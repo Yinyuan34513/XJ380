@@ -66,7 +66,7 @@ EFI_GUID efi_acpi_table_guid = {
  */
 void putc(unsigned short c)
 {
-  unsigned short str[2] = L" ";
+  __WCHAR_TYPE__ str[2] = L" ";
   str[0] = c;
   ST->ConOut->OutputString(ST->ConOut, str);
 }
