@@ -1,0 +1,71 @@
+ENTRYPOINT = 0x30400
+
+ASM  = nasm
+CC   = i686-elf-gcc
+LD   = i686-elf-ld
+ASMBFLAGS = -I boot/include/
+ASMKFLAGS = -I include/ -f elf
+CFLAGS    = -I include/ -c -fno-builtin -nostdlib -nostdinc
+LDFLAGS   = -s -Ttext $(ENTRYPOINT)
+
+XJ380BOOT = out/boot.bin out/loader.bin
+XJ380KERN = out/kernel.bin
+OBJS      = out/kernel.o out/start.o out/main.o out/string.o out/global.o out/rect.o out/text.o out/font.o out/kliba.o \
+		out/klib.o out/intr.o out/i8259.o out/gdt.o out/clock.o out/syscall.o out/syscall_impl.o out/proc.o out/keyboard.o \
+		out/keymap.o out/fifo.o out/printf.o out/mouse_pointer.o out/mouse.o out/sheet.o out/vram.o out/window.o
+
+default : clear run
+
+everything : $(XJ380BOOT) $(XJ380KERN)
+
+image : everything clean
+	dd if=out/boot.bin of=a.img bs=512 count=1
+	edimg imgin:a.img copy from:out/loader.bin to:@: copy from:out/kernel.bin to:@: imgout:a.img
+
+clean :
+	rm -r out/*.o
+
+clear :
+	rm -r out/*.bin
+
+run : image
+	qemu-system-i386 -fda a.img -serial stdio -m 256
+
+out/boot.bin : boot/boot.asm
+	$(ASM) $(ASMBFLAGS) -o $@ $<
+
+out/loader.bin : boot/loader.asm
+	$(ASM) $(ASMBFLAGS) -o $@ $<
+
+$(XJ380KERN) : $(OBJS)
+	$(LD) $(LDFLAGS) -o $(XJ380KERN) $(OBJS)
+
+out/%.o : kernel/%.asm
+	$(ASM) $(ASMKFLAGS) -o $@ $<
+
+out/%.o : kernel/%.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+out/%.o : lib/%.asm
+	$(ASM) $(ASMKFLAGS) -o $@ $<
+
+out/%.o : lib/%.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+out/%.o : graphics/%.asm
+	$(ASM) $(ASMKFLAGS) -o $@ $<
+
+out/%.o : graphics/%.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+out/%.o : drivers/%.asm
+	$(ASM) $(ASMKFLAGS) -o $@ $<
+
+out/%.o : drivers/%.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+out/%.o : gui/%.asm
+	$(ASM) $(ASMKFLAGS) -o $@ $<
+
+out/%.o : gui/%.c
+	$(CC) $(CFLAGS) -o $@ $<
