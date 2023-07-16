@@ -1,1 +1,1 @@
-XJ380OS Official Repository
+由XINGJI集团开发的一款有GUI的操作系统。
