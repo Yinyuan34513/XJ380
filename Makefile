@@ -1,8 +1,15 @@
 ENTRYPOINT = 0x30400
 
-ASM  = nasm
-CC   = i686-elf-gcc
-LD   = i686-elf-ld
+TOOLS = ./tools
+
+ASM  = $(TOOLS)/nasm/nasm.exe
+CC   = $(TOOLS)/i686-elf-tools-windows/bin/i686-elf-gcc.exe
+LD   = $(TOOLS)/i686-elf-tools-windows/bin/i686-elf-ld.exe
+EDIMG = $(TOOLS)/edimg.exe
+QEMU = $(TOOLS)/qemu/qemu-system-i386.exe
+QEMU_IMG = $(TOOLS)/qemu/qemu-img.exe
+DD = $(TOOLS)/dd-0.6beta3/dd.exe  
+
 ASMBFLAGS = -I boot/include/
 ASMKFLAGS = -I include/ -f elf
 CFLAGS    = -I include/ -c -fno-builtin -nostdlib -nostdinc
@@ -19,17 +26,22 @@ default : clear run
 everything : $(XJ380BOOT) $(XJ380KERN)
 
 image : everything clean
-	dd if=out/boot.bin of=a.img bs=512 count=1
-	edimg imgin:a.img copy from:out/loader.bin to:@: copy from:out/kernel.bin to:@: imgout:a.img
+	$(QEMU_IMG) create a.img 1474560
+	$(DD) if=out/boot.bin of=a.img bs=512 count=1
+	$(EDIMG) \
+	imgin:.\a.img \
+	copy from:out/loader.bin to:@: \
+	copy from:out/kernel.bin to:@: \
+	imgout:a.img
 
 clean :
-	rm -r out/*.o
+	del out\*.o
 
 clear :
-	rm -r out/*.bin
+	del out\*.bin
 
 run : image
-	qemu-system-i386 -fda a.img -serial stdio -m 256
+	$(QEMU) -fda a.img -serial stdio -m 256
 
 out/boot.bin : boot/boot.asm
 	$(ASM) $(ASMBFLAGS) -o $@ $<

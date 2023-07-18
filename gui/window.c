@@ -103,7 +103,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
     int back_col;
     back_col = bc;
     int obj_col;
-    obj_col = (wincol * alpha / 255) + (back_col * (255 - alpha) / 255);
+    obj_col = (win_col * alpha / 255) + (back_col * (255 - alpha) / 255);
 	boxfill8(buf, xsize, obj_col, 0, 0, xsize, 28);
     putstr_atbuf(buf, xsize, (xsize - 64 - strlen(title) * 8) / 2, 4, 0x000000, title);
     for (y = 0; y < 18; y++)
