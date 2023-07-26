@@ -1,77 +1,96 @@
-#include "include.h"
+#include "include.h"    //使用了include\include.h头文件
 
-u32 buf_win[160 * 68];
+u32 buf_win[160 * 68];  //声明一个u32类型的数组
+                        //大小为160*68个元素，共10880元素，每个元素可存储一个32位的值
 
-void TestA()
+void TestA()            //定义了名为TestA的无返回值的函数
 {
-    int i = 0;
-    while (1) {
-        if (fifo_status(&decoded_key) > 0) {
+    int i = 0;          //定义了数字类型的名为 i 的变量，并赋值为0
+    while (1) {         //使用while循环，并且无限循环
+                        //fifo_status是proto.h文件里的全局变量，数据类型为int，
+        if (fifo_status(&decoded_key) > 0) {                            
             printf("%c", fifo_get(&decoded_key));
             sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
-        }
-    }
+        }               //在循环中，它通过调用传入decoded_key FIFO 作为参数的 fifo_status 函数来检查 FIFO 中是否有可用的元素。
+    }                   //如果有可用的元素，它会使用 fifo_get 函数检索并打印出下一个元素。然后，它通过调用 sheet_refresh 函数来更新显示。
 }
 
-void TestB()
+void TestB()            //TestB()是一个简单的循环
 {
-    int i = 0x1000;
-    while (1) {
-        put_str("B");
-        put_int(i++);
-        put_str(".");
+    int i = 0x1000;     //设一个名称为i的int类型局部变量为0x1000（16进制），实际上为十进制中的4096
+    while (1) {         //无限循环
+        put_str("B");   //打印字符为“B”
+        put_int(i++);   //变量i加1
+        put_str(".");   //打印字符“.”
         milli_delay(200);
+                        //上一行还包括使用milli_delay函数的200毫秒（0.2秒）的延迟
     }
 }
 
-void TestC()
+void TestC()            //TestC()是一个简单的循环
 {
-    int i = 0x2000;
-    while (1) {
-        put_str("C");
-        put_int(i++);
-        put_str(".");
+    int i = 0x2000;     //设一个名称为i的int类型局部变量为0x2000（16进制），实际上为十进制中的8192
+    while (1) {         //while (1)为无限循环
+        put_str("C");   //打印字符为“C”
+        put_int(i++);   //变量i加1
+        put_str(".");   //打印字符英文句号“.”
         milli_delay(200);
+                        //使用milli_delay函数进行200毫秒，即0.2秒的等待或延迟
     }
 }
 
-PUBLIC int kernel_main()
+PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 {
-    shtctl_init(&shtctl);
-    SHEET *sht_back = sheet_alloc(&shtctl);
-    SHEET *sht_win  = sheet_alloc(&shtctl);
+    //此代码片段是初始化操作系统和GUI系统中的图形工作表（以下称为“工作表”）
+    shtctl_init(&shtctl);                   //这行代码初始化用于管理工作表的shtctl结构
+    SHEET *sht_back = sheet_alloc(&shtctl); //使用sheet_alloc函数分配工作表，并将其分配给指针sht_back
+    SHEET *sht_win  = sheet_alloc(&shtctl); //使用sheet_alloc函数分配另一个工作表，并将其分配给指针sht_win
     sheet_setbuf(sht_back, buf_back, binfo->scrnx, binfo->scrny, -1);
+    //使用sheet_setbuf函数设置图纸sht_back的缓冲区、尺寸和透明度颜色；buf_back是缓冲区数组，binfo->scrnx和binfo->scrny是屏幕尺寸，-1表示没有透明度
     sheet_setbuf(sht_win, buf_win, 160, 68, 99);
-    init_screen();
+    //使用sheet_setbuf函数设置sht_back缓冲区数组为buf_win，将buf_win数组设置为尺寸为160x68像素的缓冲区，透明度颜色设置为99。
+    init_screen();      //通过执行一些图形操作来初始化屏幕
     make_window(buf_win, 160, 68, "Window", 99);
+    //使用标题为window并且透明度为99的make_window函数在buf_win缓冲区中创建窗口形状
     putstr_atbuf(buf_win, 160, 53, 25, 0, "XJ380OS");
-    putstr_atbuf(buf_win, 160, 52, 24, 0xffffff, "XJ380OS");
+    //使用putstr_atbuf函数将字符串“XJ380OS”写入XY位置为(53,25)处的buf_win的缓冲区
     putstr_atbuf(buf_win, 160, 13, 45, 0, "Codename \"Beluga\"");
-    putstr_atbuf(buf_win, 160, 12, 44, 0xffffff, "Codename \"Beluga\"");
+    //执行与上一步相同的操作，但将字符串“Codename "Beluga"”写入位置（13，45）处的buf_win缓冲区。
 
-    sheet_slide(sht_back, 0, 0);
-    sheet_updown(sht_back, 0);
-    sheet_slide(sht_win, 80, 72);
-    sheet_updown(sht_win, 1);
+    sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
+    sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到顶层。
+    sheet_slide(sht_win, 80, 72);           //将sht_win表移动到屏幕上的位置（80，72）
+    sheet_updown(sht_win, 1);               //将sht_win表带到第二个顶层
 
     sheet_refresh(sht_back, 0, 0, binfo->scrnx, 48);
+    //刷新屏幕上sht_back表的一部分，使其可见
 
-    TASK    *p_task       = task_table;
-    PROCESS *p_proc       = proc_table;
+    TASK    *p_task       = task_table;     //声明一个指针p_task，并使用task_table指针的值对其进行初始化；说明task_table是TASK结构的数组。
+    PROCESS *p_proc       = proc_table;     //声明一个指针p_proc，并使用proc_table指针的值对其进行初始化；说明proc_table是一个PROCESS结构数组。
     char    *p_task_stack = task_stack + STACK_SIZE_TOTAL;
+    //声明一个指针p_task_stack，并使用task_stack加stack_SIZE_OTAL的值对其进行初始化；task_stack是指向堆栈开始的指针，stack_SIZE_TOAL是堆栈的总大小。
     u16      selector_ldt = SELECTOR_LDT_FIRST;
-    int i;
-    for (i = 0; i < NR_TASKS; i++) {
-        strcpy(p_proc->p_name, p_task->name);
-        p_proc->pid = i;
+    //声明一个16位无符号整数selector_ldt，并使用selector_ldt_FIRST值对其进行初始化；大概SELECTOR_LDT_FIRST是表示LDT（本地描述符表）选择器的特定值的宏或常量。
 
-        p_proc->ldt_sel = selector_ldt;
+    //这个代码片段是一个循环，它迭代系统中的任务和进程，并设置它们各自的属性
+    int i;                                  //声明了一个int类型的名称为i的变量
+    for (i = 0; i < NR_TASKS; i++) {        //启动一个从0迭代到NR_TASKS-1的循环。
+        strcpy(p_proc->p_name, p_task->name);
+        //将当前任务的名称（p_task->name）复制到当前进程的名称（sp_proc->p_name）
+        p_proc->pid = i;                    //将当前进程的进程ID（pid）设置为i的值
+
+        p_proc->ldt_sel = selector_ldt;     //将当前进程的本地描述符表（LDT）选择器设置为selector_LDT的值
         
         memcpy(&p_proc->ldts[0], &gdt[SELECTOR_KERNEL_CS >> 3], sizeof(DESCRIPTOR));
+        //将段描述符从全局描述符表（GDT）复制到当前进程的本地描述符表（LDT）
         p_proc->ldts[0].attr1 = DA_C | PRIVILEGE_USER << 5;
+        //将LDT中代码段描述符的属性设置为具有代码特权级别USER（3）和可执行段
         memcpy(&p_proc->ldts[1], &gdt[SELECTOR_KERNEL_DS >> 3], sizeof(DESCRIPTOR));
+        //将段描述符从GDT复制到当前进程的LDT
         p_proc->ldts[1].attr1 = DA_DRW | PRIVILEGE_USER << 5;
+        //将LDT中数据段描述符的属性设置为具有数据特权级别USER（3）和读/写访问权限
 
+        //接下来的几行将当前进程的段寄存器（cs、ds、es、fs、ss和gs）的值设置为基于当前任务和特权级别的适当值
         p_proc->regs.cs = ((0 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
         p_proc->regs.ds = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
         p_proc->regs.es = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
@@ -80,28 +99,36 @@ PUBLIC int kernel_main()
         p_proc->regs.gs = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
 
         p_proc->regs.eip = (u32) p_task->initial_eip;
+        //将当前进程的指令指针（eip）寄存器设置为当前任务的初始入口点
         p_proc->regs.esp = (u32) p_task_stack;
+        //将当前进程的堆栈指针（esp）寄存器设置为p_task_stack的当前值
         p_proc->regs.eflags = 0x1202;
+        //将当前进程的标志（eflags）寄存器设置为值0x1202（十六进制，十进制4610）
 
-        p_task_stack -= p_task->stacksize;
-        p_proc++;
-        p_task++;
-        selector_ldt += 1 << 3;
+        p_task_stack -= p_task->stacksize;  //递减p_task_stack指针，为下一个任务的堆栈保留空间
+        p_proc++;                           //增加p_proc指针以指向proc_table数组中的下一个进程
+        p_task++;                           //增加p_task指针指向task_table数组中的下一个任务
+        selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器
     }
 
     proc_table[0].ticks = proc_table[0].priority = 150;
+    //将第一个proc_table条目的刻度和优先级字段设置为150
     proc_table[1].ticks = proc_table[1].priority = 0;
+    //将第二个proc_table条目的刻度和优先级字段设置为0
     proc_table[2].ticks = proc_table[2].priority = 0;
+    //将第三个proc_table条目的刻度和优先级字段设置为0
 
-    init_clock();
-    init_keyboard();
-    init_mouse();
+    init_clock();                           //调用init_clock()函数来初始化系统时钟
+    init_keyboard();                        //调用init_keyboard()函数来初始化键盘
+    init_mouse();                           //调用init_mouse()函数来初始化鼠标
 
-    k_reenter = 0;
-    ticks = 0;
+    k_reenter = 0;                          //将用于内核重新输入的k_renter变量设置为0
+    ticks = 0;                              //将用于计数时钟刻度的刻度变量设置为0
 
-    p_proc_ready = proc_table;
-    restart();
+    p_proc_ready = proc_table;              //将p_proc_ready指针设置为指向proc_table数组中的第一个条目
+    restart();                              //调用restart()函数，该函数执行一些内部操作并将控制权转移到下一个进程
 
-    while (1);
+    TestA();
+
+    while (1);                              //进入一个无限循环，有效地停止任何进一步指令的执行
 }

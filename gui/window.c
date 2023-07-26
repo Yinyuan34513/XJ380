@@ -1,57 +1,14 @@
 #include "include.h"
 
-/*
-PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title)
-{
-    PRIVATE char closebtn[14][16] = {
-        "OOOOOOOOOOOOOOO@",
-        "OQQQQQQQQQQQQQ$@",
-        "OQQQQQQQQQQQQQ$@",
-        "OQQQ@@QQQQ@@QQ$@",
-        "OQQQQ@@QQ@@QQQ$@",
-        "OQQQQQ@@@@QQQQ$@",
-        "OQQQQQQ@@QQQQQ$@",
-        "OQQQQQ@@@@QQQQ$@",
-        "OQQQQ@@QQ@@QQQ$@",
-        "OQQQ@@QQQQ@@QQ$@",
-        "OQQQQQQQQQQQQQ$@",
-        "OQQQQQQQQQQQQQ$@",
-        "O$$$$$$$$$$$$$$@",
-        "@@@@@@@@@@@@@@@@"
-    };
-
-    int x, y, c;
-    
-    boxfill8(buf, xsize, 0xc6c6c6, 0, 0, xsize - 1, 0);
-    boxfill8(buf, xsize, 0xffffff, 1, 1, xsize - 2, 1);
-    boxfill8(buf, xsize, 0xc6c6c6, 0, 0, 0, ysize - 1);
-    boxfill8(buf, xsize, 0xffffff, 1, 1, 1, ysize - 2);
-    boxfill8(buf, xsize, 0x848484, xsize - 2, 1, xsize - 2, ysize - 2);
-    boxfill8(buf, xsize, 0x000000, xsize - 1, 0, xsize - 1, ysize - 1);
-    boxfill8(buf, xsize, 0x848484, 1, ysize - 2, xsize - 2, ysize - 2);
-    boxfill8(buf, xsize, 0x000000, 0, ysize - 1, xsize - 1, ysize - 1);
-    boxfill8(buf, xsize, 0xc6c6c6, 2, 2, xsize - 3, ysize - 3);
-    boxfill8(buf, xsize, 0x000084, 3, 3, xsize - 4, 20);
-    putstr_atbuf(buf, xsize, 24, 4, 0xffffff, title);
-
-    for (y = 0; y < 14; y++) {
-        for (x = 0; x < 16; x++) {
-            c = closebtn[y][x];
-            if (c == '@') c = 0;
-            else if (c == '$') c = 0x848484;
-            else if (c == 'Q') c = 0xc6c6c6;
-            else c = 0xffffff;
-            buf[(5 + y) * xsize + (xsize - 21 + x)] = c;
-        }
-    }
-}
-*/
+//创建窗口
 
 PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
 {
     //绘制窗口
-	boxfill8(buf, xsize, 0xffffff, 0, 0, xsize, ysize);
-    boxfill8(buf, xsize, 0xc6c6c6, 8, 28, xsize - 8, ysize - 8);
+	boxfill8(buf, xsize, 0x00a2e8, 0, 0, xsize, ysize);
+    boxfill8(buf, xsize, 0xffffff, 0, 20, xsize, ysize);
+
+    //定义关闭按钮样式
 
     static char closebtn[18][32] = {
         "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
@@ -73,6 +30,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
         "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
         "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     };
+    //定义缩小按钮样式
     static char minimize[18][32] = {
         "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
         "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
@@ -95,17 +53,8 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
     };
     //标题栏
     int x, y, c;
-    //显示颜色 = 源像素颜色 X alpha / 255 + 背景颜色 X (255 - alpha) / 255
-    int alpha;
-    alpha = 0;
-    int win_col;
-    win_col = 0x91c4e2;
-    int back_col;
-    back_col = bc;
-    int obj_col;
-    obj_col = (win_col * alpha / 255) + (back_col * (255 - alpha) / 255);
-	boxfill8(buf, xsize, obj_col, 0, 0, xsize, 28);
-    putstr_atbuf(buf, xsize, (xsize - 64 - strlen(title) * 8) / 2, 4, 0x000000, title);
+    putstr_atbuf(buf, xsize, 8, 4, 0xffffff, title);
+    //将样式转换为颜色列表
     for (y = 0; y < 18; y++)
     {
         for (x = 0; x < 32; x++)
@@ -119,7 +68,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
             {
                 c = 0xc42b1c;
             }
-            buf[y * xsize + (xsize - 37 + x)] = c;
+            buf[(y + 2) * xsize + (xsize - 37 + x)] = c;
             c = minimize[y][x];
             if (c == '@')
             {
@@ -127,10 +76,48 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
             }
             else if (c == 'Q')
             {
-                c = 0x91c4e2;
+                c = 0x00a2e8;
             }
-            buf[y * xsize + (xsize - 68 + x)] = c;
+            buf[(y + 2) * xsize + (xsize - 68 + x)] = c;
         }
     }
+    // 圆角
+    buf[0 * xsize + 0] = bc;
+    buf[0 * xsize + 1] = bc;
+    buf[0 * xsize + 2] = bc;
+    buf[0 * xsize + 3] = bc;
+    buf[1 * xsize + 0] = bc;
+    buf[1 * xsize + 1] = bc;
+    buf[2 * xsize + 0] = bc;
+    buf[3 * xsize + 0] = bc;
+
+    buf[0 * xsize + xsize - 1 - 0] = bc;
+    buf[0 * xsize + xsize - 1 - 1] = bc;
+    buf[0 * xsize + xsize - 1 - 2] = bc;
+    buf[0 * xsize + xsize - 1 - 3] = bc;
+    buf[1 * xsize + xsize - 1 - 0] = bc;
+    buf[1 * xsize + xsize - 1 - 1] = bc;
+    buf[2 * xsize + xsize - 1 - 0] = bc;
+    buf[3 * xsize + xsize - 1 - 0] = bc;
+
+    buf[(ysize - 0) * xsize + 0] = bc;
+    buf[(ysize - 0) * xsize + 1] = bc;
+    buf[(ysize - 0) * xsize + 2] = bc;
+    buf[(ysize - 0) * xsize + 3] = bc;
+    buf[(ysize - 1) * xsize + 0] = bc;
+    buf[(ysize - 1) * xsize + 1] = bc;
+    buf[(ysize - 2) * xsize + 0] = bc;
+    buf[(ysize - 3) * xsize + 0] = bc;
+
+    buf[(ysize - 0) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 1] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 2] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 3] = bc;
+    buf[(ysize - 1) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 1) * xsize + xsize - 1 - 1] = bc;
+    buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
+
+    //返回值
     return;
 }

@@ -1,5 +1,6 @@
 #include "include.h"
 
+// 定义存储各按键状态的变量
 PRIVATE int code_with_E0 = 0;
 PRIVATE int shift_l;
 PRIVATE int shift_r;
