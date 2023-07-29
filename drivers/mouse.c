@@ -1,12 +1,12 @@
 #include "include.h"
-
+//鼠标
 int mcursor[256];
 MOUSE_DEC mdec;
 int mx = (1024 - 16) / 2;
 int my = (768 - 28 - 16) / 2;
 int mmx = -1, mmy = -1, x, y, j;
 SHEET *sht_mouse, *sht = NULL;
-
+//鼠标移动
 PUBLIC void mouse_handler()
 {
     u8 data = in_byte(KB_DATA);
@@ -52,7 +52,7 @@ PUBLIC void mouse_handler()
         }
     }
 }
-
+//鼠标中断
 PUBLIC void init_mouse()
 {
     sht_mouse = sheet_alloc(&shtctl);
@@ -77,7 +77,7 @@ PUBLIC void init_mouse()
     enable_irq(CASCADE_IRQ);
     enable_irq(MOUSE_IRQ);
 }
-
+//鼠标按键识别
 PUBLIC int mouse_decode(MOUSE_DEC *mdec, u8 data)
 {
     if (mdec->phase == 0) {

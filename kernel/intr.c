@@ -1,5 +1,5 @@
 #include "include.h"
-
+//意义暂时不明
 PRIVATE void init_idt_desc(u8 vector, u8 desc_type, int_handler handler, u8 privilege)
 {
     GATE *p_gate = &idt[vector];
@@ -11,7 +11,7 @@ PRIVATE void init_idt_desc(u8 vector, u8 desc_type, int_handler handler, u8 priv
     p_gate->attr        = desc_type | (privilege << 5);
     p_gate->offset_high = (base >> 16) & 0xFFFF;
 }
-
+//中断登记
 PRIVATE void init_interruptions()
 {
     init_8259A();
@@ -53,7 +53,7 @@ PRIVATE void init_interruptions()
 
     init_idt_desc(INT_VECTOR_SYS_CALL,     DA_386IGate, sys_call,              PRIVILEGE_USER);
 }
-
+//中断相关
 PUBLIC void init_idt()
 {
     u16 *p_idt_limit = (u16 *) (&idt_ptr[0]);
@@ -64,7 +64,7 @@ PUBLIC void init_idt()
 
     init_interruptions();
 }
-
+//30分自制异常系统
 PUBLIC void exception_handler(int vec_no, int err_code, int eip, int cs, int eflags)
 {
     disable_int();

@@ -1,5 +1,5 @@
 #include "include.h"
-
+//键盘按键表
 PUBLIC u32 keymap[NR_SCAN_CODES * MAP_COLS] = {
     0,            0,           0,
     ESC,          ESC,         0,

@@ -1,6 +1,7 @@
 #ifndef _XJ380_TYPE_H_
 #define _XJ380_TYPE_H_
 
+//将类型名称简化
 typedef unsigned int   u32;
 typedef unsigned short u16;
 typedef unsigned char  u8;

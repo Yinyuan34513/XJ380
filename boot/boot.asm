@@ -198,4 +198,4 @@ LABEL_GET_FAT_ENRY_OK:
     ret
 
 times 510 - ($ - $$) db 0
-dw 0xaa55
+dw 0xaa55   ;启动扇区结束符

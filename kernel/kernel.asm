@@ -1,5 +1,7 @@
 %include "sconst.inc"
 
+;内核，看不懂（恼
+
 extern cstart
 extern exception_handler
 extern spurious_irq

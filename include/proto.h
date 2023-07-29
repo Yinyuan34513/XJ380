@@ -1,6 +1,6 @@
 #ifndef _XJ380_PROTO_H_
 #define _XJ380_PROTO_H_
-
+//声明，作用相当于30day里的bootpack.h
 // drivers/keyboard.c
 PUBLIC void init_keyboard();
 PUBLIC void kb_wait();

@@ -1,7 +1,8 @@
 #include "include.h"
-
+//显示光标
 PUBLIC void init_mouse_cursor(int *mouse, int bc)
 {
+    //从XJ380重置前移植过来的丑光标
     static char cursor[16][16] = {
         "*...............",
 		"**..............",
@@ -20,7 +21,7 @@ PUBLIC void init_mouse_cursor(int *mouse, int bc)
 		"....*O*.........",
 		".....**.........",
     };
-
+    
     int x, y;
     for (y = 0; y < 16; y++) {
         for (x = 0; x < 16; x++) {

@@ -1,6 +1,5 @@
 #include "include.h"
 
-// 定义存储各按键状态的变量
 PRIVATE int code_with_E0 = 0;
 PRIVATE int shift_l;
 PRIVATE int shift_r;
@@ -15,13 +14,13 @@ PRIVATE int column;
 
 PRIVATE void keyboard_read();
 
-PUBLIC void keyboard_handler(int irq)
+PUBLIC void keyboard_handler(int irq)   //将按键放入FIFO缓冲区并读取
 {
     fifo_put(&keyfifo, in_byte(KB_DATA));
     keyboard_read();
 }
 
-PUBLIC void kb_wait()
+PUBLIC void kb_wait()       //等待
 {
     u8 kb_stat;
 
@@ -30,7 +29,7 @@ PUBLIC void kb_wait()
     } while (kb_stat & 0x02);
 }
 
-PRIVATE void kb_ack()
+PRIVATE void kb_ack()       //意义不明
 {
     u8 kb_read;
 
@@ -39,7 +38,7 @@ PRIVATE void kb_ack()
     } while (kb_read != KB_ACK);
 }
 
-PRIVATE void set_leds()
+PRIVATE void set_leds()     //意义不明
 {
     u8 leds = (caps_lock << 2) | (num_lock << 1) | scroll_lock;
 
@@ -53,7 +52,7 @@ PRIVATE void set_leds()
 }
 
 
-PUBLIC void init_keyboard()
+PUBLIC void init_keyboard() //键盘中断
 {
     fifo_init(&keyfifo, 32, keybuf);
     fifo_init(&decoded_key, 32, dkey_buf);
@@ -72,7 +71,7 @@ PUBLIC void init_keyboard()
     enable_irq(KEYBOARD_IRQ);
 }
 
-PRIVATE u8 get_scancode()
+PRIVATE u8 get_scancode()   //意义不明
 {
     u8 scan_code;
     disable_int();
@@ -81,7 +80,7 @@ PRIVATE u8 get_scancode()
     return scan_code;
 }
 
-PRIVATE void in_process(u32 key)
+PRIVATE void in_process(u32 key)    //识别换行符和回车符
 {
     char output[2] = {0, 0};
 
@@ -100,7 +99,7 @@ PRIVATE void in_process(u32 key)
     }
 }
 
-PRIVATE void keyboard_read()
+PRIVATE void keyboard_read()    //识别按键
 {
     u8 scan_code;
     int make;

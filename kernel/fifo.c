@@ -1,5 +1,5 @@
 #include "include.h"
-
+//FIFO缓冲区相关
 PUBLIC void fifo_init(FIFO *fifo, int size, u32 *buf)
 {
     fifo->size = size;

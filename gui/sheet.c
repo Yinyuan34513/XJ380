@@ -1,12 +1,12 @@
-// winmerge fuck you
+//Microsoft Fuck You
 
 #include "include.h"
 
-#define SHEET_USE 1
+#define SHEET_USE 1     //详见30day里的用法
 
-PUBLIC void shtctl_init(SHTCTL *ctl)
+PUBLIC void shtctl_init(SHTCTL *ctl)    //注释.exe已停止运行
 {
-    memset(ctl, 0, sizeof(ctl));
+    memset(ctl, 0, sizeof(ctl));    //开辟内存空间
     ctl->vram = binfo->vram;
     ctl->xsize = binfo->scrnx;
     ctl->ysize = binfo->scrny;
@@ -16,7 +16,7 @@ PUBLIC void shtctl_init(SHTCTL *ctl)
     }
 }
 
-PUBLIC SHEET *sheet_alloc(SHTCTL *ctl)
+PUBLIC SHEET *sheet_alloc(SHTCTL *ctl)      //图层ALLOC
 {
     SHEET *sht;
     int i;
@@ -32,7 +32,7 @@ PUBLIC SHEET *sheet_alloc(SHTCTL *ctl)
     return NULL;
 }
 
-PUBLIC void sheet_setbuf(SHEET *sht, u32 *buf, int xsize, int ysize, int col_inv)
+PUBLIC void sheet_setbuf(SHEET *sht, u32 *buf, int xsize, int ysize, int col_inv)   //设置图层
 {
     sht->buf = buf;
     sht->bxsize = xsize;
@@ -40,7 +40,7 @@ PUBLIC void sheet_setbuf(SHEET *sht, u32 *buf, int xsize, int ysize, int col_inv
     sht->col_inv = col_inv;
 }
 
-PUBLIC void sheet_updown(SHEET *sht, int height)
+PUBLIC void sheet_updown(SHEET *sht, int height)    //改变图层高度
 {
     int h, old = sht->height;
     SHTCTL *ctl = &shtctl;
@@ -51,6 +51,7 @@ PUBLIC void sheet_updown(SHEET *sht, int height)
     sht->height = height;
 
     if (old > height) {
+        //如果是降低图层
         if (height >= 0) {
             for (h = old; h > height; h--) {
                 ctl->sheets[h] = ctl->sheets[h - 1];
@@ -68,6 +69,7 @@ PUBLIC void sheet_updown(SHEET *sht, int height)
         }
         sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize);
     } else if (old < height) {
+        //如果是增高图层
         if (old >= 0) {
             for (h = old; h < height; h++) {
                 ctl->sheets[h] = ctl->sheets[h + 1];
@@ -86,7 +88,7 @@ PUBLIC void sheet_updown(SHEET *sht, int height)
     }
 }
 
-PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)
+PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)   //刷新图层
 {
     int h, bx, by, vx, vy, bx0, by0, bx1, by1;
     u32 *buf, c;
@@ -110,6 +112,7 @@ PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)
         for (by = by0; by < by1; by++) {
             vy = sht->vy0 + by;
             for (bx = bx0; bx < bx1; bx++) {
+                //重新绘制图层
                 vx = sht->vx0 + bx;
                 c = buf[by * sht->bxsize + bx];
                 if (c != sht->col_inv) {
@@ -120,13 +123,13 @@ PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)
     }
 }
 
-PUBLIC void sheet_refresh(SHEET *sht, int bx0, int by0, int bx1, int by1)
+PUBLIC void sheet_refresh(SHEET *sht, int bx0, int by0, int bx1, int by1)   //刷新图层
 {
     SHTCTL *ctl = &shtctl;
-    if (sht->height >= 0) sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);
+    if (sht->height >= 0) sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);    //用刷新图层的函数来达到刷新图层的效果
 }
 
-PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)
+PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)   //移动图层
 {
     SHTCTL *ctl = &shtctl;
     int old_vx0 = sht->vx0, old_vy0 = sht->vy0;
@@ -138,7 +141,7 @@ PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)
     }
 }
 
-PUBLIC void sheet_free(SHEET *sht)
+PUBLIC void sheet_free(SHEET *sht)      //让图层免费（bushi     //关掉，关掉，一定要关掉！再不关掉这些图层，电脑怎有霉譹（hao3）的未来？
 {
     if (sht->height >= 0) sheet_updown(sht, -1);
     sht->flags = 0;
