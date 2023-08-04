@@ -26,13 +26,13 @@ PUBLIC void init_mouse_cursor(int *mouse, int bc)
     for (y = 0; y < 16; y++) {
         for (x = 0; x < 16; x++) {
             if (cursor[y][x] == '*') {
-                mouse[y * 16 + x] = 0;
+                mouse[y * 16 + x] = 0;	//如果是*则填充黑色
             }
             if (cursor[y][x] == 'O') {
-                mouse[y * 16 + x] = 0xffffff;
+                mouse[y * 16 + x] = 0xffffff;	//如果是O则填充白色
             }
             if (cursor[y][x] == '.') {
-                mouse[y * 16 + x] = bc;
+                mouse[y * 16 + x] = bc;		//如果是.则填充透明色
             }
         }
     }

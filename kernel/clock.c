@@ -12,13 +12,19 @@ PUBLIC void clock_handler(int irq)  //意义暂时不明
     schedule();
 }
 
-PUBLIC void milli_delay(int ms) //意义暂时不明
+PUBLIC void milli_delay(int ms) //sleep
 {
     int t = get_ticks();
     while (((get_ticks() - t) * 1000 / HZ) < ms);
 }
 
-PUBLIC void init_clock()        //时钟中断
+PUBLIC void Sleep(int ms) //Windows也有这个玩意
+{
+    int t = get_ticks();
+    while (((get_ticks() - t) * 1000 / HZ) < ms);
+}
+
+PUBLIC void init_clock()        //初始化时钟中断
 {
     put_irq_handler(CLOCK_IRQ, clock_handler);
     enable_irq(CLOCK_IRQ);

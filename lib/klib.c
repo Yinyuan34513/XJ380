@@ -1,9 +1,5 @@
 #include "include.h"
 
-// 将一个数字转换成16进制
-// *str 目标字符串首地址
-// num 源数字
-
 PRIVATE char *tohex(char *str, int num)
 {
     char *p = str;
@@ -29,9 +25,6 @@ PRIVATE char *tohex(char *str, int num)
     *p = 0;
     return str;
 }
-
-// 将一个数字转换成16进制并输出
-// i 源数字
 
 PUBLIC void put_int(int i)
 {
