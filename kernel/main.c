@@ -50,12 +50,15 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     sheet_setbuf(sht_win, buf_win, 160, 68, 99);
     //使用sheet_setbuf函数设置sht_back缓冲区数组为buf_win，将buf_win数组设置为尺寸为160x68像素的缓冲区，透明度颜色设置为99。
     init_screen();      //通过执行一些图形操作来初始化屏幕
-    make_window(buf_win, 160, 68, "Window", 99);
-    //使用标题为window并且透明度为99的make_window函数在buf_win缓冲区中创建窗口形状
-    putstr_atbuf(buf_win, 160, 53, 25, 0, "XJ380OS");
-    //使用putstr_atbuf函数将字符串“XJ380OS”写入XY位置为(53,25)处的buf_win的缓冲区
-    putstr_atbuf(buf_win, 160, 13, 45, 0, "Codename \"Beluga\"");
-    //执行与上一步相同的操作，但将字符串“Codename "Beluga"”写入位置（13，45）处的buf_win缓冲区。
+    
+    
+    
+    //窗口
+    make_window(buf_win, 160, 68, "Console", 99);
+    putstr_atbuf(buf_win, 160, 0, 20, 0x000000, ">");
+    
+    
+    
 
     sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到顶层。
@@ -127,6 +130,11 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 
     p_proc_ready = proc_table;              //将p_proc_ready指针设置为指向proc_table数组中的第一个条目
     restart();                              //调用restart()函数，该函数执行一些内部操作并将控制权转移到下一个进程
-
-    while (1);                              //进入一个无限循环，有效地停止任何进一步指令的执行
+    
+	//start_console();	//BUG.exe
+    
+    for(;;)
+    {
+    	//6
+    }
 }

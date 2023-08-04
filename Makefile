@@ -19,7 +19,8 @@ XJ380BOOT = out/boot.bin out/loader.bin
 XJ380KERN = out/kernel.bin
 OBJS      = out/kernel.o out/start.o out/main.o out/string.o out/global.o out/rect.o out/text.o out/font.o out/kliba.o \
 		out/klib.o out/intr.o out/i8259.o out/gdt.o out/clock.o out/syscall.o out/syscall_impl.o out/proc.o out/keyboard.o \
-		out/keymap.o out/fifo.o out/printf.o out/mouse_pointer.o out/mouse.o out/sheet.o out/vram.o out/window.o
+		out/keymap.o out/fifo.o out/printf.o out/mouse_pointer.o out/mouse.o out/sheet.o out/vram.o out/window.o \
+		out/console.o
 
 default : clear run
 

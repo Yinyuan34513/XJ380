@@ -52,7 +52,7 @@ PRIVATE void set_leds()     //意义不明
 }
 
 
-PUBLIC void init_keyboard() //键盘中断
+PUBLIC void init_keyboard() //初始化键盘中断
 {
     fifo_init(&keyfifo, 32, keybuf);
     fifo_init(&decoded_key, 32, dkey_buf);
