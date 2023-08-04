@@ -10,6 +10,7 @@ PRIVATE void putfont8(u32 *buf, int xsize, int x, int y, int c, char *font)
     for (i = 0; i < 16; i++) {
         p = buf + (y + i) * xsize + x;
         d = font[i];
+        //解析字体文件
         if ((d & 0x80) != 0) { p[0] = c; }
         if ((d & 0x40) != 0) { p[1] = c; }
         if ((d & 0x20) != 0) { p[2] = c; }
@@ -23,19 +24,20 @@ PRIVATE void putfont8(u32 *buf, int xsize, int x, int y, int c, char *font)
 //字符自动换行相关
 PRIVATE void scroll()
 {
-    if (x >= binfo->scrnx) {
-        y += 16;
-        x = 0;
+    if (x >= binfo->scrnx) {	//如果X超过了显示区域边界
+        y += 16;	//让Y增加16（换行）
+        x = 0;		//让X归零（回车）
     }
-    if (y == binfo->scrny) {
-        y = binfo->scrny - 16;
+    if (y == binfo->scrny) {	//如果Y超过了显示区域边界
+        y = binfo->scrny - 16;	//Y上调16像素
+        //将其他字符上移
         for (int i = 0; i < binfo->scrny; i++) {
             for (int j = 0; j < binfo->scrnx; j++) {
                 buf_back[j + i * binfo->scrnx] = buf_back[j + (i + 16) * binfo->scrnx];
             }
         }
     }
-    if (y == binfo->scrny - binfo->scrny % 16) {
+    if (y == binfo->scrny - binfo->scrny % 16) {	//如果Y超过了最大显示区域边界（再显示就会超出了）
         y = binfo->scrny - 16;
         for (int i = 0; i < binfo->scrny; i++) {
             for (int j = 0; j < binfo->scrnx; j++) {

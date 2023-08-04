@@ -2,28 +2,28 @@
 
 #include "include.h"
 
-#define SHEET_USE 1     //详见30day里的用法
+#define SHEET_USE 1     //使用
 
-PUBLIC void shtctl_init(SHTCTL *ctl)    //注释.exe已停止运行
+PUBLIC void shtctl_init(SHTCTL *ctl)    //初始化
 {
     memset(ctl, 0, sizeof(ctl));    //开辟内存空间
     ctl->vram = binfo->vram;
     ctl->xsize = binfo->scrnx;
     ctl->ysize = binfo->scrny;
     ctl->top = -1;
-    for (int i = 0; i < MAX_SHEETS; i++) {
-        ctl->sheets0[i].flags = 0;
+    for (int i = 0; i < MAX_SHEETS; i++) {	//小于最大图层量
+        ctl->sheets0[i].flags = 0;	//标记为未使用
     }
 }
 
-PUBLIC SHEET *sheet_alloc(SHTCTL *ctl)      //图层ALLOC
+PUBLIC SHEET *sheet_alloc(SHTCTL *ctl)      //ALLOC
 {
     SHEET *sht;
     int i;
     for (i = 0; i < MAX_SHEETS; i++) {
-        if (ctl->sheets0[i].flags == 0) {
+        if (ctl->sheets0[i].flags == 0) {	//如果未使用
             sht = &ctl->sheets0[i];
-            sht->flags = SHEET_USE;
+            sht->flags = SHEET_USE;			//标记为使用
             sht->height = -1;
             return sht;
         }
@@ -135,7 +135,7 @@ PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)   //移动图层
     int old_vx0 = sht->vx0, old_vy0 = sht->vy0;
     sht->vx0 = vx0;
     sht->vy0 = vy0;
-    if (sht->height >= 0) {
+    if (sht->height >= 0) {	//重新绘制
         sheet_refreshsub(ctl, old_vx0, old_vy0, old_vx0 + sht->bxsize, old_vy0 + sht->bysize);
         sheet_refreshsub(ctl, vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize);
     }
