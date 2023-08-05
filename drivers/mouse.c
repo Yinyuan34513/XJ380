@@ -59,7 +59,7 @@ PUBLIC void init_mouse()
     init_mouse_cursor(mcursor, 99);
     sheet_setbuf(sht_mouse, mcursor, 16, 16, 99);
     sheet_slide(sht_mouse, mx, my);
-    sheet_updown(sht_mouse, 2);
+    sheet_updown(sht_mouse, 3);
 
     kb_wait();
     out_byte(KB_CMD, 0x60);
