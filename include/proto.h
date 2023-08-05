@@ -100,7 +100,7 @@ PUBLIC u32 sprintf(char *buf, const char *fmt, ...);
 PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
 
 //	kernel/console.c
-PUBLIC void start_console();
+PUBLIC void start_console(SHEET *sht_cons);
 
 // system calls here
 // kernel/syscall_impl.c

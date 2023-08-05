@@ -45,6 +45,7 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     shtctl_init(&shtctl);                   //这行代码初始化用于管理工作表的shtctl结构
     SHEET *sht_back = sheet_alloc(&shtctl); //使用sheet_alloc函数分配工作表，并将其分配给指针sht_back
     SHEET *sht_win  = sheet_alloc(&shtctl); //使用sheet_alloc函数分配另一个工作表，并将其分配给指针sht_win
+    SHEET *sht_cons  = sheet_alloc(&shtctl); 
     sheet_setbuf(sht_back, buf_back, binfo->scrnx, binfo->scrny, -1);
     //使用sheet_setbuf函数设置图纸sht_back的缓冲区、尺寸和透明度颜色；buf_back是缓冲区数组，binfo->scrnx和binfo->scrny是屏幕尺寸，-1表示没有透明度
     sheet_setbuf(sht_win, buf_win, 160, 68, 99);
@@ -54,16 +55,23 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     
     
     //窗口
-    make_window(buf_win, 160, 68, "Console", 99);
-    putstr_atbuf(buf_win, 160, 0, 20, 0x000000, ">");
+    make_window(buf_win, 160, 68, "TestWindow", 99);
+    putstr_atbuf(buf_win, 160, 36, 30, 0x000000, "GTA5,Start!");
+    
+    
+    
+    //命令行
+	start_console(sht_cons);
     
     
     
 
     sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
-    sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到顶层。
+    sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
+    sheet_slide(sht_cons, 40, 36);
+    sheet_updown(sht_cons, 1);
     sheet_slide(sht_win, 80, 72);           //将sht_win表移动到屏幕上的位置（80，72）
-    sheet_updown(sht_win, 1);               //将sht_win表带到第二个顶层
+    sheet_updown(sht_win, 2);               //将sht_win表带到顶层
 
     sheet_refresh(sht_back, 0, 0, binfo->scrnx, 48);
     //刷新屏幕上sht_back表的一部分，使其可见
@@ -131,10 +139,14 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     p_proc_ready = proc_table;              //将p_proc_ready指针设置为指向proc_table数组中的第一个条目
     restart();                              //调用restart()函数，该函数执行一些内部操作并将控制权转移到下一个进程
     
+<<<<<<< HEAD
 	//start_console();	//BUG.exe
     
     for(;;)
     {
     	//6
     }
+=======
+    while(1);
+>>>>>>> cf71ba0234e123779bc8dca43ad7459a1c4d6a69
 }
