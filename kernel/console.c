@@ -1,14 +1,8 @@
 #include "include.h"
 
-<<<<<<< HEAD
-u32 buf_con[480 * 270];
-
-PUBLIC void start_console()
-=======
 u32 buf_cons[480 * 290];
 
 PUBLIC void start_console(SHEET *sht_cons)
->>>>>>> cf71ba0234e123779bc8dca43ad7459a1c4d6a69
 {
 	//光标坐标
 	int ccx;

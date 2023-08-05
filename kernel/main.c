@@ -140,12 +140,16 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     restart();                              //调用restart()函数，该函数执行一些内部操作并将控制权转移到下一个进程
     
 <<<<<<< HEAD
+<<<<<<< HEAD
 	//start_console();	//BUG.exe
     
     for(;;)
     {
     	//6
     }
+=======
+    while(1);
+>>>>>>> cf71ba0234e123779bc8dca43ad7459a1c4d6a69
 =======
     while(1);
 >>>>>>> cf71ba0234e123779bc8dca43ad7459a1c4d6a69
