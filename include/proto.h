@@ -45,6 +45,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc);
 // kernel/clock.c
 PUBLIC void clock_handler(int irq);
 PUBLIC void milli_delay(int ms);
+PUBLIC void Sleep(int ms);
 PUBLIC void init_clock();
 
 // kernel/fifo.c
@@ -96,6 +97,9 @@ PUBLIC void enable_int();
 PUBLIC u32 printf(const char *fmt, ...);
 PUBLIC u32 sprintf(char *buf, const char *fmt, ...);
 PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
+
+//	kernel/console.c
+PUBLIC void start_console(SHEET *sht_cons);
 
 // system calls here
 // kernel/syscall_impl.c

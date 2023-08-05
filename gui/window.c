@@ -118,6 +118,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
     buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
     buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
 
-    //返回值
+    //返回
     return;
 }
+
