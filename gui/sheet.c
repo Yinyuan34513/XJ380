@@ -70,7 +70,7 @@ PUBLIC void sheet_updown(SHEET *sht, int height)    //改变图层高度
             }
             ctl->top--;
         }
-        sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize);
+        sheet_refreshsub(ctl, sht->vx0 - 10, sht->vy0 - 10, sht->vx0 + sht->bxsize + 10, sht->vy0 + sht->bysize + 10);
     } else if (old < height) {
         //如果是增高图层
         if (old >= 0) {
@@ -87,7 +87,7 @@ PUBLIC void sheet_updown(SHEET *sht, int height)    //改变图层高度
             ctl->sheets[height] = sht;
             ctl->top++;
         }
-        sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize);
+        sheet_refreshsub(ctl, sht->vx0 - 10, sht->vy0 - 10, sht->vx0 + sht->bxsize + 10, sht->vy0 + sht->bysize + 10);
     }
 }
 
@@ -129,7 +129,7 @@ PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)   
 PUBLIC void sheet_refresh(SHEET *sht, int bx0, int by0, int bx1, int by1)   //刷新图层
 {
     SHTCTL *ctl = &shtctl;
-    if (sht->height >= 0) sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);    //用刷新图层的函数来达到刷新图层的效果
+    if (sht->height >= 0) sheet_refreshsub(ctl, sht->vx0 + bx0 - 10, sht->vy0 + by0 - 10, sht->vx0 + bx1 + 10, sht->vy0 + by1 + 10);    //用刷新图层的函数来达到刷新图层的效果
 }
 
 PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)   //移动图层
@@ -139,8 +139,8 @@ PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)   //移动图层
     sht->vx0 = vx0;
     sht->vy0 = vy0;
     if (sht->height >= 0) {	//重新绘制
-        sheet_refreshsub(ctl, old_vx0, old_vy0, old_vx0 + sht->bxsize, old_vy0 + sht->bysize);
-        sheet_refreshsub(ctl, vx0, vy0, vx0 + sht->bxsize, vy0 + sht->bysize);
+        sheet_refreshsub(ctl, old_vx0 - 10, old_vy0 - 10, old_vx0 + sht->bxsize + 10, old_vy0 + sht->bysize + 10);
+        sheet_refreshsub(ctl, vx0-10, vy0-10, vx0 + sht->bxsize+10, vy0 + sht->bysize+10);
     }
 }
 
