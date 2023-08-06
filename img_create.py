@@ -1,1 +1,0 @@
-open('a.img', 'wb').write(b'\x00' * 1474560)
