@@ -27,13 +27,13 @@ default : clear run
 everything : $(XJ380BOOT) $(XJ380KERN)
 
 image : everything clean
-	$(QEMU_IMG) create a.img 1474560
-	$(DD) if=out/boot.bin of=a.img bs=512 count=1
+	$(QEMU_IMG) create xj380os.img 1474560
+	$(DD) if=out/boot.bin of=xj380os.img bs=512 count=1
 	$(EDIMG) \
-	imgin:.\a.img \
+	imgin:.\xj380os.img \
 	copy from:out/loader.bin to:@: \
 	copy from:out/kernel.bin to:@: \
-	imgout:a.img
+	imgout:xj380os.img
 
 clean :
 	del out\*.o
@@ -42,7 +42,7 @@ clear :
 	del out\*.bin
 
 run : image
-	$(QEMU) -fda a.img -serial stdio -m 256
+	$(QEMU) -fda xj380os.img -serial stdio -m 256
 
 out/boot.bin : boot/boot.asm
 	$(ASM) $(ASMBFLAGS) -o $@ $<
