@@ -112,3 +112,7 @@ PUBLIC int mouse_decode(MOUSE_DEC *mdec, u8 data)
     }
     return -1;
 }
+
+PUBLIC void mouse_sheet_update_to(u16 height){
+    sheet_updown(sht_mouse, height);
+}

@@ -132,7 +132,17 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     init_clock();                           //调用init_clock()函数来初始化系统时钟
     init_keyboard();                        //调用init_keyboard()函数来初始化键盘
     init_mouse();                           //调用init_mouse()函数来初始化鼠标
-
+    mouse_sheet_update_to(3);
+    /*
+    for(u16 h = 1;h < MAX_SHEETS;h++){
+        SHTCTL *check_ctl = &shtctl;
+        if(check_ctl->sheets0[i].flags != 1){
+            mouse_sheet_update_to(i);
+            check_ctl->sheets0[i].flags = 1;
+            break;
+        }
+    }
+    */
     k_reenter = 0;                          //将用于内核重新输入的k_renter变量设置为0
     ticks = 0;                              //将用于计数时钟刻度的刻度变量设置为0
 

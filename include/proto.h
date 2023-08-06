@@ -9,6 +9,7 @@ PUBLIC void kb_wait();
 PUBLIC void enable_mouse();
 PUBLIC int mouse_decode(MOUSE_DEC *mdec, u8 data);
 PUBLIC void init_mouse();
+PUBLIC void mouse_sheet_update_to(u16 height);
 
 // graphics/rect.c
 PUBLIC void draw_rect(int x0, int y0, int x1, int y1, int c);

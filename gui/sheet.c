@@ -47,7 +47,10 @@ PUBLIC void sheet_updown(SHEET *sht, int height)    //改变图层高度
 
     if (height > ctl->top + 1) height = ctl->top + 1;
     if (height < -1) height = -1;
-
+    /*
+    ctl->sheets0[height].flags = 1;
+    ctl->sheets0[old].flags = 0;
+    */
     sht->height = height;
 
     if (old > height) {
