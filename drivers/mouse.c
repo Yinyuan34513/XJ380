@@ -1,9 +1,9 @@
 #include "include.h"
 //鼠标
-int mcursor[256];
+int mcursor[304];
 MOUSE_DEC mdec;
 int mx = (1024 - 16) / 2;
-int my = (768 - 28 - 16) / 2;
+int my = (768 - 28 - 19) / 2;
 int mmx = -1, mmy = -1, x, y, j;
 SHEET *sht_mouse, *sht = NULL;
 //鼠标移动
@@ -57,7 +57,7 @@ PUBLIC void init_mouse()
 {
     sht_mouse = sheet_alloc(&shtctl);
     init_mouse_cursor(mcursor, 99);
-    sheet_setbuf(sht_mouse, mcursor, 16, 16, 99);
+    sheet_setbuf(sht_mouse, mcursor, 16, 19, 99);
     sheet_slide(sht_mouse, mx, my);
     sheet_updown(sht_mouse, 2);
 

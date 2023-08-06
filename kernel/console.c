@@ -8,18 +8,43 @@ PUBLIC void start_console(SHEET *sht_cons)
 	int ccx;
 	int ccy;
 	//初生化
-	ccx = 0;
-	ccy = 0;
+	ccx = 8;
+	ccy = 20;
+	
+	//窗口大小
+	int win_x;
+	int win_y;
+	//初生化
+	win_x = 480;
+	win_y = 290;
 	
 	//光标颜色
 	u32 cur_col = 0x000000;
 	
 	//窗口
-    sheet_setbuf(sht_cons, buf_cons, 480, 290, 99);
+    sheet_setbuf(sht_cons, buf_cons, win_x, win_y, 99);
     
-    make_window(buf_cons, 480, 68, "Console", 99);
-    putstr_atbuf(buf_cons, 480, 0, 20, 0x000000, ">");
-    putstr_atbuf(buf_cons, 480, ccx * 8 + 8, ccy * 8 + 20, cur_col, " ");
+    make_window(buf_cons, win_x, win_y, "Console", 99);
+    putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, ">");
+    int t;
+    t = get_ticks();
+    putstr_atbuf(buf_cons, 480, ccx, ccy, cur_col, " ");
+    if (((get_ticks() - t) * 100 / HZ) < 500)
+    {
+    	if (cur_col == 0x000000)
+        {
+        	cur_col = 0xffffff;
+        }
+        else if (cur_col == 0xffffff)
+        {
+        	cur_col = 0x000000;
+        }
+    }
+    if (ccx == (win_x - 20))
+    {
+    	ccx = 8;
+    	ccy += 16;
+    }
     
     return;
 }
