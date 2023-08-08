@@ -1,6 +1,6 @@
 #include "include.h"
 
-u32 buf_cons[480 * 290];
+PUBLIC u32 buf_cons[480 * 290];
 
 PUBLIC void start_console(SHEET *sht_cons)
 {
@@ -15,8 +15,8 @@ PUBLIC void start_console(SHEET *sht_cons)
 	int win_x;
 	int win_y;
 	//初生化
-	win_x = 240;
-	win_y = 145;
+	win_x = 480;
+	win_y = 290;
 	
 	//光标颜色
 	u32 cur_col = 0x000000;
