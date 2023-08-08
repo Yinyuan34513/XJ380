@@ -2,6 +2,7 @@
 
 u32 buf_win[160 * 68];  //声明一个u32类型的数组
                         //大小为160*68个元素，共10880元素，每个元素可存储一个32位的值
+extern PUBLIC u32 buf_cons[480 * 290];
 
 void TestA()            //定义了名为TestA的无返回值的函数
 {
@@ -50,6 +51,7 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     //使用sheet_setbuf函数设置图纸sht_back的缓冲区、尺寸和透明度颜色；buf_back是缓冲区数组，binfo->scrnx和binfo->scrny是屏幕尺寸，-1表示没有透明度
     sheet_setbuf(sht_win, buf_win, 160, 68, 99);
     //使用sheet_setbuf函数设置sht_back缓冲区数组为buf_win，将buf_win数组设置为尺寸为160x68像素的缓冲区，透明度颜色设置为99。
+    sheet_setbuf(sht_cons, buf_cons,480,290,-1);
     init_screen();      //通过执行一些图形操作来初始化屏幕
     
     
