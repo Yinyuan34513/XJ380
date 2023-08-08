@@ -1,4 +1,4 @@
-#include "include.h"
+﻿#include "include.h"
 
 PUBLIC u32 buf_cons[480 * 290];
 
@@ -24,26 +24,29 @@ PUBLIC void start_console(SHEET *sht_cons)
 	//窗口
     sheet_setbuf(sht_cons, buf_cons, win_x, win_y, 99);
     
-    make_window(buf_cons, win_x, win_y, "Console", 99);
+    make_window(buf_cons, win_x, win_y, "Terminal", 99);
     putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, ">");
     int t;
-    t = get_ticks();
-    putstr_atbuf(buf_cons, 480, ccx, ccy, cur_col, " ");
-    if (((get_ticks() - t) * 100 / HZ) < 500)
+    for(;;)
     {
-    	if (cur_col == 0x000000)
-        {
-        	cur_col = 0xffffff;
-        }
-        else if (cur_col == 0xffffff)
-        {
-        	cur_col = 0x000000;
-        }
-    }
-    if (ccx == (win_x - 20))
-    {
-    	ccx = 8;
-    	ccy += 16;
+		t = get_ticks();
+		putstr_atbuf(buf_cons, 480, ccx, ccy, cur_col, " ");
+		if (((get_ticks() - t) * 100 / HZ) >= 500)
+		{
+			if (cur_col == 0x000000)
+			{
+				cur_col = 0xffffff;
+			}
+			else if (cur_col == 0xffffff)
+			{
+				cur_col = 0x000000;
+			}
+		}
+		if (ccx == (win_x - 20))
+		{
+			ccx = 8;
+			ccy += 16;
+		}
     }
     
     return;
