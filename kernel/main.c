@@ -80,6 +80,8 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 
     TASK    *p_task       = task_table;     //声明一个指针p_task，并使用task_table指针的值对其进行初始化；说明task_table是TASK结构的数组。
     PROCESS *p_proc       = proc_table;     //声明一个指针p_proc，并使用proc_table指针的值对其进行初始化；说明proc_table是一个PROCESS结构数组。
+    TASK    *p_tcon       = task_table;
+    PROCESS *p_cons       = proc_table;
     char    *p_task_stack = task_stack + STACK_SIZE_TOTAL;
     //声明一个指针p_task_stack，并使用task_stack加stack_SIZE_OTAL的值对其进行初始化；task_stack是指向堆栈开始的指针，stack_SIZE_TOAL是堆栈的总大小。
     u16      selector_ldt = SELECTOR_LDT_FIRST;
@@ -88,6 +90,8 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     //这个代码片段是一个循环，它迭代系统中的任务和进程，并设置它们各自的属性
     int i;                                  //声明了一个int类型的名称为i的变量
     for (i = 0; i < NR_TASKS; i++) {        //启动一个从0迭代到NR_TASKS-1的循环。
+    	
+    	/*任务A*/
         strcpy(p_proc->p_name, p_task->name);
         //将当前任务的名称（p_task->name）复制到当前进程的名称（sp_proc->p_name）
         p_proc->pid = i;                    //将当前进程的进程ID（pid）设置为i的值
@@ -122,6 +126,45 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
         p_proc++;                           //增加p_proc指针以指向proc_table数组中的下一个进程
         p_task++;                           //增加p_task指针指向task_table数组中的下一个任务
         selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器
+        
+        
+        
+        
+        
+    	/*任务B（命令行）*/
+        strcpy(p_cons->p_name, p_tcon->name);
+        p_cons->pid = i;                    //将当前进程的进程ID（pid）设置为i的值
+
+        p_cons->ldt_sel = selector_ldt;     //将当前进程的本地描述符表（LDT）选择器设置为selector_LDT的值
+        
+        memcpy(&p_cons->ldts[0], &gdt[SELECTOR_KERNEL_CS >> 3], sizeof(DESCRIPTOR));
+        //将段描述符从全局描述符表（GDT）复制到当前进程的本地描述符表（LDT）
+        p_cons->ldts[0].attr1 = DA_C | PRIVILEGE_USER << 5;
+        //将LDT中代码段描述符的属性设置为具有代码特权级别USER（3）和可执行段
+        memcpy(&p_cons->ldts[1], &gdt[SELECTOR_KERNEL_DS >> 3], sizeof(DESCRIPTOR));
+        //将段描述符从GDT复制到当前进程的LDT
+        p_cons->ldts[1].attr1 = DA_DRW | PRIVILEGE_USER << 5;
+        //将LDT中数据段描述符的属性设置为具有数据特权级别USER（3）和读/写访问权限
+
+        //接下来的几行将当前进程的段寄存器（cs、ds、es、fs、ss和gs）的值设置为基于当前任务和特权级别的适当值
+        p_cons->regs.cs = ((0 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
+        p_cons->regs.ds = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
+        p_cons->regs.es = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
+        p_cons->regs.fs = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
+        p_cons->regs.ss = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
+        p_cons->regs.gs = ((1 * 8) & SA_RPL_MASK & SA_TI_MASK) | SA_TIL | RPL_USER;
+
+        p_cons->regs.eip = (u32) p_tcon->initial_eip;
+        //将当前进程的指令指针（eip）寄存器设置为当前任务的初始入口点
+        p_cons->regs.esp = (u32) p_task_stack;
+        //将当前进程的堆栈指针（esp）寄存器设置为p_task_stack的当前值
+        p_cons->regs.eflags = 0x1202;
+        //将当前进程的标志（eflags）寄存器设置为值0x1202（十六进制，十进制4610）
+
+        p_task_stack -= p_tcon->stacksize;  //递减p_task_stack指针，为下一个任务的堆栈保留空间
+        p_cons++;                           //增加p_proc指针以指向proc_table数组中的下一个进程
+        p_tcon++;                           //增加p_task指针指向task_table数组中的下一个任务
+        selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器        
     }
 
     proc_table[0].ticks = proc_table[0].priority = 150;
