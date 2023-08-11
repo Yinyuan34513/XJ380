@@ -28,26 +28,36 @@ PUBLIC void start_console(SHEET *sht_cons)
     putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, ">");
     
     int t;
-
-    t = get_ticks();
-    putstr_atbuf(buf_cons, win_x, ccx, ccy, cur_col, " ");
-    if (((get_ticks() - t) * 100 / HZ) >= 500)
+	int refresh_right = 1;//是否刷新，0 = 不刷新，其他 = 刷新
+    
+    for (;;)
     {
-    	if (cur_col == 0x000000)
-        {
-        	cur_col = 0xffffff;
-        }
-        else if (cur_col == 0xffffff)
-        {
-        	cur_col = 0x000000;
-        }
+		t = get_ticks();
+		putstr_atbuf(buf_cons, win_x, ccx, ccy, cur_col, " ");
+		if (((get_ticks() - t) * 100 / HZ) >= 500)
+		{
+			if (cur_col == 0x000000)
+			{
+				cur_col = 0xffffff;
+			}
+			else if (cur_col == 0xffffff)
+			{
+				cur_col = 0x000000;
+			}
+			refresh_right = 1;
+		}
+		if (ccx == (win_x - 20))
+		{
+			ccx = 8;
+			ccy += 16;
+			refresh_right = 1;
+		}
+		if (refresh_right ^ 0)
+		{
+			sheet_refresh(sht_cons, 0, 0, win_x, win_y);
+			refresh_right = 0;
+		}
     }
-    if (ccx == (win_x - 20))
-    {
-    	ccx = 8;
-    	ccy += 16;
-    }
-    for (;;);
     
     return;
 }
