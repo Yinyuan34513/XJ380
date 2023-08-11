@@ -1,6 +1,6 @@
 ﻿#include "include.h"
 
-PUBLIC u32 buf_cons[480 * 290];
+PUBLIC u32 buf_cons[320 * 180];
 
 PUBLIC void start_console(SHEET *sht_cons)
 {
@@ -15,8 +15,8 @@ PUBLIC void start_console(SHEET *sht_cons)
 	int win_x;
 	int win_y;
 	//初生化
-	win_x = 480;
-	win_y = 290;
+	win_x = 320;
+	win_y = 180;
 	
 	//光标颜色
 	u32 cur_col = 0x000000;
@@ -26,28 +26,28 @@ PUBLIC void start_console(SHEET *sht_cons)
     
     make_window(buf_cons, win_x, win_y, "Terminal", 99);
     putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, ">");
+    
     int t;
-    for(;;)
+
+    t = get_ticks();
+    putstr_atbuf(buf_cons, win_x, ccx, ccy, cur_col, " ");
+    if (((get_ticks() - t) * 100 / HZ) >= 500)
     {
-		t = get_ticks();
-		putstr_atbuf(buf_cons, 480, ccx, ccy, cur_col, " ");
-		if (((get_ticks() - t) * 100 / HZ) >= 500)
-		{
-			if (cur_col == 0x000000)
-			{
-				cur_col = 0xffffff;
-			}
-			else if (cur_col == 0xffffff)
-			{
-				cur_col = 0x000000;
-			}
-		}
-		if (ccx == (win_x - 20))
-		{
-			ccx = 8;
-			ccy += 16;
-		}
+    	if (cur_col == 0x000000)
+        {
+        	cur_col = 0xffffff;
+        }
+        else if (cur_col == 0xffffff)
+        {
+        	cur_col = 0x000000;
+        }
     }
+    if (ccx == (win_x - 20))
+    {
+    	ccx = 8;
+    	ccy += 16;
+    }
+    for (;;);
     
     return;
 }
