@@ -51,7 +51,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     			ccx = 8;
     			ccy += 8;
     			//识别指令
-    			if (strcmp(keys_in, "info", 4) == 0)
+    			if (strcmp(keys_in, "info") == 0)
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "XJ380 BetaVersion");
     				ccx += (17 << 3);
