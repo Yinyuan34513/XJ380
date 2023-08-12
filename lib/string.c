@@ -31,3 +31,22 @@ PUBLIC u32 strlen(const char *str)
     while (*p++);
     return p - str - 1;
 }
+
+PUBLIC u32 strcmp(char *str, const char *cmp_str, int len2)
+{
+	int len1;
+	len1 = strlen(str);
+	if (len1 ^ len2)
+	{
+		return 1;
+	}
+	int i;
+	for (i = 0; i < len2; i += 1)
+	{
+		if (str[i] ^ cmp_str[i])
+		{
+			return 1;
+		}
+	}
+	return 0;
+}

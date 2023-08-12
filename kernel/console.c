@@ -51,13 +51,18 @@ PUBLIC void start_console(SHEET *sht_cons)
     			ccx = 8;
     			ccy += 8;
     			//识别指令
-    			if (keys_in == "info")
+    			if (strcmp(keys_in, "info", 4) == 0)
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "XJ380 BetaVersion");
     				ccx += (17 << 3);
     			}
+    			else
+    			{
+    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command not found.");
+    				ccx += (18 << 3);
+    			}
     			ccx = 8;
-    			    			ccy += 8;
+    			ccy += 8;
     		}
     		putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
     		if (ccx + 8 >= win_x - 7)
