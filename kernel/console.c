@@ -34,8 +34,8 @@ PUBLIC void start_console(SHEET *sht_cons)
     
     int t;
     char key_in[1];
-    int key_in_m;
-    char keys_in[64];
+    int key_in_m = 0;
+    char keys_in[256];
     int ref_right = 1;
 	t = get_ticks();
     
@@ -43,38 +43,87 @@ PUBLIC void start_console(SHEET *sht_cons)
     {
     	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)
     	{
-    		//输入
-    		key_in[0] = fifo_get(&decoded_key);
-    		keys_in[key_in_m] = key_in[0];
+    		if (key_in_m == 255)
+    		{
+    			//pass
+    		}
+    		else
+    		{
+				//输入
+				key_in[0] = fifo_get(&decoded_key);
+			}
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
     			ccx = 8;
-    			ccy += 8;
+    			ccy += 16;
     			//识别指令
     			if (strcmp(keys_in, "info") == 0)
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "XJ380 BetaVersion");
-    				ccx += (17 << 3);
+    				ccx = 8;
+    				ccy += 16;
+    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
     			}
     			else
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command not found.");
     				ccx += (18 << 3);
     			}
-    			ccx = 8;
-    			ccy += 8;
+    			
+    			memset(keys_in, 0, sizeof keys_in);
+    			strcpy(keys_in, "");
+    			for (int i = 0; i < strlen(keys_in); i++) { keys_in[i] = '\0'; }
+    			key_in_m = 0;
+    			
+    			ccx = 0;
+    			ccy += 32;
+    		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     		}
-    		putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
+    		else if (key_in[0] == BACKSPACE)
+    		{
+    			if (ccx > 8)
+    			{
+    				ccx -= 8;
+    			}
+    			else if (ccx <= 8)
+    			{
+    				ccx = win_x - 168;
+    				ccy -= 8;
+    			}
+    			
+				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0xffffff, " ");
+    		}
+    		else
+    		{
+				keys_in[key_in_m] = key_in[0];
+				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
+    		}
     		if (ccx + 8 >= win_x - 7)
     		{
     			if (ccy + 16 >= win_y - 15)
     			{
-    				//滚动
-    				//以后再写
+    		    	//滚动
+    				int i;
+    				for (i = 1; i < win_x - 16; i += 1)
+    				{
+    					int j;
+    					for (j = 1; j <= win_y; j += 1)
+    					{
+    						buf_cons[(i * j) - j - i] = buf_cons[((i + 16) * j) - j - i];
+    					}
+    				}
+    				for (i = 1; i < win_x - 16; i += 1)
+    				{
+    					int j;
+    					for (j = 1; j <= win_y; j += 1)
+    					{
+    						sht_cons[(i * j) - j - i] = sht_cons[((i + 16) * j) - j - i];
+    					}
+    				}
     			}
     			else
     			{
-        			ccy += 16;
+    				ccy += 16;
     			}
     			ccx = 8;
     		}

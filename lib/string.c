@@ -32,14 +32,12 @@ PUBLIC u32 strlen(const char *str)
     return p - str - 1;
 }
 
-PUBLIC u32 strcmp(const char *from_str, const char *cmp_str)
+PUBLIC u32 strcmp(char *from_str, char *cmp_str)
 {
-	//assert(from_str != NULL && cmp_str != NULL);
-    const char *fs,*cs;
-    while(*fs == *cs){
-        if(*fs == '\0') return 0;
-        fs++;
-        cs++;
-    }
-	return *(u8*)fs - *(u8*)cs;
+	while ((*from_str != '\0') && (*from_str == *cmp_str))
+	{
+		from_str++;
+		cmp_str++;
+	}
+	return *from_str - *cmp_str;
 }
