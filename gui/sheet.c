@@ -105,8 +105,12 @@ PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)   
     vy0--;
     vx1++;
     vy1++;
-
-    for (h = 0; h <= ctl->top; h++) {
+    //ctl->vram[vy * ctl->xsize + vx] = c;
+    //
+    //vx = sht->vx0 + bx;
+    //c = buf[by * sht->bxsize + bx];
+    for (h = 0; h <= ctl->top; h++) 
+    {
         sht = ctl->sheets[h];
         buf = sht->buf;
         
@@ -124,7 +128,7 @@ PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)   
                 //重新绘制图层
                 vx = sht->vx0 + bx;
                 c = buf[by * sht->bxsize + bx];
-                if (c != sht->col_inv) {
+                if (c ^ sht->col_inv) {
                     ctl->vram[vy * ctl->xsize + vx] = c;
                 }
             }
@@ -135,7 +139,10 @@ PUBLIC void sheet_refreshsub(SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1)   
 PUBLIC void sheet_refresh(SHEET *sht, int bx0, int by0, int bx1, int by1)   //刷新图层
 {
     SHTCTL *ctl = &shtctl;
-    if (sht->height >= 0) sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);    //用刷新图层的函数来达到刷新图层的效果
+    if (sht->height >= 0) 
+    {
+    	sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);    //用刷新图层的函数来达到刷新图层的效果
+    }
 }
 
 PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0)   //移动图层
