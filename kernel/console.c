@@ -103,21 +103,11 @@ PUBLIC void start_console(SHEET *sht_cons)
     			if (ccy + 16 >= win_y - 15)
     			{
     		    	//滚动
-    				int i;
-    				for (i = 1; i < win_x - 16; i += 1)
+    				for (int i = 0; i < win_y; i++) 
     				{
-    					int j;
-    					for (j = 1; j <= win_y; j += 1)
+    					for (int j = 0; j < win_x; j++) 
     					{
-    						buf_cons[(i * j) - j - i] = buf_cons[((i + 16) * j) - j - i];
-    					}
-    				}
-    				for (i = 1; i < win_x - 16; i += 1)
-    				{
-    					int j;
-    					for (j = 1; j <= win_y; j += 1)
-    					{
-    						sht_cons[(i * j) - j - i] = sht_cons[((i + 16) * j) - j - i];
+    				    	buf_cons[j + i * win_x] = buf_cons[j + (i + 16) * win_x];
     					}
     				}
     			}
