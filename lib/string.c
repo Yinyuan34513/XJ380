@@ -31,24 +31,3 @@ PUBLIC u32 strlen(const char *str)
     while (*p++);
     return p - str - 1;
 }
-
-PUBLIC u32 strcmp(char *str, const char *cmp_str)
-{
-	int len1;
-	int len2;
-	len1 = strlen(str);
-	len2 = strlen(cmp_str);
-	if (len1 ^ len2)
-	{
-		return 0;
-	}
-	int i;
-	for (i = 0; i < len1; i += 1)
-	{
-		if (str[i] ^ cmp_str[i])
-		{
-			return 0;
-		}
-	}
-	return 1;
-}

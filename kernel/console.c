@@ -36,17 +36,28 @@ PUBLIC void start_console(SHEET *sht_cons)
     char key_in[1];
     int key_in_m;
     char keys_in[64];
+    int ref_right = 1;
+	t = get_ticks();
     
     for (;;)
     {
-    	if (fifo_status(&decoded_key) > 0)
+    	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)
     	{
     		//输入
     		key_in[0] = fifo_get(&decoded_key);
     		keys_in[key_in_m] = key_in[0];
-    		if (key_in == 13 || key_in == 10)
+    		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
-    			input_pgm(keys_in, ccx, ccy);
+    			ccx = 8;
+    			ccy += 8;
+    			//识别指令
+    			if (keys_in == "info")
+    			{
+    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "XJ380 BetaVersion");
+    				ccx += (17 << 3);
+    			}
+    			ccx = 8;
+    			    			ccy += 8;
     		}
     		putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
     		if (ccx + 8 >= win_x - 7)
@@ -66,12 +77,13 @@ PUBLIC void start_console(SHEET *sht_cons)
     		{
     			ccx += 8;
     		}
+    		ref_right = 1;
     		key_in_m++;
     	}
-		t = get_ticks();
 		putstr_atbuf(buf_cons, win_x, ccx, ccy, cur_col, " ");
 		if (((get_ticks() - t) * 100 / HZ) >= 500)
 		{
+			t = get_ticks();
 			if (cur_col == 0x000000)
 			{
 				cur_col = 0xffffff;
@@ -80,27 +92,12 @@ PUBLIC void start_console(SHEET *sht_cons)
 			{
 				cur_col = 0x000000;
 			}
+			ref_right = 1;
 		}
-		sheet_refresh(sht_cons, 0, 0, win_x, win_y);
+		if (ref_right == 1)
+		{
+			sheet_refresh(sht_cons, 0, 0, win_x, win_y);
+			ref_right = 0;
+		}
     }
-}
-
-PUBLIC int input_pgm(char *str, int ccx, int ccy)
-{
-	int black = COL_BLACK;
-	//strcmp()（XINGJI版）说明：1 = 一样， 0 = 不一样
-	if (strcmp(str, "info") == 1)
-	{
-		output("XJ380 BetaVersion", black, ccx, ccy);
-		output("Copyright(C) XINGJI 2017-2023", black, ccx, ccy);
-	}
-	return ccx, ccy;
-}
-
-PUBLIC int output(char *str, int c, int x, int y)
-{
-	putstr_atbuf(buf_cons, CONS_WIN_X, x, y, c, str);
-	x += (strlen(str) << 3);
-	y += 16;
-	return x, y;
 }
