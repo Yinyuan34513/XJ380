@@ -34,7 +34,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     
     int t;
     char key_in[1];
-    int key_in_m;
+    int key_in_m = 0;
     char keys_in[256];
     int ref_right = 1;
 	t = get_ticks();
@@ -60,18 +60,21 @@ PUBLIC void start_console(SHEET *sht_cons)
     			if (strcmp(keys_in, "info") == 0)
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "XJ380 BetaVersion");
-    				ccx += (17 << 3);
+    				ccx = 8;
+    				ccy += 16;
+    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
     			}
     			else
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command not found.");
     				ccx += (18 << 3);
     			}
-    			int temp = 64;
-    			while(temp--)
-    			{
-    				keys_in[temp] = ' ';
-    			}
+    			
+    			memset(keys_in, 0, sizeof keys_in);
+    			strcpy(keys_in, "");
+    			for (int i = 0; i < strlen(keys_in); i++) { keys_in[i] = '\0'; }
+    			key_in_m = 0;
+    			
     			ccx = 0;
     			ccy += 32;
     		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
@@ -87,11 +90,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     				ccx = win_x - 168;
     				ccy -= 8;
     			}
-    			int temp = 64;
-    			while(temp--)
-    			{
-    				keys_in[temp] = ' ';
-    			}
+    			
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0xffffff, " ");
     		}
     		else
