@@ -35,7 +35,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     int t;
     char key_in[1];
     int key_in_m;
-    char keys_in[64];
+    char keys_in[256];
     int ref_right = 1;
 	t = get_ticks();
     
@@ -43,8 +43,15 @@ PUBLIC void start_console(SHEET *sht_cons)
     {
     	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)
     	{
-    		//输入
-    		key_in[0] = fifo_get(&decoded_key);
+    		if (key_in_m == 255)
+    		{
+    			//pass
+    		}
+    		else
+    		{
+				//输入
+				key_in[0] = fifo_get(&decoded_key);
+			}
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
     			ccx = 8;
@@ -66,7 +73,8 @@ PUBLIC void start_console(SHEET *sht_cons)
     				keys_in[temp] = ' ';
     			}
     			ccx = 0;
-    			ccy += 16;
+    			ccy += 32;
+    		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     		}
     		else if (key_in[0] == BACKSPACE)
     		{
@@ -76,8 +84,8 @@ PUBLIC void start_console(SHEET *sht_cons)
     			}
     			else if (ccx <= 8)
     			{
-    				ccx = win_x - 8;
-    				ccy -= 16;
+    				ccx = win_x - 168;
+    				ccy -= 8;
     			}
     			int temp = 64;
     			while(temp--)
@@ -96,7 +104,23 @@ PUBLIC void start_console(SHEET *sht_cons)
     			if (ccy + 16 >= win_y - 15)
     			{
     		    	//滚动
-    		    	//以后再写
+    				int i;
+    				for (i = 1; i < win_x - 16; i += 1)
+    				{
+    					int j;
+    					for (j = 1; j <= win_y; j += 1)
+    					{
+    						buf_cons[(i * j) - j - i] = buf_cons[((i + 16) * j) - j - i];
+    					}
+    				}
+    				for (i = 1; i < win_x - 16; i += 1)
+    				{
+    					int j;
+    					for (j = 1; j <= win_y; j += 1)
+    					{
+    						sht_cons[(i * j) - j - i] = sht_cons[((i + 16) * j) - j - i];
+    					}
+    				}
     			}
     			else
     			{

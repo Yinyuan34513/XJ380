@@ -35,11 +35,13 @@ PUBLIC u32 strlen(const char *str)
 PUBLIC u32 strcmp(const char *from_str, const char *cmp_str)
 {
 	//assert(from_str != NULL && cmp_str != NULL);
-    const char *fs,*cs;
-    while(*fs == *cs){
-        if(*fs == '\0') return 0;
-        fs++;
-        cs++;
+	int i;
+    for (i = 0; from_str[i] == cmp_str[i]; i += 1)
+    {
+    	if (from_str[i] == '\0')
+    	{
+    		return 0;
+    	}
     }
-	return *(u8*)fs - *(u8*)cs;
+    return 1;
 }
