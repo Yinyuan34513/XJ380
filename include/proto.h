@@ -102,8 +102,6 @@ PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
 
 //	kernel/console.c
 PUBLIC void start_console(SHEET *sht_cons);
-PUBLIC int input_pgm(char *str, int ccx, int ccy);
-PUBLIC int output(char *str, int c, int x, int y);
 
 // system calls here
 // kernel/syscall_impl.c
