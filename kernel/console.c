@@ -43,9 +43,10 @@ PUBLIC void start_console(SHEET *sht_cons)
     {
     	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)
     	{
+    		int out_right = 1;
     		if (key_in_m == 255)
     		{
-    			//pass
+    			out_right = 0;
     		}
     		else
     		{
@@ -64,19 +65,31 @@ PUBLIC void start_console(SHEET *sht_cons)
     				ccy += 16;
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
     			}
+    			else if (strcmp(keys_in, "") == 0)
+    			{
+    				//pass
+    				ccy -= 32;
+    			}
     			else
     			{
     				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command not found.");
     				ccx += (18 << 3);
     			}
-    			
+    			//清空keys_in
     			memset(keys_in, 0, sizeof keys_in);
     			strcpy(keys_in, "");
     			for (int i = 0; i < strlen(keys_in); i++) { keys_in[i] = '\0'; }
     			key_in_m = 0;
-    			
-    			ccx = 0;
-    			ccy += 32;
+    			if (ccy + 32 >= win_y - 31)
+    			{
+    				console_scroll();
+    				ccy += 16;
+    			}
+    			else
+    			{
+    				ccy += 32;
+    			}
+				ccx = 0;
     		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     		}
     		else if (key_in[0] == BACKSPACE)
@@ -90,10 +103,12 @@ PUBLIC void start_console(SHEET *sht_cons)
     				ccx = win_x - 168;
     				ccy -= 8;
     			}
-    			
+    			//keys_in删除一个字符
+    			key_in_m--;
+    			keys_in[key_in_m] = '\0';
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0xffffff, " ");
     		}
-    		else
+    		else if (out_right == 1)
     		{
 				keys_in[key_in_m] = key_in[0];
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
@@ -102,14 +117,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     		{
     			if (ccy + 16 >= win_y - 15)
     			{
-    		    	//滚动
-    				for (int i = 0; i < win_y; i++) 
-    				{
-    					for (int j = 0; j < win_x; j++) 
-    					{
-    				    	buf_cons[j + i * win_x] = buf_cons[j + (i + 16) * win_x];
-    					}
-    				}
+    				console_scroll();
     			}
     			else
     			{
@@ -144,4 +152,25 @@ PUBLIC void start_console(SHEET *sht_cons)
 			ref_right = 0;
 		}
     }
+}
+
+PUBLIC void console_scroll()
+{
+	int win_x = CONS_WIN_X;
+	int win_y = CONS_WIN_Y;
+	//滚动
+	for (int i = 20; i < win_y; i++) 
+	{
+		for (int j = 0; j < win_x; j++) 
+		{
+	    	buf_cons[j + i * win_x] = buf_cons[j + (i + 16) * win_x];
+		}
+	}
+	for (int i = win_y - 16; i < win_y; i++) 
+	{
+		for (int j = 0; j < win_x; j++) 
+		{
+	    	buf_cons[j + i * win_x] = 0xffffff;
+		}
+	}
 }
