@@ -102,7 +102,7 @@ PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
 
 //	kernel/console.c
 PUBLIC void start_console(SHEET *sht_cons);
-PUBLIC void console_scroll();
+PUBLIC void console_scroll(u32 *buf);
 
 // system calls here
 // kernel/syscall_impl.c

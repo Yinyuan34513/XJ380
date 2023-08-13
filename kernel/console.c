@@ -43,16 +43,8 @@ PUBLIC void start_console(SHEET *sht_cons)
     {
     	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)
     	{
-    		int out_right = 1;
-    		if (key_in_m == 255)
-    		{
-    			out_right = 0;
-    		}
-    		else
-    		{
-				//输入
-				key_in[0] = fifo_get(&decoded_key);
-			}
+			//输入
+			key_in[0] = fifo_get(&decoded_key);
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
     			ccx = 8;
@@ -82,14 +74,14 @@ PUBLIC void start_console(SHEET *sht_cons)
     			key_in_m = 0;
     			if (ccy + 32 >= win_y - 31)
     			{
-    				console_scroll();
+    				console_scroll(buf_cons);
     				ccy += 16;
     			}
     			else
     			{
     				ccy += 32;
     			}
-				ccx = 0;
+				ccx = 8;
     		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     		}
     		else if (key_in[0] == BACKSPACE)
@@ -108,7 +100,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     			keys_in[key_in_m] = '\0';
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0xffffff, " ");
     		}
-    		else if (out_right == 1)
+    		else
     		{
 				keys_in[key_in_m] = key_in[0];
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
@@ -117,7 +109,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     		{
     			if (ccy + 16 >= win_y - 15)
     			{
-    				console_scroll();
+    				console_scroll(buf_cons);
     			}
     			else
     			{
@@ -154,23 +146,63 @@ PUBLIC void start_console(SHEET *sht_cons)
     }
 }
 
-PUBLIC void console_scroll()
+PUBLIC void console_scroll(u32 *buf)
 {
 	int win_x = CONS_WIN_X;
 	int win_y = CONS_WIN_Y;
+	int bc = 99;
 	//滚动
 	for (int i = 20; i < win_y; i++) 
 	{
 		for (int j = 0; j < win_x; j++) 
 		{
-	    	buf_cons[j + i * win_x] = buf_cons[j + (i + 16) * win_x];
+		    buf_cons[j + i * win_x] = buf_cons[j + (i + 16) * win_x];
 		}
 	}
-	for (int i = win_y - 16; i < win_y; i++) 
+	for (int i = win_y - 20; i < win_y; i++) 
 	{
 		for (int j = 0; j < win_x; j++) 
 		{
 	    	buf_cons[j + i * win_x] = 0xffffff;
 		}
 	}
+	
+	int xsize = win_x;
+	int ysize = win_y;
+	
+    buf[0 * xsize + 0] = bc;
+    buf[0 * xsize + 1] = bc;
+    buf[0 * xsize + 2] = bc;
+    buf[0 * xsize + 3] = bc;
+    buf[1 * xsize + 0] = bc;
+    buf[1 * xsize + 1] = bc;
+    buf[2 * xsize + 0] = bc;
+    buf[3 * xsize + 0] = bc;
+
+    buf[0 * xsize + xsize - 1 - 0] = bc;
+    buf[0 * xsize + xsize - 1 - 1] = bc;
+    buf[0 * xsize + xsize - 1 - 2] = bc;
+    buf[0 * xsize + xsize - 1 - 3] = bc;
+    buf[1 * xsize + xsize - 1 - 0] = bc;
+    buf[1 * xsize + xsize - 1 - 1] = bc;
+    buf[2 * xsize + xsize - 1 - 0] = bc;
+    buf[3 * xsize + xsize - 1 - 0] = bc;
+
+    buf[(ysize - 0) * xsize + 0] = bc;
+    buf[(ysize - 0) * xsize + 1] = bc;
+    buf[(ysize - 0) * xsize + 2] = bc;
+    buf[(ysize - 0) * xsize + 3] = bc;
+    buf[(ysize - 1) * xsize + 0] = bc;
+    buf[(ysize - 1) * xsize + 1] = bc;
+    buf[(ysize - 2) * xsize + 0] = bc;
+    buf[(ysize - 3) * xsize + 0] = bc;
+
+    buf[(ysize - 0) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 1] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 2] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 3] = bc;
+    buf[(ysize - 1) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 1) * xsize + xsize - 1 - 1] = bc;
+    buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
 }
