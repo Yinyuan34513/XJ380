@@ -16,6 +16,7 @@ PUBLIC void draw_rect(int x0, int y0, int x1, int y1, int c);
 PUBLIC void boxfill8(u32 *buf, int xsize, int c, int x0, int y0, int x1, int y1);
 
 // graphics/text.c
+PUBLIC void putfont8(u32 *buf, int xsize, int x, int y, int c, char *font);
 PUBLIC void put_char(char c);
 PUBLIC void put_str(char *s);
 PUBLIC void putstr_atbuf(u32 *buf, int xsize, int x, int y, int c, char *s);

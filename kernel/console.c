@@ -38,13 +38,14 @@ PUBLIC void start_console(SHEET *sht_cons)
     char keys_in[256];
     int ref_right = 1;
 	t = get_ticks();
-    
+    char key;
     for (;;)
     {
     	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)
     	{
 			//输入
-			key_in[0] = fifo_get(&decoded_key);
+			key = fifo_get(&decoded_key);
+			key_in[0]=key;
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
     			ccx = 8;
@@ -81,7 +82,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     			{
     				ccy += 32;
     			}
-				ccx = 8;
+				ccx = 0;
     		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     		}
     		else if (key_in[0] == BACKSPACE)
@@ -103,6 +104,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     		else
     		{
 				keys_in[key_in_m] = key_in[0];
+				key_in[1]='\0';
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
     		}
     		if (ccx + 8 >= win_x - 7)

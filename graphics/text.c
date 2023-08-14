@@ -2,7 +2,7 @@
 
 PRIVATE int x = 0, y = 0;
 //显示字符
-PRIVATE void putfont8(u32 *buf, int xsize, int x, int y, int c, char *font)
+PUBLIC void putfont8(u32 *buf, int xsize, int x, int y, int c, char *font)
 {
     int i;
     int *p;
