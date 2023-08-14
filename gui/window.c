@@ -11,10 +11,10 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
     //定义关闭按钮样式
 
     static char closebtn[18][32] = {
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
-        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
-        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
-        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
+        "@@@@@@@@@@@@@@@@@@@@@@@@@@@@BBBB",
+        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQ@@BB",
+        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@B",
+        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@B",
         "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
         "@QQQQQQQQQQQ@@QQQQ@@QQQQQQQQQQQ@",
         "@QQQQQQQQQQQQ@@QQ@@QQQQQQQQQQQQ@",
@@ -45,11 +45,11 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
         "@QQQQQQQQQQ@@@QQQQQQQQQQQQQQQQQ@",
         "@QQQQQQQQQQ@@@@QQQQQQQQQQQQQQQQ@",
         "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
-        "@QQQQQQQQ@@@@@@@@@@@@@@QQQQQQQQ@",
-        "@QQQQQQQQ@@@@@@@@@@@@@@QQQQQQQQ@",
-        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
-        "@QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+        "B@QQQQQQQ@@@@@@@@@@@@@@QQQQQQQQ@",
+        "B@QQQQQQQ@@@@@@@@@@@@@@QQQQQQQQ@",
+        "BB@QQQQQQQQQQQQQQQQQQQQQQQQQQQQ@",
+        "BBB@@QQQQQQQQQQQQQQQQQQQQQQQQQQ@",
+        "BBBBB@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     };
     //标题栏
     int x, y, c;
@@ -68,7 +68,11 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
             {
                 c = 0xc42b1c;	//Windows关闭按钮的红（#C42B1C）
             }
-            buf[(y + 2) * xsize + (xsize - 37 + x)] = c;
+            else if (c == 'B') 
+            {
+            	c = 0x00a2e8;
+            }
+            buf[y * xsize + (xsize - 32 + x)] = c;
             c = minimize[y][x];
             if (c == '@')
             {
@@ -78,7 +82,11 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
             {
                 c = 0x00a2e8;	//星际集团主题色——浅蓝（#00A2E8）
             }
-            buf[(y + 2) * xsize + (xsize - 68 + x)] = c;
+            else if (c == 'B') 
+            {
+            	c = 0x00a2e8;
+            }
+            buf[y * xsize + (xsize - 63 + x)] = c;
         }
     }
     //硬核圆角

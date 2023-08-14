@@ -16,6 +16,7 @@ PUBLIC void draw_rect(int x0, int y0, int x1, int y1, int c);
 PUBLIC void boxfill8(u32 *buf, int xsize, int c, int x0, int y0, int x1, int y1);
 
 // graphics/text.c
+PUBLIC void putfont8(u32 *buf, int xsize, int x, int y, int c, char *font);
 PUBLIC void put_char(char c);
 PUBLIC void put_str(char *s);
 PUBLIC void putstr_atbuf(u32 *buf, int xsize, int x, int y, int c, char *s);
@@ -102,6 +103,16 @@ PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
 
 //	kernel/console.c
 PUBLIC void start_console(SHEET *sht_cons);
+PUBLIC void console_scroll();
+PUBLIC void check_command(char *str);
+PUBLIC void command_cls();
+PUBLIC void command_info();
+PUBLIC void printstr(char *str);
+PUBLIC void endline();
+PUBLIC void yuanjiao(u32 *buf);
+
+//	/system_api.c
+PUBLIC void system_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax);
 
 // system calls here
 // kernel/syscall_impl.c

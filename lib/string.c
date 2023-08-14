@@ -31,3 +31,13 @@ PUBLIC u32 strlen(const char *str)
     while (*p++);
     return p - str - 1;
 }
+
+PUBLIC u32 strcmp(char *from_str, char *cmp_str)
+{
+	while ((*from_str != '\0') && (*from_str == *cmp_str))
+	{
+		from_str++;
+		cmp_str++;
+	}
+	return *from_str - *cmp_str;
+}

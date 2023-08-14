@@ -8,7 +8,7 @@ void TestA()            //定义了名为TestA的无返回值的函数
 {
     int i = 0;          //定义了数字类型的名为 i 的变量，并赋值为0
     while (1) {         //使用while循环，并且无限循环
-                        //fifo_status是proto.h文件里的全局变量，数据类型为int，
+                        //fifo_status是fifo.c文件里的全局变量，数据类型为int，
         if (fifo_status(&decoded_key) > 0) {                            
             printf("%c", fifo_get(&decoded_key));
             sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
