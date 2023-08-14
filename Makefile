@@ -82,3 +82,6 @@ out/%.o : gui/%.asm
 
 out/%.o : gui/%.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+out/%.o : api/%.c
+	$(CC) $(CFLAGS) -o $@ $<

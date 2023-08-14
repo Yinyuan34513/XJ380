@@ -165,11 +165,10 @@ PUBLIC void check_command(char *str)
 	ccy += 16;
 	//识别指令
 	if (strcmp(str, "info") == 0) { command_info(); }
-	else if (strcmp(str, "cls") == 0) { command_cls(buf_cons); }
+	else if (strcmp(str, "cls") == 0) { command_cls(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else { printstr("Command or program not found."); }
 }
-
 PUBLIC void command_cls()
 {
 	for (int i = 20; i < CONS_WIN_Y; i++) 
@@ -195,9 +194,12 @@ PUBLIC void command_info()
 	printstr("Copyright(C) XINGJI Studios 2017-2023");
 }
 
+
 PUBLIC void printstr(char *str)
 {
-	putstr_atbuf(buf_cons, CONS_WIN_X, 8, ccy, 0xffffff, str);
+	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, str);
+	//纪念一下找了一整天不知道问题出在哪里的代码
+	//putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0xffffff, str);
 	ccx += (strlen(str) << 3);
 }
 
