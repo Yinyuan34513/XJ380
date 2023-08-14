@@ -112,6 +112,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     			if (ccy + 16 >= win_y - 15)
     			{
     				console_scroll(buf_cons);
+    				putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     			}
     			else
     			{
