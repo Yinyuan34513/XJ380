@@ -7,11 +7,12 @@
 
 PUBLIC u32 buf_cons[320 * 180];
 
+//光标坐标
+int ccx;
+int ccy;
+
 PUBLIC void start_console(SHEET *sht_cons)
 {
-	//光标坐标
-	int ccx;
-	int ccy;
 	//初生化
 	ccx = 8;
 	ccy = 20;
@@ -48,31 +49,14 @@ PUBLIC void start_console(SHEET *sht_cons)
 			key_in[0]=key;
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
-    			ccx = 8;
-    			ccy += 16;
-    			//识别指令
-    			if (strcmp(keys_in, "info") == 0)
-    			{
-    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "XJ380 BetaVersion");
-    				ccx = 8;
-    				ccy += 16;
-    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
-    			}
-    			else if (strcmp(keys_in, "") == 0)
-    			{
-    				//pass
-    				ccy -= 32;
-    			}
-    			else
-    			{
-    				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command not found.");
-    				ccx += (18 << 3);
-    			}
+    			check_command(keys_in);
+    			
     			//清空keys_in
     			memset(keys_in, 0, sizeof keys_in);
     			strcpy(keys_in, "");
     			for (int i = 0; i < strlen(keys_in); i++) { keys_in[i] = '\0'; }
     			key_in_m = 0;
+    			
     			if (ccy + 32 >= win_y - 31)
     			{
     				console_scroll(buf_cons);
@@ -85,7 +69,7 @@ PUBLIC void start_console(SHEET *sht_cons)
 				ccx = 0;
     		    putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     		}
-    		else if (key_in[0] == BACKSPACE)
+    		else if (key_in[0] == BACKSPACE)	//BUG里写了个退格
     		{
     			if (ccx > 8)
     			{
@@ -208,4 +192,59 @@ PUBLIC void console_scroll(u32 *buf)
     buf[(ysize - 1) * xsize + xsize - 1 - 1] = bc;
     buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
     buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
+}
+
+PUBLIC void check_command(char *str)
+{
+	ccx = 8;
+	ccy += 16;
+	//识别指令
+	if (strcmp(str, "info") == 0)
+	{
+		command_info();
+	}
+	else if (strcmp(str, "cls") == 0)
+	{
+		command_cls();
+	}
+	else if (strcmp(str, "") == 0)
+	{
+		//pass
+		ccy -= 32;
+	}
+	else
+	{
+		putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command or program not found.");
+		ccx += (29 << 3);
+	}
+}
+
+PUBLIC void command_cls()
+{
+	for (int i = 0; i < win_y; i++) 
+	{
+		for (int j = 0; j < win_x; j++) 
+		{
+		    buf_cons[j + i * win_x] = 0xffffff;
+		}
+	}
+}
+
+PUBLIC void command_info()
+{
+	printstr("XJ380 BetaVersion");
+	endline();
+	printstr("Copyright(C) XINGJI Studios 2017-2023");
+}
+
+PUBLIC void printstr(char *str)
+{
+	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0xffffff, str);
+	ccx += (strlen(str) << 3);
+}
+
+PUBLIC void endline()
+{
+	ccx = 8;
+	ccy += 16;
 }
