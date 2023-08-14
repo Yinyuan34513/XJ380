@@ -8,10 +8,10 @@
 PUBLIC u32 buf_cons[320 * 180];
 
 //光标坐标
-int ccx = 8;
-int ccy = 20;
+PRIVATE int ccx = 8;
+PRIVATE int ccy = 20;
 
-int cls_right = 0;
+PRIVATE int cls_right = 0;
 
 PUBLIC void start_console(SHEET *sht_cons)
 {
@@ -61,7 +61,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     			
     			if (ccy + 32 >= win_y - 31)
     			{
-    				console_scroll(buf_cons);
+    				console_scroll();
     				ccy += 16;
     			}
     			else if (cls_right ^ 1)
@@ -97,7 +97,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     		{
     			if (ccy + 16 >= win_y - 15)
     			{
-    				console_scroll(buf_cons);
+    				console_scroll();
     				putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
     			}
     			else
@@ -135,11 +135,11 @@ PUBLIC void start_console(SHEET *sht_cons)
     }
 }
 
-PUBLIC void console_scroll(u32 *buf)
+PUBLIC void console_scroll()
 {
 	int win_x = CONS_WIN_X;
 	int win_y = CONS_WIN_Y;
-	int bc = 99;
+	
 	//滚动
 	for (int i = 20; i < win_y; i++) 
 	{
@@ -156,44 +156,7 @@ PUBLIC void console_scroll(u32 *buf)
 		}
 	}
 	
-	int xsize = win_x;
-	int ysize = win_y;
-	
-    buf[0 * xsize + 0] = bc;
-    buf[0 * xsize + 1] = bc;
-    buf[0 * xsize + 2] = bc;
-    buf[0 * xsize + 3] = bc;
-    buf[1 * xsize + 0] = bc;
-    buf[1 * xsize + 1] = bc;
-    buf[2 * xsize + 0] = bc;
-    buf[3 * xsize + 0] = bc;
-
-    buf[0 * xsize + xsize - 1 - 0] = bc;
-    buf[0 * xsize + xsize - 1 - 1] = bc;
-    buf[0 * xsize + xsize - 1 - 2] = bc;
-    buf[0 * xsize + xsize - 1 - 3] = bc;
-    buf[1 * xsize + xsize - 1 - 0] = bc;
-    buf[1 * xsize + xsize - 1 - 1] = bc;
-    buf[2 * xsize + xsize - 1 - 0] = bc;
-    buf[3 * xsize + xsize - 1 - 0] = bc;
-
-    buf[(ysize - 0) * xsize + 0] = bc;
-    buf[(ysize - 0) * xsize + 1] = bc;
-    buf[(ysize - 0) * xsize + 2] = bc;
-    buf[(ysize - 0) * xsize + 3] = bc;
-    buf[(ysize - 1) * xsize + 0] = bc;
-    buf[(ysize - 1) * xsize + 1] = bc;
-    buf[(ysize - 2) * xsize + 0] = bc;
-    buf[(ysize - 3) * xsize + 0] = bc;
-
-    buf[(ysize - 0) * xsize + xsize - 1 - 0] = bc;
-    buf[(ysize - 0) * xsize + xsize - 1 - 1] = bc;
-    buf[(ysize - 0) * xsize + xsize - 1 - 2] = bc;
-    buf[(ysize - 0) * xsize + xsize - 1 - 3] = bc;
-    buf[(ysize - 1) * xsize + xsize - 1 - 0] = bc;
-    buf[(ysize - 1) * xsize + xsize - 1 - 1] = bc;
-    buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
-    buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
+	yuanjiao(buf_cons);
 }
 
 PUBLIC void check_command(char *str)
@@ -207,7 +170,7 @@ PUBLIC void check_command(char *str)
 	else { printstr("Command or program not found."); }
 }
 
-PUBLIC void command_cls(u32 *buf)
+PUBLIC void command_cls()
 {
 	for (int i = 20; i < CONS_WIN_Y; i++) 
 	{
@@ -222,6 +185,30 @@ PUBLIC void command_cls(u32 *buf)
 	cls_right = 1;
 	putstr_atbuf(buf_cons, CONS_WIN_X, 0, 20, 0x000000, ">");
 	
+	yuanjiao(buf_cons);
+}
+
+PUBLIC void command_info()
+{
+	printstr("XJ380 BetaVersion");
+	endline();
+	printstr("Copyright(C) XINGJI Studios 2017-2023");
+}
+
+PUBLIC void printstr(char *str)
+{
+	putstr_atbuf(buf_cons, CONS_WIN_X, 8, ccy, 0xffffff, str);
+	ccx += (strlen(str) << 3);
+}
+
+PUBLIC void endline()
+{
+	ccx = 8;
+	ccy += 16;
+}
+
+PUBLIC void yuanjiao(u32 *buf)
+{
 	int xsize = CONS_WIN_X;
 	int ysize = CONS_WIN_Y;
 	int bc = 99;
@@ -261,23 +248,4 @@ PUBLIC void command_cls(u32 *buf)
     buf[(ysize - 1) * xsize + xsize - 1 - 1] = bc;
     buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
     buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
-}
-
-PUBLIC void command_info()
-{
-	printstr("XJ380 BetaVersion");
-	endline();
-	printstr("Copyright(C) XINGJI Studios 2017-2023");
-}
-
-PUBLIC void printstr(char *str)
-{
-	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0xffffff, str);
-	ccx += (strlen(str) << 3);
-}
-
-PUBLIC void endline()
-{
-	ccx = 8;
-	ccy += 16;
 }

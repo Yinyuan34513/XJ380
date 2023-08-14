@@ -103,12 +103,16 @@ PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
 
 //	kernel/console.c
 PUBLIC void start_console(SHEET *sht_cons);
-PUBLIC void console_scroll(u32 *buf);
+PUBLIC void console_scroll();
 PUBLIC void check_command(char *str);
-PUBLIC void command_cls(u32 *buf);
+PUBLIC void command_cls();
 PUBLIC void command_info();
 PUBLIC void printstr(char *str);
 PUBLIC void endline();
+PUBLIC void yuanjiao(u32 *buf);
+
+//	/system_api.c
+PUBLIC void system_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax);
 
 // system calls here
 // kernel/syscall_impl.c
