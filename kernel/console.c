@@ -11,6 +11,8 @@ PUBLIC u32 buf_cons[320 * 180];
 int ccx = 8;
 int ccy = 20;
 
+int cls_right = 0;
+
 PUBLIC void start_console(SHEET *sht_cons)
 {
 	//初生化
@@ -62,7 +64,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     				console_scroll(buf_cons);
     				ccy += 16;
     			}
-    			else
+    			else if (cls_right ^ 1)
     			{
     				ccy += 32;
     			}
@@ -200,20 +202,65 @@ PUBLIC void check_command(char *str)
 	ccy += 16;
 	//识别指令
 	if (strcmp(str, "info") == 0) { command_info(); }
-	else if (strcmp(str, "cls") == 0) { command_cls(); }
+	else if (strcmp(str, "cls") == 0) { command_cls(buf_cons); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else { printstr("Command or program not found."); }
 }
 
-PUBLIC void command_cls()
+PUBLIC void command_cls(u32 *buf)
 {
-	for (int i = 0; i < CONS_WIN_Y; i++) 
+	for (int i = 20; i < CONS_WIN_Y; i++) 
 	{
 		for (int j = 0; j < CONS_WIN_X; j++) 
 		{
 		    buf_cons[j + i * CONS_WIN_X] = 0xffffff;
 		}
 	}
+	
+	ccx = 8;
+	ccy = 20;
+	cls_right = 1;
+	putstr_atbuf(buf_cons, CONS_WIN_X, 0, 20, 0x000000, ">");
+	
+	int xsize = CONS_WIN_X;
+	int ysize = CONS_WIN_Y;
+	int bc = 99;
+	
+    buf[0 * xsize + 0] = bc;
+    buf[0 * xsize + 1] = bc;
+    buf[0 * xsize + 2] = bc;
+    buf[0 * xsize + 3] = bc;
+    buf[1 * xsize + 0] = bc;
+    buf[1 * xsize + 1] = bc;
+    buf[2 * xsize + 0] = bc;
+    buf[3 * xsize + 0] = bc;
+
+    buf[0 * xsize + xsize - 1 - 0] = bc;
+    buf[0 * xsize + xsize - 1 - 1] = bc;
+    buf[0 * xsize + xsize - 1 - 2] = bc;
+    buf[0 * xsize + xsize - 1 - 3] = bc;
+    buf[1 * xsize + xsize - 1 - 0] = bc;
+    buf[1 * xsize + xsize - 1 - 1] = bc;
+    buf[2 * xsize + xsize - 1 - 0] = bc;
+    buf[3 * xsize + xsize - 1 - 0] = bc;
+
+    buf[(ysize - 0) * xsize + 0] = bc;
+    buf[(ysize - 0) * xsize + 1] = bc;
+    buf[(ysize - 0) * xsize + 2] = bc;
+    buf[(ysize - 0) * xsize + 3] = bc;
+    buf[(ysize - 1) * xsize + 0] = bc;
+    buf[(ysize - 1) * xsize + 1] = bc;
+    buf[(ysize - 2) * xsize + 0] = bc;
+    buf[(ysize - 3) * xsize + 0] = bc;
+
+    buf[(ysize - 0) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 1] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 2] = bc;
+    buf[(ysize - 0) * xsize + xsize - 1 - 3] = bc;
+    buf[(ysize - 1) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 1) * xsize + xsize - 1 - 1] = bc;
+    buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
+    buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
 }
 
 PUBLIC void command_info()
