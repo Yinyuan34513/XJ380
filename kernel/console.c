@@ -8,14 +8,14 @@
 PUBLIC u32 buf_cons[320 * 180];
 
 //光标坐标
-int ccx;
-int ccy;
+int ccx = 8;
+int ccy = 20;
 
 PUBLIC void start_console(SHEET *sht_cons)
 {
 	//初生化
-	ccx = 8;
-	ccy = 20;
+	//ccx = 8;
+	//ccy = 20;
 	
 	//窗口大小
 	int win_x;
@@ -199,33 +199,19 @@ PUBLIC void check_command(char *str)
 	ccx = 8;
 	ccy += 16;
 	//识别指令
-	if (strcmp(str, "info") == 0)
-	{
-		command_info();
-	}
-	else if (strcmp(str, "cls") == 0)
-	{
-		command_cls();
-	}
-	else if (strcmp(str, "") == 0)
-	{
-		//pass
-		ccy -= 32;
-	}
-	else
-	{
-		putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, "Command or program not found.");
-		ccx += (29 << 3);
-	}
+	if (strcmp(str, "info") == 0) { command_info(); }
+	else if (strcmp(str, "cls") == 0) { command_cls(); }
+	else if (strcmp(str, "") == 0) { ccy -= 32; }
+	else { printstr("Command or program not found."); }
 }
 
 PUBLIC void command_cls()
 {
-	for (int i = 0; i < win_y; i++) 
+	for (int i = 0; i < CONS_WIN_Y; i++) 
 	{
-		for (int j = 0; j < win_x; j++) 
+		for (int j = 0; j < CONS_WIN_X; j++) 
 		{
-		    buf_cons[j + i * win_x] = 0xffffff;
+		    buf_cons[j + i * CONS_WIN_X] = 0xffffff;
 		}
 	}
 }
