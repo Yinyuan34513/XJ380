@@ -48,7 +48,7 @@ PUBLIC void start_console(SHEET *sht_cons)
     	{
 			//输入
 			key = fifo_get(&decoded_key);
-			key_in[0]=key;
+			key_in[0] = key;
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
     			check_command(keys_in);
@@ -90,7 +90,8 @@ PUBLIC void start_console(SHEET *sht_cons)
     		else
     		{
 				keys_in[key_in_m] = key_in[0];
-				key_in[1]='\0';
+				key_in_m++;
+				key_in[1] = '\0';
 				putstr_atbuf(buf_cons, win_x, ccx, ccy, 0x000000, key_in);
     		}
     		if (ccx + 8 >= win_x - 7)
@@ -111,7 +112,6 @@ PUBLIC void start_console(SHEET *sht_cons)
     			ccx += 8;
     		}
     		ref_right = 1;
-    		key_in_m++;
     	}
 		putstr_atbuf(buf_cons, win_x, ccx, ccy, cur_col, " ");
 		if (((get_ticks() - t) * 100 / HZ) >= 500)
