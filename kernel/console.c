@@ -40,8 +40,11 @@ PUBLIC void start_console(SHEET *sht_cons)
     int key_in_m = 0;
     char keys_in[256];
     int ref_right = 1;
-	t = get_ticks();
     char key;
+    int *fat
+    
+	t = get_ticks();
+	
     for (;;)
     {
     	if (fifo_status(&decoded_key) > 0 && ((get_ticks() - t) * 100 / HZ) >= 25)

@@ -9,6 +9,7 @@
 #include "binfo.h"
 #include "proc.h"
 #include "fifo.h"
+#include "fat.h"
 #include "keyboard.h"
 #include "mouse.h"
 #include "sheet.h"
