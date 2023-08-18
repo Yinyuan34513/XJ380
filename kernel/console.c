@@ -41,7 +41,6 @@ PUBLIC void start_console(SHEET *sht_cons)
     char keys_in[256];
     int ref_right = 1;
     char key;
-    int *fat
     
 	t = get_ticks();
 	
