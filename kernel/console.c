@@ -196,7 +196,6 @@ PUBLIC void command_info()
 	printstr("Copyright(C) XINGJI Studios 2017-2023");
 }
 
-
 PUBLIC void printstr(char *str)
 {
 	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, str);
