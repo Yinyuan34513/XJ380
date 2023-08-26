@@ -95,16 +95,13 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 
 	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
 	
-	for (int i=0;i<binfo->scrnx;i++)
+	for (int i = 0; i < binfo -> scrnx; i++)
 	{
-		for (int j=0;j<1;j++)
+		for (int j = 0; j < 1; j++)
 		{
 			draw_rect(0, 0, i, 10, 0x00ff00);
 			sheet_refresh(sht_back, 0, 0, binfo->scrnx, 48);
-		}
-		
-		
-
+        }
 	}	 
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
@@ -114,7 +111,7 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	int adder=0x010000;
 	char p[3];
 	p[0] = (char*) adder;
-    make_window(buf_win, 190, 100, "Explorer", 99);
+    make_window(buf_win, 190, 100, "ExplTest", 99);
 	int DIRADR=0x010000;
     struct FILEINFO *finfo = (struct FILEINFO *) (DIRADR);
 	int fileloop=0;

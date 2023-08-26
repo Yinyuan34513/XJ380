@@ -8,6 +8,17 @@
 PUBLIC u32 buf_cons[320 * 180];
 PUBLIC u32 buf_win[190 * 100];
 
+struct FILEINFO{
+	unsigned char name[8], ext[3], type;
+	char reserve[10];
+	unsigned short time, date, clustno;
+	unsigned int size;
+};
+
+struct FILEDATA{
+	char data[32];
+};
+
 //光标坐标
 PRIVATE int ccx = 8;
 PRIVATE int ccy = 20;
@@ -173,7 +184,7 @@ PUBLIC void check_command(char *str)
 	//识别指令
 	if (strcmp(str, "info") == 0) { command_info(); }
 	else if (strcmp(str, "cls") == 0) { command_cls(buf_cons); }
-	else if (strcmp(str, "explorer") == 0) {command_dir();}
+	else if (strcmp(str, "dir") == 0)  {command_dir(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else { printstr("Command or program not found."); }
 }
@@ -204,14 +215,30 @@ PUBLIC void command_cls()
 
 PUBLIC void command_dir()
 {
+	ccx = 8;
+	//啊？
 	//make_window(buf_win, 190, 100, "Explorer", 99);
-	putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "You don't need open me");
-	putstr_atbuf(buf_win, 190, 0, 30, 0x000000, "in the console.");
-	putstr_atbuf(buf_win, 190, 0, 40, 0x000000, "Now explorer broken.");
-	putstr_atbuf(buf_win, 190, 0, 60, 0x000000, ":)");
+	//putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "You don't need open me");
+	//putstr_atbuf(buf_win, 190, 0, 30, 0x000000, "in the console.");
+	//putstr_atbuf(buf_win, 190, 0, 40, 0x000000, "Now explorer broken.");
+	//putstr_atbuf(buf_win, 190, 0, 60, 0x000000, ":)");
 	//SHEET *sht_win  = sheet_alloc(&shtctl);
 	//sheet_slide(sht_win, 120, 120);           //将sht_win表移动到屏幕上的位置（80，72）
     //sheet_updown(sht_win, 2);  
+	int adder = 0x010000;
+	char p[3];
+	p[0] = (char*) adder;
+	int DIRADR=0x010000;
+    struct FILEINFO *finfo = (struct FILEINFO *) (DIRADR);
+	int fileloop=0;
+	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, "NAME    EXT");
+	ccy += 16;
+	while(finfo[fileloop].name[0] != 0x00)
+	{
+		putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy + fileloop * 16, 0x000000, finfo[fileloop].name);
+		fileloop++;
+	}
+	ccy += 32;
 }
 
 PUBLIC void command_info()
