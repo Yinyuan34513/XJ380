@@ -92,11 +92,6 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	
 	sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
-	
-	
-	printf("%s", "\n GTA5 START!");
-	printf("%s", "\n Copyright 2023 XINGJI Stdios.");
-
 
 	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
 	
@@ -113,20 +108,15 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	}	 
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
-    BetaWaterMark();
     
     
     //窗口
 	int adder=0x010000;
 	char p[3];
 	p[0] = (char*) adder;
-	//p[1] = (char*) adder+0x01;
-	//p[2] = '\0';
     make_window(buf_win, 190, 100, "Explorer", 99);
-    //putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "KERNEL  BIN     ");
 	int DIRADR=0x010000;
     struct FILEINFO *finfo = (struct FILEINFO *) (DIRADR);
-	//struct FILEDATA *finfo = (struct FILEDATA *) (DIRADR);
 	int fileloop=0;
 	putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "NAME    EXT");
 	while(finfo[fileloop].name[0] != 0x00)
@@ -134,9 +124,6 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 		putstr_atbuf(buf_win, 190, 0, 35+fileloop*12, 0x000000, finfo[fileloop].name);
 		fileloop++;
 	}
-	
-	//printf("%s", finfo[0].ext);
-	//draw_rect(0, 0, 20, 20, 0xffffff);
 
     
 
