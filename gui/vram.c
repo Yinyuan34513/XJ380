@@ -1,43 +1,42 @@
 #include "include.h"
 
 //星星图标(星际工作室)
-static char Star[22][24]=
+static char Star[24][24] =
 {
-	"          +           ",
-	"         +++          ",
-	"         +++          ",
-	"        ++++          ",
-	"        +++++         ",
-	"        +++++         ",
-	"        ++++++        ",
-	"       ++++++++       ",
-	"      ++++++++++      ",
-	" ++++++++++++++++++++ ",
-	" +++++++++++++++++++  ",
-	"  ++++++++++++++++++  ",
-	"   +++++++++++++++   ",
-	"    +++++++++++++     ",
-	"     +++++++++++++    ",
-	"    ++++++++++++++    ",
-	"   +++++++ ++++++++   ",
-	"   ++++++   +++++++   ",
-	"   +++++      +++++   ",
-	"  +++++        +++++  ",
-	"  ++++          ++++  ",
-	"  +++            +++  ",
-	"  ++              ++  ",
-	"  +                +  ",
+	"            +           ",
+	"           + +          ",
+	"           + +          ",
+	"           + +          ",
+	"          +   +         ",
+	"          +   +         ",
+	"          +   +         ",
+	"++++++++++++++++++++++++",
+	" ++      +     +      + ",
+	"   +     +     +    ++  ",
+	"    +   +       +  +    ",
+	"     ++ +       + +     ",
+	"       +         +      ",
+	"       ++      +++      ",
+	"       + ++   +  +      ",
+	"      +    + +    +     ",
+	"      +    ++     +     ",
+	"      +   +  ++   +     ",
+	"     +   +     +   +    ",
+	"     +  +       +  +    ",
+	"     +++         +++    ",
+	"    ++             ++   ",
+	"    +               +   "
 };
 
 PUBLIC void DrawStar(int x, int y, int size, int color)
 {
-	for (int i=0;i<=22;i++)
+	for (int i = 0; i <= 23; i++)
 	{
-		for (int j=0;j<=22;j++)
+		for (int j = 0; j <= 24; j++)
 		{
-			if (Star[j][i]=='+')
+			if (Star[j][i] == '+')
 			{
-				draw_rect(x+i*size, y+j*size, x+i*size+size, y+j*size+size, color);
+				draw_rect(x + i * size, y + j * size, x + i * size + size, y + j * size + size, color);
 			}
 			//if (Star[j][i]=='1')
 			//{
@@ -56,7 +55,7 @@ PUBLIC void init_screen()   //绘制桌面
     draw_rect(0, binfo->scrny - 40, binfo->scrnx - 1, binfo->scrny - 1,  0xc6c6c6);
 	draw_rect(0, binfo->scrny - 40, 90, binfo->scrny - 1,  0xaaaaaa);
 	DrawStar(5,binfo->scrny - 32,1,0x44cef7);
-	putstr_atbuf(buf_back, binfo->scrnx, 35, binfo->scrny - 25, 0x000000, "START");
+	putstr_atbuf(buf_back, binfo->scrnx, 35, binfo->scrny - 25, 0x000000, "Menu");
 }
 
 PUBLIC void DrawStartMenu(int color)
@@ -103,7 +102,7 @@ PUBLIC void BetaWaterMark()
 {
 	putstr_atbuf(buf_back, binfo->scrnx, binfo->scrnx-(8*26)-16, binfo->scrny-20-(15*3), 0xffffff, "XINGJI Stdios Confidential");
 	putstr_atbuf(buf_back, binfo->scrnx, binfo->scrnx-(8*31), binfo->scrny-12-(15*2), 0xffffff, "Prohibit leakage of source code");
-	putstr_atbuf(buf_back, binfo->scrnx, binfo->scrnx-(8*18), binfo->scrny-12-(15*1), 0xffffff, "XJ380 OS Beta 17.1");
+	putstr_atbuf(buf_back, binfo->scrnx, binfo->scrnx-(8*18), binfo->scrny-12-(15*1), 0xffffff, "XJ380 OS Beta Version");
 }
 
 //哎空姐！

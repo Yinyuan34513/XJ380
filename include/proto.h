@@ -39,7 +39,14 @@ PUBLIC void sheet_slide(SHEET *sht, int vx0, int vy0);
 PUBLIC void sheet_free(SHEET *sht);
 
 // gui/vram.c
+PUBLIC void DrawStar(int x, int y, int size, int color);
 PUBLIC void init_screen();
+PUBLIC void DrawStartMenu(int color);
+PUBLIC void computer();
+PUBLIC void reDrawComputer();
+PUBLIC void DrawCommand();
+PUBLIC void reDrawCommand();
+PUBLIC void BetaWaterMark();
 
 // gui/window.c
 PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc);
