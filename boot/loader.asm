@@ -5,7 +5,10 @@ PageDirBase             equ 100000h
 PageTblBase             equ 101000h
 
     jmp LABEL_START
-
+FIN:
+		HLT
+		JMP FIN
+	
 %include "fat12hdr.inc"
 %include "pm.inc"
 %include "load.inc"
@@ -30,12 +33,76 @@ LABEL_START:
     mov ss, ax
     mov sp, BaseOfStack
 
+	MOV 	AX,0x1000
+	MOV 	ES,AX
+	MOV 	CH,0
+	MOV 	DH,1
+	MOV 	CL,2
+	MOV 	AH,02H
+	MOV 	AL,1
+	MOV 	BX,0
+	MOV 	DL,0x00
+	INT 	13H
+	JC 		FIN
+	
+	
     call SwitchGraphicMode
 
     mov word [wSectorNo], SectorNoOfRootDirectory
     xor ah, ah
     xor dl, dl
     int 13h
+	
+	
+
+	
+	
+	; mov ah,00h
+	; mov al,12h
+	; int 10h
+	
+	
+; loader:
+		; MOV 	AL,2
+		; MOV 	AH,0CH
+		; NOP
+		; INT 	10H
+		; NOP
+		; ADD 	DX,1
+
+		; NOP
+		; MOV 	AH,0CH
+		; NOP
+		; INT 	10H
+		; NOP
+		; ADD 	DX,1
+
+		; SUB 	DX,1
+		; NOP
+		; ADD		CX,1
+		; NOP
+		
+		; NOP
+		; MOV 	ESI,0
+		; CALL 	noploop
+		; CMP 	CX,270
+		; JBE 	loader
+		; ;MOV 	AL,0x03
+		; ;MOV 	AH,0x00
+		; ;INT 	0x10
+		; ;mov ax, 0600h
+		; ;mov bx, 0700h
+		; ;mov cx, 0
+		; ;mov dx, 0184fh
+		; ;int 10h
+		; JMP 	LABEL_SEARCH_IN_ROOT_DIR_BEGIN
+; noploop:
+		; NOP
+		; ADD 	ESI,1
+		; CMP 	ESI,10000000
+		; JBE 	noploop
+		; RET
+		
 LABEL_SEARCH_IN_ROOT_DIR_BEGIN:
     cmp word [wRootDirSizeForLoop], 0
     jz LABEL_NO_KERNELBIN
@@ -391,3 +458,4 @@ InitKernel:
 LABEL_DATA:
 StackSpace: times 1024 db 0
 TopOfStack equ BaseOfLoaderPhyAddr + $
+
