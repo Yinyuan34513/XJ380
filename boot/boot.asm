@@ -14,7 +14,8 @@ LABEL_START:
     mov es, ax
     mov ss, ax
     mov sp, BaseOfStack
-
+	
+	
     mov ax, 0600h
     mov bx, 0700h
     mov cx, 0
@@ -196,6 +197,16 @@ LABEL_GET_FAT_ENRY_OK:
     pop bx
     pop es
     ret
+putChar:
+		;PUSH 	BX;压入栈(这样做能确保寄存器的改变不会影响到程序)
 
+		mov 	bh,0
+		mov 	ah,0Eh
+		MOV 	bh,40h
+		MOV 	bx,001ch
+		int 	10h
+		;POP		BX;弹出
+
+		RET
 times 510 - ($ - $$) db 0
 dw 0xaa55   ;启动扇区结束符

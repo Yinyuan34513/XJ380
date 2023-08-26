@@ -1,8 +1,27 @@
 #include "include.h"    //使用了include\include.h头文件
 
-u32 buf_win[160 * 68];  //声明一个u32类型的数组
+u32 buf_win[190 * 100];  //声明一个u32类型的数组
                         //大小为160*68个元素，共10880元素，每个元素可存储一个32位的值
 extern PUBLIC u32 buf_cons[320 * 180];
+
+SHEET *sht_backe;
+SHEET *sht_explorer;
+
+SHEET *sht_win;
+SHEET *sht_cons;
+
+struct FILEINFO{
+	unsigned char name[8], ext[3], type;
+	char reserve[10];
+	unsigned short time, date, clustno;
+	unsigned int size;
+};
+
+struct FILEDATA{
+	char data[32];
+};
+
+
 
 void TestA()            //定义了名为TestA的无返回值的函数
 {
@@ -40,34 +59,95 @@ void TestC()            //TestC()是一个简单的循环
     }
 }
 
+
+PUBLIC void UpExplorer()
+{
+	sheet_updown(sht_win, 2);
+}
+
+PUBLIC void UpCommand()
+{
+	sheet_updown(sht_cons, 2);
+}
+
+
 PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 {
     //此代码片段是初始化操作系统和GUI系统中的图形工作表（以下称为“工作表”）
     shtctl_init(&shtctl);                   //这行代码初始化用于管理工作表的shtctl结构
     SHEET *sht_back = sheet_alloc(&shtctl); //使用sheet_alloc函数分配工作表，并将其分配给指针sht_back
-    SHEET *sht_win  = sheet_alloc(&shtctl); //使用sheet_alloc函数分配另一个工作表，并将其分配给指针sht_win
-    SHEET *sht_cons = sheet_alloc(&shtctl); 
+    sht_win  = sheet_alloc(&shtctl); //使用sheet_alloc函数分配另一个工作表，并将其分配给指针sht_win
+    sht_cons = sheet_alloc(&shtctl); 
     sheet_setbuf(sht_back, buf_back, binfo->scrnx, binfo->scrny, -1);
+	sht_backe = sht_back;//将局部变量放入全局变量，供其它代码使用
+	sht_explorer = sht_win;
     //使用sheet_setbuf函数设置图纸sht_back的缓冲区、尺寸和透明度颜色；buf_back是缓冲区数组，binfo->scrnx和binfo->scrny是屏幕尺寸，-1表示没有透明度
-    sheet_setbuf(sht_win, buf_win, 160, 68, 99);
+    sheet_setbuf(sht_win, buf_win, 190, 100, 99);
     //使用sheet_setbuf函数设置sht_back缓冲区数组为buf_win，将buf_win数组设置为尺寸为160x68像素的缓冲区，透明度颜色设置为99。
     sheet_setbuf(sht_cons, buf_cons, 320, 180, 99);
+	
+
+	
+	init_screen();
+	
+	sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
+    sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
+	
+	
+	printf("%s", "\n GTA5 START!");
+	printf("%s", "\n Copyright 2023 XINGJI Stdios.");
+
+
+	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
+	
+	for (int i=0;i<binfo->scrnx;i++)
+	{
+		for (int j=0;j<1;j++)
+		{
+			draw_rect(0, 0, i, 10, 0x00ff00);
+			sheet_refresh(sht_back, 0, 0, binfo->scrnx, 48);
+		}
+		
+		
+
+	}	 
+
     init_screen();      //通过执行一些图形操作来初始化屏幕
-    
+    BetaWaterMark();
     
     
     //窗口
-    make_window(buf_win, 160, 68, "TestWindow", 99);
-    putstr_atbuf(buf_win, 160, 36, 30, 0x000000, "GTA5,Start!");
-    
-    
+	int adder=0x010000;
+	char p[3];
+	p[0] = (char*) adder;
+	//p[1] = (char*) adder+0x01;
+	//p[2] = '\0';
+    make_window(buf_win, 190, 100, "Explorer", 99);
+    //putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "KERNEL  BIN     ");
+	int DIRADR=0x010000;
+    struct FILEINFO *finfo = (struct FILEINFO *) (DIRADR);
+	//struct FILEDATA *finfo = (struct FILEDATA *) (DIRADR);
+	int fileloop=0;
+	putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "NAME    EXT");
+	while(finfo[fileloop].name[0] != 0x00)
+	{
+		putstr_atbuf(buf_win, 190, 0, 35+fileloop*12, 0x000000, finfo[fileloop].name);
+		fileloop++;
+	}
+	
+	//printf("%s", finfo[0].ext);
+	//draw_rect(0, 0, 20, 20, 0xffffff);
+
     
 
     sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
+	
+   
+	
     sheet_slide(sht_cons, 40, 36);
     sheet_updown(sht_cons, 1);
-    sheet_slide(sht_win, 80, 72);           //将sht_win表移动到屏幕上的位置（80，72）
+    sheet_slide(sht_win, 300, 300);           //将sht_win表移动到屏幕上的位置（80，72）
     sheet_updown(sht_win, 2);               //将sht_win表带到顶层
 
     sheet_refresh(sht_back, 0, 0, binfo->scrnx, 48);
@@ -189,5 +269,9 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     p_proc_ready = proc_table;              //将p_proc_ready指针设置为指向proc_table数组中的第一个条目
     restart();                              //调用restart()函数，该函数执行一些内部操作并将控制权转移到下一个进程
     
-    while(1);
+    while(1)
+	{
+		
+	}
+	
 }

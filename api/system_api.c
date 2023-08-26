@@ -2,8 +2,8 @@
 
 PUBLIC void system_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax)
 {
-	if (edx == 1) { printstr((char *)ebx); }	//打印字符串
-	else if (edx == 2) { endline(); }			//换行
+	if (edx == 1) { printstr((char *)ebx); }
+	else if (edx == 2) { /* pass */ }
 	else if (edx == 3) { /* pass */ }
 	else if (edx == 4) { /* pass */ }
 	else if (edx == 5) { /* pass */ }
