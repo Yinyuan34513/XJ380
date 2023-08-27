@@ -63,12 +63,15 @@ PRIVATE void StartAni(SHEET *sht_back)
 {
     int x = binfo->scrnx;
     int y = binfo->scrny;
+    char *str2 = "Copyright(C) XINGJI Studios 2017-2023";
+    int str2len = strlen(str2);
     draw_rect(0, 0, x, y, 0x000000);
-    putstr_atbuf(sht_back, x, 8, 34, 0xffffff, "Starting XJ380...");
+    putstr_atbuf(buf_back, x, 8, y - 34, 0xffffff, "Starting XJ380...");
+    putstr_atbuf(buf_back, x, x - 8 - (str2len * 8), y - 34, 0xffffff, "Copyright(C) XINGJI Studios 2017-2023");
 	for (int i = 8; i < x - 8; i += 8)
 	{
 		draw_rect(8, y - 18, i, y - 8, 0x00ff00);
-		sheet_refresh(sht_back, 0, 0, x, y);
+        sheet_refresh(sht_back, 0, 0, x, y);
 	}	 
 }
 
@@ -104,7 +107,7 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 
     StartAni(sht_back);  //启动动画
 
-	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
+	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, binfo->scrny);//刷新屏幕
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
     
