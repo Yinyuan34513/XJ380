@@ -84,6 +84,8 @@ PUBLIC void sys_call();
 PUBLIC void TestA();
 PUBLIC void TestB();
 PUBLIC void TestC();
+PUBLIC void UpExplorer();
+PUBLIC void UpCommand();
 
 // kernel/proc.c
 PUBLIC void schedule();

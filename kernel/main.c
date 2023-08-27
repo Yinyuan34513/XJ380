@@ -59,6 +59,19 @@ void TestC()            //TestC()是一个简单的循环
     }
 }
 
+PRIVATE void StartAni(SHEET *sht_back)
+{
+    int x = binfo->scrnx;
+    int y = binfo->scrny;
+    draw_rect(0, 0, x, y, 0x000000);
+    putstr_atbuf(sht_back, x, 8, 34, 0xffffff, "Starting XJ380...");
+	for (int i = 8; i < x - 8; i += 8)
+	{
+		draw_rect(8, y - 18, i, y - 8, 0x00ff00);
+		sheet_refresh(sht_back, 0, 0, x, y);
+	}	 
+}
+
 
 PUBLIC void UpExplorer()
 {
@@ -86,23 +99,12 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     //使用sheet_setbuf函数设置sht_back缓冲区数组为buf_win，将buf_win数组设置为尺寸为160x68像素的缓冲区，透明度颜色设置为99。
     sheet_setbuf(sht_cons, buf_cons, 320, 180, 99);
 	
-
-	
-	init_screen();
-	
 	sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
 
+    StartAni(sht_back);  //启动动画
+
 	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, 114);
-	
-	for (int i = 0; i < binfo -> scrnx; i++)
-	{
-		for (int j = 0; j < 1; j++)
-		{
-			draw_rect(0, 0, i, 10, 0x00ff00);
-			sheet_refresh(sht_back, 0, 0, binfo->scrnx, 48);
-        }
-	}	 
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
     
@@ -259,3 +261,5 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	}
 	
 }
+
+//源神，启动！
