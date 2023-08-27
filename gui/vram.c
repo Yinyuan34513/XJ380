@@ -92,6 +92,20 @@ PUBLIC void DrawLOGO(int x, int y, int size, int back_color)
 	}
 }
 
+PRIVATE void warning()
+{
+    int x = binfo->scrnx;
+    int y = binfo->scrny;
+
+	putstr_atbuf(buf_back, x, x - 449, y - 87, 0x000000, "                XINGJI Studios Caution                 ");
+	putstr_atbuf(buf_back, x, x - 449, y - 71, 0x000000, "This version is in beta,Leakage is strictly prohibited.");
+	putstr_atbuf(buf_back, x, x - 449, y - 55, 0x000000, "Violators are punished by punishment or even dismissal.");
+
+	putstr_atbuf(buf_back, x, x - 448, y - 88, 0xffffff, "                XINGJI Studios Caution                 ");
+	putstr_atbuf(buf_back, x, x - 448, y - 72, 0xffffff, "This version is in beta,Leakage is strictly prohibited.");
+	putstr_atbuf(buf_back, x, x - 448, y - 56, 0xffffff, "Violators are punished by punishment or even dismissal.");
+}
+
 PUBLIC void init_screen()   //绘制桌面
 {
     draw_rect(0, 0, binfo->scrnx - 1, binfo->scrny - 1, 0x44cef6);
@@ -99,7 +113,9 @@ PUBLIC void init_screen()   //绘制桌面
 	DrawCommand();
     draw_rect(0, binfo->scrny - 40, binfo->scrnx - 1, binfo->scrny - 1,  0xc6c6c6);
 	draw_rect(0, binfo->scrny - 40, 90, binfo->scrny - 1,  0xaaaaaa);
-	DrawStar(4, binfo->scrny - 40, 1, 0x44cef7);
+	DrawStar(5, binfo->scrny - 32, 1, 0x44cef7);
+	putstr_atbuf(buf_back, binfo->scrnx, 35, binfo->scrny - 25, 0xffffff, "Menu");
+	warning();
 }
 
 PUBLIC void DrawStartMenu(int color)

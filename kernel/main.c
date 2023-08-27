@@ -67,7 +67,7 @@ PRIVATE void StartAni(SHEET *sht_back)
     int str2len = strlen(str2);
     draw_rect(0, 0, x, y, 0x000000);
     putstr_atbuf(buf_back, x, 8, y - 34, 0xffffff, "Starting XJ380...");
-    putstr_atbuf(buf_back, x, x - 8 - (str2len * 8), y - 34, 0xffffff, "Copyright(C) XINGJI Studios 2017-2023");
+    putstr_atbuf(buf_back, x, x - 8 - (str2len * 8), y - 34, 0xffffff, str2);
 	for (int i = 8; i < x - 8; i += 8)
 	{
 		draw_rect(8, y - 18, i, y - 8, 0x00ff00);
