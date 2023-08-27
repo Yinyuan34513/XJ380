@@ -28,6 +28,35 @@ static char Star[24][24] =
 	"    +               +   "
 };
 
+//XJ380
+static char XJ380_LOGO[24][24] =
+{
+	"                        ",
+	"                        ",
+	"                      ##",
+	"                  ######",
+	"              ##########",
+	"          ##############",
+	"      ##################",
+	"  ##############@@######",
+	"###########@######@@####",
+	"###########@########@###",
+	"###########@@#@@####@###",
+	"##########@@@@@#####@@##",
+	"####@##@@@@##@#####@@@##",
+	"###@@@##@@@#@@#####@@@##",
+	"###@@@####@@@#@#####@###",
+	"###@@####@#@@@@#########",
+	"####@####@@###@#########",
+	"####@####@##############",
+	"#####@@#################",
+	"#######@@###############",
+	"########################",
+	"                        ",
+	"                        ",
+	"                        "
+};
+
 PUBLIC void DrawStar(int x, int y, int size, int color)
 {
 	for (int i = 0; i <= 23; i++)
@@ -38,12 +67,43 @@ PUBLIC void DrawStar(int x, int y, int size, int color)
 			{
 				draw_rect(x + i * size, y + j * size, x + i * size + size, y + j * size + size, color);
 			}
-			//if (Star[j][i]=='1')
-			//{
-				//draw_rect(x+i*5, y+j*5, x+i*5+5, y+j*5+5,  0x000000);
-			//}
 		}
 	}
+}
+PUBLIC void DrawLOGO(int x, int y, int size, int back_color)
+{
+	for (int i = 0; i <= 23; i++)
+	{
+		for (int j = 0; j <= 24; j++)
+		{
+			if (XJ380_LOGO[j][i] == ' ')
+			{
+				draw_rect(x + i * size, y + j * size, x + i * size + size, y + j * size + size, back_color);
+			}
+			else if (XJ380_LOGO[j][i] == '#')
+			{
+				draw_rect(x + i * size, y + j * size, x + i * size + size, y + j * size + size, 0x00a2e8);
+			}
+			else if (XJ380_LOGO[j][i] == '@')
+			{
+				draw_rect(x + i * size, y + j * size, x + i * size + size, y + j * size + size, 0xfff200);
+			}
+		}
+	}
+}
+
+PRIVATE void warning()
+{
+    int x = binfo->scrnx;
+    int y = binfo->scrny;
+
+	putstr_atbuf(buf_back, x, x - 449, y - 87, 0x000000, "                XINGJI Studios Caution                 ");
+	putstr_atbuf(buf_back, x, x - 449, y - 71, 0x000000, "This version is in beta,Leakage is strictly prohibited.");
+	putstr_atbuf(buf_back, x, x - 449, y - 55, 0x000000, "Violators are punished by punishment or even dismissal.");
+
+	putstr_atbuf(buf_back, x, x - 448, y - 88, 0xffffff, "                XINGJI Studios Caution                 ");
+	putstr_atbuf(buf_back, x, x - 448, y - 72, 0xffffff, "This version is in beta,Leakage is strictly prohibited.");
+	putstr_atbuf(buf_back, x, x - 448, y - 56, 0xffffff, "Violators are punished by punishment or even dismissal.");
 }
 
 PUBLIC void init_screen()   //绘制桌面
@@ -51,11 +111,11 @@ PUBLIC void init_screen()   //绘制桌面
     draw_rect(0, 0, binfo->scrnx - 1, binfo->scrny - 1, 0x44cef6);
 	computer();
 	DrawCommand();
-	DrawStar(120,120,5,0xffff00);
     draw_rect(0, binfo->scrny - 40, binfo->scrnx - 1, binfo->scrny - 1,  0xc6c6c6);
 	draw_rect(0, binfo->scrny - 40, 90, binfo->scrny - 1,  0xaaaaaa);
-	DrawStar(5,binfo->scrny - 32,1,0x44cef7);
-	putstr_atbuf(buf_back, binfo->scrnx, 35, binfo->scrny - 25, 0x000000, "Menu");
+	DrawStar(5, binfo->scrny - 32, 1, 0x44cef7);
+	putstr_atbuf(buf_back, binfo->scrnx, 35, binfo->scrny - 25, 0xffffff, "Menu");
+	warning();
 }
 
 PUBLIC void DrawStartMenu(int color)
