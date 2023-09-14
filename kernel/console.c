@@ -247,10 +247,7 @@ PUBLIC void command_info()
 	
 	//writeMem(0xffffff,0x0a);
 	ccx = 8;
-    //ccy += 16;
-    putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, "XJ380 by");
 	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy+12, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
-	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy+24, 0x000000, "QQ group: 370019841");
 	// Copyright(C) XINGJI Studios 2017-2023
 	return;
 
