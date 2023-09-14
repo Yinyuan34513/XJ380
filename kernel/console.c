@@ -325,4 +325,4 @@ PUBLIC void yuanjiao(u32 *buf)
     buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
     buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
 }
-
+/* test */
