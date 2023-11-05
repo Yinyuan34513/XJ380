@@ -16,5 +16,6 @@
 #include "stdarg.h"
 #include "proto.h"
 #include "global.h"
+#include "memory.h"
 
 #endif

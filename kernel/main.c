@@ -89,6 +89,7 @@ PUBLIC void UpCommand()
 
 PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 {
+    init_mem(memory);
     //此代码片段是初始化操作系统和GUI系统中的图形工作表（以下称为“工作表”）
     shtctl_init(&shtctl);                   //这行代码初始化用于管理工作表的shtctl结构
     SHEET *sht_back = sheet_alloc(&shtctl); //使用sheet_alloc函数分配工作表，并将其分配给指针sht_back
