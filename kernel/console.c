@@ -186,7 +186,8 @@ PUBLIC void check_command(char *str)
 	else if (strcmp(str, "cls") == 0) { command_cls(buf_cons); }
 	else if (strcmp(str, "dir") == 0)  {command_dir(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
-	else { printstr("Command or program not found."); }
+	else if (strcmp(str, "explorer") == 0) { command_explorer(); }
+	else { err_Command_or_program_not_found(); }
 }
 
 PUBLIC void command_cls()
@@ -245,17 +246,32 @@ PUBLIC void command_info()
 {
 	
 	//writeMem(0xffffff,0x0a);
-	
-    ccx = 8;
-    //ccy += 16;
-    putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
+	ccx = 8;
+	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy+12, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
+	// Copyright(C) XINGJI Studios 2017-2023
 	return;
+
 }	
+
+PUBLIC void command_explorer()
+{
+	
+	//writeMem(0xffffff,0x0a);
+	UpExplorer();
+	return;
+
+}
 
 PUBLIC void printstr(char *str)
 {
 	putstr_atbuf(buf_cons, CONS_WIN_X, 8, ccy, 0x000000, str);
 	ccx += (strlen(str) << 3);
+}
+
+PUBLIC void err_Command_or_program_not_found()
+{
+	putstr_atbuf(buf_cons, CONS_WIN_X, 8, ccy, 0xFF0033, "Command or program not found.");
+	ccx += (strlen("Command or program not found.") << 3);
 }
 
 PUBLIC void endline()
@@ -306,3 +322,4 @@ PUBLIC void yuanjiao(u32 *buf)
     buf[(ysize - 2) * xsize + xsize - 1 - 0] = bc;
     buf[(ysize - 3) * xsize + xsize - 1 - 0] = bc;
 }
+/* test */
