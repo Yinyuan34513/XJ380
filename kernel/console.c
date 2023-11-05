@@ -25,7 +25,7 @@ PRIVATE int ccy = 20;
 
 PRIVATE int cls_right = 0;
 
-PUBLIC void start_console(SHEET *sht_cons)
+PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！能别动就别动！否则全崩！！！！！！！！
 {
 	//初生化
 	//ccx = 8;
