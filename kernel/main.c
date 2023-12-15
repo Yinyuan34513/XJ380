@@ -1,5 +1,5 @@
 #include "include.h"    //使用了include\include.h头文件
-
+#include "memory.h"
 u32 buf_win[190 * 100];  //声明一个u32类型的数组
                         //大小为160*68个元素，共10880元素，每个元素可存储一个32位的值
 extern PUBLIC u32 buf_cons[320 * 180];
@@ -85,11 +85,11 @@ PUBLIC void UpCommand()
 {
 	sheet_updown(sht_cons, 2);
 }
-
+memory *m;
 
 PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 {
-    init_mem(memory);
+    m = memory_init(0x015a0400,240000);
     //此代码片段是初始化操作系统和GUI系统中的图形工作表（以下称为“工作表”）
     shtctl_init(&shtctl);                   //这行代码初始化用于管理工作表的shtctl结构
     SHEET *sht_back = sheet_alloc(&shtctl); //使用sheet_alloc函数分配工作表，并将其分配给指针sht_back
@@ -111,8 +111,14 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, binfo->scrny);//刷新屏幕
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
-    
-    
+    put_int(mem_alloc(m,0x1000));
+    printf("\n");
+    put_int(mem_alloc(m,0x1000));
+    printf("\n");
+    put_int(mem_alloc(m,0x1000));
+    printf("\n");
+    put_int(mem_alloc(m,0x1000));
+    printf("\n");
     //窗口
 	int adder=0x010000;
 	char p[3];
