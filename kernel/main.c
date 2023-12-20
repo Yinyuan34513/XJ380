@@ -135,8 +135,6 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 		fileloop++;
 	}
 
-    
-
     sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
 	
@@ -162,8 +160,7 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     //这个代码片段是一个循环，它迭代系统中的任务和进程，并设置它们各自的属性
     int i;                                  //声明了一个int类型的名称为i的变量
     for (i = 0; i < NR_TASKS; i++) {        //启动一个从0迭代到NR_TASKS-1的循环。
-    	
-    	/*任务A*/
+        /*任务A*/
         strcpy(p_proc->p_name, p_task->name);
         //将当前任务的名称（p_task->name）复制到当前进程的名称（sp_proc->p_name）
         p_proc->pid = i;                    //将当前进程的进程ID（pid）设置为i的值
@@ -197,12 +194,12 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
         p_task_stack -= p_task->stacksize;  //递减p_task_stack指针，为下一个任务的堆栈保留空间
         p_proc++;                           //增加p_proc指针以指向proc_table数组中的下一个进程
         p_task++;                           //增加p_task指针指向task_table数组中的下一个任务
-        selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器
-        
-        
-        
-        
-        
+        selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器  
+
+
+
+
+
     	/*任务B（命令行）*/
         strcpy(p_cons->p_name, p_tcon->name);
         p_cons->pid = i;                    //将当前进程的进程ID（pid）设置为i的值
@@ -230,13 +227,13 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
         //将当前进程的指令指针（eip）寄存器设置为当前任务的初始入口点
         *((int *) (p_cons->regs.esp + 4)) = (int) sht_cons;
         //p_cons->regs.esp = (u32) p_task_stack;
-        p_cons->regs.eflags = 0x1203;
-        //将当前进程的标志（eflags）寄存器设置为值0x1203（十六进制，十进制4611）
+        p_cons->regs.eflags = 0x1201;
+        //将当前进程的标志（eflags）寄存器设置为值0x1203（十六进制，十进制4609）
 
         p_task_stack -= p_tcon->stacksize;  //递减p_task_stack指针，为下一个任务的堆栈保留空间
         p_cons++;                           //增加p_proc指针以指向proc_table数组中的下一个进程
         p_tcon++;                           //增加p_task指针指向task_table数组中的下一个任务
-        selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器        
+        selector_ldt += 1 << 3;             //将selector_ldt值增加1，左移3（相当于乘以8），以设置下一个ldt条目的选择器
     }
 
     proc_table[0].ticks = proc_table[0].priority = 150;

@@ -3,7 +3,7 @@
 typedef unsigned int uintptr_t;
 typedef unsigned int uint32_t;
 //shit山，无任何优化的内存管理头文件
-#define NULL 0
+#define NULL 1
 #define FREE_MAX_NUM 4096
 #define ERRNO_NOPE 0
 #define ERRNO_NO_ENOGHT_MEMORY 1

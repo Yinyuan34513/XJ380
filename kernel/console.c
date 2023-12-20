@@ -19,17 +19,34 @@ struct FILEDATA{
 	char data[32];
 };
 
+
 //光标坐标
 PRIVATE int ccx = 8;
 PRIVATE int ccy = 20;
 
 PRIVATE int cls_right = 0;
 
+int adder = 0x010000;
+
+char p[3];
+int DIRADR=0x010000;
+struct FILEINFO *finfo;
+int fileloop=0;
+    
+int t;
+char key_in[1];
+int key_in_m = 0;
+char keys_in[256];
+int ref_right = 1;
+char key;
+
 PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！能别动就别动！否则全崩！！！！！！！！
 {
 	//初生化
 	//ccx = 8;
 	//ccy = 20;
+	p[0] = (char*) adder;
+	finfo = (struct FILEINFO *) (DIRADR);
 	
 	//窗口大小
 	int win_x;
@@ -48,14 +65,9 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
     
     make_window(buf_cons, win_x, win_y, "Terminal", 99);
     putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, ">");
-    
-    int t;
-    char key_in[1];
-    int key_in_m = 0;
-    char keys_in[256];
-    int ref_right = 1;
-	t = get_ticks();
-    char key;
+
+	t = get_ticks();	
+
     for (;;)
     {
 		
@@ -113,7 +125,7 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
     		}
     		if (ccx + 8 >= win_x - 7)
     		{
-    			if (ccy + 16 >= win_y - 15)
+    			if (ccy + 32 >= win_y - 15)
     			{
     				console_scroll();
     				putstr_atbuf(buf_cons, win_x, 0, ccy, 0x000000, ">");
@@ -187,19 +199,86 @@ PUBLIC void check_command(char *str)
 	else if (strcmp(str, "dir") == 0)  {command_dir(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else if (strcmp(str, "explorer") == 0) { command_explorer(); }
+	else if (strcmp(str, "open ") == 0) { command_open(); }
 	else { err_Command_or_program_not_found(); }
+}
+
+PUBLIC void command_open()
+{
+	char file_name[12];
+	//初始化
+	for (int y = 0; y < 11; y++)
+	{
+		file_name[y] = ' ';
+	}
+	int x, y;
+	for (x = 5; y < 11 && keys_in[x] != 0; x++)
+	{
+		if (keys_in[x] == '.' && y <= 8)
+		{
+			y = 8;
+		}
+		else
+		{
+			file_name[y] = keys_in[x];
+			if ('a' <= file_name[y] && file_name[y] <= 'z')
+			{
+				file_name[y] -= 0x20;
+			}
+			y++;
+		}
+	}
+	for (x = 0; x < 224; /*源神！启动！*/)
+	{
+		if (finfo[x].name[0] == 0x00)
+		{
+			break;
+		}
+		if ((finfo[x].type & 0x18) == 0)
+		{
+			for (y = 0; y < 11; y++)
+			{
+				if (finfo[x].name[y] != file_name[y])
+				{
+					//没找到，鬼！
+					goto next_step_typenextfile;
+				}
+			}
+			//找到了文件
+			break;
+		}
+	next_step_typenextfile:
+		x++;
+	}
+	if (x < 224 && finfo[x].name[0] != 0x00)
+	{
+		y = finfo[x].size;
+		int *temp;
+		temp = (char *) (finfo[x].clustno * 512 + 0x003e00 + DIRADR);
+		ccx = 8;
+		char str_type[30];
+		for (x = 0; x < y; x++)
+		{
+			str_type[0] = temp[x];
+			str_type[1] = 0;
+			printstr(str_type);
+			if (ccx == 8 + CONS_WIN_X)
+			{
+				ccx = 8;
+				ccy += 16;
+			}
+		}
+	}
+	else
+	{
+		printstr("File not found.");
+		ccy += 16;
+	}
+	return;
 }
 
 PUBLIC void command_cls()
 {
-	/*for (int i = 20; i < CONS_WIN_Y; i++) 
-	{
-		for (int j = 0; j < CONS_WIN_X; j++) 
-		{
-		    buf_cons[j + i * CONS_WIN_X] = 0xffffff;
-		}
-	}*/
-	
 	for (int loop1=0;loop1<320;loop1++)
 	{
 		for (int loop2=10;loop2<180;loop2++)
@@ -217,21 +296,6 @@ PUBLIC void command_cls()
 PUBLIC void command_dir()
 {
 	ccx = 8;
-	//啊？
-	//make_window(buf_win, 190, 100, "Explorer", 99);
-	//putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "You don't need open me");
-	//putstr_atbuf(buf_win, 190, 0, 30, 0x000000, "in the console.");
-	//putstr_atbuf(buf_win, 190, 0, 40, 0x000000, "Now explorer broken.");
-	//putstr_atbuf(buf_win, 190, 0, 60, 0x000000, ":)");
-	//SHEET *sht_win  = sheet_alloc(&shtctl);
-	//sheet_slide(sht_win, 120, 120);           //将sht_win表移动到屏幕上的位置（80，72）
-    //sheet_updown(sht_win, 2);  
-	int adder = 0x010000;
-	char p[3];
-	p[0] = (char*) adder;
-	int DIRADR=0x010000;
-    struct FILEINFO *finfo = (struct FILEINFO *) (DIRADR);
-	int fileloop=0;
 	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, "NAME    EXT");
 	ccy += 16;
 	while(finfo[fileloop].name[0] != 0x00)
@@ -255,8 +319,6 @@ PUBLIC void command_info()
 
 PUBLIC void command_explorer()
 {
-	
-	//writeMem(0xffffff,0x0a);
 	UpExplorer();
 	return;
 

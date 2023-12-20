@@ -114,11 +114,14 @@ PUBLIC u32 vsprintf(char *buf, const char *fmt, va_list args);
 PUBLIC void start_console(SHEET *sht_cons);
 PUBLIC void console_scroll();
 PUBLIC void check_command(char *str);
+PUBLIC void command_open();
 PUBLIC void command_dir();
 PUBLIC void command_cls();
 PUBLIC void command_info();
+PUBLIC void command_explorer();
 PUBLIC void printstr(char *str);
 PUBLIC void endline();
+PUBLIC void err_Command_or_program_not_found();
 PUBLIC void yuanjiao(u32 *buf);
 
 //	/system_api.c

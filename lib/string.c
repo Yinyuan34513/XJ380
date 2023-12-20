@@ -41,3 +41,13 @@ PUBLIC u32 strcmp(char *from_str, char *cmp_str)
 	}
 	return *from_str - *cmp_str;
 }
+
+PUBLIC u32 part_strcmp(char *from_str, char *cmp_str, int from_len)
+{
+	for (int i = 0; i < from_len; i++)
+	{
+		from_str++;
+		cmp_str++;
+	}
+	return *from_str - *cmp_str;
+}
