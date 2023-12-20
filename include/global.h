@@ -17,7 +17,7 @@ EXTERN PROCESS   *p_proc_ready;
 
 EXTERN int        k_reenter;
 EXTERN int        ticks;
-//键鼠相关
+
 EXTERN FIFO       keyfifo;
 EXTERN u32        keybuf[32];
 EXTERN FIFO       decoded_key;

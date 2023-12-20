@@ -2,10 +2,9 @@
 
 _NR_get_ticks       equ 0
 _NR_write           equ 1
-_NR_writeMem		equ 2
 INT_VECTOR_SYS_CALL equ 0x90
 
-global get_ticks, write,writeMem
+global get_ticks, write
 
 bits 32
 [section .text]
@@ -20,15 +19,3 @@ write:
     mov ebx, [esp + 4]
     int INT_VECTOR_SYS_CALL
     ret
-writeMem:
-	MOV 	ECX,[ESP+4]
-	MOV 	AL,[ESP+8]
-	MOV 	[ECX],EAX
-	int     INT_VECTOR_SYS_CALL
-	RET
-	
-readMem:
-	MOV 	ECX,[ESP+4]
-	MOV 	EAX,[ECX]
-	int     INT_VECTOR_SYS_CALL
-	RET
