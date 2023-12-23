@@ -258,12 +258,11 @@ PUBLIC void command_open()
 		int *temp;
 		temp = (char *) (finfo[x].clustno * 512 + 0x003e00 + DIRADR);
 		ccx = 8;
-		char str_type[30];
 		for (x = 0; x < y; x++)
 		{
-			str_type[0] = temp[x];
-			str_type[1] = 0;
-			printstr(str_type);
+			file_name[0] = temp[x];
+			file_name[1] = 0;
+			printstr(file_name);
 			if (ccx == 8 + CONS_WIN_X)
 			{
 				ccx = 8;
