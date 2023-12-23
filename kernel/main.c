@@ -112,14 +112,6 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, binfo->scrny);//刷新屏幕
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
-    put_int(mem_alloc(m,0x1000));
-    printf("\n");
-    put_int(mem_alloc(m,0x1000));
-    printf("\n");
-    put_int(mem_alloc(m,0x1000));
-    printf("\n");
-    put_int(mem_alloc(m,0x1000));
-    printf("\n");
     //窗口
 	int adder=0x010000;
 	char p[3];

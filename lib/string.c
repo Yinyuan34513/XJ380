@@ -42,12 +42,17 @@ PUBLIC u32 strcmp(char *from_str, char *cmp_str)
 	return *from_str - *cmp_str;
 }
 
-PUBLIC u32 part_strcmp(char *from_str, char *cmp_str, int from_len)
+PUBLIC u32 part_strcmp(char *from_str, char *cmp_str, int size)
 {
-	for (int i = 0; i < from_len; i++)
-	{
-		from_str++;
-		cmp_str++;
-	}
-	return *from_str - *cmp_str;
+   char temp[32], from[32];
+   for (int i = 0; i < size; i++)
+   {
+       temp[i] = from_str[i];
+       from[i] = cmp_str[i];
+   }
+   temp[size] = '\0';
+   from[size] = '\0';
+   int ret;
+   ret = strcmp(from, temp);
+   return ret;
 }

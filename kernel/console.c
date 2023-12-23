@@ -68,6 +68,9 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
 
 	t = get_ticks();	
 
+	memset(keys_in, 0, sizeof keys_in);
+    strcpy(keys_in, "");
+
     for (;;)
     {
 		
@@ -75,7 +78,7 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
     	{
 			//输入
 			key = fifo_get(&decoded_key);
-			key_in[0]=key;
+			key_in[0] = key;
     		if (key_in[0] == '\n' || key_in[0] == '\r')
     		{
     			check_command(keys_in);
@@ -100,7 +103,6 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
     		}
     		else if (key_in[0] == 0x08)	//BUG里写了个退格
     		{
-				
     			if (ccx > 8)
     			{
 					putstr_atbuf(buf_cons, win_x, ccx-8, ccy, 0xffffff, keys_in[key_in_m]);
@@ -199,7 +201,7 @@ PUBLIC void check_command(char *str)
 	else if (strcmp(str, "dir") == 0)  {command_dir(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else if (strcmp(str, "explorer") == 0) { command_explorer(); }
-	else if (strcmp(str, "open ") == 0) { command_open(); }
+	else if (part_strcmp(str, "open ", 5) == 0) { command_open(); }
 	else { err_Command_or_program_not_found(); }
 }
 
