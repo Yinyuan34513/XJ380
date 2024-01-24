@@ -33,17 +33,7 @@ LABEL_START:
     mov ss, ax
     mov sp, BaseOfStack
 
-	MOV 	AX,0x1000
-	MOV 	ES,AX
-	MOV 	CH,0
-	MOV 	DH,1
-	MOV 	CL,2
-	MOV 	AH,02H
-	MOV 	AL,1
-	MOV 	BX,0
-	MOV 	DL,0x00
-	INT 	13H
-	JC 		FIN
+
 	
 	
     call SwitchGraphicMode
@@ -102,6 +92,71 @@ LABEL_START:
 		; CMP 	ESI,10000000
 		; JBE 	noploop
 		; RET
+		
+loaddisk1:
+		MOV 	AX,0x1000
+		MOV 	ES,AX
+		MOV 	CH,0
+		MOV 	DH,1
+		MOV 	CL,2
+		MOV 	AH,02H
+		MOV 	AL,1
+		MOV 	BX,0
+		MOV 	DL,0x00
+		INT 	13H
+		JC 		FIN
+		MOV 	CH,0
+		MOV 	DH,0
+		MOV 	CL,1
+		MOV 	AX,0x1500
+		MOV 	ES,AX
+
+		
+		
+; loaddisk1.1:
+		; MOV 	AX,0x1500
+		; MOV 	CH,0
+		; MOV 	DH,1
+		; MOV 	CL,17
+		; MOV 	AL,48
+; loaddisk2:
+		; MOV 	ES,AX
+		; MOV 	AH,02H
+		; MOV 	BX,0
+		; MOV 	DL,0x00
+		; INT 	13H
+		; JC 		FIN
+readloop:
+		;empty
+retry:
+		MOV		AH,0x02			
+		MOV		AL,1		
+		MOV		BX,0
+		MOV		DL,0x00			
+		INT		0x13			
+		JMP		next			
+		;JMP 	FIN
+next:
+		MOV		AX,ES			
+		ADD		AX,0x0020
+		MOV		ES,AX		
+		ADD		CL,1			
+		CMP		CL,18			
+		JBE		retry	
+		MOV		CL,1
+		ADD		DH,1
+		CMP		DH,2
+		JB		retry		
+		MOV		DH,0
+		ADD		CH,1
+		CMP		CH,10
+		JB		retry		
+
+
+
+
+
+
 		
 LABEL_SEARCH_IN_ROOT_DIR_BEGIN:
     cmp word [wRootDirSizeForLoop], 0

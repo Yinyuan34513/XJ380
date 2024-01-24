@@ -8,17 +8,6 @@
 PUBLIC u32 buf_cons[320 * 180];
 PUBLIC u32 buf_win[190 * 100];
 
-struct FILEINFO{
-	unsigned char name[8], ext[3], type;
-	char reserve[10];
-	unsigned short time, date, clustno;
-	unsigned int size;
-};
-
-struct FILEDATA{
-	char data[32];
-};
-
 
 //光标坐标
 PRIVATE int ccx = 8;
@@ -26,10 +15,10 @@ PRIVATE int ccy = 20;
 
 PRIVATE int cls_right = 0;
 
-int adder = 0x010000;
+int adder = ADR_DISKIMG;
 
 char p[3];
-int DIRADR=0x010000;
+int DIRADR=ADR_DISKIMG;
 struct FILEINFO *finfo;
 int fileloop=0;
     
@@ -46,7 +35,7 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
 	//ccx = 8;
 	//ccy = 20;
 	p[0] = (char*) adder;
-	finfo = (struct FILEINFO *) (DIRADR);
+	finfo = (struct FILEINFO *) (ADR_DISKIMG);
 	
 	//窗口大小
 	int win_x;
@@ -201,82 +190,94 @@ PUBLIC void check_command(char *str)
 	else if (strcmp(str, "dir") == 0)  {command_dir(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else if (strcmp(str, "explorer") == 0) { command_explorer(); }
-	else if (part_strcmp(str, "open ", 5) == 0) { command_open(); }
+	else if (part_strcmp(str, "type ", 5) == 0) { command_open(); }
 	else { err_Command_or_program_not_found(); }
 }
 
-PUBLIC void command_open()
-{
-	char file_name[12];
-	//初始化
-	for (int y = 0; y < 11; y++)
-	{
-		file_name[y] = ' ';
-	}
-	int x, y;
-	for (x = 5; y < 11 && keys_in[x] != 0; x++)
-	{
-		if (keys_in[x] == '.' && y <= 8)
-		{
-			y = 8;
-		}
-		else
-		{
-			file_name[y] = keys_in[x];
-			if ('a' <= file_name[y] && file_name[y] <= 'z')
-			{
-				file_name[y] -= 0x20;
-			}
-			y++;
-		}
-	}
-	for (x = 0; x < 224; /*源神！启动！*/)
-	{
-		if (finfo[x].name[0] == 0x00)
-		{
-			break;
-		}
-		if ((finfo[x].type & 0x18) == 0)
-		{
-			for (y = 0; y < 11; y++)
-			{
-				if (finfo[x].name[y] != file_name[y])
-				{
-					//没找到，鬼！
-					goto next_step_typenextfile;
-				}
-			}
-			//找到了文件
-			break;
-		}
-	next_step_typenextfile:
-		x++;
-	}
-	if (x < 224 && finfo[x].name[0] != 0x00)
-	{
-		y = finfo[x].size;
-		int *temp;
-		temp = (char *) (finfo[x].clustno * 512 + 0x003e00 + DIRADR);
-		ccx = 8;
-		for (x = 0; x < y; x++)
-		{
-			file_name[0] = temp[x];
-			file_name[1] = 0;
-			printstr(file_name);
-			if (ccx == 8 + CONS_WIN_X)
-			{
-				ccx = 8;
-				ccy += 16;
-			}
-		}
-	}
-	else
-	{
+PUBLIC void command_open() {
+	int win_x = CONS_WIN_X;
+	int win_y = CONS_WIN_Y;
+    char str[32];
+	int tempccy=ccy;
+    // Initialize
+    memset(str, ' ', sizeof(str));
+    int x, y;
+    y = 0;
+    for (x = 5; keys_in[x] != 0; x++) {
+        if (keys_in[x] == '.' && y <= 8) {
+            y = 8;
+        } else {
+            str[y] = keys_in[x];
+            // Convert to uppercase//TODO
+            if ('a' <= str[y] && str[y] <= 'z') {
+                str[y] -= 32;
+            }
+            y++;
+        }
+    }
+    // Find file
+	
+    for (x = 0; x < 224; x++) {
+        if (finfo[x].name[0] == 0) {
+            break;
+        }
+        if ((finfo[x].type & 0x18) == 0) {
+            int match = 1;
+            for (y = 0; y < 11; y++) {
+                if (finfo[x].name[y] != str[y]) {
+                    match = 0;
+                    break;
+                }
+            }
+            if (match) {
+                // File found
+				//printstr("File found.\n");//TODO
+                int yy = 0;
+                int size = finfo[x].size;
+				//
+                char *ptr = (char *) (finfo[x].clustno * 512 + 0x003e00 + 0x15000);
+				char buf[16];
+				//*ptr='A';
+				//buf[0]=*ptr;
+				//buf[1]='\0';
+				
+				//printstr(buf);
+                while (yy < size) {
+
+                    char buf[39];
+                    int xx = 0;
+                    while (xx < 38 && ptr[yy] != '\0' && ptr[yy]!='\n') {
+                        buf[xx] = ptr[yy++];
+                        xx++;
+                    }
+					buf[xx] = '\0';
+
+                    putstr_atbuf(buf_cons, CONS_WIN_X, 8, tempccy, 0x000000, buf);
+					tempccy+=16;
+					ccy+=16;
+
+					if (ccy + 32 >= win_y - 15)
+					{
+						console_scroll();
+					}
+                    if (yy % 80 == 79) {
+                        console_scroll();
+						//ccy+=16;
+                    }
+                    yy++;
+                }
+                break;
+            }
+        }
+    }
+    if (x == 224) {
+		// File not found
 		printstr("File not found.");
-		ccy += 16;
-	}
-	return;
+    }
 }
+
+
+
 
 PUBLIC void command_cls()
 {

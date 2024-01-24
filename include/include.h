@@ -17,5 +17,6 @@
 #include "proto.h"
 #include "global.h"
 #include "memory.h"
+#include "file.h"
 
 #endif

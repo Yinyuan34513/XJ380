@@ -10,17 +10,6 @@ SHEET *sht_explorer;
 SHEET *sht_win;
 SHEET *sht_cons;
 
-struct FILEINFO{
-	unsigned char name[8], ext[3], type;
-	char reserve[10];
-	unsigned short time, date, clustno;
-	unsigned int size;
-};
-
-struct FILEDATA{
-	char data[32];
-};
-
 
 
 void TestA()            //定义了名为TestA的无返回值的函数
@@ -63,7 +52,7 @@ PRIVATE void StartAni(SHEET *sht_back)
 {
     int x = binfo->scrnx;
     int y = binfo->scrny;
-    char *str2 = "Copyright(C) XINGJI Studios 2017-2023";
+    char *str2 = "Copyright(C) XINGJI Studios 2017-2024";
     int str2len = strlen(str2);
     draw_rect(0, 0, x, y, 0x000000);
     putstr_atbuf(buf_back, x, 8, y - 34, 0xffffff, "Starting XJ380...");
@@ -112,16 +101,15 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	sheet_refresh(&shtctl.sheets0[0], 0, 0, binfo->scrnx, binfo->scrny);//刷新屏幕
 
     init_screen();      //通过执行一些图形操作来初始化屏幕
-    //窗口
-	int adder=0x010000;
+    //文件浏览窗口
+	int adder=ADR_DISKIMG;
 	char p[3];
 	p[0] = (char*) adder;
     make_window(buf_win, 190, 100, "ExplTest", 99);
-	int DIRADR=0x010000;
-    struct FILEINFO *finfo = (struct FILEINFO *) (DIRADR);
+    struct FILEINFO *finfo = (struct FILEINFO *) (ADR_DISKIMG);
 	int fileloop=0;
 	putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "NAME    EXT");
-	while(finfo[fileloop].name[0] != 0x00)
+	while(finfo[fileloop].name[0] != 0x00)//循环打印信息
 	{
 		putstr_atbuf(buf_win, 190, 0, 35+fileloop*12, 0x000000, finfo[fileloop].name);
 		fileloop++;
