@@ -1,4 +1,1 @@
-由XINGJI集团开发的一款有GUI的操作系统。
-当前版本：BetaVersion2023082401
-
-本版本操作系统为内部测试版本，任何员工严禁泄露！！！
+XJ380OS Official Repository
