@@ -201,7 +201,7 @@ PUBLIC void command_open() {
 	int win_x = CONS_WIN_X;
 	int win_y = CONS_WIN_Y;
     char str[32];
-	int tempccy=ccy - 8;
+	int tempccy=ccy;
     // Initialize
     memset(str, ' ', sizeof(str));
     int x, y;
@@ -256,6 +256,10 @@ PUBLIC void command_open() {
                     }
 					buf[xx] = '\0';
 
+					
+
+                    putstr_atbuf(buf_cons, CONS_WIN_X, 8, tempccy, 0x000000, buf);
+
 					if (ccy + 32 >= win_y - 15)
 					{
 						console_scroll();
@@ -264,10 +268,8 @@ PUBLIC void command_open() {
                         console_scroll();
 						//ccy+=16;
                     }
-
-                    putstr_atbuf(buf_cons, CONS_WIN_X, 8, tempccy, 0x000000, buf);
 					
-					//tempccy+=16;
+					tempccy+=16;
 					ccy+=16;
 
                     yy++;
@@ -280,7 +282,6 @@ PUBLIC void command_open() {
 		// File not found
 		printstr("File not found.");
     }
-	ccy -= 16;
 }
 
 
