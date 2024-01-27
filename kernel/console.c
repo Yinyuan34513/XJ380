@@ -11,7 +11,7 @@ PUBLIC u32 buf_win[190 * 100];
 
 //光标坐标
 PRIVATE int ccx = 8;
-PRIVATE int ccy = 20;
+PRIVATE int ccy = 36;
 
 PRIVATE int cls_right = 0;
 
@@ -53,7 +53,10 @@ PUBLIC void start_console(SHEET *sht_cons)	//这个程序全是shit山代码！�
 	sheet_setbuf(sht_win, buf_win, 190, 100, 99);
     
     make_window(buf_cons, win_x, win_y, "Terminal", 99);
-    putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, ">");
+	putstr_atbuf(buf_cons, win_x, 0, 20, 0x000000, "Copyright(C)XINGJI Studios 2017-2023");
+
+
+    putstr_atbuf(buf_cons, win_x, 0, 36, 0x000000, ">");
 
 	t = get_ticks();	
 
@@ -190,7 +193,7 @@ PUBLIC void check_command(char *str)
 	else if (strcmp(str, "dir") == 0)  {command_dir(); }
 	else if (strcmp(str, "") == 0) { ccy -= 32; }
 	else if (strcmp(str, "explorer") == 0) { command_explorer(); }
-	else if (part_strcmp(str, "type ", 5) == 0) { command_open(); }
+	else if (part_strcmp(str, "open ", 5) == 0) { command_open(); }
 	else { err_Command_or_program_not_found(); }
 }
 
@@ -198,7 +201,7 @@ PUBLIC void command_open() {
 	int win_x = CONS_WIN_X;
 	int win_y = CONS_WIN_Y;
     char str[32];
-	int tempccy=ccy;
+	int tempccy=ccy - 8;
     // Initialize
     memset(str, ' ', sizeof(str));
     int x, y;
@@ -242,6 +245,7 @@ PUBLIC void command_open() {
 				//buf[1]='\0';
 				
 				//printstr(buf);
+				ccy--;
                 while (yy < size) {
 
                     char buf[39];
@@ -252,10 +256,6 @@ PUBLIC void command_open() {
                     }
 					buf[xx] = '\0';
 
-                    putstr_atbuf(buf_cons, CONS_WIN_X, 8, tempccy, 0x000000, buf);
-					tempccy+=16;
-					ccy+=16;
-
 					if (ccy + 32 >= win_y - 15)
 					{
 						console_scroll();
@@ -264,6 +264,12 @@ PUBLIC void command_open() {
                         console_scroll();
 						//ccy+=16;
                     }
+
+                    putstr_atbuf(buf_cons, CONS_WIN_X, 8, tempccy, 0x000000, buf);
+					
+					//tempccy+=16;
+					ccy+=16;
+
                     yy++;
                 }
                 break;
@@ -274,6 +280,7 @@ PUBLIC void command_open() {
 		// File not found
 		printstr("File not found.");
     }
+	ccy -= 16;
 }
 
 
@@ -298,14 +305,15 @@ PUBLIC void command_cls()
 PUBLIC void command_dir()
 {
 	ccx = 8;
-	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy, 0x000000, "NAME    EXT");
-	ccy += 16;
+	printstr("NAME    EXT");
+	endline();
 	while(finfo[fileloop].name[0] != 0x00)
 	{
 		putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy + fileloop * 16, 0x000000, finfo[fileloop].name);
 		fileloop++;
 	}
-	ccy += 32;
+	endline();
+	endline();
 }
 
 PUBLIC void command_info()
@@ -313,7 +321,8 @@ PUBLIC void command_info()
 	
 	//writeMem(0xffffff,0x0a);
 	ccx = 8;
-	putstr_atbuf(buf_cons, CONS_WIN_X, ccx, ccy+12, 0x000000, "Copyright(C) XINGJI Studios 2017-2023");
+	printstr("Copyright(C) XINGJI Studios 2017-2023");
+	endline();
 	// Copyright(C) XINGJI Studios 2017-2023
 	return;
 
@@ -323,7 +332,6 @@ PUBLIC void command_explorer()
 {
 	UpExplorer();
 	return;
-
 }
 
 PUBLIC void printstr(char *str)
@@ -334,14 +342,15 @@ PUBLIC void printstr(char *str)
 
 PUBLIC void err_Command_or_program_not_found()
 {
-	putstr_atbuf(buf_cons, CONS_WIN_X, 8, ccy, 0xFF0033, "Command or program not found.");
-	ccx += (strlen("Command or program not found.") << 3);
+	printstr("Command or program not found.");
+	endline();
 }
 
 PUBLIC void endline()
 {
 	ccx = 8;
-	ccy += 16;
+	if (ccy + 16 < CONS_WIN_Y) { ccy += 16; }
+	else if (ccy + 16 >= CONS_WIN_Y) { console_scroll(); }
 }
 
 PUBLIC void yuanjiao(u32 *buf)

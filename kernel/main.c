@@ -58,7 +58,7 @@ PRIVATE void StartAni(SHEET *sht_back)
     putstr_atbuf(buf_back, x, 8, y - 34, 0xffffff, "Starting XJ380...");
     putstr_atbuf(buf_back, x, x - 8 - (str2len * 8), y - 34, 0xffffff, str2);
     DrawLOGO(x / 2 - 120, 114, 10, 0x000000);
-	for (int i = 8; i < x - 8; i += 8)
+	for (int i = 8; i < x - 8; i += 16)
 	{
 		draw_rect(8, y - 18, i, y - 8, 0x00ff00);
         sheet_refresh(sht_back, 0, 0, x, y);
@@ -105,15 +105,9 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
 	int adder=ADR_DISKIMG;
 	char p[3];
 	p[0] = (char*) adder;
-    make_window(buf_win, 190, 100, "ExplTest", 99);
-    struct FILEINFO *finfo = (struct FILEINFO *) (ADR_DISKIMG);
-	int fileloop=0;
-	putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "NAME    EXT");
-	while(finfo[fileloop].name[0] != 0x00)//循环打印信息
-	{
-		putstr_atbuf(buf_win, 190, 0, 35+fileloop*12, 0x000000, finfo[fileloop].name);
-		fileloop++;
-	}
+    make_window(buf_win, 190, 100, "Egg", 99);
+	putstr_atbuf(buf_win, 190, 0, 20, 0x000000, "1514 10211225N17 1215151");
+    putstr_atbuf(buf_win, 190, 0, 36, 0x000000, "1 61518231184 2015 920");
 
     sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
