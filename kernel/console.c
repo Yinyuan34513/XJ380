@@ -1,11 +1,11 @@
 ﻿#include "include.h"
 
-#define CONS_WIN_X	320
-#define CONS_WIN_Y	180
+#define CONS_WIN_X	640
+#define CONS_WIN_Y	360
 
 #define COL_BLACK	0x000000
 
-PUBLIC u32 buf_cons[320 * 180];
+PUBLIC u32 buf_cons[CONS_WIN_X * CONS_WIN_Y];
 PUBLIC u32 buf_win[190 * 100];
 
 

@@ -5,7 +5,21 @@
 PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
 {
     //绘制窗口
-	boxfill8(buf, xsize, 0x00a2e8, 0, 0, xsize, ysize);		//标题栏，颜色#00A2E8
+    //计算透明效果（Alpha混色，显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255）
+    int xt, yt;
+    int ori_col;
+    int bak_col;
+    int alp_col;
+    int alpha = 64;
+    for (yt = 0; yt <= 20; yt++) {
+        for (xt = 0; xt <= xsize; xt++) {
+            ori_col = buf[yt * xsize + xt];
+            bak_col = 0x00a2e8;
+            alp_col = ((ori_col * alpha / 255) + (bak_col * (255 - alpha) / 255));
+            buf[yt * xsize + xt] = alp_col;
+        }
+    } 
+	//boxfill8(buf, xsize, 0x00a2e8, 0, 0, xsize, 20);		//标题栏，颜色#00A2E8
     boxfill8(buf, xsize, 0xffffff, 0, 20, xsize, ysize);	//窗口主体，白色
 
     //定义关闭按钮样式
@@ -70,7 +84,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
             }
             else if (c == 'B') 
             {
-            	c = 0x00a2e8;
+            	c = alp_col;
             }
             buf[y * xsize + (xsize - 32 + x)] = c;
             c = minimize[y][x];
@@ -84,7 +98,7 @@ PUBLIC void make_window(u32 *buf, int xsize, int ysize, char *title, int bc)
             }
             else if (c == 'B') 
             {
-            	c = 0x00a2e8;
+            	c = alp_col;
             }
             buf[y * xsize + (xsize - 63 + x)] = c;
         }

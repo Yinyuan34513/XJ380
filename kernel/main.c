@@ -2,7 +2,7 @@
 #include "memory.h"
 u32 buf_win[190 * 100];  //声明一个u32类型的数组
                         //大小为160*68个元素，共10880元素，每个元素可存储一个32位的值
-extern PUBLIC u32 buf_cons[320 * 180];
+extern PUBLIC u32 buf_cons[640 * 360];
 
 SHEET *sht_backe;
 SHEET *sht_explorer;
@@ -91,7 +91,7 @@ PUBLIC int kernel_main()//此为内核主函数，返回值为int类型
     //使用sheet_setbuf函数设置图纸sht_back的缓冲区、尺寸和透明度颜色；buf_back是缓冲区数组，binfo->scrnx和binfo->scrny是屏幕尺寸，-1表示没有透明度
     sheet_setbuf(sht_win, buf_win, 190, 100, 99);
     //使用sheet_setbuf函数设置sht_back缓冲区数组为buf_win，将buf_win数组设置为尺寸为160x68像素的缓冲区，透明度颜色设置为99。
-    sheet_setbuf(sht_cons, buf_cons, 320, 180, 99);
+    sheet_setbuf(sht_cons, buf_cons, 640, 360, 99);
 	
 	sheet_slide(sht_back, 0, 0);            //使用sheet_slide函数将sht_back图纸移动到屏幕上的位置（0，0）   
     sheet_updown(sht_back, 0);              //使用sheet_updown函数将sht_back工作表带到底层。
