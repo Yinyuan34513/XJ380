@@ -1,5 +1,5 @@
 由XINGJI集团开发的一款有GUI的操作系统。
-当前版本：BetaVersion24
+当前版本：BetaVersion25
 
 本版本操作系统为内部测试版本，任何员工严禁泄露！！！
 
