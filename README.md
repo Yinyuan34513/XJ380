@@ -1,29 +1,40 @@
-由XINGJI集团开发的一款有GUI的操作系统。
-当前版本：BetaVersion26
+由XINGJI集团开发的一款有GUI的操作系统。<br>
+当前版本：BetaVersion27
 
 本版本操作系统为内部测试版本，任何员工严禁泄露！！！
 
-更新日志
-BetaVersion24
+### 更新日志
+
+**BetaVersion24**<br>
 更新内容：
 - 修复命令行第一次输入识别错误的BUG
 - 修复open命令无法识别的BUG
+
 已知问题：
 - open命令仍然无法使用
 
-BetaVersion25
+**BetaVersion25**<br>
 更新内容：
 - 修复open命令无法使用的BUG
 - 加快装饰性开机动画
 - 加了个很明显的彩蛋
+
 已知问题：
 - 远古BUG（在命令行输出内容时光标坐标ccy很容易被干出窗口外）
 - XJ380点阵图下面有一条线
 - 窗口大小如果调大就会花屏
 
-BetaVersion26
+**BetaVersion26**<br>
 更新内容：
 - 修复了 `README.md` 中列表没有加空格的问题<br>
   `-修复open命令无法使用的BUG` -> `- 修复open命令无法使用的BUG`
+
+已知问题：
+- 以上所有未解决问题
+
+**BetaVersion27**<br>
+更新内容：
+- 修复了 `README.md` 中换行的问题
+
 已知问题：
 - 以上所有未解决问题
