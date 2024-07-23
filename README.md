@@ -1,7 +1,7 @@
 由XINGJI集团开发的一款有GUI的操作系统。<br>
 A OS with gui developed by XINGJI Studio<br>
-当前版本：BetaVersion29<br>
-Current Version: BetaVersion29<br>
+当前版本：BetaVersion30<br>
+Current Version: BetaVersion30<br>
 **NOTE**：本版本操作系统为内部测试版本，任何员工严禁泄露！<br>
 **NOTE**: This version of the operating system is an internal test version, and any employee is strictly prohibited from divulging!
 ### 更新日志
@@ -42,7 +42,7 @@ The bugs we have known:
 Update Content:
 - 修复了 `README.md` 中列表没有加空格的问题<br>
   `-修复open命令无法使用的BUG` -> `- 修复open命令无法使用的BUG`
-- The bug that the list in `README.md` does not have spaces
+- The bug that the list in `README.md` does not have spaces<br>
   `-修复open命令无法使用的BUG` -> `- 修复open命令无法使用的BUG`
 
 已知问题：<br>
@@ -77,6 +77,17 @@ The bugs we have known:
 Update Content:
 - 更新版本至BetaVersion29
 - Update version to BetaVersion29
+
+已知问题：<br>
+The bugs we have known:
+- 以上所有未解决问题
+- All the above bugs that is still not be fixed.
+
+**BetaVersion30**<br>
+更新内容：<br>
+Update Content:
+- 修复了 `README.md` 中的换行错误
+- Fixed line break error in 'README.md'
 
 已知问题：<br>
 The bugs we have known:
