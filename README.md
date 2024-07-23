@@ -42,7 +42,7 @@ The bugs we have known:
 Update Content:
 - 修复了 `README.md` 中列表没有加空格的问题<br>
   `-修复open命令无法使用的BUG` -> `- 修复open命令无法使用的BUG`
-- The bug that the list in `README.md` does not have spaces<br>
+- The bug that the list in README.md does not have spaces is fixed<br>
   `-修复open命令无法使用的BUG` -> `- 修复open命令无法使用的BUG`
 
 已知问题：<br>
@@ -93,3 +93,9 @@ Update Content:
 The bugs we have known:
 - 以上所有未解决问题
 - All the above bugs that is still not be fixed.
+
+**BetaVersion31**<br>
+更新内容：<br>
+Update Content:
+- 修复了"README.md"中的一处语法错误
+- Fixed a wrong typo in "README.md"
