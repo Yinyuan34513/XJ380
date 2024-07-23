@@ -1,7 +1,7 @@
 由XINGJI集团开发的一款有GUI的操作系统。<br>
 A OS with gui developed by XINGJI Studio<br>
-当前版本：BetaVersion30<br>
-Current Version: BetaVersion30<br>
+当前版本：BetaVersion32<br>
+Current Version: BetaVersion32<br>
 **NOTE**：本版本操作系统为内部测试版本，任何员工严禁泄露！<br>
 **NOTE**: This version of the operating system is an internal test version, and any employee is strictly prohibited from divulging!
 ### 更新日志
@@ -99,3 +99,9 @@ The bugs we have known:
 Update Content:
 - 修复了"README.md"中的一处语法错误
 - Fixed a wrong typo in "README.md"
+
+**BetaVersion32**<br>
+更新内容：<br>
+Update Content:
+- 修复了"README.md"中没改版本号的错误
+- Fixed the wrong version name in "README.md"
