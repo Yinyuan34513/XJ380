@@ -121,12 +121,6 @@ struct EFI_BOOT_SERVICES {
     EFI_STATUS (*FreePool)(
             VOID *Buffer);
     UINTN _buf3[3];
-    EFI_STATUS (*AllocatePool)(
-            enum EFI_MEMORY_TYPE PoolType,
-            UINTN Size,
-            VOID **Buffer);
-    EFI_STATUS (*FreePool)(
-            VOID *Buffer);
 
     // Event & Timer Services
     UINTN _buf4[2];

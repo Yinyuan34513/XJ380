@@ -19,7 +19,7 @@ mkvd:
 #将ESP模拟为fat32驱动器并运行
 run:
 	sudo mkdir -p esp/EFI/BOOT
-	sudo cp BOOTX64.efi esp/EFI/BOOT/BOOTX64.EFI
+	sudo cp out/BOOTX64.efi esp/EFI/BOOT/BOOTX64.EFI
 	sudo cp out/kernel.elf esp/kernel.elf
 	$(QEMU) -bios /usr/share/OVMF/OVMF_CODE.fd -net none -drive file=fat:rw:esp,index=0,format=vvfat
 
