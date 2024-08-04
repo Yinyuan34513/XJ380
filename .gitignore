@@ -1,5 +1,0 @@
-*.img
-*.o
-out/*
-tools/*
-.vscode/*
