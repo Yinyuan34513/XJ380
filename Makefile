@@ -1,33 +1,46 @@
-MINCC = x86_64-w64-mingw32-gcc
-ELFCC = ./tools/x86_64-elf-g++
-ELFLD = ./tools/x86_64-elf-ld
-QEMU = qemu-system-x86_64
+#工具路径
+TOOLS = ../tools
 
-default : mkvd run
+#工具
+MINCC = $(TOOLS)/mingw64/bin/x86_64-w64-mingw32-gcc.exe
+ELFPP = $(TOOLS)/x86_64-elf-tools-windows/bin/x86_64-elf-g++.exe
+ELFLD = $(TOOLS)/x86_64-elf-tools-windows/bin/x86_64-elf-ld.exe
+QEMU = $(TOOLS)/qemu/qemu-system-x86_64.exe
+QEMU_IMG = $(TOOLS)/qemu/qemu-img.exe
+DD = $(TOOLS)/dd-0.6beta3/dd.exe
 
-#制作镜像
-mkvd:
-	dd if=/dev/zero of=XJ380.img bs=1M count=2048
-	sudo losetup /dev/loop17 XJ380.img
-	sudo mkfs.vfat -F 32 /dev/loop17
-	sudo mount /dev/loop17 /mnt
-	sudo mkdir -p /mnt/EFI/BOOT
-	sudo cp out/BOOTX64.efi /mnt/EFI/BOOT/BOOTX64.EFI
-	sudo cp out/kernel.elf /mnt/kernel.elf
-	sudo umount /mnt
+#系统指令
+CPY = copy
+MKDIR = mkdir
+RMDIR = rmdir
+
+#编译版本及编译平台
+REL = XJ380_BUILD_V2
+
+default : run clear
+
+mkrel : 
+	$(MKDIR) $(REL)\EFI\BOOT
+	$(CPY) out\BOOTX64.efi $(REL)\EFI\BOOT
+	$(CPY) out\kernel.elf $(REL)
+
+clear :
+	$(RMDIR) /Q /S esp
+	$(RMDIR) /Q /S out
+	$(MKDIR) out
 
 #将ESP模拟为fat32驱动器并运行
-run:
-	sudo mkdir -p esp/EFI/BOOT
-	sudo cp out/BOOTX64.efi esp/EFI/BOOT/BOOTX64.EFI
-	sudo cp out/kernel.elf esp/kernel.elf
-	$(QEMU) -bios /usr/share/OVMF/OVMF_CODE.fd -net none -drive file=fat:rw:esp,index=0,format=vvfat
+run :
+	$(MKDIR) esp\EFI\BOOT
+	$(CPY) out\BOOTX64.efi esp\EFI\BOOT
+	$(CPY) out\kernel.elf esp
+	$(QEMU) -bios $(TOOLS)/OVMF.fd -m 512 -net none -drive file=fat:rw:esp,index=0,format=vvfat
 
 out/BOOTX64.efi : boot/bootx64.c
 	$(MINCC) -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -o BOOTX64.efi bootx64.c
 
 out/main.o : kernel/main.c
-	$(ELFCC) main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o main.o
+	$(ELFPP) main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o main.o
 
 out/kernel.elf : out/main.o
 	$(ELFLD) -e KernelMain -z norelro -Ttext-segment 0x100000 --static -o kernel.elf main.o
