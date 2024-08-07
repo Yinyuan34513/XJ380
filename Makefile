@@ -1,88 +1,46 @@
-ENTRYPOINT = 0x30400
+#工具路径
+TOOLS = ../tools
 
-TOOLS = ./tools
-
-ASM  = $(TOOLS)/nasm/nasm.exe
-CC   = $(TOOLS)/i686-elf-tools-windows/bin/i686-elf-gcc.exe
-LD   = $(TOOLS)/i686-elf-tools-windows/bin/i686-elf-ld.exe
-EDIMG = $(TOOLS)/edimg.exe
-QEMU = $(TOOLS)/qemu/qemu-system-i386.exe
+#工具
+MINCC = $(TOOLS)/mingw64/bin/x86_64-w64-mingw32-gcc.exe
+ELFPP = $(TOOLS)/x86_64-elf-tools-windows/bin/x86_64-elf-g++.exe
+ELFLD = $(TOOLS)/x86_64-elf-tools-windows/bin/x86_64-elf-ld.exe
+QEMU = $(TOOLS)/qemu/qemu-system-x86_64.exe
 QEMU_IMG = $(TOOLS)/qemu/qemu-img.exe
-DD = $(TOOLS)/dd-0.6beta3/dd.exe  
+DD = $(TOOLS)/dd-0.6beta3/dd.exe
 
-ASMBFLAGS = -I boot/include/
-ASMKFLAGS = -I include/ -f elf
-CFLAGS    = -I include/ -c -fno-builtin -nostdlib -nostdinc
-LDFLAGS   = -s -Ttext $(ENTRYPOINT)
+#系统指令
+CPY = copy
+MKDIR = mkdir
+RMDIR = rmdir
 
-XJ380BOOT = out/boot.bin out/loader.bin
-XJ380KERN = out/kernel.bin
-OBJS      = out/kernel.o out/start.o out/main.o out/string.o out/global.o out/rect.o out/text.o out/font.o out/kliba.o \
-		out/klib.o out/intr.o out/i8259.o out/gdt.o out/clock.o out/syscall.o out/syscall_impl.o out/proc.o out/keyboard.o \
-		out/keymap.o out/fifo.o out/printf.o out/mouse_pointer.o out/mouse.o out/sheet.o out/vram.o out/window.o \
-		out/console.o out/system_api.o out/memory.o 
+#编译版本及编译平台
+REL = XJ380_BUILD_V2
 
-default : clear run
+default : run clear
 
-everything : $(XJ380BOOT) $(XJ380KERN)
-
-image : everything clean
-	$(QEMU_IMG) create XJ380.img 1474560
-	$(DD) if=out/boot.bin of=XJ380.img bs=512 count=1
-	$(EDIMG) \
-	imgin:.\XJ380.img \
-	copy from:out/loader.bin to:@: \
-	copy from:out/kernel.bin to:@: \
-	copy from:TEST.TXT to:@: \
-	imgout:XJ380.img
-
-clean :
-	del out\*.o
+mkrel : 
+	$(MKDIR) $(REL)\EFI\BOOT
+	$(CPY) out\BOOTX64.efi $(REL)\EFI\BOOT
+	$(CPY) out\kernel.elf $(REL)
 
 clear :
-	del out\*.bin
+	$(RMDIR) /Q /S esp
+	$(RMDIR) /Q /S out
+	$(MKDIR) out
 
-run : image
-	$(QEMU) -fda XJ380.img -serial stdio -m 256
+#将ESP模拟为fat32驱动器并运行
+run :
+	$(MKDIR) esp\EFI\BOOT
+	$(CPY) out\BOOTX64.efi esp\EFI\BOOT
+	$(CPY) out\kernel.elf esp
+	$(QEMU) -bios $(TOOLS)/OVMF.fd -m 512 -net none -drive file=fat:rw:esp,index=0,format=vvfat
 
-out/boot.bin : boot/boot.asm
-	$(ASM) $(ASMBFLAGS) -o $@ $<
+out/BOOTX64.efi : boot/bootx64.c
+	$(MINCC) -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -W -isystem -o ./out/BOOTX64.efi ./boot/bootx64.c
 
-out/loader.bin : boot/loader.asm
-	$(ASM) $(ASMBFLAGS) -o $@ $<
+out/main.o : kernel/main.c
+	$(ELFPP) kernel/main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o ./out/main.o
 
-$(XJ380KERN) : $(OBJS)
-	$(LD) $(LDFLAGS) -o $(XJ380KERN) $(OBJS)
-
-out/%.o : kernel/%.asm
-	$(ASM) $(ASMKFLAGS) -o $@ $<
-
-out/%.o : kernel/%.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-out/%.o : lib/%.asm
-	$(ASM) $(ASMKFLAGS) -o $@ $<
-
-out/%.o : lib/%.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-out/%.o : graphics/%.asm
-	$(ASM) $(ASMKFLAGS) -o $@ $<
-
-out/%.o : graphics/%.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-out/%.o : drivers/%.asm
-	$(ASM) $(ASMKFLAGS) -o $@ $<
-
-out/%.o : drivers/%.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-out/%.o : gui/%.asm
-	$(ASM) $(ASMKFLAGS) -o $@ $<
-
-out/%.o : gui/%.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-out/%.o : api/%.c
-	$(CC) $(CFLAGS) -o $@ $<
+out/kernel.elf : out/main.o
+	$(ELFLD) -e KernelMain -z norelro -Ttext-segment 0x100000 --static -o ./out/kernel.elf ./out/main.o
