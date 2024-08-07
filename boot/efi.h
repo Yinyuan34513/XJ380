@@ -5,8 +5,13 @@ typedef unsigned char UINT8;
 typedef unsigned short UINT16;
 typedef unsigned int UINT32;
 typedef unsigned long long UINT64;
-
-typedef UINT64 UINTN; // x64
+enum EFI_ALLOCATE_TYPE {
+    AllocateAnyPages,
+    AllocateMaxAddress,
+    AllocateAddress,
+    MaxAllocateType
+};
+typedef UINT64 UINTN; // 我们在64位下
 typedef UINTN EFI_STATUS;
 typedef void VOID;
 typedef UINT16 CHAR16;
@@ -66,13 +71,6 @@ struct EFI_GUID {
     UINT8 Data4[8];
 };
 
-enum EFI_ALLOCATE_TYPE {
-    AllocateAnyPages,
-    AllocateMaxAddress,
-    AllocateAddress,
-    MaxAllocateType
-};
-
 #define EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 0x00000001
 #define EFI_OPEN_PROTOCOL_GET_PROTOCOL 0x00000002
 #define EFI_OPEN_PROTOCOL_TEST_PROTOCOL 0x00000004
@@ -120,7 +118,6 @@ struct EFI_BOOT_SERVICES {
             VOID **Buffer);
     EFI_STATUS (*FreePool)(
             VOID *Buffer);
-    UINTN _buf3[3];
 
     // Event & Timer Services
     UINTN _buf4[2];
@@ -235,7 +232,7 @@ struct EFI_LOADED_IMAGE_PROTOCOL {
     struct EFI_SYSTEM_TABLE *SystemTable;
 
     EFI_HANDLE DeviceHandle;
-    VOID *FilePath; // EFI_DEVICE_PATH_PROTOCOL我们并不会用到，除非要把执行EFI的内容加进来，如果真加到时候就改
+    VOID *FilePath; // EFI_DEVICE_PATH_PROTOCOL我们并不会用到，除非我哪天脑子一闪想要把执行EFI的内容加进来，如果真加到时候就改
     VOID *Reserved;
 
     UINT32 LoadOptionsSize;

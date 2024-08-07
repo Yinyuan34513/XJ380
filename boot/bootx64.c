@@ -68,9 +68,15 @@ void free(void *buf)
     BS->FreePool(buf);
 }
 
-EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)
-{
-    return BS->AllocatePages(AllocateAddress, LIP ? LIP->ImageDataType : EfiLoaderData, (size + 0xfff) / 0x1000, &addr);
+EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)  
+{  
+    EFI_STATUS status;  
+    EFI_PHYSICAL_ADDRESS allocated_addr; 
+    status = BS->AllocatePages(AllocateAnyPages,   
+                               LIP ? LIP->ImageDataType : EfiLoaderData,  
+                               (size + 0xfff) / 0x1000,  
+                               &allocated_addr);   
+    return status;  
 }
 
 void freeAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)
