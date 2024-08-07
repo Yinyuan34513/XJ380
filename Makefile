@@ -37,10 +37,10 @@ run :
 	$(QEMU) -bios $(TOOLS)/OVMF.fd -m 512 -net none -drive file=fat:rw:esp,index=0,format=vvfat
 
 out/BOOTX64.efi : boot/bootx64.c
-	$(MINCC) -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -o BOOTX64.efi bootx64.c
+	$(MINCC) -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -W -isystem -o ./out/BOOTX64.efi ./boot/bootx64.c
 
 out/main.o : kernel/main.c
-	$(ELFPP) main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o main.o
+	$(ELFPP) kernel/main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o ./out/main.o
 
 out/kernel.elf : out/main.o
-	$(ELFLD) -e KernelMain -z norelro -Ttext-segment 0x100000 --static -o kernel.elf main.o
+	$(ELFLD) -e KernelMain -z norelro -Ttext-segment 0x100000 --static -o ./out/kernel.elf ./out/main.o

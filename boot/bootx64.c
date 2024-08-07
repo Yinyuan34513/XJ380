@@ -1,5 +1,5 @@
 #include "efi.h"
-
+#define NULL 0
 struct EFI_SYSTEM_TABLE *ST;
 struct EFI_BOOT_SERVICES *BS;
 struct EFI_GRAPHICS_OUTPUT_PROTOCOL *GOP;
