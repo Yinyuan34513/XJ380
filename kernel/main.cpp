@@ -34,14 +34,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc) {
     if (pixel_writer != nullptr) {  
         for (int x = 0; x < fbc.horizontal_resolution; x++) {  
             for (int y = 0; y < fbc.vertical_resolution; y++) {  
-                pixel_writer->Write(x, y, {0,162,232});  
-            }  
-        }  
-  
-        // 在屏幕中央绘制一个绿色方块  
-        for (int x = 0; x < 200; x++) {  
-            for (int y = 0; y < 100; y++) {  
-                pixel_writer->Write(fbc.horizontal_resolution / 2 - 100 + x, fbc.vertical_resolution / 2 - 50 + y, {0, 255, 0});  
+                pixel_writer->Write(x, y, {0,162,232});  // #00a2e8 - 星际蓝
             }  
         }  
     }  
