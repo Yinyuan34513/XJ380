@@ -50,3 +50,7 @@ Makefile里有一个变量“REL”，填版本。
 - 可以加载内核
 - 写了个内核“kernel.elf”（kernel/main.c）
 - 更新Makefile，可以直接通过虚拟机启动（需OVMF.fd，在tools里已经配置好）。
+- 删除Makefile，可以直接通过脚本“build.bat”直接编译运行一条龙。
+### BuildVersion 3 【已虚拟机测试】
+2024年8月8日 Guoqiyu1115
+- 全彩画图搞定
