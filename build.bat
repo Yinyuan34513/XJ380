@@ -1,3 +1,4 @@
+rmdir /Q /S esp
 mkdir out
 mkdir esp\EFI\BOOT
 ..\tools\mingw64\bin\x86_64-w64-mingw32-gcc.exe -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -o out\BOOTX64.efi boot\bootx64.c
@@ -6,3 +7,4 @@ mkdir esp\EFI\BOOT
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
 ..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 512 -net none -drive file=fat:rw:esp,index=0,format=vvfat
+rmdir /Q /S out

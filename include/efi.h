@@ -301,28 +301,4 @@ struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
     UINT64 Revision;
     EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, struct EFI_FILE_PROTOCOL **Root);
 }; // SFSP
-void CalcLoadAddressRange(Elf64_Ehdr *ehdr, UINT64 *first, UINT64 *last)
-{
-    Elf64_Phdr *phdr = (Elf64_Phdr *) ((UINT64) ehdr + ehdr->e_phoff); // 第一个 program header 地址
-    *first = 0xffffffffffffffff; // UINT64最大值
-    *last = 0; // UINT64最小值
-
-    for (UINT16 i = 0; i < ehdr->e_phnum; i++) { // 遍历每一个 program header
-        if (phdr[i].p_type != PT_LOAD) continue; // 只关心LOAD段
-        *first = min(*first, phdr[i].p_vaddr);
-        *last = max(*last, phdr[i].p_vaddr + phdr[i].p_memsz); // 每一个program header首尾取最值
-    }
-}
-void CopyLoadSegments(Elf64_Ehdr *ehdr)
-{
-    Elf64_Phdr *phdr = (Elf64_Phdr *) ((UINT64) ehdr + ehdr->e_phoff); // 第一个 program header 地址
-    for (UINT16 i = 0; i < ehdr->e_phnum; i++) { // 遍历每一个 program header
-        if (phdr[i].p_type != PT_LOAD) continue; // 只关心LOAD段
-
-        UINT64 segm_in_file = (UINT64) ehdr + phdr[i].p_offset; // 段在文件中的位置
-        memcpy((VOID *) phdr[i].p_vaddr, (VOID *) segm_in_file, phdr[i].p_filesz); // 将文件中大小的部分copy过去
-        UINTN remain_bytes = phdr[i].p_memsz - phdr[i].p_filesz; // 两者之差
-        memset((VOID *) (phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes); // 赋值为0
-    }
-}
 #endif 
