@@ -1,6 +1,0 @@
-..\tools\mingw64\bin\x86_64-w64-mingw32-gcc.exe -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Iinclude -Wl,--subsystem,10 -o out\BOOTX64.efi boot\bootx64.c
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -Iinclude -fno-rtti -std=c++17 -c -o out\main.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf .\out\main.o
-copy out\BOOTX64.efi esp\EFI\BOOT
-copy out\kernel.elf esp
-..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 512 -net none -drive file=fat:rw:esp,index=0,format=vvfat

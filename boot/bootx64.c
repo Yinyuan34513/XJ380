@@ -1,4 +1,8 @@
+// 版权所有©XINGJI Studios 2017-2024 保留所有权利。
+// XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
 #include "efi.h"
+#include "elf.h"
+#include "../include/include.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE *ST;
 struct EFI_BOOT_SERVICES *BS;
@@ -10,6 +14,49 @@ EFI_HANDLE IM;
 struct EFI_GUID gop_guid = {0x9042a9de, 0x23dc, 0x4a38, {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}};
 struct EFI_GUID lip_guid = {0x5b1b31a1, 0x9562, 0x11d2, {0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
 struct EFI_GUID sfsp_guid = {0x964e5b22, 0x6459, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
+
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) < (b) ? (b) : (a))
+
+void xmemset(void *dst_, UINT8 value, UINTN size)
+{
+    UINT8 *dst = (UINT8 *) dst_;
+    while (size-- > 0) *dst++ = value;
+}
+
+void *xmemcpy(void *dst_, const void *src_, UINTN size)
+{
+    UINT8 *dst = dst_;
+    const UINT8 *src = src_;
+    while (size-- > 0) *dst++ = *src++;
+    return (void *) src_;
+}
+
+void CalcLoadAddressRange(Elf64_Ehdr *ehdr, UINT64 *first, UINT64 *last)
+{
+    Elf64_Phdr *phdr = (Elf64_Phdr *) ((UINT64) ehdr + ehdr->e_phoff); // 第一个 program header 地址
+    *first = 0xffffffffffffffff; // UINT64最大值
+    *last = 0; // UINT64最小值
+
+    for (UINT16 i = 0; i < ehdr->e_phnum; i++) { // 遍历每一个 program header
+        if (phdr[i].p_type != PT_LOAD) continue; // 只关心LOAD段
+        *first = min(*first, phdr[i].p_vaddr);
+        *last = max(*last, phdr[i].p_vaddr + phdr[i].p_memsz); // 每一个program header首尾取最值
+    }
+}
+
+void CopyLoadSegments(Elf64_Ehdr *ehdr)
+{
+    Elf64_Phdr *phdr = (Elf64_Phdr *) ((UINT64) ehdr + ehdr->e_phoff); // 第一个 program header 地址
+    for (UINT16 i = 0; i < ehdr->e_phnum; i++) { // 遍历每一个 program header
+        if (phdr[i].p_type != PT_LOAD) continue; // 只关心LOAD段
+
+        UINT64 segm_in_file = (UINT64) ehdr + phdr[i].p_offset; // 段在文件中的位置
+        xmemcpy((VOID *) phdr[i].p_vaddr, (VOID *) segm_in_file, phdr[i].p_filesz); // 将文件中大小的部分copy过去
+        UINTN remain_bytes = phdr[i].p_memsz - phdr[i].p_filesz; // 两者之差
+        xmemset((VOID *) (phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes); // 赋值为0
+    }
+}
 
 void putc(unsigned short c)
 {
@@ -87,8 +134,6 @@ void freeAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)
 void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
     ST = SystemTable;
-    ST->BootServices->SetWatchdogTimer(0, 0, 0, NULL);
-    ST->BootServices->LocateProtocol(&gop_guid, NULL, (void **)&GOP);
     BS = SystemTable->BootServices;
     IM = ImageHandle;
 
@@ -113,17 +158,17 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     status = SFSP->OpenVolume(SFSP, &root);
     if (EFI_ERROR(status)) {
-        puts(L"bootloader: error while opening root dir");
+        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
         while (1);
     }
     status = root->Open(root, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
     if (EFI_ERROR(status)) {
-        puts(L"bootloader: error while opening kernel file");
+        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
         while (1);
     }
     status = kernel_file->Read(kernel_file, &kernel_size, kernel_buffer); // 读取内核，直接读到kernel_buffer
     if (EFI_ERROR(status)) {
-        puts(L"bootloader: error while reading kernel file");
+        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
         while (1);
     }
 
@@ -133,16 +178,39 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     status = mallocAt(kernel_first_addr, kernel_last_addr - kernel_first_addr); // 分配内存
     if (EFI_ERROR(status)) {
-        puts(L"bootloader: error while allocating buffer for kernel");
+        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
         while (1);
     }
 
-    CopyLoadSegments(ehdr); // 复制PT_LOAD
+    CopyLoadSegments(ehdr); // CV
     entry_addr = ehdr->e_entry; // 获取入口点
-    free(kernel_buffer); // 释放内核文件，因为没用了
+    free(kernel_buffer); // 释放内核文件，丢掉！
 
-    typedef void (* __attribute__((sysv_abi)) Kernel)(UINT64, UINT64); // 指定使用sysv_abi，这是ELF的abi，否则传参会出问题
-    // 其实所有的问题都是因为这里sysv_abi没写导致的，只是正好借机把bootloader完善一下（
-    Kernel kernel = (Kernel) entry_addr; // 同样的赋值，注意Kernel已经是函数指针了
-    kernel(GOP->Mode->FrameBufferBase, GOP->Mode->FrameBufferSize); // jump in!
+    struct FrameBufferConfig config = {
+        (UINT8 *) GOP->Mode->FrameBufferBase,
+        GOP->Mode->Info->PixelsPerScanLine,
+        GOP->Mode->Info->HorizontalResolution,
+        GOP->Mode->Info->VerticalResolution
+    };
+
+    switch (GOP->Mode->Info->PixelFormat) {
+        case PixelRedGreenBlueReserved8BitPerColor:
+            config.pixel_format = kRGBR;
+            break;
+        case PixelBlueGreenRedReserved8BitPerColor:
+            config.pixel_format = kBGRR;
+            break;
+        default:
+            puts(L"bootloader: unsupported pixel format: ");
+            puth(GOP->Mode->Info->PixelFormat);
+            while (1);
+    }
+
+    typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *);
+    Kernel kernel = (Kernel) entry_addr;
+    kernel(&config); // 滚进去！
+
+    //此处=kernel.elf
+
+    while (1); // 趋势
 }
