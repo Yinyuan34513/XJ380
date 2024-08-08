@@ -1,8 +1,6 @@
 #ifndef _ELF_H_
 #define _ELF_H_
 
-#include "efi.h"
-
 #define PT_LOAD 1 // PT_LOAD值不变
 
 typedef struct
