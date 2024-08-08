@@ -1,35 +1,50 @@
-// 版权所有©XINGJI Studios 2017-2024 保留所有权利。
-// XJ380内核主程序（\kernel.elf）
-#include "../include/include.h"
-
-struct PixelColor {
-    uint8_t r, g, b;
-};
-
-int WritePixel(const FrameBufferConfig &config, int x, int y, const PixelColor &c)
-{
-    const int pixel_position = config.pixels_per_scan_line * y + x;
-    if (config.pixel_format == kRGBR) {
-        uint8_t *p = &config.frame_buffer[4 * pixel_position]; // RGBR/BGRR模式下，一个像素占4个字节
-        p[0] = c.r;
-        p[1] = c.g;
-        p[2] = c.b; // 按顺序写入，因为是RGBR
-    } else if (config.pixel_format == kBGRR) {
-        uint8_t *p = &config.frame_buffer[4 * pixel_position]; // RGBR/BGRR模式下，一个像素占4个字节
-        p[0] = c.b;
-        p[1] = c.g;
-        p[2] = c.r; // 同样，按顺序写入
-    } else {
-        return -1; // 不应该出现
-    }
-    return 0; // 正常
+// main.cpp  
+#include "../include/include.h"  
+auto operator new(size_t size, void *ptr) -> void * {
+  return ptr;
 }
 
-extern "C" void KernelMain(const FrameBufferConfig& fbc) {
-    for (int x = 0; x < fbc.horizontal_resolution; x++) {
-        for (int y = 0; y < fbc.vertical_resolution; y++) {
-            WritePixel(fbc, x, y, {0, 162, 232});
-        }
-    }
-    while (1) asm("hlt");
+auto operator new[](size_t size, void *ptr) -> void * {
+  return ptr;
+}
+
+auto operator delete(void *ptr, size_t size) -> void { 
+}
+
+auto operator delete[](void *ptr, size_t size) -> void { 
+}
+
+extern "C" void KernelMain(const FrameBufferConfig &fbc) {  
+    static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  
+    static PixelWriter* pixel_writer = nullptr;  
+  
+    switch (fbc.pixel_format) {  
+        case PixelFormat::kRGBR:  
+            pixel_writer = new(pixel_writer_buf) RGBRWriter(fbc); // 使用 placement new  
+            break;  
+        case PixelFormat::kBGRR:  
+            pixel_writer = new(pixel_writer_buf) BGRRWriter(fbc);  
+            break;  
+        // ... 处理其他像素格式 ...  
+        default:  
+            // 错误处理  
+            break;  
+    }  
+  
+    if (pixel_writer != nullptr) {  
+        for (int x = 0; x < fbc.horizontal_resolution; x++) {  
+            for (int y = 0; y < fbc.vertical_resolution; y++) {  
+                pixel_writer->Write(x, y, {0,162,232});  
+            }  
+        }  
+  
+        // 在屏幕中央绘制一个绿色方块  
+        for (int x = 0; x < 200; x++) {  
+            for (int y = 0; y < 100; y++) {  
+                pixel_writer->Write(fbc.horizontal_resolution / 2 - 100 + x, fbc.vertical_resolution / 2 - 50 + y, {0, 255, 0});  
+            }  
+        }  
+    }  
+  
+    while (1) asm("hlt");  
 }

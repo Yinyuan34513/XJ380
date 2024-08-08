@@ -2,8 +2,10 @@
 // XJ380头文件头文件
 #ifndef _INCLUDE_HPP_
 #define _INCLUDE_HPP_
-
-#include "fbc.hpp"
+#ifdef __cplusplus
+#include "GOP.hpp"
+#else
 #include "stdint.h"
-
+#include "fbc.hpp"
+#endif
 #endif 
