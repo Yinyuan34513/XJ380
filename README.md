@@ -54,6 +54,6 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 3 【已实机测试】
 2024年8月8日 Guoqiyu1115
 - 全彩画图搞定
-### BuildVersion 4 【已虚拟机测试】
+### BuildVersion 4 【已实机测试】
 2024年8月8日 Guoqiyu1115
 - 优化画图算法
