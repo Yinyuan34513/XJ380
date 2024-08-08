@@ -17,7 +17,7 @@ RMDIR = rmdir
 #编译版本及编译平台
 REL = XJ380_BUILD_V2
 
-default : run clear
+default : clear run clear
 
 mkrel : 
 	$(MKDIR) $(REL)\EFI\BOOT
@@ -39,7 +39,7 @@ run :
 out/BOOTX64.efi : boot/bootx64.c
 	$(MINCC) -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -W -isystem -o ./out/BOOTX64.efi ./boot/bootx64.c
 
-out/main.o : kernel/main.c
+out/main.o : kernel/main.cpp
 	$(ELFPP) kernel/main.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o ./out/main.o
 
 out/kernel.elf : out/main.o

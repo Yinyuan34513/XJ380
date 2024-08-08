@@ -220,7 +220,8 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
             UINT32 HorizontalResolution;
             UINT32 VerticalResolution;
             enum EFI_GRAPHICS_PIXEL_FORMAT PixelFormat;
-            // 后面还有俩成员，但由于这结构体成员（Info）是指针，字节数一定，因此无大碍
+            UINT32 PixelInformation[4];
+            UINT32 PixelsPerScanLine;
         } *Info;
         UINTN SizeOfInfo;
         EFI_PHYSICAL_ADDRESS FrameBufferBase;
