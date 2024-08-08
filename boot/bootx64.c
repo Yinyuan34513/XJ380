@@ -1,8 +1,8 @@
 // 版权所有©XINGJI Studios 2017-2024 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
-#include "..\include\efi.h"
+#include "efi.h"
 #include "elf.h"
-#include "..\include\include.h"
+#include "../include/include.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE *ST;
 struct EFI_BOOT_SERVICES *BS;
