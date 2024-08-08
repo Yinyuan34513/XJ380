@@ -87,6 +87,8 @@ void freeAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)
 void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
     ST = SystemTable;
+    ST->BootServices->SetWatchdogTimer(0, 0, 0, NULL);
+    ST->BootServices->LocateProtocol(&gop_guid, NULL, (void **)&GOP);
     BS = SystemTable->BootServices;
     IM = ImageHandle;
 
@@ -104,44 +106,43 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     ST->ConOut->ClearScreen(ST->ConOut);
 
     EFI_STATUS status;
-    EFI_PHYSICAL_ADDRESS kernel_base_addr = 0x100000, entry_addr;
+    EFI_PHYSICAL_ADDRESS entry_addr;
     struct EFI_FILE_PROTOCOL *root, *kernel_file;
     UINTN kernel_size = 4194304;
+    void *kernel_buffer = malloc(kernel_size);
 
     status = SFSP->OpenVolume(SFSP, &root);
     if (EFI_ERROR(status)) {
-        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
-        puts(L"XJ380 无法正常引导。 请访问 https://xingjisoft.top/product/os/xj380/error.html 以获取解决办法。 错误代码: OPEN_ROOT_DIR_ERROR");
+        puts(L"bootloader: error while opening root dir");
         while (1);
     }
     status = root->Open(root, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
     if (EFI_ERROR(status)) {
-        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
-        puts(L"XJ380 无法正常引导。 请访问 https://xingjisoft.top/product/os/xj380/error.html 以获取解决办法。 错误代码: OPEN_ROOT_DIR_ERROR");
+        puts(L"bootloader: error while opening kernel file");
         while (1);
     }
-    status = mallocAt(kernel_base_addr, kernel_size); // 提前分配内存
+    status = kernel_file->Read(kernel_file, &kernel_size, kernel_buffer); // 读取内核，直接读到kernel_buffer
     if (EFI_ERROR(status)) {
-        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_KERNEL_BUF");
-        puts(L"XJ380 无法正常引导。 请访问 https://xingjisoft.top/product/os/xj380/error.html 以获取解决办法。 错误代码: OPEN_ROOT_DIR_ERROR");
+        puts(L"bootloader: error while reading kernel file");
         while (1);
     }
-    status = kernel_file->Read(kernel_file, &kernel_size, (void *) kernel_base_addr); // 读取内核
+
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *) kernel_buffer;
+    UINT64 kernel_first_addr, kernel_last_addr; // 计算的首尾
+    CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
+
+    status = mallocAt(kernel_first_addr, kernel_last_addr - kernel_first_addr); // 分配内存
     if (EFI_ERROR(status)) {
-        puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
-        puts(L"XJ380 无法正常引导。 请访问 https://xingjisoft.top/product/os/xj380/error.html 以获取解决办法。 错误代码: OPEN_ROOT_DIR_ERROR");
+        puts(L"bootloader: error while allocating buffer for kernel");
         while (1);
     }
 
-    //加载内核(kernel.elf)
-    entry_addr = *(EFI_PHYSICAL_ADDRESS *) (kernel_base_addr + 24);
-    typedef int Kernel(void);
-    Kernel *kernel = (Kernel *) entry_addr;
-    int retval = kernel();
+    CopyLoadSegments(ehdr); // 复制PT_LOAD
+    entry_addr = ehdr->e_entry; // 获取入口点
+    free(kernel_buffer); // 释放内核文件，因为没用了
 
-    //此处=kernel.elf
-
-    //测试输出（正常应该是7）
-    puth(retval);
-    while (1);
+    typedef void (* __attribute__((sysv_abi)) Kernel)(UINT64, UINT64); // 指定使用sysv_abi，这是ELF的abi，否则传参会出问题
+    // 其实所有的问题都是因为这里sysv_abi没写导致的，只是正好借机把bootloader完善一下（
+    Kernel kernel = (Kernel) entry_addr; // 同样的赋值，注意Kernel已经是函数指针了
+    kernel(GOP->Mode->FrameBufferBase, GOP->Mode->FrameBufferSize); // jump in!
 }
