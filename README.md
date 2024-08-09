@@ -60,7 +60,7 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 5 【已虚拟机测试】
 2024年8月9日 wcjbr
 - 拆代码
-### BuildVersion 6 【已虚拟机测试】
+### BuildVersion 6 【已实机测试】
 2024年8月9日 wcjbr & Guoqiyu1115
 - 绘图函数
 - 半个任务栏
