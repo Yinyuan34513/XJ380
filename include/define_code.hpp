@@ -10,5 +10,11 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
 // graphics/desktop.cpp
 void init_desktop(const FrameBufferConfig &fbc);
 void init_dock(const FrameBufferConfig &fbc);
+void init_shortcut_dock(const FrameBufferConfig &fbc);
+void draw_logo(const FrameBufferConfig &fbc, int xi, int yi);
+
+// font/font.cpp
+void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
+void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
 
 #endif
