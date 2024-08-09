@@ -1,5 +1,17 @@
 #include "../include/include.h"
+auto operator new(size_t size, void *ptr) -> void * {
+  return ptr;
+}
 
+auto operator new[](size_t size, void *ptr) -> void * {
+  return ptr;
+}
+
+auto operator delete(void *ptr, size_t size) -> void { 
+}
+
+auto operator delete[](void *ptr, size_t size) -> void { 
+}
 
 void draw_rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor& c)
 {

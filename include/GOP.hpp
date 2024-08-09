@@ -6,7 +6,6 @@
   
 #include "stdint.h"
 #include "fbc.hpp"
-  
 struct PixelColor {  
     uint8_t r, g, b;  
 };  
@@ -49,5 +48,5 @@ public:
         p[2] = c.r; // BGRR格式  
     }  
 };  
-  
+
 #endif

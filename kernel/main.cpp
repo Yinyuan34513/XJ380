@@ -1,23 +1,10 @@
 // main.cpp  
 #include "../include/include.h"  
-auto operator new(size_t size, void *ptr) -> void * {
-  return ptr;
-}
-
-auto operator new[](size_t size, void *ptr) -> void * {
-  return ptr;
-}
-
-auto operator delete(void *ptr, size_t size) -> void { 
-}
-
-auto operator delete[](void *ptr, size_t size) -> void { 
-}
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc) {  
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  
     static PixelWriter* pixel_writer = nullptr;  
-  
+    /*
     switch (fbc.pixel_format) {  
         case PixelFormat::kRGBR:  
             pixel_writer = new(pixel_writer_buf) RGBRWriter(fbc); // 使用 placement new  
@@ -29,7 +16,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc) {
         default:  
             // 错误处理  
             break;  
-    }  
+    }    
   
     if (pixel_writer != nullptr) {  
         for (int x = 0; x < fbc.horizontal_resolution; x++) {  
@@ -38,7 +25,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc) {
             }  
         }  
     }  
-
+    */
+    draw_rect(fbc, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, {0,162,232});  // #FFF200 - 星际黄
     draw_rect(fbc, 200, 200, 400, 400, {255, 242, 0});  // #FFF200 - 星际黄
   
     while (1) asm("hlt");  
