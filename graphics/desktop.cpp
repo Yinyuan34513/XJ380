@@ -6,7 +6,8 @@ void init_desktop(const FrameBufferConfig &fbc)
 {
     int scrx = fbc.horizontal_resolution;
     int scry = fbc.vertical_resolution;
-    rect(fbc, 0, 0, scrx, scry, {34, 34, 156});
+    //#136dff
+    rect(fbc, 0, 0, scrx, scry, {0x13, 0x6d, 0xff});
     init_dock(fbc);
     init_shortcut_dock(fbc);
 }
