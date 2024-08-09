@@ -38,6 +38,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc) {
             }  
         }  
     }  
+
+    draw_rect(fbc, 200, 200, 400, 400, {255, 242, 0});  // #FFF200 - 星际黄
   
     while (1) asm("hlt");  
 }
