@@ -1,8 +1,6 @@
 // 版权所有©XINGJI Studios 2017-2024 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
-#include "..\include\efi.h"
-#include "elf.h"
-#include "..\include\include.h"
+#include "../include/include.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE *ST;
 struct EFI_BOOT_SERVICES *BS;
@@ -14,49 +12,6 @@ EFI_HANDLE IM;
 struct EFI_GUID gop_guid = {0x9042a9de, 0x23dc, 0x4a38, {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}};
 struct EFI_GUID lip_guid = {0x5b1b31a1, 0x9562, 0x11d2, {0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
 struct EFI_GUID sfsp_guid = {0x964e5b22, 0x6459, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
-
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#define max(a, b) ((a) < (b) ? (b) : (a))
-
-void xmemset(void *dst_, UINT8 value, UINTN size)
-{
-    UINT8 *dst = (UINT8 *) dst_;
-    while (size-- > 0) *dst++ = value;
-}
-
-void *xmemcpy(void *dst_, const void *src_, UINTN size)
-{
-    UINT8 *dst = dst_;
-    const UINT8 *src = src_;
-    while (size-- > 0) *dst++ = *src++;
-    return (void *) src_;
-}
-
-void CalcLoadAddressRange(Elf64_Ehdr *ehdr, UINT64 *first, UINT64 *last)
-{
-    Elf64_Phdr *phdr = (Elf64_Phdr *) ((UINT64) ehdr + ehdr->e_phoff); // 第一个 program header 地址
-    *first = 0xffffffffffffffff; // UINT64最大值
-    *last = 0; // UINT64最小值
-
-    for (UINT16 i = 0; i < ehdr->e_phnum; i++) { // 遍历每一个 program header
-        if (phdr[i].p_type != PT_LOAD) continue; // 只关心LOAD段
-        *first = min(*first, phdr[i].p_vaddr);
-        *last = max(*last, phdr[i].p_vaddr + phdr[i].p_memsz); // 每一个program header首尾取最值
-    }
-}
-
-void CopyLoadSegments(Elf64_Ehdr *ehdr)
-{
-    Elf64_Phdr *phdr = (Elf64_Phdr *) ((UINT64) ehdr + ehdr->e_phoff); // 第一个 program header 地址
-    for (UINT16 i = 0; i < ehdr->e_phnum; i++) { // 遍历每一个 program header
-        if (phdr[i].p_type != PT_LOAD) continue; // 只关心LOAD段
-
-        UINT64 segm_in_file = (UINT64) ehdr + phdr[i].p_offset; // 段在文件中的位置
-        xmemcpy((VOID *) phdr[i].p_vaddr, (VOID *) segm_in_file, phdr[i].p_filesz); // 将文件中大小的部分copy过去
-        UINTN remain_bytes = phdr[i].p_memsz - phdr[i].p_filesz; // 两者之差
-        xmemset((VOID *) (phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes); // 赋值为0
-    }
-}
 
 void putc(unsigned short c)
 {

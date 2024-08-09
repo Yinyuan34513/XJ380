@@ -7,5 +7,6 @@
 #else
 #include "stdint.h"
 #include "fbc.hpp"
+#include "elf.h"
 #endif
 #endif 

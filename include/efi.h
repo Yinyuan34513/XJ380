@@ -104,17 +104,18 @@ enum EFI_MEMORY_TYPE {
     EfiPalCode,
     EfiMaxMemoryType
 };
-void memset(void *dst_, UINT8 value, UINTN size)
+void xmemset(void *dst_, UINT8 value, UINTN size)
 {
     UINT8 *dst = (UINT8 *) dst_;
     while (size-- > 0) *dst++ = value;
 }
 
-void memcpy(void *dst_, const void *src_, UINTN size)
+void *xmemcpy(void *dst_, const void *src_, UINTN size)
 {
     UINT8 *dst = dst_;
     const UINT8 *src = src_;
     while (size-- > 0) *dst++ = *src++;
+    return (void *) src_;
 }
 struct EFI_BOOT_SERVICES {
     char _buf1[24];
