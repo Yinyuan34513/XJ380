@@ -10,4 +10,4 @@ mkdir esp\EFI\BOOT
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf .\out\main.o .\out\draw.o
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
-..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 512 -net none -drive file=fat:rw:esp,index=0,format=vvfat
+..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat
