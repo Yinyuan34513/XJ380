@@ -36,6 +36,9 @@ void init_shortcut_dock(const FrameBufferConfig &fbc)
     int x2 = fbc.horizontal_resolution * 0.8125;
     int y2 = 24;
     rect(fbc, x1, y1, x2, y2, {230, 230, 230});
+
+    WriteString(fbc, x1 + 24 + 8, 4, "Files", {0, 0, 0}); 
+    WriteString(fbc, x1 + 24 + 8 + 40 + 8, 4, "Settings", {0, 0, 0}); 
 }
 
 void draw_logo(const FrameBufferConfig &fbc, int xi, int yi)
