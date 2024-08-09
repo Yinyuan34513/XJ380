@@ -64,3 +64,7 @@ Makefile里有一个变量“REL”，填版本。
 2024年8月9日 wcjbr & Guoqiyu1115
 - 绘图函数
 - 半个任务栏
+### BuildVersion 7 【已实机测试】
+2024年8月9日 wcjbr & Guoqiyu1115
+- ASCII字符显示
+- 任务栏及快捷栏
