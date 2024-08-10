@@ -1,5 +1,6 @@
 #include "../include/include.h"
 #include "xj380_logo_rect_72x64px.hpp"
+#include "xingji_logo_16px.hpp"
 
 //初始化桌面
 void init_desktop(const FrameBufferConfig &fbc)
@@ -26,7 +27,7 @@ void init_dock(const FrameBufferConfig &fbc)
         }
     }
 
-    draw_logo(fbc, 24, scry - 24);
+    draw_logo(fbc, 24, scry - 24 - 63);
 }
 
 void init_shortcut_dock(const FrameBufferConfig &fbc)
@@ -37,13 +38,17 @@ void init_shortcut_dock(const FrameBufferConfig &fbc)
     int y2 = 24;
     rect(fbc, x1, y1, x2, y2, {230, 230, 230});
 
-    WriteString(fbc, x1 + 24 + 8, 4, "Files", {0, 0, 0}); 
-    WriteString(fbc, x1 + 24 + 8 + 40 + 8, 4, "Settings", {0, 0, 0}); 
+    draw_studio_logo(fbc, x1 + 4, 4);
+
+    WriteString(fbc, x1 + 32, 4, "Files", {0, 0, 0}); 
+    WriteString(fbc, x1 + 32 + 40 + 8, 4, "Settings", {0, 0, 0}); 
+    WriteString(fbc, x1 + 32 + 40 + 8 + 64 + 8, 4, "Terminal", {0, 0, 0}); 
+    WriteString(fbc, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8, 4, "Graphics", {0, 0, 0}); 
+    WriteString(fbc, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8 + 64 + 8, 4, "About", {0, 0, 0}); 
 }
 
 void draw_logo(const FrameBufferConfig &fbc, int xi, int yi)
 {
-    yi -= 63;
     for (int y = 0; y < 63; y++) {
         for (int x = 0; x < 73; x++) {
             if (xj380_logo_rect_72x64px[y][x] == '.')
@@ -55,6 +60,26 @@ void draw_logo(const FrameBufferConfig &fbc, int xi, int yi)
                 dot(fbc, x + xi, y + yi, {0, 162, 232});
             }
             else if (xj380_logo_rect_72x64px[y][x] == '@')
+            {
+                dot(fbc, x + xi, y + yi, {255, 230, 0});
+            }
+        }
+    }
+}
+
+void draw_studio_logo(const FrameBufferConfig &fbc, int xi, int yi)
+{
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            if (xingji_logo_16px[y][x] == '.')
+            {
+                // pass
+            }
+            else if (xingji_logo_16px[y][x] == '@')
+            {
+                dot(fbc, x + xi, y + yi, {0, 162, 232});
+            }
+            else if (xingji_logo_16px[y][x] == '#')
             {
                 dot(fbc, x + xi, y + yi, {255, 230, 0});
             }
