@@ -103,6 +103,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 {
     efi_init(ImageHandle, SystemTable);
 
+    (void)ImageHandle; // 提前这么一下，有助于避免 Unused Parameter 的警告（这是很常见的用法），虽然不开 Wall 和 Wextra 也没这警告
+
     ST->ConOut->ClearScreen(ST->ConOut);
 
     EFI_STATUS status;
@@ -161,9 +163,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             while (1);
     }
 
-    typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *);
+    typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *);
     Kernel kernel = (Kernel) entry_addr;
-    kernel(&config); // 滚进去！
+    kernel(&config, &SystemTable); // 滚进去！
 
     //此处=kernel.elf
 
