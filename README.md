@@ -68,5 +68,6 @@ Makefile里有一个变量“REL”，填版本。
 2024年8月9日 wcjbr & Guoqiyu1115
 - ASCII字符显示
 - 任务栏及快捷栏
-2024年8月10日  Guoqiyu1115 Upgrade1
+### BuildVersion 7 Upgrade 1
+2024年8月10日  Guoqiyu1115
 - 完善快捷栏
