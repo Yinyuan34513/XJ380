@@ -19,7 +19,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE
                 str[1] = L'\n'; // 给EFI擦屁股，\r\n才是一个换行，而enter只能接收到\r
                 str[2] = L'\0'; // 结束符
             }
-            WriteString(fbc, 100, 100, str, {255, 255, 255}); 
+            WriteString(fbc, 100, 100, (char*)str, {255, 255, 255}); 
         }
     }
     // 按理来说不可能到这儿
