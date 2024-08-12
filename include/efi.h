@@ -5,7 +5,7 @@
 typedef __UINT8_TYPE__ UINT8;
 typedef __UINT16_TYPE__ UINT16;
 typedef __UINT32_TYPE__ UINT32;
-typedef __UINT64_TYPE__ UINT64;
+typedef __INT32_TYPE__ INT32;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
@@ -13,6 +13,10 @@ typedef unsigned char UINT8;
 typedef unsigned short UINT16;
 typedef unsigned int UINT32;
 typedef unsigned long long UINT64;
+typedef signed int INT32;
+
+
+
 enum EFI_ALLOCATE_TYPE {
     AllocateAnyPages,
     AllocateMaxAddress,
@@ -78,7 +82,7 @@ struct EFI_GUID {
     UINT16 Data2;
     UINT16 Data3;
     UINT8 Data4[8];
-};
+}*gEfiSimpleFileSystemProtocolGuid;;
 
 #define EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 0x00000001
 #define EFI_OPEN_PROTOCOL_GET_PROTOCOL 0x00000002
@@ -112,11 +116,12 @@ void xmemset(void *dst_, UINT8 value, UINTN size)
 
 void *xmemcpy(void *dst_, const void *src_, UINTN size)
 {
-    UINT8 *dst = dst_;
-    const UINT8 *src = src_;
+    UINT8 *dst = (UINT8*)dst_;
+    const UINT8 *src = (const UINT8*)src_;
     while (size-- > 0) *dst++ = *src++;
     return (void *) src_;
 }
+
 struct EFI_BOOT_SERVICES {
     char _buf1[24];
 
@@ -212,14 +217,14 @@ struct EFI_SYSTEM_TABLE {
     } *ConOut;
     UINTN _buf3[3];
     struct EFI_BOOT_SERVICES *BootServices;
-};
-
+}*gST;
 struct EFI_GRAPHICS_OUTPUT_BLT_PIXEL {
     unsigned char Blue;
     unsigned char Green;
     unsigned char Red;
     unsigned char Reserved;
 };
+
 
 
 enum EFI_GRAPHICS_PIXEL_FORMAT {
@@ -302,4 +307,29 @@ struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
     UINT64 Revision;
     EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, struct EFI_FILE_PROTOCOL **Root);
 }; // SFSP
+
+// BMP 文件头结构
+struct BITMAPFILEHEADER {
+    UINT16 bfType;
+    UINT32 bfSize;
+    UINT16 bfReserved1;
+    UINT16 bfReserved2;
+    UINT32 bfOffBits;
+};
+
+// BMP 信息头结构
+struct BITMAPINFOHEADER {
+    UINT32 biSize;
+    INT32 biWidth;
+    INT32 biHeight;
+    UINT16 biPlanes;
+    UINT16 biBitCount;
+    UINT32 biCompression;
+    UINT32 biSizeImage;
+    INT32 biXPelsPerMeter;
+    INT32 biYPelsPerMeter;
+    UINT32 biClrUsed;
+    UINT32 biClrImportant;
+};
+
 #endif 
