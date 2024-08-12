@@ -1,4 +1,9 @@
 #include "../include/include.h"
+#include "../include/efi.h"
+
+extern EFI_SYSTEM_TABLE* ST;
+extern EFI_GUID gEfiSimpleFileSystemProtocolGuid;
+
 auto operator new(size_t size, void *ptr) -> void * {
   return ptr;
 }
@@ -176,3 +181,106 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
         }  
     }
 }  
+
+#define NULL 0
+
+// BMP 像素数据结构
+struct BMP_PIXEL {
+    UINT8 b;
+    UINT8 g;
+    UINT8 r;
+};
+
+// 加载 BMP 文件
+EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP_PIXEL** pixels)
+{
+    EFI_STATUS Status;
+    struct EFI_FILE_PROTOCOL* file;
+    struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* fs;
+    VOID* buffer = NULL;
+    UINT64 bufferSize = 0;
+    BITMAPFILEHEADER fileHeader;
+
+    // 打开文件gST
+    Status = ST->BootServices->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid, NULL, (VOID**)&fs);
+    if (Status != EFI_SUCCESS) {
+        return Status;
+    }
+
+    Status = fs->OpenVolume(fs, &file);
+    if (Status != EFI_SUCCESS) {
+        return Status;
+    }
+
+    Status = file->Open(file, &file, filename, EFI_FILE_MODE_READ, 0);
+    if (Status != EFI_SUCCESS) {
+        return Status;
+    }
+
+    // 读取文件头
+    Status = file->Read(file, &bufferSize, &fileHeader);
+    if (EFI_ERROR(Status)) {
+        return Status;
+    }
+
+    // 读取信息头
+    Status = file->Read(file, &bufferSize, infoHeader);
+    if (EFI_ERROR(Status)) {
+        return Status;
+    }
+
+    // 读取像素数据
+    Status = ST->BootServices->AllocatePool(EfiLoaderData, infoHeader->biSizeImage, (VOID**)&buffer);
+    if (Status != EFI_SUCCESS) {
+        return Status;
+    }
+
+    Status = file->Read(file, &bufferSize, buffer);
+    if (EFI_ERROR(Status)) {
+        return Status;
+    }
+
+    *pixels = (struct BMP_PIXEL*)buffer;
+    file->Close(file);
+
+    return EFI_SUCCESS;
+}
+
+// 显示 BMP 图像
+EFI_STATUS ShowBMP(struct BMP_PIXEL* pixels,BITMAPINFOHEADER* infoHeader, const FrameBufferConfig& fbc)
+{
+    // 绘制像素
+    UINT32 pixel;
+    UINTN i, j;
+
+    for (j = 0; j < infoHeader->biHeight; j++) {
+        for (i = 0; i < infoHeader->biWidth; i++) {
+            BMP_PIXEL* pixelData = &pixels[(infoHeader->biHeight - j - 1) * infoHeader->biWidth + i];
+            // 创建 PixelColor 结构体
+            PixelColor color = {
+                .r = pixelData->r,
+                .g = pixelData->g,
+                .b = pixelData->b
+            };
+            // 调用 dot 函数绘制单个像素
+            dot(fbc, i, j, color);
+        }
+    }
+
+    return EFI_SUCCESS;
+}
+
+void bmp(const FrameBufferConfig& fbc, CHAR16 filename[], const UINT32 offsetX_, const UINT32 offsetY_)
+{
+    BMP_PIXEL* pixels = nullptr;
+    BITMAPINFOHEADER infoHeader;
+    LoadBMPFile(filename, &infoHeader, &pixels);
+    // 计算位置
+    UINT32 offsetX = offsetX_;
+    UINT32 offsetY = offsetY_;
+    // 调整显示位置
+    BITMAPINFOHEADER adjustedInfoHeader = infoHeader;
+    adjustedInfoHeader.biWidth += offsetX;
+    adjustedInfoHeader.biHeight += offsetY;
+    ShowBMP(pixels, &adjustedInfoHeader, fbc);
+}
