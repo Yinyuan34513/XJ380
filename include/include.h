@@ -6,9 +6,11 @@
 #ifdef __cplusplus
 #include "GOP.hpp"
 #include "define_code.hpp"
+#include "malloc.hpp"
 #else
 #include "stdint.h"
 #include "fbc.hpp"
 #include "elf.h"
 #endif
+
 #endif 

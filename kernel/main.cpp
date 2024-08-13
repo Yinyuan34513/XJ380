@@ -1,5 +1,7 @@
 // main.cpp  
 #include "../include/include.h"  
+#include "../include/efi.h"
+
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc) {  
     init_desktop(fbc);

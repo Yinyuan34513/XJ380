@@ -2,23 +2,19 @@
 // XJ380UEFI引导头文件
 #ifndef _EFI_H_
 #define _EFI_H_
+
+#define PT_LOAD 1 // PT_LOAD值不变
+#ifndef _STDINT_H
 typedef __UINT8_TYPE__ UINT8;
 typedef __UINT16_TYPE__ UINT16;
 typedef __UINT32_TYPE__ UINT32;
 typedef __UINT64_TYPE__ UINT64;
 
-#define PT_LOAD 1 // PT_LOAD值不变
-
 typedef unsigned char UINT8;
 typedef unsigned short UINT16;
 typedef unsigned int UINT32;
 typedef unsigned long long UINT64;
-enum EFI_ALLOCATE_TYPE {
-    AllocateAnyPages,
-    AllocateMaxAddress,
-    AllocateAddress,
-    MaxAllocateType
-};
+
 typedef UINT64 UINTN; // 我们在64位下
 typedef UINTN EFI_STATUS;
 typedef void VOID;
@@ -29,6 +25,14 @@ typedef UINTN EFI_VIRTUAL_ADDRESS;
 
 typedef VOID *EFI_HANDLE;
 typedef VOID *EFI_EVENT;
+#endif
+enum EFI_ALLOCATE_TYPE {
+    AllocateAnyPages,
+    AllocateMaxAddress,
+    AllocateAddress,
+    MaxAllocateType
+};
+
 
 #define EFI_ERROR_MASK 0x8000000000000000
 #define EFIERR(a) (EFI_ERROR_MASK | a)
@@ -110,6 +114,7 @@ void xmemset(void *dst_, UINT8 value, UINTN size)
     while (size-- > 0) *dst++ = value;
 }
 
+
 void *xmemcpy(void *dst_, const void *src_, UINTN size)
 {
     UINT8 *dst = dst_;
@@ -190,7 +195,6 @@ struct EFI_BOOT_SERVICES {
     // Miscellaneous Services
     UINTN _buf12[3];
 };
-
 struct EFI_SYSTEM_TABLE {
     char _buf1[44];
     struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
