@@ -1,7 +1,4 @@
-#ifndef _MALLOC_HPP_
-#define _MALLOC_HPP_
-#include "stdint.h"
-
+#include "../include/include.h"
 #define HEAP_SIZE 1048576//堆大小(bytes)  1MB=1048576bytes
 #define BITMAP_SIZE (HEAP_SIZE / 8)
 #define NULL 0
@@ -68,7 +65,7 @@ int find_free_block(uint32_t size) {
     return -1;
 }
 
-void* malloc(uint32_t size) {
+void* HEAP_malloc(uint32_t size) {
     int start_index = find_free_block(size);
     if (start_index == -1) return NULL;
     
@@ -80,7 +77,7 @@ void* malloc(uint32_t size) {
     return &heap[start_index];
 }
 
-void free(void *ptr) {
+void HEAP_free(void *ptr) {
     uint32_t index = (uint8_t*)ptr - heap;
     uint32_t size = 0;
     while (index + size < HEAP_SIZE && !bitmap[(index + size) / 8] & (1 << ((index + size) % 8))) {
@@ -96,4 +93,3 @@ void free(void *ptr) {
     add_free_block((FreeBlock){.start = index, .size = size});
     merge_free_blocks();  // 合并相邻的空闲块
 }
-#endif

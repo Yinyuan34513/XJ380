@@ -6,4 +6,5 @@
 #include "GOP.hpp"
 #include "define_code.hpp"
 #include "stdint.h"
+#include "bmp.hpp"
 #endif 

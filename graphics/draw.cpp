@@ -1,8 +1,8 @@
 #include "../include/include.h"
-#include "../include/efi.h"
+#include "../include/efi.hpp"
 
-extern EFI_SYSTEM_TABLE* ST;
-extern EFI_GUID gEfiSimpleFileSystemProtocolGuid;
+struct EFI_SYSTEM_TABLE* ST;
+struct EFI_GUID gEfiSimpleFileSystemProtocolGuid={0x824e5c22, 0x6469, 0x1002, {0x81, 0x19, 0x20, 0xe1, 0xc0, 0x66, 0xe2, 0x3a}};
 
 auto operator new(size_t size, void *ptr) -> void * {
   return ptr;
