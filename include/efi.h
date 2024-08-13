@@ -9,10 +9,10 @@ typedef __UINT64_TYPE__ UINT64;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
-typedef unsigned char UINT8;
-typedef unsigned short UINT16;
-typedef unsigned int UINT32;
-typedef unsigned long long UINT64;
+//typedef unsigned char UINT8;
+//typedef unsigned short UINT16;
+//typedef unsigned int UINT32;
+//typedef unsigned long long UINT64;
 enum EFI_ALLOCATE_TYPE {
     AllocateAnyPages,
     AllocateMaxAddress,
@@ -112,8 +112,8 @@ void xmemset(void *dst_, UINT8 value, UINTN size)
 
 void *xmemcpy(void *dst_, const void *src_, UINTN size)
 {
-    UINT8 *dst = dst_;
-    const UINT8 *src = src_;
+    UINT8 *dst = (UINT8 *)dst_;
+    const UINT8 *src = (UINT8 *)src_;
     while (size-- > 0) *dst++ = *src++;
     return (void *) src_;
 }

@@ -1,6 +1,6 @@
 // main.cpp  
 #include "../include/include.h" 
-#include "../include/efi.hpp" 
+#include "../include/efi.h" 
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE &SystemTable) {  
     unsigned short str[3]; // 打印用的字符串
