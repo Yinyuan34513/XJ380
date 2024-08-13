@@ -7,9 +7,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE
     struct EFI_INPUT_KEY key; // 用于接收按键
 
     init_desktop(fbc);
-
+    char* write_string=(char*)HEAP_malloc(2*sizeof(char));
+    write_string[0]='a';
+    write_string[1]='\0';
     while (1) {
-        WriteString(fbc, 100, 200, "a", {255, 255, 255}); 
+        WriteString(fbc, 100, 200,write_string, {255, 255, 255}); 
         if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) { // nmd就这行卡住了焯
             WriteString(fbc, 100, 300, "b", {255, 255, 255}); 
             if (key.UnicodeChar != L'\r') { // 不是换行
@@ -24,4 +26,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE
         }
     }
     // 按理来说不可能到这儿
+    // 如果真因为什么B原因到这了就帮忙清理一下吧
+    HEAP_free(write_string);
 }
