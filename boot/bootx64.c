@@ -114,6 +114,35 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
     BS->OpenProtocol(LIP->DeviceHandle, &sfsp_guid, (void **) &SFSP, ImageHandle, NULL, EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
 
+
+
+/*
+struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL_expand in1;
+struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_expand in2;
+
+struct EFI_SYSTEM_TABLE_expand expand_systemtable(struct EFI_SYSTEM_TABLE* systemtable)
+{
+    in1.ReadKeyStroke=systemtable->ConIn->ReadKeyStroke;
+    in1.Reset=systemtable->ConIn->Reset;
+    in1.WaitForKey=systemtable->ConIn->ReadKeyStroke;
+    in2.ClearScreen=systemtable->ConOut->ClearScreen;
+    in2.OutputString=systemtable->ConOut->OutputString;
+    in2._buf=systemtable->ConOut->_buf;
+    in2._buf2=systemtable->ConOut->_buf2;
+    struct EFI_SYSTEM_TABLE_expand out;
+    out._buf1=systemtable->_buf1;
+    out._buf2=systemtable->_buf2;
+    out._buf3=systemtable->_buf3;
+    out.BootServices=systemtable->BootServices;
+    out.ConIn=&in1;
+    out.ConOut=&in2;
+    return out;
+}
+*/
+
+
+
+
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
     efi_init(ImageHandle, SystemTable);
@@ -179,13 +208,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *);
     Kernel kernel = (Kernel) entry_addr;
 
-    struct EFI_SYSTEM_TABLE* copy=malloc(sizeof(struct EFI_SYSTEM_TABLE)+4);
-    *copy=*SystemTable;
-
-    copy->_buf1[0]='a';
-    copy->_buf3[0]='b';
-
-    kernel(&config, copy); // 滚进去！
+    kernel(&config,SystemTable); // 滚进去！
 
     //此处=kernel.elf
 

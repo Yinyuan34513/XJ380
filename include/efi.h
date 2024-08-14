@@ -68,10 +68,10 @@ typedef VOID *EFI_EVENT;
 #define EFI_COMPROMISED_DATA            EFIERR(33)
 #define min(a, b)                       ((a) < (b) ? (a) : (b))
 #define max(a, b)                       ((a) < (b) ? (b) : (a))
-struct EFI_INPUT_KEY {
-    UINT16 ScanCode;
-    CHAR16 UnicodeChar;
-};
+//struct EFI_INPUT_KEY {
+//    UINT16 ScanCode;
+//    CHAR16 UnicodeChar;
+//};
 
 struct EFI_GUID {
     UINT32 Data1;
@@ -203,7 +203,28 @@ struct EFI_SYSTEM_TABLE {
     UINTN _buf3[3];
     struct EFI_BOOT_SERVICES *BootServices;
 };
+/*
+typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL_expand{
+    UINTN Reset;
+    EFI_STATUS (*ReadKeyStroke)(void *This, struct EFI_INPUT_KEY *Key);
+    EFI_EVENT WaitForKey;
+} ;
+typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_expand{
+    UINTN _buf;
+    EFI_STATUS (*OutputString)(void *This, CHAR16 *String);
+    UINTN _buf2[4];
+    EFI_STATUS (*ClearScreen)(void *This);
+} ;
 
+struct EFI_SYSTEM_TABLE_expand{
+    char _buf1[44];
+    struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL *ConIn;
+    UINTN _buf2;
+    struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
+    UINTN _buf3[3];
+    struct EFI_BOOT_SERVICES *BootServices;
+};
+*/
 struct EFI_GRAPHICS_OUTPUT_BLT_PIXEL {
     unsigned char Blue;
     unsigned char Green;
