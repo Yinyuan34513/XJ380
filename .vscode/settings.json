@@ -101,7 +101,10 @@
     "stdexcept": "cpp",
     "streambuf": "cpp",
     "cinttypes": "cpp",
-    "typeinfo": "cpp"
+    "typeinfo": "cpp",
+    "stdint.h": "c",
+    "cinclude.h": "c",
+    "fbc.hpp": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }
