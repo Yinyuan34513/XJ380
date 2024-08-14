@@ -17,6 +17,10 @@ void init_shortcut_dock(const FrameBufferConfig &fbc);
 void draw_logo(const FrameBufferConfig &fbc, int xi, int yi);
 void draw_studio_logo(const FrameBufferConfig &fbc, int xi, int yi);
 
+//graphics/heap_malloc.cpp
+void* HEAP_malloc(uint32_t size);
+void HEAP_free(void *ptr);
+
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
 void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);

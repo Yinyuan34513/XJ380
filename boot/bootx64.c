@@ -1,6 +1,6 @@
 // 版权所有©XINGJI Studios 2017-2024 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
-#include "../include/include.h"
+#include "../include/cinclude.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE *ST;
 struct EFI_BOOT_SERVICES *BS;
@@ -54,13 +54,14 @@ void puth(unsigned long long hex)
     puts(buf); // 打印
 }
 
-void *malloc(int buf_size)
+void *malloc(size_t buf_size)
 {
     void *res;
-    unsigned long long status;
+    EFI_STATUS status;
 
-    status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, buf_size, &res); // 分配内存，第一个参数是判断LIP是否存在，如果存在就直接拿过来用
-    if (status < 0) return NULL;
+    status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, buf_size, &res);
+    if (status != EFI_SUCCESS)
+        return NULL;
 
     return res;
 }
@@ -145,7 +146,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         (UINT8 *) GOP->Mode->FrameBufferBase,
         GOP->Mode->Info->PixelsPerScanLine,
         GOP->Mode->Info->HorizontalResolution,
-        GOP->Mode->Info->VerticalResolution
+        GOP->Mode->Info->VerticalResolution,
+        GOP->Mode->Info->PixelFormat
     };
 
     switch (GOP->Mode->Info->PixelFormat) {
@@ -161,9 +163,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             while (1);
     }
 
-    typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *);
+    typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *);
     Kernel kernel = (Kernel) entry_addr;
-    kernel(&config); // 滚进去！
+    kernel(&config, SystemTable); // 滚进去！
 
     //此处=kernel.elf
 
