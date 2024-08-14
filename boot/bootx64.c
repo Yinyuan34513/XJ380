@@ -9,6 +9,16 @@ struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP;
 struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;
 EFI_HANDLE                              IM;
 
+static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf, size_t len,
+                                                                   uint64_t n) {
+  uint16_t *s = buf + len;
+  *--s        = '\0';
+  if (n == 0) return (*--s = '0', s);
+  for (; n; n >>= 4)
+    *--s = L"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"[n & 15];
+  return s;
+}
+
 struct EFI_GUID gop_guid = {
     0x9042a9de, 0x23dc, 0x4a38, {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}
 };
@@ -99,6 +109,9 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
                    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
 
+typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
+                                                 struct EFI_SYSTEM_TABLE *);
+
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
 
@@ -163,8 +176,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       ;
   }
 
-  typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
-                                                   struct EFI_SYSTEM_TABLE *);
   Kernel kernel = (Kernel)entry_addr;
   kernel(&config, SystemTable); // 滚进去！
 
