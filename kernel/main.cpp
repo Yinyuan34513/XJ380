@@ -2,18 +2,16 @@
 #include "../include/include.h" 
 #include "../include/efi.h" 
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE &SystemTable) {  
-    unsigned short str[3]; // 打印用的字符串
+extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE *SystemTable) {  
+    uint64_t str[3]; // 打印用的字符串
     struct EFI_INPUT_KEY key; // 用于接收按键
-
     init_desktop(fbc);
-    char* write_string=(char*)HEAP_malloc(2*sizeof(char));
-    write_string[0]='a';
-    write_string[1]='\0';
     while (1) {
-        WriteString(fbc, 100, 200,write_string, {255, 255, 255}); 
-        if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) { // nmd就这行卡住了焯
+        WriteString(fbc, 100, 100, (char*)SystemTable, {255, 255, 255});  
+        if (!SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn, &key)) { // nmd就这行卡住了焯
+
             WriteString(fbc, 100, 300, "b", {255, 255, 255}); 
+
             if (key.UnicodeChar != L'\r') { // 不是换行
                 str[0] = key.UnicodeChar; // 第一个字符就输出
                 str[1] = L'\0'; // 第二个字符是\0，结束符
@@ -27,5 +25,5 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE
     }
     // 按理来说不可能到这儿
     // 如果真因为什么B原因到这了就帮忙清理一下吧
-    HEAP_free(write_string);
+
 }

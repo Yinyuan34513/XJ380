@@ -1,11 +1,10 @@
-#include "../include/include.h"
-#define HEAP_SIZE 1048576//堆大小(bytes)  1MB=1048576bytes
+#include "stdint.h"
+#define HEAP_SIZE 1048576  // 堆大小(bytes)  1MB=1048576bytes
 #define BITMAP_SIZE (HEAP_SIZE / 8)
 #define NULL 0
 
-uint8_t heap[HEAP_SIZE];//堆
-// 用一个位图来记录堆中每一块的状态
-uint8_t bitmap[BITMAP_SIZE];
+uint8_t heap[HEAP_SIZE];      // 堆
+uint8_t bitmap[BITMAP_SIZE];  // 用一个位图来记录堆中每一块的状态
 
 // 保存空闲块的起始位置和长度
 typedef struct FreeBlock {
@@ -14,7 +13,7 @@ typedef struct FreeBlock {
 } FreeBlock;
 
 FreeBlock free_list[HEAP_SIZE / 8];  // 空闲块列表
-uint32_t free_list_size = 0;         // 空闲块列表的大小
+uint32_t free_list_size = 0;          // 空闲块列表的大小
 
 void set_bit(uint8_t *bitmap, uint32_t index) {
     bitmap[index / 8] |= (1 << (index % 8));
@@ -24,15 +23,24 @@ void clear_bit(uint8_t *bitmap, uint32_t index) {
     bitmap[index / 8] &= ~(1 << (index % 8));
 }
 
-// 添加一个新的空闲块到列表
+// 添加一个新的空闲块到列表，并尝试与相邻的块合并
 void add_free_block(FreeBlock block) {
     if (free_list_size < HEAP_SIZE / 8) {
-        free_list[free_list_size++] = block;
+        // 尝试与前一个块合并
+        if (free_list_size > 0 && free_list[free_list_size - 1].start + free_list[free_list_size - 1].size == block.start) {
+            free_list[free_list_size - 1].size += block.size;
+        } else if (free_list_size > 0 && free_list[free_list_size - 1].start == block.start + block.size) {
+            block.size += free_list[free_list_size - 1].size;
+            free_list[free_list_size - 1] = block;
+        } else {
+            free_list[free_list_size++] = block;
+        }
     }
 }
 
-// 合并相邻的空闲块
+// 合并相邻的空闲块，并排序空闲块列表
 void merge_free_blocks() {
+    // 合并相邻的空闲块
     for (uint32_t i = 0; i < free_list_size - 1; i++) {
         if (free_list[i].start + free_list[i].size == free_list[i + 1].start) {
             free_list[i].size += free_list[i + 1].size;
@@ -43,6 +51,17 @@ void merge_free_blocks() {
             free_list_size--;
             i--;  // 回退一步以检查新合并的块是否还可以与其他块合并
         }
+    }
+
+    // 使用插入排序对空闲块列表按起始地址排序
+    for (uint32_t i = 1; i < free_list_size; i++) {
+        FreeBlock temp = free_list[i];
+        uint32_t j = i - 1;
+        while (j >= 0 && free_list[j].start > temp.start) {
+            free_list[j + 1] = free_list[j];
+            j--;
+        }
+        free_list[j + 1] = temp;
     }
 }
 
@@ -67,20 +86,20 @@ int find_free_block(uint32_t size) {
 
 void* HEAP_malloc(uint32_t size) {
     int start_index = find_free_block(size);
-    if (start_index == -1) return NULL;
-    
+    if (start_index == -1) return nullptr;
+
     // 标记这块内存为已分配
     for (uint32_t i = 0; i < size; i++) {
         set_bit(bitmap, start_index + i);
     }
-    
+
     return &heap[start_index];
 }
 
 void HEAP_free(void *ptr) {
     uint32_t index = (uint8_t*)ptr - heap;
     uint32_t size = 0;
-    while (index + size < HEAP_SIZE && !bitmap[(index + size) / 8] & (1 << ((index + size) % 8))) {
+    while (index + size < HEAP_SIZE && (~bitmap[(index + size) / 8] & (1 << ((index + size) % 8)))) {
         size++;
     }
 
