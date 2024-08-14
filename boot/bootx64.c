@@ -60,7 +60,7 @@ void *malloc(int buf_size)
     unsigned long long status;
 
     status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, buf_size, &res); // 分配内存，第一个参数是判断LIP是否存在，如果存在就直接拿过来用
-    if (status < 0) return NULL;
+    if (status != EFI_SUCCESS) return NULL;
 
     return res;
 }
@@ -70,7 +70,7 @@ void free(void *buf)
     BS->FreePool(buf);
 }
 
-EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)  
+EFI_STATUS mallocAt(UINTN size) 
 {  
     EFI_STATUS status;  
     EFI_PHYSICAL_ADDRESS allocated_addr; 
@@ -131,7 +131,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINT64 kernel_first_addr, kernel_last_addr; // 计算的首尾
     CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
 
-    status = mallocAt(kernel_first_addr, kernel_last_addr - kernel_first_addr); // 分配内存
+    status = mallocAt(kernel_last_addr - kernel_first_addr); // 分配内存
     if (EFI_ERROR(status)) {
         puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
         while (1);
