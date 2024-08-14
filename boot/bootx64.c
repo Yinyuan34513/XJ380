@@ -127,23 +127,20 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
-    while (1)
-      ;
+    while (1);
   }
   status = root->Open(root, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
-    while (1)
-      ;
+    while (1);
   }
   status = kernel_file->Read(kernel_file, &kernel_size,
                              kernel_buffer); // 读取内核，直接读到kernel_buffer
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
-    while (1)
-      ;
+    while (1);
   }
 
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel_buffer;
@@ -154,8 +151,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
-    while (1)
-      ;
+    while (1);
   }
 
   CopyLoadSegments(ehdr);     // CV
@@ -170,10 +166,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   case PixelRedGreenBlueReserved8BitPerColor: config.pixel_format = kRGBR; break;
   case PixelBlueGreenRedReserved8BitPerColor: config.pixel_format = kBGRR; break;
   default:
-    puts(L"bootloader: unsupported pixel format: ");
-    puth(GOP->Mode->Info->PixelFormat);
-    while (1)
-      ;
+    
+    puts(L"XJ380 does not boot properly. Please visit "
+         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: UNSUPPORTED_PIXEL_FORMAT");
+    while (1);
   }
 
   Kernel kernel = (Kernel)entry_addr;
@@ -181,6 +177,5 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   //此处=kernel.elf
 
-  while (1)
-    ; // 趋势
+  while (1); // 趋势
 }
