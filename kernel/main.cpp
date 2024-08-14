@@ -20,6 +20,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   init_desktop(fbc);
 
   int fontx = 100;
+  int fonty = 100;
   while (1) {
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
       if (key.UnicodeChar != L'\r') { // 不是换行
@@ -30,9 +31,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         str[1] = '\n'; // 给EFI擦屁股，\r\n才是一个换行，而enter只能接收到\r
         str[2] = '\0'; // 结束符
       }
-      WriteString(fbc, fontx, 100, str, {255, 255, 255});
-
+      WriteString(fbc, fontx, fonty, str, {255, 255, 255});
       fontx += 8;
+      if(fontx>500){
+        fontx = 100;
+        fonty += 16;
+      }
     }
   }
   // 按理来说不可能到这儿
