@@ -1,29 +1,39 @@
-// main.cpp  
-#include "../include/include.h" 
-#include "../include/efi.h" 
-struct EFI_GUID stiep_guid = {0xdd9e7534, 0x7762, 0x4698,{0x8c, 0x14, 0xf5, 0x85, 0x17, 0xa6, 0x25, 0xaa}};
-extern "C" void KernelMain(const FrameBufferConfig &fbc,EFI_SYSTEM_TABLE* SystemTable) {  
-    uint64_t str[3]; // 打印用的字符串
-    struct EFI_KEY_DATA key; // 用于接收按键
-    init_desktop(fbc);
+// main.cpp
+extern "C" {
+#include "../include/efi.h"
+}
+#include "../include/include.h"
 
-    while (1) {
-        WriteString(fbc, 100, 200, "a", {255, 255, 255}); 
-        if (!SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn, (key.Key))) { // nmd就这行卡住了焯
-            WriteString(fbc, 100, 200, "a", {0x13, 0x6d, 0xff});
-            WriteString(fbc, 100, 300, "b", {255, 255, 255}); 
-            if (key.UnicodeChar != L'\r') { // 不是换行
-                str[0] = key.Key.UnicodeChar; // 第一个字符就输出
-                str[1] = L'\0'; // 第二个字符是\0，结束符
-            } else { // 是换行或不可打印字符
-                str[0] = L'\r'; // \r
-                str[1] = L'\n'; // 给EFI擦屁股，\r\n才是一个换行，而enter只能接收到\r
-                str[2] = L'\0'; // 结束符
-            }
-            WriteString(fbc, 100, 100, (char*)str, {255, 255, 255}); 
-        }
+static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
+  char *s = buf + len;
+  *--s    = '\0';
+  if (n == 0) return (*--s = '0', s);
+  for (; n; n >>= 4)
+    *--s = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"[n & 15];
+  return s;
+}
+
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable) {
+  char                 str[3]; // 打印用的字符串
+  struct EFI_INPUT_KEY key;    // 用于接收按键
+
+  init_desktop(fbc);
+
+  int fontx = 100;
+  while (1) {
+    if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
+      if (key.UnicodeChar != L'\r') { // 不是换行
+        str[0] = key.UnicodeChar;     // 第一个字符就输出
+        str[1] = '\0';                // 第二个字符是\0，结束符
+      } else {                        // 是换行或不可打印字符
+        str[0] = '\r';                // \r
+        str[1] = '\n'; // 给EFI擦屁股，\r\n才是一个换行，而enter只能接收到\r
+        str[2] = '\0'; // 结束符
+      }
+      WriteString(fbc, fontx, 100, str, {255, 255, 255});
+
+      fontx += 8;
     }
-    // 按理来说不可能到这儿
-    // 如果真因为什么B原因到这了就帮忙清理一下吧
-
+  }
+  // 按理来说不可能到这儿
 }
