@@ -17,12 +17,16 @@ echo draw.cpp编译结束
 echo font.cpp开始编译
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe font\font.cpp -O2 -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\font.o
 echo font.cpp编译结束
+echo heap_malloc.cpp开始编译
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\heap_malloc.cpp -O2 -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\heap_malloc.o
+echo heap_malloc.cpp编译结束
 echo desktop.cpp开始编译
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\desktop.cpp -O2 -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\desktop.o
 echo desktop.cpp编译结束
 echo 开始链接内核
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o .\out\heap_malloc.o
 echo 链接内核结束
 copy out\BOOTX64.efi esp\EFI\BOOT
+copy test.bmp esp\EFI\BOOT
 copy out\kernel.elf esp
-..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log
+..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0

@@ -104,7 +104,8 @@
     "typeinfo": "cpp",
     "stdint.h": "c",
     "cinclude.h": "c",
-    "fbc.hpp": "c"
+    "fbc.hpp": "c",
+    "get-usb-keyboard-info.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

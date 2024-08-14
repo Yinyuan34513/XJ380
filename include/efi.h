@@ -240,6 +240,56 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
     } *Mode;
 };
 
+struct EFI_KEY_DATA {
+    /* 要绑定的按键 */
+    struct EFI_INPUT_KEY {
+        unsigned short ScanCode;
+            /* 扫描码，用于Unicode范围外的按键 */
+        unsigned short UnicodeChar;
+            /* Unicode码，用于Unicode范围内的按键 */
+    } Key;
+    /* 要绑定的输入设备状态 */
+    struct EFI_KEY_STATE {
+        unsigned int KeyShiftState;
+            /* Ctrl、Alt、Shift等键的状态（是否按下） */
+        unsigned char KeyToggleState;
+            /* 切换键状态，如NumLock、CapsLock是否被按下 */
+    } KeyState;
+};
+
+struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL {
+    /* 重置输入设备 */
+    unsigned long long (*Reset)(
+        struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL *This,
+        unsigned char ExtendedVerification);
+
+    /* 获取按键输入数据 */
+    unsigned long long (*ReadKeyStrokeEx)(
+        struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL *This,
+        struct EFI_KEY_DATA *KeyData);
+
+    /* 等待按键输入的事件，EFI_EVENT类型 */
+    void *WaitForKeyEx;
+
+    /* 设置输入设备状态(NumLock、CapsLock等) */
+    unsigned long long (*SetState)(
+        struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL *This,
+        unsigned char *KeyToggleState);
+
+    /* 绑定按键事件处理函数 */
+    unsigned long long (*RegisterKeyNotify)(
+        struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL *This,
+        struct EFI_KEY_DATA *KeyData,
+        unsigned long long (*KeyNotificationFunction)(
+            struct EFI_KEY_DATA *KeyData),
+        void **NotifyHandle);
+
+    /* 解绑按键事件 */
+    unsigned long long (*UnregisterKeyNotify)(
+        struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL *This,
+        void *NotificationHandle);
+};
+
 
 struct EFI_LOADED_IMAGE_PROTOCOL {
     UINT32 Revision;

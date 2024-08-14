@@ -181,7 +181,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     struct EFI_SYSTEM_TABLE* copy=malloc(sizeof(struct EFI_SYSTEM_TABLE)+4);
     *copy=*SystemTable;
-    
+
     copy->_buf1[0]='a';
     copy->_buf3[0]='b';
 
