@@ -7,7 +7,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE
     struct EFI_INPUT_KEY key; // 用于接收按键
     init_desktop(fbc);
     while (1) {
-        WriteString(fbc, 100, 100, (char*)SystemTable, {255, 255, 255});  
+        WriteString(fbc, 100, 100,(char*)SystemTable, {255, 255, 255});  
         if (!SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn, &key)) { // nmd就这行卡住了焯
 
             WriteString(fbc, 100, 300, "b", {255, 255, 255}); 
