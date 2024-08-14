@@ -139,6 +139,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     CopyLoadSegments(ehdr); // CV
     entry_addr = ehdr->e_entry; // 获取入口点
+    free(kernel_buffer);
 
     struct FrameBufferConfig config = {
         (UINT8 *) GOP->Mode->FrameBufferBase,
@@ -159,12 +160,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             puth(GOP->Mode->Info->PixelFormat);
             while (1);
     }
-	SystemTable->_buf1[0] = 'H';
-	SystemTable->_buf1[1] = 'e';
-	SystemTable->_buf1[2] = 'l';
-	SystemTable->_buf1[3] = 'l';
-	SystemTable->_buf1[4] = 'o';
-	SystemTable->_buf3[0] = 'W';
     typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE **);
     Kernel kernel = (Kernel) entry_addr;
     kernel(&config, SystemTable); // 滚进去！

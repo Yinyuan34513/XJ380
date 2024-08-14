@@ -9,8 +9,7 @@ extern "C" void KernelMain(const FrameBufferConfig *fbc, struct EFI_SYSTEM_TABLE
     init_desktop(*fbc);
 
     while (1) {
-        WriteString(*fbc, 100, 200, SystemTable->_buf1, {255, 255, 255});
-        WriteString(*fbc, 100, 300, (char*)SystemTable->_buf3, {255, 255, 255});
+        WriteString(*fbc, 100, 200, "SystemTable can use in KernelMain!!!", {255, 255, 255});
         if (!SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn, &key)) { // nmd就这行卡住了焯
             WriteString(*fbc, 100, 300, "b", {255, 255, 255}); 
             if (key.UnicodeChar != L'\r') { // 不是换行
