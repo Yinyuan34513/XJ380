@@ -165,7 +165,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *);
     Kernel kernel = (Kernel) entry_addr;
-    kernel(&config, &SystemTable); // 滚进去！
+    kernel(&config, SystemTable); // 滚进去！
 
     //此处=kernel.elf
 

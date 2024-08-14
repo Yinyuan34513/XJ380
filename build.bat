@@ -24,4 +24,4 @@ echo 开始链接内核
 echo 链接内核结束
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
-..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat
+..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log
