@@ -1,4 +1,5 @@
 @echo off
+chcp 65001
 cls
 del /Q /S out\*
 del /Q /S esp\*
