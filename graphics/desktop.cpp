@@ -86,3 +86,17 @@ void draw_studio_logo(const FrameBufferConfig &fbc, int xi, int yi)
         }
     }
 }
+
+void *xmemcpy(void *dst_, const void *src_, UINTN size)
+{
+    UINT8 *dst = (UINT8 *)dst_;
+    const UINT8 *src = (UINT8 *)src_;
+    while (size-- > 0) *dst++ = *src++;
+    return (void *) src_;
+}
+
+void xmemset(void *dst_, UINT8 value, UINTN size)
+{
+    UINT8 *dst = (UINT8 *) dst_;
+    while (size-- > 0) *dst++ = value;
+}

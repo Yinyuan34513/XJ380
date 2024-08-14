@@ -13,6 +13,20 @@ struct EFI_GUID gop_guid = {0x9042a9de, 0x23dc, 0x4a38, {0x96, 0xfb, 0x7a, 0xde,
 struct EFI_GUID lip_guid = {0x5b1b31a1, 0x9562, 0x11d2, {0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
 struct EFI_GUID sfsp_guid = {0x964e5b22, 0x6459, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
 
+void *xmemcpy(void *dst_, const void *src_, UINTN size)
+{
+    UINT8 *dst = (UINT8 *)dst_;
+    const UINT8 *src = (UINT8 *)src_;
+    while (size-- > 0) *dst++ = *src++;
+    return (void *) src_;
+}
+
+void xmemset(void *dst_, UINT8 value, UINTN size)
+{
+    UINT8 *dst = (UINT8 *) dst_;
+    while (size-- > 0) *dst++ = value;
+}
+
 void putc(unsigned short c)
 {
     unsigned short str[2] = L" ";
@@ -103,7 +117,6 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
     efi_init(ImageHandle, SystemTable);
-    gST = SystemTable;
     ST->ConOut->ClearScreen(ST->ConOut);
 
     EFI_STATUS status;
