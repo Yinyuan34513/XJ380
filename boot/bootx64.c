@@ -103,7 +103,7 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
     efi_init(ImageHandle, SystemTable);
-
+    gST = SystemTable;
     ST->ConOut->ClearScreen(ST->ConOut);
 
     EFI_STATUS status;

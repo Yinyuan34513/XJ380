@@ -7,7 +7,9 @@
 #include "stdint.h"
 #include "fbc.hpp"
 struct PixelColor {  
-    uint8_t r, g, b;  
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
 };  
   
 class PixelWriter {  
