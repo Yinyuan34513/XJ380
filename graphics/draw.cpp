@@ -1,7 +1,5 @@
 #include "../include/include.h"
 #include "../include/efi.h"
-
-struct EFI_SYSTEM_TABLE* ST;
 struct EFI_GUID gEfiSimpleFileSystemProtocolGuid={0x824e5c22, 0x6469, 0x1002, {0x81, 0x19, 0x20, 0xe1, 0xc0, 0x66, 0xe2, 0x3a}};
 
 auto operator new(size_t size, void *ptr) -> void * {
@@ -65,8 +63,8 @@ void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const Pi
 void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const PixelColor& c){
     int dx = x1 - x0;  
     int dy = y1 - y0;  
-    int steps, k;  
-    int xIncrement, yIncrement;  
+    int k;  
+    int xIncrement;  
     int err;  
   
     // 确定迭代方向和步数  
@@ -76,22 +74,18 @@ void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const Pi
     } else {  
         xIncrement = 1;  
     }  
-    steps = dx;  
   
     // 初始化斜率（2*dy，因为我们后面会乘以2来避免浮点运算）  
     k = 2 * dy;  
   
     // 初始化误差项和y的增量  
     err = k - dx;  
-    int y = y0;  
+    int y = y0; 
   
     // 绘制直线上的点  
     for (int x = x0; x != x1 + xIncrement; x += xIncrement) {  
         // 这里可以添加代码来绘制点(x, y)  
         dot(fbc,x,y,c);
-
-
-
   
         // 更新误差项  
         if (err < 0) {  
@@ -192,7 +186,7 @@ struct BMP_PIXEL {
 };
 
 // 加载 BMP 文件
-EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP_PIXEL** pixels)
+EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP_PIXEL** pixels,struct EFI_SYSTEM_TABLE* ST)
 {
     EFI_STATUS Status;
     struct EFI_FILE_PROTOCOL* file;
@@ -201,17 +195,17 @@ EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP
     UINT64 bufferSize = 0;
     BITMAPFILEHEADER fileHeader;
 
-    // 打开文件gST
+    // 打开文件,就炸在这，应该是ST炸了
     Status = ST->BootServices->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid, NULL, (VOID**)&fs);
     if (Status != EFI_SUCCESS) {
         return Status;
     }
-
+    
     Status = fs->OpenVolume(fs, &file);
     if (Status != EFI_SUCCESS) {
         return Status;
     }
-
+ 
     Status = file->Open(file, &file, filename, EFI_FILE_MODE_READ, 0);
     if (Status != EFI_SUCCESS) {
         return Status;
@@ -270,11 +264,14 @@ EFI_STATUS ShowBMP(struct BMP_PIXEL* pixels,BITMAPINFOHEADER* infoHeader, const 
     return EFI_SUCCESS;
 }
 
-void bmp(const FrameBufferConfig& fbc, CHAR16 filename[], const UINT32 offsetX_, const UINT32 offsetY_)
+void bmp(const FrameBufferConfig& fbc,struct EFI_SYSTEM_TABLE* ST, CHAR16 filename[], const UINT32 offsetX_, const UINT32 offsetY_)
 {
+    
     BMP_PIXEL* pixels = nullptr;
     BITMAPINFOHEADER infoHeader;
-    LoadBMPFile(filename, &infoHeader, &pixels);
+    
+    LoadBMPFile(filename, &infoHeader, &pixels,ST);
+
     // 计算位置
     UINT32 offsetX = offsetX_;
     UINT32 offsetY = offsetY_;

@@ -85,7 +85,7 @@ void free(void *buf)
     BS->FreePool(buf);
 }
 
-EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)  
+EFI_STATUS mallocAt(UINTN size)  
 {  
     EFI_STATUS status;  
     EFI_PHYSICAL_ADDRESS allocated_addr; 
@@ -145,7 +145,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     UINT64 kernel_first_addr, kernel_last_addr; // 计算的首尾
     CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
 
-    status = mallocAt(kernel_first_addr, kernel_last_addr - kernel_first_addr); // 分配内存
+    status = mallocAt(kernel_last_addr - kernel_first_addr); // 分配内存
     if (EFI_ERROR(status)) {
         puts(L"XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
         while (1);
@@ -178,7 +178,14 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     typedef void (* __attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *);
     Kernel kernel = (Kernel) entry_addr;
-    kernel(&config, SystemTable); // 滚进去！
+
+    struct EFI_SYSTEM_TABLE* copy=malloc(sizeof(struct EFI_SYSTEM_TABLE)+4);
+    *copy=*SystemTable;
+    
+    copy->_buf1[0]='a';
+    copy->_buf3[0]='b';
+
+    kernel(&config, copy); // 滚进去！
 
     //此处=kernel.elf
 

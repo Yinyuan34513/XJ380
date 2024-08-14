@@ -2,12 +2,15 @@
 #include "../include/include.h" 
 #include "../include/efi.h" 
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE *SystemTable) {  
+extern "C" void KernelMain(const FrameBufferConfig &fbc, struct EFI_SYSTEM_TABLE* SystemTable) {  
     uint64_t str[3]; // 打印用的字符串
     struct EFI_INPUT_KEY key; // 用于接收按键
     init_desktop(fbc);
+
+
+    //bmp(fbc,&SystemTable,(CHAR16*)"\\EFI\\BOOT\\test.bmp",200,200);
     while (1) {
-        WriteString(fbc, 100, 100,(char*)SystemTable, {255, 255, 255});  
+        WriteString(fbc, 100, 100,"200", {255, 255, 255});  
         if (!SystemTable->ConIn->ReadKeyStroke(SystemTable->ConIn, &key)) { // nmd就这行卡住了焯
 
             WriteString(fbc, 100, 300, "b", {255, 255, 255}); 
