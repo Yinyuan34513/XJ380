@@ -3,7 +3,7 @@
 #ifndef _FBC_HPP_
 #define _FBC_HPP_
 
-#include "stdint.h"
+#include "../global/stdint.h"
 
 enum PixelFormat {
     kRGBR, // 带k表示内核会用到
