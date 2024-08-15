@@ -14,9 +14,8 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP) {
-  unsigned long long status;
-  struct EFI_SIMPLE_POINTER_STATE s;
-  unsigned long long waitidx;
+  unsigned long long spp_status;
+  struct EFI_SIMPLE_POINTER_STATE spp_state;
 
   char                 str[3]; // 打印用的字符串
   struct EFI_INPUT_KEY key;    // 用于接收按键
