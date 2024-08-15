@@ -25,18 +25,19 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
       if (key.UnicodeChar != L'\r') { // 不是换行
         str[0] = key.UnicodeChar;     // 第一个字符就输出
-        str[1] = '\0';                // 第二个字符是\0，结束符
-      } else {                        // 是换行或不可打印字符
-        str[0] = '\r';                // \r
-        str[1] = '\n'; // 给EFI擦屁股，\r\n才是一个换行，而enter只能接收到\r
-        str[2] = '\0'; // 结束符
+        str[1] = '\0';
+		fontx += 8;
+		if(fontx > 500) {
+			fontx = 108;
+			fonty += 16;
+		}
+      }
+	  else {                        // 是换行或不可打印字符
+        fontx = 108;
+        fonty += 16;
+        str[0] = '\0';
       }
       WriteString(fbc, fontx, fonty, str, {255, 255, 255});
-      fontx += 8;
-      if(fontx>500){
-        fontx = 100;
-        fonty += 16;
-      }
     }
   }
   // 按理来说不可能到这儿
