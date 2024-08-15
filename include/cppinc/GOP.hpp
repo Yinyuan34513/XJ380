@@ -4,8 +4,8 @@
 #ifndef _GOP_HPP_  
 #define _GOP_HPP_  
   
-#include "stdint.h"
-#include "fbc.hpp"
+#include "../global/stdint.h"
+#include "../cinc/fbc.h"
 struct PixelColor {  
     uint8_t r;
     uint8_t g;

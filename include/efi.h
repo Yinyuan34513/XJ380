@@ -2,11 +2,29 @@
 // XJ380UEFI引导头文件
 #ifndef _EFI_H_
 #define _EFI_H_
-// 定义，不要动
+// efi规范定义，不要动
+// 无符号整型
 typedef __UINT8_TYPE__  UINT8;
 typedef __UINT16_TYPE__ UINT16;
 typedef __UINT32_TYPE__ UINT32;
 typedef __UINT64_TYPE__ UINT64;
+// 有符号整型
+typedef __INT8_TYPE__  INT8;
+typedef __INT16_TYPE__ INT16;
+typedef __INT32_TYPE__ INT32;
+typedef __INT64_TYPE__ INT64;
+
+// 自定义类型
+// 无符号整型
+typedef UINT8 u8;
+typedef UINT16 u16;
+typedef UINT32 u32;
+typedef UINT64 u64;
+// 有符号整型
+typedef INT8 i8;
+typedef INT16 i16;
+typedef INT32 i32;
+typedef INT64 i64;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
