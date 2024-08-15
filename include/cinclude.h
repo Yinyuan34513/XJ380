@@ -3,7 +3,7 @@
 #ifndef _CINCLUDE_H_
 #define _CINCLUDE_H_
 
-#include "stdint.h"
-#include "fbc.hpp"
-#include "elf.h"
+#include "./global/stdint.h"
+#include "./cinc/fbc.h"
+#include "./cinc/elf.h"
 #endif 

@@ -3,7 +3,7 @@
 #ifndef _INCLUDE_HPP_
 #define _INCLUDE_HPP_
 
-#include "GOP.hpp"
-#include "define_code.hpp"
-#include "stdint.h"
+#include "./cppinc/GOP.hpp"
+#include "./cppinc/define_code.hpp"
+#include "./global/stdint.h"
 #endif 
