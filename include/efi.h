@@ -2,6 +2,7 @@
 // XJ380UEFI引导头文件
 #ifndef _EFI_H_
 #define _EFI_H_
+// 定义，不要动
 typedef __UINT8_TYPE__  UINT8;
 typedef __UINT16_TYPE__ UINT16;
 typedef __UINT32_TYPE__ UINT32;

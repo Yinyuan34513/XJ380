@@ -63,7 +63,7 @@ void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const Pi
 void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const PixelColor& c){
     int dx = x1 - x0;  
     int dy = y1 - y0;  
-    int k;  
+    int k; 
     int xIncrement;  
     int err;  
   
@@ -73,7 +73,7 @@ void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const Pi
         xIncrement = -1;  
     } else {  
         xIncrement = 1;  
-    }  
+    } 
   
     // 初始化斜率（2*dy，因为我们后面会乘以2来避免浮点运算）  
     k = 2 * dy;  
