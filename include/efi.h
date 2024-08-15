@@ -68,11 +68,26 @@ typedef VOID *EFI_EVENT;
 #define EFI_COMPROMISED_DATA            EFIERR(33)
 #define min(a, b)                       ((a) < (b) ? (a) : (b))
 #define max(a, b)                       ((a) < (b) ? (b) : (a))
-struct EFI_INPUT_KEY {
-    UINT16 ScanCode;
-    CHAR16 UnicodeChar;
+//struct EFI_INPUT_KEY {
+//    UINT16 ScanCode;
+//    CHAR16 UnicodeChar;
+//};
+struct EFI_KEY_DATA {
+    /* 要绑定的按键 */
+    struct EFI_INPUT_KEY {
+        unsigned short ScanCode;
+            /* 扫描码，用于Unicode范围外的按键 */
+        unsigned short UnicodeChar;
+            /* Unicode码，用于Unicode范围内的按键 */
+    } Key;
+    /* 要绑定的输入设备状态 */
+    struct EFI_KEY_STATE {
+        unsigned int KeyShiftState;
+            /* Ctrl、Alt、Shift等键的状态（是否按下） */
+        unsigned char KeyToggleState;
+            /* 切换键状态，如NumLock、CapsLock是否被按下 */
+    } KeyState;
 };
-
 struct EFI_GUID {
     UINT32 Data1;
     UINT16 Data2;
@@ -203,7 +218,28 @@ struct EFI_SYSTEM_TABLE {
     UINTN _buf3[3];
     struct EFI_BOOT_SERVICES *BootServices;
 };
+/*
+typedef struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL_expand{
+    UINTN Reset;
+    EFI_STATUS (*ReadKeyStroke)(void *This, struct EFI_INPUT_KEY *Key);
+    EFI_EVENT WaitForKey;
+} ;
+typedef struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_expand{
+    UINTN _buf;
+    EFI_STATUS (*OutputString)(void *This, CHAR16 *String);
+    UINTN _buf2[4];
+    EFI_STATUS (*ClearScreen)(void *This);
+} ;
 
+struct EFI_SYSTEM_TABLE_expand{
+    char _buf1[44];
+    struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL *ConIn;
+    UINTN _buf2;
+    struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *ConOut;
+    UINTN _buf3[3];
+    struct EFI_BOOT_SERVICES *BootServices;
+};
+*/
 struct EFI_GRAPHICS_OUTPUT_BLT_PIXEL {
     unsigned char Blue;
     unsigned char Green;
@@ -240,22 +276,7 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL {
     } *Mode;
 };
 
-struct EFI_KEY_DATA {
-    /* 要绑定的按键 */
-    struct EFI_INPUT_KEY {
-        unsigned short ScanCode;
-            /* 扫描码，用于Unicode范围外的按键 */
-        unsigned short UnicodeChar;
-            /* Unicode码，用于Unicode范围内的按键 */
-    } Key;
-    /* 要绑定的输入设备状态 */
-    struct EFI_KEY_STATE {
-        unsigned int KeyShiftState;
-            /* Ctrl、Alt、Shift等键的状态（是否按下） */
-        unsigned char KeyToggleState;
-            /* 切换键状态，如NumLock、CapsLock是否被按下 */
-    } KeyState;
-};
+
 
 struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL {
     /* 重置输入设备 */
