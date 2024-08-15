@@ -23,7 +23,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 100;
   while (1) {
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
-      if (key.UnicodeChar != L'\r') { // 不是换行
+      if (key.UnicodeChar == 0x08) {
+      	fontx -= 8;
+        if(fontx < 100) {
+        	fontx = 492;
+        	fonty -= 16;
+		}
+        rect(fbc,fontx,fonty,fontx+16,fonty+16,{0x13, 0x6d, 0xff});
+        str[0] = '\0';
+      }
+      else if (key.UnicodeChar != L'\r') { // 不是换行
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';
 		fontx += 8;
@@ -33,9 +42,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 		}
       }
 	  else {                        // 是换行或不可打印字符
-        fontx = 108;
+        fontx = 100;
         fonty += 16;
         str[0] = '\0';
+        str[1] = '\0';                // 第二个字符是\0，结束符
+        if(fontx>500){
+          fontx = 100;
+          fonty += 16;
+    	}
       }
       WriteString(fbc, fontx, fonty, str, {255, 255, 255});
     }
