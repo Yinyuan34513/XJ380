@@ -74,7 +74,7 @@ void *malloc(int buf_size) {
 
   status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, buf_size,
                             &res); // 分配内存，第一个参数是判断LIP是否存在，如果存在就直接拿过来用
-  if (status < 0) return NULL;
+  if (status !=EFI_SUCCESS) return NULL;
 
   return res;
 }
@@ -108,34 +108,6 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   BS->OpenProtocol(LIP->DeviceHandle, &sfsp_guid, (void **)&SFSP, ImageHandle, NULL,
                    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
-
-
-
-/*
-struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL_expand in1;
-struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_expand in2;
-
-struct EFI_SYSTEM_TABLE_expand expand_systemtable(struct EFI_SYSTEM_TABLE* systemtable)
-{
-    in1.ReadKeyStroke=systemtable->ConIn->ReadKeyStroke;
-    in1.Reset=systemtable->ConIn->Reset;
-    in1.WaitForKey=systemtable->ConIn->ReadKeyStroke;
-    in2.ClearScreen=systemtable->ConOut->ClearScreen;
-    in2.OutputString=systemtable->ConOut->OutputString;
-    in2._buf=systemtable->ConOut->_buf;
-    in2._buf2=systemtable->ConOut->_buf2;
-    struct EFI_SYSTEM_TABLE_expand out;
-    out._buf1=systemtable->_buf1;
-    out._buf2=systemtable->_buf2;
-    out._buf3=systemtable->_buf3;
-    out.BootServices=systemtable->BootServices;
-    out.ConIn=&in1;
-    out.ConOut=&in2;
-    return out;
-}
-*/
-
-
 
 
 typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
@@ -189,7 +161,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   struct FrameBufferConfig config = {
       (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
-      GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution};
+      GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution,
+      GOP->Mode->Info->PixelFormat
+    };
 
   switch (GOP->Mode->Info->PixelFormat) {
   case PixelRedGreenBlueReserved8BitPerColor: config.pixel_format = kRGBR; break;

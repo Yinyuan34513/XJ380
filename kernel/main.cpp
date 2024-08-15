@@ -22,17 +22,21 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fontx = 100;
   int fonty = 100;
   while (1) {
+    WriteString(fbc, fontx+6, fonty,"|", {255, 255, 255});
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
-      if (key.UnicodeChar == 0x08) {
+      if (key.UnicodeChar == 0x08) //bakespace
+      {
+        rect(fbc,fontx+7,fonty,fontx+10,fonty+16,{0x13, 0x6d, 0xff});
       	fontx -= 8;
         if(fontx < 100) {
         	fontx = 492;
         	fonty -= 16;
 		}
-        rect(fbc,fontx,fonty,fontx+16,fonty+16,{0x13, 0x6d, 0xff});
+        rect(fbc,fontx+8,fonty,fontx+16,fonty+16,{0x13, 0x6d, 0xff});
         str[0] = '\0';
       }
       else if (key.UnicodeChar != L'\r') { // 不是换行
+        rect(fbc,fontx+7,fonty,fontx+10,fonty+16,{0x13, 0x6d, 0xff});
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';
 		fontx += 8;
@@ -42,6 +46,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 		}
       }
 	  else {                        // 是换行或不可打印字符
+        rect(fbc,fontx+7,fonty,fontx+10,fonty+16,{0x13, 0x6d, 0xff});
         fontx = 100;
         fonty += 16;
         str[0] = '\0';
