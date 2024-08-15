@@ -69,5 +69,14 @@ Makefile里有一个变量“REL”，填版本。
 - ASCII字符显示
 - 任务栏及快捷栏
 ### BuildVersion 7 Upgrade 1
-2024年8月10日  Guoqiyu1115
+2024年8月10日 Guoqiyu1115
 - 完善快捷栏
+### BuildVersion 8 【已虚拟机测试】
+2024年8月15日 copi143 & min0911Y & Guoqiyu1115 & wcjbr
+- 将SystemTable传入内核
+- 键盘输入
+- 输入换行
+- 整理头文件
+- 整理史山代码
+- 整理类型定义（详见stdint.h）
+- 整理目录
