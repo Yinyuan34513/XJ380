@@ -46,6 +46,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         fonty += 16;
       }
     }
+    if (!spp_status) {
+      // out
+      WriteString(fbc, 300, 284, "PointerInputOut", {255, 255, 255});
+      WriteHex(fbc, 300, 300, (unsigned long long)spp_state.RelativeMovementX, {255, 255, 255});
+      WriteHex(fbc, 300, 316, (unsigned long long)spp_state.RelativeMovementY, {255, 255, 255});
+      WriteHex(fbc, 300, 332, (unsigned long long)spp_state.RelativeMovementZ, {255, 255, 255});
+    }
   }
   // 按理来说不可能到这儿
 }

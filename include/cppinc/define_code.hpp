@@ -17,5 +17,6 @@ void draw_studio_logo(const FrameBufferConfig &fbc, int xi, int yi);
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
 void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
+void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
 
 #endif
