@@ -13,7 +13,10 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
   return s;
 }
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable) {
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP) {
+  unsigned long long spp_status;
+  struct EFI_SIMPLE_POINTER_STATE spp_state;
+
   char                 str[3]; // 打印用的字符串
   struct EFI_INPUT_KEY key;    // 用于接收按键
 
@@ -23,16 +26,18 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 100;
   while (1) {
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
-      if (key.UnicodeChar != L'\r') { // 不是换行
+      if (key.UnicodeChar != L'\r') { // 是字符
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';                // 第二个字符是\0，结束符
-      } else {                        // 是换行或不可打印字符
-        str[0] = '\r';                // \r
-        str[1] = '\n'; // 给EFI擦屁股，\r\n才是一个换行，而enter只能接收到\r
-        str[2] = '\0'; // 结束符
+        WriteString(fbc, fontx, fonty, str, {255, 255, 255});
+        fontx += 8;
+      } else if (key.UnicodeChar == L'\r') { // 是换行
+        fontx = 100;
+        fonty += 16;
+      } else {                        // 是不可打印字符
+        // pass
+        fontx += 8;
       }
-      WriteString(fbc, fontx, fonty, str, {255, 255, 255});
-      fontx += 8;
       if(fontx>500){
         fontx = 100;
         fonty += 16;
