@@ -22,9 +22,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   init_desktop(fbc);
 
+  SPP.Reset(&SPP, 0);
   int fontx = 100;
   int fonty = 100;
+
   while (1) {
+    spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
       if (key.UnicodeChar != L'\r') { // 是字符
         str[0] = key.UnicodeChar;     // 第一个字符就输出
