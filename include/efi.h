@@ -215,10 +215,10 @@ struct EFI_SYSTEM_TABLE {
 
 // 简单（鼠标）指针协议
 struct EFI_SIMPLE_POINTER_PROTOCOL {
-    unsigned long long (*Reset)(
+    EFIAPI EFI_STATUS (*Reset)(
         struct EFI_SIMPLE_POINTER_PROTOCOL *This,
         unsigned char ExtendedVerification);
-    unsigned long long (*GetState)(
+    EFIAPI EFI_STATUS (*GetState)(
         struct EFI_SIMPLE_POINTER_PROTOCOL *This,
         struct EFI_SIMPLE_POINTER_STATE *State);
     void *WaitForInput;
