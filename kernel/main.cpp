@@ -26,6 +26,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fontx = 100;
   int fonty = 100;
 
+  WriteString(fbc, 300, 284, "PointerInputOut", {255, 255, 255});
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
@@ -48,10 +49,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     }
     if (!spp_status) {
       // out
-      WriteString(fbc, 300, 284, "PointerInputOut", {255, 255, 255});
-      WriteHex(fbc, 300, 300, (unsigned long long)spp_state.RelativeMovementX, {255, 255, 255});
-      WriteHex(fbc, 300, 316, (unsigned long long)spp_state.RelativeMovementY, {255, 255, 255});
-      WriteHex(fbc, 300, 332, (unsigned long long)spp_state.RelativeMovementZ, {255, 255, 255});
+      rect(fbc, 300, 300, 308, 348, {0x13, 0x6d, 0xff});
+      WriteHex(fbc, 300, 300, spp_state.RelativeMovementX, {255, 255, 255});
+      WriteHex(fbc, 300, 316, spp_state.RelativeMovementY, {255, 255, 255});
+      WriteHex(fbc, 300, 332, spp_state.RelativeMovementZ, {255, 255, 255});
     }
   }
   // 按理来说不可能到这儿

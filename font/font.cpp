@@ -51,9 +51,9 @@ void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, cons
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c)
 {
     // 输出16进制
-    unsigned short  buf[20];
-    unsigned short *p = buf;
-    unsigned short  ch;
+    char            buf[20];
+    char           *p = buf;
+    char            ch;
     int             i, flag = 0;
 
     *p++ = L'0';
@@ -76,6 +76,6 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
         }
     }
     *p = L'\0'; // 结束符
-    WriteString(fbc, x, y, (char *)buf, c);  // 打印
+    WriteString(fbc, x, y, buf, c);  // 打印
 }
 
