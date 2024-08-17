@@ -26,14 +26,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fontx = 100;
   int fonty = 100;
 
-  WriteString(fbc, 300, 284, "PointerInputOut", {255, 255, 255});
+  WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
       if (key.UnicodeChar != L'\r') { // 是字符
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';                // 第二个字符是\0，结束符
-        WriteString(fbc, fontx, fonty, str, {255, 255, 255});
+        WriteString(fbc, fontx, fonty, str, WHITE);
         fontx += 8;
       } else if (key.UnicodeChar == L'\r') { // 是换行
         fontx = 100;
@@ -50,9 +50,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (!spp_status) {
       // out
       rect(fbc, 300, 300, 308, 348, {0x13, 0x6d, 0xff});
-      WriteHex(fbc, 300, 300, spp_state.RelativeMovementX, {255, 255, 255});
-      WriteHex(fbc, 300, 316, spp_state.RelativeMovementY, {255, 255, 255});
-      WriteHex(fbc, 300, 332, spp_state.RelativeMovementZ, {255, 255, 255});
+
+      WriteHex(fbc, 300, 300, spp_state.RelativeMovementX, WHITE);
+      WriteHex(fbc, 300, 316, spp_state.RelativeMovementY, WHITE);
+      WriteHex(fbc, 300, 332, spp_state.RelativeMovementZ, WHITE);
     }
   }
   // 按理来说不可能到这儿
