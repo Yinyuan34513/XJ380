@@ -225,9 +225,9 @@ struct EFI_SIMPLE_POINTER_PROTOCOL {
 };
 
 struct EFI_SIMPLE_POINTER_STATE {
-    int RelativeMovementX;      /* X轴方向的相对移动量 */
-    int RelativeMovementY;      /* Y轴方向的相对移动量 */
-    int RelativeMovementZ;      /* Z轴方向的相对移动量 */
+    UINT64 RelativeMovementX;      /* X轴方向的相对移动量 */
+    UINT64 RelativeMovementY;      /* Y轴方向的相对移动量 */
+    UINT64 RelativeMovementZ;      /* Z轴方向的相对移动量 */
     unsigned char LeftButton;   /* 左键状态，按下为1，松开为0 */
     unsigned char RightButton;  /* 右键状态，同上 */
 };

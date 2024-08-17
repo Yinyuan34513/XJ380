@@ -48,3 +48,34 @@ void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, cons
     }
 }
 
+void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c)
+{
+    // 输出16进制
+    char            buf[20];
+    char           *p = buf;
+    char            ch;
+    int             i, flag = 0;
+
+    *p++ = L'0';
+    *p++ = L'x'; // 先存一个0x
+
+    if (hex == 0)
+        *p++ = L'0'; // 如果是0，直接0x0趋势
+    else {
+        for (i = 28; i >= 0; i -= 4) { // 每次4位
+        ch = (hex >> i) & 0xF;       // 0~9, A~F
+        // 28（冗余）
+        if (flag || ch > 0) { // 跳过前导0
+            flag  = 1;          // 没有前导0就把flag设为1，这样后面再有0也不会忽略
+            ch   += L'0';       // 0~9 => '0'~'9'
+            if (ch > L'9') {
+            ch += 7; // 'A' - '9' = 7
+            }
+            *p++ = ch; // 写入
+        }
+        }
+    }
+    *p = L'\0'; // 结束符
+    WriteString(fbc, x, y, buf, c);  // 打印
+}
+

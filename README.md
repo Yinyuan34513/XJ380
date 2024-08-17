@@ -80,7 +80,10 @@ Makefile里有一个变量“REL”，填版本。
 - 整理史山代码
 - 整理类型定义（详见stdint.h）
 - 整理目录
-### BuildVersion 9 【已虚拟机测试】
+### BuildVersion 9 【已实机测试】
 2024年8月16日 Guoqiyu1115 & HlHill
 - 成功获取鼠标输入
 - 弄清楚了导致键盘输入卡住的元凶
+### BuildVersion 10 【已实机测试】
+2024年8月17日 Guoqiyu1115
+- 鼠标数据输出
