@@ -49,7 +49,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     }
     if (!spp_status) {
       // out
-      rect(fbc, 300, 300, 308, 348, {0x13, 0x6d, 0xff});
+      rect(fbc, 300, 300, 820, 348, WIN_BLUE);
 
       WriteHex(fbc, 300, 300, spp_state.RelativeMovementX, WHITE);
       WriteHex(fbc, 300, 316, spp_state.RelativeMovementY, WHITE);
