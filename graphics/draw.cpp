@@ -185,8 +185,7 @@ struct BMP_PIXEL {
     UINT8 r;
 };
 
-// 加载 BMP 文件
-EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP_PIXEL** pixels,struct EFI_SYSTEM_TABLE* ST)
+EFI_STATUS LoadBMPFile(CHAR16* filename, BITMAPINFOHEADER* infoHeader, BMP_PIXEL** pixels, struct EFI_SYSTEM_TABLE* ST)
 {
     EFI_STATUS Status;
     struct EFI_FILE_PROTOCOL* file;
@@ -195,7 +194,6 @@ EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP
     UINT64 bufferSize = 0;
     BITMAPFILEHEADER fileHeader;
 
-    // 打开文件,就炸在这，应该是ST炸了
     Status = ST->BootServices->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid, NULL, (VOID**)&fs);
     if (Status != EFI_SUCCESS) {
         return Status;
@@ -223,6 +221,9 @@ EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP
         return Status;
     }
 
+    // 重置缓冲区大小
+    bufferSize = 0;
+
     // 读取像素数据
     Status = ST->BootServices->AllocatePool(EfiLoaderData, infoHeader->biSizeImage, (VOID**)&buffer);
     if (Status != EFI_SUCCESS) {
@@ -234,14 +235,13 @@ EFI_STATUS LoadBMPFile(CHAR16* filename,BITMAPINFOHEADER* infoHeader, struct BMP
         return Status;
     }
 
-    *pixels = (struct BMP_PIXEL*)buffer;
+    *pixels = (BMP_PIXEL*)buffer;
     file->Close(file);
 
     return EFI_SUCCESS;
 }
 
-// 显示 BMP 图像
-EFI_STATUS ShowBMP(struct BMP_PIXEL* pixels,BITMAPINFOHEADER* infoHeader, const FrameBufferConfig& fbc)
+EFI_STATUS ShowBMP(BMP_PIXEL* pixels, BITMAPINFOHEADER* infoHeader, const FrameBufferConfig& fbc, UINT32 offsetX, UINT32 offsetY)
 {
     // 绘制像素
     UINT32 pixel;
@@ -257,27 +257,26 @@ EFI_STATUS ShowBMP(struct BMP_PIXEL* pixels,BITMAPINFOHEADER* infoHeader, const 
                 .b = pixelData->b
             };
             // 调用 dot 函数绘制单个像素
-            dot(fbc, i, j, color);
+            dot(fbc, i + offsetX, j + offsetY, color);
         }
     }
 
     return EFI_SUCCESS;
 }
 
-void bmp(const FrameBufferConfig& fbc,struct EFI_SYSTEM_TABLE* ST, CHAR16 filename[], const UINT32 offsetX_, const UINT32 offsetY_)
+void bmp(const FrameBufferConfig& fbc, struct EFI_SYSTEM_TABLE* ST, CHAR16 filename[], const UINT32 offsetX_, const UINT32 offsetY_)
 {
-    
     BMP_PIXEL* pixels = nullptr;
     BITMAPINFOHEADER infoHeader;
-    
-    LoadBMPFile(filename, &infoHeader, &pixels,ST);
 
-    // 计算位置
-    UINT32 offsetX = offsetX_;
-    UINT32 offsetY = offsetY_;
-    // 调整显示位置
-    BITMAPINFOHEADER adjustedInfoHeader = infoHeader;
-    adjustedInfoHeader.biWidth += offsetX;
-    adjustedInfoHeader.biHeight += offsetY;
-    ShowBMP(pixels, &adjustedInfoHeader, fbc);
+    EFI_STATUS status = LoadBMPFile(filename, &infoHeader, &pixels, ST);
+    if (status != EFI_SUCCESS) {
+        // Handle error
+        return;
+    }
+
+    ShowBMP(pixels, &infoHeader, fbc, offsetX_, offsetY_);
+
+    // Free allocated memory
+    ST->BootServices->FreePool(pixels);
 }

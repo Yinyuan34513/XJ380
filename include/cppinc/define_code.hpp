@@ -1,7 +1,7 @@
 #ifndef _DEFINE_CODE_HPP_
 #define _DEFINE_CODE_HPP_
 
-#include"efi.h"
+#include"../efi.h"
 
 // graphics/draw.cpp
 void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor& c);
@@ -11,6 +11,7 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
 EFI_STATUS ShowBMP(struct BMP_PIXEL* pixels, struct BITMAPINFOHEADER* infoHeader, const FrameBufferConfig& fbc);
 EFI_STATUS LoadBMPFile(CHAR16* filename, struct BITMAPINFOHEADER* infoHeader, struct BMP_PIXEL** pixels);
 void bmp(const FrameBufferConfig& fbc,struct EFI_SYSTEM_TABLE* ST, CHAR16 filename[], const UINT32 offsetX_, const UINT32 offsetY_);
+
 // graphics/desktop.cpp
 void init_desktop(const FrameBufferConfig &fbc);
 void init_dock(const FrameBufferConfig &fbc);

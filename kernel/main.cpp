@@ -18,7 +18,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   struct EFI_INPUT_KEY key;    // 用于接收按键
 
   init_desktop(fbc);
-
+  bmp(fbc,&SystemTable, (CHAR16*)"\\EFI\\BOOT\\test.bmp", 200, 200);
   int fontx = 100;
   int fonty = 100;
   while (1) {
