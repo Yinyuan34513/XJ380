@@ -2,11 +2,12 @@
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
 #include "../include/cinclude.h"
 #define NULL 0
-struct EFI_SYSTEM_TABLE                *ST;
-struct EFI_BOOT_SERVICES               *BS;
-struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP;
-struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP;
-struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;
+struct EFI_SYSTEM_TABLE                *ST;  // 系统表
+struct EFI_BOOT_SERVICES               *BS;  // 启动信息
+struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP; // GOP
+struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP;// 文件
+struct EFI_LOADED_IMAGE_PROTOCOL       *LIP; // e?
+struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP; // 鼠标
 EFI_HANDLE                              IM;
 
 static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf, size_t len,
@@ -27,6 +28,9 @@ struct EFI_GUID lip_guid = {
 };
 struct EFI_GUID sfsp_guid = {
     0x964e5b22, 0x6459, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
+};
+struct EFI_GUID spp_guid = {
+    0x31878c87, 0xb75, 0x11d5, {0x9a, 0x4f, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d}
 };
 
 void putc(unsigned short c) {
@@ -100,8 +104,10 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   BS = SystemTable->BootServices;
   IM = ImageHandle;
 
+  // 初始化
   BS->SetWatchdogTimer(0, 0, 0, NULL); // 别删，不然UEFI会自动重启
   BS->LocateProtocol(&gop_guid, NULL, (void **)&GOP);
+  BS->LocateProtocol(&spp_guid, NULL, (void **)&SPP);
 
   BS->OpenProtocol(ImageHandle, &lip_guid, (void **)&LIP, ImageHandle, NULL,
                    EFI_OPEN_PROTOCOL_GET_PROTOCOL); // 获取LIP
@@ -111,7 +117,7 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
 
 
 typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
-                                                 struct EFI_SYSTEM_TABLE *);
+                                                 struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
@@ -176,7 +182,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   }
 
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable); // 滚进去！
+  kernel(&config, SystemTable, SPP); // 滚进去！
 
   //此处=kernel.elf
 

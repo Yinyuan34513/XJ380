@@ -213,6 +213,25 @@ struct EFI_SYSTEM_TABLE {
   struct EFI_BOOT_SERVICES *BootServices;
 };
 
+// 简单（鼠标）指针协议
+struct EFI_SIMPLE_POINTER_PROTOCOL {
+    EFIAPI EFI_STATUS (*Reset)(
+        struct EFI_SIMPLE_POINTER_PROTOCOL *This,
+        unsigned char ExtendedVerification);
+    EFIAPI EFI_STATUS (*GetState)(
+        struct EFI_SIMPLE_POINTER_PROTOCOL *This,
+        struct EFI_SIMPLE_POINTER_STATE *State);
+    void *WaitForInput;
+};
+
+struct EFI_SIMPLE_POINTER_STATE {
+    UINT64 RelativeMovementX;      /* X轴方向的相对移动量 */
+    UINT64 RelativeMovementY;      /* Y轴方向的相对移动量 */
+    UINT64 RelativeMovementZ;      /* Z轴方向的相对移动量 */
+    unsigned char LeftButton;   /* 左键状态，按下为1，松开为0 */
+    unsigned char RightButton;  /* 右键状态，同上 */
+};
+
 struct EFI_GRAPHICS_OUTPUT_BLT_PIXEL {
   unsigned char Blue;
   unsigned char Green;

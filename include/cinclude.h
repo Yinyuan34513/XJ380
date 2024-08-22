@@ -6,4 +6,5 @@
 #include "./global/stdint.h"
 #include "./cinc/fbc.h"
 #include "./cinc/elf.h"
+#include "./global/global_color.h"
 #endif 
