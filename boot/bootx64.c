@@ -78,7 +78,7 @@ void *malloc(int buf_size) {
 
   status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, buf_size,
                             &res); // 分配内存，第一个参数是判断LIP是否存在，如果存在就直接拿过来用
-  if (status !=EFI_SUCCESS) return NULL;
+  if (status!=EFI_SUCCESS) return NULL;
 
   return res;
 }
@@ -89,7 +89,7 @@ void free(void *buf) {
 
 EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size) {
   EFI_STATUS           status;
-  EFI_PHYSICAL_ADDRESS allocated_addr;
+  EFI_PHYSICAL_ADDRESS allocated_addr=addr;
   status = BS->AllocatePages(AllocateAnyPages, LIP ? LIP->ImageDataType : EfiLoaderData,
                              (size + 0xfff) / 0x1000, &allocated_addr);
   return status;
@@ -114,7 +114,6 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   BS->OpenProtocol(LIP->DeviceHandle, &sfsp_guid, (void **)&SFSP, ImageHandle, NULL,
                    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
-
 
 typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
                                                  struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *);
@@ -167,9 +166,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   struct FrameBufferConfig config = {
       (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
-      GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution,
-      GOP->Mode->Info->PixelFormat
-    };
+      GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution};
 
   switch (GOP->Mode->Info->PixelFormat) {
   case PixelRedGreenBlueReserved8BitPerColor: config.pixel_format = kRGBR; break;
