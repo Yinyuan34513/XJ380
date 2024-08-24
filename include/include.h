@@ -7,4 +7,5 @@
 #include "./cppinc/define_code.hpp"
 #include "./global/stdint.h"
 #include "./global/global_color.h"
+#include "./global/memory.h"
 #endif 

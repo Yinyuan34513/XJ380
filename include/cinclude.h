@@ -7,4 +7,5 @@
 #include "./cinc/fbc.h"
 #include "./cinc/elf.h"
 #include "./global/global_color.h"
+#include "./global/memory.h"
 #endif 
