@@ -13,6 +13,8 @@ typedef __INT8_TYPE__  INT8;
 typedef __INT16_TYPE__ INT16;
 typedef __INT32_TYPE__ INT32;
 typedef __INT64_TYPE__ INT64;
+// 布尔类型
+typedef char BOOLEAN;
 
 // 自定义类型
 // 无符号整型
@@ -240,11 +242,11 @@ struct EFI_SIMPLE_POINTER_PROTOCOL {
 };
 
 struct EFI_SIMPLE_POINTER_STATE {
-    UINT64 RelativeMovementX;      /* X轴方向的相对移动量 */
-    UINT64 RelativeMovementY;      /* Y轴方向的相对移动量 */
-    UINT64 RelativeMovementZ;      /* Z轴方向的相对移动量 */
-    unsigned char LeftButton;   /* 左键状态，按下为1，松开为0 */
-    unsigned char RightButton;  /* 右键状态，同上 */
+    INT32 RelativeMovementX;      /* X轴方向的相对移动量 */
+    INT32 RelativeMovementY;      /* Y轴方向的相对移动量 */
+    INT32 RelativeMovementZ;      /* Z轴方向的相对移动量 */
+    BOOLEAN LeftButton;   /* 左键状态，按下为1，松开为0 */
+    BOOLEAN RightButton;  /* 右键状态，同上 */
 };
 
 struct EFI_GRAPHICS_OUTPUT_BLT_PIXEL {
