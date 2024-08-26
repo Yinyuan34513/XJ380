@@ -5,7 +5,7 @@
 
 //bmp支持
 // 定义 BITMAPFILEHEADER 结构体
-struct BITMAPFILEHEADER {
+typedef struct BITMAPFILEHEADER{
     uint16_t bfType;        // 文件类型，通常是 'BM' (0x4D42)
     uint32_t bfSize;       // 文件大小
     uint16_t bfReserved1;   // 保留字段
@@ -14,7 +14,7 @@ struct BITMAPFILEHEADER {
 };
 
 // 定义 BITMAPINFOHEADER 结构体
-struct BITMAPINFOHEADER {
+typedef struct BITMAPINFOHEADER{
     uint32_t biSize;       // 结构体的大小
     uint32_t  biWidth;      // 图像宽度
     uint32_t  biHeight;     // 图像高度
@@ -27,4 +27,12 @@ struct BITMAPINFOHEADER {
     uint32_t biClrUsed;    // 使用的颜色数
     uint32_t biClrImportant;// 重要的颜色数
 };
+
+//定义像素结构
+//对于24位无压缩BMP文件，每个像素由三个字节表示（BGR顺序）。
+typedef struct {
+  UINT8 Blue;
+  UINT8 Green;
+  UINT8 Red;
+} RGBQUAD;
 #endif

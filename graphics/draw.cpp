@@ -1,7 +1,9 @@
+#define DRAW_CPP
 #include "../include/include.h"
 #include "../include/efi.h"
 struct EFI_GUID gEfiSimpleFileSystemProtocolGuid={0x824e5c22, 0x6469, 0x1002, {0x81, 0x19, 0x20, 0xe1, 0xc0, 0x66, 0xe2, 0x3a}};
-
+struct EFI_GUID gEfiFileInfoGuid=                {0x5c4e2f81, 0x7b4a, 0x4d03, {0xa3, 0x9f, 0x4d, 0x56, 0x9e, 0x1a, 0x3f, 0x78}};
+#define NULL 0
 auto operator new(size_t size, void *ptr) -> void * {
   return ptr;
 }
@@ -175,3 +177,113 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
         }  
     }
 }  
+
+
+
+EFI_STATUS ReadBmpFile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *gST, CHAR16 *FileName, struct BITMAPFILEHEADER *FileHeader, struct BITMAPINFOHEADER *InfoHeader, RGBQUAD **PixelData, UINT32 *BufferSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  EFI_FILE_PROTOCOL *RootDir = NULL;
+  EFI_FILE_PROTOCOL *FileHandle = NULL;
+  UINT32 FileSize = 0;
+  void *Buffer = NULL;
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem = NULL;
+
+  // 打开根目录
+  Status = gST->BootServices->HandleProtocol(ImageHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&FileSystem);
+  if (EFI_ERROR(Status)) {
+    return Status;
+  }
+
+  Status = FileSystem->OpenVolume(FileSystem, &RootDir);
+  if (EFI_ERROR(Status)) {
+    FileSystem->Close(FileSystem);
+    return Status;
+  }
+
+  // 打开文件
+  Status = RootDir->Open(RootDir, &FileHandle, FileName, EFI_FILE_MODE_READ, 0);
+  if (EFI_ERROR(Status)) {
+    FileHandle->Close(FileHandle);
+    FileSystem->Close(FileSystem);
+    return Status;
+  }
+
+  // 获取文件大小
+  Status = FileHandle->GetInfo(FileHandle, &gEfiFileInfoGuid, &FileSize, NULL, NULL);
+  if (EFI_ERROR(Status)) {
+    FileHandle->Close(FileHandle);
+    FileSystem->Close(FileSystem);
+    return Status;
+  }
+
+  // 读取文件头部
+  Buffer = AllocatePages(PageAllocationGranularity, EfiLoaderData, EFI_SIZE_TO_PAGES(FileSize));
+  if (Buffer == NULL) {
+    FileHandle->Close(FileHandle);
+    FileSystem->Close(FileSystem);
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Status = FileHandle->Read(FileHandle, &FileSize, Buffer);
+  if (EFI_ERROR(Status)) {
+    FreePages((EFI_PHYSICAL_ADDRESS)Buffer, EFI_SIZE_TO_PAGES(FileSize));
+    FileHandle->Close(FileHandle);
+    FileSystem->Close(FileSystem);
+    return Status;
+  }
+
+  // 解析文件头
+  CopyMem(FileHeader, Buffer, sizeof(BITMAPFILEHEADER));
+  CopyMem(InfoHeader, ((UINT8 *)Buffer + sizeof(BITMAPFILEHEADER)), sizeof(BITMAPINFOHEADER));
+
+  // 计算像素数据的偏移量
+  *BufferSize = FileHeader->bfSize - FileHeader->bfOffBits;
+
+  // 分配像素数据的内存
+  *PixelData = (RGBQUAD *)AllocatePages(PageAllocationGranularity, EfiLoaderData, EFI_SIZE_TO_PAGES(*BufferSize));
+  if (*PixelData == NULL) {
+    FreePages((EFI_PHYSICAL_ADDRESS)Buffer, EFI_SIZE_TO_PAGES(FileSize));
+    FileHandle->Close(FileHandle);
+    FileSystem->Close(FileSystem);
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  // 复制像素数据
+  CopyMem(*PixelData, ((UINT8 *)Buffer + FileHeader->bfOffBits), *BufferSize);
+
+  // 清理资源
+  FreePages((EFI_PHYSICAL_ADDRESS)Buffer, EFI_SIZE_TO_PAGES(FileSize));
+  FileHandle->Close(FileHandle);
+  FileSystem->Close(FileSystem);
+
+  return EFI_SUCCESS;
+}
+
+EFI_STATUS DisplayBmpImage(EFI_GRAPHICS_OUTPUT_PROTOCOL *GraphicsOutput, struct BITMAPINFOHEADER *InfoHeader, RGBQUAD *PixelData, UINT32 XPos, UINT32 YPos,const FrameBufferConfig &fbc)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 Row, Col;
+  
+  // Copy the image data using the dot function
+  for (Row = 0; Row < InfoHeader->biHeight; Row++) {
+    for (Col = 0; Col < InfoHeader->biWidth; Col++) {
+      UINT32 DestRow = (InfoHeader->biHeight - Row - 1) + YPos; // Adjust row to bottom-up coordinate system
+      UINT32 DestCol = Col + XPos;
+      
+      // Check if the destination is within the frame buffer bounds
+      if (DestRow < fbc.height && DestCol < fbc.width) {
+        // Convert RGBQUAD to PixelColor
+        PixelColor c(PixelData[Row * InfoHeader->biWidth + Col].r, 
+                     PixelData[Row * InfoHeader->biWidth + Col].g, 
+                     PixelData[Row * InfoHeader->biWidth + Col].b);
+
+        // Draw the pixel at the specified position
+        dot(fbc, DestCol, DestRow, c);
+      }
+    }
+  }
+
+  return Status;
+}
+

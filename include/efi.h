@@ -85,6 +85,10 @@ typedef VOID *EFI_EVENT;
 #define EFI_END_OF_FILE          EFIERR(31)
 #define EFI_INVALID_LANGUAGE     EFIERR(32)
 #define EFI_COMPROMISED_DATA     EFIERR(33)
+
+#define EFI_FILE_MODE_READ_ONLY  0x00000001
+#define EFI_READ_ONLY  EFI_FILE_MODE_READ_ONLY
+
 #define min(a, b)                ((a) < (b) ? (a) : (b))
 #define max(a, b)                ((a) < (b) ? (b) : (a))
 struct EFI_INPUT_KEY {
