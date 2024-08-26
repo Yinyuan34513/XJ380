@@ -136,7 +136,7 @@ typedef struct {
   UINT64 Attribute;
 } EFI_MEMORY_DESCRIPTOR;
 
-void xmemset(void *dst_, UINT8 value, UINTN size) {
+static void xmemset(void *dst_, UINT8 value, UINTN size) {
   UINT8 *dst = (UINT8 *)dst_;
   while (size-- > 0)
     *dst++ = value;

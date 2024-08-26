@@ -179,7 +179,7 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
 }  
 
 
-
+/*
 EFI_STATUS ReadBmpFile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *gST, CHAR16 *FileName, struct BITMAPFILEHEADER *FileHeader, struct BITMAPINFOHEADER *InfoHeader, RGBQUAD **PixelData, UINT32 *BufferSize)
 {
   EFI_STATUS Status = EFI_SUCCESS;
@@ -286,4 +286,4 @@ EFI_STATUS DisplayBmpImage(EFI_GRAPHICS_OUTPUT_PROTOCOL *GraphicsOutput, struct 
 
   return Status;
 }
-
+*/
