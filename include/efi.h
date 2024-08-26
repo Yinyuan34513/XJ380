@@ -127,7 +127,16 @@ enum EFI_MEMORY_TYPE {
   EfiPalCode,
   EfiMaxMemoryType
 };
-static void xmemset(void *dst_, UINT8 value, UINTN size) {
+
+typedef struct {
+  UINT32 Type;
+  EFI_PHYSICAL_ADDRESS PhysicalStart;
+  EFI_VIRTUAL_ADDRESS VirtualStart;
+  UINT64 NumberOfPages;
+  UINT64 Attribute;
+} EFI_MEMORY_DESCRIPTOR;
+
+void xmemset(void *dst_, UINT8 value, UINTN size) {
   UINT8 *dst = (UINT8 *)dst_;
   while (size-- > 0)
     *dst++ = value;
@@ -140,6 +149,7 @@ static void *xmemcpy(void *dst_, const void *src_, UINTN size) {
     *dst++ = *src++;
   return (void *)src_;
 }
+
 struct EFI_BOOT_SERVICES {
   char _buf1[24];
 
@@ -152,7 +162,8 @@ struct EFI_BOOT_SERVICES {
   (enum EFI_ALLOCATE_TYPE Type, enum EFI_MEMORY_TYPE MemoryType, UINTN Pages,
    EFI_PHYSICAL_ADDRESS *Memory);
   EFIAPI EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS Memory, UINTN Pages);
-  UINTN  GetMemoryMap; // 此处不着急获取MemoryMap，等后面需要内存管理了再加
+  EFIAPI EFI_STATUS (*GetMemoryMap)(UINTN *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap,
+   UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
   EFIAPI
   EFI_STATUS (*AllocatePool)(enum EFI_MEMORY_TYPE PoolType, UINTN Size, VOID **Buffer);
   EFIAPI EFI_STATUS (*FreePool)(VOID *Buffer);

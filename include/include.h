@@ -13,4 +13,5 @@
 #undef DRAW_CPP
 #endif
 
+#include "./global/memory.h"
 #endif 
