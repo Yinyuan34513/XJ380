@@ -26,7 +26,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fontx = 100;
   int fonty = 100;
 
+  UINTN MMS = 4096;
+
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
+
+  SystemTable.BootServices->GetMemoryMap(&MMS, NULL, 0, 0, 0); // 获取内存表
+
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
