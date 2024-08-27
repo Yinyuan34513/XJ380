@@ -2,4 +2,12 @@
 #ifndef _MEMORY_H_
 #define _MEMORY_H_
 #include "./stdint.h"
+typedef struct
+{
+    __UINT64_TYPE__ MapSize;
+    void *Buffer;
+    __UINT64_TYPE__ MapKey;
+    __UINT64_TYPE__ DescriptorSize;
+    __UINT32_TYPE__ DescriptorVersion;
+} MEMORY_MAP;
 #endif
