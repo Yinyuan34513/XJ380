@@ -32,14 +32,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
   GetMemoryMapStatus = SystemTable.BootServices->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData,
-   mmp.MapSize, &mmp.Buffer); // 开辟内存空间存放内存表，有bug
+   mmp.MapSize, &mmp.Buffer); // 开辟内存空间存放内存表
   if(EFI_ERROR(GetMemoryMapStatus)) {
     // 无法开辟内存空间
     WSOD_Cannot_Alloc_MemoryMap(fbc);
     while (1) { __asm__("hlt"); } // 寄
   }
 
-  // 获取内存表
+  // 获取内存表（bug啊啊啊啊啊啊啊啊啊啊啊啊）
   GetMemoryMapStatus = SystemTable.BootServices->GetMemoryMap(
     &mmp.MapSize,
     (EFI_MEMORY_DESCRIPTOR*)mmp.Buffer,
@@ -47,6 +47,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     &mmp.DescriptorSize,
     &mmp.DescriptorVersion
   );
+
+  if (EFI_ERROR(GetMemoryMapStatus)) {
+    // 获取内存表失败
+    WSOD_Cannot_Alloc_MemoryMap_2(fbc);
+    while (1) { __asm__("hlt"); } // 寄
+  }
 
   init_desktop(fbc);
 
@@ -56,8 +62,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
   WriteHex(fbc, 500, 500, mmp.MapKey, WHITE);
-
-  //init_MemoryManager(fbc, &mmp); // 这个B玩意儿有BUG！！！！！
+  if (init_MemoryManager(fbc, &mmp) != 0)//寄在这一行了
+  {
+    WriteString(fbc, 28, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", BLACK);
+    WriteString(fbc, 28, 24, "Error code: MEMORYMAP_ERROR", BLACK);
+    WriteString(fbc, 28, 50, "XINGJI Interactive Software - XJ380 Operating System", BLACK);
+  }
 
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
@@ -74,7 +84,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         // pass
         fontx += 8;
       }
-      if(fontx>500){
+      if(fontx > 500){
         fontx = 100;
         fonty += 16;
       }

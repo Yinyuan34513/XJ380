@@ -17,9 +17,6 @@ echo draw.cpp编译结束
 echo font.cpp开始编译
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe font\font.cpp -O2 -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\font.o
 echo font.cpp编译结束
-echo heap_malloc.cpp开始编译
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\heap_malloc.cpp -O2 -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\heap_malloc.o
-echo heap_malloc.cpp编译结束
 echo desktop.cpp开始编译
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\desktop.cpp -O2 -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\desktop.o
 echo desktop.cpp编译结束
