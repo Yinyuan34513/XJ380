@@ -126,6 +126,7 @@ enum EFI_MEMORY_TYPE {
   EfiMaxMemoryType
 };
 
+// 36字节大小
 typedef struct {
   UINT32 Type;
   EFI_PHYSICAL_ADDRESS PhysicalStart;
@@ -134,13 +135,13 @@ typedef struct {
   UINT64 Attribute;
 } EFI_MEMORY_DESCRIPTOR;
 
-void xmemset(void *dst_, UINT8 value, UINTN size) {
+static void xmemset(void *dst_, UINT8 value, UINTN size) {
   UINT8 *dst = (UINT8 *)dst_;
   while (size-- > 0)
     *dst++ = value;
 }
 
-void *xmemcpy(void *dst_, const void *src_, UINTN size) {
+static void *xmemcpy(void *dst_, const void *src_, UINTN size) {
   UINT8       *dst = (UINT8 *)dst_;
   const UINT8 *src = (UINT8 *)src_;
   while (size-- > 0)

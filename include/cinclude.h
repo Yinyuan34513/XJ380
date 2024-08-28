@@ -8,4 +8,5 @@
 #include "./cinc/elf.h"
 #include "./global/global_color.h"
 #include "./global/memory.h"
+#include "./efi.h"
 #endif 

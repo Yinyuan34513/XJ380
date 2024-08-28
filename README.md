@@ -87,3 +87,8 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 10 【已实机测试】
 2024年8月17日 Guoqiyu1115
 - 鼠标数据输出
+### BuildVersion 11 【已虚拟机测试】
+2024年8月17日 Guoqiyu1115
+- 整理史山头文件
+- 获取MemoryMap（为内存管理做准备）
+- 输出MemoryMap（有BUG，给注释掉了）

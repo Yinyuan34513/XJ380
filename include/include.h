@@ -8,4 +8,7 @@
 #include "./global/stdint.h"
 #include "./global/global_color.h"
 #include "./global/memory.h"
+extern "C" {
+#include "./efi.h"
+}
 #endif 
