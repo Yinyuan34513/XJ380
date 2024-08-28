@@ -4,13 +4,7 @@ extern "C" {
 }
 #include "../include/include.h"
 
-struct EFI_SYSTEM_TABLE                *ST;  // 系统表
-struct EFI_BOOT_SERVICES               *BS;  // 启动信息
-struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP; // GOP
-struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP;// 文件
-struct EFI_LOADED_IMAGE_PROTOCOL       *LIP; // e?
-struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP; // 鼠标
-EFI_HANDLE                              IM;
+struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;
 
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
   char *s = buf + len;
