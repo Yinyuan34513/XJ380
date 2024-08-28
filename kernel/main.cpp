@@ -41,9 +41,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
    mmp.MapSize, &mmp.Buffer); // 开辟内存空间存放内存表，有bug
   if(EFI_ERROR(GetMemoryMapStatus)) {
     // 无法开辟内存空间
+    WSOD_Cannot_Alloc_MemoryMap(fbc);
+    while (1) { __asm__("hlt"); } // 寄
   }
 
-    // 获取内存表
+  // 获取内存表
   GetMemoryMapStatus = SystemTable.BootServices->GetMemoryMap(
     &mmp.MapSize,
     (EFI_MEMORY_DESCRIPTOR*)mmp.Buffer,
@@ -59,6 +61,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 100;
 
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
+  WriteHex(fbc, 500, 500, mmp.MapKey, WHITE);
 
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住

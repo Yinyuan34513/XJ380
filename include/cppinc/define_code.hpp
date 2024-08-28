@@ -19,4 +19,7 @@ void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const Pixel
 void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
 
+// kernel/wsod.cpp
+void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc);
+
 #endif
