@@ -26,9 +26,12 @@ echo desktop.cpp编译结束
 echo memory.cpp开始编译
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\memory.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\memory.o
 echo memory.cpp编译结束
+echo wsod.cpp开始编译
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\wsod.cpp -O2 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\wsod.o
+echo wsod.cpp编译结束
 echo 开始链接内核
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o .\out\heap_malloc.o
-echo 链接内核结束
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o .\out\memory.o .\out\wsod.o
+echo 内核链接结束
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy test.bmp esp\EFI\BOOT
 copy out\kernel.elf esp

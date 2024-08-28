@@ -14,4 +14,7 @@
 #undef DRAW_CPP
 #endif
 
+extern "C" {
+#include "./efi.h"
+}
 #endif 

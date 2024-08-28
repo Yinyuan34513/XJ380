@@ -1,6 +1,8 @@
 #ifndef _DEFINE_CODE_HPP_
 #define _DEFINE_CODE_HPP_
 
+#include "../global/memory.h"
+
 #include"../efi.h"
 
 // graphics/draw.cpp
@@ -27,5 +29,11 @@ void HEAP_free(void *ptr);
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
 void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
+
+// kernel/wsod.cpp
+void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc);
+
+// kernel/memory.cpp
+int init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP *MemoryMap);
 
 #endif

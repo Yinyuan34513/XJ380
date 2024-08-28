@@ -4,6 +4,8 @@ extern "C" {
 }
 #include "../include/include.h"
 
+struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;
+
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
   char *s = buf + len;
   *--s    = '\0';
@@ -20,6 +22,32 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   char                 str[3]; // 打印用的字符串
   struct EFI_INPUT_KEY key;    // 用于接收按键
 
+  // 初始化GetMemoryMap传入参数结构体（include\global\memory.h > struct MEMORY_MAP）
+  MEMORY_MAP mmp;
+  mmp.MapSize = 4096;
+  mmp.Buffer = NULL;
+  mmp.MapKey = 0;
+  mmp.DescriptorSize = 0;
+  mmp.DescriptorVersion = 0;
+
+  EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
+  GetMemoryMapStatus = SystemTable.BootServices->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData,
+   mmp.MapSize, &mmp.Buffer); // 开辟内存空间存放内存表，有bug
+  if(EFI_ERROR(GetMemoryMapStatus)) {
+    // 无法开辟内存空间
+    WSOD_Cannot_Alloc_MemoryMap(fbc);
+    while (1) { __asm__("hlt"); } // 寄
+  }
+
+  // 获取内存表
+  GetMemoryMapStatus = SystemTable.BootServices->GetMemoryMap(
+    &mmp.MapSize,
+    (EFI_MEMORY_DESCRIPTOR*)mmp.Buffer,
+    &mmp.MapKey,
+    &mmp.DescriptorSize,
+    &mmp.DescriptorVersion
+  );
+
   init_desktop(fbc);
 
   SPP.Reset(&SPP, 0);
@@ -27,6 +55,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 100;
 
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
+  WriteHex(fbc, 500, 500, mmp.MapKey, WHITE);
+
+  //init_MemoryManager(fbc, &mmp); // 这个B玩意儿有BUG！！！！！
+
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {

@@ -130,6 +130,7 @@ enum EFI_MEMORY_TYPE {
   EfiMaxMemoryType
 };
 
+// 36字节大小
 typedef struct {
   UINT32 Type;
   EFI_PHYSICAL_ADDRESS PhysicalStart;
@@ -166,8 +167,7 @@ struct EFI_BOOT_SERVICES {
   EFIAPI EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS Memory, UINTN Pages);
   EFIAPI EFI_STATUS (*GetMemoryMap)(UINTN *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap,
    UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
-  EFIAPI
-  EFI_STATUS (*AllocatePool)(enum EFI_MEMORY_TYPE PoolType, UINTN Size, VOID **Buffer);
+  EFIAPI EFI_STATUS (*AllocatePool)(enum EFI_MEMORY_TYPE PoolType, UINTN Size, VOID **Buffer);
   EFIAPI EFI_STATUS (*FreePool)(VOID *Buffer);
 
   // Event & Timer Services
