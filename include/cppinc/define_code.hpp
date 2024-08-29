@@ -24,7 +24,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 // kernel/wsod.cpp
 void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc);
 
-// kernel/memory.cpp
-int init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP *MemoryMap);
+// kernel/memorym.cpp
+void init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP &MemoryMap);
 
 #endif

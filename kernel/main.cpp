@@ -57,7 +57,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
   WriteHex(fbc, 500, 500, mmp.MapKey, WHITE);
 
-  //init_MemoryManager(fbc, &mmp); // 这个B玩意儿有BUG！！！！！
+  init_MemoryManager(fbc, mmp);
 
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
