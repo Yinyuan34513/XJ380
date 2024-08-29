@@ -39,20 +39,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     while (1) { __asm__("hlt"); } // 寄
   }
 
-  // 获取内存表（bug啊啊啊啊啊啊啊啊啊啊啊啊）
-  GetMemoryMapStatus = SystemTable.BootServices->GetMemoryMap(
+  // 获取内存表
+  SystemTable.BootServices->GetMemoryMap(
     &mmp.MapSize,
     (EFI_MEMORY_DESCRIPTOR*)mmp.Buffer,
     &mmp.MapKey,
     &mmp.DescriptorSize,
     &mmp.DescriptorVersion
   );
-
-  if (EFI_ERROR(GetMemoryMapStatus)) {
-    // 获取内存表失败
-    WSOD_Cannot_Alloc_MemoryMap_2(fbc);
-    while (1) { __asm__("hlt"); } // 寄
-  }
 
   init_desktop(fbc);
 
