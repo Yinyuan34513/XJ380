@@ -1,5 +1,6 @@
 #include "../include/include.h"
 
+/*
 void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc) {
     int scrx = fbc.horizontal_resolution;
     int scry = fbc.vertical_resolution;
@@ -8,3 +9,4 @@ void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc) {
     WriteString(fbc, 8, 24, "Error code: CANNOT_ALLOC_MEMORYMAP", BLACK);
     WriteString(fbc, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", BLACK);
 }
+*/

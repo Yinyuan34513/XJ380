@@ -1,6 +1,7 @@
 // 版权所有©XINGJI Studios 2017-2024 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
 #include "../include/cinclude.h"
+#include "../include/global/memory.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE                *ST;  // 系统表
 struct EFI_BOOT_SERVICES               *BS;  // 启动信息
@@ -115,8 +116,28 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
                    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
 
+EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
+  EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
+  GetMemoryMapStatus = BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize, &MemoryMap->Buffer); // 开辟内存空间存放内存表，有bug
+  if(EFI_ERROR(GetMemoryMapStatus)) {
+    // 无法开辟内存空间
+    puts(L"XJ380 does not boot properly. Please visit "
+         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORYMAP");
+    while (1); // 寄
+  }
+
+  // 获取内存表
+  GetMemoryMapStatus = BS->GetMemoryMap(
+    &MemoryMap->MapSize,
+    (EFI_MEMORY_DESCRIPTOR*)MemoryMap->Buffer,
+    &MemoryMap->MapKey,
+    &MemoryMap->DescriptorSize,
+    &MemoryMap->DescriptorVersion
+  );
+}
+
 typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
-                                                 struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *);
+                                                 struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *, struct MEMORY_MAP *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
@@ -178,8 +199,19 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1);
   }
 
+  MEMORY_MAP MemoryMap;
+  MemoryMap.MapSize = 4096;
+  MemoryMap.Buffer = NULL;
+  MemoryMap.MapKey = 0;
+  MemoryMap.DescriptorSize = 0;
+  MemoryMap.DescriptorVersion = 0;
+
+  GetMMP(&MemoryMap);
+
+  puth(MemoryMap.MapKey);
+  
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable, SPP); // 滚进去！
+  kernel(&config, SystemTable, SPP, &MemoryMap); // 滚进去！
 
   //此处=kernel.elf
 
