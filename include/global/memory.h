@@ -5,10 +5,10 @@
 #include "./stdint.h"
 typedef struct
 {
-    __UINT64_TYPE__ MapSize;
-    void *Buffer;
-    __UINT64_TYPE__ MapKey;
-    __UINT64_TYPE__ DescriptorSize;
-    __UINT32_TYPE__ DescriptorVersion;
+    UINTN MapSize;
+    VOID *Buffer;
+    UINTN MapKey;
+    UINTN DescriptorSize;
+    UINT32 DescriptorVersion;
 } MEMORY_MAP;
 #endif
