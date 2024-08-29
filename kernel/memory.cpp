@@ -1,13 +1,11 @@
 // 内存管理
-extern "C" {
-#include "../include/efi.h"
-}
+//#include "../include/efi.h"
 #include "../include/include.h"
 int init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP *MemoryMap) {
     // 初始化
     //EFI_MEMORY_DESCRIPTOR *EfiMemory = (EFI_MEMORY_DESCRIPTOR *)(MemoryMap->Buffer);
-    int printy = 164;
-    for (int i = 0; i < 2; i++) {
+    //int printy = 164;
+    for (int i = 0; i < 3; i++) {
         //WriteHex(fbc, 8, printy, EfiMemory->Type, WHITE);
         //WriteHex(fbc, 96, printy, EfiMemory->PhysicalStart, WHITE);
         //WriteHex(fbc, 248, printy, EfiMemory->VirtualStart, WHITE);

@@ -92,3 +92,4 @@ Makefile里有一个变量“REL”，填版本。
 - 整理史山头文件
 - 获取MemoryMap（为内存管理做准备）
 - 输出MemoryMap（有BUG，给注释掉了）
+- 修复ld脚本和编译脚本的隐藏bug
