@@ -3,7 +3,7 @@
 #define _MEMORY_H_
 #include "../efi.h"
 #include "./stdint.h"
-typedef struct
+typedef struct __packed
 {
     UINTN MapSize;
     VOID *Buffer;

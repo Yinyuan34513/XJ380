@@ -1,8 +1,8 @@
 #include "../include/efi.h"
 #include "../include/include.h"
-void init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP &MemoryMap) {
+void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     // 初始化
-    EFI_MEMORY_DESCRIPTOR *EfiMemory = (EFI_MEMORY_DESCRIPTOR *)(MemoryMap.Buffer);
+    EFI_MEMORY_DESCRIPTOR *EfiMemory = (EFI_MEMORY_DESCRIPTOR *)(BootConfig->MemoryMap.Buffer);
     int printy = 164;
     for (int i = 0; i < 10; i++) {
         WriteHex(fbc, 8, printy, EfiMemory->Type, WHITE);

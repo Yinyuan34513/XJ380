@@ -9,4 +9,5 @@
 #include "./global/global_color.h"
 #include "./global/memory.h"
 #include "./efi.h"
+#include "./global/boot.h"
 #endif 

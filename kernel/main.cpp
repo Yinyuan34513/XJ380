@@ -13,7 +13,7 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
   return s;
 }
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP, MEMORY_MAP *MemoryMap) {
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP, BOOT_CONFIG *BootConfig) {
   unsigned long long spp_status;
   struct EFI_SIMPLE_POINTER_STATE spp_state;
 
@@ -27,9 +27,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 100;
 
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
-  WriteHex(fbc, 500, 500, MemoryMap->MapKey, WHITE);
+  WriteHex(fbc, 500, 500, BootConfig->MemoryMap.MapKey, WHITE);
 
-  init_MemoryManager(fbc, *MemoryMap);
+  init_MemoryManager(fbc, BootConfig);
 
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住

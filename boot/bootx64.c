@@ -118,7 +118,7 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
 
 EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
   EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
-  GetMemoryMapStatus = BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize, &MemoryMap->Buffer); // 开辟内存空间存放内存表，有bug
+  GetMemoryMapStatus = BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize, &MemoryMap->Buffer); // 开辟内存空间存放内存表
   if(EFI_ERROR(GetMemoryMapStatus)) {
     // 无法开辟内存空间
     puts(L"XJ380 does not boot properly. Please visit "
@@ -134,10 +134,12 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
     &MemoryMap->DescriptorSize,
     &MemoryMap->DescriptorVersion
   );
+
+  return GetMemoryMapStatus;
 }
 
 typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
-                                                 struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *, struct MEMORY_MAP *);
+                                                 struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
@@ -199,19 +201,17 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1);
   }
 
-  MEMORY_MAP MemoryMap;
-  MemoryMap.MapSize = 4096;
-  MemoryMap.Buffer = NULL;
-  MemoryMap.MapKey = 0;
-  MemoryMap.DescriptorSize = 0;
-  MemoryMap.DescriptorVersion = 0;
+  BOOT_CONFIG BootConfig;
+  BootConfig.MemoryMap.MapSize = 4096;
+  BootConfig.MemoryMap.Buffer = NULL;
+  BootConfig.MemoryMap.MapKey = 0;
+  BootConfig.MemoryMap.DescriptorSize = 0;
+  BootConfig.MemoryMap.DescriptorVersion = 0;
 
-  GetMMP(&MemoryMap);
-
-  puth(MemoryMap.MapKey);
+  GetMMP(&BootConfig.MemoryMap);
   
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable, SPP, &MemoryMap); // 滚进去！
+  kernel(&config, SystemTable, SPP, &BootConfig); // 滚进去！
 
   //此处=kernel.elf
 

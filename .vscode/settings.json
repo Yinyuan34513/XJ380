@@ -59,7 +59,13 @@
   "files.associations": {
     "elf.h": "c",
     "efi.h": "c",
-    "global_color.h": "c"
+    "global_color.h": "c",
+    "memory.h": "c",
+    "boot.h": "c",
+    "*.tcc": "c",
+    "cstdlib": "c",
+    "memory": "c",
+    "stdint.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }
