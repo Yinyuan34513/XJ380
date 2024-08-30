@@ -1,4 +1,3 @@
-// 内存管理
 extern "C" {
 #include "../include/efi.h"
 }
@@ -61,35 +60,71 @@ const char* GetMemoryTypeName(uint32_t type) {
     }
 }
 
+// 初始化内存管理器
 int init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP *MemoryMap) {
     // 检查是否有足够的内存描述符
     if (!checkEnoughDescriptors(MemoryMap, 4)) {
-        WSOD_Cannot_Alloc_MemoryMap(fbc);
-        while (1) { __asm__("hlt"); } // 寄
-        // 不足4个描述符，返回错误
+        WriteString(fbc, 28, 24, "Not enough descriptors", WHITE);
+        WSOD_Cannot_Alloc_MemoryMap_2(fbc);
+        while (1) { __asm__("hlt"); } // 无限循环
     }
 
-    EFI_MEMORY_DESCRIPTOR *EfiMemory = (EFI_MEMORY_DESCRIPTOR *)(MemoryMap->Buffer);
-    int printx = 164;
+    // 检查内存对齐
+    if (((uintptr_t)MemoryMap->Buffer & 0x7) != 0) {
+        // 地址不对齐，处理错误
+        WriteString(fbc, 28, 24, "Memory not aligned", WHITE);
+        WSOD_Cannot_Alloc_MemoryMap_2(fbc);
+        while (1) { __asm__("hlt"); } // 无限循环
+    }
+
+    // 检查内存大小
+    if (MemoryMap->MapSize < sizeof(EFI_MEMORY_DESCRIPTOR)) {
+        WriteString(fbc, 28, 24, "Insufficient memory size", WHITE);
+        WSOD_Cannot_Alloc_MemoryMap_2(fbc);
+        while (1) { __asm__("hlt"); } // 无限循环
+    }
+
+    // 输出内存映射基本信息
+    WriteString(fbc, 428, 40, "Map Size:", WHITE);
+    WriteHex(fbc, 428, 56, MemoryMap->MapSize, WHITE);
+    WriteString(fbc, 428, 72, "Map Key:", WHITE);
+    WriteHex(fbc, 428, 88, MemoryMap->MapKey, WHITE);
+    WriteString(fbc, 428, 104, "Descriptor Size:", WHITE);
+    WriteHex(fbc, 428, 120, MemoryMap->DescriptorSize, WHITE);
+    WriteString(fbc, 428, 136, "Descriptor Version:", WHITE);
+    WriteHex(fbc, 428, 152, MemoryMap->DescriptorVersion, WHITE);
+
+    // 转换为EFI_MEMORY_DESCRIPTOR指针
+    EFI_MEMORY_DESCRIPTOR *EfiMemory = (EFI_MEMORY_DESCRIPTOR *)MemoryMap->Buffer;
+    //WriteHex(fbc, 560, 150, (uint64_t)MemoryMap->Buffer, WHITE);
+    int printx = 200;
 
     for (int i = 0; i < 4; i++) {
         // 输出类型
         const char* typeName = GetMemoryTypeName(EfiMemory->Type);
+
+        //WriteHex(fbc, 560, printx, (uint64_t)EfiMemory, WHITE);
+
         //WriteString(fbc, 8, printx, typeName, WHITE); // 输出内存类型字符串
-        WriteHex(fbc, 8, printx, EfiMemory->Type, BLACK); // 输出内存类型十六进制值
+        WriteString(fbc, 8, printx, "type:", WHITE);
+        WriteHex(fbc, 48, printx, EfiMemory->Type, WHITE); // 输出内存类型十六进制值
 
         // 输出起始地址
-        WriteHex(fbc, 96, printx, EfiMemory->PhysicalStart, WHITE);
+        WriteString(fbc, 128, printx, "start address:", WHITE);
+        WriteHex(fbc, 256, printx, EfiMemory->PhysicalStart, WHITE);
 
         // 计算并输出结束地址
         uint64_t endAddress = EfiMemory->PhysicalStart + (EfiMemory->NumberOfPages * 0x1000) - 1;
-        WriteHex(fbc, 224, printx, endAddress, WHITE);
+        WriteString(fbc, 344, printx, "END address:", WHITE);
+        WriteHex(fbc, 456, printx, endAddress, WHITE);
 
         // 输出页数
-        WriteHex(fbc, 8, printx + 16, EfiMemory->NumberOfPages, WHITE);
+        WriteString(fbc, 8, printx+16, "Paginal number:", WHITE);
+        WriteHex(fbc, 136, printx + 16, EfiMemory->NumberOfPages, WHITE);
 
         // 输出属性
-        WriteHex(fbc, 160, printx + 16, EfiMemory->Attribute, WHITE);
+        WriteString(fbc, 217, printx+16, "property:", WHITE);
+        WriteHex(fbc, 297, printx + 16, EfiMemory->Attribute, WHITE);
 
         printx += 32;
         EfiMemory = (EFI_MEMORY_DESCRIPTOR *)((uintptr_t)EfiMemory + MemoryMap->DescriptorSize);

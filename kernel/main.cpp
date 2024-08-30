@@ -1,4 +1,3 @@
-// main.cpp
 extern "C" {
 #include "../include/efi.h"
 }
@@ -54,10 +53,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fontx = 100;
   int fonty = 100;
 
-  WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
-  WriteHex(fbc, 500, 500, mmp.MapKey, WHITE);
-  if (init_MemoryManager(fbc, &mmp) != 0)//寄在这一行了
-  {
+  //WriteString(fbc, 500, 284, "PointerInputOut", WHITE);
+  //WriteHex(fbc, 500, 500, mmp.MapKey, WHITE);
+
+  // 在调用 init_MemoryManager 之前输出一些调试信息
+  WriteString(fbc, 428, 24, "Before init_MemoryManager", WHITE);
+
+  if (init_MemoryManager(fbc, &mmp) != 0) {
     WriteString(fbc, 28, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", BLACK);
     WriteString(fbc, 28, 24, "Error code: MEMORYMAP_ERROR", BLACK);
     WriteString(fbc, 28, 50, "XINGJI Interactive Software - XJ380 Operating System", BLACK);
@@ -87,9 +89,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       // out
       rect(fbc, 300, 300, 820, 348, WIN_BLUE);
 
-      WriteHex(fbc, 300, 300, spp_state.RelativeMovementX, WHITE);
-      WriteHex(fbc, 300, 316, spp_state.RelativeMovementY, WHITE);
-      WriteHex(fbc, 300, 332, spp_state.RelativeMovementZ, WHITE);
+      WriteHex(fbc, 500, 300, spp_state.RelativeMovementX, WHITE);
+      WriteHex(fbc, 500, 316, spp_state.RelativeMovementY, WHITE);
+      WriteHex(fbc, 500, 332, spp_state.RelativeMovementZ, WHITE);
     }
   }
   // 按理来说不可能到这儿
