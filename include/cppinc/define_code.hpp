@@ -1,7 +1,7 @@
 #ifndef _DEFINE_CODE_HPP_
 #define _DEFINE_CODE_HPP_
 
-#include "../global/memory.h"
+#include "../include.h"
 
 #include"../efi.h"
 
@@ -34,7 +34,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc);
 void WSOD_Cannot_Alloc_MemoryMap_2(const FrameBufferConfig &fbc);
 
-// kernel/memory.cpp
-int init_MemoryManager(const FrameBufferConfig &fbc, MEMORY_MAP *MemoryMap);
+// kernel/memorym.cpp
+void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 
 #endif
