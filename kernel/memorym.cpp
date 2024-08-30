@@ -1,8 +1,15 @@
 #include "../include/efi.h"
 #include "../include/include.h"
+typedef struct {
+  UINT32 Type;
+  EFI_PHYSICAL_ADDRESS PhysicalStart;
+  EFI_VIRTUAL_ADDRESS VirtualStart;
+  UINT64 NumberOfPages;
+  UINT64 Attribute;
+} __attribute__((__aligned__(16))) EfiMemoryDesc;
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     // 初始化
-    EFI_MEMORY_DESCRIPTOR *EfiMemory = (EFI_MEMORY_DESCRIPTOR *)(BootConfig->MemoryMap.Buffer);
+    EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
     int printy = 164;
     for (int i = 0; i < 10; i++) {
         WriteHex(fbc, 8, printy, EfiMemory->Type, WHITE);

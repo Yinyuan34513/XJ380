@@ -118,22 +118,29 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
 
 EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
   EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
-  GetMemoryMapStatus = BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize, &MemoryMap->Buffer); // 开辟内存空间存放内存表
-  if(EFI_ERROR(GetMemoryMapStatus)) {
-    // 无法开辟内存空间
-    puts(L"XJ380 does not boot properly. Please visit "
-         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORYMAP");
-    while (1); // 寄
-  }
+  // GetMemoryMapStatus = BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize, &MemoryMap->Buffer); // 开辟内存空间存放内存表
+  // if(EFI_ERROR(GetMemoryMapStatus)) {
+  //   // 无法开辟内存空间
+  //   puts(L"XJ380 does not boot properly. Please visit "
+  //        L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORYMAP");
+  //   while (1); // 寄
+  // }
 
   // 获取内存表
-  GetMemoryMapStatus = BS->GetMemoryMap(
+  while( BS->GetMemoryMap(
     &MemoryMap->MapSize,
     (EFI_MEMORY_DESCRIPTOR*)MemoryMap->Buffer,
     &MemoryMap->MapKey,
     &MemoryMap->DescriptorSize,
     &MemoryMap->DescriptorVersion
-  );
+  ) == EFI_BUFFER_TOO_SMALL) {
+    if (MemoryMap->Buffer) {
+      BS->FreePool(MemoryMap->Buffer);
+      MemoryMap->Buffer = NULL;
+    }
+    BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize * sizeof(EFI_MEMORY_DESCRIPTOR), &MemoryMap->Buffer);
+
+  } 
 
   return GetMemoryMapStatus;
 }

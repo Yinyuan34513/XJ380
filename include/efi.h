@@ -127,15 +127,15 @@ enum EFI_MEMORY_TYPE {
 };
 
 // 36字节大小
-#pragma pack(16)
+
 typedef struct {
   UINT32 Type;
   EFI_PHYSICAL_ADDRESS PhysicalStart;
   EFI_VIRTUAL_ADDRESS VirtualStart;
   UINT64 NumberOfPages;
   UINT64 Attribute;
-} EFI_MEMORY_DESCRIPTOR;
-#pragma pack()
+}  __attribute__((__aligned__(16))) EFI_MEMORY_DESCRIPTOR;
+
 
 static void xmemset(void *dst_, UINT8 value, UINTN size) {
   UINT8 *dst = (UINT8 *)dst_;
