@@ -94,5 +94,5 @@ Makefile里有一个变量“REL”，填版本。
 - 输出MemoryMap（有BUG，给注释掉了）
 - 修复ld脚本和编译脚本的隐藏bug
 ### BuildVersion 11 【已虚拟机测试】
-2024年8月17日 Guoqiyu1115
+2024年8月17日 Guoqiyu1115 & 绿灯
 - 输出MemoryMap
