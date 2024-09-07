@@ -115,7 +115,6 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   BS->OpenProtocol(LIP->DeviceHandle, &sfsp_guid, (void **)&SFSP, ImageHandle, NULL,
                    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
-
 EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
   EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
   // GetMemoryMapStatus = BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize, &MemoryMap->Buffer); // 开辟内存空间存放内存表
@@ -127,6 +126,9 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
   // }
 
   // 获取内存表
+  MemoryMap->Buffer = malloc(MemoryMap->MapSize);
+
+  // 获取内存表
   while( BS->GetMemoryMap(
     &MemoryMap->MapSize,
     (EFI_MEMORY_DESCRIPTOR*)MemoryMap->Buffer,
@@ -135,16 +137,21 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
     &MemoryMap->DescriptorVersion
   ) == EFI_BUFFER_TOO_SMALL) {
     if (MemoryMap->Buffer) {
-      BS->FreePool(MemoryMap->Buffer);
+      free(MemoryMap->Buffer);
       MemoryMap->Buffer = NULL;
     }
-    BS->AllocatePool(EfiLoaderData, MemoryMap->MapSize * sizeof(EFI_MEMORY_DESCRIPTOR), &MemoryMap->Buffer);
 
-  } 
+    // 重新分配更大的缓冲区
+    MemoryMap->Buffer = malloc(MemoryMap->MapSize);
+  }
+
+  // 检查是否成功分配了内存
+  if (!MemoryMap->Buffer) {
+    GetMemoryMapStatus = EFI_OUT_OF_RESOURCES;
+  }
 
   return GetMemoryMapStatus;
 }
-
 typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
                                                  struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *);
 
