@@ -27,7 +27,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
   WriteHex(fbc, 500, 500, BootConfig->MemoryMap.MapKey, WHITE);
-
+  
   init_MemoryManager(fbc, BootConfig);
 
   while (1) {
