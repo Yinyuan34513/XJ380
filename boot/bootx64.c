@@ -199,7 +199,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
-  free(kernel_buffer);        // 释放内核文件，丢掉！
+  //free(kernel_buffer);        // 释放内核文件，丢掉！
 
   struct FrameBufferConfig config = {
       (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
