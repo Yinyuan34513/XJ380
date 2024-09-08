@@ -113,21 +113,22 @@ struct EFI_GUID {
 #define EFI_OPEN_PROTOCOL_EXCLUSIVE           0x00000020
 
 enum EFI_MEMORY_TYPE {
-  EfiReservedMemoryType,  // 0
-  EfiLoaderCode,          // 1
-  EfiLoaderData,          // 2
-  EfiBootServicesCode,    // 3
-  EfiBootServicesData,    // 4
-  EfiRuntimeServicesCode, // 5
-  EfiRuntimeServicesData, // 6
-  EfiConventionalMemory,  // 7
-  EfiUnusableMemory,      // 8
-  EfiACPIReclaimMemory,   // 9
-  EfiACPIMemoryNVS,       // A
-  EfiMemoryMappedIO,      // B
-  EfiMemoryMappedIOPortSpace,   // C
-  EfiPalCode,             // D
-  EfiMaxMemoryType        // E
+  EfiReservedMemoryType,  // 0 不要动为好
+  EfiLoaderCode,          // 1 不要动
+  EfiLoaderData,          // 2 不要动
+  EfiBootServicesCode,    // 3 暂时不要动
+  EfiBootServicesData,    // 4 暂时不要动
+  EfiRuntimeServicesCode, // 5 不要动
+  EfiRuntimeServicesData, // 6 不要动
+  EfiConventionalMemory,  // 7 可以动
+  EfiUnusableMemory,      // 8 可以动
+  EfiACPIReclaimMemory,   // 9 不要动
+  EfiACPIMemoryNVS,       // A 不要动
+  EfiMemoryMappedIO,      // B 不要动
+  EfiMemoryMappedIOPortSpace,   // C 不要动
+  EfiPalCode,             // D 应该可以动
+  EfiPersistentMemory,    // E 应该可以动
+  EfiMaxMemoryType        // F 应该可以动
 };
 
 // 36字节大小
