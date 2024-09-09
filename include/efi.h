@@ -30,10 +30,6 @@ typedef INT64 i64;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
-//typedef unsigned char UINT8;
-//typedef unsigned short UINT16;
-//typedef unsigned int UINT32;
-//typedef unsigned long long UINT64;
 enum EFI_ALLOCATE_TYPE {
   AllocateAnyPages,
   AllocateMaxAddress,
