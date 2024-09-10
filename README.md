@@ -99,3 +99,6 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 13 【已实机测试】
 2024年8月23日 Guoqiyu1115 & chezixiang
 - 修复实机无法输出MemoryMap的问题
+### BuildVersion 14 【已实机测试】
+2024年8月23日 jje
+- 内存合并
