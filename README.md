@@ -100,5 +100,7 @@ Makefile里有一个变量“REL”，填版本。
 2024年8月23日 Guoqiyu1115 & chezixiang
 - 修复实机无法输出MemoryMap的问题
 ### BuildVersion 14 【已实机测试】
-2024年8月23日 jje
+2024年8月23日 jje & Guoqiyu1115
 - 内存合并
+- 修复了内存合并的BUG
+- 输出内存容量

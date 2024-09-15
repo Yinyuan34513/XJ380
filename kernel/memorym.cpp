@@ -8,8 +8,9 @@ typedef struct {
   UINT64 Attribute;
 } __attribute__((__aligned__(16))) EfiMemoryDesc;
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
-    // 初始化
-    EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
+  // 初始化
+  EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
+    /*
     int printy = 164;
     for (int i = 0; i < 10; i++) {
         WriteHex(fbc, 8, printy, EfiMemory->Type, WHITE);
@@ -20,15 +21,16 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
         printy += 32;
         EfiMemory++;
     }
-    OS_MEMORY_DESCRIPTOR *OsMemory = nullptr;
-    int EfiMemoryPageSize = (BootConfig->MemoryMap.MapSize >> 12) + 1;
-    EFI_PHYSICAL_ADDRESS OsMemoryAddress = 0;
-    int EfiDescriptorCount = BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize;
-    for(int i = 0; i < EfiDescriptorCount; i++) {
-    	if(EfiMemoryPageSize < EfiMemory[i].NumberOfPages && EfiMemory[i].Type == 7) {
-    		OsMemoryAddress = EfiMemory[i].PhysicalStart;
-    		OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
-    		break;
+    */
+  OS_MEMORY_DESCRIPTOR *OsMemory = NULL;
+  int EfiMemoryPageSize = (BootConfig->MemoryMap.MapSize >> 12) + 1;
+  EFI_PHYSICAL_ADDRESS OsMemoryAddress = 0;
+  int EfiDescriptorCount = BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize;
+  for(int i = 0; i < EfiDescriptorCount; i++) {
+    if(EfiMemoryPageSize < EfiMemory[i].NumberOfPages && EfiMemory[i].Type == 7) {
+    	OsMemoryAddress = EfiMemory[i].PhysicalStart;
+    	OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
+    	break;
 		}
 	}
 	WriteHex(fbc, 0, 0, (UINT64)OsMemory, WHITE);
@@ -56,4 +58,20 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     OsMemory++;
     OsMemDescNum++;
   }
+  //输出合并后的
+  OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
+  UINT64 TotalMemory = 0;
+  int printy = 164;
+  for (int i = 0; i < OsMemDescNum; i++) {
+      WriteHex(fbc, 8, printy, OsMemory->Type, WHITE);
+      WriteHex(fbc, 96, printy, OsMemory->PhysicalStart, WHITE);
+      WriteHex(fbc, 248, printy, OsMemory->PageSize, WHITE);
+      printy += 16;
+      if(OsMemory->Type != MMIO_MEMORY) {
+        TotalMemory += OsMemory->PageSize;
+      }
+      OsMemory++;
+  }
+  WriteString(fbc, 8, printy, "TotalMemory:", WHITE);
+  WriteHex(fbc, 8, printy + 16, TotalMemory, WHITE);
 }

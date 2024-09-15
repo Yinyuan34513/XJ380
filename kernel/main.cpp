@@ -25,7 +25,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fontx = 100;
   int fonty = 100;
 
-  WriteString(fbc, 300, 284, "PointerInputOut", WHITE);
+  WriteString(fbc, 332, 284, "PointerInputOut", WHITE);
   WriteHex(fbc, 500, 500, BootConfig->MemoryMap.MapKey, WHITE);
   
   init_MemoryManager(fbc, BootConfig);
@@ -54,9 +54,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       // out
       rect(fbc, 300, 300, 820, 348, WIN_BLUE);
 
-      WriteHex(fbc, 500, 300, spp_state.RelativeMovementX, WHITE);
-      WriteHex(fbc, 500, 316, spp_state.RelativeMovementY, WHITE);
-      WriteHex(fbc, 500, 332, spp_state.RelativeMovementZ, WHITE);
+      WriteHex(fbc, 332, 300, spp_state.RelativeMovementX, WHITE);
+      WriteHex(fbc, 332, 316, spp_state.RelativeMovementY, WHITE);
+      WriteHex(fbc, 332, 332, spp_state.RelativeMovementZ, WHITE);
     }
   }
   // 按理来说不可能到这儿
