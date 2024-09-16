@@ -2,6 +2,7 @@ extern "C" {
 #include "../include/efi.h"
 }
 #include "../include/include.h"
+#include "./build_settings.h"
 
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
   char *s = buf + len;
@@ -22,11 +23,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   init_desktop(fbc);
 
   SPP.Reset(&SPP, 0);
-  int fontx = 100;
-  int fonty = 100;
+  int fontx = 8;
+  int fonty = 50;
 
-  WriteString(fbc, 332, 284, "PointerInputOut", WHITE);
-  WriteHex(fbc, 500, 500, BootConfig->MemoryMap.MapKey, WHITE);
+  // DEBUG
+  if (BUILD_EDITION == DEBUG_VERSION) {
+    WriteString(fbc, 8, 34, "KeyboardInputOut", WHITE);
+    WriteString(fbc, 332, 34, "PointerInputOut", WHITE);
+    WriteString(fbc, 300, 480, "MapKey:", WHITE);
+    WriteHex(fbc, 300, 496, BootConfig->MemoryMap.MapKey, WHITE);
+  }
   
   init_MemoryManager(fbc, BootConfig);
 
@@ -39,24 +45,24 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         WriteString(fbc, fontx, fonty, str, WHITE);
         fontx += 8;
       } else if (key.UnicodeChar == L'\r') { // 是换行
-        fontx = 100;
+        fontx = 8;
         fonty += 16;
       } else {                        // 是不可打印字符
         // pass
         fontx += 8;
       }
-      if(fontx > 500){
-        fontx = 100;
+      if(fontx > 304){
+        fontx = 8;
         fonty += 16;
       }
     }
     if (!spp_status) {
       // out
-      rect(fbc, 300, 300, 820, 348, WIN_BLUE);
+      rect(fbc, 314, 42, 600, 82, WIN_BLUE);
 
-      WriteHex(fbc, 332, 300, spp_state.RelativeMovementX, WHITE);
-      WriteHex(fbc, 332, 316, spp_state.RelativeMovementY, WHITE);
-      WriteHex(fbc, 332, 332, spp_state.RelativeMovementZ, WHITE);
+      WriteHex(fbc, 332, 50, spp_state.RelativeMovementX, WHITE);
+      WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
+      WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
     }
   }
   // 按理来说不可能到这儿

@@ -77,8 +77,8 @@ void *malloc(int buf_size) {
   void              *res;
   unsigned long long status;
 
-  status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, buf_size,
-                            &res); // 分配内存，第一个参数是判断LIP是否存在，如果存在就直接拿过来用
+  status = BS->AllocatePool(EfiLoaderData, buf_size,
+                            &res); // 分配内存
   if (status!=EFI_SUCCESS) return NULL;
 
   return res;
@@ -91,7 +91,7 @@ void free(void *buf) {
 EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size) {
   EFI_STATUS           status;
   EFI_PHYSICAL_ADDRESS allocated_addr=addr;
-  status = BS->AllocatePages(AllocateAnyPages, LIP ? LIP->ImageDataType : EfiLoaderData,
+  status = BS->AllocatePages(AllocateAnyPages, EfiLoaderData,
                              (size + 0xfff) / 0x1000, &allocated_addr);
   return status;
 }

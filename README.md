@@ -97,10 +97,14 @@ Makefile里有一个变量“REL”，填版本。
 2024年8月23日 Guoqiyu1115 & 绿灯
 - 输出MemoryMap
 ### BuildVersion 13 【已实机测试】
-2024年8月23日 Guoqiyu1115 & chezixiang
+2024年9月8日 Guoqiyu1115 & chezixiang
 - 修复实机无法输出MemoryMap的问题
 ### BuildVersion 14 【已实机测试】
-2024年8月23日 jje & Guoqiyu1115
+2024年9月15日 jje & Guoqiyu1115
 - 内存合并
 - 修复了内存合并的BUG
 - 输出内存容量
+### BuildVersion 14 【已虚拟机测试】
+2024年9月16日 jje & Guoqiyu1115
+- 修复了把BS也分类为free的BUG
+- 整理debug数据布局
