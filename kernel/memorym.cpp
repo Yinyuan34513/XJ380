@@ -8,6 +8,7 @@ typedef struct {
   UINT64 NumberOfPages;
   UINT64 Attribute;
 } __attribute__((__aligned__(16))) EfiMemoryDesc;
+
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   // 初始化
   EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
@@ -36,8 +37,8 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
 	}
 
   if (BUILD_EDITION == DEBUG_VERSION) {
-    WriteString(fbc, 8, 480, "FirstFreeMemoryAddress:", WHITE);
-    WriteHex(fbc, 8, 496, (UINT64)OsMemory, WHITE);
+    WriteString(fbc, 480, 480, "FirstFreeMemoryAddress:", WHITE);
+    WriteHex(fbc, 480, 496, (UINT64)OsMemory, WHITE);
   }
 
   int OsMemDescNum = 0;
@@ -84,6 +85,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
         OsMemory++;
     }
     WriteString(fbc, 8, printy, "TotalMemory:", WHITE);
-    WriteHex(fbc, 8, printy + 16, TotalMemory, WHITE);
+    WriteString(fbc, 88, printy + 16, "KB", WHITE);
+    WriteDec(fbc, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
   }
 }

@@ -30,8 +30,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   if (BUILD_EDITION == DEBUG_VERSION) {
     WriteString(fbc, 8, 34, "KeyboardInputOut", WHITE);
     WriteString(fbc, 332, 34, "PointerInputOut", WHITE);
-    WriteString(fbc, 300, 480, "MapKey:", WHITE);
-    WriteHex(fbc, 300, 496, BootConfig->MemoryMap.MapKey, WHITE);
+    WriteString(fbc, 316, 480, "MapKey:", WHITE);
+    WriteHex(fbc, 316, 496, BootConfig->MemoryMap.MapKey, WHITE);
   }
   
   init_MemoryManager(fbc, BootConfig);
@@ -58,7 +58,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     }
     if (!spp_status) {
       // out
-      rect(fbc, 314, 42, 600, 82, WIN_BLUE);
+      rect(fbc, 316, 50, 600, 82, WIN_BLUE);
 
       WriteHex(fbc, 332, 50, spp_state.RelativeMovementX, WHITE);
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);

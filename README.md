@@ -108,3 +108,4 @@ Makefile里有一个变量“REL”，填版本。
 2024年9月16日 jje & Guoqiyu1115
 - 修复了把BS也分类为free的BUG
 - 整理debug数据布局
+- 增加十进制输出函数
