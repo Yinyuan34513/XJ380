@@ -15,13 +15,19 @@ void memory_test(const FrameBufferConfig &fbc) {
   void *ptr1 = malloc(16);
   void *ptr2 = malloc(16);
   void *ptr3 = malloc(16);
-  WriteString(fbc, 16, 48, "memory test:", PURPLE);
-  WriteHex(fbc, 16, 64, (size_t)ptr1, PURPLE);
-  WriteHex(fbc, 16, 80, (size_t)ptr2, PURPLE);
-  WriteHex(fbc, 16, 96, (size_t)ptr3, PURPLE);
-  free(ptr1);
+  WriteString(fbc, 440, 132, "MemoryManagerTest:", WHITE);
+  WriteHex(fbc, 440, 148, (size_t)ptr1, WHITE);
+  WriteHex(fbc, 440, 164, (size_t)ptr2, WHITE);
+  WriteHex(fbc, 440, 180, (size_t)ptr3, WHITE);
   free(ptr2);
+  void *ptr4 = malloc(16);
+  WriteHex(fbc, 440, 196, (size_t)ptr4, WHITE);
   free(ptr3);
+  free(ptr4);
+  void *ptr5 = malloc(8192);
+  WriteHex(fbc, 440, 212, (size_t)ptr5, WHITE);
+  free(ptr1);
+  free(ptr5);
 }
 
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
@@ -110,7 +116,6 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     WriteString(fbc, 8, printy, "TotalMemory:", WHITE);
     WriteString(fbc, 88, printy + 16, "KB", WHITE);
     WriteDec(fbc, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
+    memory_test(fbc);
   }
-
-  memory_test(fbc);
 }

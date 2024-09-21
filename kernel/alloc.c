@@ -14,6 +14,7 @@ void memory_init(void *ptr, size_t size) {
   mpool_init(&pool, ptr, size);
 }
 
+// size单位=字节
 void *malloc(size_t size) {
   return mpool_alloc(&pool, size);
 }

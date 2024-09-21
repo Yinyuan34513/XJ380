@@ -32,6 +32,23 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     WriteString(fbc, 332, 34, "PointerInputOut", WHITE);
     WriteString(fbc, 316, 480, "MapKey:", WHITE);
     WriteHex(fbc, 316, 496, BootConfig->MemoryMap.MapKey, WHITE);
+    // 别问为什么这么多-40，问就是因为改起来太麻烦
+    rect(fbc, 480 - 40, 300, 500 - 40, 320, WHITE);
+    rect(fbc, 500 - 40, 300, 520 - 40, 320, BLACK);
+    rect(fbc, 520 - 40, 300, 540 - 40, 320, XINGJI_BLUE);
+    rect(fbc, 540 - 40, 300, 560 - 40, 320, XINGJI_YELLOW);
+    rect(fbc, 560 - 40, 300, 580 - 40, 320, WIN_BLUE);
+    rect(fbc, 580 - 40, 300, 600 - 40, 320, GRAY);
+    rect(fbc, 600 - 40, 300, 620 - 40, 320, BGRAY);
+    rect(fbc, 620 - 40, 300, 640 - 40, 320, PURPLE);
+    rect(fbc, 640 - 40, 300, 660 - 40, 320, PINK);
+    rect(fbc, 660 - 40, 300, 680 - 40, 320, RED);
+    rect(fbc, 680 - 40, 300, 700 - 40, 320, CHINA_RED);
+    rect(fbc, 700 - 40, 300, 720 - 40, 320, GOLD);
+    rect(fbc, 720 - 40, 300, 740 - 40, 320, GREEN);
+    rect(fbc, 740 - 40, 300, 760 - 40, 320, LIGHT_GREEN);
+    rect(fbc, 760 - 40, 300, 780 - 40, 320, BLUE);
+    rect(fbc, 780 - 40, 300, 800 - 40, 320, SKY_BLUE);
   }
   
   init_MemoryManager(fbc, BootConfig);
