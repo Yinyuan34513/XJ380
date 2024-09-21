@@ -104,8 +104,11 @@ Makefile里有一个变量“REL”，填版本。
 - 内存合并
 - 修复了内存合并的BUG
 - 输出内存容量
-### BuildVersion 15 【已虚拟机测试】
+### BuildVersion 15 【已实机测试】
 2024年9月16日 Guoqiyu1115
 - 修复了把BS也分类为free的BUG
 - 整理debug数据布局
 - 增加十进制输出函数
+### BuildVersion 16 【已虚拟机测试】
+2024年9月21日 copi143
+- 内存管理
