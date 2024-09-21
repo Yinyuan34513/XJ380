@@ -1,6 +1,6 @@
-.vscode/*
-out/*
-esp/*
+.vscode
+out
+esp
 serial.log
-.vs/*
+.vs
 test.bmp
