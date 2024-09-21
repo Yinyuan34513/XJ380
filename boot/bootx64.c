@@ -3,12 +3,12 @@
 #include "../include/cinclude.h"
 #include "../include/global/memory.h"
 #define NULL 0
-struct EFI_SYSTEM_TABLE                *ST;  // 系统表
-struct EFI_BOOT_SERVICES               *BS;  // 启动信息
-struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP; // GOP
-struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP;// 文件
-struct EFI_LOADED_IMAGE_PROTOCOL       *LIP; // e?
-struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP; // 鼠标
+struct EFI_SYSTEM_TABLE                *ST;   // 系统表
+struct EFI_BOOT_SERVICES               *BS;   // 启动信息
+struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP;  // GOP
+struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP; // 文件
+struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;  // e?
+struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP;  // 鼠标
 EFI_HANDLE                              IM;
 
 static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf, size_t len,
@@ -73,13 +73,13 @@ void puth(unsigned long long hex) {
   puts(buf);  // 打印
 }
 
-void *malloc(int buf_size) {
+void *malloc(size_t buf_size) {
   void              *res;
   unsigned long long status;
 
   status = BS->AllocatePool(EfiLoaderData, buf_size,
                             &res); // 分配内存
-  if (status!=EFI_SUCCESS) return NULL;
+  if (status != EFI_SUCCESS) return NULL;
 
   return res;
 }
@@ -90,9 +90,9 @@ void free(void *buf) {
 
 EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size) {
   EFI_STATUS           status;
-  EFI_PHYSICAL_ADDRESS allocated_addr=addr;
-  status = BS->AllocatePages(AllocateAnyPages, EfiLoaderData,
-                             (size + 0xfff) / 0x1000, &allocated_addr);
+  EFI_PHYSICAL_ADDRESS allocated_addr = addr;
+  status =
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, (size + 0xfff) / 0x1000, &allocated_addr);
   return status;
 }
 
@@ -129,13 +129,9 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
   MemoryMap->Buffer = malloc(MemoryMap->MapSize);
 
   // 获取内存表
-  while( BS->GetMemoryMap(
-    &MemoryMap->MapSize,
-    (EFI_MEMORY_DESCRIPTOR*)MemoryMap->Buffer,
-    &MemoryMap->MapKey,
-    &MemoryMap->DescriptorSize,
-    &MemoryMap->DescriptorVersion
-  ) == EFI_BUFFER_TOO_SMALL) {
+  while (BS->GetMemoryMap(&MemoryMap->MapSize, (EFI_MEMORY_DESCRIPTOR *)MemoryMap->Buffer,
+                          &MemoryMap->MapKey, &MemoryMap->DescriptorSize,
+                          &MemoryMap->DescriptorVersion) == EFI_BUFFER_TOO_SMALL) {
     if (MemoryMap->Buffer) {
       free(MemoryMap->Buffer);
       MemoryMap->Buffer = NULL;
@@ -146,14 +142,13 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
   }
 
   // 检查是否成功分配了内存
-  if (!MemoryMap->Buffer) {
-    GetMemoryMapStatus = EFI_OUT_OF_RESOURCES;
-  }
+  if (!MemoryMap->Buffer) { GetMemoryMapStatus = EFI_OUT_OF_RESOURCES; }
 
   return GetMemoryMapStatus;
 }
-typedef void (*__attribute__((sysv_abi)) Kernel)(const struct FrameBufferConfig *,
-                                                 struct EFI_SYSTEM_TABLE *, struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *);
+typedef void (*__attribute__((sysv_abi))
+              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *,
+                      struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
@@ -170,20 +165,23 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
-    while (1);
+    while (1)
+      ;
   }
   status = root->Open(root, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
-    while (1);
+    while (1)
+      ;
   }
   status = kernel_file->Read(kernel_file, &kernel_size,
                              kernel_buffer); // 读取内核，直接读到kernel_buffer
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
-    while (1);
+    while (1)
+      ;
   }
 
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel_buffer;
@@ -194,7 +192,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
-    while (1);
+    while (1)
+      ;
   }
 
   CopyLoadSegments(ehdr);     // CV
@@ -209,25 +208,28 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   case PixelRedGreenBlueReserved8BitPerColor: config.pixel_format = kRGBR; break;
   case PixelBlueGreenRedReserved8BitPerColor: config.pixel_format = kBGRR; break;
   default:
-    
+
     puts(L"XJ380 does not boot properly. Please visit "
-         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: UNSUPPORTED_PIXEL_FORMAT");
-    while (1);
+         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+         L"UNSUPPORTED_PIXEL_FORMAT");
+    while (1)
+      ;
   }
 
   BOOT_CONFIG BootConfig;
-  BootConfig.MemoryMap.MapSize = 4096;
-  BootConfig.MemoryMap.Buffer = NULL;
-  BootConfig.MemoryMap.MapKey = 0;
-  BootConfig.MemoryMap.DescriptorSize = 0;
+  BootConfig.MemoryMap.MapSize           = 4096;
+  BootConfig.MemoryMap.Buffer            = NULL;
+  BootConfig.MemoryMap.MapKey            = 0;
+  BootConfig.MemoryMap.DescriptorSize    = 0;
   BootConfig.MemoryMap.DescriptorVersion = 0;
 
   GetMMP(&BootConfig.MemoryMap);
-  
+
   Kernel kernel = (Kernel)entry_addr;
   kernel(&config, SystemTable, SPP, &BootConfig); // 滚进去！
 
   //此处=kernel.elf
 
-  while (1); // 趋势
+  while (1)
+    ; // 趋势
 }
