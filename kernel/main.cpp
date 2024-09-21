@@ -33,6 +33,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     WriteString(fbc, 316, 480, "MapKey:", WHITE);
     WriteHex(fbc, 316, 496, BootConfig->MemoryMap.MapKey, WHITE);
     // 别问为什么这么多-40，问就是因为改起来太麻烦
+    WriteString(fbc, 440, 284, "PrintTestColor", WHITE);
     rect(fbc, 480 - 40, 300, 500 - 40, 320, WHITE);
     rect(fbc, 500 - 40, 300, 520 - 40, 320, BLACK);
     rect(fbc, 520 - 40, 300, 540 - 40, 320, XINGJI_BLUE);
