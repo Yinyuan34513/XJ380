@@ -11,10 +11,14 @@ typedef struct {
 
 extern "C" void memory_init(void *ptr, size_t size);
 
-void memory_test() {
-  void *ptr1 = malloc(1024);
-  void *ptr2 = malloc(1024);
-  void *ptr3 = malloc(1024);
+void memory_test(const FrameBufferConfig &fbc) {
+  void *ptr1 = malloc(16);
+  void *ptr2 = malloc(16);
+  void *ptr3 = malloc(16);
+  WriteString(fbc, 16, 48, "memory test:", PURPLE);
+  WriteHex(fbc, 16, 64, (size_t)ptr1, PURPLE);
+  WriteHex(fbc, 16, 80, (size_t)ptr2, PURPLE);
+  WriteHex(fbc, 16, 96, (size_t)ptr3, PURPLE);
   free(ptr1);
   free(ptr2);
   free(ptr3);
@@ -69,7 +73,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     OsMemory->PageSize      = EfiMemory[i].NumberOfPages;
 
     if (OsMemory->Type == FREE_MEMORY && OsMemory->PageSize > maxpagesize) {
-      maxpageaddr = EfiMemory[i].VirtualStart;
+      maxpageaddr = OsMemory->PhysicalStart;
       maxpagesize = OsMemory->PageSize;
     }
 
@@ -84,7 +88,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     OsMemDescNum++;
   }
 
-  memory_init((void *)maxpageaddr, maxpagesize);
+  memory_init((void *)maxpageaddr, maxpagesize * PAGE_SIZE);
 
   //输出合并后的
   OsMemory           = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
@@ -108,5 +112,5 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     WriteDec(fbc, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
   }
 
-  memory_test();
+  memory_test(fbc);
 }
