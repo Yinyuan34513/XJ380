@@ -65,7 +65,8 @@
     "*.tcc": "c",
     "cstdlib": "c",
     "memory": "c",
-    "stdint.h": "c"
+    "stdint.h": "c",
+    "fbc.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

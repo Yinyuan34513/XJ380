@@ -6,6 +6,7 @@
 #include "./cppinc/GOP.hpp"
 #include "./global/boot.h"
 #include "./cppinc/define_code.hpp"
+#include "./cppinc/sheet.h"
 #include "./global/stdint.h"
 #include "./global/global_color.h"
 #include "./global/memory.h"
