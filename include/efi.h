@@ -240,8 +240,6 @@ struct EFI_BOOT_SERVICES {
 };
 
 struct EFI_RUNTIME_SERVICES { 
-  char _buf1[44];
-
   EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
   EFIAPI VOID (*EfiResetSystem) (EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, 
                                       UINTN DataSize, VOID *ResetData);
@@ -263,8 +261,8 @@ struct EFI_SYSTEM_TABLE {
     UINTN  _buf2[4];
     EFIAPI EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
   }                        *ConOut;
-  UINTN                     _buf3[3];
-  //struct EFI_RUNTIME_SERVICES *RuntimeServices; // 此有bug
+  UINTN                     _buf3[2];
+  struct EFI_RUNTIME_SERVICES *RuntimeServices; // 此有bug
   struct EFI_BOOT_SERVICES *BootServices;
 };
 
