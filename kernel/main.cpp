@@ -4,6 +4,8 @@ extern "C" {
 #include "../include/include.h"
 #include "./build_settings.h"
 
+#define NULL        0
+
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
   char *s = buf + len;
   *--s    = '\0';
@@ -22,6 +24,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   struct EFI_INPUT_KEY key;    // 用于接收按键
 
   EFI_TIME time;
+  EFI_TIME_CAPABILITIES time_capab;
 
   init_desktop(fbc);
 
@@ -53,6 +56,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(fbc, 740 - 40, 300, 760 - 40, 320, LIGHT_GREEN);
     rect(fbc, 760 - 40, 300, 780 - 40, 320, BLUE);
     rect(fbc, 780 - 40, 300, 800 - 40, 320, SKY_BLUE);
+    SystemTable.RuntimeServices->GetTime(&time, &time_capab);
   }
   
   init_MemoryManager(fbc, BootConfig);
@@ -85,6 +89,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
       WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
     }
+    SystemTable.RuntimeServices->GetTime(&time, &time_capab);
+    int scdx = fbc.horizontal_resolution * 0.8125;
+    rect(fbc, scdx - 44, 0, scdx - 4, 24, GRAY);
+    WriteDec(fbc, scdx - 44, 4, time.Hour, BLACK);
+    WriteAscii(fbc, scdx - 28, 4, ':', BLACK);
+    WriteDec(fbc, scdx - 20, 4, time.Minute, BLACK);
   }
   // 按理来说不可能到这儿
 }
