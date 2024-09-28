@@ -87,6 +87,9 @@ typedef VOID *EFI_EVENT;
 #define EFI_FILE_MODE_READ_ONLY  0x00000001
 #define EFI_READ_ONLY  EFI_FILE_MODE_READ_ONLY
 
+#define EFI_RUNTIME_SERVICES_SIGNATURE 0x56524553544e5552
+#define EFI_RUNTIME_SERVICES_REVISION EFI_SPECIFICATION_VERSIONs
+
 #define min(a, b)                ((a) < (b) ? (a) : (b))
 #define max(a, b)                ((a) < (b) ? (b) : (a))
 struct EFI_INPUT_KEY {
@@ -117,7 +120,7 @@ enum EFI_MEMORY_TYPE {
   EfiRuntimeServicesCode, // 5 不要动
   EfiRuntimeServicesData, // 6 不要动
   EfiConventionalMemory,  // 7 可以动
-  EfiUnusableMemory,      // 8 可以动
+  EfiUnusableMemory,      // 8 动不了
   EfiACPIReclaimMemory,   // 9 不要动
   EfiACPIMemoryNVS,       // A 不要动
   EfiMemoryMappedIO,      // B 不要动
@@ -151,6 +154,33 @@ static void *xmemcpy(void *dst_, const void *src_, UINTN size) {
     *dst++ = *src++;
   return (void *)src_;
 }
+
+typedef struct {
+ UINT16 Year;       // 1900 – 9999
+ UINT8 Month;       // 1 – 12
+ UINT8 Day;         // 1 – 31
+ UINT8 Hour;        // 0 – 23
+ UINT8 Minute;      // 0 – 59
+ UINT8 Second;      // 0 – 59
+ UINT8 Pad1;
+ UINT32 Nanosecond; // 0 – 999,999,999
+ INT16 TimeZone;    // -1440 to 1440 or 2047
+ UINT8 Daylight;
+ UINT8 Pad2;
+} EFI_TIME;
+
+typedef struct {
+ UINT32 Resolution;
+ UINT32 Accuracy;
+ BOOLEAN SetsToZero;
+} EFI_TIME_CAPABILITIES;
+
+typedef enum {
+ EfiResetCold,
+ EfiResetWarm,
+ EfiResetShutdown,
+ EfiResetPlatformSpecific
+} EFI_RESET_TYPE;
 
 struct EFI_BOOT_SERVICES {
   char _buf1[24];
@@ -209,6 +239,14 @@ struct EFI_BOOT_SERVICES {
   UINTN _buf12[3];
 };
 
+struct EFI_RUNTIME_SERVICES { 
+  char _buf1[44];
+
+  EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
+  EFIAPI VOID (*EFI_RESET_SYSTEM) (EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, 
+                                      UINTN DataSize, VOID *ResetData);
+};
+
 struct EFI_SYSTEM_TABLE {
   char _buf1[44];
   struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
@@ -226,6 +264,7 @@ struct EFI_SYSTEM_TABLE {
     EFIAPI EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
   }                        *ConOut;
   UINTN                     _buf3[3];
+  //struct EFI_RUNTIME_SERVICES *RuntimeServices;
   struct EFI_BOOT_SERVICES *BootServices;
 };
 
@@ -238,6 +277,41 @@ struct EFI_SIMPLE_POINTER_PROTOCOL {
         struct EFI_SIMPLE_POINTER_PROTOCOL *This,
         struct EFI_SIMPLE_POINTER_STATE *State);
     void *WaitForInput;
+};
+
+enum EFI_BATTERY_CHARGING_STATUS {      
+    EfiBatteryChargingStatusNone,
+    EfiBatteryChargingStatusSuccess,
+    EfiBatteryChargingStatusOverheat,
+    EfiBatteryChargingStatusVoltageOutOfRange,
+    EfiBatteryChargingStatusCurrentOutOfRange,
+    EfiBatteryChargingStatusTimeout,
+    EfiBatteryChargingStatusAborted,
+    EfiBatteryChargingStatusDeviceError,
+    EfiBatteryChargingStatusExtremeCold,
+    EfiBatteryChargingStatusBatteryChargingNotSupported,
+    EfiBatteryChargingStatusBatteryNotDetected,
+    EfiBatteryChargingSourceNotDetected,
+    EfiBatteryChargingSourceVoltageInvalid,
+    EfiBatteryChargingSourceCurrentInvalid,
+    EfiBatteryChargingErrorRequestShutdown,
+    EfiBatteryChargingErrorRequestReboot
+};
+
+struct EFI_BATTERY_CHARGING_COMPLETION_TOKEN {
+  EFI_EVENT Event;
+  enum EFI_BATTERY_CHARGING_STATUS Status;
+};
+
+struct EFI_BATTERY_CHARGING_PROTOCOL {
+  EFIAPI EFI_STATUS (*GetBatteryStatus)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, UINT32 *StateOfCharge,
+                                            UINT32 *RatedCapacity, INT32 *ChargeCurrent);
+  EFIAPI EFI_STATUS (*ChargeBattery)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, UINT32 MaximumCurrent, 
+                                            UINT32 TargetStateOfCharge, struct EFI_BATTERY_CHARGING_COMPLETION_TOKEN *CompletionToken ); 
+  UINT32                                          Revision;
+  EFIAPI EFI_STATUS (*Get_Battery_Information)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, UINT32 *StateOfCharge, 
+                                            INT32 *CurrentIntoBattery, UINT32 *BatteryTerminalVoltage, 
+                                            INT32 *BatteryTemperature, UINT32 *USBCableVoltage, UINT32 *USBCableCurrent);
 };
 
 struct EFI_SIMPLE_POINTER_STATE {

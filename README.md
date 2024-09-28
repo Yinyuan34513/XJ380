@@ -109,6 +109,10 @@ Makefile里有一个变量“REL”，填版本。
 - 修复了把BS也分类为free的BUG
 - 整理debug数据布局
 - 增加十进制输出函数
-### BuildVersion 16 【已虚拟机测试】
+### BuildVersion 16 【已实机测试】
 2024年9月21日 copi143
 - 内存管理
+### BuildVersion 17 【已虚拟机测试】
+2024年9月28日 Guoqiyu1115
+- 可以调用Runtime的东东了
+- 电池信息

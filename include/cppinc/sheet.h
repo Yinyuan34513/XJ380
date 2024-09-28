@@ -5,10 +5,18 @@
 
 #define MAX_SHEET       256
 
+enum SystemSheetType {
+    FixedSheetType,
+    MovableSheetType,
+    TopSheetType
+};
+
 typedef struct SHEET {
     UINT64 *buffer;
     UINT32 bx, by;
     UINT32 width, height;
+    UINT32 flag;
+    UINT32 type;
 };
 
 typedef struct SHEET_INFO
