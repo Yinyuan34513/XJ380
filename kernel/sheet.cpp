@@ -1,6 +1,6 @@
 #include "../include/include.h"
 void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO &sht) {
-    sht.fbc = *fbc;
+    sht.fbc = &fbc;
     sht.scrx = fbc.horizontal_resolution;
     sht.scry = fbc.vertical_resolution;
     for (int i = 0; i < MAX_SHEET; i++) {

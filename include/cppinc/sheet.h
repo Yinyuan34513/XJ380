@@ -14,7 +14,7 @@ enum SystemSheetType {
 };
 
 typedef struct SHEET {
-    UINT64 *buffer;
+    VOID *buffer;
     UINT32 bx, by;
     UINT32 width, height;
     UINT32 flag;
@@ -26,7 +26,7 @@ typedef struct SHEET_INFO
     SHEET sheet[MAX_SHEET];
     UINT32 scrx, scry;
     UINT32 sheet_num;
-    FrameBufferConfig *fbc;
+    const FrameBufferConfig *fbc;
 };
 
 #endif

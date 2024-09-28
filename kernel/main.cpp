@@ -26,6 +26,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   EFI_TIME time;
   EFI_TIME_CAPABILITIES time_capab;
 
+  SHEET_INFO shtinf;
+  init_sheet(fbc, shtinf);
+
   init_desktop(fbc);
 
   SPP.Reset(&SPP, 0);
