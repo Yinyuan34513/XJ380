@@ -9,6 +9,7 @@ struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP;  // GOP
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP; // 文件
 struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;  // e?
 struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP;  // 鼠标
+struct EFI_BATTERY_CHARGING_PROTOCOL   *BAT;  // 电池
 EFI_HANDLE                              IM;
 
 static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf, size_t len,
@@ -112,6 +113,7 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   BS->SetWatchdogTimer(0, 0, 0, NULL); // 别删，不然UEFI会自动重启
   BS->LocateProtocol(&gop_guid, NULL, (void **)&GOP);
   BS->LocateProtocol(&spp_guid, NULL, (void **)&SPP);
+  BS->LocateProtocol(&battery_guid, NULL, (void **)&BAT);
 
   BS->OpenProtocol(ImageHandle, &lip_guid, (void **)&LIP, ImageHandle, NULL,
                    EFI_OPEN_PROTOCOL_GET_PROTOCOL); // 获取LIP
@@ -151,7 +153,7 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
 }
 typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *,
-                      struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *);
+                      struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *, struct EFI_BATTERY_CHARGING_PROTOCOL *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
@@ -229,7 +231,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   GetMMP(&BootConfig.MemoryMap);
 
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable, SPP, &BootConfig); // 滚进去！
+  kernel(&config, SystemTable, SPP, &BootConfig, BAT); // 滚进去！
 
   //此处=kernel.elf
 

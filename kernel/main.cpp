@@ -13,12 +13,15 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
   return s;
 }
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP, BOOT_CONFIG *BootConfig) {
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP, 
+                              BOOT_CONFIG *BootConfig, EFI_BATTERY_CHARGING_PROTOCOL &battery) {
   unsigned long long spp_status;
   struct EFI_SIMPLE_POINTER_STATE spp_state;
 
   char                 str[3]; // 打印用的字符串
   struct EFI_INPUT_KEY key;    // 用于接收按键
+
+  EFI_TIME time;
 
   init_desktop(fbc);
 
