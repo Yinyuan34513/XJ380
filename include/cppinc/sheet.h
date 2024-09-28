@@ -4,6 +4,8 @@
 #include "../include.h"
 
 #define MAX_SHEET       256
+#define NEW_SHEET_X     64
+#define NEW_SHEET_Y     64
 
 enum SystemSheetType {
     FixedSheetType,
