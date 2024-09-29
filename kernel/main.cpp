@@ -29,7 +29,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   SHEET_INFO shtinf;
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   init_sheet(fbc, shtinf);
+  *shtinf.sheet[0].number = 1145;
   create_sheet(shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
+  //desktop_sheet_id = 514; // debug
 
 
   init_desktop(fbc);
@@ -69,8 +71,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     WriteString(fbc, 440, 380, "0xB: EFI Code & Data", WHITE);
 
     WriteString(fbc, 440, 416, "SheetManagerTest", WHITE);
-    WriteHex(fbc, 440, 432, desktop_sheet_id, WHITE);
+    WriteDec(fbc, 440, 432, (UINT64)desktop_sheet_id, WHITE);
     WriteHex(fbc, 440, 448, (UINT64)&desktop_sheet_id, WHITE);
+    WriteDec(fbc, 580, 432, (UINT64)*shtinf.sheet[0].number, WHITE);
+    WriteHex(fbc, 580, 448, (UINT64)&shtinf.sheet[0].number, WHITE);
   }
   
   init_MemoryManager(fbc, BootConfig);

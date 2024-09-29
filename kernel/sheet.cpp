@@ -24,6 +24,7 @@ void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32
                 sht.sheet[i].flag = 1;
                 sht.sheet_num++;
                 *sheet_id = i;
+                sht.sheet[i].number = sheet_id;
                 break;
             }
         }
@@ -39,5 +40,8 @@ void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32
         sht.sheet[index].flag = 1;
         sht.sheet_num++;
         *sheet_id = index;
+        sht.sheet[index].number = sheet_id;
     }
 }
+
+//void delete_sheet(struct SHEET_INFO &sht, UINT16* sheet_id)

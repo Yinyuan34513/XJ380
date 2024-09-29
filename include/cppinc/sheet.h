@@ -17,6 +17,7 @@ struct SHEET {
     UINT32 width, height;
     UINT32 flag;
     UINT32 type;
+    UINT16 *number;
 };
 
 struct SHEET_INFO
