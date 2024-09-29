@@ -32,6 +32,6 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 
 // kernel/sheet.cpp
 void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO &sht);
-void create_sheet(struct SHEET_INFO &sht, UINT32 x, UINT32 y, UINT32 type, INT32 index);
+void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id);
 
 #endif

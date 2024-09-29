@@ -4,8 +4,6 @@
 #include "../include.h"
 
 #define MAX_SHEET       256
-#define NEW_SHEET_X     64
-#define NEW_SHEET_Y     64
 
 enum SystemSheetType {
     FixedSheetType,
@@ -13,7 +11,7 @@ enum SystemSheetType {
     TopSheetType
 };
 
-typedef struct SHEET {
+struct SHEET {
     VOID *buffer;
     UINT32 bx, by;
     UINT32 width, height;
@@ -21,7 +19,7 @@ typedef struct SHEET {
     UINT32 type;
 };
 
-typedef struct SHEET_INFO
+struct SHEET_INFO
 {
     SHEET sheet[MAX_SHEET];
     UINT32 scrx, scry;

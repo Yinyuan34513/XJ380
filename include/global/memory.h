@@ -2,8 +2,9 @@
 #ifndef _MEMORY_H_
 #define _MEMORY_H_
 #define FREE_MEMORY 0
-#define OS_CODE     1
-#define OS_DATA     2
+#define OS_COTA     1     // code&data
+//#define OS_CODE     1
+//#define OS_DATA     2
 #define AP_CODE     3
 #define AP_DATA     4
 #define UEFI_MEMORY 11

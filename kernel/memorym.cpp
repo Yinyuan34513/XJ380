@@ -72,6 +72,9 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
       OsMemory->Type = FREE_MEMORY;
     } else if (EfiMemory[i].Type == EfiMemoryMappedIO) {
       OsMemory->Type = MMIO_MEMORY;
+    } else if (EfiMemory[i].Type == EfiLoaderData || EfiMemory[i].Type == EfiBootServicesData || 
+                  EfiMemory[i].Type == EfiLoaderCode || EfiMemory[i].Type == EfiBootServicesCode) {
+      OsMemory->Type = OS_COTA;
     } else {
       OsMemory->Type = UEFI_MEMORY;
     }
