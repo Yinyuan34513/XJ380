@@ -5,17 +5,21 @@ struct EFI_GUID gEfiSimpleFileSystemProtocolGuid={0x824e5c22, 0x6469, 0x1002, {0
 struct EFI_GUID gEfiFileInfoGuid=                {0x5c4e2f81, 0x7b4a, 0x4d03, {0xa3, 0x9f, 0x4d, 0x56, 0x9e, 0x1a, 0x3f, 0x78}};
 #define NULL 0
 auto operator new(size_t size, void *ptr) -> void * {
-  return ptr;
+    ptr = malloc(size);
+    return ptr;
 }
 
 auto operator new[](size_t size, void *ptr) -> void * {
-  return ptr;
+    ptr = malloc(size);
+    return ptr;
 }
 
 auto operator delete(void *ptr, size_t size) -> void { 
+    free(ptr);
 }
 
 auto operator delete[](void *ptr, size_t size) -> void { 
+    free(ptr);
 }
 
 

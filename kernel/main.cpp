@@ -32,6 +32,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   *shtinf.sheet[0].number = 1145;
   create_sheet(shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   //desktop_sheet_id = 514; // debug
+  //delete_sheet(shtinf, &desktop_sheet_id);
 
 
   init_desktop(fbc);

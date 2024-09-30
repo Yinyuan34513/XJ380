@@ -28,4 +28,13 @@ struct SHEET_INFO
     const FrameBufferConfig *fbc;
 };
 
+struct SHEET_BUFFER
+{
+    UINT8 r;
+    UINT8 g;
+    UINT8 b;
+    UINT8 a;
+};
+
+
 #endif
