@@ -6,6 +6,10 @@
 #include"../efi.h"
 
 // graphics/draw.cpp
+auto operator new(size_t size, void *ptr) -> void *;
+auto operator new[](size_t size, void *ptr) -> void *;
+auto operator delete(void *ptr, size_t size) -> void;
+auto operator delete[](void *ptr, size_t size) -> void;
 void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor& c);
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor& c);
 void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const PixelColor& c);

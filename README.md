@@ -116,3 +116,6 @@ Makefile里有一个变量“REL”，填版本。
 2024年9月28日 Guoqiyu1115
 - 可以调用Runtime的东东了
 - 电池信息
+### BuildVersion 18 【已虚拟机测试】
+2024年9月30日 Guoqiyu1115
+- 图层的分配刷新与释放

@@ -4,8 +4,11 @@ void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO &sht) {
     sht.fbc = &fbc;
     sht.scrx = fbc.horizontal_resolution;
     sht.scry = fbc.vertical_resolution;
+    sht.temp_buffer = malloc(sht.scrx * sht.scry * 4);
+    sht.sheet_num = -1;
     for (int i = 0; i < MAX_SHEET - 1; i++) {
         sht.sheet[i].flag = 0;
+        sht.sheet[i].col_type = NoAlpha;
     }
 }
 
@@ -53,25 +56,50 @@ void delete_sheet(struct SHEET_INFO &sht, UINT16* sheet_id) {
 }
 
 void refresh_sheet(struct SHEET_INFO &sht) {
-    /*
+    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht.temp_buffer);
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  
     static PixelWriter* pixel_writer = nullptr;  
   
     switch (sht.fbc->pixel_format) {  
         case PixelFormat::kRGBR:  
-            pixel_writer = new(pixel_writer_buf) RGBRWriter(sht.fbc); // 使用 placement new  
+            pixel_writer = new(pixel_writer_buf) RGBRWriter(*sht.fbc); // 使用 placement new  
             break;  
         case PixelFormat::kBGRR:  
-            pixel_writer = new(pixel_writer_buf) BGRRWriter(sht.fbc);  
+            pixel_writer = new(pixel_writer_buf) BGRRWriter(*sht.fbc);  
             break;  
         default:  
             break;  
-    }  
-    */
-
-    for (int i = 0; i < MAX_SHEET - 1; i++) {
-        SHEET_BUFFER *EfiMemory = (SHEET_BUFFER *)(sht.sheet[i].buffer);
     }
-   
-    //pixel_writer->Write(x, y, c);
+
+    for (int i = 0; i < sht.sheet_num; i++) {
+        if (sht.sheet[i].col_type == NoAlpha) {
+            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht.sheet[i].buffer);
+            for (int y = sht.sheet[i].by; y < sht.sheet[i].by + sht.sheet[i].height; y++) {
+                for (int x = sht.sheet[i].bx; x < sht.sheet[i].bx + sht.sheet[i].width; x++) {
+                    TempBuffer->r = SheetBuffer->r;
+                    TempBuffer->g = SheetBuffer->g;
+                    TempBuffer->b = SheetBuffer->b;
+                    SheetBuffer++;
+                }
+            }
+        } else {
+            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht.sheet[i].buffer);
+            for (int y = sht.sheet[i].by; y < sht.sheet[i].by + sht.sheet[i].height; y++) {
+                for (int x = sht.sheet[i].bx; x < sht.sheet[i].bx + sht.sheet[i].width; x++) {
+                    //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                    TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
+                    TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
+                    TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
+                    SheetBuffer++;
+                }
+            }
+        }
+    }
+
+    // 刷新
+    for (int y = 0; y < sht.scry; y++) {
+        for (int x = 0; x < sht.scrx; x++) {
+            pixel_writer->Write(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b});
+        }
+    }
 }
