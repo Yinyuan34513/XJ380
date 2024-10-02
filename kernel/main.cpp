@@ -31,12 +31,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   init_sheet(fbc, shtinf);
   *shtinf.sheet[0].number = 1145;
   create_sheet(shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
-  //desktop_sheet_id = 514; // debug
-  //delete_sheet(shtinf, &desktop_sheet_id);
 
   init_desktop(fbc);
 
-  //refresh_sheet(shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
+  //draw_point(shtinf, &desktop_sheet_id, 0, 0, {0, 0, 0, 255});
+  refresh_sheet(shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
 
   SPP.Reset(&SPP, 0);
   int fontx = 8;
@@ -74,9 +73,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     WriteString(fbc, 440, 416, "SheetManagerTest", WHITE);
     WriteDec(fbc, 440, 432, (UINT64)desktop_sheet_id, WHITE);
-    WriteHex(fbc, 440, 448, (UINT64)&desktop_sheet_id, WHITE);
+    WriteHex(fbc, 440, 448, (UINT64)&shtinf.temp_buffer, WHITE);
     WriteDec(fbc, 580, 432, (UINT64)*shtinf.sheet[0].number, WHITE);
-    WriteHex(fbc, 580, 448, (UINT64)&shtinf.sheet[0].number, WHITE);
   }
   
   init_MemoryManager(fbc, BootConfig);

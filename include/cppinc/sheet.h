@@ -35,13 +35,13 @@ struct SHEET_INFO
     const FrameBufferConfig *fbc;
 };
 
-struct SHEET_BUFFER
+typedef struct
 {
     UINT8 r;
     UINT8 g;
     UINT8 b;
     UINT8 a;    // 在TempBuffer里，这个没用
-};
+} SHEET_BUFFER;
 
 
 #endif
