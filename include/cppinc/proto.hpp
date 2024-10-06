@@ -15,6 +15,9 @@ void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor& c);
 void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const PixelColor& c);
 void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,int solid,const PixelColor& c);
 
+// graphics/draw_sheet.cpp
+void draw_point(struct SHEET_INFO &sht, UINT16* sheet_id, int x, int y, const SHEET_BUFFER& color);
+
 // graphics/desktop.cpp
 void init_desktop(const FrameBufferConfig &fbc);
 void init_dock(const FrameBufferConfig &fbc);
@@ -35,7 +38,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 
 // kernel/sheet.cpp
-void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO &sht);
+void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO *sht);
 void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id);
 void delete_sheet(struct SHEET_INFO &sht, UINT16* sheet_id);
 void refresh_sheet(struct SHEET_INFO &sht);

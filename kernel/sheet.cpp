@@ -1,14 +1,26 @@
 #include "../include/include.h"
 
-void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO &sht) {
-    sht.fbc = &fbc;
-    sht.scrx = fbc.horizontal_resolution;
-    sht.scry = fbc.vertical_resolution;
-    sht.temp_buffer = malloc(sht.scrx * sht.scry * 4);
-    sht.sheet_num = -1;
+void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO *sht) {
+    sht->fbc = &fbc;
+    sht->scrx = fbc.horizontal_resolution;
+    sht->scry = fbc.vertical_resolution;
+    sht->temp_buffer = malloc(sht->scrx * sht->scry * 4);
+    sht->sheet_num = -1;
+    /*
+    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+    for (int y = 0; y < sht->scry; y++) {
+        for (int x = 0; x < sht->scrx; x++) {
+            SheetBuffer->r = 0x00;
+            SheetBuffer->g = 0xa2;
+            SheetBuffer->b = 0xe8;
+            SheetBuffer->a = 0xff;
+            SheetBuffer++;
+        }
+    }
+    */
     for (int i = 0; i < MAX_SHEET - 1; i++) {
-        sht.sheet[i].flag = 0;
-        sht.sheet[i].col_type = NoAlpha;
+        sht->sheet[i].flag = 0;
+        sht->sheet[i].col_type = NoAlpha;
     }
 }
 

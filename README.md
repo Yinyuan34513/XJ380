@@ -119,3 +119,6 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 18 【已虚拟机测试】
 2024年9月30日 Guoqiyu1115
 - 图层的分配刷新与释放
+### BuildVersion 18 【已虚拟机测试】
+2024年10月6日 Guoqiyu1115
+- 调整分辨率
