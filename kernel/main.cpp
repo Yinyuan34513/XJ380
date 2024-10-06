@@ -106,12 +106,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
       WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
     }
-    SystemTable.RuntimeServices->GetTime(&time, &time_capab);
-    int scdx = fbc.horizontal_resolution * 0.8125;
-    rect(fbc, scdx - 44, 0, scdx - 4, 24, GRAY);
-    WriteDec(fbc, scdx - 44, 4, time.Hour, BLACK);
-    WriteAscii(fbc, scdx - 28, 4, ':', BLACK);
-    WriteDec(fbc, scdx - 20, 4, time.Minute, BLACK);
+    drawtime(SystemTable,fbc,fbc.horizontal_resolution * 0.8125,0,8);
+    //这玩意默认是0时区(冰岛那里)
   }
   // 按理来说不可能到这儿
 }
