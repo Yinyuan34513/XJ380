@@ -22,7 +22,6 @@ auto operator delete[](void *ptr, size_t size) -> void {
     free(ptr);
 }
 
-
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor& c){
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  
     static PixelWriter* pixel_writer = nullptr;  

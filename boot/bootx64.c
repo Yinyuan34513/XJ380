@@ -151,6 +151,21 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
 
   return GetMemoryMapStatus;
 }
+
+void SwitchToResolution(unsigned int x, unsigned int y)
+{
+    unsigned long long sizeofInfo = 0;
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info;
+    for (unsigned int i = 0; i < GOP->Mode->MaxMode; i++) {
+        GOP->QueryMode(GOP, i, &sizeofInfo, &info);
+
+        if (info->HorizontalResolution == x && info->VerticalResolution == y) {
+            GOP->SetMode(GOP, i);
+        }
+    }
+}
+
+
 typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *,
                       struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *, struct EFI_BATTERY_CHARGING_PROTOCOL *);
@@ -204,6 +219,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
   //free(kernel_buffer);        // 释放内核文件，丢掉！
+
+  SwitchToResolution(1280, 720);
 
   struct FrameBufferConfig config = {
       (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
