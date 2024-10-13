@@ -16,7 +16,7 @@ enum SystemSheetColorType {
     NeedAlpha
 };
 
-struct SHEET {
+typedef struct {
     VOID *buffer;
     UINT32 bx, by;
     UINT32 width, height;
@@ -24,16 +24,16 @@ struct SHEET {
     UINT32 type;
     UINT32 col_type;
     UINT16 *number;
-};
+} SHEET;
 
-struct SHEET_INFO
+typedef struct
 {
     SHEET sheet[MAX_SHEET];
     VOID *temp_buffer;
     UINT32 scrx, scry;
     UINT32 sheet_num;
     const FrameBufferConfig *fbc;
-};
+} SHEET_INFO;
 
 typedef struct
 {

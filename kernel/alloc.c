@@ -8,6 +8,8 @@
 #define try_split_and_free mpool_try_split_and_free
 #include "alloc/pool.c"
 
+#include "../include/cinclude.h"
+
 static struct mpool pool;
 
 void memory_init(void *ptr, size_t size) {

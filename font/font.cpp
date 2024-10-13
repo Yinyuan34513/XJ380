@@ -102,7 +102,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
     if (hex == 0)
         *p++ = '0'; // 如果是0，直接0x0趋势
     else {
-        for (i = 28; i >= 0; i -= 4) { // 每次4位
+        for (i = 48; i >= 0; i -= 4) { // 每次4位
         ch = (hex >> i) & 0xF;       // 0~9, A~F
         // 28（冗余）
         if (flag || ch > 0) { // 跳过前导0

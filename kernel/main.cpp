@@ -1,7 +1,5 @@
-extern "C" {
-#include "../include/efi.h"
-}
 #include "../include/include.h"
+#include "../include/efi.h"
 #include "./build_settings.h"
 
 #define NULL        0
@@ -26,13 +24,19 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   EFI_TIME time;
   EFI_TIME_CAPABILITIES time_capab;
 
+  init_desktop(fbc);
+  
+  init_MemoryManager(fbc, BootConfig);
+
   SHEET_INFO shtinf;
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   init_sheet(fbc, &shtinf);
-  *shtinf.sheet[0].number = 1145;
-  create_sheet(shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
 
-  init_desktop(fbc);
+  void *debug_temp = malloc(32);
+  shtinf.temp_buffer = debug_temp;
+
+  *shtinf.sheet[0].number = 1145;
+  //create_sheet(shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
 
   //draw_point(shtinf, &desktop_sheet_id, 0, 0, {0, 0, 0, 255});
   //refresh_sheet(shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
@@ -43,6 +47,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   // DEBUG
   if (BUILD_EDITION == DEBUG_VERSION) {
+    WriteString(fbc, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 40, "X:", WHITE);
+    WriteString(fbc, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 24, "Y:", WHITE);
+    WriteDec(fbc, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 40, shtinf.scrx, WHITE);
+    WriteDec(fbc, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 24, shtinf.scry, WHITE);
     WriteString(fbc, 8, 34, "KeyboardInputOut", WHITE);
     WriteString(fbc, 332, 34, "PointerInputOut", WHITE);
     WriteString(fbc, 316, 480, "MapKey:", WHITE);
@@ -72,14 +80,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     WriteString(fbc, 440, 400, "SheetManagerTest", WHITE);
     WriteDec(fbc, 440, 416, (UINT64)desktop_sheet_id, WHITE);
-    WriteHex(fbc, 440, 432, (UINT64)shtinf.temp_buffer, WHITE);
     WriteDec(fbc, 580, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
+    
+    WriteHex(fbc, 440, 432, (UINT64)shtinf.temp_buffer, WHITE);
+    //void *temp_shit = malloc(32);
+    //WriteHex(fbc, 440, 432, (UINT64)temp_shit, WHITE);
   }
-  
-  init_MemoryManager(fbc, BootConfig);
 
   while (1) {
-    spp_status = SPP.GetState(&SPP, &spp_state); // 如果这玩意前面有WriteString或者在循环里就会在下面键盘那行卡住
+    spp_status = SPP.GetState(&SPP, &spp_state);
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
       if (key.UnicodeChar != L'\r') { // 是字符
         str[0] = key.UnicodeChar;     // 第一个字符就输出
@@ -109,7 +118,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;
     rect(fbc, scdx - 44, 0, scdx - 4, 24, GRAY);
-    WriteDec(fbc, scdx - 44, 4, time.Hour, BLACK);
+    WriteDec(fbc, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
     WriteAscii(fbc, scdx - 28, 4, ':', BLACK);
     WriteDec(fbc, scdx - 20, 4, time.Minute, BLACK);
   }

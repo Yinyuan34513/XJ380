@@ -1,13 +1,16 @@
 #include "../include/include.h"
+#include "../include/efi.h"
 
-void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO *sht) {
+void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     sht->fbc = &fbc;
     sht->scrx = fbc.horizontal_resolution;
     sht->scry = fbc.vertical_resolution;
-    sht->temp_buffer = malloc(sht->scrx * sht->scry * 4);
+    //sht->temp_buffer = malloc(sht->scrx * sht->scry * 4);
+    sht->temp_buffer = malloc(32);
     sht->sheet_num = -1;
-    /*
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+    //WriteHex(fbc, 440, 432, (UINT64)SheetBuffer, WHITE);
+    /*
     for (int y = 0; y < sht->scry; y++) {
         for (int x = 0; x < sht->scrx; x++) {
             SheetBuffer->r = 0x00;
@@ -16,14 +19,14 @@ void init_sheet(const FrameBufferConfig &fbc, struct SHEET_INFO *sht) {
             SheetBuffer->a = 0xff;
             SheetBuffer++;
         }
-    }
-    */
+    }*/
     for (int i = 0; i < MAX_SHEET - 1; i++) {
         sht->sheet[i].flag = 0;
         sht->sheet[i].col_type = NoAlpha;
     }
 }
 
+/*
 void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id) {
     if (index == -1) // 随便分配
     {
@@ -115,3 +118,4 @@ void refresh_sheet(struct SHEET_INFO &sht) {
         }
     }
 }
+*/
