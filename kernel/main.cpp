@@ -32,9 +32,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   init_sheet(fbc, &shtinf);
 
-  void *debug_temp = malloc(32);
-  shtinf.temp_buffer = debug_temp;
-
   *shtinf.sheet[0].number = 1145;
   //create_sheet(shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
 
@@ -83,8 +80,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     WriteDec(fbc, 580, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
     
     WriteHex(fbc, 440, 432, (UINT64)shtinf.temp_buffer, WHITE);
-    //void *temp_shit = malloc(32);
-    //WriteHex(fbc, 440, 432, (UINT64)temp_shit, WHITE);
   }
 
   while (1) {
