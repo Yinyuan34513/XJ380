@@ -33,16 +33,16 @@ void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, cons
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
 
 // kernel/wsod.cpp
-//void WSOD_Cannot_Alloc_MemoryMap(const FrameBufferConfig &fbc);
+void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc);
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 
 // kernel/sheet.cpp
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
+void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id);
+void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id);
 /*
-void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id);
-void delete_sheet(struct SHEET_INFO &sht, UINT16* sheet_id);
 void refresh_sheet(struct SHEET_INFO &sht);
 */
 

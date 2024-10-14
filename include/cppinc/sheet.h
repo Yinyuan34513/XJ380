@@ -31,7 +31,7 @@ typedef struct
     SHEET sheet[MAX_SHEET];
     VOID *temp_buffer;
     UINT32 scrx, scry;
-    UINT32 sheet_num;
+    INT32 sheet_num;
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 

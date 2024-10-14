@@ -5,10 +5,14 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     sht->fbc = &fbc;
     sht->scrx = fbc.horizontal_resolution;
     sht->scry = fbc.vertical_resolution;
-    sht->temp_buffer = malloc(sht->scrx * sht->scry * 4);
+    //sht->temp_buffer = 0; // 测试WSOD
+    sht->temp_buffer = malloc((sht->scrx * sht->scry * 4) + 4); // 多分配4字节防止溢出啥的
+    if (sht->temp_buffer == NULL) {
+        // 没分配成，去世。
+        WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
+    }
     sht->sheet_num = -1;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
-    //WriteHex(fbc, 440, 432, (UINT64)SheetBuffer, WHITE);
     for (int y = 0; y < sht->scry; y++) {
         for (int x = 0; x < sht->scrx; x++) {
             SheetBuffer->r = 0x00;
@@ -24,50 +28,102 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     }
 }
 
-/*
-void create_sheet(struct SHEET_INFO &sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id) {
-    if (index == -1) // 随便分配
-    {
-        for (int i = MAX_SHEET - 3; i > 1; i--) // 0 1 254 255 保留使用
-        {
-            if (sht.sheet[i].flag == 1 && i < MAX_SHEET - 3) // free
-            {
-                sht.sheet[i + 1].width = x;
-                sht.sheet[i + 1].height = y;
-                sht.sheet[i + 1].buffer = malloc(x * y * 4);
-                sht.sheet[i + 1].bx = bx;
-                sht.sheet[i + 1].by = by;
-                sht.sheet[i + 1].type = type;
-                sht.sheet[i + 1].flag = 1;
-                sht.sheet_num++;
-                *sheet_id = i;
-                sht.sheet[i].number = sheet_id;
-                break;
+void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id) {
+    if (sht->sheet_num >= 253) {
+        // 图层满了，直接去世
+        return;
+    }
+    if (index >= sht->sheet_num) {
+        // 图层高度 > 已有最高图层
+        // 直接分配下一个
+        UINT16 i = sht->sheet_num + 1;
+        *sheet_id = i;
+
+        sht->sheet[i].flag = 1;
+        sht->sheet[i].bx = bx;
+        sht->sheet[i].by = by;
+        sht->sheet[i].width = x;
+        sht->sheet[i].height = y;
+        sht->sheet[i].type = type;
+        sht->sheet[i].number = sheet_id;
+        sht->sheet[i].buffer = malloc((x * y * 4) + 4); // 多分配4字节防止溢出啥的
+
+        sht->sheet_num++;
+    } else if (index >= 0) {
+        // 指定图层高度
+        for (int i = MAX_SHEET - 4; i >= sht->sheet_num; i--) {
+            // 把所有图层位移一下
+            if (sht->sheet[i].flag == 1) {
+                sht->sheet[i + 1].buffer = sht->sheet[i].buffer;
+                sht->sheet[i + 1].bx = sht->sheet[i].bx;
+                sht->sheet[i + 1].by = sht->sheet[i].by;
+                sht->sheet[i + 1].col_type = sht->sheet[i].col_type;
+                sht->sheet[i + 1].height = sht->sheet[i].height;
+                sht->sheet[i + 1].number = sht->sheet[i].number;
+                sht->sheet[i + 1].type = sht->sheet[i].type;
+                sht->sheet[i + 1].width = sht->sheet[i].width;
+
+                sht->sheet[i + 1].flag = 1;
+                sht->sheet[i].flag = 0;
             }
         }
-    }
-    else if (index != -1 && index <= 255)
-    {
-        sht.sheet[index].width = x;
-        sht.sheet[index].height = y;
-        sht.sheet[index].buffer = malloc(x * y * 4);
-        sht.sheet[index].bx = bx;
-        sht.sheet[index].by = by;
-        sht.sheet[index].type = type;
-        sht.sheet[index].flag = 1;
-        sht.sheet_num++;
-        *sheet_id = index;
-        sht.sheet[index].number = sheet_id;
+        // 分配
+        UINT16 i = index;
+        *sheet_id = i;
+
+        sht->sheet[i].flag = 1;
+        sht->sheet[i].bx = bx;
+        sht->sheet[i].by = by;
+        sht->sheet[i].width = x;
+        sht->sheet[i].height = y;
+        sht->sheet[i].type = type;
+        sht->sheet[i].number = sheet_id;
+        sht->sheet[i].buffer = malloc((x * y * 4) + 4); // 多分配4字节防止溢出啥的
+
+        sht->sheet_num++;
+    } else {
+        // 随便分配
+        // 直接分配下一个
+        UINT16 i = sht->sheet_num + 1;
+        *sheet_id = i;
+
+        sht->sheet[i].flag = 1;
+        sht->sheet[i].bx = bx;
+        sht->sheet[i].by = by;
+        sht->sheet[i].width = x;
+        sht->sheet[i].height = y;
+        sht->sheet[i].type = type;
+        sht->sheet[i].number = sheet_id;
+        sht->sheet[i].buffer = malloc((x * y * 4) + 4); // 多分配4字节防止溢出啥的
+
+        sht->sheet_num++;
     }
 }
 
-void delete_sheet(struct SHEET_INFO &sht, UINT16* sheet_id) {
-    free(sht.sheet[*sheet_id].buffer);
-    sht.sheet[*sheet_id].flag = 0;
-    sht.sheet_num--;
-    sht.sheet[*sheet_id].number = 0;
+void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
+    UINT16 i = *sheet_id;
+    sht->sheet[i].flag = 0;
+    free(sht->sheet[i].buffer);
+    for (int j = i; j < MAX_SHEET - 4; j++) {
+        sht->sheet[j].buffer = sht->sheet[j + 1].buffer;
+        sht->sheet[j].bx = sht->sheet[j + 1].bx;
+        sht->sheet[j].by = sht->sheet[j + 1].by;
+        sht->sheet[j].col_type = sht->sheet[j + 1].col_type;
+        sht->sheet[j].height = sht->sheet[j + 1].height;
+        sht->sheet[j].number = sht->sheet[j + 1].number;
+        sht->sheet[j].type = sht->sheet[j + 1].type;
+        sht->sheet[j].width = sht->sheet[j + 1].width;
+
+        sht->sheet[j].flag = 1;
+        sht->sheet[j + 1].flag = 0;
+
+        if (sht->sheet[j + 2].flag == 0) {
+            break;
+        }
+    }
 }
 
+/*
 void refresh_sheet(struct SHEET_INFO &sht) {
     SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht.temp_buffer);
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  

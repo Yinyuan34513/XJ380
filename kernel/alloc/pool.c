@@ -103,7 +103,7 @@ dlexport void *mpool_alloc(mpool_t pool, size_t size) {
   if (ptr == null) ptr = freelist_match(&pool->large_blk, size);
 
   if (ptr == null) { // 不足就分配
-    if (!mpool_reqmem(pool, size)) return 0x114514;
+    if (!mpool_reqmem(pool, size)) return null;
     ptr = freelist_match(&pool->large_blk, size);
   }
 
