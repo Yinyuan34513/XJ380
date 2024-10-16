@@ -42,8 +42,6 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id);
 void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id);
-/*
-void refresh_sheet(struct SHEET_INFO &sht);
-*/
+void refresh_sheet(SHEET_INFO *sht);
 
 #endif

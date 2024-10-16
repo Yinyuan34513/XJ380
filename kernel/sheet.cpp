@@ -33,10 +33,11 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
         // 图层满了，直接去世
         return;
     }
-    if (index >= sht->sheet_num) {
-        // 图层高度 > 已有最高图层
+    if (sht->sheet[index].flag == 0) {
+        // 指定图层高度为空
+        // 非必要不要用
         // 直接分配下一个
-        UINT16 i = sht->sheet_num + 1;
+        UINT16 i = index;
         *sheet_id = i;
 
         sht->sheet[i].flag = 1;
@@ -105,6 +106,9 @@ void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
     sht->sheet[i].flag = 0;
     free(sht->sheet[i].buffer);
     for (int j = i; j < MAX_SHEET - 4; j++) {
+        if (sht->sheet[j + 2].flag == 0) {
+            break;
+        }
         sht->sheet[j].buffer = sht->sheet[j + 1].buffer;
         sht->sheet[j].bx = sht->sheet[j + 1].bx;
         sht->sheet[j].by = sht->sheet[j + 1].by;
@@ -116,35 +120,30 @@ void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
 
         sht->sheet[j].flag = 1;
         sht->sheet[j + 1].flag = 0;
-
-        if (sht->sheet[j + 2].flag == 0) {
-            break;
-        }
     }
 }
 
-/*
-void refresh_sheet(struct SHEET_INFO &sht) {
-    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht.temp_buffer);
+void refresh_sheet(SHEET_INFO *sht) {
+    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  
     static PixelWriter* pixel_writer = nullptr;  
   
-    switch (sht.fbc->pixel_format) {  
+    switch (sht->fbc->pixel_format) {  
         case PixelFormat::kRGBR:  
-            pixel_writer = new(pixel_writer_buf) RGBRWriter(*sht.fbc); // 使用 placement new  
+            pixel_writer = new(pixel_writer_buf) RGBRWriter(*sht->fbc); // 使用 placement new  
             break;  
         case PixelFormat::kBGRR:  
-            pixel_writer = new(pixel_writer_buf) BGRRWriter(*sht.fbc);  
+            pixel_writer = new(pixel_writer_buf) BGRRWriter(*sht->fbc);  
             break;  
         default:  
             break;  
     }
 
-    for (int i = 0; i < sht.sheet_num; i++) {
-        if (sht.sheet[i].col_type == NoAlpha) {
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht.sheet[i].buffer);
-            for (int y = sht.sheet[i].by; y < sht.sheet[i].by + sht.sheet[i].height; y++) {
-                for (int x = sht.sheet[i].bx; x < sht.sheet[i].bx + sht.sheet[i].width; x++) {
+    for (int i = 0; i < sht->sheet_num; i++) {
+        if (sht->sheet[i].col_type == NoAlpha) {
+            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
+            for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
+                for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
                     TempBuffer->r = SheetBuffer->r;
                     TempBuffer->g = SheetBuffer->g;
                     TempBuffer->b = SheetBuffer->b;
@@ -152,9 +151,9 @@ void refresh_sheet(struct SHEET_INFO &sht) {
                 }
             }
         } else {
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht.sheet[i].buffer);
-            for (int y = sht.sheet[i].by; y < sht.sheet[i].by + sht.sheet[i].height; y++) {
-                for (int x = sht.sheet[i].bx; x < sht.sheet[i].bx + sht.sheet[i].width; x++) {
+            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
+            for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
+                for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
                     //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
                     TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
                     TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
@@ -166,10 +165,9 @@ void refresh_sheet(struct SHEET_INFO &sht) {
     }
 
     // 刷新
-    for (int y = 0; y < sht.scry; y++) {
-        for (int x = 0; x < sht.scrx; x++) {
+    for (int y = 0; y < sht->scry; y++) {
+        for (int x = 0; x < sht->scrx; x++) {
             pixel_writer->Write(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b});
         }
     }
 }
-*/

@@ -37,7 +37,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   //delete_sheet(&shtinf, &desktop_sheet_id); // Test
 
   //draw_point(shtinf, &desktop_sheet_id, 0, 0, {0, 0, 0, 255});
-  //refresh_sheet(shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
+  refresh_sheet(&shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
 
   SPP.Reset(&SPP, 0);
   int fontx = 8;
