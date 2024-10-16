@@ -17,7 +17,7 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
 void drawtime(EFI_SYSTEM_TABLE &table, const FrameBufferConfig &fbc,const int x,const int y,float UTC);
 
 // graphics/draw_sheet.cpp
-//void draw_point(struct SHEET_INFO &sht, UINT16* sheet_id, int x, int y, const SHEET_BUFFER& color);
+void draw_point(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
 void init_desktop(const FrameBufferConfig &fbc);
