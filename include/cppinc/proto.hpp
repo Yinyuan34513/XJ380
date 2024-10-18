@@ -18,6 +18,8 @@ void drawtime(EFI_SYSTEM_TABLE &table, const FrameBufferConfig &fbc,const int x,
 
 // graphics/draw_sheet.cpp
 void draw_point(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, const SHEET_BUFFER &color);
+void draw_rect(SHEET_INFO *sht, UINT16* sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color);
+void draw_line(SHEET_INFO *sht, UINT16* sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
 void init_desktop(const FrameBufferConfig &fbc);

@@ -36,7 +36,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   //delete_sheet(&shtinf, &desktop_sheet_id); // Test
 
-  draw_point(&shtinf, &desktop_sheet_id, 0, 0, {255, 255, 255, 255});
+  //draw_point(&shtinf, &desktop_sheet_id, 0, 0, {255, 255, 255, 255});
+  //draw_rect(&shtinf, &desktop_sheet_id, 0, 0, 100, 100,{255, 255, 255, 255});
   refresh_sheet(&shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
 
   SPP.Reset(&SPP, 0);

@@ -181,35 +181,6 @@ void circle(const FrameBufferConfig &fbc,int centerX, int centerY, int radius,in
     }
 }  
 
-void drawtime(EFI_SYSTEM_TABLE &table,const FrameBufferConfig &fbc,const int x,const int y,float UTC=0)
-{
-    EFI_TIME time;
-    EFI_TIME_CAPABILITIES time_capab;
-    table.RuntimeServices->GetTime(&time, &time_capab);
-    time.Hour+=UTC;
-     // 处理小时数超过24的情况
-    if (time.Hour >= 24) {
-        time.Hour -= 24;
-        time.Day += 1;
-
-        // 处理日期超过当月最大天数的情况
-        if (time.Day > 31) {
-            time.Day -= 31;
-            time.Month += 1;
-
-            // 处理月份超过12的情况
-            if (time.Month > 12) {
-                time.Month -= 12;
-                time.Year += 1;
-            }
-        }
-    }
-    int scdx = x;//fbc.horizontal_resolution * 0.8125;
-    rect(fbc, scdx - 44, y, scdx - 4, 24, GRAY);
-    WriteDec(fbc, scdx - 44, y+4, time.Hour, BLACK);
-    WriteAscii(fbc, scdx - 28, y+4, ':', BLACK);
-    WriteDec(fbc, scdx - 20, y+4, time.Minute, BLACK);
-}
 /*
 EFI_STATUS ReadBmpFile(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *gST, CHAR16 *FileName, struct BITMAPFILEHEADER *FileHeader, struct BITMAPINFOHEADER *InfoHeader, RGBQUAD **PixelData, UINT32 *BufferSize)
 {
