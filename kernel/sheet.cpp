@@ -19,6 +19,12 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
             SheetBuffer->g = 0x00;
             SheetBuffer->b = 0x00;
             SheetBuffer->a = 0xff;
+            if ((sht->scrx * y + x) % 2 != 0) {
+                SheetBuffer->r = 0xff;
+                SheetBuffer->g = 0xff;
+                SheetBuffer->b = 0xff;
+                SheetBuffer->a = 0xff;
+            }
             SheetBuffer++;
         }
     }
@@ -165,9 +171,11 @@ void refresh_sheet(SHEET_INFO *sht) {
     }
 
     // 刷新
+    SHEET_BUFFER *OutputBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     for (int y = 0; y < sht->scry; y++) {
         for (int x = 0; x < sht->scrx; x++) {
-            pixel_writer->Write(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b});
+            pixel_writer->Write(x, y, {OutputBuffer->r, OutputBuffer->g, OutputBuffer->b});
+            OutputBuffer++;
         }
     }
 }
