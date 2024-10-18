@@ -36,7 +36,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   //delete_sheet(&shtinf, &desktop_sheet_id); // Test
 
-  draw_point(&shtinf, &desktop_sheet_id, 100, 100, {255, 255, 255, 255});
+  draw_point(&shtinf, &desktop_sheet_id, 0, 0, {255, 255, 255, 255});
   refresh_sheet(&shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
 
   SPP.Reset(&SPP, 0);
@@ -81,7 +81,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     WriteDec(fbc, 580, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
     
     WriteHex(fbc, 440, 432, (UINT64)shtinf.temp_buffer, WHITE);
-    WriteHex(fbc, 580, 432, (UINT64)shtinf.sheet[0].buffer, WHITE);
+    WriteDec(fbc, 580, 432, (UINT64)shtinf.sheet_num, WHITE);
+
+    UINT64 *ssbp = (UINT64 *)shtinf.sheet[0].buffer;
+    WriteHex(fbc, 440, 448, (UINT64)*ssbp, WHITE);
+    //WriteDec(fbc, 580, 448, (UINT64)shtinf.sheet_num, WHITE);
   }
 
   while (1) {

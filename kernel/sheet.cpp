@@ -19,12 +19,14 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
             SheetBuffer->g = 0x00;
             SheetBuffer->b = 0x00;
             SheetBuffer->a = 0xff;
+            /*
             if ((sht->scrx * y + x) % 2 != 0) {
                 SheetBuffer->r = 0xff;
                 SheetBuffer->g = 0xff;
                 SheetBuffer->b = 0xff;
                 SheetBuffer->a = 0xff;
             }
+            */
             SheetBuffer++;
         }
     }
@@ -127,6 +129,7 @@ void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
         sht->sheet[j].flag = 1;
         sht->sheet[j + 1].flag = 0;
     }
+    sht->sheet_num--;
 }
 
 void refresh_sheet(SHEET_INFO *sht) {
@@ -145,7 +148,7 @@ void refresh_sheet(SHEET_INFO *sht) {
             break;  
     }
 
-    for (int i = 0; i < sht->sheet_num; i++) {
+    for (int i = 0; i <= sht->sheet_num; i++) {
         if (sht->sheet[i].col_type == NoAlpha) {
             SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
             for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
@@ -153,6 +156,7 @@ void refresh_sheet(SHEET_INFO *sht) {
                     TempBuffer->r = SheetBuffer->r;
                     TempBuffer->g = SheetBuffer->g;
                     TempBuffer->b = SheetBuffer->b;
+                    TempBuffer++;
                     SheetBuffer++;
                 }
             }
@@ -164,6 +168,7 @@ void refresh_sheet(SHEET_INFO *sht) {
                     TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
                     TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
                     TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
+                    TempBuffer++;
                     SheetBuffer++;
                 }
             }
