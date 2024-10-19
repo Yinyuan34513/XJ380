@@ -19,11 +19,11 @@ void init_dock(SHEET_INFO *sht, UINT16* sheet_id)
     int scry = sht->scry;
     int tmpx = scrx  * 0.75;            
     int tmpy = scry - 48;                // 75%
-    draw_rect(sht, sheet_id, 0, scry - 48, tmpx, scry, GRAY);
+    draw_rect(sht, sheet_id, 0, scry - 48, tmpx, scry, DOCK_COL);
 
     for (int y = 0; y <= 47; y++) {
         for (int x = 0; x <= y; x++) {
-            draw_point(sht, sheet_id, x + tmpx, y + tmpy, GRAY);
+            draw_point(sht, sheet_id, x + tmpx, y + tmpy, DOCK_COL);
         }
     }
 
@@ -36,7 +36,7 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16* sheet_id)
     int y1 = 0;
     int x2 = sht->scrx * 0.8125;
     int y2 = 24;
-    draw_rect(sht, sheet_id, x1, y1, x2, y2, GRAY);
+    draw_rect(sht, sheet_id, x1, y1, x2, y2, DOCK_COL);
 
     draw_studio_logo(sht, sheet_id, x1 + 4, 4);
 
