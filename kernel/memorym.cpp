@@ -12,6 +12,7 @@ typedef struct {
 extern "C" void memory_init(void *ptr, size_t size);
 
 void memory_test(const FrameBufferConfig &fbc) {
+  /*
   void *ptr1 = malloc(16);
   void *ptr2 = malloc(16);
   void *ptr3 = malloc(16);
@@ -28,6 +29,7 @@ void memory_test(const FrameBufferConfig &fbc) {
   WriteHex(fbc, 440, 212, (size_t)ptr5, WHITE);
   free(ptr1);
   free(ptr5);
+  */
 }
 
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
@@ -57,10 +59,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     }
   }
 
+  /*
   if (BUILD_EDITION == DEBUG_VERSION) {
     WriteString(fbc, 480, 480, "FirstFreeMemoryAddress:", WHITE);
     WriteHex(fbc, 480, 496, (UINT64)OsMemory, WHITE);
   }
+  */
 
   size_t maxpageaddr = 0;
   size_t maxpagesize = 0;
@@ -99,23 +103,25 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   //输出合并后的
   OsMemory           = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
   UINT64 TotalMemory = 0;
+  /*
   if (BUILD_EDITION == DEBUG_VERSION) {
-    WriteString(fbc, 8, 132, "MemoryMap:", WHITE);
-    WriteString(fbc, 8, 148, "Type", WHITE);
-    WriteString(fbc, 96, 148, "PhysicalStart", WHITE);
-    WriteString(fbc, 248, 148, "PageSize", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 132, "MemoryMap:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 148, "Type", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 96, 148, "PhysicalStart", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 248, 148, "PageSize", WHITE);
     int printy = 164;
     for (int i = 0; i < OsMemDescNum; i++) {
-      WriteHex(fbc, 8, printy, OsMemory->Type, WHITE);
-      WriteHex(fbc, 96, printy, OsMemory->PhysicalStart, WHITE);
-      WriteHex(fbc, 248, printy, OsMemory->PageSize, WHITE);
+      PrintHex(&shtinf, &desktop_sheet_id, 8, printy, OsMemory->Type, WHITE);
+      PrintHex(&shtinf, &desktop_sheet_id, 96, printy, OsMemory->PhysicalStart, WHITE);
+      PrintHex(&shtinf, &desktop_sheet_id, 248, printy, OsMemory->PageSize, WHITE);
       printy += 16;
       if (OsMemory->Type != MMIO_MEMORY) { TotalMemory += OsMemory->PageSize; }
       OsMemory++;
     }
-    WriteString(fbc, 8, printy, "TotalMemory:", WHITE);
-    WriteString(fbc, 88, printy + 16, "KB", WHITE);
-    WriteDec(fbc, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
+    PrintString(&shtinf, &desktop_sheet_id, 8, printy, "TotalMemory:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 88, printy + 16, "KB", WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
     memory_test(fbc);
   }
+  */
 }
