@@ -1,5 +1,5 @@
-#ifndef _XINGJI_LOGO__16PX_HPP_
-#define _XINGJI_LOGO__16PX_HPP_
+#ifndef _MOUSE_HPP_
+#define _MOUSE_HPP_
 
 char mouse[22][11] = {
     "@.........",
