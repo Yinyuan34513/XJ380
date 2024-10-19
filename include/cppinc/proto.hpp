@@ -22,7 +22,7 @@ void draw_rect(SHEET_INFO *sht, UINT16* sheet_id, int x1, int y1, int x2, int y2
 void draw_line(SHEET_INFO *sht, UINT16* sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
-void init_desktop(SHEET_INFO *sht, UINT16* sheet_id);
+void init_desktop(SHEET_INFO *sht, UINT16* sheet_id, UINT16* dock_sheet_id);
 void init_dock(SHEET_INFO *sht, UINT16* sheet_id);
 void init_shortcut_dock(SHEET_INFO *sht, UINT16* sheet_id);
 void draw_logo(SHEET_INFO *sht, UINT16* sheet_id, int xi, int yi);

@@ -3,14 +3,14 @@
 #include "xingji_logo_16px.hpp"
 
 //初始化桌面
-void init_desktop(SHEET_INFO *sht, UINT16* sheet_id)
+void init_desktop(SHEET_INFO *sht, UINT16* sheet_id, UINT16* dock_sheet_id)
 {
     int scrx = sht->scrx;
     int scry = sht->scry;
     //#136dff
     draw_rect(sht, sheet_id, 0, 0, scrx, scry, WIN_BLUE);
-    init_dock(sht, sheet_id);
-    init_shortcut_dock(sht, sheet_id);
+    init_dock(sht, dock_sheet_id);
+    init_shortcut_dock(sht, dock_sheet_id);
 }
 
 void init_dock(SHEET_INFO *sht, UINT16* sheet_id)

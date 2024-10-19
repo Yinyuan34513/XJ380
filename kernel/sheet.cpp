@@ -19,14 +19,12 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
             SheetBuffer->g = 0x00;
             SheetBuffer->b = 0x00;
             SheetBuffer->a = 0xff;
-            /*
             if ((sht->scrx * y + x) % 2 != 0) {
                 SheetBuffer->r = 0xff;
                 SheetBuffer->g = 0xff;
                 SheetBuffer->b = 0xff;
                 SheetBuffer->a = 0xff;
             }
-            */
             SheetBuffer++;
         }
     }
@@ -107,6 +105,20 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
 
         sht->sheet_num++;
     }
+
+    int tx = sht->sheet[*sheet_id].width;
+    int ty = sht->sheet[*sheet_id].height;
+    sht->sheet[*sheet_id].col_type = NeedAlpha;
+    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[*sheet_id].buffer);
+    for (int y = 0; y < tx; y++) {
+        for (int x = 0; x < ty; x++) {
+            SheetBuffer->r = 0x00;
+            SheetBuffer->g = 0x00;
+            SheetBuffer->b = 0x00;
+            SheetBuffer->a = 0x00;
+            SheetBuffer++;
+        }
+    }
 }
 
 void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
@@ -133,7 +145,6 @@ void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
 }
 
 void refresh_sheet(SHEET_INFO *sht) {
-    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];  
     static PixelWriter* pixel_writer = nullptr;  
   
@@ -148,28 +159,38 @@ void refresh_sheet(SHEET_INFO *sht) {
             break;  
     }
 
-    for (int i = 0; i <= sht->sheet_num; i++) {
-        if (sht->sheet[i].col_type == NoAlpha) {
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-            for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
-                for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
-                    TempBuffer->r = SheetBuffer->r;
-                    TempBuffer->g = SheetBuffer->g;
-                    TempBuffer->b = SheetBuffer->b;
-                    TempBuffer++;
-                    SheetBuffer++;
-                }
+    for (int i = 0; i < MAX_SHEET; i++) {
+        if (sht->sheet[i].flag == 1) {
+            if (i == 254) {
+                UINT16 temp = 0;
+                PrintFont(sht, &temp, 0, 0, '1', WHITE);
             }
-        } else {
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-            for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
-                for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
-                    //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                    TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
-                    TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
-                    TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
-                    TempBuffer++;
-                    SheetBuffer++;
+            SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+            if (sht->sheet[i].col_type == NoAlpha) {
+                SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
+                SheetBuffer += (sht->scrx * sht->sheet[i].by + sht->sheet[i].bx);
+                for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
+                    for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
+                        TempBuffer->r = SheetBuffer->r;
+                        TempBuffer->g = SheetBuffer->g;
+                        TempBuffer->b = SheetBuffer->b;
+                        TempBuffer++;
+                        SheetBuffer++;
+                    }
+                    TempBuffer += (sht->scrx - sht->sheet[i].width);
+                }
+            } else {
+                SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
+                for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
+                    for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
+                        //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                        TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
+                        TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
+                        TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
+                        TempBuffer++;
+                        SheetBuffer++;
+                    }
+                    TempBuffer += (sht->scrx - sht->sheet[i].width);
                 }
             }
         }
