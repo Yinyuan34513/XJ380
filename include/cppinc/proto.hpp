@@ -28,6 +28,10 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16* sheet_id);
 void draw_logo(SHEET_INFO *sht, UINT16* sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16* sheet_id, int xi, int yi);
 
+// graphics/mouse.cpp
+void draw_mouse(SHEET_INFO *sht, UINT16* sheet_id);
+void move_mouse(SHEET_INFO *sht, UINT16* sheet_id, int px, int py);
+
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
 void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec, const PixelColor &c);

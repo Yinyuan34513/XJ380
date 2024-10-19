@@ -161,16 +161,12 @@ void refresh_sheet(SHEET_INFO *sht) {
 
     for (int i = 0; i < MAX_SHEET; i++) {
         if (sht->sheet[i].flag == 1) {
-            if (i == 254) {
-                UINT16 temp = 0;
-                PrintFont(sht, &temp, 0, 0, '1', WHITE);
-            }
             SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+            TempBuffer += (sht->scrx * sht->sheet[i].by + sht->sheet[i].bx);
             if (sht->sheet[i].col_type == NoAlpha) {
                 SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-                SheetBuffer += (sht->scrx * sht->sheet[i].by + sht->sheet[i].bx);
-                for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
-                    for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
+                for (int y = 0; y < sht->sheet[i].height; y++) {
+                    for (int x = 0; x < sht->sheet[i].width; x++) {
                         TempBuffer->r = SheetBuffer->r;
                         TempBuffer->g = SheetBuffer->g;
                         TempBuffer->b = SheetBuffer->b;
@@ -181,8 +177,8 @@ void refresh_sheet(SHEET_INFO *sht) {
                 }
             } else {
                 SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-                for (int y = sht->sheet[i].by; y < sht->sheet[i].by + sht->sheet[i].height; y++) {
-                    for (int x = sht->sheet[i].bx; x < sht->sheet[i].bx + sht->sheet[i].width; x++) {
+                for (int y = 0; y < sht->sheet[i].height; y++) {
+                    for (int x = 0; x < sht->sheet[i].width; x++) {
                         //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
                         TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
                         TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;

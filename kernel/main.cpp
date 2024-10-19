@@ -29,11 +29,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   SHEET_INFO shtinf;
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   UINT16 dock_sheet_id = 1145;
+  UINT16 mouse_sheet_id = 1145;
   init_sheet(fbc, &shtinf);
 
   *shtinf.sheet[0].number = 1145;
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
+  create_sheet(&shtinf, 128, 128, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
   //delete_sheet(&shtinf, &desktop_sheet_id); // Test
 
   //draw_point(&shtinf, &desktop_sheet_id, 0, 0, {255, 255, 255, 255});
@@ -87,10 +89,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     UINT32 *ssbp = (UINT32 *)shtinf.sheet[0].buffer;
     PrintHex(&shtinf, &desktop_sheet_id, 8, 448, (UINT32)*ssbp, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 148, 448, (UINT64)shtinf.sheet[0].flag, WHITE);
+    PrintHex(&shtinf, &desktop_sheet_id, 148, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, 650, 480, 700, {0x00, 0xa2, 0xe8, 0xff});
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
   }
+
+  draw_mouse(&shtinf, &mouse_sheet_id);
 
   refresh_sheet(&shtinf);   // 刷新
 
@@ -101,6 +105,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';                // 第二个字符是\0，结束符
         PrintString(&shtinf, &desktop_sheet_id, fontx, fonty, str, WHITE);
+        refresh_sheet(&shtinf);   // 刷新
         fontx += 8;
       } else if (key.UnicodeChar == L'\r') { // 是换行
         fontx = 8;
@@ -123,6 +128,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
       WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
       */
+      int sppx = spp_state.RelativeMovementX;
+      int sppy = spp_state.RelativeMovementY;
+      sppx /= 0x2000;
+      sppy /= 0x2000;
+      move_mouse(&shtinf, &mouse_sheet_id, sppx, sppy);
+      SPP.Reset(&SPP, 0);
+      refresh_sheet(&shtinf);   // 刷新
     }
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;

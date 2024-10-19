@@ -1,7 +1,7 @@
 #include "../include/include.h"
 void draw_point(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, const SHEET_BUFFER &color) {
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[*sheet_id].buffer);
-    SheetBuffer += (sht->scrx * y + x);
+    SheetBuffer += (sht->sheet[*sheet_id].width * y + x);
     if (color.a != 255){
         sht->sheet[*sheet_id].col_type = NeedAlpha;
     }
