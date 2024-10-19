@@ -22,17 +22,21 @@ void draw_rect(SHEET_INFO *sht, UINT16* sheet_id, int x1, int y1, int x2, int y2
 void draw_line(SHEET_INFO *sht, UINT16* sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
-void init_desktop(const FrameBufferConfig &fbc);
-void init_dock(const FrameBufferConfig &fbc);
-void init_shortcut_dock(const FrameBufferConfig &fbc);
-void draw_logo(const FrameBufferConfig &fbc, int xi, int yi);
-void draw_studio_logo(const FrameBufferConfig &fbc, int xi, int yi);
+void init_desktop(SHEET_INFO *sht, UINT16* sheet_id);
+void init_dock(SHEET_INFO *sht, UINT16* sheet_id);
+void init_shortcut_dock(SHEET_INFO *sht, UINT16* sheet_id);
+void draw_logo(SHEET_INFO *sht, UINT16* sheet_id, int xi, int yi);
+void draw_studio_logo(SHEET_INFO *sht, UINT16* sheet_id, int xi, int yi);
 
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
 void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec, const PixelColor &c);
 void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
+void PrintFont(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, char ch, const SHEET_BUFFER &color);
+void PrintString(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color);
+void PrintHex(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color);
+void PrintDec(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color);
 
 // kernel/wsod.cpp
 void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc);

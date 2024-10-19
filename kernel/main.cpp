@@ -23,8 +23,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   EFI_TIME time;
   EFI_TIME_CAPABILITIES time_capab;
-
-  init_desktop(fbc);
   
   init_MemoryManager(fbc, BootConfig);
 
@@ -38,6 +36,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   //draw_point(&shtinf, &desktop_sheet_id, 0, 0, {255, 255, 255, 255});
   //draw_rect(&shtinf, &desktop_sheet_id, 0, 0, 100, 100,{255, 255, 255, 255});
+
+  init_desktop(&shtinf, &desktop_sheet_id);
   refresh_sheet(&shtinf);  // debug，运行之后如果桌面和快捷栏等init_desktop的内容没了就代表成功
 
   SPP.Reset(&SPP, 0);
@@ -45,6 +45,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 50;
 
   // DEBUG
+  /*
   if (BUILD_EDITION == DEBUG_VERSION) {
     WriteString(fbc, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 40, "X:", WHITE);
     WriteString(fbc, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 24, "Y:", WHITE);
@@ -88,6 +89,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     WriteHex(fbc, 440, 448, (UINT64)*ssbp, WHITE);
     //WriteDec(fbc, 580, 448, (UINT64)shtinf.sheet_num, WHITE);
   }
+  */
 
   while (1) {
     spp_status = SPP.GetState(&SPP, &spp_state);
@@ -95,7 +97,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       if (key.UnicodeChar != L'\r') { // 是字符
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';                // 第二个字符是\0，结束符
-        WriteString(fbc, fontx, fonty, str, WHITE);
+        //WriteString(fbc, fontx, fonty, str, WHITE);
         fontx += 8;
       } else if (key.UnicodeChar == L'\r') { // 是换行
         fontx = 8;
@@ -111,18 +113,22 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     }
     if (!spp_status) {
       // out
+      /*
       rect(fbc, 316, 50, 600, 82, WIN_BLUE);
 
       WriteHex(fbc, 332, 50, spp_state.RelativeMovementX, WHITE);
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
       WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
+      */
     }
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;
+    /*
     rect(fbc, scdx - 44, 0, scdx - 4, 24, GRAY);
     WriteDec(fbc, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
     WriteAscii(fbc, scdx - 28, 4, ':', BLACK);
     WriteDec(fbc, scdx - 20, 4, time.Minute, BLACK);
+    */
   }
   // 按理来说不可能到这儿
 }

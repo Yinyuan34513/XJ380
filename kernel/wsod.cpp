@@ -1,5 +1,6 @@
 #include "../include/include.h"
 
+/*
 void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc) {
     int scrx = fbc.horizontal_resolution;
     int scry = fbc.vertical_resolution;
@@ -9,3 +10,4 @@ void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc) {
     WriteString(fbc, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", BLACK);
     while (1) { __asm__("hlt"); };
 }
+*/

@@ -12,6 +12,7 @@ typedef struct {
 extern "C" void memory_init(void *ptr, size_t size);
 
 void memory_test(const FrameBufferConfig &fbc) {
+  /*
   void *ptr1 = malloc(16);
   void *ptr2 = malloc(16);
   void *ptr3 = malloc(16);
@@ -28,6 +29,7 @@ void memory_test(const FrameBufferConfig &fbc) {
   WriteHex(fbc, 440, 212, (size_t)ptr5, WHITE);
   free(ptr1);
   free(ptr5);
+  */
 }
 
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
@@ -57,10 +59,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     }
   }
 
+  /*
   if (BUILD_EDITION == DEBUG_VERSION) {
     WriteString(fbc, 480, 480, "FirstFreeMemoryAddress:", WHITE);
     WriteHex(fbc, 480, 496, (UINT64)OsMemory, WHITE);
   }
+  */
 
   size_t maxpageaddr = 0;
   size_t maxpagesize = 0;
@@ -99,6 +103,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   //输出合并后的
   OsMemory           = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
   UINT64 TotalMemory = 0;
+  /*
   if (BUILD_EDITION == DEBUG_VERSION) {
     WriteString(fbc, 8, 132, "MemoryMap:", WHITE);
     WriteString(fbc, 8, 148, "Type", WHITE);
@@ -118,4 +123,5 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     WriteDec(fbc, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
     memory_test(fbc);
   }
+  */
 }

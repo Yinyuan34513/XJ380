@@ -9,7 +9,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     sht->temp_buffer = malloc((sht->scrx * sht->scry * 4) + 4); // 多分配4字节防止溢出啥的
     if (sht->temp_buffer == NULL) {
         // 没分配成，去世。
-        WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
+        //WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
     }
     sht->sheet_num = -1;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
