@@ -40,37 +40,47 @@ Makefile里有一个变量“REL”，填版本。
 正式版：XJ380_RELEASE_V<大版本号><br>
 <br>
 自己玩的话愿意叫啥叫啥。
+
 ## 更新日志
+
 ### BuildVersion 1 【已实机测试】
 2024年8月3日 Guoqiyu1115
 - 可以通过UEFI进行引导
 - 可以输出固定字符串。
+
 ### BuildVersion 2 【已实机测试】
 2024年8月4日 Guoqiyu1115
 - 可以加载内核
 - 写了个内核“kernel.elf”（kernel/main.c）
 - 更新Makefile，可以直接通过虚拟机启动（需OVMF.fd，在tools里已经配置好）。
 - 删除Makefile，可以直接通过脚本“build.bat”直接编译运行一条龙。
+
 ### BuildVersion 3 【已实机测试】
 2024年8月8日 Guoqiyu1115
 - 全彩画图搞定
+
 ### BuildVersion 4 【已实机测试】
 2024年8月8日 Guoqiyu1115
 - 优化画图算法
+
 ### BuildVersion 5 【已虚拟机测试】
 2024年8月9日 wcjbr
 - 拆代码
+
 ### BuildVersion 6 【已实机测试】
 2024年8月9日 wcjbr & Guoqiyu1115
 - 绘图函数
 - 半个任务栏
+
 ### BuildVersion 7 【已实机测试】
 2024年8月9日 wcjbr & Guoqiyu1115
 - ASCII字符显示
 - 任务栏及快捷栏
+
 ### BuildVersion 7 Upgrade 1
 2024年8月10日 Guoqiyu1115
 - 完善快捷栏
+
 ### BuildVersion 8 【已虚拟机测试】
 2024年8月15日 copi143 & min0911Y & Guoqiyu1115 & wcjbr
 - 将SystemTable传入内核
@@ -80,45 +90,64 @@ Makefile里有一个变量“REL”，填版本。
 - 整理史山代码
 - 整理类型定义（详见stdint.h）
 - 整理目录
+
 ### BuildVersion 9 【已实机测试】
 2024年8月16日 Guoqiyu1115 & HlHill
 - 成功获取鼠标输入
 - 弄清楚了导致键盘输入卡住的元凶
+
 ### BuildVersion 10 【已实机测试】
 2024年8月17日 Guoqiyu1115
 - 鼠标数据输出
+
 ### BuildVersion 11 【已实机测试】
 2024年8月22日 Guoqiyu1115
 - 整理史山头文件
 - 获取MemoryMap（为内存管理做准备）
 - 输出MemoryMap（有BUG，给注释掉了）
 - 修复ld脚本和编译脚本的隐藏bug
+
 ### BuildVersion 12 【已虚拟机测试】
 2024年8月23日 Guoqiyu1115 & 绿灯
 - 输出MemoryMap
+
 ### BuildVersion 13 【已实机测试】
 2024年9月8日 Guoqiyu1115 & chezixiang
 - 修复实机无法输出MemoryMap的问题
+
 ### BuildVersion 14 【已实机测试】
 2024年9月15日 jje & Guoqiyu1115
 - 内存合并
 - 修复了内存合并的BUG
 - 输出内存容量
+
 ### BuildVersion 15 【已实机测试】
 2024年9月16日 Guoqiyu1115
 - 修复了把BS也分类为free的BUG
 - 整理debug数据布局
 - 增加十进制输出函数
+
 ### BuildVersion 16 【已实机测试】
 2024年9月21日 copi143
 - 内存管理
+
 ### BuildVersion 17 【已虚拟机测试】
 2024年9月28日 Guoqiyu1115
 - 可以调用Runtime的东东了
 - 电池信息
+
 ### BuildVersion 18 【已虚拟机测试】
 2024年9月30日 Guoqiyu1115
 - 图层的分配刷新与释放
-### BuildVersion 18 【已虚拟机测试】
+
+### BuildVersion 19 【已虚拟机测试】
 2024年10月6日 Guoqiyu1115
 - 调整分辨率
+
+### BuildVersion 20 【已虚拟机测试】
+2024年10月19日 Guoqiyu1115
+- 图层及透明
+
+### BuildVersion 21 【已实机测试】
+2024年10月19日 Guoqiyu1115
+- 鼠标指针
