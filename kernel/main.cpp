@@ -91,7 +91,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     PrintHex(&shtinf, &desktop_sheet_id, 8, 448, (UINT32)*ssbp, WHITE);
     PrintHex(&shtinf, &desktop_sheet_id, 148, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, 650, 480, 700, {0x00, 0xa2, 0xe8, 0xff});
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
   }
 
   draw_mouse(&shtinf, &mouse_sheet_id);
@@ -134,6 +134,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       sppy /= 0x2000;
       move_mouse(&shtinf, &mouse_sheet_id, sppx, sppy);
       SPP.Reset(&SPP, 0);
+      refresh_sheet(&shtinf);   // 刷新
     }
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;
