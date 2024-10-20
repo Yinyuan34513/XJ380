@@ -138,12 +138,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     }
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;
-    /*
-    rect(fbc, scdx - 44, 0, scdx - 4, 24, GRAY);
-    WriteDec(fbc, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
-    WriteAscii(fbc, scdx - 28, 4, ':', BLACK);
-    WriteDec(fbc, scdx - 20, 4, time.Minute, BLACK);
-    */
+    draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
+    PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
+    PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
+    PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
+    refresh_sheet(&shtinf);   // 刷新
   }
   // 按理来说不可能到这儿
 }
