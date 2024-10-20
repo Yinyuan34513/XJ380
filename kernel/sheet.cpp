@@ -167,6 +167,8 @@ void refresh_sheet(SHEET_INFO *sht) {
                         TempBuffer->r = SheetBuffer->r;
                         TempBuffer->g = SheetBuffer->g;
                         TempBuffer->b = SheetBuffer->b;
+                    } else if (SheetBuffer->a == 0) {
+                        // pass
                     } else {
                         TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
                         TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
@@ -205,44 +207,35 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
             break;  
     }
 
+    int vx, vy;
+
     for (int i = 0; i < MAX_SHEET; i++) {
-        if (sht->sheet[i].flag == 1 &&
-                    sht->sheet[i].bx + sht->sheet[i].width >= bex1 && 
-                    sht->sheet[i].by + sht->sheet[i].height >= bey1) {
+        if (sht->sheet[i].flag == 1) {
             SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
             SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-            TempBuffer += (sht->scrx * bey1 + bex1);
-
-            int x_edge;
-            int y_edge;
-
-            if (sht->sheet[i].bx + sht->sheet[i].width > bex2)
-                x_edge = bex2;
-            else
-                x_edge = sht->sheet[i].bx + sht->sheet[i].width;
-
-            if (sht->sheet[i].by + sht->sheet[i].width > bey2)
-                y_edge = bey2;
-            else
-                y_edge = sht->sheet[i].by + sht->sheet[i].height;
-
-            for (int y = bey1; y < y_edge; y++) {
-                for (int x = bex1; x < x_edge; x++) {
-                    //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                    if (SheetBuffer->a == 255) {
-                        TempBuffer->r = SheetBuffer->r;
-                        TempBuffer->g = SheetBuffer->g;
-                        TempBuffer->b = SheetBuffer->b;
-                    } else {
-                        TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
-                        TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
-                        TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
+            TempBuffer += (sht->scrx * sht->sheet[i].by + sht->sheet[i].bx);
+            for (int y = 0; y < sht->sheet[i].height; y++) {
+                vy = sht->sheet[i].by + y;
+                for (int x = 0; x < sht->sheet[i].width; x++) {
+                    vx = sht->sheet[i].bx + x;
+                    if (bex1 <= vx && vx < bex2 && bey1 <= vy && vy < bey2) {
+                        //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                        if (SheetBuffer->a == 255) {
+                            TempBuffer->r = SheetBuffer->r;
+                            TempBuffer->g = SheetBuffer->g;
+                            TempBuffer->b = SheetBuffer->b;
+                        } else if (SheetBuffer->a == 0) {
+                            // pass
+                        } else {
+                            TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
+                            TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
+                            TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
+                        }
                     }
                     TempBuffer++;
                     SheetBuffer++;
                 }
-                TempBuffer += (sht->scrx - bex2 + bex1);
-                SheetBuffer += (sht->sheet[i].width - bex2 + bex1);
+                TempBuffer += (sht->scrx - sht->sheet[i].width);
             }
         }
     }
