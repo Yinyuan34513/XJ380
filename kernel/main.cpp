@@ -105,7 +105,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         str[0] = key.UnicodeChar;     // 第一个字符就输出
         str[1] = '\0';                // 第二个字符是\0，结束符
         PrintString(&shtinf, &desktop_sheet_id, fontx, fonty, str, WHITE);
-        refresh_sheet(&shtinf);   // 刷新
+        refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16);   // 刷新
         fontx += 8;
       } else if (key.UnicodeChar == L'\r') { // 是换行
         fontx = 8;
@@ -142,7 +142,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
     PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
     PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
-    refresh_sheet(&shtinf);   // 刷新
+    //refresh_sheet(&shtinf);   // 刷新
   }
   // 按理来说不可能到这儿
 }
