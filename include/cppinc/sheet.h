@@ -11,18 +11,12 @@ enum SystemSheetType {
     TopSheetType
 };
 
-enum SystemSheetColorType {
-    NoAlpha,
-    NeedAlpha
-};
-
 typedef struct {
     VOID *buffer;
     UINT32 bx, by;
     UINT32 width, height;
     UINT32 flag;
     UINT32 type;
-    UINT32 col_type;
     UINT16 *number;
 } SHEET;
 
