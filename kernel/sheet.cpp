@@ -242,10 +242,12 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
     // 刷新
     SHEET_BUFFER *OutputBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+    OutputBuffer += (sht->scrx * bey1 + bex1);
     for (int y = bey1; y < bey2; y++) {
         for (int x = bex1; x < bex2; x++) {
             pixel_writer->Write(x, y, {OutputBuffer->r, OutputBuffer->g, OutputBuffer->b});
             OutputBuffer++;
         }
+        OutputBuffer += (sht->scrx - bex2 + bex1);
     }
 }
