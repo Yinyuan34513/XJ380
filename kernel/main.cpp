@@ -128,13 +128,28 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
       WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
       */
+      int tbx = shtinf.sheet[mouse_sheet_id].bx;
+      int tby = shtinf.sheet[mouse_sheet_id].by;
       int sppx = spp_state.RelativeMovementX;
       int sppy = spp_state.RelativeMovementY;
       sppx /= 0x2000;
       sppy /= 0x2000;
+      if (sppx >= shtinf.scrx)
+        sppx = shtinf.scrx - 1;
+      else if (sppx < 0)
+        sppx = 0;
+      if (sppy >= shtinf.scry)
+        sppy = shtinf.scry - 1;
+      if (sppy < 0)
+        sppy = 0;
       move_mouse(&shtinf, &mouse_sheet_id, sppx, sppy);
       SPP.Reset(&SPP, 0);
-      refresh_sheet(&shtinf);   // 刷新
+      refresh_part_sheet(&shtinf, tbx, tby, 
+                                tbx + shtinf.sheet[mouse_sheet_id].width, 
+                                tby + shtinf.sheet[mouse_sheet_id].height);
+      refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
+                                shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
+                                shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
     }
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;
