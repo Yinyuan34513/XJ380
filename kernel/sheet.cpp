@@ -209,6 +209,11 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
     int vx, vy;
 
+    if (bex1 < 0) { bex1 = 0; }
+    if (bey1 < 0) { bey1 = 0; }
+    if (bex2 > sht->scrx) { bex2 = sht->scrx; }
+    if (bey2 > sht->scry) { bey2 = sht->scry; }
+
     for (int i = 0; i < MAX_SHEET; i++) {
         if (sht->sheet[i].flag == 1) {
             SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
