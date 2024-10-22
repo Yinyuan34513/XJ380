@@ -32,6 +32,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   UINT16 mouse_sheet_id = 1145;
   init_sheet(fbc, &shtinf);
 
+  int mouse_x = 128;
+  int mouse_y = 128;
+
   *shtinf.sheet[0].number = 1145;
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
@@ -54,7 +57,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 40, shtinf.scrx, WHITE);
     PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 24, shtinf.scry, WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
+    //PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
     PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BootConfig->MemoryMap.MapKey, WHITE);
     // 别问为什么这么多-40，问就是因为改起来太麻烦
@@ -134,15 +137,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       int sppy = spp_state.RelativeMovementY;
       sppx /= 0x2000;
       sppy /= 0x2000;
-      if (sppx >= shtinf.scrx)
-        sppx = shtinf.scrx - 1;
-      else if (sppx < 0)
-        sppx = 0;
-      if (sppy >= shtinf.scry)
-        sppy = shtinf.scry - 1;
-      if (sppy < 0)
-        sppy = 0;
-      move_mouse(&shtinf, &mouse_sheet_id, sppx, sppy);
+      mouse_x += sppx;
+      mouse_y += sppy;
+      
+      if (mouse_x < 0) { mouse_x = 0; }
+      if (mouse_y < 0) { mouse_y = 0; }
+      if (mouse_x > shtinf.scrx - 1) { mouse_x = shtinf.scrx - 1; }
+      if (mouse_y > shtinf.scry - 1) { mouse_y = shtinf.scry - 1; }
+
+      move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
       SPP.Reset(&SPP, 0);
       refresh_part_sheet(&shtinf, tbx, tby, 
                                 tbx + shtinf.sheet[mouse_sheet_id].width, 

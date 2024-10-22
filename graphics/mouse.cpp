@@ -21,6 +21,6 @@ void draw_mouse(SHEET_INFO *sht, UINT16* sheet_id) {
 }
 
 void move_mouse(SHEET_INFO *sht, UINT16* sheet_id, int px, int py) {
-    sht->sheet[*sheet_id].bx += px;
-    sht->sheet[*sheet_id].by += py;
+    sht->sheet[*sheet_id].bx = px;
+    sht->sheet[*sheet_id].by = py;
 }
