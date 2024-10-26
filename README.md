@@ -152,6 +152,10 @@ Makefile里有一个变量“REL”，填版本。
 2024年10月19日 Guoqiyu1115
 - 鼠标指针
 
-### BuildVersion 22 【已虚拟机测试】
+### BuildVersion 22 【已实机测试】
 2024年10月22日 Guoqiyu1115
 - 修复了鼠标指针溢出的问题
+
+### BuildVersion 23 【已实机测试】
+2024年10月25日 Guoqiyu1115
+- 软关机.exe

@@ -130,6 +130,14 @@ enum EFI_MEMORY_TYPE {
   EfiMaxMemoryType        // F 应该可以动
 };
 
+typedef enum {
+    EfiResetCold,             // 冷重启，断电再通电
+    EfiResetWarm,             // 热重启，初始化为最初状态
+    EfiResetShutdown,         // 软关机，置于ACPI G2、S5（软关机）或G3（断电）状态
+    EfiResetPlatformSpecific  // 非正常冷重启，要传入一段数据
+} EFI_RESET_TYPE;
+
+
 // 36字节大小
 
 typedef struct {
@@ -174,13 +182,6 @@ typedef struct {
  UINT32 Accuracy;
  BOOLEAN SetsToZero;
 } EFI_TIME_CAPABILITIES;
-
-typedef enum {
- EfiResetCold,
- EfiResetWarm,
- EfiResetShutdown,
- EfiResetPlatformSpecific
-} EFI_RESET_TYPE;
 
 struct EFI_BOOT_SERVICES {
   char _buf1[24];
@@ -241,8 +242,17 @@ struct EFI_BOOT_SERVICES {
 
 struct EFI_RUNTIME_SERVICES { 
   char _buf1[24];
+  // Variable Services
+  UINTN _buf2[4];
+
+  // Time Services
   EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
-  EFIAPI VOID (*EfiResetSystem) (EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, 
+  UINTN _buf3[3];
+
+  // Virtual Memory Services
+  UINTN _buf4[2];
+
+  EFIAPI VOID (*ResetSystem) (EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, 
                                       UINTN DataSize, VOID *ResetData);
 };
 

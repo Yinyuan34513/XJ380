@@ -131,6 +131,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
       WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
       WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
       */
+      if (spp_state.LeftButton == 1) {
+        int tx1 = shtinf.scrx * 0.1875;
+        if (mouse_x > tx1 && mouse_x < tx1 + 16 && 
+                mouse_y > 4 && mouse_y < 20) {
+          SystemTable.RuntimeServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
+        }
+      }
       int tbx = shtinf.sheet[mouse_sheet_id].bx;
       int tby = shtinf.sheet[mouse_sheet_id].by;
       int sppx = spp_state.RelativeMovementX;
