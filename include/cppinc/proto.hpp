@@ -43,7 +43,7 @@ void PrintHex(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long lon
 void PrintDec(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color);
 
 // kernel/wsod.cpp
-void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc);
+//void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc);
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);

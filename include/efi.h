@@ -115,8 +115,8 @@ enum EFI_MEMORY_TYPE {
   EfiReservedMemoryType,  // 0 不要动为好
   EfiLoaderCode,          // 1 不要动
   EfiLoaderData,          // 2 不要动
-  EfiBootServicesCode,    // 3 暂时不要动
-  EfiBootServicesData,    // 4 暂时不要动
+  EfiBootServicesCode,    // 3 永远怀念
+  EfiBootServicesData,    // 4 永远怀念
   EfiRuntimeServicesCode, // 5 不要动
   EfiRuntimeServicesData, // 6 不要动
   EfiConventionalMemory,  // 7 可以动
@@ -237,7 +237,9 @@ struct EFI_BOOT_SERVICES {
   UINTN _buf11;
 
   // Miscellaneous Services
-  UINTN _buf12[3];
+  UINTN _buf12[1];
+  EFIAPI EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
+  UINTN _buf13[1];
 };
 
 struct EFI_RUNTIME_SERVICES { 
@@ -361,6 +363,7 @@ typedef struct {
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
     UINTN SizeOfInfo;
     UINTN FrameBufferBase;
+    UINTN FrameBufferSize;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
 
 typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL {

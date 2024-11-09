@@ -13,13 +13,12 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
   return s;
 }
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, EFI_SIMPLE_POINTER_PROTOCOL &SPP, 
-                              BOOT_CONFIG *BootConfig, EFI_BATTERY_CHARGING_PROTOCOL &battery) {
-  unsigned long long spp_status;
-  struct EFI_SIMPLE_POINTER_STATE spp_state;
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig) {
+  //unsigned long long spp_status;
+  //struct EFI_SIMPLE_POINTER_STATE spp_state;
 
-  char                 str[3]; // 打印用的字符串
-  struct EFI_INPUT_KEY key;    // 用于接收按键
+  //char                 str[3]; // 打印用的字符串
+  //struct EFI_INPUT_KEY key;    // 用于接收按键
 
   EFI_TIME time;
   EFI_TIME_CAPABILITIES time_capab;
@@ -46,7 +45,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
-  SPP.Reset(&SPP, 0);
+  //SPP.Reset(&SPP, 0);
   int fontx = 8;
   int fonty = 50;
 
@@ -102,6 +101,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   refresh_sheet(&shtinf);   // 刷新
 
   while (1) {
+    /*
     spp_status = SPP.GetState(&SPP, &spp_state);
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
       if (key.UnicodeChar != L'\r') { // 是字符
@@ -124,13 +124,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     }
     if (!spp_status) {
       // out
-      /*
-      rect(fbc, 316, 50, 600, 82, WIN_BLUE);
-
-      WriteHex(fbc, 332, 50, spp_state.RelativeMovementX, WHITE);
-      WriteHex(fbc, 332, 66, spp_state.RelativeMovementY, WHITE);
-      WriteHex(fbc, 332, 82, spp_state.RelativeMovementZ, WHITE);
-      */
       if (spp_state.LeftButton == 1) {
         int tx1 = shtinf.scrx * 0.1875;
         if (mouse_x > tx1 && mouse_x < tx1 + 16 && 
@@ -161,13 +154,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
                                 shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
                                 shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
     }
+    */
     SystemTable.RuntimeServices->GetTime(&time, &time_capab);
     int scdx = fbc.horizontal_resolution * 0.8125;
     draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
     PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
     PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
     PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
-    //refresh_sheet(&shtinf);   // 刷新
+    refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
   }
   // 按理来说不可能到这儿
 }

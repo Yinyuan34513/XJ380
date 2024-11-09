@@ -72,7 +72,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   int OsMemDescNum = 0;
   // 内存合并与分类
   for (int i = 0; i < EfiDescriptorCount; i++) {
-    if (EfiMemory[i].Type == EfiConventionalMemory) {
+    if (EfiMemory[i].Type == EfiConventionalMemory || EfiMemory[i].Type == EfiBootServicesCode || EfiMemory[i].Type == EfiBootServicesData) {
       OsMemory->Type = FREE_MEMORY;
     } else if (EfiMemory[i].Type == EfiMemoryMappedIO) {
       OsMemory->Type = MMIO_MEMORY;

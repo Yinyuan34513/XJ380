@@ -148,7 +148,6 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap) {
 
   // 检查是否成功分配了内存
   if (!MemoryMap->Buffer) { GetMemoryMapStatus = EFI_OUT_OF_RESOURCES; }
-
   return GetMemoryMapStatus;
 }
 
@@ -167,8 +166,7 @@ void SwitchToResolution(unsigned int x, unsigned int y)
 
 
 typedef void (*__attribute__((sysv_abi))
-              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *,
-                      struct EFI_SIMPLE_POINTER_PROTOCOL *, struct BOOT_CONFIG *, struct EFI_BATTERY_CHARGING_PROTOCOL *);
+              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, struct BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   efi_init(ImageHandle, SystemTable);
@@ -247,8 +245,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   GetMMP(&BootConfig.MemoryMap);
 
+  EFI_STATUS ExitBSStatus = EFI_SUCCESS;
+
+  ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig.MemoryMap.MapKey);
+
+  if(EFI_ERROR(ExitBSStatus)) {
+    puts(L"XJ380 does not boot properly. Please visit "
+         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+         L"CANNOT_BOOT_SYSTEM");
+  }
+
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable, SPP, &BootConfig, BAT); // 滚进去！
+  kernel(&config, SystemTable, &BootConfig); // 滚进去！
 
   //此处=kernel.elf
 
