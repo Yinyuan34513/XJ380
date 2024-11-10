@@ -11,4 +11,6 @@
 #include "./efi.h"
 #include "./global/boot.h"
 #include "./global/gdt.h"
+#include "./global/idt.h"
+#include "./global/protect.h"
 #endif 

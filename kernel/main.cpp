@@ -14,6 +14,10 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig) {
+  disable_intr();
+  init_gdt();
+  init_idt();
+  
   //unsigned long long spp_status;
   //struct EFI_SIMPLE_POINTER_STATE spp_state;
 
@@ -24,8 +28,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   EFI_TIME_CAPABILITIES time_capab;
   
   init_MemoryManager(fbc, BootConfig);
-  disable_intr();
-  init_gdt();
 
   SHEET_INFO shtinf;
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题

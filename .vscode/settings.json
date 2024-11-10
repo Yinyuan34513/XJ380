@@ -67,7 +67,11 @@
     "memory": "c",
     "stdint.h": "c",
     "fbc.h": "c",
-    "include.h": "c"
+    "include.h": "c",
+    "gdt.h": "c",
+    "proto.hpp": "c",
+    "idt.h": "c",
+    "protect.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

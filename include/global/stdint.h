@@ -25,6 +25,9 @@ typedef double float64_t;
 typedef float32_t f32;
 typedef float64_t f64;
 
+// 中断入口
+typedef void (*int_func)();
+
 #define NULL    0
 
 typedef unsigned long int size_t; // compatible to ELF toolchain

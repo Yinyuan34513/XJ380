@@ -3,6 +3,11 @@
 
 #include "./stdint.h"
 
+#define GDT_TYPE_ZERO			0
+#define GDT_TYPE_KERNEL_CS		1
+#define GDT_TYPE_KERNEL_DS		2
+#define GDT_TYPE_USER_CS		3
+#define GDT_TYPE_USER_DS		4
 // 全局描述符类型
 typedef struct {
 	UINT16 limit_low;     // 段界限			    15 - 0

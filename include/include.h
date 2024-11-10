@@ -11,6 +11,8 @@
 #include "./global/global_color.h"
 #include "./global/memory.h"
 #include "./global/gdt.h"
+#include "./global/idt.h"
+#include "./global/protect.h"
 
 extern "C" {
 #include "./efi.h"

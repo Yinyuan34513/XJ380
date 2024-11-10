@@ -249,7 +249,7 @@ struct EFI_RUNTIME_SERVICES {
 
   // Time Services
   EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
-  UINTN _buf3[3];
+  UINTN _buf3[2];
 
   // Virtual Memory Services
   UINTN _buf4[2];
