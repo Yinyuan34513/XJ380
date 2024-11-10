@@ -256,6 +256,7 @@ struct EFI_RUNTIME_SERVICES {
 
   EFIAPI VOID (*ResetSystem) (EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, 
                                       UINTN DataSize, VOID *ResetData);
+  UINTN _buf5[3];
 };
 
 struct EFI_SYSTEM_TABLE {

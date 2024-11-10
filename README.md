@@ -160,6 +160,11 @@ Makefile里有一个变量“REL”，填版本。
 2024年10月25日 Guoqiyu1115
 - 软关机.exe
 
-### BuildVersion 24 【已实机测试】
+### BuildVersion 24 【已虚拟机测试】
 2024年11月9日 Guoqiyu1115
 - 除了国企鱼没人想你，BootServices
+
+### BuildVersion 25 【已虚拟机测试】
+2024年11月10日 Guoqiyu1115
+- GDT搞定
+- 国企鱼也不想你，BootServices

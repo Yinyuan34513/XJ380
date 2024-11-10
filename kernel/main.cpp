@@ -24,6 +24,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   EFI_TIME_CAPABILITIES time_capab;
   
   init_MemoryManager(fbc, BootConfig);
+  disable_intr();
+  init_gdt();
 
   SHEET_INFO shtinf;
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题

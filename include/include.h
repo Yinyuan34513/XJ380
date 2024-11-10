@@ -10,6 +10,7 @@
 #include "./global/stdint.h"
 #include "./global/global_color.h"
 #include "./global/memory.h"
+#include "./global/gdt.h"
 
 extern "C" {
 #include "./efi.h"

@@ -45,6 +45,23 @@ void PrintDec(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long lon
 // kernel/wsod.cpp
 //void WSOD_Cannot_Alloc_Memory(const FrameBufferConfig &fbc);
 
+// kernel/gdt.cpp
+void init_gdt();
+
+// kernel/asm/common.cpp
+void outb(UINT16 port, UINT8 value);
+UINT8 inb(UINT16 port);
+void outw(UINT16 port, UINT16 value);
+UINT16 inw(UINT16 port);
+void outl(UINT16 port, UINT32 value);
+UINT32 inl(UINT16 port);
+void insw(UINT16 port, VOID *buf, unsigned long n);
+void outsw(UINT16 port, const VOID *buf, unsigned long n);
+void insl(UINT32 port, VOID *addr, int cnt);
+void outsl(UINT32 port, const VOID *addr, int cnt);
+void enable_intr();
+void disable_intr();
+
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 

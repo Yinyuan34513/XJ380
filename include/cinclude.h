@@ -10,4 +10,5 @@
 #include "./global/memory.h"
 #include "./efi.h"
 #include "./global/boot.h"
+#include "./global/gdt.h"
 #endif 
