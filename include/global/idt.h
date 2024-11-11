@@ -2,8 +2,8 @@
 #define _IDT_H_
 
 #define IDT_SIZE                    256
-#define X86_64_INTR_GATE            0xE
-#define X86_64_TRAP_GATE            0xF
+#define X86_64_INTR_GATE            0x8E
+#define X86_64_TRAP_GATE            0x8F
 
 // 中断向量号
 #define INT_VECTOR_DIVIDE           0

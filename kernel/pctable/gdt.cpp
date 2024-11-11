@@ -24,10 +24,10 @@ void init_gdt()
 
 	// 采用 Intel 平坦模型
 	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);				// 按照 Intel 文档要求，第一个描述符必须全 0
-	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFFFFF, 0x9A, 0xCF);	// 指令段
-	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFFFFF, 0x92, 0xCF);	// 数据段
-	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFFFFF, 0xFA, 0xCF);	// 用户模式代码段
-	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFFFFF, 0xF2, 0xCF);	// 用户模式数据段
+	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFFFFFFFFFFFFF, 0x9A, 0xCF);	// 指令段
+	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFFFFFFFFFFFFF, 0x92, 0xCF);	// 数据段
+	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFFFFFFFFFFFFF, 0xFA, 0xCF);	// 用户模式代码段
+	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFFFFFFFFFFFFF, 0xF2, 0xCF);	// 用户模式数据段
 
 	asm volatile (
 		"lgdt [gdt_ptr]\n"
@@ -45,8 +45,8 @@ void init_gdt()
 	);
 }
 
-// 全局描述符表构造函数，根据下标构造
-// 参数 数组下标、基地址、限长、访问标志，其它访问标志
+// 入参：数组下标、基地址、限长、访问标志，其它访问标志
+// 热知识：64位下，基地址和限长填了也没用
 static void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 gran)
 {
 	gdt_entries[num].base_low		= (base & 0xFFFF);
