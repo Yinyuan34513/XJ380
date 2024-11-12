@@ -50,7 +50,7 @@ void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privi
     UINT64          f_base = (UINT64)function;
 
     p_gate->offset_1            = f_base & 0xFFFF;
-    p_gate->selector            = GDT_TYPE_KERNEL_CS;
+    p_gate->selector            = SELECTOR_KERNEL_CS;
     p_gate->ist                 = 0;           // 不使用IST
     p_gate->type_attributes     = gate_type | (privilege << 5);
     p_gate->offset_2            = (f_base >> 16) & 0xFFFF;
