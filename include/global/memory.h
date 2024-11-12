@@ -12,6 +12,7 @@
 #pragma pack(1)
 #include "../efi.h"
 #include "./stdint.h"
+
 typedef struct __packed {
   UINTN  MapSize;
   VOID  *Buffer;

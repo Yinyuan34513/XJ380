@@ -93,8 +93,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
     PrintDec(&shtinf, &desktop_sheet_id, 148, 432, (UINT64)shtinf.sheet_num, WHITE);
 
-    UINT32 *ssbp = (UINT32 *)shtinf.sheet[0].buffer;
-    PrintHex(&shtinf, &desktop_sheet_id, 8, 448, (UINT32)*ssbp, WHITE);
+    PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
     PrintHex(&shtinf, &desktop_sheet_id, 148, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
 
     draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});

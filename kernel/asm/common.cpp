@@ -1,12 +1,12 @@
 #include "../../include/include.h"
 
-/* 端口写（8位） */
+// 端口写（8位）
 void outb(UINT16 port, UINT8 value)
 {
 	asm volatile("outb %1, %0" : : "dN" (port), "a" (value));
 }
 
-/* 端口读（8位） */
+// 端口读（8位）
 UINT8 inb(UINT16 port)
 {
 	uint8_t ret;
@@ -14,13 +14,13 @@ UINT8 inb(UINT16 port)
 	return ret;
 }
 
-/* 端口写（16位） */
+// 端口写（16位）
 void outw(UINT16 port, UINT16 value)
 {
 	asm volatile("outw %1, %0" : : "dN" (port), "a" (value));
 }
 
-/* 端口读（16位） */
+// 端口读（16位）
 UINT16 inw(UINT16 port)
 {
 	UINT16 ret;
@@ -28,13 +28,13 @@ UINT16 inw(UINT16 port)
 	return ret;
 }
 
-/* 端口写（32位） */
+// 端口写（32位）
 void outl(UINT16 port, UINT32 value)
 {
 	asm volatile("outl %1, %0" : : "dN"(port), "a"(value));
 }
 
-/* 端口读（32位） */
+// 端口读（32位）
 UINT32 inl(UINT16 port)
 {
 	UINT32 ret;
@@ -42,7 +42,7 @@ UINT32 inl(UINT16 port)
 	return ret;
 }
 
-/* 从I/O端口批量地读取数据到内存（16位） */
+// 从I/O端口批量地读取数据到内存（16位）
 void insw(UINT16 port, VOID *buf, unsigned long n)
 {
 	asm volatile("cld; rep; insw"
@@ -51,7 +51,7 @@ void insw(UINT16 port, VOID *buf, unsigned long n)
                  : "d"(port));
 }
 
-/* 从内存批量地写入数据到I/O端口（16位） */
+// 从内存批量地写入数据到I/O端口（16位）
 void outsw(UINT16 port, const VOID *buf, unsigned long n)
 {
 	asm volatile("cld; rep; outsw"
@@ -60,7 +60,7 @@ void outsw(UINT16 port, const VOID *buf, unsigned long n)
                  : "d"(port));
 }
 
-/* 从I/O端口批量地读取数据到内存（32位） */
+// 从I/O端口批量地读取数据到内存（32位）
 void insl(UINT32 port, VOID *addr, int cnt)
 {
 	asm volatile("cld;"
@@ -70,7 +70,7 @@ void insl(UINT32 port, VOID *addr, int cnt)
                  : "memory", "cc");
 }
 
-/* 从内存批量地写入数据到I/O端口（32位） */
+// 从内存批量地写入数据到I/O端口（32位）
 void outsl(UINT32 port, const VOID *addr, int cnt)
 {
 	asm volatile("cld;"

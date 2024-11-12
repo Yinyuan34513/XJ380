@@ -13,4 +13,5 @@
 #include "./global/gdt.h"
 #include "./global/idt.h"
 #include "./global/protect.h"
+#include "./global/apic.h"
 #endif 

@@ -91,7 +91,7 @@ void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, cons
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c)
 {
     // 输出16进制
-    char            buf[20];
+    char            buf[32];
     char           *p = buf;
     char            ch;
     int             i, flag = 0;
@@ -102,17 +102,16 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
     if (hex == 0)
         *p++ = '0'; // 如果是0，直接0x0趋势
     else {
-        for (i = 48; i >= 0; i -= 4) { // 每次4位
-        ch = (hex >> i) & 0xF;       // 0~9, A~F
-        // 28（冗余）
-        if (flag || ch > 0) { // 跳过前导0
-            flag  = 1;          // 没有前导0就把flag设为1，这样后面再有0也不会忽略
-            ch   += '0';       // 0~9 => '0'~'9'
-            if (ch > '9') {
-            ch += 7; // 'A' - '9' = 7
+        for (i = 64; i >= 0; i -= 4) { // 每次4位
+            ch = (hex >> i) & 0xF;       // 0~9, A~F
+            if (flag || ch > 0) { // 跳过前导0
+                flag  = 1;          // 没有前导0就把flag设为1，这样后面再有0也不会忽略
+                ch   += '0';       // 0~9 => '0'~'9'
+                if (ch > '9') {
+                    ch += 7; // 'A' - '9' = 7
+                }
+                *p++ = ch; // 写入
             }
-            *p++ = ch; // 写入
-        }
         }
     }
     *p = '\0'; // 结束符
