@@ -169,6 +169,6 @@ Makefile里有一个变量“REL”，填版本。
 - GDT搞定（有bug）
 - 国企鱼也不想你，BootServices
 
-### BuildVersion 26 【已虚拟机测试】
+### BuildVersion 26 【已实机测试】
 2024年11月10日 Guoqiyu1115
 - IDT搞定
