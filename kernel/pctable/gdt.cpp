@@ -1,9 +1,5 @@
 #include "../../include/include.h"
 
-/* 全局描述符表长度 */
-#define GDT_LENGTH 5
-#define kernel_data_selector 0x10
-
 /* 全局描述符表定义 */
 GDT_ENTRY gdt_entries[GDT_LENGTH];
 
@@ -23,11 +19,11 @@ void init_gdt()
 	gdt_ptr.base	= (UINT64)&gdt_entries;
 
 	// 采用 Intel 平坦模型
-	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);				// 按照 Intel 文档要求，第一个描述符必须全 0
+	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);								// 按照 Intel 文档要求，第一个描述符必须全 0
 	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFFFFFFFFFFFFF, 0x9A, 0xCF);	// 指令段
 	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFFFFFFFFFFFFF, 0x92, 0xCF);	// 数据段
-	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFFFFFFFFFFFFF, 0xFA, 0xCF);	// 用户模式代码段
-	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFFFFFFFFFFFFF, 0xF2, 0xCF);	// 用户模式数据段
+	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFFFFFFFFFFFFF, 0xFA, 0xCF);		// 用户模式代码段
+	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFFFFFFFFFFFFF, 0xF2, 0xCF);		// 用户模式数据段
 
 	asm volatile (
 		"lgdt [gdt_ptr]\n"
@@ -41,7 +37,7 @@ void init_gdt()
 		"mov %[dsel], %%es\n"
 		"mov %[dsel], %%ss\n"
 		:
-		: [dsel] "rm" (kernel_data_selector)
+		: [dsel] "rm" (SELECTOR_KERNEL_DS)
 	);
 }
 

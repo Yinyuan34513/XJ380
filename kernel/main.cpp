@@ -3,6 +3,7 @@
 #include "./build_settings.h"
 
 #define NULL        0
+SHEET_INFO          shtinf;
 
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
   char *s = buf + len;
@@ -29,7 +30,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   
   init_MemoryManager(fbc, BootConfig);
 
-  SHEET_INFO shtinf;
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   UINT16 dock_sheet_id = 1145;
   UINT16 mouse_sheet_id = 1145;

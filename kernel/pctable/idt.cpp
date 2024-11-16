@@ -12,37 +12,32 @@ void init_idt() {
     *p_idt_limit = IDT_SIZE * sizeof(IDT_GATE_TYPE) - 1;
     *p_idt_base  = (UINT64) &idt_gate;
 
-    init_interruptions();
+    init_idt_desc(0 , X86_64_INTR_GATE, divide_error                , RING0);
+    init_idt_desc(1 , X86_64_INTR_GATE, debug                       , RING0);
+    init_idt_desc(2 , X86_64_INTR_GATE, nmi                         , RING0);
+    init_idt_desc(3 , X86_64_TRAP_GATE, int3                        , RING3);
+    init_idt_desc(4 , X86_64_TRAP_GATE, overflow                    , RING3);
+    init_idt_desc(5 , X86_64_INTR_GATE, bounds                      , RING0);
+    init_idt_desc(6 , X86_64_INTR_GATE, undefined_opcode            , RING0);
+    init_idt_desc(7 , X86_64_INTR_GATE, dev_not_avaliable           , RING0);
+    init_idt_desc(8 , X86_64_INTR_GATE, double_fault                , RING0);
+    init_idt_desc(9 , X86_64_INTR_GATE, coprocessor_segment_overrun , RING0);
+    init_idt_desc(10, X86_64_INTR_GATE, invalid_TSS                 , RING0);
+    init_idt_desc(11, X86_64_INTR_GATE, segment_not_exists          , RING0);
+    init_idt_desc(12, X86_64_INTR_GATE, stack_segment_fault         , RING0);
+    init_idt_desc(13, X86_64_INTR_GATE, general_protection          , RING0);
+    init_idt_desc(14, X86_64_INTR_GATE, page_fault                  , RING0);
+    init_idt_desc(16, X86_64_INTR_GATE, x87_FPU_error               , RING0);
+    init_idt_desc(17, X86_64_INTR_GATE, alignment_check             , RING0);
+    init_idt_desc(18, X86_64_INTR_GATE, machine_check               , RING0);
+    init_idt_desc(19, X86_64_INTR_GATE, SIMD_exception              , RING0);
+    init_idt_desc(20, X86_64_INTR_GATE, virtualization_exception    , RING0);
 
-    asm volatile (
-		"lidt [idt_ptr]\n"
-		:
-		: [idt_ptr] "*p" (&idt_ptr)
-	);
-}
+    __asm__ volatile ("lidt %0" : : "m"(idt_ptr));
 
-void init_interruptions() {
-    init_idt_desc(INT_VECTOR_DIVIDE         , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_DEBUG          , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_NMI            , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_BREAKPOINT     , X86_64_TRAP_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_OVERFLOW       , X86_64_TRAP_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_BOUND          , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_INVAL_OP       , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_NO_MATH        , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_DOUBLEF        , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_CSO            , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_INVAL_TSS      , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_SEGMENT        , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_STACK_SEG      , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_GENERAL        , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_PAGE_FAULT     , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_FPU            , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_ALIGN_CHECK    , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_MACHINE_CHECK  , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_SIMD           , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_VIRTUAL_EX     , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
-    init_idt_desc(INT_VECTOR_CTRL_PROTECT   , X86_64_INTR_GATE, WSOD_UNEXPECT_INTRRUPT, RING0);
+    // 一恢复中断就死循环反复重启
+    //enable_intr();
+    //int test = 1 / 0;
 }
 
 void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege) {

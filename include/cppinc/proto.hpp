@@ -59,9 +59,11 @@ void PrintDec(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long lon
 /*
 *   kernel/*
 */
+// kernel/main.cpp
+extern SHEET_INFO shtinf;
+
 // kernel/wsod.cpp
-//void WSOD_UNEXPECT_INTRRUPT(SHEET_INFO *sht);
-void WSOD_UNEXPECT_INTRRUPT();
+extern "C" void wsod_unexpect_intrrupt();
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
@@ -93,6 +95,5 @@ void init_gdt();
 // kernel/pctable/idt.cpp
 void init_idt();
 void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege);
-void init_interruptions();
 
 #endif

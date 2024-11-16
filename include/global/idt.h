@@ -5,32 +5,35 @@
 #define X86_64_INTR_GATE            0x8E
 #define X86_64_TRAP_GATE            0x8F
 
-// 中断向量号
-#define INT_VECTOR_DIVIDE           0
-#define INT_VECTOR_DEBUG            1
-#define INT_VECTOR_NMI              2
-#define INT_VECTOR_BREAKPOINT       3
-#define INT_VECTOR_OVERFLOW         4
-#define INT_VECTOR_BOUND            5
-#define INT_VECTOR_INVAL_OP         6
-#define INT_VECTOR_NO_MATH          7
-#define INT_VECTOR_DOUBLEF          8
-#define INT_VECTOR_CSO              9
-#define INT_VECTOR_INVAL_TSS        10
-#define INT_VECTOR_SEGMENT          11
-#define INT_VECTOR_STACK_SEG        12
-#define INT_VECTOR_GENERAL          13
-#define INT_VECTOR_PAGE_FAULT       14
-#define INT_VECTOR_ZERO             15
-#define INT_VECTOR_FPU              16
-#define INT_VECTOR_ALIGN_CHECK      17
-#define INT_VECTOR_MACHINE_CHECK    18
-#define INT_VECTOR_SIMD             19
-#define INT_VECTOR_VIRTUAL_EX       20
-#define INT_VECTOR_CTRL_PROTECT     21
-/* 22-31 保留 */
-/* 32-255 自己定义 */
-
+// 除法错误
+void divide_error();
+// 调试
+void debug();
+// 不可屏蔽中断
+void nmi();
+//
+void int3();
+// 溢出
+void overflow();
+    // 边界问题
+void bounds();
+// 未定义的操作数
+void undefined_opcode();
+// 设备不可用
+void dev_not_avaliable();
+void double_fault();
+void coprocessor_segment_overrun();
+void invalid_TSS();
+void segment_not_exists();
+void stack_segment_fault();
+void general_protection();
+// 缺页异常
+void page_fault();
+void x87_FPU_error();
+void alignment_check();
+void machine_check();
+void SIMD_exception();
+void virtualization_exception();
 
 #include "./stdint.h"
 

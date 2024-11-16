@@ -10,6 +10,10 @@
 #define GDT_TYPE_USER_DS		4
 
 #define SELECTOR_KERNEL_CS		GDT_TYPE_KERNEL_CS << 3	
+#define SELECTOR_KERNEL_DS 		GDT_TYPE_KERNEL_DS << 3
+
+// 全局描述符表长度
+#define GDT_LENGTH 5
 
 // 全局描述符类型
 typedef struct {
