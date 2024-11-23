@@ -3,7 +3,7 @@
 #include "./build_settings.h"
 
 #define NULL        0
-SHEET_INFO          shtinf;
+const FrameBufferConfig *fbc_addr;
 
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
   char *s = buf + len;
@@ -15,9 +15,12 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig) {
+  fbc_addr = &fbc;
   disable_intr();
   init_gdt();
   init_idt();
+  //rect(fbc, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, {0x00, 0xa2, 0xe8});
+  enable_intr();
   
   //unsigned long long spp_status;
   //struct EFI_SIMPLE_POINTER_STATE spp_state;
@@ -33,6 +36,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   UINT16 dock_sheet_id = 1145;
   UINT16 mouse_sheet_id = 1145;
+  SHEET_INFO          shtinf;
   init_sheet(fbc, &shtinf);
 
   int mouse_x = 128;
@@ -98,6 +102,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
   }
+  //wsod_debug();
 
   draw_mouse(&shtinf, &mouse_sheet_id);
 

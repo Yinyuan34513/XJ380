@@ -112,7 +112,7 @@ ENTRY(divide_error)
 ENTRY(debug)
     pushq $0    
     pushq %rax  
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_debug(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -131,7 +131,7 @@ ENTRY(nmi)
 ENTRY(int3)
     pushq $0
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_debug(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 

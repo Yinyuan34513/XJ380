@@ -172,3 +172,8 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 26 【已实机测试】
 2024年11月10日 Guoqiyu1115
 - IDT搞定
+
+### BuildVersion 27 【已虚拟机测试】
+2024年11月23日 Guoqiyu1115
+- 修好了GDT
+- 新的WSOD（白屏死机）界面
