@@ -1,5 +1,6 @@
 #include "../../include/include.h"
 
+__attribute__((aligned(0x10))) 
 IDT_GATE_TYPE idt_gate[IDT_SIZE];
 IDTR_TYPE idt_ptr;
 
@@ -34,10 +35,6 @@ void init_idt() {
     init_idt_desc(20, X86_64_INTR_GATE, virtualization_exception    , RING0);
 
     __asm__ volatile ("lidt %0" : : "m"(idt_ptr));
-
-    // 一恢复中断就死循环反复重启
-    //enable_intr();
-    //int test = 1 / 0;
 }
 
 void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege) {
@@ -50,4 +47,5 @@ void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privi
     p_gate->type_attributes     = gate_type | (privilege << 5);
     p_gate->offset_2            = (f_base >> 16) & 0xFFFF;
     p_gate->offset_3            = (f_base >> 32) & 0xFFFFFFFF;
+    p_gate->zero                = 0;
 }

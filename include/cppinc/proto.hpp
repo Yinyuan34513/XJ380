@@ -60,10 +60,11 @@ void PrintDec(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long lon
 *   kernel/*
 */
 // kernel/main.cpp
-extern SHEET_INFO shtinf;
+extern const FrameBufferConfig *fbc_addr;
 
 // kernel/wsod.cpp
-extern "C" void wsod_unexpect_intrrupt();
+extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
