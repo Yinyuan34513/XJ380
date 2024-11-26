@@ -48,6 +48,31 @@ void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code) {
     do_wsod("UNEXPECT_INTRRUPT", regs);
 }
 
+// 不可屏蔽中断
+void wsod_nmi(struct X64_REGS *regs, UINT64 error_code) {
+    do_wsod("NMI", regs);
+}
+
+// 双重错误
+void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code) {
+    do_wsod("DOUBLE_FAULT", regs);
+}
+
+// 内核错误
+void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code) {
+    do_wsod("SYSTEM_KERNEL_ERROR", regs);
+}
+
+// 一般保护性异常
+void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code) {
+    do_wsod("GENERAL_PROTECTION", regs);
+}
+
+// 页错误
+void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code) {
+    do_wsod("PAGE_FAULT", regs);
+}
+
 // DEBUG
 void wsod_debug(struct X64_REGS *regs, UINT64 error_code) {
     do_wsod("DEBUG_BREAKPOINT", regs);
