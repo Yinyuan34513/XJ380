@@ -3,3 +3,6 @@ out
 esp
 serial.log
 .vs
+out/draw.o
+/esp
+/out
