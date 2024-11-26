@@ -65,6 +65,12 @@ extern const FrameBufferConfig *fbc_addr;
 // kernel/wsod.cpp
 extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_nmi(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);

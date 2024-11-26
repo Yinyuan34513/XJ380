@@ -123,7 +123,7 @@ ENTRY(nmi)
     pushq $0  //占位err_code
 
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax
+    leaq wsod_nmi(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
 
@@ -170,7 +170,7 @@ ENTRY(dev_not_avaliable)
 // 8 #DF 双重错误
 ENTRY(double_fault)
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_double_fault(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -187,28 +187,28 @@ ENTRY(invalid_TSS)
     // === 不正确的任务状态段 #TS ==
     // 有错误码,处理器已经自动在异常处理程序栈中压入错误码
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax
+    leaq wsod_system_kernel_error(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
 
 // 11 #NP 段不存在
 ENTRY(segment_not_exists)
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_system_kernel_error(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
 // 12 #SS 段错误
 ENTRY(stack_segment_fault)
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_system_kernel_error(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
 // 13 #GP 通用保护性异常
 ENTRY(general_protection)
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_general_protection(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -217,7 +217,7 @@ ENTRY(page_fault)
     // === 页故障 #PF ==
     // 有错误码
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax
+    leaq wsod_page_fault(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
 
