@@ -10,8 +10,8 @@
 #include "./global/memory.h"
 #include "./efi.h"
 #include "./global/boot.h"
-#include "./global/gdt.h"
-#include "./global/idt.h"
+#include "./global/pctable/gdt.h"
+#include "./global/pctable/idt.h"
 #include "./global/protect.h"
 #include "./global/apic.h"
 #endif 

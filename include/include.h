@@ -10,12 +10,12 @@
 #include "./global/stdint.h"
 #include "./global/global_color.h"
 #include "./global/memory.h"
-#include "./global/gdt.h"
+#include "./global/pctable/gdt.h"
 #include "./global/protect.h"
 #include "./global/apic.h"
 
 extern "C" {
-#include "./global/idt.h"
+#include "./global/pctable/idt.h"
 #include "./efi.h"
 }
 #endif 
