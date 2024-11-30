@@ -20,10 +20,10 @@ void init_gdt()
 	// 采用 Intel 平坦模型
 	// 0xAF = 10101111
 	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);						// 按照 Intel 文档要求，第一个描述符必须全 0
-	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFFFFF, 0x9A, 0xAF);	// 代码段 0x9A = 10011010
-	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFFFFF, 0x92, 0xAF);	// 数据段 0x92 = 10010010
-	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFFFFF, 0xFA, 0xAF);		// 用户模式代码段 0xFA = 11111010
-	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFFFFF, 0xF2, 0xAF);		// 用户模式数据段 0xF2 = 11110010
+	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFF, 0x9A, 0xAF);	// 代码段 0x9A = 10011010
+	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFF, 0x92, 0xAF);	// 数据段 0x92 = 10010010
+	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFF, 0xFA, 0xAF);		// 用户模式代码段 0xFA = 11111010
+	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFF, 0xF2, 0xAF);		// 用户模式数据段 0xF2 = 11110010
 
 	__asm__ volatile ("lgdt %0" : : "m"(gdt_ptr));
 	asm volatile (

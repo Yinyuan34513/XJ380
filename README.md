@@ -1,4 +1,5 @@
 # XJ380(Code Singularity)操作系统
+XINGJI工作室A级机密 | 保密编号XSEC202212011-11-A
 ## 开发者须知
 1、严禁泄露源代码及非正式版镜像。<br>
 2、Push代码请推送到自己的分支上。<br>
@@ -177,3 +178,8 @@ Makefile里有一个变量“REL”，填版本。
 2024年11月23日 Guoqiyu1115
 - 修好了GDT
 - 新的WSOD（白屏死机）界面
+
+### BuildVersion 28 【已虚拟机测试】
+2024年11月30日 Guoqiyu1115
+- 修好了GDT
+- 8259A（临时用）

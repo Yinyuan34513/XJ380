@@ -92,13 +92,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     PrintString(&shtinf, &desktop_sheet_id, 8, 400, "SheetManagerTest", WHITE);
     PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (UINT64)desktop_sheet_id, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 148, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
     
     PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 148, 432, (UINT64)shtinf.sheet_num, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (UINT64)shtinf.sheet_num, WHITE);
 
     PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
-    PrintHex(&shtinf, &desktop_sheet_id, 148, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
+    PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
 
     draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
   }
