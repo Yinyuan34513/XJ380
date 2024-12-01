@@ -114,7 +114,7 @@ dlexport void *mpool_alloc(mpool_t pool, size_t size) {
   pool->alloced_size += size;
 
   // 是APIC寄存器映射用的，直接重开（有备无患防止抽风）
-  if ((ptr >= 0xFEE00000 && ptr <= 0xFEE00400) || (ptr >= 0xFEC00000 && ptr <= 0xFEC000F0)) {
+  if ((ptr >= 0xFEE00000 && ptr <= 0xFEE01000) || (ptr >= 0xFEC00000 && ptr <= 0xFEC01000)) {
     ptr = null;
     ptr = malloc(size);
   }
