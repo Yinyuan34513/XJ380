@@ -4,9 +4,6 @@ __attribute__((aligned(0x10)))
 IDT_GATE_TYPE idt_gate[IDT_SIZE];
 IDTR_TYPE idt_ptr;
 
-#define INT_VECTOR_IRQ0         0x20
-#define INT_VECTOR_IRQ8         0x28
-
 void init_8259A();
 
 // 初始化idt
