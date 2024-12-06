@@ -97,12 +97,12 @@ struct EFI_INPUT_KEY {
   CHAR16 UnicodeChar;
 };
 
-struct EFI_GUID {
+typedef struct {
   UINT32 Data1;
   UINT16 Data2;
   UINT16 Data3;
   UINT8  Data4[8];
-};
+} EFI_GUID;
 
 #define EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL  0x00000001
 #define EFI_OPEN_PROTOCOL_GET_PROTOCOL        0x00000002
@@ -178,10 +178,15 @@ typedef struct {
 } EFI_TIME;
 
 typedef struct {
- UINT32 Resolution;
- UINT32 Accuracy;
- BOOLEAN SetsToZero;
+  UINT32 Resolution;
+  UINT32 Accuracy;
+  BOOLEAN SetsToZero;
 } EFI_TIME_CAPABILITIES;
+
+typedef struct {
+  EFI_GUID VendorGuid;
+  VOID    *VendorTable;
+} EFI_CONFIGURATION_TABLE;
 
 struct EFI_BOOT_SERVICES {
   char _buf1[24];
@@ -223,14 +228,14 @@ struct EFI_BOOT_SERVICES {
   // Open and Close Protocol Services
   EFIAPI
   EFI_STATUS(*OpenProtocol)
-  (EFI_HANDLE Handle, struct EFI_GUID *Protocol, VOID **Interface, EFI_HANDLE AgentHandle,
+  (EFI_HANDLE Handle, EFI_GUID *Protocol, VOID **Interface, EFI_HANDLE AgentHandle,
    EFI_HANDLE ControllerHandle, UINT32 Attributes);
   UINTN _buf9[2];
 
   // Library Services
   UINTN _buf10[2];
   EFIAPI
-  EFI_STATUS (*LocateProtocol)(struct EFI_GUID *Protocol, VOID *Registration, VOID **Interface);
+  EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, VOID *Registration, VOID **Interface);
   UINTN _buf10_2[2];
 
   // 32-bit CRC Services
@@ -278,6 +283,8 @@ struct EFI_SYSTEM_TABLE {
   UINTN                     _buf3[2];
   struct EFI_RUNTIME_SERVICES *RuntimeServices; // 此有bug
   struct EFI_BOOT_SERVICES *BootServices;
+  UINTN                     NumberOfTableEntries;
+  EFI_CONFIGURATION_TABLE  *ConfigurationTable;
 };
 
 // 简单（鼠标）指针协议

@@ -3,7 +3,7 @@
 #define _BOOT_H_
 #include "../efi.h"
 #include "./stdint.h"
-#include "./memory.h"
+#include "./kernel/memory.h"
 typedef struct
 {
     MEMORY_MAP MemoryMap;

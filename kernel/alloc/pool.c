@@ -3,7 +3,7 @@
 #define null 0
 #define auto __auto_type
 
-#include "../../include/global/memory.h"
+#include "../../include/global/kernel/memory.h"
 
 #include "area.h"
 #include "block.h"

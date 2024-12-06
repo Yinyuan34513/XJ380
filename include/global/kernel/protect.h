@@ -1,7 +1,7 @@
 #ifndef _PROTECT_H_
 #define _PROTECT_H_
 
-#include "./stdint.h"
+#include "../stdint.h"
 
 #define INT_M_CTL     0x20
 #define INT_M_CTLMASK 0x21
@@ -13,8 +13,6 @@
 
 #define RING0       0
 #define RING3       3
-
-#include "./stdint.h"
 
 struct X64_REGS
 {

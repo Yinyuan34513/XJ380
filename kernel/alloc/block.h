@@ -1,5 +1,5 @@
 #pragma once
-#include "../../include/global/memory.h"
+#include "../../include/global/kernel/memory.h"
 
 #define FREE_FLAG ((size_t)1) // 块释放标记
 #define AREA_FLAG ((size_t)2) // 分配区头尾标记 (防止块查找越界)
