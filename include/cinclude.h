@@ -13,7 +13,8 @@
 #include "./global/boot.h"
 #include "./global/kernel/pctable/gdt.h"
 #include "./global/kernel/pctable/idt.h"
-#include "./global/kernel/protect.h"
+#include "./global/kernel/longm.h"
 #include "./global/kernel/acpi.h"
-#include "./global/kernel/apic.h"
+#include "./global/kernel/apic/madt.h"
+#include "./global/kernel/apic/apic.h"
 #endif 

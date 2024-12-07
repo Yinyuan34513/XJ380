@@ -184,3 +184,7 @@ Makefile里有一个变量“REL”，填版本。
 - 修好了GDT
 - 8259A（临时用）
 - 整理文件
+
+### BuildVersion 29 【已虚拟机测试】
+2024年12月7日 Guoqiyu1115
+- 成功从ACPI获取MADT（APIC，启动！）
