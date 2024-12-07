@@ -1,5 +1,4 @@
-#include "../include/include.h"
-#include "../include/efi.h"
+#include "../../include/include.h"
 
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     sht->fbc = &fbc;

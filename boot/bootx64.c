@@ -270,38 +270,38 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   }
 
   // 获取RSDP
-  EFI_CONFIGURATION_TABLE  *SystemConfigTable    = NULL;
+  EFI_CONFIGURATION_TABLE  *SystemConfigTable     = NULL;
   RSDP_TYPE                *AcpiRsdp;
   ACPI_TABLE_HEADER        *XSDT, *AcpiTableEntry;
   UINT64                    SDTEntryCount;
   UINT64                   *AcpiTableEntryPtr;
+  UINT8                     AcpiTableWasFound     = 0;    // 0=找不着 1=找到了
   SystemConfigTable = ST->ConfigurationTable;
   for (int i = 0; i < ST->NumberOfTableEntries; i++) {
-    if (CompareGUID(&SystemConfigTable->VendorGuid, &acpi_table_guid) == 1 || 
-        CompareGUID(&SystemConfigTable->VendorGuid, &efi_acpi_table_guid) == 1) {
+    if (CompareGUID(&SystemConfigTable->VendorGuid, &efi_acpi_table_guid) == 1) {
       // 找到了ACPI表
-      AcpiRsdp = SystemConfigTable->VendorTable; 
-      if (AcpiRsdp->version >= 2) {
-        // 修订版 >= ACPI 2.0
-        // 遍历所有ACPI表
-        XSDT = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);
-        AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);
-        for (int j = 0; j < SDTEntryCount; j++, AcpiTableEntryPtr++) {
-          AcpiTableEntry = (ACPI_TABLE_HEADER *)((UINT64)(*AcpiTableEntryPtr));
-          if (strcmp(AcpiTableEntry->sign, "APIC") == 0) {
-            // MADT!!!
-          }
+      // 修订版 >= ACPI 2.0
+      AcpiTableWasFound = 1;
+      AcpiRsdp = SystemConfigTable->VendorTable;
+      // 遍历所有ACPI表
+      XSDT = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);
+      AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);
+      for (int j = 0; j < SDTEntryCount; j++, AcpiTableEntryPtr++) {
+        AcpiTableEntry = (ACPI_TABLE_HEADER *)((UINT64)(*AcpiTableEntryPtr));
+        if (strcmp(AcpiTableEntry->sign, "APIC") == 0) {
+          // MADT!!!
         }
-      } else {
-        puts(L"XJ380 does not boot properly. Please visit "
-                L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
-                L"ACPI_REVISION_TOO_LOW\r\n");
-        while (1)
-          ;
       }
       break;
     }
     SystemConfigTable++;
+  }
+  if (AcpiTableWasFound != 1) {
+    puts(L"XJ380 does not boot properly. Please visit "
+            L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+            L"ACPI_TABLE_NOT_FOUND\r\n");
+    while (1)
+      ;
   }
 
   // 获取memory map
