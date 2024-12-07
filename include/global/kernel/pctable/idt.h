@@ -35,7 +35,7 @@ void machine_check();
 void SIMD_exception();
 void virtualization_exception();
 
-#include "../stdint.h"
+#include "../../stdint.h"
 
 typedef struct
 {

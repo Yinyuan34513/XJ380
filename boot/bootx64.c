@@ -1,13 +1,12 @@
 // 版权所有©XINGJI Studios 2017-2024 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
 #include "../include/cinclude.h"
-#include "../include/global/memory.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE                *ST;   // 系统表
 struct EFI_BOOT_SERVICES               *BS;   // 启动信息
 struct EFI_GRAPHICS_OUTPUT_PROTOCOL    *GOP;  // GOP
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *SFSP; // 文件
-struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;  // e?
+struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;  // 文件
 struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP;  // 鼠标
 struct EFI_BATTERY_CHARGING_PROTOCOL   *BAT;  // 电池
 EFI_HANDLE                              IM;
@@ -22,20 +21,33 @@ static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf
   return s;
 }
 
-struct EFI_GUID gop_guid = {
+// 图形输出协议 GUID
+EFI_GUID gop_guid = {
     0x9042a9de, 0x23dc, 0x4a38, {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a}
 };
-struct EFI_GUID lip_guid = {
+// 文件加载协议 GUID
+EFI_GUID lip_guid = {
     0x5b1b31a1, 0x9562, 0x11d2, {0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
 };
-struct EFI_GUID sfsp_guid = {
+// 简单文件系统协议 GUID
+EFI_GUID sfsp_guid = {
     0x964e5b22, 0x6459, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
 };
-struct EFI_GUID spp_guid = {
+// 简单指针输入协议 GUID
+EFI_GUID spp_guid = {
     0x31878c87, 0xb75, 0x11d5, {0x9a, 0x4f, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d}
 };
-struct EFI_GUID battery_guid = {
+// 电池协议 GUID
+EFI_GUID battery_guid = {
   0x840cb643, 0x8198, 0x428a, {0xa8, 0xb3, 0xa0, 0x72, 0xce, 0x57, 0xcd, 0xb9}
+};
+// ACPI 1.x GUID
+EFI_GUID acpi_table_guid = {
+  0xeb9d2d30, 0x2d88, 0x11d3, {0x9a, 0x16, 0x00, 0x90, 0x27, 0x3f, 0xc1, 0x4d}
+};
+// ACPI 2.0或更新 GUID
+EFI_GUID efi_acpi_table_guid = {
+  0x8868e871, 0xe4f1, 0x11d3, {0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81}
 };
 
 void putc(unsigned short c) {
@@ -164,6 +176,26 @@ void SwitchToResolution(unsigned int x, unsigned int y)
     }
 }
 
+// 比较GUID
+UINTN CompareGUID(EFI_GUID *src, EFI_GUID *obj) {
+  if (src->Data1 == obj->Data1 && 
+      src->Data2 == obj->Data2 && 
+      src->Data3 == obj->Data3 && 
+      src->Data4[0] == obj->Data4[0] && 
+      src->Data4[1] == obj->Data4[1] && 
+      src->Data4[2] == obj->Data4[2] && 
+      src->Data4[3] == obj->Data4[3] && 
+      src->Data4[4] == obj->Data4[4] && 
+      src->Data4[5] == obj->Data4[5] && 
+      src->Data4[6] == obj->Data4[6] && 
+      src->Data4[7] == obj->Data4[7]
+    ) {
+    return 1; // Yes!
+  }
+  return 0;
+}
+
+
 
 typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, struct BOOT_CONFIG *);
@@ -179,6 +211,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   UINTN                     kernel_size   = 4194304;
   void                     *kernel_buffer = malloc(kernel_size);
 
+  // 引导内核
   status = SFSP->OpenVolume(SFSP, &root);
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
@@ -218,7 +251,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   entry_addr = ehdr->e_entry; // 获取入口点
   //free(kernel_buffer);        // 释放内核文件，丢掉！
 
-  SwitchToResolution(1280, 720);
+  SwitchToResolution(1280, 720);  // 切换分辨率
 
   struct FrameBufferConfig config = {
       (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
@@ -236,6 +269,42 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       ;
   }
 
+  // 获取RSDP
+  EFI_CONFIGURATION_TABLE  *SystemConfigTable     = NULL;
+  RSDP_TYPE                *AcpiRsdp;
+  ACPI_TABLE_HEADER        *XSDT, *AcpiTableEntry;
+  UINT64                    SDTEntryCount;
+  UINT64                   *AcpiTableEntryPtr;
+  UINT8                     AcpiTableWasFound     = 0;    // 0=找不着 1=找到了
+  SystemConfigTable = ST->ConfigurationTable;
+  for (int i = 0; i < ST->NumberOfTableEntries; i++) {
+    if (CompareGUID(&SystemConfigTable->VendorGuid, &efi_acpi_table_guid) == 1) {
+      // 找到了ACPI表
+      // 修订版 >= ACPI 2.0
+      AcpiTableWasFound = 1;
+      AcpiRsdp = SystemConfigTable->VendorTable;
+      // 遍历所有ACPI表
+      XSDT = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);
+      AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);
+      for (int j = 0; j < SDTEntryCount; j++, AcpiTableEntryPtr++) {
+        AcpiTableEntry = (ACPI_TABLE_HEADER *)((UINT64)(*AcpiTableEntryPtr));
+        if (strcmp(AcpiTableEntry->sign, "APIC") == 0) {
+          // MADT!!!
+        }
+      }
+      break;
+    }
+    SystemConfigTable++;
+  }
+  if (AcpiTableWasFound != 1) {
+    puts(L"XJ380 does not boot properly. Please visit "
+            L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+            L"ACPI_TABLE_NOT_FOUND\r\n");
+    while (1)
+      ;
+  }
+
+  // 获取memory map
   BOOT_CONFIG BootConfig;
   BootConfig.MemoryMap.MapSize           = 4096;
   BootConfig.MemoryMap.Buffer            = NULL;
@@ -247,12 +316,15 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 
+  // say goodbye~
   ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig.MemoryMap.MapKey);
 
   if(EFI_ERROR(ExitBSStatus)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"CANNOT_BOOT_SYSTEM");
+    while (1)
+      ;
   }
 
   Kernel kernel = (Kernel)entry_addr;
@@ -263,3 +335,49 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   while (1)
     ; // 趋势
 }
+
+
+
+// lib/string.c
+// 懒得链接啥的了，直接塞一个得了
+char *strcpy(char *dest, const char *src)
+{
+    //assert(dest != NULL && src != NULL);
+    char *r = dest;
+    while ((*dest++ = *src++));
+    return r;
+}
+
+UINT64 strlen(const char *str)
+{
+    //assert(str != NULL);
+    const char *p = str;
+    while (*p++);
+    return p - str - 1;
+}
+
+UINT64 strcmp(char *from_str, char *cmp_str)
+{
+	while ((*from_str != '\0') && (*from_str == *cmp_str))
+	{
+		from_str++;
+		cmp_str++;
+	}
+	return *from_str - *cmp_str;
+}
+
+UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size)
+{
+   char temp[32], from[32];
+   for (UINT64 i = 0; i < size; i++)
+   {
+       temp[i] = from_str[i];
+       from[i] = cmp_str[i];
+   }
+   temp[size] = '\0';
+   from[size] = '\0';
+   UINT64 ret;
+   ret = strcmp(from, temp);
+   return ret;
+}
+

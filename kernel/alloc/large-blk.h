@@ -1,5 +1,5 @@
 #pragma once
-#include "../../include/global/memory.h"
+#include "../../include/global/kernel/memory.h"
 
 // ALLOC_LARGE_BLK_SIZE
 

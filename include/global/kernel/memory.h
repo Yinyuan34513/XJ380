@@ -10,8 +10,8 @@
 #define UEFI_MEMORY 11
 #define MMIO_MEMORY 12
 #pragma pack(1)
-#include "../efi.h"
-#include "./stdint.h"
+#include "../../efi.h"
+#include "../stdint.h"
 
 typedef struct __packed {
   UINTN  MapSize;
@@ -30,7 +30,7 @@ typedef struct {
 
 // This code is released under the MIT License
 
-#include "../attribute.h"
+#include "../../attribute.h"
 
 #ifndef __cplusplus
 #  define bool  _Bool

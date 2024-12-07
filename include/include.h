@@ -8,14 +8,15 @@
 #include "./cppinc/sheet.h"
 #include "./cppinc/proto.hpp"
 #include "./global/stdint.h"
-#include "./global/global_color.h"
-#include "./global/memory.h"
-#include "./global/pctable/gdt.h"
-#include "./global/protect.h"
-#include "./global/apic.h"
+#include "./global/graphics/global_color.h"
+#include "./global/kernel/memory.h"
+#include "./global/kernel/pctable/gdt.h"
+#include "./global/kernel/protect.h"
+#include "./global/kernel/acpi.h"
+#include "./global/kernel/apic.h"
 
 extern "C" {
-#include "./global/pctable/idt.h"
+#include "./global/kernel/pctable/idt.h"
 #include "./efi.h"
 }
 #endif 
