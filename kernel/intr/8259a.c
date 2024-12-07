@@ -16,3 +16,9 @@ void init_8259A()
     outb(INT_M_CTLMASK, 0xFF);
     outb(INT_S_CTLMASK, 0xFF);
 }
+
+void disable_8259A()
+{
+    outb(INT_M_CTLMASK, 0xff);
+    outb(INT_S_CTLMASK, 0xff);
+}

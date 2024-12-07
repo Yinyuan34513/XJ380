@@ -269,12 +269,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       ;
   }
 
+  BOOT_CONFIG BootConfig;     // 内核传参
+
   // 获取RSDP
   EFI_CONFIGURATION_TABLE  *SystemConfigTable     = NULL;
-  RSDP_TYPE                *AcpiRsdp;
-  ACPI_TABLE_HEADER        *XSDT, *AcpiTableEntry;
-  UINT64                    SDTEntryCount;
-  UINT64                   *AcpiTableEntryPtr;
   UINT8                     AcpiTableWasFound     = 0;    // 0=找不着 1=找到了
   SystemConfigTable = ST->ConfigurationTable;
   for (int i = 0; i < ST->NumberOfTableEntries; i++) {
@@ -282,21 +280,27 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       // 找到了ACPI表
       // 修订版 >= ACPI 2.0
       AcpiTableWasFound = 1;
-      AcpiRsdp = SystemConfigTable->VendorTable;
+      RSDP_TYPE              *AcpiRsdp =  (RSDP_TYPE *)(SystemConfigTable->VendorTable);    // 指向存储RSDP的表的指针
+      ACPI_TABLE_HEADER      *XSDT =      (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);        // 指向XSDT的指针
+      UINT64                 *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);                     // 指向XSDT后面的其他SDT的地址的指针
+      UINT64                  Entries =   (XSDT->length - sizeof(XSDT->length)) / 8;        // SDT数量
+      
       // 遍历所有ACPI表
-      XSDT = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);
-      AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);
-      for (int j = 0; j < SDTEntryCount; j++, AcpiTableEntryPtr++) {
-        AcpiTableEntry = (ACPI_TABLE_HEADER *)((UINT64)(*AcpiTableEntryPtr));
-        if (strcmp(AcpiTableEntry->sign, "APIC") == 0) {
+      for (int j = 0; j < Entries; j++, AcpiTableEntryPtr++) {
+        ACPI_TABLE_HEADER    *AcpiSdtPointer = (ACPI_TABLE_HEADER *)(*AcpiTableEntryPtr);    // 指向其他SDT的表头的指针
+        if (!part_strcmp(AcpiSdtPointer->sign, "APIC", 4)) {
           // MADT!!!
+          MADT_FLAG          *MadtFlag =  (MADT_FLAG *)(AcpiSdtPointer + 1);
+          BootConfig.MADT.MadtFlag.LocalApicAddr      = MadtFlag->LocalApicAddr;
+          BootConfig.MADT.MadtFlag.PicSign            = MadtFlag->PicSign;
+          BootConfig.MADT.TableAddr                   = (UINT64)(MadtFlag + 1);
         }
       }
       break;
     }
     SystemConfigTable++;
   }
-  if (AcpiTableWasFound != 1) {
+  if (AcpiTableWasFound == 0) {
     puts(L"XJ380 does not boot properly. Please visit "
             L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
             L"ACPI_TABLE_NOT_FOUND\r\n");
@@ -305,7 +309,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   }
 
   // 获取memory map
-  BOOT_CONFIG BootConfig;
   BootConfig.MemoryMap.MapSize           = 4096;
   BootConfig.MemoryMap.Buffer            = NULL;
   BootConfig.MemoryMap.MapKey            = 0;
