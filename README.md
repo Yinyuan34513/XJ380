@@ -188,3 +188,7 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 29 【已虚拟机测试】
 2024年12月7日 Guoqiyu1115
 - 成功从ACPI获取MADT（VMware无法引导）
+
+### BuildVersion 29.1 【已实机测试】
+2024年12月7日 Guoqiyu1115
+- 成功从ACPI获取MADT（国企鱼事傻逼）
