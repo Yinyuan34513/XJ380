@@ -65,6 +65,14 @@ UINT64 strlen(const char *str);
 UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
+/*
+*   driver/*
+*/
+// driver/serial/serial_port.cpp
+int init_serial();
+int is_transmit_empty();
+void write_serial(char a);
+
 
 
 /*

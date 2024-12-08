@@ -11,6 +11,7 @@ mkdir esp\EFI\BOOT
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\idt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\idt.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\asm\common.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\common.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\cpu\apic.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\apic.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe driver\serial\serial_port.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\serial_port.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\draw.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\draw.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe font\font.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\font.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\desktop.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\desktop.o
@@ -23,7 +24,7 @@ mkdir esp\EFI\BOOT
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\alloc.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -c -o out\alloc.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe lib\string.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -c -o out\lib_string.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\asm\handler.S -nostdlib -m64 -O0 -g -ffreestanding -fno-exceptions -fno-rtti -c -o out\handler.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z norelro -T linker.ld -nostdlib --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o .\out\memorym.o .\out\wsod.o .\out\alloc.o .\out\sheet.o .\out\draw_sheet.o .\out\mouse.o .\out\gdt.o .\out\common.o out\handler.o .\out\idt.o .\out\apic.o .\out\t.o .\out\lib_string.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z norelro -T linker.ld -nostdlib --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o .\out\memorym.o .\out\wsod.o .\out\alloc.o .\out\sheet.o .\out\draw_sheet.o .\out\mouse.o .\out\gdt.o .\out\common.o out\handler.o .\out\idt.o .\out\apic.o .\out\t.o .\out\lib_string.o .\out\serial_port.o
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
 ..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 4096 -net none -machine q35 -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
