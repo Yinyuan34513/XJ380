@@ -292,11 +292,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
           ACPI_TABLE_HEADER    *AcpiSdtPointer = (ACPI_TABLE_HEADER *)(AcpiTableEntryPtr);    // 指向其他SDT的表头的指针（有BUG）
           if (!part_strcmp(AcpiSdtPointer->sign, "APIC", 4)) {
             // MADT!!!
-            /*
-            MADT_FLAG          *MadtFlag =  (MADT_FLAG *)(AcpiSdtPointer + 1);
-            BootConfig.MADT.MadtFlag.LocalApicAddr      = MadtFlag->LocalApicAddr;
-            BootConfig.MADT.MadtFlag.PicSign            = MadtFlag->PicSign;
-            BootConfig.MADT.TableAddr                   = (UINT64)(MadtFlag + 1);*/
+            BootConfig.MADT = (UINT64)(AcpiSdtPointer);
           }
         }
         break;

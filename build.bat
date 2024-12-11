@@ -10,7 +10,7 @@ mkdir esp\EFI\BOOT
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\gdt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\gdt.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\idt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\idt.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\asm\common.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\common.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\cpu\apic.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\apic.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\apic.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\apic.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe driver\serial\serial_port.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\serial_port.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\draw.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\draw.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe font\font.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\font.o

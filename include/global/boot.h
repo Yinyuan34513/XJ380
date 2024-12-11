@@ -5,14 +5,9 @@
 #include "./stdint.h"
 #include "./kernel/memory.h"
 #include "./kernel/apic/madt.h"
-typedef struct 
-{
-    MADT_FLAG   MadtFlag;
-    UINT64      TableAddr;
-} MADT_CONFIG;
 typedef struct
 {
-    MADT_CONFIG MADT;
+    UINT64      MADT;
     MEMORY_MAP  MemoryMap;
 } BOOT_CONFIG;
 #endif
