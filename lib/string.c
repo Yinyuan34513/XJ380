@@ -7,6 +7,13 @@ extern "C" {
 #endif
 #include "../include/global/stdint.h"
 
+char *strncpy(char *dest, const char *src, UINT64 length)
+{
+    char *r = dest;
+    for (int i = 0; i < length; i++)
+        *dest++ = *src++;
+    return r;
+}
 char *strcpy(char *dest, const char *src)
 {
     //assert(dest != NULL && src != NULL);

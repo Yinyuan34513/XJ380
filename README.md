@@ -192,3 +192,73 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 29.1 【已实机测试】
 2024年12月7日 Guoqiyu1115
 - 成功从ACPI获取MADT（国企鱼事傻逼）
+
+## 中断分配表
+### 0   ~   31	trap fault abort for system
+    0	devide error
+    1	debug
+    2	NMI
+    3	breakpoint
+    4	overflow
+    5	bound range
+    6	undefined opcode
+    7	device	not available
+    8	double fault
+    9	coprocessor segment overrun
+    10	invalid TSS
+    11	segment not present
+    12	stack segment fault
+    13	general protection
+    14	page fault
+    15
+    16	x87 FPU error
+    17	alignment check
+    18	machine check
+    19	SIMD exception
+    20	virtualization exception
+### 21  ~   31	Do not use
+
+### 32  ~   55	I/O APIC
+    32	8259A
+    33	keyboard
+    34	HPET timer 0,8254 counter 0
+    35	serial port A
+    36	serial port B
+    37	parallel port
+    38	floppy
+    39	parallel port
+    40	RTC,HPET timer 1
+    41	Generic
+    42	Generic
+    43	HPET timer 2
+    44	HPET timer 3	/ mouse
+    45	FERR#
+    46	SATA primary
+    47	SATA secondary
+    48	PIRQA
+    49	PIRQB
+    50	PIRQC
+    51	PIRQD
+    52	PIRQE
+    53	PIRQF
+    54	PIRQG
+    55	PIRQH
+
+
+0x80		system call
+0x81		system interrupt 系统中断
+
+### 150 ~   200	Local APIC
+    150	CMCI
+    151	Timer
+    152	Thermal Monitor
+    153	Performance Counter
+    154	LINT0
+    155	LINT1
+    156	Error
+    157 xhci_controller_0
+    158 xhci_controller_1
+    159 xhci_controller_2
+    160 xhci_controller_3
+
+### 200 ~   255	MP IPI
