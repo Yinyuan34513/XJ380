@@ -101,6 +101,40 @@ extern "C" {
 #define SMP_IRQ_NUM 10
 #define LOCAL_APIC_IRQ_NUM 50
 
+extern void (*interrupt_table[24])(void);
+extern void (*SMP_interrupt_table[SMP_IRQ_NUM])(void);
+extern void (*local_apic_interrupt_table[LOCAL_APIC_IRQ_NUM])(void);
+
+/*
+    ICR
+*/
+
+struct INT_CMD_REG
+{
+    unsigned int vector : 8, // 0~7
+        deliver_mode : 3,    // 8~10
+        dest_mode : 1,       // 11
+        deliver_status : 1,  // 12
+        res_1 : 1,           // 13
+        level : 1,           // 14
+        trigger : 1,         // 15
+        res_2 : 2,           // 16~17
+        dest_shorthand : 2,  // 18~19
+        res_3 : 12;          // 20~31
+
+    union
+    {
+        struct
+        {
+            unsigned int res_4 : 24, // 32~55
+                dest_field : 8;      // 56~63
+        } apic_destination;
+
+        unsigned int x2apic_destination; // 32~63
+    } destination;
+
+} __attribute__((packed));
+
 typedef struct
 {
     // 使能中断操作接口

@@ -149,8 +149,15 @@ void init_x2Apic(UINT64 MADT) {
  * @param MADT MADT表地址
  * 
  */
-void init_LocalApic(UINT64 MADT) {
+void init_apic(UINT64 MADT) {
     write_serial_string("Initializing APIC...\n");
+
+    for (int i = 32; i <= 55; ++i)
+        init_idt_desc(i, X86_64_INTR_GATE, interrupt_table[i - 32], RING3);
+
+    // 设置Local APIC中断门
+    for (int i = 150; i < 160; ++i)
+        init_idt_desc(i, X86_64_INTR_GATE, local_apic_interrupt_table[i - 150], RING3);
 
     // 屏蔽8259A
     disable_8259A();

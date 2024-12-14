@@ -1,5 +1,12 @@
 #include "../../include/asm.h"
 #include "../../include/global/kernel/apic/apic.h"
+#include "../../include/cinc/cproto.h"
+
+#ifndef __cplusplus
+#  define bool  _Bool
+#  define true  ((bool)1)
+#  define false ((bool)0)
+#endif
 
 // 一碰就炸
 IRQ_DESC_TYPE interrupt_desc[IRQ_NUM] = {0};
@@ -100,3 +107,174 @@ void (*interrupt_table[24])(void) =
     IRQ0x36interrupt,
     IRQ0x37interrupt
 };
+
+
+/**
+ * @brief 声明10个IPI消息处理程序，向量号从200(0xc8)开始
+ *
+ */
+
+/*
+ */
+Build_IRQ(0xc8);
+Build_IRQ(0xc9);
+Build_IRQ(0xca);
+Build_IRQ(0xcb);
+Build_IRQ(0xcc);
+Build_IRQ(0xcd);
+Build_IRQ(0xce);
+Build_IRQ(0xcf);
+Build_IRQ(0xd0);
+Build_IRQ(0xd1);
+
+// 初始化IPI中断服务程序数组
+void (*SMP_interrupt_table[SMP_IRQ_NUM])(void) =
+    {
+        IRQ0xc8interrupt,
+        IRQ0xc9interrupt,
+        IRQ0xcainterrupt,
+        IRQ0xcbinterrupt,
+        IRQ0xccinterrupt,
+        IRQ0xcdinterrupt,
+        IRQ0xceinterrupt,
+        IRQ0xcfinterrupt,
+        IRQ0xd0interrupt,
+        IRQ0xd1interrupt,
+};
+
+// 初始化local apic中断服务程序数组
+Build_IRQ(0x96);
+Build_IRQ(0x97);
+Build_IRQ(0x98);
+Build_IRQ(0x99);
+Build_IRQ(0x9a);
+Build_IRQ(0x9b);
+Build_IRQ(0x9c);
+Build_IRQ(0x9d);
+Build_IRQ(0x9e);
+Build_IRQ(0x9f);
+
+void (*local_apic_interrupt_table[LOCAL_APIC_IRQ_NUM])(void) =
+    {
+        IRQ0x96interrupt,
+        IRQ0x97interrupt,
+        IRQ0x98interrupt,
+        IRQ0x99interrupt,
+        IRQ0x9ainterrupt,
+        IRQ0x9binterrupt,
+        IRQ0x9cinterrupt,
+        IRQ0x9dinterrupt,
+        IRQ0x9einterrupt,
+        IRQ0x9finterrupt,
+};
+
+/**
+ * @brief 中断注册函数
+ *
+ * @param irq_num 中断向量号
+ * @param arg 传递给中断安装接口的参数
+ * @param handler 中断处理函数
+ * @param paramater 中断处理函数的参数
+ * @param controller 中断控制器结构
+ * @param irq_name 中断名
+ * @return int
+ */
+int irq_register(uint64_t irq_num, void *arg, void (*handler)(uint64_t irq_num, uint64_t parameter, struct X64_REGS *regs), uint64_t paramater, HARDWARE_INTR_CTRL *controller, char *irq_name)
+{
+    // 由于为I/O APIC分配的中断向量号是从32开始的，因此要减去32才是对应的interrupt_desc的元素
+    IRQ_DESC_TYPE *p = NULL;
+    if (irq_num >= 32 && irq_num < 0x80)
+        p = &interrupt_desc[irq_num - 32];
+    else if (irq_num >= 150 && irq_num < 200)
+        p = &local_apic_interrupt_desc[irq_num - 150];
+    else
+    {
+        write_serial_string("[irq.c:188]Invaild IRQ.");
+        return -1;
+    }
+    p->controller = controller;
+    if (p->irq_name == NULL)
+    {
+        int namelen = strlen(irq_name) + 1;
+        p->irq_name = (char *)malloc(namelen);
+        xmemset(p->irq_name, 0, namelen);
+        strncpy(p->irq_name, irq_name, namelen);
+    }
+
+    p->parameter = paramater;
+    p->flags = 0;
+    p->handler = handler;
+
+    p->controller->install(irq_num, arg);
+    p->controller->enable(irq_num);
+
+    return 0;
+}
+
+/**
+ * @brief 中断注销函数
+ *
+ * @param irq_num 中断向量号
+ * @return int
+ */
+int irq_unregister(uint64_t irq_num)
+{
+    IRQ_DESC_TYPE *p = &interrupt_desc[irq_num - 32];
+    p->controller->disable(irq_num);
+    p->controller->uninstall(irq_num);
+
+    p->controller = NULL;
+    if (p->irq_name)
+        free(p->irq_name);
+    p->irq_name = NULL;
+    p->parameter = 0;
+    p->flags = 0;
+    p->handler = NULL;
+
+    return 0;
+}
+
+void ipi_send_IPI(uint32_t dest_mode, uint32_t deliver_status, uint32_t level, uint32_t trigger,
+                  uint32_t vector, uint32_t deliver_mode, uint32_t dest_shorthand, bool apic_type, 
+                  uint32_t destination)
+{
+    struct INT_CMD_REG icr_entry;
+    icr_entry.dest_mode = dest_mode;
+    icr_entry.deliver_status = deliver_status;
+    icr_entry.res_1 = 0;
+    icr_entry.level = level;
+    icr_entry.trigger = trigger;
+    icr_entry.res_2 = 0;
+    icr_entry.res_3 = 0;
+
+    icr_entry.vector = vector;
+    icr_entry.deliver_mode = deliver_mode;
+    icr_entry.dest_shorthand = dest_shorthand;
+
+    icr_entry.destination.x2apic_destination = destination;
+    SetMSR(0x830, (*(unsigned long *)&icr_entry & 0xffffffff), (*(unsigned long *)&icr_entry << 32)); // 发送ipi
+}
+
+int ipi_regiserIPI(uint64_t irq_num, void *arg,
+                   void (*handler)(uint64_t irq_num, uint64_t param, struct pt_regs *regs),
+                   uint64_t param, HARDWARE_INTR_CTRL *controller, char *irq_name)
+{
+    IRQ_DESC_TYPE *p = &SMP_IPI_desc[irq_num - 200];
+    p->controller = NULL;
+    p->irq_name = irq_name;
+    p->parameter = param;
+    p->flags = 0;
+    p->handler = handler;
+    return 0;
+}
+
+/**
+ * @brief 初始化中断模块
+ */
+void init_irq(UINT64 MADT)
+{
+    xmemset((void *)interrupt_desc,             0, sizeof(IRQ_DESC_TYPE) * IRQ_NUM);
+    xmemset((void *)local_apic_interrupt_desc,  0, sizeof(IRQ_DESC_TYPE) * LOCAL_APIC_IRQ_NUM);
+
+    init_apic(MADT);
+}

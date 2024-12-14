@@ -60,10 +60,13 @@ void PrintDec(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, unsigned long lon
 *   lib/*
 */
 // lib/string.c
+char *strncpy(char *dest, const char *src, UINT64 length);
 char *strcpy(char *dest, const char *src);
 UINT64 strlen(const char *str);
 UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
+
+
 
 /*
 *   driver/*
@@ -107,7 +110,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
 // kernel/intr/apic.cpp
 extern "C" void do_IRQ(struct X64_REGS *regs, UINT64 error_code);
-void init_LocalApic(UINT64 MADT);
+void init_apic(UINT64 MADT);
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
