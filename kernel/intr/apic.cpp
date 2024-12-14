@@ -31,53 +31,22 @@ UINT8 check_apic() {
     return 0;
 }
 
-/**
- * @brief 中断处理函数
- * 
- * @param regs   寄存器
- * @param number 中断号
- */
-void do_IRQ(struct X64_REGS *rsp, UINT64 number) {
-    // 低于0x80的是外部中断控制器，高于0x80的是Local APIC
-    if (number < 0x80 && number >= 32)      // 是外部中断控制器
-    {
-        IRQ_DESC_TYPE *irq = &interrupt_desc[number - 32];
+void init_ioApic(UINT64 MADT) {
+    ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
+    MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
+    UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
+    UINT64                  ioApicAddr           = 0;                 // APIC寄存器地址
 
-        // 执行中断上半部处理程序
-        if (irq != NULL && irq->handler != NULL) {
-            irq->handler(number, irq->parameter, rsp);
-        } else {
-            //
+    // 遍历所有表入口
+    for (/* PASS */; MadtEntryPointer <= MadtEntryPointer + MadtHeader->length; /* PASS */) {
+        MADT_ENTRY_FLAG    *MadtEntryFlagPointer = (MADT_ENTRY_FLAG *)(MadtEntryPointer);   // 获取入口类型
+        if (MadtEntryFlagPointer->EntryType == 1) {
+            MADT_IO_APIC_FLAG *IOApicAddrEntry = (MADT_IO_APIC_FLAG *)(MadtEntryFlagPointer + 1);
+            // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
+            if (IOApicAddrEntry->IOApicAddr) {
+                ioApicAddr = IOApicAddrEntry->IOApicAddr;
+            }
         }
-        // 向中断控制器发送应答消息
-        if (irq->controller != NULL && irq->controller->ack != NULL) {
-            irq->controller->ack(number);
-        } else {
-            // 向EOI寄存器写入0x00表示结束中断
-            __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
-                                 "movq	$0x00,	%%rax	\n\t"
-                                 "movq 	$0x80b,	%%rcx	\n\t"
-                                 "wrmsr	\n\t" ::
-                                     : "memory");
-        }
-    }
-    else if (number > 0x80)                 // 是Local APIC
-    {
-        __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
-                                 "movq	$0x00,	%%rax	\n\t"
-                                 "movq 	$0x80b,	%%rcx	\n\t"
-                                 "wrmsr	\n\t" ::
-                                     : "memory");
-
-        {
-            IRQ_DESC_TYPE *irq = &SMP_IPI_desc[number - 200];
-            if (irq->handler != NULL)
-                irq->handler(number, irq->parameter, rsp);
-        }
-    }
-    else
-    {
-        //
     }
 }
 
@@ -171,5 +140,58 @@ void init_apic(UINT64 MADT) {
         wsod_apic_not_found();
     }
     write_serial_string("APIC Local Initialize Success.\n");
+
+    init_ioApic(MADT);
+
     write_serial_string("APIC Initialize Success.\n");
+}
+
+/**
+ * @brief 中断处理函数
+ * 
+ * @param regs   寄存器
+ * @param number 中断号
+ */
+void do_IRQ(struct X64_REGS *rsp, UINT64 number) {
+    // 低于0x80的是外部中断控制器，高于0x80的是Local APIC
+    if (number < 0x80 && number >= 32)      // 是外部中断控制器
+    {
+        IRQ_DESC_TYPE *irq = &interrupt_desc[number - 32];
+
+        // 执行中断上半部处理程序
+        if (irq != NULL && irq->handler != NULL) {
+            irq->handler(number, irq->parameter, rsp);
+        } else {
+            //
+        }
+        // 向中断控制器发送应答消息
+        if (irq->controller != NULL && irq->controller->ack != NULL) {
+            irq->controller->ack(number);
+        } else {
+            // 向EOI寄存器写入0x00表示结束中断
+            __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
+                                 "movq	$0x00,	%%rax	\n\t"
+                                 "movq 	$0x80b,	%%rcx	\n\t"
+                                 "wrmsr	\n\t" ::
+                                     : "memory");
+        }
+    }
+    else if (number > 0x80)                 // 是Local APIC
+    {
+        __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
+                                 "movq	$0x00,	%%rax	\n\t"
+                                 "movq 	$0x80b,	%%rcx	\n\t"
+                                 "wrmsr	\n\t" ::
+                                     : "memory");
+
+        {
+            IRQ_DESC_TYPE *irq = &SMP_IPI_desc[number - 200];
+            if (irq->handler != NULL)
+                irq->handler(number, irq->parameter, rsp);
+        }
+    }
+    else
+    {
+        //
+    }
 }
