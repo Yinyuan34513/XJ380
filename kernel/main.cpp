@@ -108,8 +108,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   refresh_sheet(&shtinf);   // 刷新
 
+  write_serial_string("Operating System Initialize Success.\n");
   while (1) {
-    write_serial_string("Operating System Initialize Success.\n");
     /*
     spp_status = SPP.GetState(&SPP, &spp_state);
     if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
