@@ -22,7 +22,7 @@ mkdir esp\EFI\BOOT
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\memorym.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\memorym.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\wsod.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\wsod.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\8259a.c -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\t.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\asm\irq.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -std=c11 -c -o out\irq.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\intr\irq.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -std=c11 -c -o out\irq.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\alloc.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -std=c11 -c -o out\alloc.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe lib\string.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -std=c11 -c -o out\lib_string.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\asm\handler.S -nostdlib -m64 -O0 -g -ffreestanding -fno-exceptions -fno-rtti -c -o out\handler.o
