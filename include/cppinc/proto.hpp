@@ -2,8 +2,8 @@
 #define _PROTO_HPP_
 
 #include "../include.h"
-
-#include"../efi.h"
+#include "../efi.h"
+#include "../global/kernel/apic/apic.h"
 
 
 
@@ -134,6 +134,17 @@ void io_mfence();
 // kernel/intr/8259A.cpp
 void init_8259A();
 void disable_8259A();
+
+// kernel/intr/irqfunc.c
+int irq_register(uint64_t irq_num, void *arg, void (*handler)(uint64_t irq_num, uint64_t parameter, struct X64_REGS *regs), uint64_t paramater, HARDWARE_INTR_CTRL *controller, char *irq_name);
+int irq_unregister(uint64_t irq_num);
+void ipi_send_IPI(uint32_t dest_mode, uint32_t deliver_status, uint32_t level, uint32_t trigger,
+                  uint32_t vector, uint32_t deliver_mode, uint32_t dest_shorthand, bool apic_type, 
+                  uint32_t destination);
+int ipi_regiserIPI(uint64_t irq_num, void *arg,
+                   void (*handler)(uint64_t irq_num, uint64_t param, struct pt_regs *regs),
+                   uint64_t param, HARDWARE_INTR_CTRL *controller, char *irq_name);
+void init_irq(UINT64 MADT);
 
 // kernel/pctable/gdt.cpp
 void init_gdt();
