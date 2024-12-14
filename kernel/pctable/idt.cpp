@@ -8,6 +8,7 @@ void init_8259A();
 
 // 初始化idt
 void init_idt() {
+    write_serial_string("Initializing IDT...\n");
     // 初始化IDTR寄存器和门描述符
     UINT16 *p_idt_limit = (UINT16 *)(&idt_ptr.size);
     UINT64 *p_idt_base  = (UINT64 *)(&idt_ptr.base);
@@ -57,6 +58,7 @@ void init_idt() {
     init_idt_desc(INT_VECTOR_IRQ8 + 7,     X86_64_INTR_GATE, debug,               RING0);
 
     __asm__ volatile ("lidt %0" : : "m"(idt_ptr));
+    write_serial_string("IDT Initialize Success.\n");
 }
 
 void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege) {

@@ -34,6 +34,7 @@ void memory_test(const FrameBufferConfig &fbc) {
 
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   // 初始化
+  write_serial_string("Initializing Memory Manager...\n");
   EfiMemoryDesc        *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
   /*
     int printy = 164;
@@ -124,4 +125,5 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     memory_test(fbc);
   }
   */
+  write_serial_string("Memory Manager Initialize Success.\n");
 }

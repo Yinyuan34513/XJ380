@@ -72,6 +72,7 @@ UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 int init_serial();
 int is_transmit_empty();
 void write_serial(char a);
+void write_serial_string(char *str);
 
 
 

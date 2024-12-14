@@ -1,6 +1,7 @@
 // 版权所有©XINGJI Studios 2017-2024 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
 #include "../include/cinclude.h"
+#include "./bootlib.c"
 #define NULL 0
 struct EFI_SYSTEM_TABLE                *ST;   // 系统表
 struct EFI_BOOT_SERVICES               *BS;   // 启动信息
@@ -10,6 +11,11 @@ struct EFI_LOADED_IMAGE_PROTOCOL       *LIP;  // 文件
 struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP;  // 鼠标
 struct EFI_BATTERY_CHARGING_PROTOCOL   *BAT;  // 电池
 EFI_HANDLE                              IM;
+
+void write_serial_string(char *str);
+char *strcpy(char *dest, const char *src);
+UINT64 strcmp(char *from_str, char *cmp_str);
+UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
 static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf, size_t len,
                                                                    uint64_t n) {
@@ -201,7 +207,12 @@ typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, struct BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
+  write_serial_string("\n");
+  write_serial_string("XJ380 Operating System - Serial Log\n");
+  write_serial_string("Copyright(C) XINGJI Interacitve Software 2017-2024 All rights reserved.\n");
+  write_serial_string("OS Version: BuildVersion\n");
   efi_init(ImageHandle, SystemTable);
+  write_serial_string("EFI Initialize Success.\n");
 
   ST->ConOut->ClearScreen(ST->ConOut);
 
@@ -216,13 +227,16 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
+    write_serial_string("[bootx64.c:230]Root Dir Open Failed. Stop.\n");
     while (1)
       ;
   }
+  write_serial_string("Root Dir Open Success.\n");
   status = root->Open(root, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
+    write_serial_string("[bootx64.c:239]Kernel Read Failed. Stop.\n");
     while (1)
       ;
   }
@@ -231,9 +245,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
+    write_serial_string("[bootx64.c:248]Kernel Read Failed. Stop.\n");
     while (1)
       ;
   }
+  write_serial_string("XSK2.0 Kernel Read Success.\n");
 
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel_buffer;
   UINT64      kernel_first_addr, kernel_last_addr;                   // 计算的首尾
@@ -243,9 +259,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   if (EFI_ERROR(status)) {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
+    write_serial_string("[bootx64.c:262]Memory Allocate Failed. Stop.\n");
     while (1)
       ;
   }
+  write_serial_string("Kernel Memory Allocate Success.\n");
 
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
@@ -265,9 +283,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"UNSUPPORTED_PIXEL_FORMAT");
+    write_serial_string("[bootx64.c:286]Vedio Initialize Failed. Stop.\n");
     while (1)
       ;
   }
+  write_serial_string("Vedio Initialize Success.\n");
 
   BOOT_CONFIG BootConfig;     // 内核传参
 
@@ -283,6 +303,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       RSDP_TYPE              *AcpiRsdp =  (RSDP_TYPE *)(SystemConfigTable->VendorTable);    // 指向存储RSDP的表的指针
       // 修订版 >= ACPI 2.0
       if (AcpiRsdp->version >= 2) {
+        write_serial_string("ACPI Table Found Success.\n");
         ACPI_TABLE_HEADER      *XSDT =      (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);        // 指向XSDT的指针
         UINT64                 *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);                     // 指向XSDT后面的其他SDT的地址的指针
         UINT64                  Entries =   (XSDT->length - sizeof(XSDT->length)) / 8;        // SDT数量
@@ -291,6 +312,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         for (int j = 0; j < Entries; j++, AcpiTableEntryPtr++) {
           ACPI_TABLE_HEADER    *AcpiSdtPointer = (ACPI_TABLE_HEADER *)(AcpiTableEntryPtr);    // 指向其他SDT的表头的指针（有BUG）
           if (!part_strcmp(AcpiSdtPointer->sign, "APIC", 4)) {
+            write_serial_string("MADT Found Success.\n");
             // MADT!!!
             BootConfig.MADT = (UINT64)(AcpiSdtPointer);
           }
@@ -304,6 +326,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
             L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
             L"ACPI_TABLE_NOT_FOUND\r\n");
+    write_serial_string("[bootx64.c:329]ACPI Table Not Found.\n");
     while (1)
       ;
   }
@@ -326,6 +349,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"CANNOT_BOOT_SYSTEM");
+    write_serial_string("[bootx64.c:352]Boot Services Exit Failed. Stop.\n");
     while (1)
       ;
   }
@@ -337,50 +361,5 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   while (1)
     ; // 趋势
-}
-
-
-
-// lib/string.c
-// 懒得链接啥的了，直接塞一个得了
-char *strcpy(char *dest, const char *src)
-{
-    //assert(dest != NULL && src != NULL);
-    char *r = dest;
-    while ((*dest++ = *src++));
-    return r;
-}
-
-UINT64 strlen(const char *str)
-{
-    //assert(str != NULL);
-    const char *p = str;
-    while (*p++);
-    return p - str - 1;
-}
-
-UINT64 strcmp(char *from_str, char *cmp_str)
-{
-	while ((*from_str != '\0') && (*from_str == *cmp_str))
-	{
-		from_str++;
-		cmp_str++;
-	}
-	return *from_str - *cmp_str;
-}
-
-UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size)
-{
-   char temp[32], from[32];
-   for (UINT64 i = 0; i < size; i++)
-   {
-       temp[i] = from_str[i];
-       from[i] = cmp_str[i];
-   }
-   temp[size] = '\0';
-   from[size] = '\0';
-   UINT64 ret;
-   ret = strcmp(from, temp);
-   return ret;
 }
 

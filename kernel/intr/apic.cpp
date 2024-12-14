@@ -114,7 +114,8 @@ void init_x2Apic(UINT64 MADT) {
     SetMSR(IA32_APIC_BASE_MSR,  ApicMsrEax,  ApicMsrEdx);
     GetMSR(IA32_APIC_BASE_MSR, &ApicMsrEax, &ApicMsrEdx);
     // 检测是否启用
-    if (ApicMsrEax & 0xC00) { /* 好像没啥要干的 */ }
+    if (ApicMsrEax & 0xC00) 
+        write_serial_string("x2APIC Enabled Success.\n");
     
     // 设置SVR寄存器，启用Local APIC，禁止EOI广播
     GetMSR(IA32_APIC_SVR_MSR, &ApicMsrEax, &ApicMsrEdx);
@@ -123,12 +124,10 @@ void init_x2Apic(UINT64 MADT) {
     SetMSR(IA32_APIC_SVR_MSR,  ApicMsrEax,  ApicMsrEdx);
     GetMSR(IA32_APIC_SVR_MSR, &ApicMsrEax, &ApicMsrEdx);
     // 检测是否成功设置
-    if (ApicMsrEax & 0x100) {
-        // Local APIC已启用
-    }
-    if (ApicMsrEax & 0x1000) {
-        // EOI广播已禁用
-    }
+    if (ApicMsrEax & 0x100) 
+        write_serial_string("Local APIC Enabled Success.\n");
+    if (ApicMsrEax & 0x1000) 
+        write_serial_string("EOI Disabled Success.\n");     // 这个如果不输出事正常情况
 
     // 关掉LVT
     SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
@@ -140,6 +139,7 @@ void init_x2Apic(UINT64 MADT) {
 
     *(UINT32 *)(LocalApicAddr + LOCAL_APIC_OFFSET_Local_APIC_LVT_TIMER) = 0x10000;
     io_mfence();
+    write_serial_string("Local APIC Initialize Success.\n");
 }
 
 /** 
@@ -150,6 +150,7 @@ void init_x2Apic(UINT64 MADT) {
  * 
  */
 void init_LocalApic(UINT64 MADT) {
+    write_serial_string("Initializing APIC...\n");
 
     // 屏蔽8259A
     disable_8259A();
@@ -162,4 +163,6 @@ void init_LocalApic(UINT64 MADT) {
     } else {
         wsod_apic_not_found();
     }
+    write_serial_string("APIC Local Initialize Success.\n");
+    write_serial_string("APIC Initialize Success.\n");
 }

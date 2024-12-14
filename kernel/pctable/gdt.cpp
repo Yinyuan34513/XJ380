@@ -14,6 +14,7 @@ extern "C" UINT64 stack;
 /* 初始化全局描述符表 */
 void init_gdt()
 {
+	write_serial_string("Initializing GDT...\n");
 	gdt_ptr.limit	= sizeof(GDT_ENTRY) * GDT_LENGTH - 1;
 	gdt_ptr.base	= (UINT64)&gdt_entries;
 
@@ -41,6 +42,7 @@ void init_gdt()
 		: [SELECTOR_CODE64]"i"( SELECTOR_KERNEL_CS ),
 		  [SELECTOR_DATA64]"a"( SELECTOR_KERNEL_DS )
 	: );
+    write_serial_string("GDT Initialize Success.\n");
 }
 
 // 热知识：64位下，基地址和限长填了也没用

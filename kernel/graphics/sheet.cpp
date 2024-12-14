@@ -1,6 +1,7 @@
 #include "../../include/include.h"
 
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
+    write_serial_string("Initializing Sheet Manager...\n");
     sht->fbc = &fbc;
     sht->scrx = fbc.horizontal_resolution;
     sht->scry = fbc.vertical_resolution;
@@ -30,6 +31,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     for (int i = 0; i < MAX_SHEET - 1; i++) {
         sht->sheet[i].flag = 0;
     }
+    write_serial_string("Sheet Manager Initialize Success.\n");
 }
 
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id) {
