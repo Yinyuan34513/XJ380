@@ -82,6 +82,7 @@ void write_serial(char a);
 extern const FrameBufferConfig *fbc_addr;
 
 // kernel/wsod.cpp
+// 异常处理
 extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_nmi(struct X64_REGS *regs, UINT64 error_code);
@@ -90,6 +91,8 @@ extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_cod
 extern "C" void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
+// APIC初始化错误处理
+void wsod_apic_not_found();
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
@@ -100,6 +103,14 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
 void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id);
 void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
+
+// kernel/intr/apic.cpp
+extern "C" void do_IRQ(struct X64_REGS *regs, UINT64 error_code);
+void init_LocalApic(UINT64 MADT);
+
+// kernel/cpu/msr.cpp
+void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
+void SetMSR(UINT32 msr, UINT32  lo, UINT32  hi);
 
 // kernel/asm/common.cpp
 void outb(UINT16 port, UINT8 value);
@@ -114,6 +125,11 @@ void insl(UINT32 port, VOID *addr, int cnt);
 void outsl(UINT32 port, const VOID *addr, int cnt);
 void enable_intr();
 void disable_intr();
+void io_mfence();
+
+// kernel/intr/8259A.cpp
+void init_8259A();
+void disable_8259A();
 
 // kernel/pctable/gdt.cpp
 void init_gdt();
