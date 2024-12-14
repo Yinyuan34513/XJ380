@@ -43,6 +43,43 @@ void do_wsod(const char *err_code, struct X64_REGS *regs) {
     };
 } 
 
+void no_regs_wsod(const char *err_code) {
+    int scrx = fbc_addr->horizontal_resolution;
+    int scry = fbc_addr->vertical_resolution;
+    rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});   WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
+
+    WriteString(*fbc_addr, 8, 64, "We've stored the breakpoint, and you can send a screenshot of this screen or error log file to a technician.", {0, 0, 0});
+    
+    WriteString(*fbc_addr, 8, 84, "Register Data:", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 104, "CS  = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 104, "FUNC= N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 124, "DS  = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 124, "FLAG= N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 144, "SS  = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 144, "RIP = N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 164, "ES  = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 164, "ERRC= N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 184, "RAX = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 184, "R8  = N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 204, "RBX = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 204, "R9  = N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 224, "RCX = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 224, "R10 = N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 244, "RDX = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 244, "R11 = N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 264, "R12 = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 264, "R12 = N/A", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 284, "R14 = N/A", {0, 0, 0});    WriteString(*fbc_addr, 256, 284, "R15 = N/A", {0, 0, 0});
+
+    WriteString(*fbc_addr, 8, 320, "OS Version     = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 320, OS_VERSION, {0, 0, 0});
+    WriteString(*fbc_addr, 8, 360, "OS Edition     = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 360, OS_EDITION, {0, 0, 0});
+    WriteString(*fbc_addr, 8, 340, "Kernel Version = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 340, KN_VERSION, {0, 0, 0});
+    WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
+    while (1) { 
+        disable_intr();
+        __asm__("hlt"); 
+    };
+} 
+
+/**
+ * 
+ *      异常处理函数
+ * 
+ */
+
 // 预期外的中断
 void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code) {
     do_wsod("UNEXPECT_INTRRUPT", regs);
@@ -76,4 +113,17 @@ void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code) {
 // DEBUG
 void wsod_debug(struct X64_REGS *regs, UINT64 error_code) {
     do_wsod("DEBUG_BREAKPOINT", regs);
+}
+
+
+
+/**
+ * 
+ *      APIC初始化错误处理函数
+ * 
+ */
+
+// 未找到APIC
+void wsod_apic_not_found() {
+    no_regs_wsod("APIC_NOT_FOUND");
 }

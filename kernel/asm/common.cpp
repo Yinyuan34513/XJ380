@@ -91,3 +91,9 @@ void disable_intr()
 {
 	asm volatile("cli" ::: "memory");
 }
+
+// MFENCE
+void io_mfence()
+{
+	__asm__ volatile ("mfence	\n\t" ::: "memory");
+}
