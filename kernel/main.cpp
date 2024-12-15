@@ -5,7 +5,7 @@
 #define NULL        0
 const FrameBufferConfig *fbc_addr;
 
-static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, uint64_t n) {
+static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, UINT64 n) {
   char *s = buf + len;
   *--s    = '\0';
   if (n == 0) return (*--s = '0', s);

@@ -11,7 +11,7 @@
  * @param irq_name 中断名
  * @return int
  */
-int irq_register(uint64_t irq_num, void *arg, void (*handler)(uint64_t irq_num, uint64_t parameter, struct X64_REGS *regs), uint64_t paramater, HARDWARE_INTR_CTRL *controller, char *irq_name)
+int irq_register(UINT64 irq_num, void *arg, void (*handler)(UINT64 irq_num, UINT64 parameter, struct X64_REGS *regs), UINT64 paramater, HARDWARE_INTR_CTRL *controller, char *irq_name)
 {
     // 由于为I/O APIC分配的中断向量号是从32开始的，因此要减去32才是对应的interrupt_desc的元素
     IRQ_DESC_TYPE *p = NULL;
@@ -49,7 +49,7 @@ int irq_register(uint64_t irq_num, void *arg, void (*handler)(uint64_t irq_num, 
  * @param irq_num 中断向量号
  * @return int
  */
-int irq_unregister(uint64_t irq_num)
+int irq_unregister(UINT64 irq_num)
 {
     IRQ_DESC_TYPE *p = &interrupt_desc[irq_num - 32];
     p->controller->disable(irq_num);
@@ -66,9 +66,9 @@ int irq_unregister(uint64_t irq_num)
     return 0;
 }
 
-void ipi_send_IPI(uint32_t dest_mode, uint32_t deliver_status, uint32_t level, uint32_t trigger,
-                  uint32_t vector, uint32_t deliver_mode, uint32_t dest_shorthand, bool apic_type, 
-                  uint32_t destination)
+void ipi_send_IPI(UINT32 dest_mode, UINT32 deliver_status, UINT32 level, UINT32 trigger,
+                  UINT32 vector, UINT32 deliver_mode, UINT32 dest_shorthand, bool apic_type, 
+                  UINT32 destination)
 {
     struct INT_CMD_REG icr_entry;
     icr_entry.dest_mode = dest_mode;
@@ -87,9 +87,9 @@ void ipi_send_IPI(uint32_t dest_mode, uint32_t deliver_status, uint32_t level, u
     SetMSR(0x830, (*(unsigned long *)&icr_entry & 0xffffffff), (*(unsigned long *)&icr_entry << 32)); // 发送ipi
 }
 
-int ipi_regiserIPI(uint64_t irq_num, void *arg,
-                   void (*handler)(uint64_t irq_num, uint64_t param, struct X64_REGS *regs),
-                   uint64_t param, HARDWARE_INTR_CTRL *controller, char *irq_name)
+int ipi_regiserIPI(UINT64 irq_num, void *arg,
+                   void (*handler)(UINT64 irq_num, UINT64 param, struct X64_REGS *regs),
+                   UINT64 param, HARDWARE_INTR_CTRL *controller, char *irq_name)
 {
     IRQ_DESC_TYPE *p = &SMP_IPI_desc[irq_num - 200];
     p->controller = NULL;

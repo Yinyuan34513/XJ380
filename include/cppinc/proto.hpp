@@ -136,14 +136,14 @@ void init_8259A();
 void disable_8259A();
 
 // kernel/intr/irqfunc.c
-int irq_register(uint64_t irq_num, void *arg, void (*handler)(uint64_t irq_num, uint64_t parameter, struct X64_REGS *regs), uint64_t paramater, HARDWARE_INTR_CTRL *controller, char *irq_name);
-int irq_unregister(uint64_t irq_num);
-void ipi_send_IPI(uint32_t dest_mode, uint32_t deliver_status, uint32_t level, uint32_t trigger,
-                  uint32_t vector, uint32_t deliver_mode, uint32_t dest_shorthand, bool apic_type, 
-                  uint32_t destination);
-int ipi_regiserIPI(uint64_t irq_num, void *arg,
-                   void (*handler)(uint64_t irq_num, uint64_t param, struct pt_regs *regs),
-                   uint64_t param, HARDWARE_INTR_CTRL *controller, char *irq_name);
+int irq_register(UINT64 irq_num, void *arg, void (*handler)(UINT64 irq_num, UINT64 parameter, struct X64_REGS *regs), UINT64 paramater, HARDWARE_INTR_CTRL *controller, char *irq_name);
+int irq_unregister(UINT64 irq_num);
+void ipi_send_IPI(UINT32 dest_mode, UINT32 deliver_status, UINT32 level, UINT32 trigger,
+                  UINT32 vector, UINT32 deliver_mode, UINT32 dest_shorthand, bool apic_type, 
+                  UINT32 destination);
+int ipi_regiserIPI(UINT64 irq_num, void *arg,
+                   void (*handler)(UINT64 irq_num, UINT64 param, struct pt_regs *regs),
+                   UINT64 param, HARDWARE_INTR_CTRL *controller, char *irq_name);
 void init_irq(UINT64 MADT);
 
 // kernel/pctable/gdt.cpp

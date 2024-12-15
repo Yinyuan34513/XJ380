@@ -17,9 +17,9 @@ char *strcpy(char *dest, const char *src);
 UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
-static inline __attribute__((always_inline)) uint16_t *u64tostrb16(uint16_t *buf, size_t len,
-                                                                   uint64_t n) {
-  uint16_t *s = buf + len;
+static inline __attribute__((always_inline)) UINT16 *u64tostrb16(UINT16 *buf, size_t len,
+                                                                   UINT64 n) {
+  UINT16 *s = buf + len;
   *--s        = '\0';
   if (n == 0) return (*--s = '0', s);
   for (; n; n >>= 4)

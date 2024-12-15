@@ -9,7 +9,7 @@ void outb(UINT16 port, UINT8 value)
 // 端口读（8位）
 UINT8 inb(UINT16 port)
 {
-	uint8_t ret;
+	UINT8 ret;
 	asm volatile("inb %1, %0" : "=a" (ret) : "dN" (port));
 	return ret;
 }

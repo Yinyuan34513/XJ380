@@ -193,8 +193,8 @@ Makefile里有一个变量“REL”，填版本。
 2024年12月7日 Guoqiyu1115
 - 成功从ACPI获取MADT（国企鱼事傻逼）
 
-## 中断分配表
-### 0   ~   31	trap fault abort for system
+## 中断号分配表
+### 0   ~   31	异常
     0	devide error
     1	debug
     2	NMI
@@ -216,7 +216,8 @@ Makefile里有一个变量“REL”，填版本。
     18	machine check
     19	SIMD exception
     20	virtualization exception
-### 21  ~   31	Do not use
+
+### 21  ~   31	没用（算是保留）
 
 ### 32  ~   55	I/O APIC
     32	8259A
@@ -244,9 +245,7 @@ Makefile里有一个变量“REL”，填版本。
     54	PIRQG
     55	PIRQH
 
-
-0x80		system call
-0x81		system interrupt 系统中断
+### 56 ~    149 暂时没用
 
 ### 150 ~   200	Local APIC
     150	CMCI

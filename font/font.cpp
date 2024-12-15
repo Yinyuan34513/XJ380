@@ -3,11 +3,11 @@ auto operator new(size_t size, void *ptr) -> void*;
 auto operator new[](size_t size, void *ptr) -> void*;
 auto operator delete(void *ptr, size_t size) -> void;
 auto operator delete[](void *ptr, size_t size) -> void;
-extern const uint8_t _binary_hankaku_bin_start;
-extern const uint8_t _binary_hankaku_bin_end;
-extern const uint8_t _binary_hankaku_bin_size; // 将三个常量声明
+extern const UINT8 _binary_hankaku_bin_start;
+extern const UINT8 _binary_hankaku_bin_end;
+extern const UINT8 _binary_hankaku_bin_size; // 将三个常量声明
 typedef size_t uintptr_t;
-const uint8_t *GetFont(char c)
+const UINT8 *GetFont(char c)
 {
     auto index = 16 * static_cast<unsigned int>(c); // 每一个字符要对应16个char作为字体
     if (index >= reinterpret_cast<uintptr_t>(&_binary_hankaku_bin_size)) return nullptr; // 指针指到字体外面去，返回空指针
@@ -30,7 +30,7 @@ void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const Pixel
             break;  
     } 
 
-    const uint8_t *font = GetFont(ch); // 获取字体
+    const UINT8 *font = GetFont(ch); // 获取字体
     if (font == nullptr) return; // 不存在字体，直接退出
     for (int dy = 0; dy < 16; dy++) { // 第几行
         for (int dx = 0; dx < 16; dx++) { // 第几列
@@ -120,7 +120,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 // 下面是图层专属
 void PrintFont(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, char ch, const SHEET_BUFFER &color)
 {
-    const uint8_t *font = GetFont(ch); // 获取字体
+    const UINT8 *font = GetFont(ch); // 获取字体
     if (font == nullptr) return; // 不存在字体，直接退出
     for (int dy = 0; dy < 16; dy++) { // 第几行
         for (int dx = 0; dx < 16; dx++) { // 第几列
