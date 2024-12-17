@@ -116,6 +116,9 @@ void init_apic(UINT64 MADT);
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
 void SetMSR(UINT32 msr, UINT32  lo, UINT32  hi);
 
+// kernel/cpu/cpuid.cpp
+void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx);
+
 // kernel/asm/common.cpp
 void outb(UINT16 port, UINT8 value);
 UINT8 inb(UINT16 port);

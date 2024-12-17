@@ -1,15 +1,12 @@
 #include "../../include/include.h"
 
-/** 
- * 
- * @brief CPUID
- * 
- * @param mop 格式（0=CPU厂商 1=CPU参数）
- * 
- */
-void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx) {
-    __asm__ volatile ("cpuid \n\t" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "0"(mop), "2"(sop) : "memory");
-}
+struct IOApicMap_TYPE
+{
+    UINT8  *IOApicIndexAddr;
+    UINT32 *IOApicDataAddr;
+    UINT32 *IOApicEoiAddr;
+} IOApicMap;
+
 
 /** 
  * 
@@ -31,7 +28,45 @@ UINT8 check_apic() {
     return 0;
 }
 
-void init_ioApic(UINT64 MADT) {
+uint64_t IOApicReadRTE(UINT8 index)
+{
+    // 由于处理器的乱序执行的问题，需要加入内存屏障以保证结果的正确性。
+    uint64_t ret;
+    // 先读取高32bit
+    *IOApicMap.IOApicIndexAddr = index + 1;
+    io_mfence();
+
+    ret = *IOApicMap.IOApicDataAddr;
+    ret <<= 32;
+    io_mfence();
+
+    // 读取低32bit
+    *IOApicMap.IOApicIndexAddr = index;
+    io_mfence();
+    ret |= *IOApicMap.IOApicDataAddr;
+    io_mfence();
+
+    return ret;
+}
+
+void IOApicWriteRTE(UINT8 index, UINT64 value)
+{
+    // 先写低32位
+    *IOApicMap.IOApicIndexAddr = index;
+    io_mfence();
+
+    *IOApicMap.IOApicDataAddr  = value & 0xffffffff;
+    io_mfence();
+    // 再写高32位
+    value >>= 32;
+    io_mfence();
+    *IOApicMap.IOApicIndexAddr = index + 1;
+    io_mfence();
+    *IOApicMap.IOApicDataAddr  = value & 0xffffffff;
+    io_mfence();
+}
+
+void init_IOApic(UINT64 MADT) {
     ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
     MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
     UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
@@ -47,6 +82,30 @@ void init_ioApic(UINT64 MADT) {
                 ioApicAddr = IOApicAddrEntry->IOApicAddr;
             }
         }
+    }
+
+    IOApicMap.IOApicIndexAddr        = (UINT8 *)(ioApicAddr);
+    IOApicMap.IOApicDataAddr         = (UINT32 *)(ioApicAddr + 0x10);
+    IOApicMap.IOApicEoiAddr          = (UINT32 *)(ioApicAddr + 0x40);
+
+    // 设置IO APIC ID 为0x0f000000
+    *IOApicMap.IOApicIndexAddr = 0x00;
+    io_mfence();
+    *IOApicMap.IOApicDataAddr  = 0x0f000000;
+    io_mfence();
+
+    io_mfence();
+
+    // 获取IO APIC Version
+    *IOApicMap.IOApicIndexAddr = 0x01;
+    io_mfence();
+    //UINT8 IOApicVersion = *apic_ioapic_map.virtual_data_addr & 0xff;
+
+    // 初始化RTE表项，将所有RTE表项屏蔽
+    for (int i = 0x10; i < 0x40; i += 2)
+    {
+        // 以0x20为起始中断向量号，初始化RTE
+        IOApicWriteRTE(i, 0x10020 + ((i - 0x10) >> 1));
     }
 }
 
@@ -141,7 +200,7 @@ void init_apic(UINT64 MADT) {
     }
     write_serial_string("APIC Local Initialize Success.\n");
 
-    init_ioApic(MADT);
+    init_IOApic(MADT);
 
     write_serial_string("APIC Initialize Success.\n");
 }
