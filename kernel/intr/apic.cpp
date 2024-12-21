@@ -70,19 +70,58 @@ void init_IOApic(UINT64 MADT) {
     ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
     MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
     UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
-    UINT64                  ioApicAddr           = 0;                 // APIC寄存器地址
+    UINT64                  ioApicAddr           = 0;                                       // APIC寄存器地址
 
     // 遍历所有表入口
     for (/* PASS */; MadtEntryPointer <= MadtEntryPointer + MadtHeader->length; /* PASS */) {
         MADT_ENTRY_FLAG    *MadtEntryFlagPointer = (MADT_ENTRY_FLAG *)(MadtEntryPointer);   // 获取入口类型
+        char TEMP[12];
+        TEMP[0] = MadtEntryFlagPointer->EntryType + '0';
+        write_serial_string(TEMP);
+        write_serial_string("\n");
         if (MadtEntryFlagPointer->EntryType == 1) {
             MADT_IO_APIC_FLAG *IOApicAddrEntry = (MADT_IO_APIC_FLAG *)(MadtEntryFlagPointer + 1);
             // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
             if (IOApicAddrEntry->IOApicAddr) {
                 ioApicAddr = IOApicAddrEntry->IOApicAddr;
             }
+        } else {
+            switch (MadtEntryFlagPointer->EntryType)
+            {
+            case 0:
+                MadtEntryPointer += sizeof(MADT_LOCAL_APIC_FLAG);
+                break;
+            
+            case 1:
+                MadtEntryPointer += sizeof(MADT_IO_APIC_FLAG);
+                break;
+            
+            case 2:
+                MadtEntryPointer += sizeof(MADT_IO_APIC_InterScrOverride);
+                break;
+            
+            case 3:
+                MadtEntryPointer += sizeof(MADT_IO_APIC_NMIScr);
+                break;
+            
+            case 4:
+                MadtEntryPointer += sizeof(MADT_LOCAL_APIC_NMI);
+                break;
+            
+            case 5:
+                MadtEntryPointer += sizeof(MADT_LOCAL_APIC_AddrOverride);
+                break;
+            
+            case 9:
+                MadtEntryPointer += sizeof(MADT_LOCAL_x2APIC);
+                break;
+            
+            default:
+                break;
+            }
         }
     }
+    write_serial_string("IO APIC Address Get Success.\n");
 
     IOApicMap.IOApicIndexAddr        = (UINT8 *)(ioApicAddr);
     IOApicMap.IOApicDataAddr         = (UINT32 *)(ioApicAddr + 0x10);
@@ -96,6 +135,8 @@ void init_IOApic(UINT64 MADT) {
 
     io_mfence();
 
+    write_serial_string("IO APIC ID Set Success.\n");
+
     // 获取IO APIC Version
     *IOApicMap.IOApicIndexAddr = 0x01;
     io_mfence();
@@ -107,6 +148,7 @@ void init_IOApic(UINT64 MADT) {
         // 以0x20为起始中断向量号，初始化RTE
         IOApicWriteRTE(i, 0x10020 + ((i - 0x10) >> 1));
     }
+    write_serial_string("RTE Initialize Success.\n");
 }
 
 /** 
@@ -131,8 +173,43 @@ void init_x2Apic(UINT64 MADT) {
             if (LApicAddrEntry->LocalApicAddr) {
                 LocalApicAddr = LApicAddrEntry->LocalApicAddr;
             }
+        } else {
+            switch (MadtEntryFlagPointer->EntryType)
+            {
+            case 0:
+                MadtEntryPointer += sizeof(MADT_LOCAL_APIC_FLAG);
+                break;
+            
+            case 1:
+                MadtEntryPointer += sizeof(MADT_IO_APIC_FLAG);
+                break;
+            
+            case 2:
+                MadtEntryPointer += sizeof(MADT_IO_APIC_InterScrOverride);
+                break;
+            
+            case 3:
+                MadtEntryPointer += sizeof(MADT_IO_APIC_NMIScr);
+                break;
+            
+            case 4:
+                MadtEntryPointer += sizeof(MADT_LOCAL_APIC_NMI);
+                break;
+            
+            case 5:
+                MadtEntryPointer += sizeof(MADT_LOCAL_APIC_AddrOverride);
+                break;
+            
+            case 9:
+                MadtEntryPointer += sizeof(MADT_LOCAL_x2APIC);
+                break;
+            
+            default:
+                break;
+            }
         }
     }
+    write_serial_string("Local APIC Address Get Success.\n");
 
     // 启用xAPIC和x2APIC
     UINT32 ApicMsrEax, ApicMsrEdx;
@@ -198,7 +275,6 @@ void init_apic(UINT64 MADT) {
     } else {
         wsod_apic_not_found();
     }
-    write_serial_string("APIC Local Initialize Success.\n");
 
     init_IOApic(MADT);
 

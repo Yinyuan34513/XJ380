@@ -118,6 +118,7 @@ void SetMSR(UINT32 msr, UINT32  lo, UINT32  hi);
 
 // kernel/cpu/cpuid.cpp
 void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx);
+void get_cpu_name(char *c);
 
 // kernel/asm/common.cpp
 void outb(UINT16 port, UINT8 value);

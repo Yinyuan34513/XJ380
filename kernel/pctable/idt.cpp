@@ -16,8 +16,6 @@ void init_idt() {
     *p_idt_limit = IDT_SIZE * sizeof(IDT_GATE_TYPE) - 1;
     *p_idt_base  = (UINT64) &idt_gate;
 
-    init_8259A();
-
     init_idt_desc(0 , X86_64_INTR_GATE, divide_error                , RING0);
     init_idt_desc(1 , X86_64_INTR_GATE, debug                       , RING0);
     init_idt_desc(2 , X86_64_INTR_GATE, nmi                         , RING0);

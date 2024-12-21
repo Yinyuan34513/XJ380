@@ -19,6 +19,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   disable_intr();
   init_gdt();
   init_idt();
+  init_irq(BootConfig->MADT);
   //rect(fbc, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, {0x00, 0xa2, 0xe8});
   enable_intr();
   
@@ -99,6 +100,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
     PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
+
+    // CPU型号
+    char CPU_Model[48];
+    get_cpu_name(CPU_Model);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 528, "CPU Model:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
 
     draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
   }
