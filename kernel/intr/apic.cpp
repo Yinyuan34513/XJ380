@@ -75,10 +75,6 @@ void init_IOApic(UINT64 MADT) {
     // 遍历所有表入口
     for (/* PASS */; MadtEntryPointer <= MadtEntryPointer + MadtHeader->length; /* PASS */) {
         MADT_ENTRY_FLAG    *MadtEntryFlagPointer = (MADT_ENTRY_FLAG *)(MadtEntryPointer);   // 获取入口类型
-        char TEMP[12];
-        TEMP[0] = MadtEntryFlagPointer->EntryType + '0';
-        write_serial_string(TEMP);
-        write_serial_string("\n");
         if (MadtEntryFlagPointer->EntryType == 1) {
             MADT_IO_APIC_FLAG *IOApicAddrEntry = (MADT_IO_APIC_FLAG *)(MadtEntryFlagPointer + 1);
             // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
