@@ -192,6 +192,7 @@ char *Hex2Char(unsigned long long hex)
     // 输出16进制
     char            buf[32];
     char           *p = buf;
+    char           *re = buf;
     char            ch;
     int             i, flag = 0;
 
@@ -215,5 +216,5 @@ char *Hex2Char(unsigned long long hex)
         }
     }
     *p = '\0'; // 结束符
-    return &buf;
+    return re;
 }
