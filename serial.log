@@ -11,26 +11,26 @@ XSK2.0 Kernel Read Success.
 Kernel Memory Allocate Success.
 Vedio Initialize Success.
 ACPI Table Found Success.
-ACPI Version: 
+ACPI Version: 0x2
+0x0
 
+0x1
 
+0x2
 
+0x3
 
+0x4
 
+0x5
 
+0x6
 
+0x7
 
+0x8
 
-
-
-
-
-
-
-
-
-
-
+0x9
 
 XJ380 does not boot properly. Please visit https://xingjisoft.top/product/os/xj380/error.html. Error code: MADT_NOT_FOUND
 [bootx64.c:337]MADT Not Found. Stop.
