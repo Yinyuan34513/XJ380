@@ -305,24 +305,36 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       if (AcpiRsdp->version >= 2) {
         write_serial_string("ACPI Table Found Success.\n");
         write_serial_string("ACPI Version: ");
-        write_serial_string(Hex2Char(AcpiRsdp->version));
+        write_serial_string(Dec2Char(AcpiRsdp->version));
         write_serial_string("\n");
+        write_serial_string("XSDT Address: ");
+        write_serial_string(Hex2Char(AcpiRsdp->XsdtAddr));
+        write_serial_string("\n");
+
         ACPI_TABLE_HEADER      *XSDT =      (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr);        // 指向XSDT的指针
         UINT64                 *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);                     // 指向XSDT后面的其他SDT的地址的指针
         UINT64                  Entries =   (XSDT->length - sizeof(XSDT->length)) / 8;        // SDT数量
         AcpiTableWasFound = 1;
         // 遍历所有ACPI表
         for (int j = 0; j < Entries; j++, AcpiTableEntryPtr++) {
-          write_serial_string(Hex2Char(j));
+          write_serial_string("SDT Entry ");
+          write_serial_string(Dec2Char(j));
+          write_serial_string(":\n");
+
+          ACPI_TABLE_HEADER    *AcpiSdtPointer = (ACPI_TABLE_HEADER *)(*AcpiTableEntryPtr);    // 指向其他SDT的表头的指针
+
+          write_serial_string("SDT Address: ");
+          write_serial_string(Hex2Char((UINT64)(AcpiTableEntryPtr)));
           write_serial_string("\n");
-          ACPI_TABLE_HEADER    *AcpiSdtPointer = (ACPI_TABLE_HEADER *)(AcpiTableEntryPtr);    // 指向其他SDT的表头的指针
           write_serial_string(AcpiSdtPointer->sign);
           write_serial_string("\n");
+
           if (!part_strcmp(AcpiSdtPointer->sign, "APIC", 4)) {
             write_serial_string("MADT Found Success.\n");
             // MADT!!!
             BootConfig.MADT = (UINT64)(AcpiSdtPointer);
           }
+          write_serial_string("\n");
         }
         break;
       }
@@ -337,7 +349,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1)
       ;
   }
-  if (BootConfig.MADT) {
+  if (BootConfig.MADT == 0) {
     puts(L"XJ380 does not boot properly. Please visit "
             L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
             L"MADT_NOT_FOUND\r\n");

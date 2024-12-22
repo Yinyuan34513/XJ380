@@ -26,10 +26,10 @@ typedef struct {
 } __attribute__((packed)) RSDP_TYPE;
 
 typedef struct {
-    char      sign[4];
-    UINT32    length;
-    UINT8     version;
-    UINT8     Checksum;
+    char      sign[4];      // 标头
+    UINT32    length;       // 长度
+    UINT8     version;      // 版本
+    UINT8     Checksum;     // 校验和
     char      OEMID[6];
     char      OEMTableID[8];
     UINT32    OEMRevision;
