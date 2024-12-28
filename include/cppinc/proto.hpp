@@ -65,6 +65,8 @@ char *strcpy(char *dest, const char *src);
 UINT64 strlen(const char *str);
 UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
+char* Dec2Char(unsigned long long dec);
+char* Hex2Char(unsigned long long hex);
 
 
 
@@ -76,6 +78,8 @@ int init_serial();
 int is_transmit_empty();
 void write_serial(char a);
 void write_serial_string(char *str);
+void write_serial_dec(unsigned long long dec);
+void write_serial_hex(unsigned long long hex);
 
 
 

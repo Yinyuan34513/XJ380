@@ -193,6 +193,11 @@ Makefile里有一个变量“REL”，填版本。
 2024年12月7日 Guoqiyu1115
 - 成功从ACPI获取MADT（国企鱼事傻逼）
 
+### BuildVersion 30 【已虚拟机测试】
+2024年12月28日 Guoqiyu1115
+- 成功从ACPI获取MADT（VMware无法引导，炸PF）
+- IO APIC设置成功（大抵是吧）
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error
