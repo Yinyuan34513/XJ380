@@ -333,6 +333,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             write_serial_string("MADT Found Success.\n");
             // MADT!!!
             BootConfig.MADT = (UINT64)(AcpiSdtPointer);
+            break;
           }
           write_serial_string("\n");
         }

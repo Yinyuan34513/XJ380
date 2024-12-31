@@ -109,6 +109,9 @@ void init_IOApic(UINT64 MADT) {
         i                += MadtEntryFlagPointer->length;
     }
     write_serial_string("IO APIC Address Get Success.\n");
+    write_serial_string("IOApicAddress: ");
+    write_serial_hex((UINT64)(ioApicAddr));
+    write_serial_string("\n");
 
     IOApicMap.IOApicIndexAddr        = (UINT8 *)(ioApicAddr);
     IOApicMap.IOApicDataAddr         = (UINT32 *)(ioApicAddr + 0x10);
@@ -188,6 +191,9 @@ void init_x2Apic(UINT64 MADT) {
         i                += MadtEntryFlagPointer->length;
     }
     write_serial_string("Local APIC Address Get Success.\n");
+    write_serial_string("LocalApicAddress: ");
+    write_serial_hex((UINT64)(LocalApicAddr));
+    write_serial_string("\n");
 
     // 启用xAPIC和x2APIC
     UINT32 ApicMsrEax, ApicMsrEdx;
@@ -220,7 +226,8 @@ void init_x2Apic(UINT64 MADT) {
     SetMSR(IA32_APIC_LVT_LINT1,     0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_ERROR,     0x10000, 0x00);
 
-    *(UINT32 *)(LocalApicAddr + LOCAL_APIC_OFFSET_Local_APIC_LVT_TIMER) = 0x10000;
+    /*
+    *(UINT32 *)(LocalApicAddr + LOCAL_APIC_OFFSET_Local_APIC_LVT_TIMER) = 0x10000;*/
     io_mfence();
     write_serial_string("Local APIC Initialize Success.\n");
 }
@@ -256,6 +263,7 @@ void init_apic(UINT64 MADT) {
     }
 
     init_IOApic(MADT);
+    io_mfence();
 
     write_serial_string("APIC Initialize Success.\n");
 }
