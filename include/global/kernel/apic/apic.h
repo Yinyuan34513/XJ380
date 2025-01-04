@@ -19,6 +19,7 @@ extern "C" {
 
 // MSR(x2APIC)
 #define IA32_APIC_BASE_MSR          0x1B                    // IA32_APIC_BASE寄存器的MSR编号
+#define IA32_APIC_VERSION_MSR       0x803                   // IA32_APIC_VERSION寄存器的MSR编号
 #define IA32_APIC_SVR_MSR           0x80f                   // IA32_APIC_SVR寄存器的MSR编号
 #define IA32_APIC_EOI_MSR           0x80b                   // EOI寄存器的MSR编号
 #define IA32_APIC_LVT_TIMER         0x832                   // LVT计时器寄存器的MSR编号

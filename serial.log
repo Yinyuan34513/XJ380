@@ -15,7 +15,7 @@ ACPI Version: 2
 XSDT Address: 0x7FB7D0E8
 SDT Entry 0:
 SDT Address: 0x7FB7D10C
-FACP�
+FACP�
 
 SDT Entry 1:
 SDT Address: 0x7FB7D114
@@ -26,6 +26,41 @@ GDT Initialize Success.
 Initializing IDT...
 IDT Initialize Success.
 Initializing APIC...
+Setting IDT (IO APIC)...   Vector 32 | HandlerAddress 0x114BF0
+Setting IDT (IO APIC)...   Vector 33 | HandlerAddress 0x114C36
+Setting IDT (IO APIC)...   Vector 34 | HandlerAddress 0x114C7C
+Setting IDT (IO APIC)...   Vector 35 | HandlerAddress 0x114CC2
+Setting IDT (IO APIC)...   Vector 36 | HandlerAddress 0x114D08
+Setting IDT (IO APIC)...   Vector 37 | HandlerAddress 0x114D4E
+Setting IDT (IO APIC)...   Vector 38 | HandlerAddress 0x114D94
+Setting IDT (IO APIC)...   Vector 39 | HandlerAddress 0x114DDA
+Setting IDT (IO APIC)...   Vector 40 | HandlerAddress 0x114E20
+Setting IDT (IO APIC)...   Vector 41 | HandlerAddress 0x114E66
+Setting IDT (IO APIC)...   Vector 42 | HandlerAddress 0x114EAC
+Setting IDT (IO APIC)...   Vector 43 | HandlerAddress 0x114EF2
+Setting IDT (IO APIC)...   Vector 44 | HandlerAddress 0x114F38
+Setting IDT (IO APIC)...   Vector 45 | HandlerAddress 0x114F7E
+Setting IDT (IO APIC)...   Vector 46 | HandlerAddress 0x114FC4
+Setting IDT (IO APIC)...   Vector 47 | HandlerAddress 0x11500A
+Setting IDT (IO APIC)...   Vector 48 | HandlerAddress 0x115050
+Setting IDT (IO APIC)...   Vector 49 | HandlerAddress 0x115096
+Setting IDT (IO APIC)...   Vector 50 | HandlerAddress 0x1150DC
+Setting IDT (IO APIC)...   Vector 51 | HandlerAddress 0x115122
+Setting IDT (IO APIC)...   Vector 52 | HandlerAddress 0x115168
+Setting IDT (IO APIC)...   Vector 53 | HandlerAddress 0x1151AE
+Setting IDT (IO APIC)...   Vector 54 | HandlerAddress 0x1151F4
+Setting IDT (IO APIC)...   Vector 55 | HandlerAddress 0x11523A
+Setting IDT (Local APIC)...   Vector 150 | HandlerAddress 0x112870
+Setting IDT (Local APIC)...   Vector 151 | HandlerAddress 0x1128B6
+Setting IDT (Local APIC)...   Vector 152 | HandlerAddress 0x1128FC
+Setting IDT (Local APIC)...   Vector 153 | HandlerAddress 0x112942
+Setting IDT (Local APIC)...   Vector 154 | HandlerAddress 0x112988
+Setting IDT (Local APIC)...   Vector 155 | HandlerAddress 0x1129CE
+Setting IDT (Local APIC)...   Vector 156 | HandlerAddress 0x112A14
+Setting IDT (Local APIC)...   Vector 157 | HandlerAddress 0x112A5A
+Setting IDT (Local APIC)...   Vector 158 | HandlerAddress 0x112AA0
+Setting IDT (Local APIC)...   Vector 159 | HandlerAddress 0x112AE6
+Disable 8259A...
 You PC support x2APIC
 Seraching Local APIC...
 MadtLength: 120
@@ -62,6 +97,10 @@ Local APIC Address Get Success.
 LocalApicAddress: 0xFEE00000
 x2APIC Enabled Success.
 Local APIC Enabled Success.
+Local APIC Version: 0x14
+Max LVT Entry: 20               // 疑似国企🐟最新力作————英特尔第114514代处理器
+SVR(Suppress EOI Broadcast): 0
+Integrated APIC.
 Local APIC Initialize Success.
 Seraching IO APIC...
 MadtLength: 120

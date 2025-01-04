@@ -218,6 +218,24 @@ void init_x2Apic(UINT64 MADT) {
     if (ApicMsrEax & 0x1000) 
         write_serial_string("EOI Disabled Success.\n");     // 这个如果不输出事正常情况
 
+    GetMSR(IA32_APIC_VERSION_MSR, &ApicMsrEax, &ApicMsrEdx);
+    UINT32 local_apic_max_LVT_entries   = ((ApicMsrEax >> 16) & 0xff) + 1;
+    UINT32 local_apic_version           = ApicMsrEax & 0xff;
+    write_serial_string("Local APIC Version: ");            // APIC版本
+    write_serial_hex(local_apic_version);
+    write_serial_string("\n");
+    write_serial_string("Max LVT Entry: ");                 // 最大LVT入口，根据英特尔手册看需要+1，奔4和志强有6个，P6系列有5个，Nehalem架构有7个
+    write_serial_dec(local_apic_version);
+    write_serial_string("\n");
+    write_serial_string("SVR(Suppress EOI Broadcast): ");   // 是否支持抑制EOI广播
+    write_serial_dec((ApicMsrEax >> 24) & 0x1);
+    write_serial_string("\n");
+    // 检测是封装在CPU里还是独立的分离的
+    if ((ApicMsrEax & 0xff) < 0x10)
+        write_serial_string("82489DX discrete APIC\n");
+    else if (((ApicMsrEax & 0xff) >= 0x10) && ((ApicMsrEax & 0xff) <= 0x15))
+        write_serial_string("Integrated APIC.\n");
+
     // 关掉LVT
     SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_THERMAL,   0x10000, 0x00);
@@ -242,16 +260,33 @@ void init_x2Apic(UINT64 MADT) {
 void init_apic(UINT64 MADT) {
     write_serial_string("Initializing APIC...\n");
 
-    for (int i = 32; i <= 55; ++i)
+    for (int i = 32; i <= 55; ++i) {
         init_idt_desc(i, X86_64_INTR_GATE, interrupt_table[i - 32], RING3);
+        write_serial_string("Setting IDT (IO APIC)...   Vector ");
+        write_serial_dec(i);
+        write_serial_string(" | HandlerAddress ");
+        write_serial_hex((UINT64)(interrupt_table[i - 32]));
+        write_serial_string("\n");
+    }
 
     // 设置Local APIC中断门
-    for (int i = 150; i < 160; ++i)
+    for (int i = 150; i < 160; ++i) {
         init_idt_desc(i, X86_64_INTR_GATE, local_apic_interrupt_table[i - 150], RING3);
+        write_serial_string("Setting IDT (Local APIC)...   Vector ");
+        write_serial_dec(i);
+        write_serial_string(" | HandlerAddress ");
+        write_serial_hex((UINT64)(local_apic_interrupt_table[i - 150]));
+        write_serial_string("\n");
+    }
 
     // 屏蔽8259A
     disable_8259A();
+    write_serial_string("Disable 8259A...\n");
     io_mfence();
+
+    // enable IMCR
+    outb(0x22, 0x70);
+    outb(0x23, 0x01);
 
     if (check_apic() == 2) {
         write_serial_string("You PC support x2APIC\n");
@@ -275,6 +310,9 @@ void init_apic(UINT64 MADT) {
  * @param number 中断号
  */
 void do_IRQ(struct X64_REGS *rsp, UINT64 number) {
+    write_serial_string("Interrupt IRQ");
+    write_serial_dec(number);
+    write_serial_string("\n");
     // 低于0x80的是外部中断控制器，高于0x80的是Local APIC
     if (number < 0x80 && number >= 32)      // 是外部中断控制器
     {

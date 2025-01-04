@@ -37,6 +37,7 @@ void do_wsod(const char *err_code, struct X64_REGS *regs) {
     WriteString(*fbc_addr, 8, 360, "OS Edition     = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 360, OS_EDITION, {0, 0, 0});
     WriteString(*fbc_addr, 8, 340, "Kernel Version = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 340, KN_VERSION, {0, 0, 0});
     WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
+    write_serial_string("WSOD: ");  write_serial_string(err_code);
     while (1) { 
         disable_intr();
         __asm__("hlt"); 
@@ -68,6 +69,7 @@ void no_regs_wsod(const char *err_code) {
     WriteString(*fbc_addr, 8, 360, "OS Edition     = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 360, OS_EDITION, {0, 0, 0});
     WriteString(*fbc_addr, 8, 340, "Kernel Version = ", {0, 0, 0}); WriteString(*fbc_addr, 144, 340, KN_VERSION, {0, 0, 0});
     WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
+    write_serial_string("WSOD: ");  write_serial_string(err_code);
     while (1) { 
         disable_intr();
         __asm__("hlt"); 

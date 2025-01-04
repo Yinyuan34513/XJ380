@@ -77,7 +77,7 @@ char* Hex2Char(unsigned long long hex);
 int init_serial();
 int is_transmit_empty();
 void write_serial(char a);
-void write_serial_string(char *str);
+void write_serial_string(const char *str);
 void write_serial_dec(unsigned long long dec);
 void write_serial_hex(unsigned long long hex);
 
