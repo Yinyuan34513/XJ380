@@ -225,7 +225,7 @@ void init_x2Apic(UINT64 MADT) {
     write_serial_hex(local_apic_version);
     write_serial_string("\n");
     write_serial_string("Max LVT Entry: ");                 // 最大LVT入口，根据英特尔手册看需要+1，奔4和志强有6个，P6系列有5个，Nehalem架构有7个
-    write_serial_dec(local_apic_version);
+    write_serial_dec(local_apic_max_LVT_entries);
     write_serial_string("\n");
     write_serial_string("SVR(Suppress EOI Broadcast): ");   // 是否支持抑制EOI广播
     write_serial_dec((ApicMsrEax >> 24) & 0x1);

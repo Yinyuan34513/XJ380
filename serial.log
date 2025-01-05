@@ -15,7 +15,7 @@ ACPI Version: 2
 XSDT Address: 0x7FB7D0E8
 SDT Entry 0:
 SDT Address: 0x7FB7D10C
-FACP�
+FACP�
 
 SDT Entry 1:
 SDT Address: 0x7FB7D114
@@ -98,7 +98,7 @@ LocalApicAddress: 0xFEE00000
 x2APIC Enabled Success.
 Local APIC Enabled Success.
 Local APIC Version: 0x14
-Max LVT Entry: 20               // 疑似国企🐟最新力作————英特尔第114514代处理器
+Max LVT Entry: 6
 SVR(Suppress EOI Broadcast): 0
 Integrated APIC.
 Local APIC Initialize Success.
