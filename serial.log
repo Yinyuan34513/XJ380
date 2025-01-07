@@ -24,42 +24,42 @@ MADT Found Success.
 Initializing GDT...
 GDT Initialize Success.
 Initializing IDT...
+Setting IDT (IO APIC)...      Vector 32  | HandlerAddress 0x114C10
+Setting IDT (IO APIC)...      Vector 33  | HandlerAddress 0x114C56
+Setting IDT (IO APIC)...      Vector 34  | HandlerAddress 0x114C9C
+Setting IDT (IO APIC)...      Vector 35  | HandlerAddress 0x114CE2
+Setting IDT (IO APIC)...      Vector 36  | HandlerAddress 0x114D28
+Setting IDT (IO APIC)...      Vector 37  | HandlerAddress 0x114D6E
+Setting IDT (IO APIC)...      Vector 38  | HandlerAddress 0x114DB4
+Setting IDT (IO APIC)...      Vector 39  | HandlerAddress 0x114DFA
+Setting IDT (IO APIC)...      Vector 40  | HandlerAddress 0x114E40
+Setting IDT (IO APIC)...      Vector 41  | HandlerAddress 0x114E86
+Setting IDT (IO APIC)...      Vector 42  | HandlerAddress 0x114ECC
+Setting IDT (IO APIC)...      Vector 43  | HandlerAddress 0x114F12
+Setting IDT (IO APIC)...      Vector 44  | HandlerAddress 0x114F58
+Setting IDT (IO APIC)...      Vector 45  | HandlerAddress 0x114F9E
+Setting IDT (IO APIC)...      Vector 46  | HandlerAddress 0x114FE4
+Setting IDT (IO APIC)...      Vector 47  | HandlerAddress 0x11502A
+Setting IDT (IO APIC)...      Vector 48  | HandlerAddress 0x115070
+Setting IDT (IO APIC)...      Vector 49  | HandlerAddress 0x1150B6
+Setting IDT (IO APIC)...      Vector 50  | HandlerAddress 0x1150FC
+Setting IDT (IO APIC)...      Vector 51  | HandlerAddress 0x115142
+Setting IDT (IO APIC)...      Vector 52  | HandlerAddress 0x115188
+Setting IDT (IO APIC)...      Vector 53  | HandlerAddress 0x1151CE
+Setting IDT (IO APIC)...      Vector 54  | HandlerAddress 0x115214
+Setting IDT (IO APIC)...      Vector 55  | HandlerAddress 0x11525A
+Setting IDT (Local APIC)...   Vector 150 | HandlerAddress 0x112890
+Setting IDT (Local APIC)...   Vector 151 | HandlerAddress 0x1128D6
+Setting IDT (Local APIC)...   Vector 152 | HandlerAddress 0x11291C
+Setting IDT (Local APIC)...   Vector 153 | HandlerAddress 0x112962
+Setting IDT (Local APIC)...   Vector 154 | HandlerAddress 0x1129A8
+Setting IDT (Local APIC)...   Vector 155 | HandlerAddress 0x1129EE
+Setting IDT (Local APIC)...   Vector 156 | HandlerAddress 0x112A34
+Setting IDT (Local APIC)...   Vector 157 | HandlerAddress 0x112A7A
+Setting IDT (Local APIC)...   Vector 158 | HandlerAddress 0x112AC0
+Setting IDT (Local APIC)...   Vector 159 | HandlerAddress 0x112B06
 IDT Initialize Success.
 Initializing APIC...
-Setting IDT (IO APIC)...   Vector 32 | HandlerAddress 0x114BF0
-Setting IDT (IO APIC)...   Vector 33 | HandlerAddress 0x114C36
-Setting IDT (IO APIC)...   Vector 34 | HandlerAddress 0x114C7C
-Setting IDT (IO APIC)...   Vector 35 | HandlerAddress 0x114CC2
-Setting IDT (IO APIC)...   Vector 36 | HandlerAddress 0x114D08
-Setting IDT (IO APIC)...   Vector 37 | HandlerAddress 0x114D4E
-Setting IDT (IO APIC)...   Vector 38 | HandlerAddress 0x114D94
-Setting IDT (IO APIC)...   Vector 39 | HandlerAddress 0x114DDA
-Setting IDT (IO APIC)...   Vector 40 | HandlerAddress 0x114E20
-Setting IDT (IO APIC)...   Vector 41 | HandlerAddress 0x114E66
-Setting IDT (IO APIC)...   Vector 42 | HandlerAddress 0x114EAC
-Setting IDT (IO APIC)...   Vector 43 | HandlerAddress 0x114EF2
-Setting IDT (IO APIC)...   Vector 44 | HandlerAddress 0x114F38
-Setting IDT (IO APIC)...   Vector 45 | HandlerAddress 0x114F7E
-Setting IDT (IO APIC)...   Vector 46 | HandlerAddress 0x114FC4
-Setting IDT (IO APIC)...   Vector 47 | HandlerAddress 0x11500A
-Setting IDT (IO APIC)...   Vector 48 | HandlerAddress 0x115050
-Setting IDT (IO APIC)...   Vector 49 | HandlerAddress 0x115096
-Setting IDT (IO APIC)...   Vector 50 | HandlerAddress 0x1150DC
-Setting IDT (IO APIC)...   Vector 51 | HandlerAddress 0x115122
-Setting IDT (IO APIC)...   Vector 52 | HandlerAddress 0x115168
-Setting IDT (IO APIC)...   Vector 53 | HandlerAddress 0x1151AE
-Setting IDT (IO APIC)...   Vector 54 | HandlerAddress 0x1151F4
-Setting IDT (IO APIC)...   Vector 55 | HandlerAddress 0x11523A
-Setting IDT (Local APIC)...   Vector 150 | HandlerAddress 0x112870
-Setting IDT (Local APIC)...   Vector 151 | HandlerAddress 0x1128B6
-Setting IDT (Local APIC)...   Vector 152 | HandlerAddress 0x1128FC
-Setting IDT (Local APIC)...   Vector 153 | HandlerAddress 0x112942
-Setting IDT (Local APIC)...   Vector 154 | HandlerAddress 0x112988
-Setting IDT (Local APIC)...   Vector 155 | HandlerAddress 0x1129CE
-Setting IDT (Local APIC)...   Vector 156 | HandlerAddress 0x112A14
-Setting IDT (Local APIC)...   Vector 157 | HandlerAddress 0x112A5A
-Setting IDT (Local APIC)...   Vector 158 | HandlerAddress 0x112AA0
-Setting IDT (Local APIC)...   Vector 159 | HandlerAddress 0x112AE6
 Disable 8259A...
 You PC support x2APIC
 Seraching Local APIC...

@@ -237,7 +237,7 @@ void init_x2Apic(UINT64 MADT) {
         write_serial_string("Integrated APIC.\n");
 
     // 关掉LVT
-    SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
+    //SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_THERMAL,   0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_PERFOR_MON,0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_LINT0,     0x10000, 0x00);
@@ -259,25 +259,6 @@ void init_x2Apic(UINT64 MADT) {
  */
 void init_apic(UINT64 MADT) {
     write_serial_string("Initializing APIC...\n");
-
-    for (int i = 32; i <= 55; ++i) {
-        init_idt_desc(i, X86_64_INTR_GATE, interrupt_table[i - 32], RING3);
-        write_serial_string("Setting IDT (IO APIC)...   Vector ");
-        write_serial_dec(i);
-        write_serial_string(" | HandlerAddress ");
-        write_serial_hex((UINT64)(interrupt_table[i - 32]));
-        write_serial_string("\n");
-    }
-
-    // 设置Local APIC中断门
-    for (int i = 150; i < 160; ++i) {
-        init_idt_desc(i, X86_64_INTR_GATE, local_apic_interrupt_table[i - 150], RING3);
-        write_serial_string("Setting IDT (Local APIC)...   Vector ");
-        write_serial_dec(i);
-        write_serial_string(" | HandlerAddress ");
-        write_serial_hex((UINT64)(local_apic_interrupt_table[i - 150]));
-        write_serial_string("\n");
-    }
 
     // 屏蔽8259A
     disable_8259A();

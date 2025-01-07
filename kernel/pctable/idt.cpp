@@ -61,6 +61,25 @@ void init_idt() {
     }
     */
 
+    for (int i = 32; i <= 55; ++i) {
+        init_idt_desc(i, X86_64_INTR_GATE, interrupt_table[i - 32], RING3);
+        write_serial_string("Setting IDT (IO APIC)...      Vector ");
+        write_serial_dec(i);
+        write_serial_string("  | HandlerAddress ");
+        write_serial_hex((UINT64)(interrupt_table[i - 32]));
+        write_serial_string("\n");
+    }
+
+    // 设置Local APIC中断门
+    for (int i = 150; i < 160; ++i) {
+        init_idt_desc(i, X86_64_INTR_GATE, local_apic_interrupt_table[i - 150], RING3);
+        write_serial_string("Setting IDT (Local APIC)...   Vector ");
+        write_serial_dec(i);
+        write_serial_string(" | HandlerAddress ");
+        write_serial_hex((UINT64)(local_apic_interrupt_table[i - 150]));
+        write_serial_string("\n");
+    }
+
     __asm__ volatile ("lidt %0" : : "m"(idt_ptr));
     write_serial_string("IDT Initialize Success.\n");
 }
