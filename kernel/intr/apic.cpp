@@ -237,7 +237,7 @@ void init_x2Apic(UINT64 MADT) {
         write_serial_string("Integrated APIC.\n");
 
     // 关掉LVT
-    //SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
+    SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_THERMAL,   0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_PERFOR_MON,0x10000, 0x00);
     SetMSR(IA32_APIC_LVT_LINT0,     0x10000, 0x00);

@@ -106,7 +106,6 @@ int ipi_regiserIPI(UINT64 irq_num, void *arg,
 void init_irq(UINT64 MADT)
 {
     xmemset((void *)interrupt_desc,             0, sizeof(IRQ_DESC_TYPE) * IRQ_NUM);
-    xmemset((void *)local_apic_interrupt_desc,  0, sizeof(IRQ_DESC_TYPE) * LOCAL_APIC_IRQ_NUM);
 
     init_apic(MADT);
 }
