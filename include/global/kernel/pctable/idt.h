@@ -35,6 +35,9 @@ void machine_check();
 void SIMD_exception();
 void virtualization_exception();
 
+// LocalAPIC
+void timer();
+
 #include "../../stdint.h"
 
 typedef struct

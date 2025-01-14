@@ -1,12 +1,6 @@
 #include "../../include/include.h"
 
-struct IOApicMap_TYPE
-{
-    UINT8  *IOApicIndexAddr;
-    UINT32 *IOApicDataAddr;
-    UINT32 *IOApicEoiAddr;
-} IOApicMap;
-
+APIC_INFO ApicInfo;
 
 /** 
  * 
@@ -28,49 +22,32 @@ UINT8 check_apic() {
     return 0;
 }
 
-uint64_t IOApicReadRTE(UINT8 index)
-{
-    // 由于处理器的乱序执行的问题，需要加入内存屏障以保证结果的正确性。
-    uint64_t ret;
-    // 先读取高32bit
-    *IOApicMap.IOApicIndexAddr = index + 1;
-    io_mfence();
-
-    ret = *IOApicMap.IOApicDataAddr;
-    ret <<= 32;
-    io_mfence();
-
-    // 读取低32bit
-    *IOApicMap.IOApicIndexAddr = index;
-    io_mfence();
-    ret |= *IOApicMap.IOApicDataAddr;
-    io_mfence();
-
-    return ret;
+void read_lapic_reg(UINT32 offest, UINT32 *lo, UINT32 *hi) {
+    if (ApicInfo.x2Apic) {
+        // MSR
+        GetMSR((0x800 + (offest >> 4)), lo, hi);
+    } else {
+        // MMIO
+        *(volatile UINT32 *)(ApicInfo.LocalApicAddr + offest) = (UINT32)(*lo);
+    }
 }
 
-void IOApicWriteRTE(UINT8 index, UINT64 value)
-{
-    // 先写低32位
-    *IOApicMap.IOApicIndexAddr = index;
-    io_mfence();
-
-    *IOApicMap.IOApicDataAddr  = value & 0xffffffff;
-    io_mfence();
-    // 再写高32位
-    value >>= 32;
-    io_mfence();
-    *IOApicMap.IOApicIndexAddr = index + 1;
-    io_mfence();
-    *IOApicMap.IOApicDataAddr  = value & 0xffffffff;
-    io_mfence();
+void write_lapic_reg(UINT32 offest, UINT32 lo, UINT32 hi) {
+    if (ApicInfo.x2Apic) {
+        // MSR
+        SetMSR((0x800 + (offest >> 4)), lo, hi);
+    } else {
+        // MMIO
+        *(volatile UINT32 *)(ApicInfo.LocalApicAddr + offest) = (UINT32)(lo);
+    }
 }
 
 void init_IOApic(UINT64 MADT) {
     ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
     MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
     UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
-    UINT64                  ioApicAddr           = 0;                                       // APIC寄存器地址
+
+    ApicInfo.ioApicAddr                          = 0xfec00000;                              // APIC寄存器地址
 
     // 遍历所有表入口
     write_serial_string("Seraching IO APIC...\n");
@@ -101,7 +78,7 @@ void init_IOApic(UINT64 MADT) {
             MADT_IO_APIC_FLAG *IOApicAddrEntry = (MADT_IO_APIC_FLAG *)(MadtEntryFlagPointer + 1);
             // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
             if (IOApicAddrEntry->IOApicAddr) {
-                ioApicAddr = IOApicAddrEntry->IOApicAddr;
+                ApicInfo.ioApicAddr = IOApicAddrEntry->IOApicAddr;
             }
         }
 
@@ -110,35 +87,8 @@ void init_IOApic(UINT64 MADT) {
     }
     write_serial_string("IO APIC Address Get Success.\n");
     write_serial_string("IOApicAddress: ");
-    write_serial_hex((UINT64)(ioApicAddr));
+    write_serial_hex((UINT64)(ApicInfo.ioApicAddr));
     write_serial_string("\n");
-
-    IOApicMap.IOApicIndexAddr        = (UINT8 *)(ioApicAddr);
-    IOApicMap.IOApicDataAddr         = (UINT32 *)(ioApicAddr + 0x10);
-    IOApicMap.IOApicEoiAddr          = (UINT32 *)(ioApicAddr + 0x40);
-
-    // 设置IO APIC ID 为0x0f000000
-    *IOApicMap.IOApicIndexAddr = 0x00;
-    io_mfence();
-    *IOApicMap.IOApicDataAddr  = 0x0f000000;
-    io_mfence();
-
-    io_mfence();
-
-    write_serial_string("IO APIC ID Set Success.\n");
-
-    // 获取IO APIC Version
-    *IOApicMap.IOApicIndexAddr = 0x01;
-    io_mfence();
-    //UINT8 IOApicVersion = *apic_ioapic_map.virtual_data_addr & 0xff;
-
-    // 初始化RTE表项，将所有RTE表项屏蔽
-    for (int i = 0x10; i < 0x40; i += 2)
-    {
-        // 以0x20为起始中断向量号，初始化RTE
-        IOApicWriteRTE(i, 0x10020 + ((i - 0x10) >> 1));
-    }
-    write_serial_string("RTE Initialize Success.\n");
 }
 
 /** 
@@ -148,11 +98,12 @@ void init_IOApic(UINT64 MADT) {
  * @param MADT MADT表地址
  * 
  */
-void init_x2Apic(UINT64 MADT) {
+void init_lApic(UINT64 MADT) {
     ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
     MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
     UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
-    UINT64                  LocalApicAddr        = MadtFlag->LocalApicAddr;                 // APIC寄存器地址
+    
+    ApicInfo.LocalApicAddr                       = MadtFlag->LocalApicAddr;                 // APIC寄存器地址
 
     // 遍历所有表入口
     write_serial_string("Seraching Local APIC...\n");
@@ -183,7 +134,7 @@ void init_x2Apic(UINT64 MADT) {
             MADT_LOCAL_APIC_AddrOverride *LocalApicAddrEntry = (MADT_LOCAL_APIC_AddrOverride *)(MadtEntryFlagPointer + 1);
             // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
             if (LocalApicAddrEntry->LocalApicAddr) {
-                LocalApicAddr = LocalApicAddrEntry->LocalApicAddr;
+                ApicInfo.LocalApicAddr = LocalApicAddrEntry->LocalApicAddr;
             }
         }
 
@@ -192,33 +143,27 @@ void init_x2Apic(UINT64 MADT) {
     }
     write_serial_string("Local APIC Address Get Success.\n");
     write_serial_string("LocalApicAddress: ");
-    write_serial_hex((UINT64)(LocalApicAddr));
+    write_serial_hex((UINT64)(ApicInfo.LocalApicAddr));
     write_serial_string("\n");
 
-    // 启用xAPIC和x2APIC
+    // 启用xAPIC和x2APIC（好像这个寄存器在xAPIC模式下也能用MSR操作）
     UINT32 ApicMsrEax, ApicMsrEdx;
-    GetMSR(IA32_APIC_BASE_MSR, &ApicMsrEax, &ApicMsrEdx);
-    ApicMsrEax |= IA32_APIC_BASE_MSR_ENABLE;    // 0000 0000 0000 0000 0000 1000 0000 0000 启用APIC
-    ApicMsrEax |= IA32_APIC_BASE_MSR_X2;        // 0000 0000 0000 0000 0000 0100 0000 0000 启用x2APIC
-    SetMSR(IA32_APIC_BASE_MSR,  ApicMsrEax,  ApicMsrEdx);
-    GetMSR(IA32_APIC_BASE_MSR, &ApicMsrEax, &ApicMsrEdx);
+    GetMSR(MSR_IA32_APIC_BASE, &ApicMsrEax, &ApicMsrEdx);
+    ApicMsrEax |= xAPIC_ENABLE;             	// 0000 0000 0000 0000 0000 1000 0000 0000 启用APIC
+    ApicMsrEax |= x2APIC_ENABLE;        		// 0000 0000 0000 0000 0000 0100 0000 0000 启用x2APIC
+    SetMSR(MSR_IA32_APIC_BASE,  ApicMsrEax,  ApicMsrEdx);
+    GetMSR(MSR_IA32_APIC_BASE, &ApicMsrEax, &ApicMsrEdx);
     // 检测是否启用
-    if (ApicMsrEax & 0xC00) 
+    if (ApicMsrEax & 0xC00) { 
         write_serial_string("x2APIC Enabled Success.\n");
-    
-    // 设置SVR寄存器，启用Local APIC，禁止EOI广播
-    GetMSR(IA32_APIC_SVR_MSR, &ApicMsrEax, &ApicMsrEdx);
-    ApicMsrEax |= IA32_APIC_SVR_MSR_LAPIC;      // 0000 0000 0000 0000 0000 0001 0000 0000 启用LocalAPIC
-    //ApicMsrEax |= IA32_APIC_SVR_MSR_DISEOI;   // 0000 0000 0000 0000 0001 0000 0000 0000 禁用EOI广播
-    SetMSR(IA32_APIC_SVR_MSR,  ApicMsrEax,  ApicMsrEdx);
-    GetMSR(IA32_APIC_SVR_MSR, &ApicMsrEax, &ApicMsrEdx);
-    // 检测是否成功设置
-    if (ApicMsrEax & 0x100) 
-        write_serial_string("Local APIC Enabled Success.\n");
-    if (ApicMsrEax & 0x1000) 
-        write_serial_string("EOI Disabled Success.\n");     // 这个如果不输出事正常情况
+	} else if (ApicMsrEax & 0x0800) {
+		write_serial_string("xAPIC Enabled Success.\n");
+		ApicInfo.x2Apic = false;
+	} else {
+		wsod_apic_not_found();
+	}
 
-    GetMSR(IA32_APIC_VERSION_MSR, &ApicMsrEax, &ApicMsrEdx);
+    read_lapic_reg(LAPIC_VERSION_OFFEST, &ApicMsrEax, &ApicMsrEdx);
     UINT32 local_apic_max_LVT_entries   = ((ApicMsrEax >> 16) & 0xff) + 1;
     UINT32 local_apic_version           = ApicMsrEax & 0xff;
     write_serial_string("Local APIC Version: ");            // APIC版本
@@ -236,16 +181,20 @@ void init_x2Apic(UINT64 MADT) {
     else if (((ApicMsrEax & 0xff) >= 0x10) && ((ApicMsrEax & 0xff) <= 0x15))
         write_serial_string("Integrated APIC.\n");
 
-    // 关掉LVT
-    SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_THERMAL,   0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_PERFOR_MON,0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_LINT0,     0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_LINT1,     0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_ERROR,     0x10000, 0x00);
+    // LVT
+	write_lapic_reg(LAPIC_LVT_TIMER_OFFEST, 32, 0);
+    
+    // 设置SVR寄存器，启用Local APIC
+    read_lapic_reg(LAPIC_SVR_OFFEST, &ApicMsrEax, &ApicMsrEdx);
+    ApicMsrEax |= IA32_APIC_SVR_MSR_LAPIC;      // 0000 0000 0000 0000 0000 0001 0000 0000 启用LocalAPIC
+    write_lapic_reg(LAPIC_SVR_OFFEST, ApicMsrEax,  ApicMsrEdx);
+    read_lapic_reg(LAPIC_SVR_OFFEST, &ApicMsrEax, &ApicMsrEdx);
+    // 检测是否成功设置
+    if (ApicMsrEax & 0x100) 
+        write_serial_string("Local APIC Enabled Success.\n");
 
-    /*
-    *(UINT32 *)(LocalApicAddr + LOCAL_APIC_OFFSET_Local_APIC_LVT_TIMER) = 0x10000;*/
+    write_lapic_reg(LAPIC_SVR_OFFEST, 0b1011, 0);
+
     io_mfence();
     write_serial_string("Local APIC Initialize Success.\n");
 }
@@ -262,77 +211,31 @@ void init_apic(UINT64 MADT) {
 
     // 屏蔽8259A
     disable_8259A();
-    write_serial_string("Disable 8259A...\n");
+    write_serial_string("Mask 8259A Success.\n");
     io_mfence();
 
-    // enable IMCR
-    outb(0x22, 0x70);
-    outb(0x23, 0x01);
-
-    if (check_apic() == 2) {
+    switch (check_apic()) 
+    {
+    case 2:
         write_serial_string("You PC support x2APIC\n");
-        init_x2Apic(MADT);
-    } else if (check_apic() == 1) {
+        ApicInfo.x2Apic = true;
+        init_lApic(MADT);
+        break;
+    case 1:
         write_serial_string("You PC support xAPIC\n");
-    } else {
+        ApicInfo.x2Apic = false;
+        init_lApic(MADT);
+        break;
+    default:
         wsod_apic_not_found();
+        break;          // 虽然这里理论上永远都不会执行...
     }
 
     init_IOApic(MADT);
-    io_mfence();
 
     write_serial_string("APIC Initialize Success.\n");
 }
 
-/**
- * @brief 中断处理函数
- * 
- * @param regs   寄存器
- * @param number 中断号
- */
-void do_IRQ(struct X64_REGS *rsp, UINT64 number) {
-    write_serial_string("Interrupt IRQ");
-    write_serial_dec(number);
-    write_serial_string("\n");
-    // 低于0x80的是外部中断控制器，高于0x80的是Local APIC
-    if (number < 0x80 && number >= 32)      // 是外部中断控制器
-    {
-        IRQ_DESC_TYPE *irq = &interrupt_desc[number - 32];
-
-        // 执行中断上半部处理程序
-        if (irq != NULL && irq->handler != NULL) {
-            irq->handler(number, irq->parameter, rsp);
-        } else {
-            //
-        }
-        // 向中断控制器发送应答消息
-        if (irq->controller != NULL && irq->controller->ack != NULL) {
-            irq->controller->ack(number);
-        } else {
-            // 向EOI寄存器写入0x00表示结束中断
-            __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
-                                 "movq	$0x00,	%%rax	\n\t"
-                                 "movq 	$0x80b,	%%rcx	\n\t"
-                                 "wrmsr	\n\t" ::
-                                     : "memory");
-        }
-    }
-    else if (number > 0x80)                 // 是Local APIC
-    {
-        __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
-                                 "movq	$0x00,	%%rax	\n\t"
-                                 "movq 	$0x80b,	%%rcx	\n\t"
-                                 "wrmsr	\n\t" ::
-                                     : "memory");
-
-        {
-            IRQ_DESC_TYPE *irq = &SMP_IPI_desc[number - 200];
-            if (irq->handler != NULL)
-                irq->handler(number, irq->parameter, rsp);
-        }
-    }
-    else
-    {
-        //
-    }
+void ApicEoi() {
+	write_lapic_reg(LAPIC_EOI_OFFEST, 0, 0);
 }

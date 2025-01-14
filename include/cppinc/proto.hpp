@@ -113,8 +113,8 @@ void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 
 // kernel/intr/apic.cpp
-extern "C" void do_IRQ(struct X64_REGS *regs, UINT64 error_code);
 void init_apic(UINT64 MADT);
+void ApicEoi();
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
@@ -142,17 +142,6 @@ void io_mfence();
 // kernel/intr/8259A.cpp
 void init_8259A();
 void disable_8259A();
-
-// kernel/intr/irqfunc.c
-int irq_register(UINT64 irq_num, void *arg, void (*handler)(UINT64 irq_num, UINT64 parameter, struct X64_REGS *regs), UINT64 paramater, HARDWARE_INTR_CTRL *controller, char *irq_name);
-int irq_unregister(UINT64 irq_num);
-void ipi_send_IPI(UINT32 dest_mode, UINT32 deliver_status, UINT32 level, UINT32 trigger,
-                  UINT32 vector, UINT32 deliver_mode, UINT32 dest_shorthand, bool apic_type, 
-                  UINT32 destination);
-int ipi_regiserIPI(UINT64 irq_num, void *arg,
-                   void (*handler)(UINT64 irq_num, UINT64 param, struct pt_regs *regs),
-                   UINT64 param, HARDWARE_INTR_CTRL *controller, char *irq_name);
-void init_irq(UINT64 MADT);
 
 // kernel/pctable/gdt.cpp
 void init_gdt();
