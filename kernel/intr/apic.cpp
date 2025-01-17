@@ -28,6 +28,12 @@ UINT8 check_apic() {
     return 0;
 }
 
+/**
+ * @brief 从IO APIC读取重定向表项（RTE）
+ * 
+ * @param index 要读取的重定向表项的索引
+ * @return uint64_t 读取到的重定向表项的值
+ */
 uint64_t IOApicReadRTE(UINT8 index)
 {
     // 由于处理器的乱序执行的问题，需要加入内存屏障以保证结果的正确性。
@@ -49,6 +55,12 @@ uint64_t IOApicReadRTE(UINT8 index)
     return ret;
 }
 
+/**
+ * @brief 向IO APIC写入重定向表项（RTE）
+ * 
+ * @param index 要写入的重定向表项的索引
+ * @param value 要写入的重定向表项的值
+ */
 void IOApicWriteRTE(UINT8 index, UINT64 value)
 {
     // 先写低32位
@@ -66,6 +78,12 @@ void IOApicWriteRTE(UINT8 index, UINT64 value)
     io_mfence();
 }
 
+/** 
+ * @brief 初始化IO APIC
+ * 
+ * @param MADT MADT表地址
+ * 
+ */
 void init_IOApic(UINT64 MADT) {
     ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
     MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
@@ -232,12 +250,12 @@ void init_x2Apic(UINT64 MADT) {
     write_serial_string("Local APIC Initialize Success.\n");
 }
 
-/** 
+/**
+ * @brief 初始化APIC
  * 
- * @brief 初始化Local APIC
+ * @param MADT 指向MADT表的指针
  * 
- * @param MADT MADT表地址
- * 
+ * 如果系统支持x2APIC，则优先使用x2APIC。
  */
 void init_apic(UINT64 MADT) {
     write_serial_string("Initializing APIC...\n");
@@ -269,9 +287,9 @@ void init_apic(UINT64 MADT) {
 }
 
 /**
- * @brief 中断处理函数
+ * @brief 处理中断请求（IRQ）
  * 
- * @param regs   寄存器
+ * @param rsp 指向X64寄存器结构的指针
  * @param number 中断号
  */
 void do_IRQ(struct X64_REGS *rsp, UINT64 number) {

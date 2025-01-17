@@ -17,6 +17,14 @@ char *strcpy(char *dest, const char *src);
 UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
+/**
+ * @brief 将无符号64位整数转换为16位字符串
+ * 
+ * @param buf 目标缓冲区，用于存储转换后的字符串
+ * @param len 目标缓冲区的长度
+ * @param n 要转换的无符号64位整数
+ * @return 返回指向转换后字符串的指针，如果缓冲区长度不足，则返回空指针
+ */
 static inline __attribute__((always_inline)) UINT16 *u64tostrb16(UINT16 *buf, size_t len,
                                                                    UINT64 n) {
   UINT16 *s = buf + len;
@@ -56,6 +64,11 @@ EFI_GUID efi_acpi_table_guid = {
   0x8868e871, 0xe4f1, 0x11d3, {0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81}
 };
 
+/**
+ * @brief 输出一个16位的字符到控制台
+ * 
+ * @param c 要输出的16位字符
+ */
 void putc(unsigned short c) {
   unsigned short str[2] = L" ";
   str[0]                = c;
@@ -66,6 +79,11 @@ void puts(unsigned short *s) {
   ST->ConOut->OutputString(ST->ConOut, s);
 }
 
+/**
+ * @brief 将无符号64位整数转换为16位字符串并输出到控制台
+ * 
+ * @param hex 要转换的无符号64位整数
+ */
 void puth(unsigned long long hex) {
   unsigned short  buf[20];
   unsigned short *p = buf;
