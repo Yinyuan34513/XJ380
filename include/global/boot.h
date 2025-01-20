@@ -8,6 +8,7 @@
 typedef struct
 {
     UINT64      MADT;
+    UINT64      HPET;
     MEMORY_MAP  MemoryMap;
 } BOOT_CONFIG;
 #endif

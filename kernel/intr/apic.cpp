@@ -22,26 +22,6 @@ UINT8 check_apic() {
     return 0;
 }
 
-void read_lapic_reg(UINT32 offest, UINT32 *lo, UINT32 *hi) {
-    if (ApicInfo.x2Apic) {
-        // MSR
-        GetMSR((0x800 + (offest >> 4)), lo, hi);
-    } else {
-        // MMIO
-        *(volatile UINT32 *)(ApicInfo.LocalApicAddr + offest) = (UINT32)(*lo);
-    }
-}
-
-void write_lapic_reg(UINT32 offest, UINT32 lo, UINT32 hi) {
-    if (ApicInfo.x2Apic) {
-        // MSR
-        SetMSR((0x800 + (offest >> 4)), lo, hi);
-    } else {
-        // MMIO
-        *(volatile UINT32 *)(ApicInfo.LocalApicAddr + offest) = (UINT32)(lo);
-    }
-}
-
 void init_IOApic(UINT64 MADT) {
     ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
     MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
@@ -145,58 +125,6 @@ void init_lApic(UINT64 MADT) {
     write_serial_string("LocalApicAddress: ");
     write_serial_hex((UINT64)(ApicInfo.LocalApicAddr));
     write_serial_string("\n");
-
-    // 启用xAPIC和x2APIC（好像这个寄存器在xAPIC模式下也能用MSR操作）
-    UINT32 ApicMsrEax, ApicMsrEdx;
-    GetMSR(MSR_IA32_APIC_BASE, &ApicMsrEax, &ApicMsrEdx);
-    ApicMsrEax |= xAPIC_ENABLE;             	// 0000 0000 0000 0000 0000 1000 0000 0000 启用APIC
-    ApicMsrEax |= x2APIC_ENABLE;        		// 0000 0000 0000 0000 0000 0100 0000 0000 启用x2APIC
-    SetMSR(MSR_IA32_APIC_BASE,  ApicMsrEax,  ApicMsrEdx);
-    GetMSR(MSR_IA32_APIC_BASE, &ApicMsrEax, &ApicMsrEdx);
-    // 检测是否启用
-    if (ApicMsrEax & 0xC00) { 
-        write_serial_string("x2APIC Enabled Success.\n");
-	} else if (ApicMsrEax & 0x0800) {
-		write_serial_string("xAPIC Enabled Success.\n");
-		ApicInfo.x2Apic = false;
-	} else {
-		wsod_apic_not_found();
-	}
-
-    read_lapic_reg(LAPIC_VERSION_OFFEST, &ApicMsrEax, &ApicMsrEdx);
-    UINT32 local_apic_max_LVT_entries   = ((ApicMsrEax >> 16) & 0xff) + 1;
-    UINT32 local_apic_version           = ApicMsrEax & 0xff;
-    write_serial_string("Local APIC Version: ");            // APIC版本
-    write_serial_hex(local_apic_version);
-    write_serial_string("\n");
-    write_serial_string("Max LVT Entry: ");                 // 最大LVT入口，根据英特尔手册看需要+1，奔4和志强有6个，P6系列有5个，Nehalem架构有7个
-    write_serial_dec(local_apic_max_LVT_entries);
-    write_serial_string("\n");
-    write_serial_string("SVR(Suppress EOI Broadcast): ");   // 是否支持抑制EOI广播
-    write_serial_dec((ApicMsrEax >> 24) & 0x1);
-    write_serial_string("\n");
-    // 检测是封装在CPU里还是独立的分离的
-    if ((ApicMsrEax & 0xff) < 0x10)
-        write_serial_string("82489DX discrete APIC\n");
-    else if (((ApicMsrEax & 0xff) >= 0x10) && ((ApicMsrEax & 0xff) <= 0x15))
-        write_serial_string("Integrated APIC.\n");
-
-    // LVT
-	write_lapic_reg(LAPIC_LVT_TIMER_OFFEST, 32, 0);
-    
-    // 设置SVR寄存器，启用Local APIC
-    read_lapic_reg(LAPIC_SVR_OFFEST, &ApicMsrEax, &ApicMsrEdx);
-    ApicMsrEax |= IA32_APIC_SVR_MSR_LAPIC;      // 0000 0000 0000 0000 0000 0001 0000 0000 启用LocalAPIC
-    write_lapic_reg(LAPIC_SVR_OFFEST, ApicMsrEax,  ApicMsrEdx);
-    read_lapic_reg(LAPIC_SVR_OFFEST, &ApicMsrEax, &ApicMsrEdx);
-    // 检测是否成功设置
-    if (ApicMsrEax & 0x100) 
-        write_serial_string("Local APIC Enabled Success.\n");
-
-    write_lapic_reg(LAPIC_SVR_OFFEST, 0b1011, 0);
-
-    io_mfence();
-    write_serial_string("Local APIC Initialize Success.\n");
 }
 
 /** 
@@ -234,8 +162,4 @@ void init_apic(UINT64 MADT) {
     init_IOApic(MADT);
 
     write_serial_string("APIC Initialize Success.\n");
-}
-
-void ApicEoi() {
-	write_lapic_reg(LAPIC_EOI_OFFEST, 0, 0);
 }

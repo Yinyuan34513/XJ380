@@ -21,6 +21,11 @@ SDT Entry 1:
 SDT Address: 0x7FB7D114
 APICx
 MADT Found Success.
+
+SDT Entry 2:
+SDT Address: 0x7FB7D11C
+HPET8
+MADT Found Success.
 Initializing GDT...
 GDT Initialize Success.
 Initializing IDT...
@@ -61,13 +66,6 @@ MadtEntryLength 175
 MadtEntryAddress 0x7FB78078
 Local APIC Address Get Success.
 LocalApicAddress: 0xFEE00000
-x2APIC Enabled Success.
-Local APIC Version: 0x14
-Max LVT Entry: 6
-SVR(Suppress EOI Broadcast): 0
-Integrated APIC.
-Local APIC Enabled Success.
-Local APIC Initialize Success.
 Seraching IO APIC...
 MadtLength: 120
 MadtAddress: 0x7FB78000
