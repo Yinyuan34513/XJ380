@@ -19,6 +19,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   disable_intr();
   init_gdt();
   init_idt();
+  hpet_init(BootConfig->HPET);
   init_apic(BootConfig->MADT);
   //rect(fbc, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, {0x00, 0xa2, 0xe8});
   //enable_intr();

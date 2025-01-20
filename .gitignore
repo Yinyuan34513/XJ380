@@ -3,6 +3,7 @@ out
 esp
 serial.log
 .vs
+.idea/
 out/draw.o
 /esp
 /out

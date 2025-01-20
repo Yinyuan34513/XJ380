@@ -159,6 +159,8 @@ void init_apic(UINT64 MADT) {
         break;          // 虽然这里理论上永远都不会执行...
     }
 
+
+
     init_IOApic(MADT);
 
     write_serial_string("APIC Initialize Success.\n");

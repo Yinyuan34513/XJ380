@@ -25,11 +25,12 @@ MADT Found Success.
 SDT Entry 2:
 SDT Address: 0x7FB7D11C
 HPET8
-MADT Found Success.
+HPET Found Success.
 Initializing GDT...
 GDT Initialize Success.
 Initializing IDT...
 IDT Initialize Success.
+Setup acpi hpet table (nano_time: 382700).
 Initializing APIC...
 Mask 8259A Success.
 You PC support x2APIC

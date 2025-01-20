@@ -114,6 +114,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
+// kernel/intr/hpet.c
+void hpet_init(UINT64 hpet);
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);

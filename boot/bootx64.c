@@ -336,7 +336,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             BootConfig.MADT = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
           } else if (!part_strcmp(AcpiSdtPointer->sign, "HPET", 4)) {
-            write_serial_string("MADT Found Success.\n");
+            write_serial_string("HPET Found Success.\n");
             // HPET!!!
             BootConfig.HPET = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
