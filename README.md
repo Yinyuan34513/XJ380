@@ -231,7 +231,7 @@ Makefile里有一个变量“REL”，填版本。
     19	SIMD exception
     20	virtualization exception
     
-    32 apic timer
-    33 keyboard irq
-    34 mouse irq
+    32 	apic timer
+    33 	keyboard
+    34 	mouse
     
