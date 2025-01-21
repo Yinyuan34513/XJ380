@@ -201,9 +201,11 @@ Makefile里有一个变量“REL”，填版本。
 ### BuildVersion 30.1 【已虚拟机测试】
 2025年1月20日 Guoqiyu1115
 - 增加Hpet高精计时器解析,并成功获取 nanoTime
+
 ### BuildVersion 30.2 【已虚拟机测试】
-2025年1月20日 Guoqiyu1115
+2025年1月21日 Guoqiyu1115
 - 支持x2APIC (LocalAPIC/IO APIC)
+- 启用APIC时钟中断
 
 ## 中断号分配表
 ### 0   ~   31	异常
@@ -228,3 +230,8 @@ Makefile里有一个变量“REL”，填版本。
     18	machine check
     19	SIMD exception
     20	virtualization exception
+    
+    32 apic timer
+    33 keyboard irq
+    34 mouse irq
+    
