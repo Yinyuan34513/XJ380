@@ -19,6 +19,7 @@ void init_idt() {
     *p_idt_limit = IDT_SIZE * sizeof(IDT_GATE_TYPE) - 1;
     *p_idt_base  = (UINT64) &idt_gate;
 
+    // 异常
     init_idt_desc(0 , X86_64_INTR_GATE, divide_error                , RING0);
     init_idt_desc(1 , X86_64_INTR_GATE, debug                       , RING0);
     init_idt_desc(2 , X86_64_INTR_GATE, nmi                         , RING0);
@@ -40,29 +41,7 @@ void init_idt() {
     init_idt_desc(19, X86_64_INTR_GATE, SIMD_exception              , RING0);
     init_idt_desc(20, X86_64_INTR_GATE, virtualization_exception    , RING0);
 
-    /*
-    init_idt_desc(INT_VECTOR_IRQ0 + 0,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 1,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 2,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 3,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 4,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 5,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 6,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ0 + 7,     X86_64_INTR_GATE, debug,               RING0);
-
-    init_idt_desc(INT_VECTOR_IRQ8 + 0,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 1,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 2,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 3,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 4,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 5,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 6,     X86_64_INTR_GATE, debug,               RING0);
-    init_idt_desc(INT_VECTOR_IRQ8 + 7,     X86_64_INTR_GATE, debug,               RING0);
-    
-    for (int i = 21; i < 256; i++) {
-        init_idt_desc(i,     X86_64_INTR_GATE, wsod_apic_not_found,               RING3);
-    }
-    */
+    init_idt_desc(32, X86_64_INTR_GATE, timer_handler, RING0);
 
     __asm__ volatile ("lidt %0" : : "m"(idt_ptr));
     write_serial_string("IDT Initialize Success.\n");

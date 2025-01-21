@@ -77,7 +77,7 @@ char* Hex2Char(unsigned long long hex);
 int init_serial();
 int is_transmit_empty();
 void write_serial(char a);
-void write_serial_string(char *str);
+void write_serial_string(const char *str);
 void write_serial_dec(unsigned long long dec);
 void write_serial_hex(unsigned long long hex);
 
@@ -98,7 +98,7 @@ extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
+
 // APIC初始化错误处理
 void wsod_apic_not_found();
 
@@ -113,8 +113,12 @@ void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 
 // kernel/intr/apic.cpp
-extern "C" void do_IRQ(struct X64_REGS *regs, UINT64 error_code);
 void init_apic(UINT64 MADT);
+void send_eoi();
+
+// kernel/intr/hpet.cpp
+void hpet_init(UINT64 hpet);
+UINT64 nanoTime();
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
@@ -142,17 +146,6 @@ void io_mfence();
 // kernel/intr/8259A.cpp
 void init_8259A();
 void disable_8259A();
-
-// kernel/intr/irqfunc.c
-int irq_register(UINT64 irq_num, void *arg, void (*handler)(UINT64 irq_num, UINT64 parameter, struct X64_REGS *regs), UINT64 paramater, HARDWARE_INTR_CTRL *controller, char *irq_name);
-int irq_unregister(UINT64 irq_num);
-void ipi_send_IPI(UINT32 dest_mode, UINT32 deliver_status, UINT32 level, UINT32 trigger,
-                  UINT32 vector, UINT32 deliver_mode, UINT32 dest_shorthand, bool apic_type, 
-                  UINT32 destination);
-int ipi_regiserIPI(UINT64 irq_num, void *arg,
-                   void (*handler)(UINT64 irq_num, UINT64 param, struct pt_regs *regs),
-                   UINT64 param, HARDWARE_INTR_CTRL *controller, char *irq_name);
-void init_irq(UINT64 MADT);
 
 // kernel/pctable/gdt.cpp
 void init_gdt();

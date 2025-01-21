@@ -17,7 +17,6 @@ UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 *   kernel/*
 */
 // kernel/intr/apic.cpp
-void do_IRQ(struct X64_REGS *regs, UINT64 error_code);
 void init_apic(UINT64 MADT);
 
 // kernel/cpu/msr.cpp

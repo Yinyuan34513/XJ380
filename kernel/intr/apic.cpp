@@ -1,12 +1,6 @@
 #include "../../include/include.h"
 
-struct IOApicMap_TYPE
-{
-    UINT8  *IOApicIndexAddr;
-    UINT32 *IOApicDataAddr;
-    UINT32 *IOApicEoiAddr;
-} IOApicMap;
-
+APIC_INFO ApicInfo;
 
 /** 
  * 
@@ -28,135 +22,75 @@ UINT8 check_apic() {
     return 0;
 }
 
-/**
- * @brief 从IO APIC读取重定向表项（RTE）
- * 
- * @param index 要读取的重定向表项的索引
- * @return uint64_t 读取到的重定向表项的值
- */
-uint64_t IOApicReadRTE(UINT8 index)
-{
-    // 由于处理器的乱序执行的问题，需要加入内存屏障以保证结果的正确性。
-    uint64_t ret;
-    // 先读取高32bit
-    *IOApicMap.IOApicIndexAddr = index + 1;
-    io_mfence();
-
-    ret = *IOApicMap.IOApicDataAddr;
-    ret <<= 32;
-    io_mfence();
-
-    // 读取低32bit
-    *IOApicMap.IOApicIndexAddr = index;
-    io_mfence();
-    ret |= *IOApicMap.IOApicDataAddr;
-    io_mfence();
-
-    return ret;
+static inline void mmio_write32(UINT32 * addr, UINT32 data) {
+    *(volatile UINT32 *) addr = data;
 }
 
-/**
- * @brief 向IO APIC写入重定向表项（RTE）
- * 
- * @param index 要写入的重定向表项的索引
- * @param value 要写入的重定向表项的值
- */
-void IOApicWriteRTE(UINT8 index, UINT64 value)
-{
-    // 先写低32位
-    *IOApicMap.IOApicIndexAddr = index;
-    io_mfence();
-
-    *IOApicMap.IOApicDataAddr  = value & 0xffffffff;
-    io_mfence();
-    // 再写高32位
-    value >>= 32;
-    io_mfence();
-    *IOApicMap.IOApicIndexAddr = index + 1;
-    io_mfence();
-    *IOApicMap.IOApicDataAddr  = value & 0xffffffff;
-    io_mfence();
+static inline UINT32 mmio_read32(void* addr) {
+    return *(volatile UINT32 *) addr;
 }
 
-/** 
- * @brief 初始化IO APIC
- * 
- * @param MADT MADT表地址
- * 
- */
-void init_IOApic(UINT64 MADT) {
-    ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
-    MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
-    UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
-    UINT64                  ioApicAddr           = 0;                                       // APIC寄存器地址
+static inline uint64_t rdmsr(UINT32 msr) {
+    UINT32 eax, edx;
+    __asm__ volatile("rdmsr" : "=a"(eax), "=d"(edx) : "c"(msr));
+    return ((UINT64) edx << 32) | eax;
+}
 
-    // 遍历所有表入口
-    write_serial_string("Seraching IO APIC...\n");
-    write_serial_string("MadtLength: ");
-    write_serial_dec(MadtHeader->length);
-    write_serial_string("\n");
-    write_serial_string("MadtAddress: ");
-    write_serial_hex(MADT);
-    write_serial_string("\n");
-    write_serial_string("MadtFootAddress: ");
-    write_serial_hex((UINT64)MadtEntryPointer + MadtHeader->length);
-    write_serial_string("\n");
-    // ??????????????????????????????????????????????????????
-    for (int i = 0; i <= MadtHeader->length; /* PASS */) {
-        MADT_ENTRY_FLAG    *MadtEntryFlagPointer = (MADT_ENTRY_FLAG *)(MadtEntryPointer);   // 获取入口类型
+static inline void wrmsr(UINT32 msr, UINT64 value) {
+    UINT32 eax = (UINT32)value;
+    UINT32 edx = value >> 32;
+    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
+}
 
-        write_serial_string("MadtEntryType ");
-        write_serial_dec(MadtEntryFlagPointer->EntryType);
-        write_serial_string("\n");
-        write_serial_string("MadtEntryLength ");
-        write_serial_dec(MadtEntryFlagPointer->length);
-        write_serial_string("\n");
-        write_serial_string("MadtEntryAddress ");
-        write_serial_hex((UINT64)(MadtEntryPointer));
-        write_serial_string("\n");
-
-        if (MadtEntryFlagPointer->EntryType == 1) {
-            MADT_IO_APIC_FLAG *IOApicAddrEntry = (MADT_IO_APIC_FLAG *)(MadtEntryFlagPointer + 1);
-            // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
-            if (IOApicAddrEntry->IOApicAddr) {
-                ioApicAddr = IOApicAddrEntry->IOApicAddr;
-            }
-        }
-
-        MadtEntryPointer += MadtEntryFlagPointer->length;
-        i                += MadtEntryFlagPointer->length;
+static void lapic_write(UINT32 reg, UINT32 value) {
+    if(ApicInfo.x2Apic){
+        wrmsr(0x800 + (reg >> 4), (UINT64)value);
+        return;
     }
-    write_serial_string("IO APIC Address Get Success.\n");
-    write_serial_string("IOApicAddress: ");
-    write_serial_hex((UINT64)(ioApicAddr));
-    write_serial_string("\n");
+    mmio_write32((UINT32 *)((UINT64)ApicInfo.LocalApicAddr + reg), value);
+}
 
-    IOApicMap.IOApicIndexAddr        = (UINT8 *)(ioApicAddr);
-    IOApicMap.IOApicDataAddr         = (UINT32 *)(ioApicAddr + 0x10);
-    IOApicMap.IOApicEoiAddr          = (UINT32 *)(ioApicAddr + 0x40);
-
-    // 设置IO APIC ID 为0x0f000000
-    *IOApicMap.IOApicIndexAddr = 0x00;
-    io_mfence();
-    *IOApicMap.IOApicDataAddr  = 0x0f000000;
-    io_mfence();
-
-    io_mfence();
-
-    write_serial_string("IO APIC ID Set Success.\n");
-
-    // 获取IO APIC Version
-    *IOApicMap.IOApicIndexAddr = 0x01;
-    io_mfence();
-    //UINT8 IOApicVersion = *apic_ioapic_map.virtual_data_addr & 0xff;
-
-    // 初始化RTE表项，将所有RTE表项屏蔽
-    for (int i = 0x10; i < 0x40; i += 2)
-    {
-        // 以0x20为起始中断向量号，初始化RTE
-        IOApicWriteRTE(i, 0x10020 + ((i - 0x10) >> 1));
+static UINT32 lapic_read(UINT32 reg) {
+    if(ApicInfo.x2Apic){
+        return rdmsr(0x800 + (reg >> 4));
     }
-    write_serial_string("RTE Initialize Success.\n");
+    return mmio_read32((UINT32 *)((UINT64)ApicInfo.LocalApicAddr + reg));
+}
+
+UINT64 lapic_id() {
+    return (lapic_read(LAPIC_REG_ID) >> 24);
+}
+
+static void ioapic_write(UINT32 reg,UINT32 value) {
+    mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr), reg);
+    mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr + 0x10), value);
+}
+
+static uint32_t ioapic_read(UINT32 reg){
+    mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr), reg);
+    return mmio_read32((UINT32 *)((UINT64)ApicInfo.ioApicAddr + 0x10));
+}
+
+void ioapic_add(UINT8 vector, UINT32 irq) {
+    UINT32 ioredtbl = (UINT32)(0x10 + (uint32_t)(irq * 2));
+    UINT64 redirect = (UINT64 )vector;
+    redirect |= lapic_id() << 56;
+    ioapic_write(ioredtbl, (UINT32)redirect);
+    ioapic_write(ioredtbl + 1, (UINT32)(redirect >> 32));
+}
+
+void init_IOApic() {
+    write_serial_string("Initializing IOAPIC...\n");
+
+    ioapic_add((UINT8)32,0);
+    ioapic_add((UINT8)33,1);
+    ioapic_add((UINT8)34,12);
+    write_serial_string("Setup I/O apic.\n");
+
+    write_serial_string("IOAPIC Address: ");
+    write_serial_hex(ApicInfo.ioApicAddr);
+    write_serial_string("\n");
+    write_serial_string("IOAPIC Initialize Success.\n");
 }
 
 /** 
@@ -166,172 +100,90 @@ void init_IOApic(UINT64 MADT) {
  * @param MADT MADT表地址
  * 
  */
-void init_x2Apic(UINT64 MADT) {
-    ACPI_TABLE_HEADER      *MadtHeader           = (ACPI_TABLE_HEADER *)(MADT);             // 获取表头
-    MADT_FLAG              *MadtFlag             = (MADT_FLAG *)(MadtHeader + 1);           // 获取Flag
-    UINT8                  *MadtEntryPointer     = (UINT8 *)(MadtFlag + 1);                 // 获取表开头
-    UINT64                  LocalApicAddr        = MadtFlag->LocalApicAddr;                 // APIC寄存器地址
+void init_lApic() {
 
-    // 遍历所有表入口
-    write_serial_string("Seraching Local APIC...\n");
-    write_serial_string("MadtLength: ");
-    write_serial_dec(MadtHeader->length);
-    write_serial_string("\n");
-    write_serial_string("MadtAddress: ");
-    write_serial_hex(MADT);
-    write_serial_string("\n");
-    write_serial_string("MadtFootAddress: ");
-    write_serial_hex((UINT64)MadtEntryPointer + MadtHeader->length);
-    write_serial_string("\n");
-    // ??????????????????????????????????????????????????????
-    for (int i = 0; i <= MadtHeader->length; /* PASS */) {
-        MADT_ENTRY_FLAG    *MadtEntryFlagPointer = (MADT_ENTRY_FLAG *)(MadtEntryPointer);   // 获取入口类型
+    lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
+    lapic_write(LAPIC_REG_SPURIOUS, 0xff | 1 << 8);
+    lapic_write(LAPIC_REG_TIMER_DIV, 11);
+    lapic_write(LAPIC_REG_TIMER_INITCNT, 0);
+    UINT64 b = nanoTime();
+    lapic_write(LAPIC_REG_TIMER_INITCNT, ~((UINT32) 0));
+    for (;;) if (nanoTime() - b >= 1000000) break;
+    UINT64 lapic_timer = (~(uint32_t) 0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
+    UINT64 calibrated_timer_initial = (UINT64) ((UINT64) (lapic_timer * 1000) / 250);
+    write_serial_string("Calibrated LAPIC timer: ");
+    write_serial_dec(calibrated_timer_initial);
+    write_serial_string(" ticks per second.\n");
+    lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
+    lapic_write(LAPIC_REG_TIMER_INITCNT,calibrated_timer_initial);
 
-        write_serial_string("MadtEntryType ");
-        write_serial_dec(MadtEntryFlagPointer->EntryType);
-        write_serial_string("\n");
-        write_serial_string("MadtEntryLength ");
-        write_serial_dec(MadtEntryFlagPointer->length);
-        write_serial_string("\n");
-        write_serial_string("MadtEntryAddress ");
-        write_serial_hex((UINT64)(MadtEntryPointer));
-        write_serial_string("\n");
-
-        if (MadtEntryFlagPointer->EntryType == 5) {
-            MADT_LOCAL_APIC_AddrOverride *LocalApicAddrEntry = (MADT_LOCAL_APIC_AddrOverride *)(MadtEntryFlagPointer + 1);
-            // 如果定义了就用这个（虽然这个判断看起来很若至但考虑到有些良心厂商emmmmm以防万一）
-            if (LocalApicAddrEntry->LocalApicAddr) {
-                LocalApicAddr = LocalApicAddrEntry->LocalApicAddr;
-            }
-        }
-
-        MadtEntryPointer += MadtEntryFlagPointer->length;
-        i                += MadtEntryFlagPointer->length;
-    }
-    write_serial_string("Local APIC Address Get Success.\n");
-    write_serial_string("LocalApicAddress: ");
-    write_serial_hex((UINT64)(LocalApicAddr));
-    write_serial_string("\n");
-
-    // 启用xAPIC和x2APIC
-    UINT32 ApicMsrEax, ApicMsrEdx;
-    GetMSR(IA32_APIC_BASE_MSR, &ApicMsrEax, &ApicMsrEdx);
-    ApicMsrEax |= IA32_APIC_BASE_MSR_ENABLE;    // 0000 0000 0000 0000 0000 1000 0000 0000 启用APIC
-    ApicMsrEax |= IA32_APIC_BASE_MSR_X2;        // 0000 0000 0000 0000 0000 0100 0000 0000 启用x2APIC
-    SetMSR(IA32_APIC_BASE_MSR,  ApicMsrEax,  ApicMsrEdx);
-    GetMSR(IA32_APIC_BASE_MSR, &ApicMsrEax, &ApicMsrEdx);
-    // 检测是否启用
-    if (ApicMsrEax & 0xC00) 
-        write_serial_string("x2APIC Enabled Success.\n");
-    
-    // 设置SVR寄存器，启用Local APIC，禁止EOI广播
-    GetMSR(IA32_APIC_SVR_MSR, &ApicMsrEax, &ApicMsrEdx);
-    ApicMsrEax |= IA32_APIC_SVR_MSR_LAPIC;      // 0000 0000 0000 0000 0000 0001 0000 0000 启用LocalAPIC
-    //ApicMsrEax |= IA32_APIC_SVR_MSR_DISEOI;   // 0000 0000 0000 0000 0001 0000 0000 0000 禁用EOI广播
-    SetMSR(IA32_APIC_SVR_MSR,  ApicMsrEax,  ApicMsrEdx);
-    GetMSR(IA32_APIC_SVR_MSR, &ApicMsrEax, &ApicMsrEdx);
-    // 检测是否成功设置
-    if (ApicMsrEax & 0x100) 
-        write_serial_string("Local APIC Enabled Success.\n");
-    if (ApicMsrEax & 0x1000) 
-        write_serial_string("EOI Disabled Success.\n");     // 这个如果不输出事正常情况
-
-    // 关掉LVT
-    SetMSR(IA32_APIC_LVT_TIMER,     0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_THERMAL,   0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_PERFOR_MON,0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_LINT0,     0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_LINT1,     0x10000, 0x00);
-    SetMSR(IA32_APIC_LVT_ERROR,     0x10000, 0x00);
-
-    /*
-    *(UINT32 *)(LocalApicAddr + LOCAL_APIC_OFFSET_Local_APIC_LVT_TIMER) = 0x10000;*/
-    io_mfence();
     write_serial_string("Local APIC Initialize Success.\n");
 }
 
-/**
- * @brief 初始化APIC
+/** 
  * 
- * @param MADT 指向MADT表的指针
+ * @brief 初始化Local APIC
  * 
- * 如果系统支持x2APIC，则优先使用x2APIC。
+ * @param MADT MADT表地址
+ * 
  */
-void init_apic(UINT64 MADT) {
+void init_apic(UINT64 MADT0) {
     write_serial_string("Initializing APIC...\n");
-
-    for (int i = 32; i <= 55; ++i)
-        init_idt_desc(i, X86_64_INTR_GATE, interrupt_table[i - 32], RING3);
-
-    // 设置Local APIC中断门
-    for (int i = 150; i < 160; ++i)
-        init_idt_desc(i, X86_64_INTR_GATE, local_apic_interrupt_table[i - 150], RING3);
+    __asm__ volatile("cli":::"memory");
 
     // 屏蔽8259A
     disable_8259A();
+    write_serial_string("Mask 8259A Success.\n");
     io_mfence();
 
-    if (check_apic() == 2) {
+    switch (check_apic()) 
+    {
+    case 2:
         write_serial_string("You PC support x2APIC\n");
-        init_x2Apic(MADT);
-    } else if (check_apic() == 1) {
+        ApicInfo.x2Apic = true;
+        break;
+    case 1:
         write_serial_string("You PC support xAPIC\n");
-    } else {
+        ApicInfo.x2Apic = false;
+        break;
+    default:
         wsod_apic_not_found();
+        break;          // 虽然这里理论上永远都不会执行...
     }
 
-    init_IOApic(MADT);
-    io_mfence();
+    UINT64 ia32_apic_base = rdmsr(0x1b);
+    ia32_apic_base |= 1 << 11;
+    if(ApicInfo.x2Apic){
+        ia32_apic_base |= 1 << 10;
+    }
+    wrmsr(0x1b, ia32_apic_base);
+
+    MADT *madt = (MADT*)MADT0;
+    ApicInfo.LocalApicAddr = (UINT64)madt->local_apic_address;
+    UINT64 current = 0;
+    for (;;) {
+        if (current + ((UINT32) sizeof(MADT) - 1) >= madt->h.Length) {
+            break;
+        }
+        MadtHeader *header = (MadtHeader *) ((uint64_t) (&madt->entries) + current);
+        if (header->entry_type == MADT_APIC_IO) {
+            MadtIOApic *ioapic = (MadtIOApic *) ((uint64_t) (&madt->entries) + current);
+            ApicInfo.ioApicAddr = (UINT64)ioapic->address;
+        }
+        current += (UINT64) header->length;
+    }
+    init_lApic();
+    init_IOApic();
 
     write_serial_string("APIC Initialize Success.\n");
 }
 
-/**
- * @brief 处理中断请求（IRQ）
- * 
- * @param rsp 指向X64寄存器结构的指针
- * @param number 中断号
- */
-void do_IRQ(struct X64_REGS *rsp, UINT64 number) {
-    // 低于0x80的是外部中断控制器，高于0x80的是Local APIC
-    if (number < 0x80 && number >= 32)      // 是外部中断控制器
-    {
-        IRQ_DESC_TYPE *irq = &interrupt_desc[number - 32];
+void send_eoi(){
+    lapic_write(0xb0,0);
+}
 
-        // 执行中断上半部处理程序
-        if (irq != NULL && irq->handler != NULL) {
-            irq->handler(number, irq->parameter, rsp);
-        } else {
-            //
-        }
-        // 向中断控制器发送应答消息
-        if (irq->controller != NULL && irq->controller->ack != NULL) {
-            irq->controller->ack(number);
-        } else {
-            // 向EOI寄存器写入0x00表示结束中断
-            __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
-                                 "movq	$0x00,	%%rax	\n\t"
-                                 "movq 	$0x80b,	%%rcx	\n\t"
-                                 "wrmsr	\n\t" ::
-                                     : "memory");
-        }
-    }
-    else if (number > 0x80)                 // 是Local APIC
-    {
-        __asm__ volatile ("movq	$0x00,	%%rdx	\n\t"
-                                 "movq	$0x00,	%%rax	\n\t"
-                                 "movq 	$0x80b,	%%rcx	\n\t"
-                                 "wrmsr	\n\t" ::
-                                     : "memory");
-
-        {
-            IRQ_DESC_TYPE *irq = &SMP_IPI_desc[number - 200];
-            if (irq->handler != NULL)
-                irq->handler(number, irq->parameter, rsp);
-        }
-    }
-    else
-    {
-        //
-    }
+extern "C" void c_timer_handler(void *regs_ptr,UINT64 error_code) {
+    //TODO 进程调度器
+    write_serial_string("Timer Interrupt\n");
+    send_eoi();
 }

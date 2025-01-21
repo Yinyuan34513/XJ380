@@ -19,15 +19,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   disable_intr();
   init_gdt();
   init_idt();
-  init_irq(BootConfig->MADT);
-  //rect(fbc, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, {0x00, 0xa2, 0xe8});
-  enable_intr();
-  
-  //unsigned long long spp_status;
-  //struct EFI_SIMPLE_POINTER_STATE spp_state;
-
-  //char                 str[3]; // 打印用的字符串
-  //struct EFI_INPUT_KEY key;    // 用于接收按键
+  hpet_init(BootConfig->HPET);
+  init_apic(BootConfig->MADT);
 
   EFI_TIME time;
   EFI_TIME_CAPABILITIES time_capab;
@@ -40,6 +33,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   SHEET_INFO          shtinf;
   init_sheet(fbc, &shtinf);
 
+  enable_intr();
+
   int mouse_x = 128;
   int mouse_y = 128;
 
@@ -47,10 +42,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
   create_sheet(&shtinf, 128, 128, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
-  //delete_sheet(&shtinf, &desktop_sheet_id); // Test
-
-  //draw_point(&shtinf, &desktop_sheet_id, 0, 0, {255, 255, 255, 255});
-  //draw_rect(&shtinf, &desktop_sheet_id, 0, 0, 100, 100,{255, 255, 255, 255});
 
   init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 

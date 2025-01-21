@@ -35,7 +35,7 @@ void write_serial(char a) {
 	outb(PORT,a);
 }
 
-void write_serial_string(char *str) {
+void write_serial_string(const char *str) {
 	while (*str) {
 		write_serial(*str++);
 	}

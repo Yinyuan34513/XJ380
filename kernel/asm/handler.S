@@ -261,3 +261,10 @@ ENTRY(virtualization_exception)
     leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
+
+ENTRY(timer_handler)
+    pushq $0
+    pushq %rax
+    leaq c_timer_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code

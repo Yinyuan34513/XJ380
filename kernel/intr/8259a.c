@@ -28,9 +28,6 @@ void init_8259A()
  */
 void disable_8259A()
 {
-    io_mfence();
     outb(INT_M_CTLMASK, 0xff);
-    io_mfence();
     outb(INT_S_CTLMASK, 0xff);
-    io_mfence();
 }

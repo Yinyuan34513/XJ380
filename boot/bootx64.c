@@ -333,6 +333,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         UINT64                 *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);                     // 指向XSDT后面的其他SDT的地址的指针
         UINT64                  Entries =   (XSDT->length - sizeof(XSDT->length)) / 8;        // SDT数量
         AcpiTableWasFound = 1;
+        UINT8                   ObjTableWasFound = 0;
         // 遍历所有ACPI表
         for (int j = 0; j < Entries; j++, AcpiTableEntryPtr++) {
           write_serial_string("SDT Entry ");
@@ -351,8 +352,15 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             write_serial_string("MADT Found Success.\n");
             // MADT!!!
             BootConfig.MADT = (UINT64)(AcpiSdtPointer);
-            break;
+            ObjTableWasFound++;
+          } else if (!part_strcmp(AcpiSdtPointer->sign, "HPET", 4)) {
+            write_serial_string("HPET Found Success.\n");
+            // HPET!!!
+            BootConfig.HPET = (UINT64)(AcpiSdtPointer);
+            ObjTableWasFound++;
           }
+          if (ObjTableWasFound == 2)
+            break;
           write_serial_string("\n");
         }
         break;

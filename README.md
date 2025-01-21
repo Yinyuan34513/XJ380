@@ -198,6 +198,15 @@ Makefile里有一个变量“REL”，填版本。
 - 成功从ACPI获取MADT（VMware无法引导，炸PF）
 - IO APIC设置成功（大抵是吧）
 
+### BuildVersion 30.1 【已虚拟机测试】
+2025年1月20日 Guoqiyu1115
+- 增加Hpet高精计时器解析,并成功获取 nanoTime
+
+### BuildVersion 30.2 【已虚拟机测试】
+2025年1月21日 Guoqiyu1115
+- 支持x2APIC (LocalAPIC/IO APIC)
+- 启用APIC时钟中断
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error
@@ -221,48 +230,8 @@ Makefile里有一个变量“REL”，填版本。
     18	machine check
     19	SIMD exception
     20	virtualization exception
-
-### 21  ~   31	没用（算是保留）
-
-### 32  ~   55	I/O APIC
-    32	8259A
-    33	keyboard
-    34	HPET timer 0,8254 counter 0
-    35	serial port A
-    36	serial port B
-    37	parallel port
-    38	floppy
-    39	parallel port
-    40	RTC,HPET timer 1
-    41	Generic
-    42	Generic
-    43	HPET timer 2
-    44	HPET timer 3	/ mouse
-    45	FERR#
-    46	SATA primary
-    47	SATA secondary
-    48	PIRQA
-    49	PIRQB
-    50	PIRQC
-    51	PIRQD
-    52	PIRQE
-    53	PIRQF
-    54	PIRQG
-    55	PIRQH
-
-### 56 ~    149 暂时没用
-
-### 150 ~   200	Local APIC
-    150	CMCI
-    151	Timer
-    152	Thermal Monitor
-    153	Performance Counter
-    154	LINT0
-    155	LINT1
-    156	Error
-    157 xhci_controller_0
-    158 xhci_controller_1
-    159 xhci_controller_2
-    160 xhci_controller_3
-
-### 200 ~   255	MP IPI
+    
+    32 apic timer
+    33 keyboard irq
+    34 mouse irq
+    
