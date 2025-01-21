@@ -34,6 +34,7 @@ void alignment_check();
 void machine_check();
 void SIMD_exception();
 void virtualization_exception();
+void timer_handler(); // apic.cpp
 
 #include "../../stdint.h"
 

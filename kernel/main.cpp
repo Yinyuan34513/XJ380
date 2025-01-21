@@ -41,6 +41,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   SHEET_INFO          shtinf;
   init_sheet(fbc, &shtinf);
 
+  enable_intr();
+
   int mouse_x = 128;
   int mouse_y = 128;
 

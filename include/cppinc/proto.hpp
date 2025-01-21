@@ -98,7 +98,7 @@ extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
+
 // APIC初始化错误处理
 void wsod_apic_not_found();
 

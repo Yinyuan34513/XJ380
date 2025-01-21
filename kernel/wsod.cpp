@@ -104,6 +104,9 @@ void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code) {
 
 // 一般保护性异常
 void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code) {
+    write_serial_string("ERROR CODE:");
+    write_serial_dec(error_code);
+    write_serial_string("\n");
     do_wsod("GENERAL_PROTECTION", regs);
 }
 

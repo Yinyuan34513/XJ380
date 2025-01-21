@@ -38,6 +38,8 @@ void init_idt() {
     init_idt_desc(19, X86_64_INTR_GATE, SIMD_exception              , RING0);
     init_idt_desc(20, X86_64_INTR_GATE, virtualization_exception    , RING0);
 
+    init_idt_desc(32, X86_64_INTR_GATE, timer_handler, RING0);
+
     __asm__ volatile ("lidt %0" : : "m"(idt_ptr));
     write_serial_string("IDT Initialize Success.\n");
 }

@@ -10,7 +10,7 @@ mkdir esp\EFI\BOOT
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\gdt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\gdt.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\idt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\idt.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\asm\common.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\common.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\apic.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\apic.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\apic.cpp -mno-sse -mno-sse2 -msoft-float -mno-mmx -mno-80387 -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\apic.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\hpet.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\hpet.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\cpu\msr.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\msr.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\cpu\cpuid.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\cpuid.o

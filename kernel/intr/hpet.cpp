@@ -1,17 +1,5 @@
 #include "../../include/include.h"
 
-struct ACPISDTHeader {
-    char Signature[4];
-    UINT32 Length;
-    UINT8 Revision;
-    UINT8 Checksum;
-    char OEMID[6];
-    char OEMTableID[8];
-    UINT32 OEMRevision;
-    UINT32 CreatorID;
-    UINT32 CreatorRevision;
-};
-
 struct generic_address {
     UINT8 address_space;
     UINT8 bit_width;
