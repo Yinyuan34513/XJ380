@@ -14,26 +14,12 @@
 #include "./global/kernel/longm.h"
 #include "./global/kernel/acpi.h"
 #include "./global/kernel/apic/madt.h"
+#include "./global/kernel/apic/hpet.h"
 #include "./global/kernel/apic/apic.h"
 
 extern "C" {
 #include "./global/kernel/pctable/idt.h"
 #include "./efi.h"
 }
-
-struct ACPISDTHeader {
-    char Signature[4];
-    UINT32 Length;
-    UINT8 Revision;
-    UINT8 Checksum;
-    char OEMID[6];
-    char OEMTableID[8];
-    UINT32 OEMRevision;
-    UINT32 CreatorID;
-    UINT32 CreatorRevision;
-};
-
-UINT64 nanoTime(); //hpet.cpp
-void send_eoi(); //apic.cpp
 
 #endif 

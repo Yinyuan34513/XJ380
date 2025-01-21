@@ -16,5 +16,6 @@
 #include "./global/kernel/longm.h"
 #include "./global/kernel/acpi.h"
 #include "./global/kernel/apic/madt.h"
+#include "./global/kernel/apic/hpet.h"
 #include "./global/kernel/apic/apic.h"
 #endif 

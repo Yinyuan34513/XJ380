@@ -57,6 +57,40 @@ struct APIC_INFO {
     UINT64 ioApicAddr;
 };
 
+#define MADT_APIC_IO 0x01
+
+#define LAPIC_REG_ID 32
+#define LAPIC_REG_TIMER_CURCNT 0x390
+#define LAPIC_REG_TIMER_INITCNT 0x380
+#define LAPIC_REG_TIMER 0x320
+#define LAPIC_REG_SPURIOUS 0xf0
+#define LAPIC_REG_TIMER_DIV 0x3e0
+
+#include "hpet.h"
+
+typedef struct {
+    struct ACPISDTHeader h;
+    uint32_t local_apic_address;
+    uint32_t flags;
+    void *entries;
+} __attribute__((packed)) MADT;
+
+struct madt_hander {
+    uint8_t entry_type;
+    uint8_t length;
+} __attribute__((packed));
+
+struct madt_io_apic {
+    struct madt_hander h;
+    uint8_t apic_id;
+    uint8_t reserved;
+    uint32_t address;
+    uint32_t gsib;
+}__attribute__((packed));
+
+typedef struct madt_hander MadtHeader;
+typedef struct madt_io_apic MadtIOApic;
+
 #pragma pack()
 
 #endif
