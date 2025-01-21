@@ -6,7 +6,10 @@ IDTR_TYPE idt_ptr;
 
 void init_8259A();
 
-// 初始化idt
+/**
+ * @brief 初始化中断描述符表（IDT）
+ * 
+ */
 void init_idt() {
     write_serial_string("Initializing IDT...\n");
     // 初始化IDTR寄存器和门描述符
@@ -44,6 +47,14 @@ void init_idt() {
     write_serial_string("IDT Initialize Success.\n");
 }
 
+/**
+ * @brief 初始化中断描述符表（IDT）中的一个描述符
+ * 
+ * @param number 中断向量号
+ * @param gate_type 门类型（如中断门、陷阱门等）
+ * @param function 中断处理函数的指针
+ * @param privilege 特权级别（如RING0、RING3等）
+ */
 void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege) {
     IDT_GATE_TYPE  *p_gate = &idt_gate[number];
     UINT64          f_base = (UINT64)function;
