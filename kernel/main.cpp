@@ -113,7 +113,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 	UINT8 k_input;
   	while (1) {
 		k_input = get_keyboard_input();
-		if (k_input != NULL && k_input != KEY_ENTER) {
+		if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL 
+                        	&& k_input != KEY_CAPS  && k_input != KEY_BACKSPACE) {
 			PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
 			refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16);   // 刷新
 			fontx += 8;

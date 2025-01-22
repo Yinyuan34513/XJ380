@@ -23,8 +23,8 @@ void init_apic(UINT64 MADT);
  *   driver/*
  */
 // driver/ps2/keyboard.cpp
-extern struct keyboard_buf kb_fifo;
 extern UINT8 keyboard_code[256];
+extern UINT8 keyboard_code1[256];
 void keyboard_init();
 UINT8 get_keyboard_input();
 

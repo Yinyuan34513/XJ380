@@ -49,6 +49,10 @@ struct keyboard_buf {
     UINT8  *p_head;
     UINT8  *p_tail;
     INT32  	count;
+	bool	ctrl;
+	bool 	shift;
+	bool	alt;
+	bool 	caps;
     UINT8  	buf[KB_BUF_SIZE];
 };
 

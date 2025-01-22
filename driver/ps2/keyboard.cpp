@@ -1,7 +1,6 @@
 #include "../../include/global/kernel/keyboard/keyboard.h"
 
 struct keyboard_buf kb_fifo;
-static int caps_lock, shift, ctrl = 0;
 UINT8 keyboard_code[256] = {
     0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', KEY_BACKSPACE,
     KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', KEY_ENTER,
@@ -22,23 +21,23 @@ extern "C" void c_keyboard_handler(void *regs_ptr, UINT64 error_code)
     x = inb(0x60);
     if (x == 0x2a || x == 0x36)
     { // Shift按下
-        shift = 1;
+        kb_fifo.shift = 1;
     }
     else if (x == 0x1d)
     { // Ctrl按下
-        ctrl = 1;
+        kb_fifo.ctrl = 1;
     }
     else if (x == 0x3a)
     { // Caps Lock按下
-        caps_lock = caps_lock ^ 1;
+        kb_fifo.caps = kb_fifo.caps ^ 1;
     }
     else if (x == 0xaa || x == 0xb6)
     { // Shift松开
-        shift = 0;
+        kb_fifo.shift = 0;
     }
     else if (x == 0x9d)
     { // Ctrl按下
-        ctrl = 0;
+        kb_fifo.ctrl = 0;
     }
     if (x < 0x80)
     {
@@ -63,7 +62,7 @@ UINT8 get_keyboard_input()
     {
         // 有没有读的
         UINT8 temp = keyboard_code[*kb_fifo.p_tail];
-        if (shift == 1 || caps_lock == 1)
+        if (kb_fifo.shift == 1 || kb_fifo.caps == 1)
         {
             temp = keyboard_code1[*kb_fifo.p_tail];
         }
