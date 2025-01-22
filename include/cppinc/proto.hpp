@@ -73,6 +73,12 @@ void write_serial_string(const char *str);
 void write_serial_dec(unsigned long long dec);
 void write_serial_hex(unsigned long long hex);
 
+// driver/ps2/keyboard.cpp
+extern struct keyboard_buf kb_fifo;
+extern char keyboard_code[256];
+void keyboard_init();
+char get_keyboard_input();
+
 /*
  *   kernel/*
  */
@@ -105,8 +111,6 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 void send_eoi();
-
-void keyboard_init();
 
 // kernel/intr/hpet.cpp
 void hpet_init(UINT64 hpet);

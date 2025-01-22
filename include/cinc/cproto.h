@@ -19,7 +19,14 @@ UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 
+/*
+ *   driver/*
+ */
+// driver/ps2/keyboard.cpp
+extern struct keyboard_buf kb_fifo;
+extern char keyboard_code[256];
 void keyboard_init();
+char get_keyboard_input();
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);

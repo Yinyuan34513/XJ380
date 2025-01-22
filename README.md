@@ -198,14 +198,18 @@ Makefile里有一个变量“REL”，填版本。
 - 成功从ACPI获取MADT（VMware无法引导，炸PF）
 - IO APIC设置成功（大抵是吧）
 
-### BuildVersion 30.1 【已虚拟机测试】
-2025年1月20日 Guoqiyu1115
+### BuildVersion 31 【已虚拟机测试】
+2025年1月20日 XIAOYI
 - 增加Hpet高精计时器解析,并成功获取 nanoTime
 
-### BuildVersion 30.2 【已虚拟机测试】
-2025年1月21日 Guoqiyu1115
+### BuildVersion 32 【已虚拟机测试】
+2025年1月21日 XIAOYI & CodeCube
 - 支持x2APIC (LocalAPIC/IO APIC)
 - 启用APIC时钟中断
+
+### BuildVersion 33 【已虚拟机测试】
+2025年1月22日 Guoqiyu1115 & CodeCube
+- 键盘
 
 ## 中断号分配表
 ### 0   ~   31	异常

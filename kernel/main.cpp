@@ -106,70 +106,66 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   refresh_sheet(&shtinf);   // 刷新
 
-  write_serial_string("Operating System Initialize Success.\n");
   keyboard_init();
-  while (1) {
-    /*
-    spp_status = SPP.GetState(&SPP, &spp_state);
-    if (!SystemTable.ConIn->ReadKeyStroke(SystemTable.ConIn, &key)) {
-      if (key.UnicodeChar != L'\r') { // 是字符
-        str[0] = key.UnicodeChar;     // 第一个字符就输出
-        str[1] = '\0';                // 第二个字符是\0，结束符
-        PrintString(&shtinf, &desktop_sheet_id, fontx, fonty, str, WHITE);
-        refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16);   // 刷新
-        fontx += 8;
-      } else if (key.UnicodeChar == L'\r') { // 是换行
-        fontx = 8;
-        fonty += 16;
-      } else {                        // 是不可打印字符
-        // pass
-        fontx += 8;
-      }
-      if(fontx > 304){
-        fontx = 8;
-        fonty += 16;
-      }
-    }
-    if (!spp_status) {
-      // out
-      if (spp_state.LeftButton == 1) {
-        int tx1 = shtinf.scrx * 0.1875;
-        if (mouse_x > tx1 && mouse_x < tx1 + 16 && 
-                mouse_y > 4 && mouse_y < 20) {
-          SystemTable.RuntimeServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
-        }
-      }
-      int tbx = shtinf.sheet[mouse_sheet_id].bx;
-      int tby = shtinf.sheet[mouse_sheet_id].by;
-      int sppx = spp_state.RelativeMovementX;
-      int sppy = spp_state.RelativeMovementY;
-      sppx /= 0x2000;
-      sppy /= 0x2000;
-      mouse_x += sppx;
-      mouse_y += sppy;
-      
-      if (mouse_x < 0) { mouse_x = 0; }
-      if (mouse_y < 0) { mouse_y = 0; }
-      if (mouse_x > shtinf.scrx - 1) { mouse_x = shtinf.scrx - 1; }
-      if (mouse_y > shtinf.scry - 1) { mouse_y = shtinf.scry - 1; }
+  write_serial_string("Keyboard Initialize Success.\n");
 
-      move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
-      SPP.Reset(&SPP, 0);
-      refresh_part_sheet(&shtinf, tbx, tby, 
-                                tbx + shtinf.sheet[mouse_sheet_id].width, 
-                                tby + shtinf.sheet[mouse_sheet_id].height);
-      refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
-                                shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
-                                shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
-    }
-    */
-    SystemTable.RuntimeServices->GetTime(&time, &time_capab);
-    int scdx = fbc.horizontal_resolution * 0.8125;
-    draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
-    PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
-    PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
-    PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
-    refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
+  write_serial_string("Operating System Initialize Success.\n");
+	char k_input;
+  	while (1) {
+		k_input = get_keyboard_input();
+		if (k_input >= 'a' && k_input <= 'z') { // 是字符
+			PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
+			refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16);   // 刷新
+			fontx += 8;
+		} else if (k_input == KEY_ENTER) { // 是换行
+			fontx = 8;
+			fonty += 16;
+		}
+		if (fontx > 304){
+			fontx = 8;
+			fonty += 16;
+		}
+		/*
+		if (!spp_status) {
+		// out
+		if (spp_state.LeftButton == 1) {
+			int tx1 = shtinf.scrx * 0.1875;
+			if (mouse_x > tx1 && mouse_x < tx1 + 16 && 
+					mouse_y > 4 && mouse_y < 20) {
+			SystemTable.RuntimeServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
+			}
+		}
+		int tbx = shtinf.sheet[mouse_sheet_id].bx;
+		int tby = shtinf.sheet[mouse_sheet_id].by;
+		int sppx = spp_state.RelativeMovementX;
+		int sppy = spp_state.RelativeMovementY;
+		sppx /= 0x2000;
+		sppy /= 0x2000;
+		mouse_x += sppx;
+		mouse_y += sppy;
+		
+		if (mouse_x < 0) { mouse_x = 0; }
+		if (mouse_y < 0) { mouse_y = 0; }
+		if (mouse_x > shtinf.scrx - 1) { mouse_x = shtinf.scrx - 1; }
+		if (mouse_y > shtinf.scry - 1) { mouse_y = shtinf.scry - 1; }
+
+		move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
+		SPP.Reset(&SPP, 0);
+		refresh_part_sheet(&shtinf, tbx, tby, 
+									tbx + shtinf.sheet[mouse_sheet_id].width, 
+									tby + shtinf.sheet[mouse_sheet_id].height);
+		refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
+									shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
+									shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
+		}
+		*/
+		SystemTable.RuntimeServices->GetTime(&time, &time_capab);
+		int scdx = fbc.horizontal_resolution * 0.8125;
+		draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
+		PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
+		PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
+		PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
+		refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
   }
   // 按理来说不可能到这儿
 }
