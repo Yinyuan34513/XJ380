@@ -50,7 +50,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int fonty = 50;
 
   // DEBUG
-  if (BUILD_EDITION == DEBUG_VERSION) {
+#if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 40, "X:", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 24, "Y:", WHITE);
     PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 40, shtinf.scrx, WHITE);
@@ -99,7 +99,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
 
     draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
-  }
+#endif
   //wsod_debug();
 
   draw_mouse(&shtinf, &mouse_sheet_id);
@@ -110,14 +110,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   write_serial_string("Keyboard Initialize Success.\n");
 
   write_serial_string("Operating System Initialize Success.\n");
-	char k_input;
+	UINT8 k_input;
   	while (1) {
 		k_input = get_keyboard_input();
-		if (k_input >= 'a' && k_input <= 'z') { // 是字符
+		if (k_input != NULL && k_input != KEY_ENTER) {
 			PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
 			refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16);   // 刷新
 			fontx += 8;
-		} else if (k_input == KEY_ENTER) { // 是换行
+		} else if (k_input == KEY_ENTER) {
 			fontx = 8;
 			fonty += 16;
 		}

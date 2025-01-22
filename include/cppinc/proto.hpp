@@ -75,9 +75,9 @@ void write_serial_hex(unsigned long long hex);
 
 // driver/ps2/keyboard.cpp
 extern struct keyboard_buf kb_fifo;
-extern char keyboard_code[256];
+extern UINT8 keyboard_code[256];
 void keyboard_init();
-char get_keyboard_input();
+UINT8 get_keyboard_input();
 
 /*
  *   kernel/*

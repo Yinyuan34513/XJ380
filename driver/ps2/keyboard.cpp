@@ -2,15 +2,13 @@
 
 struct keyboard_buf kb_fifo;
 
-char keyboard_code[256] = {
-	0, (char)KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', (char)KEY_BACKSPACE,
-	(char)KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', (char)KEY_ENTER,
-	(char)KEY_CTRL, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 
-	(char)KEY_SHIFT, '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', (char)KEY_SHIFT, 
-	'*', (char)KEY_ALT, (char)KEY_SPACE, (char)KEY_CAPS, (char)KEY_F1, (char)KEY_F2, (char)KEY_F3, (char)KEY_F4, 
-	(char)KEY_F5, (char)KEY_F6, (char)KEY_F7, (char)KEY_F8, (char)KEY_F9, (char)KEY_F10,
-	(char)KEY_NUML, (char)KEY_SCROLL, '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.', 0, 0, 0, 
-	(char)KEY_F11, (char)KEY_F12
+UINT8 keyboard_code[256] = {
+	0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', KEY_BACKSPACE,
+	KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', KEY_ENTER,
+	KEY_CTRL, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 
+	KEY_SHIFT, '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', KEY_SHIFT, 
+	'*', KEY_ALT, KEY_SPACE, KEY_CAPS, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10,
+	KEY_NUML, KEY_SCROLL, '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.', 0, 0, 0, KEY_F11, KEY_F12
 };	// +0x80 = 释放状态
 
 extern "C" void c_keyboard_handler(void *regs_ptr,UINT64 error_code) {
@@ -34,15 +32,16 @@ extern "C" void c_keyboard_handler(void *regs_ptr,UINT64 error_code) {
     send_eoi();
 }
 
-char get_keyboard_input() {
+UINT8 get_keyboard_input() {
     if (kb_fifo.p_tail != kb_fifo.p_head) {
         // 有没有读的
-        char temp = keyboard_code[*kb_fifo.p_tail];
+        UINT8 temp = keyboard_code[*kb_fifo.p_tail];
         if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE)
         {
             kb_fifo.p_tail = kb_fifo.buf;
         }
         kb_fifo.p_tail++;
+
         return temp;
     }
     return NULL;
