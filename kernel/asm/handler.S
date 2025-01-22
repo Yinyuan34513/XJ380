@@ -268,3 +268,10 @@ ENTRY(timer_handler)
     leaq c_timer_handler(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
+
+ENTRY(keyboard_handler)
+    pushq $0
+    pushq %rax
+    leaq c_keyboard_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code

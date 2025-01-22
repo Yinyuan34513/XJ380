@@ -35,7 +35,7 @@ void machine_check();
 void SIMD_exception();
 void virtualization_exception();
 void timer_handler(); // apic.cpp
-
+void keyboard_handler();
 #include "../../stdint.h"
 
 typedef struct

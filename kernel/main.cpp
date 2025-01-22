@@ -107,6 +107,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   refresh_sheet(&shtinf);   // 刷新
 
   write_serial_string("Operating System Initialize Success.\n");
+  keyboard_init();
   while (1) {
     /*
     spp_status = SPP.GetState(&SPP, &spp_state);

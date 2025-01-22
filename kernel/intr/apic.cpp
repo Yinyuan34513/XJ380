@@ -184,6 +184,6 @@ void send_eoi(){
 
 extern "C" void c_timer_handler(void *regs_ptr,UINT64 error_code) {
     //TODO 进程调度器
-    write_serial_string("Timer Interrupt\n");
+    // write_serial_string("Timer Interrupt\n"); serial.log : 尼玛
     send_eoi();
 }

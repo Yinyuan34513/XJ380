@@ -19,6 +19,8 @@ UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 
+void keyboard_init();
+
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
 void SetMSR(UINT32 msr, UINT32  lo, UINT32  hi);
