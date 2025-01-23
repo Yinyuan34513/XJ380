@@ -38,7 +38,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   *shtinf.sheet[0].number = 1145;
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
-  create_sheet(&shtinf, get_mouse_x(), get_mouse_y(), 10, 21, FixedSheetType, 255, &mouse_sheet_id);
+  create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
 
   init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
@@ -112,6 +112,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   int tby;
   int tbx;
   	while (1) {
+      tbx = shtinf.sheet[mouse_sheet_id].bx;
+		tby = shtinf.sheet[mouse_sheet_id].by;
+    move_mouse(&shtinf,&mouse_sheet_id,get_mouse_x(),get_mouse_y());
+    refresh_part_sheet(&shtinf, tbx, tby, 
+									tbx + shtinf.sheet[mouse_sheet_id].width, 
+									tby + shtinf.sheet[mouse_sheet_id].height);
+    refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
+									shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
+									shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
 		k_input = get_keyboard_input();
 		if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL 
                         	&& k_input != KEY_CAPS  && k_input != KEY_BACKSPACE) {
@@ -126,15 +135,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 			fontx = 8;
 			fonty += 16;
 		}
-    tbx = shtinf.sheet[mouse_sheet_id].bx;
-		tby = shtinf.sheet[mouse_sheet_id].by;
-    move_mouse(&shtinf,&mouse_sheet_id,get_mouse_x(),get_mouse_y());
-    refresh_part_sheet(&shtinf, tbx, tby, 
-									tbx + shtinf.sheet[mouse_sheet_id].width, 
-									tby + shtinf.sheet[mouse_sheet_id].height);
-    refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
-									shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
-									shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
 		/*
 		if (!spp_status) {
 		// out

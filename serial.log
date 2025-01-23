@@ -30,11 +30,11 @@ Initializing GDT...
 GDT Initialize Success.
 Initializing IDT...
 IDT Initialize Success.
-Setup acpi hpet table (nano_time: 148700).
+Setup acpi hpet table (nano_time: 173000).
 Initializing APIC...
 Mask 8259A Success.
 You PC support x2APIC
-Calibrated LAPIC timer: 4084800 ticks per second.
+Calibrated LAPIC timer: 4134800 ticks per second.
 Local APIC Initialize Success.
 Initializing IOAPIC...
 Setup I/O apic.
