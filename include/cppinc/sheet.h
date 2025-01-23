@@ -3,29 +3,30 @@
 
 #include "../include.h"
 
-#define MAX_SHEET       256
-
 enum SystemSheetType {
     FixedSheetType,
     MovableSheetType,
     TopSheetType
 };
 
-typedef struct {
-    VOID *buffer;
-    UINT32 bx, by;
-    UINT32 width, height;
-    UINT32 flag;
-    UINT32 type;
-    UINT16 *number;
-} SHEET;
+typedef struct SHEET* SHEETP;
+
+struct SHEET {
+    SHEETP  front;
+    VOID   *buffer;
+    UINT32  bx, by;
+    UINT32  width, height;
+    UINT32  type;
+    UINT16  index;
+    SHEETP  next;
+};
 
 typedef struct
 {
-    SHEET sheet[MAX_SHEET];
-    VOID *temp_buffer;
-    UINT32 scrx, scry;
-    INT32 sheet_num;
+    SHEET  *start;
+    VOID   *temp_buffer;
+    UINT32  scrx, scry;
+    UINT16   sheet_num;      // 图层数量 - 1
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 

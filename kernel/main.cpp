@@ -35,7 +35,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   enable_intr();
 
-  *shtinf.sheet[0].number = 1145;
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
   create_sheet(&shtinf, 0, 0, fbc.horizontal_resolution, fbc.vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
   create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
@@ -81,13 +80,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     PrintString(&shtinf, &desktop_sheet_id, 8, 400, "SheetManagerTest", WHITE);
     PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (UINT64)desktop_sheet_id, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
+    //PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
     
     PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
     PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (UINT64)shtinf.sheet_num, WHITE);
 
     PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
-    PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
+    //PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
 
     // CPU型号
     char CPU_Model[48];
@@ -99,28 +98,28 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 #endif
   //wsod_debug();
 
-  draw_mouse(&shtinf, &mouse_sheet_id);
+	draw_mouse(&shtinf, &mouse_sheet_id);
 
-  refresh_sheet(&shtinf);   // 刷新
+	refresh_sheet(&shtinf);   // 刷新
 
-  
-  keyboard_init();
-  write_serial_string("Keyboard Initialize Success.\n");
-  Mouse_init();
-  write_serial_string("Operating System Initialize Success.\n");
-	UINT8 k_input;
-  int tby;
-  int tbx;
-  	while (1) {
-      tbx = shtinf.sheet[mouse_sheet_id].bx;
-		tby = shtinf.sheet[mouse_sheet_id].by;
-    move_mouse(&shtinf,&mouse_sheet_id,get_mouse_x(),get_mouse_y());
-    refresh_part_sheet(&shtinf, tbx, tby, 
-									tbx + shtinf.sheet[mouse_sheet_id].width, 
-									tby + shtinf.sheet[mouse_sheet_id].height);
-    refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
-									shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
-									shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
+	
+	keyboard_init();
+	write_serial_string("Keyboard Initialize Success.\n");
+	Mouse_init();
+	write_serial_string("Operating System Initialize Success.\n");
+		UINT8 k_input;
+	int tby;
+	int tbx;
+	while (1) {
+		tbx = getBX(&shtinf, &mouse_sheet_id);
+		tby = getBY(&shtinf, &mouse_sheet_id);
+		move_mouse(&shtinf, &mouse_sheet_id, get_mouse_x(), get_mouse_y());
+		refresh_part_sheet(&shtinf, tbx, tby, 
+										tbx + getXsize(&shtinf, &mouse_sheet_id), 
+										tby + getYsize(&shtinf, &mouse_sheet_id));
+		refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id), 
+										getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id), 
+										getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
 		k_input = get_keyboard_input();
 		if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL 
                         	&& k_input != KEY_CAPS  && k_input != KEY_BACKSPACE) {
@@ -135,40 +134,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 			fontx = 8;
 			fonty += 16;
 		}
-		/*
-		if (!spp_status) {
-		// out
-		if (spp_state.LeftButton == 1) {
-			int tx1 = shtinf.scrx * 0.1875;
-			if (mouse_x > tx1 && mouse_x < tx1 + 16 && 
-					mouse_y > 4 && mouse_y < 20) {
-			SystemTable.RuntimeServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
-			}
-		}
-		int tbx = shtinf.sheet[mouse_sheet_id].bx;
-		int tby = shtinf.sheet[mouse_sheet_id].by;
-		int sppx = spp_state.RelativeMovementX;
-		int sppy = spp_state.RelativeMovementY;
-		sppx /= 0x2000;
-		sppy /= 0x2000;
-		mouse_x += sppx;
-		mouse_y += sppy;
-		
-		if (mouse_x < 0) { mouse_x = 0; }
-		if (mouse_y < 0) { mouse_y = 0; }
-		if (mouse_x > shtinf.scrx - 1) { mouse_x = shtinf.scrx - 1; }
-		if (mouse_y > shtinf.scry - 1) { mouse_y = shtinf.scry - 1; }
-
-		move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
-		SPP.Reset(&SPP, 0);
-		refresh_part_sheet(&shtinf, tbx, tby, 
-									tbx + shtinf.sheet[mouse_sheet_id].width, 
-									tby + shtinf.sheet[mouse_sheet_id].height);
-		refresh_part_sheet(&shtinf, shtinf.sheet[mouse_sheet_id].bx, shtinf.sheet[mouse_sheet_id].by, 
-									shtinf.sheet[mouse_sheet_id].bx + shtinf.sheet[mouse_sheet_id].width, 
-									shtinf.sheet[mouse_sheet_id].by + shtinf.sheet[mouse_sheet_id].height);
-		}
-		*/
 		SystemTable.RuntimeServices->GetTime(&time, &time_capab);
 		int scdx = fbc.horizontal_resolution * 0.8125;
 		draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);

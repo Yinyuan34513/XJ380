@@ -5,13 +5,13 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     sht->fbc = &fbc;
     sht->scrx = fbc.horizontal_resolution;
     sht->scry = fbc.vertical_resolution;
-    //sht->temp_buffer = 0; // 测试WSOD
-    sht->temp_buffer = malloc((sht->scrx * sht->scry * 4) + 4); // 多分配4字节防止溢出啥的
+    sht->start = NULL;
+    sht->temp_buffer = malloc((sht->scrx * sht->scry * 4)); // 多分配4字节防止溢出啥的
     if (sht->temp_buffer == NULL) {
         // 没分配成，去世。
         //WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
     }
-    sht->sheet_num = -1;
+    sht->sheet_num = 0;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     for (int y = 0; y < sht->scry; y++) {
         for (int x = 0; x < sht->scrx; x++) {
@@ -28,117 +28,226 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
             SheetBuffer++;
         }
     }
-    for (int i = 0; i < MAX_SHEET - 1; i++) {
-        sht->sheet[i].flag = 0;
-    }
     write_serial_string("Sheet Manager Initialize Success.\n");
 }
 
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id) {
-    if (sht->sheet_num >= 253) {
-        // 图层满了，直接去世
-        return;
-    }
-    if (sht->sheet[index].flag == 0) {
-        // 指定图层高度为空
-        // 非必要不要用
-        // 直接分配下一个
-        UINT16 i = index;
-        *sheet_id = i;
-
-        sht->sheet[i].flag = 1;
-        sht->sheet[i].bx = bx;
-        sht->sheet[i].by = by;
-        sht->sheet[i].width = x;
-        sht->sheet[i].height = y;
-        sht->sheet[i].type = type;
-        sht->sheet[i].number = sheet_id;
-        sht->sheet[i].buffer = malloc((x * y * 4) + 4); // 多分配4字节防止溢出啥的
-
-        sht->sheet_num++;
-    } else if (index >= 0) {
+    if (index > 0) {
         // 指定图层高度
-        for (int i = MAX_SHEET - 4; i >= sht->sheet_num; i--) {
-            // 把所有图层位移一下
-            if (sht->sheet[i].flag == 1) {
-                sht->sheet[i + 1].buffer = sht->sheet[i].buffer;
-                sht->sheet[i + 1].bx = sht->sheet[i].bx;
-                sht->sheet[i + 1].by = sht->sheet[i].by;
-                sht->sheet[i + 1].height = sht->sheet[i].height;
-                sht->sheet[i + 1].number = sht->sheet[i].number;
-                sht->sheet[i + 1].type = sht->sheet[i].type;
-                sht->sheet[i + 1].width = sht->sheet[i].width;
-
-                sht->sheet[i + 1].flag = 1;
-                sht->sheet[i].flag = 0;
+        SHEET *new_sheet =  (SHEET *)(malloc(sizeof(SHEET)));   // 开辟内存空间
+        SHEET *front_p = sht->start;
+        if (front_p != NULL) {
+            while (true) {
+                if (front_p->next == NULL) {
+                    break;
+                } else if (front_p->next->index >= index) {
+                    break;
+                }
+                front_p = front_p->next;
             }
+
+            if (front_p->next != NULL) {
+                // 后继有人，给他踢出去换成自己
+                new_sheet->next      = front_p->next;   // 把自己的下一个标记为曾经的
+                new_sheet->front     = front_p;         // 把自己的上一个标记为上一个
+                front_p->next->front = new_sheet;       // 把曾经的上一个标记为自己
+                front_p->next        = new_sheet;       // 把自己的上一个的下一个标记为自己
+                front_p              = new_sheet->next; // 指针指向自己的下一个（曾经的）
+                // 给后面的全++
+                while (true) {
+                    front_p->index++;
+                    if (front_p->next == NULL) {
+                        break;
+                    }
+                    front_p = front_p->next;
+                }
+
+                // 分配
+                *sheet_id = index;
+
+                new_sheet->index = index;
+                new_sheet->bx = bx;
+                new_sheet->by = by;
+                new_sheet->width = x;
+                new_sheet->height = y;
+                new_sheet->type = type;
+                new_sheet->buffer = malloc((x * y * 4));
+
+                sht->sheet_num++;
+            } else {
+                // 哦亲爱的孩子你是第一个分配的
+                new_sheet->front = front_p;
+                front_p->next    = new_sheet;
+                
+                // 分配
+                *sheet_id = index;
+
+                new_sheet->index = index;
+                new_sheet->bx = bx;
+                new_sheet->by = by;
+                new_sheet->width = x;
+                new_sheet->height = y;
+                new_sheet->type = type;
+                new_sheet->buffer = malloc((x * y * 4));
+
+                sht->sheet_num++;
+            }
+        } else {
+            sht->start = new_sheet;
+
+            *sheet_id = 1;
+
+            new_sheet->index = 0;
+            new_sheet->bx = bx;
+            new_sheet->by = by;
+            new_sheet->width = x;
+            new_sheet->height = y;
+            new_sheet->type = type;
+            new_sheet->buffer = malloc((x * y * 4));
+
+            sht->sheet_num++;
         }
-        // 分配
-        UINT16 i = index;
-        *sheet_id = i;
-
-        sht->sheet[i].flag = 1;
-        sht->sheet[i].bx = bx;
-        sht->sheet[i].by = by;
-        sht->sheet[i].width = x;
-        sht->sheet[i].height = y;
-        sht->sheet[i].type = type;
-        sht->sheet[i].number = sheet_id;
-        sht->sheet[i].buffer = malloc((x * y * 4) + 4); // 多分配4字节防止溢出啥的
-
-        sht->sheet_num++;
     } else {
         // 随便分配
         // 直接分配下一个
-        UINT16 i = sht->sheet_num + 1;
-        *sheet_id = i;
+        SHEET *new_sheet =  (SHEET *)(malloc(sizeof(SHEET)));   // 开辟内存空间
+        SHEET *front_p = sht->start;
+        if (front_p != NULL) {
+            for (int i = 0; i < sht->sheet_num; i++) {
+                if (front_p->next == NULL) {
+                    // 链表.exe
+                    front_p->next = new_sheet;
+                    new_sheet->front = front_p;
+                    break;
+                }
+                front_p = front_p->next;
+            }
 
-        sht->sheet[i].flag = 1;
-        sht->sheet[i].bx = bx;
-        sht->sheet[i].by = by;
-        sht->sheet[i].width = x;
-        sht->sheet[i].height = y;
-        sht->sheet[i].type = type;
-        sht->sheet[i].number = sheet_id;
-        sht->sheet[i].buffer = malloc((x * y * 4) + 4); // 多分配4字节防止溢出啥的
+            *sheet_id = sht->sheet_num;
 
-        sht->sheet_num++;
-    }
+            new_sheet->index = front_p->index + 1;
+            new_sheet->bx = bx;
+            new_sheet->by = by;
+            new_sheet->width = x;
+            new_sheet->height = y;
+            new_sheet->type = type;
+            new_sheet->buffer = malloc((x * y * 4));
 
-    int tx = sht->sheet[*sheet_id].width;
-    int ty = sht->sheet[*sheet_id].height;
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[*sheet_id].buffer);
-    for (int y = 0; y < tx; y++) {
-        for (int x = 0; x < ty; x++) {
-            SheetBuffer->r = 0x00;
-            SheetBuffer->g = 0x00;
-            SheetBuffer->b = 0x00;
-            SheetBuffer->a = 0x00;
-            SheetBuffer++;
+            sht->sheet_num++;
+        } else {
+            sht->start = new_sheet;
+
+            *sheet_id = 0;
+
+            new_sheet->index = 0;
+            new_sheet->bx = bx;
+            new_sheet->by = by;
+            new_sheet->width = x;
+            new_sheet->height = y;
+            new_sheet->type = type;
+            new_sheet->buffer = malloc((x * y * 4));
+
+            sht->sheet_num++;
         }
+    }
+    write_serial_string("Sheet Create Success. SheetID: ");
+    write_serial_dec(*sheet_id);
+    write_serial_string("\n");
+}
+
+UINT32 getBX(SHEET_INFO *sht, UINT16* sheet_id) {
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            return front_p->bx;
+        } else if (front_p->next == NULL) {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+UINT32 getBY(SHEET_INFO *sht, UINT16* sheet_id) {
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            return front_p->by;
+        } else if (front_p->next == NULL) {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+UINT32 getXsize(SHEET_INFO *sht, UINT16* sheet_id) {
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            return front_p->width;
+        } else if (front_p->next == NULL) {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+UINT32 getYsize(SHEET_INFO *sht, UINT16* sheet_id) {
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            return front_p->height;
+        } else if (front_p->next == NULL) {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+void setBX(SHEET_INFO *sht, UINT16* sheet_id, UINT32 num) {
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            front_p->bx = num;
+            return;
+        } else if (front_p->next == NULL) {
+            return;
+        }
+        front_p = front_p->next;
+    }
+}
+
+void setBY(SHEET_INFO *sht, UINT16* sheet_id, UINT32 num) {
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            front_p->by = num;
+            return;
+        } else if (front_p->next == NULL) {
+            return;
+        }
+        front_p = front_p->next;
     }
 }
 
 void delete_sheet(SHEET_INFO *sht, UINT16* sheet_id) {
-    UINT16 i = *sheet_id;
-    sht->sheet[i].flag = 0;
-    free(sht->sheet[i].buffer);
-    for (int j = i; j < MAX_SHEET - 4; j++) {
-        if (sht->sheet[j + 2].flag == 0) {
-            break;
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            front_p->front->next = front_p->next;
+            front_p->next->front = front_p->front;
+            free(front_p->buffer);
+            sht->sheet_num--;
+            write_serial_string("Sheet Delete Success. SheetID: ");
+            write_serial_dec(*sheet_id);
+            write_serial_string("\n");
+        } else if (front_p->next == NULL) {
+            write_serial_string("Sheet Delete Faild. SheetID: ");
+            write_serial_dec(*sheet_id);
+            write_serial_string("\n");
+            return;
         }
-        sht->sheet[j].buffer = sht->sheet[j + 1].buffer;
-        sht->sheet[j].bx = sht->sheet[j + 1].bx;
-        sht->sheet[j].by = sht->sheet[j + 1].by;
-        sht->sheet[j].height = sht->sheet[j + 1].height;
-        sht->sheet[j].number = sht->sheet[j + 1].number;
-        sht->sheet[j].type = sht->sheet[j + 1].type;
-        sht->sheet[j].width = sht->sheet[j + 1].width;
-
-        sht->sheet[j].flag = 1;
-        sht->sheet[j + 1].flag = 0;
+        front_p = front_p->next;
     }
-    sht->sheet_num--;
 }
 
 void refresh_sheet(SHEET_INFO *sht) {
@@ -156,31 +265,35 @@ void refresh_sheet(SHEET_INFO *sht) {
             break;  
     }
 
-    for (int i = 0; i < MAX_SHEET; i++) {
-        if (sht->sheet[i].flag == 1) {
-            SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-            TempBuffer += (sht->scrx * sht->sheet[i].by + sht->sheet[i].bx);
-            for (int y = 0; y < sht->sheet[i].height; y++) {
-                for (int x = 0; x < sht->sheet[i].width; x++) {
-                    //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                    if (SheetBuffer->a == 255) {
-                        TempBuffer->r = SheetBuffer->r;
-                        TempBuffer->g = SheetBuffer->g;
-                        TempBuffer->b = SheetBuffer->b;
-                    } else if (SheetBuffer->a == 0) {
-                        // pass
-                    } else {
-                        TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
-                        TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
-                        TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
-                    }
-                    TempBuffer++;
-                    SheetBuffer++;
+    SHEET *front_p = sht->start;
+
+    for (int i = 0; i < sht->sheet_num; i++) {
+        write_serial_string("Refreshing Sheet Index ");
+        write_serial_dec(front_p->index);
+        write_serial_string("\n");
+        SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+        SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+        TempBuffer += (sht->scrx * front_p->by + front_p->bx);
+        for (int y = 0; y < front_p->height; y++) {
+            for (int x = 0; x < front_p->width; x++) {
+                // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                if (SheetBuffer->a == 255) {
+                    TempBuffer->r = SheetBuffer->r;
+                    TempBuffer->g = SheetBuffer->g;
+                    TempBuffer->b = SheetBuffer->b;
+                } else if (SheetBuffer->a == 0) {
+                    // pass
+                } else {
+                    TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
+                    TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
+                    TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
                 }
-                TempBuffer += (sht->scrx - sht->sheet[i].width);
+                TempBuffer++;
+                SheetBuffer++;
             }
+            TempBuffer += (sht->scrx - front_p->width);
         }
+        front_p = front_p->next;
     }
 
     // 刷新
@@ -208,42 +321,43 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
             break;  
     }
 
-    int vx, vy;
-
     if (bex1 < 0) { bex1 = 0; }
     if (bey1 < 0) { bey1 = 0; }
     if (bex2 > sht->scrx) { bex2 = sht->scrx; }
     if (bey2 > sht->scry) { bey2 = sht->scry; }
 
-    for (int i = 0; i < MAX_SHEET; i++) {
-        if (sht->sheet[i].flag == 1) {
-            SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[i].buffer);
-            TempBuffer += (sht->scrx * sht->sheet[i].by + sht->sheet[i].bx);
-            for (int y = 0; y < sht->sheet[i].height; y++) {
-                vy = sht->sheet[i].by + y;
-                for (int x = 0; x < sht->sheet[i].width; x++) {
-                    vx = sht->sheet[i].bx + x;
-                    if (bex1 <= vx && vx < bex2 && bey1 <= vy && vy < bey2) {
-                        //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                        if (SheetBuffer->a == 255) {
-                            TempBuffer->r = SheetBuffer->r;
-                            TempBuffer->g = SheetBuffer->g;
-                            TempBuffer->b = SheetBuffer->b;
-                        } else if (SheetBuffer->a == 0) {
-                            // pass
-                        } else {
-                            TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
-                            TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
-                            TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
-                        }
+    SHEET *front_p = sht->start;
+    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+
+    int vx, vy;
+    for (int i = 0; i < sht->sheet_num; i++) {
+        SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
+        SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+        TempBuffer += (sht->scrx * front_p->by + front_p->bx);
+        for (int y = 0; y < front_p->height; y++) {
+            vy = front_p->by + y;
+            for (int x = 0; x < front_p->width; x++) {
+                vx = front_p->bx + x;
+                if (bex1 <= vx && vx < bex2 && bey1 <= vy && vy < bey2) {
+                    //显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                    if (SheetBuffer->a == 255) {
+                        TempBuffer->r = SheetBuffer->r;
+                        TempBuffer->g = SheetBuffer->g;
+                        TempBuffer->b = SheetBuffer->b;
+                    } else if (SheetBuffer->a == 0) {
+                        // pass
+                    } else {
+                        TempBuffer->r = SheetBuffer->r * SheetBuffer->a / 255 + TempBuffer->r * (255 - SheetBuffer->a) / 255;
+                        TempBuffer->g = SheetBuffer->g * SheetBuffer->a / 255 + TempBuffer->g * (255 - SheetBuffer->a) / 255;
+                        TempBuffer->b = SheetBuffer->b * SheetBuffer->a / 255 + TempBuffer->b * (255 - SheetBuffer->a) / 255;
                     }
-                    TempBuffer++;
-                    SheetBuffer++;
                 }
-                TempBuffer += (sht->scrx - sht->sheet[i].width);
+                TempBuffer++;
+                SheetBuffer++;
             }
+            TempBuffer += (sht->scrx - front_p->width);
         }
+        front_p = front_p->next;
     }
 
     // 刷新
@@ -257,10 +371,12 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         OutputBuffer += (sht->scrx - bex2 + bex1);
     }
 }
+
 UINT32 get_hor()
 {
     return fbc_addr->horizontal_resolution;
 }
+
 UINT32 get_ver()
 {
     return fbc_addr->vertical_resolution;

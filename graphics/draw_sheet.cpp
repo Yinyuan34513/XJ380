@@ -1,7 +1,16 @@
 #include "../include/include.h"
 void draw_point(SHEET_INFO *sht, UINT16* sheet_id, int x, int y, const SHEET_BUFFER &color) {
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->sheet[*sheet_id].buffer);
-    SheetBuffer += (sht->sheet[*sheet_id].width * y + x);
+    SHEET *front_p = sht->start;
+    while (true) {
+        if (front_p->index == *sheet_id) {
+            break;
+        } else if (front_p->next == NULL) {
+            return;
+        }
+        front_p = front_p->next;
+    }
+    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+    SheetBuffer += (front_p->width * y + x);
     SheetBuffer->r = color.r;
     SheetBuffer->g = color.g;
     SheetBuffer->b = color.b;

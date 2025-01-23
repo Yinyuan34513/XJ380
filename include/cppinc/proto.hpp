@@ -109,6 +109,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 // kernel/sheet.cpp
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
+UINT32 getBX(SHEET_INFO *sht, UINT16* sheet_id);
+UINT32 getBY(SHEET_INFO *sht, UINT16* sheet_id);
+UINT32 getXsize(SHEET_INFO *sht, UINT16* sheet_id);
+UINT32 getYsize(SHEET_INFO *sht, UINT16* sheet_id);
+void setBX(SHEET_INFO *sht, UINT16* sheet_id, UINT32 num);
+void setBY(SHEET_INFO *sht, UINT16* sheet_id, UINT32 num);
 void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
 void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
