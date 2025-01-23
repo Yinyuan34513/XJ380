@@ -29,6 +29,9 @@ void keyboard_init();
 UINT8 get_keyboard_input();
 void Mouse_init();
 UINT8 get_Mouse_output();
+bool mousedecode(UINT8 data);
+int get_mouse_x();
+int get_mouse_y();
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
@@ -48,5 +51,9 @@ void outsl(UINT32 port, const VOID *addr, int cnt);
 void enable_intr();
 void disable_intr();
 void io_mfence();
+
+// lib/printf.cpp
+int vsprintf(char *out, const char *fmt, __builtin_va_list ap);
+int printf(const char *fmt, ...);
 
 #endif

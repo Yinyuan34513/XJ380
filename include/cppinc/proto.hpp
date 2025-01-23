@@ -81,6 +81,9 @@ void keyboard_init();
 UINT8 get_keyboard_input();
 void Mouse_init();
 UINT8 get_Mouse_output();
+bool mousedecode(UINT8 data);
+int get_mouse_x();
+int get_mouse_y();
 /*
  *   kernel/*
  */
@@ -109,7 +112,8 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
 void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
 void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
-
+UINT32 get_hor();
+UINT32 get_ver();
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 void send_eoi();
@@ -151,5 +155,9 @@ void init_gdt();
 // kernel/pctable/idt.cpp
 void init_idt();
 void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege);
+
+// lib/printf.cpp
+int vsprintf(char *out, const char *fmt, __builtin_va_list ap);
+int printf(const char *fmt, ...);
 
 #endif

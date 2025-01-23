@@ -1,3 +1,4 @@
+#pragma once
 #ifndef _KEBOARD_H_
 #define _KEBOARD_H_
 
@@ -16,7 +17,8 @@
 #define KBSTATUS_IBF 0x02
 #define KBSTATUS_OBF 0x01
 
-enum special_key_code {
+enum special_key_code
+{
 	KEY_ESC = 128,
 	KEY_BACKSPACE,
 	KEY_TAB,
@@ -45,25 +47,30 @@ enum special_key_code {
 #define wait_KB_write() while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
 #define wait_KB_read() while (inb(PORT_KB_STATUS) & KBSTATUS_OBF)
 
-struct keyboard_buf {
-    UINT8  *p_head;
-    UINT8  *p_tail;
-    INT32  	count;
-	bool	ctrl;
-	bool 	shift;
-	bool	alt;
-	bool 	caps;
-    UINT8  	buf[KB_BUF_SIZE];
+struct keyboard_buf
+{
+	UINT8 *p_head;
+	UINT8 *p_tail;
+	INT32 count;
+	bool ctrl;
+	bool shift;
+	bool alt;
+	bool caps;
+	UINT8 buf[KB_BUF_SIZE];
 };
-struct mouse_packet
-{	
-	unsigned char Byte0;	//7:Y overflow,6:X overflow,5:Y sign bit,4:X sign bit,3:Always,2:Middle Btn,1:Right Btn,0:Left Btn
-	char Byte1;	//X movement
-	char Byte2;	//Y movement
-};
-#define KB_SEND2MOUSE	0xd4
-#define MOUSE_EN		0xf4
+typedef struct
+{
+	uint8_t buf[3], phase;
+	int x, y, btn;
+	char roll;
+	bool left;
+	bool center;
+	bool right;
+} mouse_dec;
 
-#define KB_EN_MOUSE_INTFACE	0xa8
+#define KB_SEND2MOUSE 0xd4
+#define MOUSE_EN 0xf4
+
+#define KB_EN_MOUSE_INTFACE 0xa8
 
 #endif

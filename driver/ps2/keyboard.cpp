@@ -89,51 +89,92 @@ void keyboard_init()
     outb(PORT_KB_DATA, KB_INIT_MODE);
 }
 
-// 鼠标
-
-struct keyboard_buf *p_mouse = NULL;
-static int mouse_cnt = 0;
+/*
+*  鼠标
+*
+*/
+mouse_dec ms_dec;
+int mouse_x;
+int mouse_y;
 extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 {
-    UINT8 x;
-    x = inb(PORT_KB_DATA);
-    write_serial_string("mouse:");
-    write_serial_hex(x);
-    write_serial_string("\n");
-    if (p_mouse->p_head == p_mouse->buf + KB_BUF_SIZE)
-        p_mouse->p_head = p_mouse->buf;
+    send_eoi();
+        UINT8 data = inb(PORT_KB_DATA);
 
-    *p_mouse->p_head = x;
-    p_mouse->count++;
-    p_mouse->p_head++;
+    if (mousedecode(data)) {
+        mouse_x += ms_dec.x;
+        mouse_y += ms_dec.y;
+        if (mouse_x < 0) mouse_x = 0;
+        if (mouse_y < 0) mouse_y = 0;
+        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
+
+        ms_dec.left = false;
+        ms_dec.center = false;
+        ms_dec.right = false;
+
+        if(ms_dec.btn & 0x01){
+            ms_dec.left = true;
+        }
+        if(ms_dec.btn & 0x02){
+            ms_dec.right = true;
+        }
+        if(ms_dec.btn & 0x04) {
+            ms_dec.center = true;
+        }
+    }
+    // write_serial_string("mouse X:");
+    // write_serial_dec(mouse_x);
+    // write_serial_string("\n");
+    // write_serial_string("mouse Y:");
+    // write_serial_dec(mouse_y);
+    // write_serial_string("\n");
 }
-UINT8 get_Mouse_output()
+bool mousedecode(UINT8 data)
 {
-	UINT8 ret  = 0;
+    if (ms_dec.phase == 0) {
+        if (data == 0xfa) {
+            ms_dec.phase = 1;
+        }
+        return false;
+    }
+    if (ms_dec.phase == 1) {
+        if ((data & 0xc8) == 0x08) {
+            ms_dec.buf[0] = data;
+            ms_dec.phase = 2;
+        }
+        return 0;
+    }
+    if (ms_dec.phase == 2) {
+        ms_dec.buf[1] = data;
+        ms_dec.phase = 3;
+        return 0;
+    }
+    if (ms_dec.phase == 3) {
+        ms_dec.buf[2] = data;
+        ms_dec.phase = 1;
+        ms_dec.btn = ms_dec.buf[0] & 0x07;
+        ms_dec.x = ms_dec.buf[1];
+        ms_dec.y = ms_dec.buf[2];
 
-	if(p_mouse->count == 0)
-		while(!p_mouse->count)
-			__asm__ volatile ("nop");
-	
-	if(p_mouse->p_tail == p_mouse->buf + KB_BUF_SIZE)	
-		p_mouse->p_tail = p_mouse->buf;
-
-	ret = *p_mouse->p_tail;
-	p_mouse->count--;
-	p_mouse->p_tail++;
-
-	return ret;
+        if ((ms_dec.buf[0] & 0x10) != 0) ms_dec.x |= 0xffffff00;
+        if ((ms_dec.buf[0] & 0x20) != 0) ms_dec.y |= 0xffffff00;
+        ms_dec.y = -ms_dec.y;
+        return true;
+    }
+    return false;
+}
+int get_mouse_x() {
+    return mouse_x;
 }
 
+int get_mouse_y() {
+    return mouse_y;
+}
 void Mouse_init()
 {
-    p_mouse->p_head = p_mouse->buf;
-    p_mouse->p_tail = p_mouse->buf;
-    p_mouse->count = 0;
-    xmemset(p_mouse->buf, 0, KB_BUF_SIZE);
     wait_KB_write();
     outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
-
     for (int i = 0; i < 1000; i++)
         for (int j = 0; j < 1000; j++)
             __asm__ volatile("nop");
@@ -151,6 +192,7 @@ void Mouse_init()
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_write();
     outb(PORT_KB_DATA, KB_INIT_MODE);
-
-    mouse_cnt = 0;
+    mouse_x = (get_hor() - 16) / 2;
+    mouse_y = (get_ver() - 28 - 29) / 2;
+    ms_dec.phase = 0;
 }

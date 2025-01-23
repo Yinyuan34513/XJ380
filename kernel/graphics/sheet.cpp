@@ -257,3 +257,11 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         OutputBuffer += (sht->scrx - bex2 + bex1);
     }
 }
+UINT32 get_hor()
+{
+    return fbc_addr->horizontal_resolution;
+}
+UINT32 get_ver()
+{
+    return fbc_addr->vertical_resolution;
+}
