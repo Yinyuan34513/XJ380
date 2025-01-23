@@ -88,3 +88,69 @@ void keyboard_init()
     wait_KB_read();
     outb(PORT_KB_DATA, KB_INIT_MODE);
 }
+
+// 鼠标
+
+struct keyboard_buf *p_mouse = NULL;
+static int mouse_cnt = 0;
+extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
+{
+    UINT8 x;
+    x = inb(PORT_KB_DATA);
+    write_serial_string("mouse:");
+    write_serial_hex(x);
+    write_serial_string("\n");
+    if (p_mouse->p_head == p_mouse->buf + KB_BUF_SIZE)
+        p_mouse->p_head = p_mouse->buf;
+
+    *p_mouse->p_head = x;
+    p_mouse->count++;
+    p_mouse->p_head++;
+}
+UINT8 get_Mouse_output()
+{
+	UINT8 ret  = 0;
+
+	if(p_mouse->count == 0)
+		while(!p_mouse->count)
+			__asm__ volatile ("nop");
+	
+	if(p_mouse->p_tail == p_mouse->buf + KB_BUF_SIZE)	
+		p_mouse->p_tail = p_mouse->buf;
+
+	ret = *p_mouse->p_tail;
+	p_mouse->count--;
+	p_mouse->p_tail++;
+
+	return ret;
+}
+
+void Mouse_init()
+{
+    p_mouse->p_head = p_mouse->buf;
+    p_mouse->p_tail = p_mouse->buf;
+    p_mouse->count = 0;
+    xmemset(p_mouse->buf, 0, KB_BUF_SIZE);
+    wait_KB_write();
+    outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
+
+    for (int i = 0; i < 1000; i++)
+        for (int j = 0; j < 1000; j++)
+            __asm__ volatile("nop");
+
+    wait_KB_write();
+    outb(PORT_KB_CMD, KB_SEND2MOUSE);
+    wait_KB_write();
+    outb(PORT_KB_DATA, MOUSE_EN);
+
+    for (int i = 0; i < 1000; i++)
+        for (int j = 0; j < 1000; j++)
+            __asm__ volatile("nop");
+
+    wait_KB_write();
+    outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
+    wait_KB_write();
+    outb(PORT_KB_DATA, KB_INIT_MODE);
+
+    mouse_cnt = 0;
+}

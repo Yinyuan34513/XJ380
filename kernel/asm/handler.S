@@ -275,3 +275,10 @@ ENTRY(keyboard_handler)
     leaq c_keyboard_handler(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
+
+ENTRY(mouse_handler)
+    pushq $0
+    pushq %rax
+    leaq c_mouse_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code

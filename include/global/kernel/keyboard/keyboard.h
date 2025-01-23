@@ -55,5 +55,15 @@ struct keyboard_buf {
 	bool 	caps;
     UINT8  	buf[KB_BUF_SIZE];
 };
+struct mouse_packet
+{	
+	unsigned char Byte0;	//7:Y overflow,6:X overflow,5:Y sign bit,4:X sign bit,3:Always,2:Middle Btn,1:Right Btn,0:Left Btn
+	char Byte1;	//X movement
+	char Byte2;	//Y movement
+};
+#define KB_SEND2MOUSE	0xd4
+#define MOUSE_EN		0xf4
+
+#define KB_EN_MOUSE_INTFACE	0xa8
 
 #endif
