@@ -114,7 +114,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
     	write_serial_string("  | ");
       	write_serial_hex(OsMemory->PhysicalStart);
     	write_serial_string("       | ");
-      	write_serial_hex(OsMemory->Type);
+      	write_serial_hex(OsMemory->PageSize);
 	  	write_serial_string("\n");
       	if (OsMemory->Type != MMIO_MEMORY) { TotalMemory += OsMemory->PageSize; }
       	OsMemory++;
