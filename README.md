@@ -211,6 +211,11 @@ Makefile里有一个变量“REL”，填版本。
 2025年1月22日 Guoqiyu1115 & CodeCube
 - 键盘
 
+### BuildVersion 34 【已虚拟机测试】
+2025年1月23日 Guoqiyu1115 & CodeCube
+- 鼠标
+- 新的内存管理
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error

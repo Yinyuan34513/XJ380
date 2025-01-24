@@ -1,7 +1,6 @@
 #include "../include/include.h"
 #include "../include/efi.h"
 #include "./build_settings.h"
-#include "../include/global/kernel/keyboard/keyboard.h"
 #define NULL        0
 const FrameBufferConfig *fbc_addr;
 extern struct keyboard_buf p_mouse;

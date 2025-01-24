@@ -34,9 +34,12 @@ void alignment_check();
 void machine_check();
 void SIMD_exception();
 void virtualization_exception();
-void timer_handler(); // apic.cpp
+
+// APIC
+void timer_handler();
 void keyboard_handler();
 void mouse_handler();
+
 #include "../../stdint.h"
 
 typedef struct

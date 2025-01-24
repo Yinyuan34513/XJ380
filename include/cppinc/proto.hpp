@@ -32,10 +32,6 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id);
 void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 
-// graphics/mouse.cpp
-void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
-void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
-
 /*
  *   font/*
  */
@@ -79,11 +75,16 @@ extern UINT8 keyboard_code[256];
 extern UINT8 keyboard_code1[256];
 void keyboard_init();
 UINT8 get_keyboard_input();
+
+// driver/ps2/mouse.cpp
 void Mouse_init();
 UINT8 get_Mouse_output();
 bool mousedecode(UINT8 data);
 int get_mouse_x();
 int get_mouse_y();
+void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
+void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
+
 /*
  *   kernel/*
  */
@@ -120,6 +121,7 @@ void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 UINT32 get_hor();
 UINT32 get_ver();
+
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 void send_eoi();

@@ -1,8 +1,8 @@
 #pragma once
-#ifndef _KEBOARD_H_
-#define _KEBOARD_H_
+#ifndef _KEYBOARD_H_
+#define _KEYBOARD_H_
 
-#include "../../../include.h"
+#include "../../../global/stdint.h"
 #define KB_BUF_SIZE 100
 
 #define PORT_KB_DATA 0x60
@@ -58,19 +58,5 @@ struct keyboard_buf
 	bool caps;
 	UINT8 buf[KB_BUF_SIZE];
 };
-typedef struct
-{
-	uint8_t buf[3], phase;
-	int x, y, btn;
-	char roll;
-	bool left;
-	bool center;
-	bool right;
-} mouse_dec;
-
-#define KB_SEND2MOUSE 0xd4
-#define MOUSE_EN 0xf4
-
-#define KB_EN_MOUSE_INTFACE 0xa8
 
 #endif

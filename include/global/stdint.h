@@ -4,6 +4,14 @@
 #ifndef _STDINT_H_
 #define _STDINT_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+    #include "../efi.h"
+#ifdef __cplusplus
+}
+#endif
+
 // 规范类型
 // 无符号整型
 typedef unsigned char uint8_t;

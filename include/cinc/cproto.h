@@ -22,16 +22,7 @@ void init_apic(UINT64 MADT);
 /*
  *   driver/*
  */
-// driver/ps2/keyboard.cpp
-extern UINT8 keyboard_code[256];
-extern UINT8 keyboard_code1[256];
-void keyboard_init();
-UINT8 get_keyboard_input();
-void Mouse_init();
-UINT8 get_Mouse_output();
-bool mousedecode(UINT8 data);
-int get_mouse_x();
-int get_mouse_y();
+
 
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);

@@ -32,10 +32,10 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
 }
 
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16* sheet_id) {
+    SHEET *new_sheet =  (SHEET *)(malloc(sizeof(SHEET)));   // 开辟内存空间
+    SHEET *front_p = sht->start;
     if (index > 0) {
         // 指定图层高度
-        SHEET *new_sheet =  (SHEET *)(malloc(sizeof(SHEET)));   // 开辟内存空间
-        SHEET *front_p = sht->start;
         if (front_p != NULL) {
             while (true) {
                 if (front_p->next == NULL) {
@@ -59,6 +59,12 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                     if (front_p->next == NULL) {
                         break;
                     }
+    write_serial_string("Front Table Address: ");
+    write_serial_hex((UINT64)(new_sheet->front));
+    write_serial_string("\n");
+    write_serial_string("Next Table Address: ");
+    write_serial_hex((UINT64)(new_sheet->next));
+    write_serial_string("\n");
                     front_p = front_p->next;
                 }
 
@@ -110,8 +116,6 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
     } else {
         // 随便分配
         // 直接分配下一个
-        SHEET *new_sheet =  (SHEET *)(malloc(sizeof(SHEET)));   // 开辟内存空间
-        SHEET *front_p = sht->start;
         if (front_p != NULL) {
             for (int i = 0; i < sht->sheet_num; i++) {
                 if (front_p->next == NULL) {

@@ -104,26 +104,26 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   //输出合并后的
   OsMemory           = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
   UINT64 TotalMemory = 0;
-  /*
-  if (BUILD_EDITION == DEBUG_VERSION) {
-    PrintString(&shtinf, &desktop_sheet_id, 8, 132, "MemoryMap:", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 148, "Type", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 96, 148, "PhysicalStart", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 248, 148, "PageSize", WHITE);
+
+#if BUILD_EDITION == DEBUG_VERSION 
+    write_serial_string("MemoryMap:\n");
+    write_serial_string("Type | PhysicalStart | PageSize\n");
     int printy = 164;
     for (int i = 0; i < OsMemDescNum; i++) {
-      PrintHex(&shtinf, &desktop_sheet_id, 8, printy, OsMemory->Type, WHITE);
-      PrintHex(&shtinf, &desktop_sheet_id, 96, printy, OsMemory->PhysicalStart, WHITE);
-      PrintHex(&shtinf, &desktop_sheet_id, 248, printy, OsMemory->PageSize, WHITE);
-      printy += 16;
-      if (OsMemory->Type != MMIO_MEMORY) { TotalMemory += OsMemory->PageSize; }
-      OsMemory++;
+      	write_serial_hex(OsMemory->Type);
+    	write_serial_string("  | ");
+      	write_serial_hex(OsMemory->PhysicalStart);
+    	write_serial_string("       | ");
+      	write_serial_hex(OsMemory->Type);
+	  	write_serial_string("\n");
+      	if (OsMemory->Type != MMIO_MEMORY) { TotalMemory += OsMemory->PageSize; }
+      	OsMemory++;
     }
-    PrintString(&shtinf, &desktop_sheet_id, 8, printy, "TotalMemory:", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 88, printy + 16, "KB", WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 8, printy + 16, TotalMemory * 4, WHITE); // 一个Page=4KB
-    memory_test(fbc);
-  }
-  */
+    write_serial_string("TotalMemory: ");
+    write_serial_dec(TotalMemory * 4); // 一个Page=4KB
+    write_serial_string("KB\n");
+    //memory_test(fbc);
+#endif
+
   write_serial_string("Memory Manager Initialize Success.\n");
 }

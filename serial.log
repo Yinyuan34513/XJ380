@@ -30,11 +30,11 @@ Initializing GDT...
 GDT Initialize Success.
 Initializing IDT...
 IDT Initialize Success.
-Setup acpi hpet table (nano_time: 211100).
+Setup acpi hpet table (nano_time: 244800).
 Initializing APIC...
 Mask 8259A Success.
 You PC support x2APIC
-Calibrated LAPIC timer: 4154800 ticks per second.
+Calibrated LAPIC timer: 4246000 ticks per second.
 Local APIC Initialize Success.
 Initializing IOAPIC...
 Setup I/O apic.
@@ -42,6 +42,26 @@ IOAPIC Address: 0xFEC00000
 IOAPIC Initialize Success.
 APIC Initialize Success.
 Initializing Memory Manager...
+MemoryMap:
+Type | PhysicalStart | PageSize
+0x0  | 0x0       | 0x0
+0x0  | 0x100000       | 0x0
+0xB  | 0x400000       | 0xB
+0x0  | 0x409000       | 0x0
+0xB  | 0x800000       | 0xB
+0x0  | 0x808000       | 0x0
+0xB  | 0x810000       | 0xB
+0x0  | 0x900000       | 0x0
+0xB  | 0x7E383000       | 0xB
+0x0  | 0x7E385000       | 0x0
+0xB  | 0x7E387000       | 0xB
+0x0  | 0x7E79C000       | 0x0
+0xB  | 0x7F8EF000       | 0xB
+0x0  | 0x7FBFF000       | 0x0
+0xB  | 0x7FEF4000       | 0xB
+0x0  | 0x100000000       | 0x0
+0xB  | 0xB0000000       | 0xB
+TotalMemory: 4456064KB
 Memory Manager Initialize Success.
 Initializing Sheet Manager...
 Sheet Manager Initialize Success.
@@ -53,5 +73,3 @@ Refreshing Sheet Index 254
 Refreshing Sheet Index 255
 Keyboard Initialize Success.
 Operating System Initialize Success.
-scan code: 0x1D
-scan code: 0x38

@@ -16,6 +16,8 @@
 #include "./global/kernel/apic/madt.h"
 #include "./global/kernel/apic/hpet.h"
 #include "./global/kernel/apic/apic.h"
+#include "./global/kernel/ps2/keyboard.h"
+#include "./global/kernel/ps2/mouse.h"
 
 extern "C" {
 #include "./global/kernel/pctable/idt.h"
