@@ -1,4 +1,4 @@
-// 版权所有©XINGJI Studios 2017-2024 保留所有权利。
+// 版权所有©XINGJI Studios 2017-2025 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
 #include "../include/cinclude.h"
 #include "./bootlib.c"
@@ -227,7 +227,7 @@ typedef void (*__attribute__((sysv_abi))
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable) {
   write_serial_string("\n");
   write_serial_string("XJ380 Operating System - Serial Log\n");
-  write_serial_string("Copyright(C) XINGJI Interacitve Software 2017-2024 All rights reserved.\n");
+  write_serial_string("Copyright(C) XINGJI Interacitve Software 2017-2025 All rights reserved.\n");
   write_serial_string("OS Version: BuildVersion\n");
   efi_init(ImageHandle, SystemTable);
   write_serial_string("EFI Initialize Success.\n");
