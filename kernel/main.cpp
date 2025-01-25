@@ -40,7 +40,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
-  //SPP.Reset(&SPP, 0);
   int fontx = 8;
   int fonty = 50;
 

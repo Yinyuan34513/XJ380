@@ -37,10 +37,14 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
     if (index > 0) {
         // 指定图层高度
         if (front_p != NULL) {
+            SHEET *record = front_p;
             while (true) {
                 if (front_p->next == NULL) {
                     break;
                 } else if (front_p->next->index >= index) {
+                    break;
+                } else if (record == front_p->next || front_p == front_p->next) {
+                    front_p->next = NULL;
                     break;
                 }
                 front_p = front_p->next;
@@ -53,18 +57,16 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 front_p->next->front = new_sheet;       // 把曾经的上一个标记为自己
                 front_p->next        = new_sheet;       // 把自己的上一个的下一个标记为自己
                 front_p              = new_sheet->next; // 指针指向自己的下一个（曾经的）
+                record               = front_p;
                 // 给后面的全++
                 while (true) {
                     front_p->index++;
                     if (front_p->next == NULL) {
                         break;
+                    } else if (record == front_p->next || front_p == front_p->next) {
+                        front_p->next = NULL;
+                        break;
                     }
-    write_serial_string("Front Table Address: ");
-    write_serial_hex((UINT64)(new_sheet->front));
-    write_serial_string("\n");
-    write_serial_string("Next Table Address: ");
-    write_serial_hex((UINT64)(new_sheet->next));
-    write_serial_string("\n");
                     front_p = front_p->next;
                 }
 

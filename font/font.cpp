@@ -104,11 +104,11 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
     else {
         for (i = 60; i >= 0; i -= 4) { // 每次4位
             ch = (hex >> i) & 0xF;       // 0~9, A~F
-                ch   += '0';       // 0~9 => '0'~'9'
-                if (ch > '9') {
-                    ch += 7; // 'A' - '9' = 7
-                }
-                *p++ = ch; // 写入
+            ch   += '0';       // 0~9 => '0'~'9'
+            if (ch > '9') {
+                ch += 7; // 'A' - '9' = 7
+            }
+            *p++ = ch; // 写入
         }
     }
     *p = '\0'; // 结束符

@@ -36,18 +36,24 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   // 初始化
   write_serial_string("Initializing Memory Manager...\n");
   EfiMemoryDesc        *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
-  /*
-    int printy = 164;
-    for (int i = 0; i < 10; i++) {
-        WriteHex(fbc, 8, printy, EfiMemory->Type, WHITE);
-        WriteHex(fbc, 96, printy, EfiMemory->PhysicalStart, WHITE);
-        WriteHex(fbc, 248, printy, EfiMemory->VirtualStart, WHITE);
-        WriteHex(fbc, 8, printy + 16, EfiMemory->NumberOfPages, WHITE);
-        WriteHex(fbc, 160, printy + 16, EfiMemory->Attribute, WHITE);
-        printy += 32;
-        EfiMemory++;
-    }
-    */
+#if BUILD_EDITION == DEBUG_VERSION 
+  write_serial_string("MemoryMap:\n");
+  for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++) {
+    write_serial_hex(EfiMemory->Type);
+	  write_serial_string(" ");
+    write_serial_hex(EfiMemory->PhysicalStart);
+	  write_serial_string(" ");
+    write_serial_hex(EfiMemory->VirtualStart);
+	  write_serial_string(" ");
+    write_serial_hex(EfiMemory->NumberOfPages);
+	  write_serial_string(" ");
+    write_serial_hex(EfiMemory->Attribute);
+	  write_serial_string("\n");
+    EfiMemory++;
+  }
+  EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
+#endif
+  
   OS_MEMORY_DESCRIPTOR *OsMemory          = NULL;
   int                   EfiMemoryPageSize = (BootConfig->MemoryMap.MapSize >> 12) + 1;
   EFI_PHYSICAL_ADDRESS  OsMemoryAddress   = 0;
@@ -106,16 +112,15 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig) {
   UINT64 TotalMemory = 0;
 
 #if BUILD_EDITION == DEBUG_VERSION 
-    write_serial_string("MemoryMap:\n");
+    write_serial_string("MemoryMap2:\n");
     write_serial_string("Type | PhysicalStart | PageSize\n");
-    int printy = 164;
     for (int i = 0; i < OsMemDescNum; i++) {
       	write_serial_hex(OsMemory->Type);
-    	write_serial_string("  | ");
+    	  write_serial_string("  | ");
       	write_serial_hex(OsMemory->PhysicalStart);
-    	write_serial_string("       | ");
+    	  write_serial_string("       | ");
       	write_serial_hex(OsMemory->PageSize);
-	  	write_serial_string("\n");
+	  	  write_serial_string("\n");
       	if (OsMemory->Type != MMIO_MEMORY) { TotalMemory += OsMemory->PageSize; }
       	OsMemory++;
     }
