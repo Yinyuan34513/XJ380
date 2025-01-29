@@ -1,12 +1,12 @@
-#include "alloc/sized-pool.c"
+#include "alloc/sized-pool.h"
 #define _detach            mman_detach
 #define do_free            mman_do_free
 #define try_split_and_free mman_try_split_and_free
-#include "alloc/mman.c"
+#include "alloc/mman.h"
 #define _detach            mpool_detach
 #define do_free            mpool_do_free
 #define try_split_and_free mpool_try_split_and_free
-#include "alloc/pool.c"
+#include "alloc/pool.h"
 
 #include "../include/cinclude.h"
 
