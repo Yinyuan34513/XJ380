@@ -7,3 +7,4 @@ serial.log
 out/draw.o
 /esp
 /out
+.cache
