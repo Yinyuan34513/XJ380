@@ -5,9 +5,9 @@ rmdir /s /q esp
 mkdir out
 mkdir esp\EFI\BOOT
 
-set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions -fno-rtti
-set C_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar
-set CPP_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar
+set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions
+set C_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -std=c11 -fshort-wchar -nostdinc
+set CPP_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit
 
 for /r kernel %%i in (*.S) do (
     set ASM_FILES=!ASM_FILES! %%i
@@ -79,7 +79,7 @@ for %%f in (%CPP_FILES%) do (
     set /a counter+=1
 )
 
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z muldefs -e KernelMain -z norelro -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
 
 powershell -Command "(Get-Content out\compile_commands.json) -replace '},$', '}' | Set-Content out\compile_commands.json"
 echo ] >>out\compile_commands.json
@@ -87,7 +87,7 @@ echo ] >>out\compile_commands.json
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
 
-..\tools\qemu\qemu-system-x86_64.exe -bios OVMF.fd -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
+..\tools\qemu\qemu-system-x86_64.exe -bios OVMF.fd -smp 4 -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
 
 goto :eof
 

@@ -29,13 +29,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   init_MemoryManager(fbc, BootConfig);
 
+  SMP_MANAGER.ap_startup(BootConfig->MADT);
+
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   UINT16 dock_sheet_id = 1145;
   UINT16 mouse_sheet_id = 1145;
   SHEET_INFO shtinf;
   init_sheet(fbc, &shtinf);
-
-  init_smp();
 
   enable_intr();
 

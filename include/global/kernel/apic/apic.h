@@ -59,6 +59,7 @@ struct APIC_INFO
     UINT64 ioApicAddr;
 };
 
+#define MADT_APIC_LOCAL 0x00
 #define MADT_APIC_IO 0x01
 
 #define LAPIC_REG_ID 32
@@ -69,6 +70,9 @@ struct APIC_INFO
 #define LAPIC_REG_TIMER_DIV 0x3e0
 
 #include "hpet.h"
+
+void lapic_write(UINT32 reg, UINT32 value);
+UINT32 lapic_read(UINT32 reg);
 
 typedef struct
 {
@@ -84,6 +88,17 @@ struct madt_hander
     uint8_t length;
 } __attribute__((packed));
 
+struct madt_local_apic
+{
+    // type=0
+    struct madt_hander h;
+    uint8_t ACPI_Processor_UID;
+    // 处理器的local apic id
+    uint8_t local_apic_id;
+    // 详见 ACPI Specification Version 6.3, Table 5-47
+    uint32_t flags;
+};
+
 struct madt_io_apic
 {
     struct madt_hander h;
@@ -94,6 +109,7 @@ struct madt_io_apic
 } __attribute__((packed));
 
 typedef struct madt_hander MadtHeader;
+typedef struct madt_local_apic MadtLocalApic;
 typedef struct madt_io_apic MadtIOApic;
 
 #pragma pack()
