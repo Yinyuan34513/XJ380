@@ -3,16 +3,16 @@
 
 #include "../stdint.h"
 
-#define INT_M_CTL     0x20
+#define INT_M_CTL 0x20
 #define INT_M_CTLMASK 0x21
-#define INT_S_CTL     0xA0
+#define INT_S_CTL 0xA0
 #define INT_S_CTLMASK 0xA1
 
-#define INT_VECTOR_IRQ0         0x20
-#define INT_VECTOR_IRQ8         0x28
+#define INT_VECTOR_IRQ0 0x20
+#define INT_VECTOR_IRQ8 0x28
 
-#define RING0       0
-#define RING3       3
+#define RING0 0
+#define RING3 3
 
 struct X64_REGS
 {

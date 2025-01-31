@@ -3,7 +3,8 @@
 
 #pragma pack(1)
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 #include "../../../efi.h"
 #ifdef __cplusplus
@@ -13,7 +14,8 @@ extern "C" {
 #include "../../stdint.h"
 #include "../longm.h"
 
-struct generic_address {
+struct generic_address
+{
     UINT8 address_space;
     UINT8 bit_width;
     UINT8 bit_offset;
@@ -21,7 +23,8 @@ struct generic_address {
     UINT64 address;
 } __attribute__((packed));
 
-struct ACPISDTHeader {
+struct ACPISDTHeader
+{
     char Signature[4];
     UINT32 Length;
     UINT8 Revision;
@@ -33,22 +36,25 @@ struct ACPISDTHeader {
     UINT32 CreatorRevision;
 };
 
-struct hpet {
+struct hpet
+{
     struct ACPISDTHeader h;
     UINT32 event_block_id;
     struct generic_address base_address;
     UINT16 clock_tick_unit;
     UINT8 page_oem_flags;
-}__attribute__((packed));
+} __attribute__((packed));
 
-typedef struct {
+typedef struct
+{
     UINT64 configurationAndCapability;
     UINT64 comparatorValue;
     UINT64 fsbInterruptRoute;
     UINT64 unused;
 } __attribute__((packed)) HpetTimer;
 
-typedef struct {
+typedef struct
+{
     UINT64 generalCapabilities;
     UINT64 reserved0;
     UINT64 generalConfiguration;

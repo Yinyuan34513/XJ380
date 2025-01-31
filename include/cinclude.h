@@ -18,4 +18,4 @@
 #include "./global/kernel/apic/madt.h"
 #include "./global/kernel/apic/hpet.h"
 #include "./global/kernel/apic/apic.h"
-#endif 
+#endif

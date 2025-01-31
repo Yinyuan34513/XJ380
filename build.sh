@@ -29,21 +29,21 @@ x86_64-w64-mingw32-gcc -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builti
 counter=1
 for file in $ASM_FILES; do
   add_to_compile_commands "$file" "gcc $file $ASM_FLAGS -c -o ./out/$counter.o"
-  gcc $file $ASM_FLAGS -c -o ./out/$counter.o
+  x86_64-linux-gnu-gcc $file $ASM_FLAGS -c -o ./out/$counter.o
   counter=$((counter + 1))
 done
 for file in $C_FILES; do
   add_to_compile_commands "$file" "gcc $file $C_FLAGS -c -o ./out/$counter.o"
-  gcc $file $C_FLAGS -c -o ./out/$counter.o
+  x86_64-linux-gnu-gcc $file $C_FLAGS -c -o ./out/$counter.o
   counter=$((counter + 1))
 done
 for file in $CPP_FILES; do
   add_to_compile_commands "$file" "g++ $file $CPP_FLAGS -c -o ./out/$counter.o"
-  g++ $file $CPP_FLAGS -c -o ./out/$counter.o
+  x86_64-linux-gnu-g++-14 $file $CPP_FLAGS -c -o ./out/$counter.o
   counter=$((counter + 1))
 done
 
-ld -e KernelMain -z norelro -T linker.ld --static -o ./out/kernel.elf $(find ./out -name "*.o") ./font/hankaku.o
+x86_64-linux-gnu-ld -e KernelMain -z norelro -T linker.ld --static -o ./out/kernel.elf $(find ./out -name "*.o") ./font/hankaku.o
 
 truncate -s-2 out/compile_commands.json
 echo "]" >>out/compile_commands.json

@@ -7,8 +7,8 @@
 #include "./kernel/apic/madt.h"
 typedef struct
 {
-    UINT64      MADT;
-    UINT64      HPET;
-    MEMORY_MAP  MemoryMap;
+    UINT64 MADT;
+    UINT64 HPET;
+    MEMORY_MAP MemoryMap;
 } BOOT_CONFIG;
 #endif
