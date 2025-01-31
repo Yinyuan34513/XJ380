@@ -39,13 +39,44 @@ void send_init_and_startup_ipi(UINT32 apic_id)
     send_ipi(apic_id, IPI_INIT);
     delay();
 
-    // 发送STARTUP IPI两次
+    // 发送STARTUP IPI
     send_ipi(apic_id, IPI_STARTUP | (APU_BASE_ADDR >> 12)); // 0x08是启动代码的段选择符
 }
+
+extern IDTR_TYPE idt_ptr;
+
+static inline uint64_t rdmsr(UINT32 msr)
+{
+    UINT32 eax, edx;
+    __asm__ volatile("rdmsr" : "=a"(eax), "=d"(edx) : "c"(msr));
+    return ((UINT64)edx << 32) | eax;
+}
+
+static inline void wrmsr(UINT32 msr, UINT64 value)
+{
+    UINT32 eax = (UINT32)value;
+    UINT32 edx = value >> 32;
+    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
+}
+extern APIC_INFO ApicInfo;
+extern void init_lApic();
 
 extern "C" void apu_entry()
 {
     write_serial_string("APU Starting...\n");
+
+    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
+    UINT64 ia32_apic_base = rdmsr(0x1b);
+    ia32_apic_base |= 1 << 11;
+    if (ApicInfo.x2Apic)
+    {
+        ia32_apic_base |= 1 << 10;
+    }
+    wrmsr(0x1b, ia32_apic_base);
+
+    init_lApic();
+
     while (1)
     {
         __asm__ __volatile__("hlt");

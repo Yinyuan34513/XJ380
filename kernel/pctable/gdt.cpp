@@ -8,9 +8,6 @@ GDT_PTR gdt_ptr;
 
 static void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign);
 
-/* 声明内核栈地址 */
-extern "C" UINT64 stack;
-
 /* 初始化全局描述符表 */
 void init_gdt()
 {

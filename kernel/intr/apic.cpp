@@ -210,7 +210,27 @@ void send_eoi()
 
 extern "C" void c_timer_handler(void *regs_ptr, UINT64 error_code)
 {
-    // TODO 进程调度器
-    //  write_serial_string("Timer Interrupt\n"); serial.log : 尼玛
     send_eoi();
+
+    switch (current_task->priority)
+    {
+    case 0:
+    case 1:
+        task_schedule[current_task->cpu_id].CPU_exec_task_jiffies--;
+        current_task->vrun_time += 1;
+        break;
+    case 2:
+    default:
+        task_schedule[current_task->cpu_id].CPU_exec_task_jiffies -= 2;
+        current_task->vrun_time += 2;
+        break;
+    }
+
+    if (task_schedule[current_task->cpu_id].CPU_exec_task_jiffies <= 0)
+        current_task->flags |= NEED_SCHEDULE;
+
+    if (current_task->flags & NEED_SCHEDULE)
+    {
+        schedule();
+    }
 }

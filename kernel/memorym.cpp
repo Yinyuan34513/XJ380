@@ -1,6 +1,7 @@
-#include "../include/efi.h"
 #include "../include/include.h"
 #include "./build_settings.h"
+#include "./alloc/page.h"
+
 typedef struct
 {
   UINT32 Type;
@@ -121,6 +122,34 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
   }
 
   memory_init((void *)maxpageaddr, maxpagesize * PAGE_SIZE);
+
+  uint64_t page_start = 0;
+  size_t page_count = 0;
+
+  for (int i = 0; i < EfiDescriptorCount; i++)
+  {
+    if (EfiMemory[i].Type == 7 && EfiMemory[i].PhysicalStart != OsMemoryAddress)
+    {
+      if (EfiMemory[i].NumberOfPages > page_count)
+      {
+        page_start = EfiMemory[i].PhysicalStart;
+        page_count = EfiMemory[i].NumberOfPages;
+        break;
+      }
+    }
+  }
+
+  if (page_count == 0)
+  {
+    write_serial_string("No free memory found.\n");
+    while (1)
+    {
+      __asm__("hlt");
+    }
+  }
+
+  uint64_t bitmap_size = (page_count + 7) / 8;
+  PAGE_ALLOC.init((void *)page_start, page_count, (uint8_t *)malloc(bitmap_size));
 
   // 输出合并后的
   OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;

@@ -20,6 +20,12 @@ SECTIONS
         *(.data)  
         _edata = .; /* 定义data段的结束位置 */  
     }  
+
+    . = ALIGN(65536);
+    .data.init_task :
+    {
+        *(.data.init_task)
+    }
   
     .bss :  
     {  

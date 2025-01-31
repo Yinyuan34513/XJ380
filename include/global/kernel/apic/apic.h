@@ -112,6 +112,8 @@ typedef struct madt_hander MadtHeader;
 typedef struct madt_local_apic MadtLocalApic;
 typedef struct madt_io_apic MadtIOApic;
 
+extern UINT64 lapic_id();
+
 #pragma pack()
 
 #endif
