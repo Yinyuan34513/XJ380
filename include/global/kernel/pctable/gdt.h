@@ -8,6 +8,7 @@
 #define GDT_TYPE_KERNEL_DS 2
 #define GDT_TYPE_USER_CS 3
 #define GDT_TYPE_USER_DS 4
+#define GDT_TYPE_TSS 8
 
 #define SELECTOR_KERNEL_CS GDT_TYPE_KERNEL_CS << 3
 #define SELECTOR_KERNEL_DS GDT_TYPE_KERNEL_DS << 3
@@ -15,7 +16,7 @@
 #define SELECTOR_USER_DS GDT_TYPE_USER_DS << 3
 
 // 全局描述符表长度
-#define GDT_LENGTH 5
+#define GDT_LENGTH GDT_TYPE_TSS + MAX_CPU_NUM * 2 + 1
 
 // 全局描述符类型
 typedef struct
@@ -47,5 +48,18 @@ typedef struct
 	UINT16 limit; // 全局描述符表限长
 	UINT64 base;  // 全局描述符表 32 位基地址
 } __attribute__((packed)) GDT_PTR;
+
+extern GDT_PTR gdt_ptr;
+
+#define ltr(n)                             \
+	do                                     \
+	{                                      \
+		__asm__ __volatile__("ltr	%%ax"    \
+							 :             \
+							 : "a"(n << 3) \
+							 : "memory");  \
+	} while (0)
+
+void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign);
 
 #endif

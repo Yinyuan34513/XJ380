@@ -12,6 +12,7 @@ public:
     SMP();
     ~SMP();
     void ap_startup(uint64_t madt_addr);
+    int ap_count();
 
 private:
     int apu_count;

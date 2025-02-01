@@ -1,4 +1,7 @@
+#include "./alloc/page.h"
 #include "../include/include.h"
+
+extern uint64_t idle_entry(uint64_t arg);
 
 extern uint8_t _APU_boot_start;
 extern uint8_t _APU_boot_end;
@@ -61,11 +64,64 @@ static inline void wrmsr(UINT32 msr, UINT64 value)
 extern APIC_INFO ApicInfo;
 extern void init_lApic();
 
-extern "C" void apu_entry()
-{
-    write_serial_string("APU Starting...\n");
+extern bool TASK_INITIALIZED;
 
+extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
+{
+    disable_intr();
+
+    __asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
+    __asm__ volatile(
+        "movq %%rax, %%ds \n\t"
+        "movq %%rax, %%es \n\t"
+        "movq %%rax, %%fs \n\t"
+        "movq %%rax, %%gs \n\t"
+        "movq %%rax, %%ss \n\t"
+        "pushq %[SELECTOR_CODE64] \n\t"
+        "leaq .next(%%RIP),%%rax \n\t"
+        "pushq %%rax \n\t"
+        "lretq \n\r"
+        ".next: \n\t"
+        :
+        : [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
+          [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
+        :);
+
+    ltr(tr);
+
+    current_task->cpu_id = cpu_id;
+    list_init(&current_task->list);
+    current_task->mm = &init_mm;
+    current_task->flags = PF_KTHREAD;
+    current_task->preempt_count = 0;
+    current_task->priority = 2;
+    current_task->signal = 0;
+    current_task->vrun_time = 0;
+    current_task->state = TASK_RUNNING;
+
+    current_task->thread = (struct thread_struct *)(current_task + 1);
+    xmemset(current_task->thread, 0, sizeof(struct thread_struct));
+    uint64_t stack_start = (uint64_t)PAGE_ALLOC.alloc_page() + STACK_SIZE;
+    current_task->thread->rsp0 = stack_start;
+    current_task->thread->rsp = stack_start - sizeof(struct X64_REGS);
+    struct X64_REGS regs;
+    regs.cs = SELECTOR_KERNEL_CS;
+    regs.ds = SELECTOR_KERNEL_DS;
+    regs.es = SELECTOR_KERNEL_DS;
+    regs.ss = SELECTOR_KERNEL_DS;
+    regs.rflags = (1 << 9);
+    regs.rip = (uint64_t)kernel_thread_func;
+    regs.rbx = (uint64_t)idle_entry;
+    regs.rdx = 0;
+    xmemcpy((void *)current_task->thread->rsp, &regs, sizeof(struct X64_REGS));
+    current_task->thread->fs = SELECTOR_KERNEL_DS;
+    current_task->thread->gs = SELECTOR_KERNEL_DS;
+    init_task_union.task.next = current_task;
+    current_task->parent = &init_task_union.task;
+    init_task[cpu_id] = current_task;
+    insert_task_queue(current_task);
 
     UINT64 ia32_apic_base = rdmsr(0x1b);
     ia32_apic_base |= 1 << 11;
@@ -77,9 +133,16 @@ extern "C" void apu_entry()
 
     init_lApic();
 
+    while (!TASK_INITIALIZED)
+    {
+        __asm__ __volatile__("pause");
+    }
+
+    enable_intr();
+
     while (1)
     {
-        __asm__ __volatile__("hlt");
+        __asm__ __volatile__("pause");
     }
 }
 
@@ -118,21 +181,48 @@ void SMP::ap_startup(uint64_t madt_addr)
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
     uint64_t *page_table = (uint64_t *)(APU_BASE_ADDR + 8);
     uint64_t *ap_entry = page_table + 1;
-    uint64_t *ready = ap_entry + 1;
+    uint64_t *rsp = ap_entry + 1;
+    uint64_t *cpu_id = rsp + 1;
+    uint64_t *tr = cpu_id + 1;
+    uint64_t *ready = tr + 1;
 
     *page_table = cr3;
     *ap_entry = (uint64_t)apu_entry;
+    *ready = 0;
 
     for (int i = 0; i < this->apu_count; i++)
     {
+        *ready = 0;
         if (this->apu_list[i]->local_apic_id == (lapic_read(LAPIC_REG_ID) >> 24))
         {
             continue;
         }
+
         write_serial_string("Initializing CPU ");
         write_serial_dec(this->apu_list[i]->local_apic_id);
         write_serial_string("\n");
+
+        *cpu_id = i;
+        uint64_t tr_value = GDT_TYPE_TSS + i * 2;
+        *tr = tr_value;
+        uint64_t stack_start = (uint64_t)PAGE_ALLOC.alloc_page() + STACK_SIZE;
+        *rsp = stack_start;
+        init_tss[i].rsp0 = stack_start;
+        init_tss[i].rsp1 = stack_start;
+        init_tss[i].rsp2 = stack_start;
+        uint64_t ist_stack_start = (uint64_t)PAGE_ALLOC.alloc_page() + STACK_SIZE;
+        init_tss[i].ist1 = ist_stack_start;
+        init_tss[i].ist2 = ist_stack_start;
+        init_tss[i].ist3 = ist_stack_start;
+        init_tss[i].ist4 = ist_stack_start;
+        init_tss[i].ist5 = ist_stack_start;
+        init_tss[i].ist6 = ist_stack_start;
+        init_tss[i].ist7 = ist_stack_start;
+
+        gdt_set_gate(tr_value, (UINT64)&init_tss[i], sizeof(init_tss[i]) - 1, 0x89, 0xAF);
+
         send_init_and_startup_ipi(this->apu_list[i]->local_apic_id);
+
         while (*ready == 0)
         {
             __asm__ __volatile__("pause");
@@ -141,4 +231,9 @@ void SMP::ap_startup(uint64_t madt_addr)
         write_serial_dec(this->apu_list[i]->local_apic_id);
         write_serial_string(" initialized\n");
     }
+}
+
+int SMP::ap_count()
+{
+    return this->apu_count;
 }

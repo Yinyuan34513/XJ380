@@ -127,7 +127,7 @@ void init_apic(UINT64 MADT);
 void send_eoi();
 
 // kernel/intr/hpet.cpp
-void hpet_init(UINT64 hpet);
+void init_hpet(UINT64 hpet);
 UINT64 nanoTime();
 
 // kernel/cpu/msr.cpp

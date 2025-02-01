@@ -249,7 +249,7 @@ void CreateAndMapNewPageTable()
 
   xmemcpy((void *)new_page_table_addr, (void *)old_page_table_addr, PAGE_SIZE);
 
-  // Map page_table to PAGE_TABLE_MAPPED_ADDRESS
+  // Map PAGE_TABLE_MAPPED_ADDRESS to page_table
   uint64_t *pml4 = (uint64_t *)new_page_table_addr;
   uint64_t pml4_id = (PAGE_TABLE_MAPPED_ADDRESS >> 39) & 0x1FF;
   if (pml4[pml4_id] == 0)

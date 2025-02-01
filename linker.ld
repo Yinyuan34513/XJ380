@@ -21,7 +21,7 @@ SECTIONS
         _edata = .; /* 定义data段的结束位置 */  
     }  
 
-    . = ALIGN(65536);
+    . = ALIGN(4K);
     .data.init_task :
     {
         *(.data.init_task)

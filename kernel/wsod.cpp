@@ -1,8 +1,11 @@
 #include "../include/include.h"
+#include "../include/backtrace.h"
 #include "./build_settings.h"
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
+    backtrace(regs);
+
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
@@ -64,6 +67,8 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
     write_serial_string("WSOD: ");
     write_serial_string(err_code);
+    write_serial_string("\n");
+
     while (1)
     {
         disable_intr();
@@ -116,7 +121,7 @@ void no_regs_wsod(const char *err_code)
     while (1)
     {
         disable_intr();
-        __asm__("hlt");
+        __asm__ __volatile__("hlt");
     };
 }
 
@@ -153,15 +158,49 @@ void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code)
 // 一般保护性异常
 void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code)
 {
-    write_serial_string("ERROR CODE:");
-    write_serial_dec(error_code);
-    write_serial_string("\n");
+    if (error_code & 0x01)
+        write_serial_string(
+            "The exception occurred during delivery of an event external to the program,such as an interrupt "
+            "or an earlier exception.\n");
+
+    if (error_code & 0x02)
+        write_serial_string("Refers to a gate descriptor in the IDT;\n");
+    else
+        write_serial_string("Refers to a descriptor in the GDT or the current LDT;\n");
+
+    if ((error_code & 0x02) == 0)
+        if (error_code & 0x04)
+            write_serial_string("Refers to a segment or gate descriptor in the LDT;\n");
+        else
+            write_serial_string("Refers to a descriptor in the current GDT;\n");
+
     do_wsod("GENERAL_PROTECTION", regs);
 }
 
 // 页错误
 void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code)
 {
+    if (!(error_code & 0x01))
+        write_serial_string("Page Not-Present,\t");
+
+    if (error_code & 0x02)
+        write_serial_string("Write Cause Fault,\t");
+    else
+        write_serial_string("Read Cause Fault,\t");
+
+    if (error_code & 0x04)
+        write_serial_string("Fault in user(3)\t");
+    else
+        write_serial_string("Fault in supervisor(0,1,2)\t");
+
+    if (error_code & 0x08)
+        write_serial_string(",Reserved Bit Cause Fault\t");
+
+    if (error_code & 0x10)
+        write_serial_string(",Instruction fetch Cause Fault");
+
+    write_serial_string("\n");
+
     do_wsod("PAGE_FAULT", regs);
 }
 

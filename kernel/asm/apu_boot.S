@@ -18,6 +18,12 @@ page_table_addr:
     .quad 0
 entry_addr:
     .quad 0
+rsp:
+    .quad 0
+cpu_id:
+    .quad 0
+tr:
+    .quad 0
 ready:
     .quad 0
 
@@ -101,14 +107,25 @@ _APU_Code64:
 	movq	%rax,	%gs
 	movq	%rax,	%ss
 
+    leaq    (rsp - _APU_boot_base)(%rsi), %rax
+    movq    (%rax), %rsp
 
 	leaq	(ready - _APU_boot_base)(%rsi), %rax
     movq    $1, (%rax)
 
-    leaq	(entry_addr - _APU_boot_base)(%rsi), %rax
-    movq    (%rax), %rax
+    leaq    (cpu_id - _APU_boot_base)(%rsi), %rax
+    movq    (%rax), %r14
 
-	jmpq	*%rax
+    leaq    (tr - _APU_boot_base)(%rsi), %rax
+    movq    (%rax), %r15
+
+    leaq	(entry_addr - _APU_boot_base)(%rsi), %rax
+    movq    (%rax), %r8
+
+	movq 	%r14, %rdi
+	movq 	%r15, %rsi
+
+	jmpq	*%r8
 
 	hlt
 

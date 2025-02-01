@@ -1,28 +1,110 @@
-..\tools\mingw64\bin\x86_64-w64-mingw32-gcc.exe -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -o out\BOOTX64.efi boot\bootx64.c
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\main.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\main.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\gdt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\gdt.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\pctable\idt.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\idt.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\asm\common.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\common.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\apic.cpp -mno-sse -mno-sse2 -msoft-float -mno-mmx -mno-80387 -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\apic.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\hpet.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\hpet.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\cpu\msr.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\msr.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\cpu\cpuid.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\cpuid.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe driver\serial\serial_port.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\serial_port.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\draw.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\draw.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe font\font.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\font.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\desktop.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\desktop.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe graphics\draw_sheet.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\draw_sheet.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\graphics\sheet.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\sheet.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe driver\ps2\keyboard.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\keyboard.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe driver\ps2\mouse.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\mouse.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe lib\string.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\lib_string.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe lib\printf.cpp -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\lib_printf.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\memorym.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\memorym.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\wsod.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\wsod.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe kernel\intr\8259a.cpp -O0 -nostdlib -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -c -o out\8259a.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\alloc.c -O0 -nostdlib -Wall -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-variable -g -ffreestanding -fno-exceptions -std=c11 -c -o out\alloc.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kernel\asm\handler.S -nostdlib -m64 -O0 -g -ffreestanding -fno-exceptions -fno-rtti -c -o out\handler.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z norelro -T linker.ld -nostdlib --static -o .\out\kernel.elf .\out\main.o .\out\draw.o .\out\font.o .\font\hankaku.o .\out\desktop.o .\out\memorym.o .\out\wsod.o .\out\alloc.o .\out\sheet.o .\out\draw_sheet.o .\out\gdt.o .\out\common.o out\handler.o .\out\idt.o .\out\hpet.o .\out\apic.o .\out\8259a.o .\out\lib_string.o .\out\serial_port.o out\cpuid.o .\out\msr.o .\out\keyboard.o .\out\lib_printf.o .\out\mouse.o
+@echo off
+chcp 65001
+rmdir /s /q out
+rmdir /s /q esp
+mkdir out
+mkdir esp\EFI\BOOT
+
+set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions -fno-rtti
+set C_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar
+set CPP_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar
+
+set ASM_FILES=
+for /r kernel %%i in (*.S) do (
+  set ASM_FILES=!ASM_FILES! %%i
+)
+for /r driver %%i in (*.S) do (
+  set ASM_FILES=!ASM_FILES! %%i
+)
+for /r graphics %%i in (*.S) do (
+  set ASM_FILES=!ASM_FILES! %%i
+)
+for /r font %%i in (*.S) do (
+  set ASM_FILES=!ASM_FILES! %%i
+)
+for /r lib %%i in (*.S) do (
+  set ASM_FILES=!ASM_FILES! %%i
+)
+
+set C_FILES=
+for /r kernel %%i in (*.c) do (
+  set C_FILES=!C_FILES! %%i
+)
+for /r driver %%i in (*.c) do (
+  set C_FILES=!C_FILES! %%i
+)
+for /r graphics %%i in (*.c) do (
+  set C_FILES=!C_FILES! %%i
+)
+for /r font %%i in (*.c) do (
+  set C_FILES=!C_FILES! %%i
+)
+for /r lib %%i in (*.c) do (
+  set C_FILES=!C_FILES! %%i
+)
+
+set CPP_FILES=
+for /r kernel %%i in (*.cpp) do (
+  set CPP_FILES=!CPP_FILES! %%i
+)
+for /r driver %%i in (*.cpp) do (
+  set CPP_FILES=!CPP_FILES! %%i
+)
+for /r graphics %%i in (*.cpp) do (
+  set CPP_FILES=!CPP_FILES! %%i
+)
+for /r font %%i in (*.cpp) do (
+  set CPP_FILES=!CPP_FILES! %%i
+)
+for /r lib %%i in (*.cpp) do (
+  set CPP_FILES=!CPP_FILES! %%i
+)
+
+echo [ >out\compile_commands.json
+
+..\tools\mingw64\bin\x86_64-w64-mingw32-gcc.exe -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o out/BOOTX64.efi boot/bootx64.c
+
+setlocal enabledelayedexpansion
+set counter=1
+for %%f in (%ASM_FILES%) do (
+  call :add_to_compile_commands %%f "gcc %%f %ASM_FLAGS% -c -o out\!counter!.o"
+  ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe %%f %ASM_FLAGS% -c -o out\!counter!.o
+  set /a counter+=1
+)
+for %%f in (%C_FILES%) do (
+  call :add_to_compile_commands %%f "gcc %%f %C_FLAGS% -c -o out\!counter!.o"
+  ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe %%f %C_FLAGS% -c -o out\!counter!.o
+  set /a counter+=1
+)
+for %%f in (%CPP_FILES%) do (
+  call :add_to_compile_commands %%f "g++ %%f %CPP_FLAGS% -c -o out\!counter!.o"
+  ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-g++.exe %%f %CPP_FLAGS% -c -o out\!counter!.o
+  set /a counter+=1
+)
+
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kallsyms\kallsyms.c -o .\out\kallsyms
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-nm.exe -n .\out\kernel.elf | .\out\kallsyms > .\out\kallsyms.S
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe -O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -c .\out\kallsyms.S -o .\out\kallsyms.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z muldefs -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf out\*.o .\font\hankaku.o .\out\kallsyms.o
+
+powershell -Command "(Get-Content out\compile_commands.json) -replace '},$', '}' | Set-Content out\compile_commands.json"
+echo ] >>out\compile_commands.json
+
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
-..\tools\qemu\qemu-system-x86_64.exe -bios ..\tools\OVMF.fd -m 4096 -cpu qemu64,+x2apic -net none -machine q35 -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0
+
+..\tools\qemu\qemu-system-x86_64.exe -bios OVMF.fd -m 4096 -smp 4 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
+
+goto :eof
+
+:add_to_compile_commands
+set file=%1
+set command=%2
+set directory=%cd%
+echo { >>out\compile_commands.json
+echo  "directory": "%directory%", >>out\compile_commands.json
+echo  "command": "%command%", >>out\compile_commands.json
+echo  "file": "%file%" >>out\compile_commands.json
+echo }, >>out\compile_commands.json
+goto :eof

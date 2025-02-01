@@ -134,7 +134,6 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
       {
         page_start = EfiMemory[i].PhysicalStart;
         page_count = EfiMemory[i].NumberOfPages;
-        break;
       }
     }
   }

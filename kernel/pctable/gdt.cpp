@@ -6,8 +6,6 @@ GDT_ENTRY gdt_entries[GDT_LENGTH];
 /* GDTR */
 GDT_PTR gdt_ptr;
 
-static void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign);
-
 /* 初始化全局描述符表 */
 void init_gdt()
 {
@@ -17,11 +15,12 @@ void init_gdt()
 
 	// 采用 Intel 平坦模型
 	// 0xAF = 10101111
-	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);				  // 按照 Intel 文档要求，第一个描述符必须全 0
-	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFF, 0x9A, 0xAF); // 代码段 0x9A = 10011010
-	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFF, 0x92, 0xAF); // 数据段 0x92 = 10010010
-	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFF, 0xFA, 0xAF);	  // 用户模式代码段 0xFA = 11111010
-	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFF, 0xF2, 0xAF);	  // 用户模式数据段 0xF2 = 11110010
+	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);											   // 按照 Intel 文档要求，第一个描述符必须全 0
+	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFF, 0x9A, 0xAF);							   // 代码段 0x9A = 10011010
+	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFF, 0x92, 0xAF);							   // 数据段 0x92 = 10010010
+	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFF, 0xFA, 0xAF);								   // 用户模式代码段 0xFA = 11111010
+	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFF, 0xF2, 0xAF);								   // 用户模式数据段 0xF2 = 11110010
+	gdt_set_gate(GDT_TYPE_TSS, (UINT64)&init_tss[0], sizeof(init_tss[0]) - 1, 0x89, 0xAF); // TSS 0x89 = 10001001
 
 	__asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
 	asm volatile(
@@ -39,11 +38,13 @@ void init_gdt()
 		: [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
 		  [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
 		:);
+
 	write_serial_string("GDT Initialize Success.\n");
 }
 
 // 热知识：64位下，基地址和限长填了也没用
-static void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign)
+// 冷知识：那我要是是TSS呢？
+void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign)
 {
 	gdt_entries[num].base_low = (base & 0xFFFF);
 	gdt_entries[num].base_middle = (base >> 16) & 0xFF;

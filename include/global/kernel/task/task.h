@@ -7,8 +7,8 @@
 #define CLONE_FILES (1 << 1)
 #define CLONE_SIGNAL (1 << 2)
 
-// stack size 32K
-#define STACK_SIZE 32768
+// stack size 4K
+#define STACK_SIZE 4096
 
 #define TASK_RUNNING (1 << 0)
 #define TASK_INTERRUPTIBLE (1 << 1)
@@ -60,6 +60,9 @@ struct task_struct
     long pid;
     long priority;
     long vrun_time;
+
+    struct task_struct *next;
+    struct task_struct *parent;
 };
 
 ///////struct task_struct->flags:
@@ -136,6 +139,11 @@ struct task_struct *get_current()
     "movq	%rsp,	%rbx	\n\t" \
     "andq	$-32768,%rbx	\n\t"
 
+static inline void switch_mm(struct task_struct *prev, struct task_struct *next)
+{
+    __asm__ __volatile__("movq %0, %%cr3" : : "r"(next->mm->pgd));
+}
+
 #define switch_to(prev, next)                                                                       \
     do                                                                                              \
     {                                                                                               \
@@ -159,6 +167,7 @@ uint64_t do_fork(struct pt_regs *regs, uint64_t clone_flags, uint64_t stack_star
 void init_task_manager();
 
 extern "C" void ret_from_intr(void);
+extern "C" void kernel_thread_func(void);
 
 extern struct task_struct *init_task[MAX_CPU_NUM];
 extern union task_union init_task_union;

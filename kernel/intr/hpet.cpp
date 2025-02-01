@@ -11,7 +11,7 @@ UINT64 nanoTime()
     return mcv * hpetPeriod;
 }
 
-void hpet_init(UINT64 hpet_ptr)
+void init_hpet(UINT64 hpet_ptr)
 {
     info = (HpetInfo *)((Hpet *)hpet_ptr)->base_address.address;
     UINT32 counterClockPeriod = info->generalCapabilities >> 32;

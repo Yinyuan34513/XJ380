@@ -44,6 +44,10 @@ for file in $CPP_FILES; do
 done
 
 x86_64-linux-gnu-ld -z muldefs -e KernelMain -z norelro -T linker.ld --static -o ./out/kernel.elf $(find ./out -name "*.o") ./font/hankaku.o
+gcc kallsyms/kallsyms.c -o ./out/kallsyms
+x86_64-linux-gnu-nm -n ./out/kernel.elf | ./out/kallsyms >./out/kallsyms.S
+x86_64-linux-gnu-gcc -O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -c ./out/kallsyms.S -o ./out/kallsyms.o
+x86_64-linux-gnu-ld -z muldefs -e KernelMain -z norelro -T linker.ld --static -o ./out/kernel.elf $(find ./out -name "*.o") ./font/hankaku.o ./out/kallsyms.o
 
 truncate -s-2 out/compile_commands.json
 echo "]" >>out/compile_commands.json
@@ -51,4 +55,4 @@ echo "]" >>out/compile_commands.json
 cp ./out/BOOTX64.efi ./esp/EFI/BOOT
 cp ./out/kernel.elf ./esp
 
-qemu-system-x86_64 -bios OVMF.fd -smp 4 -m 1024 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
+qemu-system-x86_64 -bios OVMF.fd -m 4096 -smp 4 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0

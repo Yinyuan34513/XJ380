@@ -131,13 +131,8 @@ void init_lApic()
             break;
     UINT64 lapic_timer = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
     UINT64 calibrated_timer_initial = (UINT64)((UINT64)(lapic_timer * 1000) / 250);
-    write_serial_string("Calibrated LAPIC timer: ");
-    write_serial_dec(calibrated_timer_initial);
-    write_serial_string(" ticks per second.\n");
     lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
     lapic_write(LAPIC_REG_TIMER_INITCNT, calibrated_timer_initial);
-
-    write_serial_string("Local APIC Initialize Success.\n");
 }
 
 /**

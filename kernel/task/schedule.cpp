@@ -1,13 +1,19 @@
 #include "../../include/include.h"
 
+spinlock_t get_next_task_lock;
+spinlock_t task_schedule_lock;
+
 struct schedule task_schedule[MAX_CPU_NUM];
 
 struct task_struct *get_next_task()
 {
+    spin_lock(&get_next_task_lock);
+
     struct task_struct *tsk = NULL;
 
     if (list_is_empty(&task_schedule[current_task->cpu_id].task_queue.list))
     {
+        spin_unlock(&get_next_task_lock);
         return init_task[current_task->cpu_id];
     }
 
@@ -15,6 +21,8 @@ struct task_struct *get_next_task()
     list_del(&tsk->list);
 
     task_schedule[current_task->cpu_id].running_task_count -= 1;
+
+    spin_unlock(&get_next_task_lock);
 
     return tsk;
 }
@@ -43,6 +51,8 @@ void insert_task_queue(struct task_struct *tsk)
 
 void schedule()
 {
+    spin_lock(&task_schedule_lock);
+
     struct task_struct *tsk = NULL;
     long cpu_id = current_task->cpu_id;
 
@@ -67,6 +77,8 @@ void schedule()
                 break;
             }
 
+        switch_mm(current_task, tsk);
+        spin_unlock(&task_schedule_lock);
         switch_to(current_task, tsk);
     }
     else
@@ -86,10 +98,14 @@ void schedule()
                 break;
             }
     }
+
+    spin_unlock(&task_schedule_lock);
 }
 
 void schedule_init()
 {
+    spin_init(&get_next_task_lock);
+    spin_init(&task_schedule_lock);
     int i = 0;
     xmemset(&task_schedule, 0, sizeof(struct schedule) * MAX_CPU_NUM);
 
