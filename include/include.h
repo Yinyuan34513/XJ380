@@ -9,6 +9,7 @@
 #include "./cppinc/proto.hpp"
 #include "./global/stdint.h"
 #include "./global/list.h"
+#include "./global/fifo8.h"
 #include "./global/spinlock.h"
 #include "./global/graphics/global_color.h"
 #include "./global/kernel/memory.h"
@@ -24,7 +25,10 @@
 #include "./global/kernel/task/schedule.h"
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
-
+// Drivers
+#include "./global/kernel/driver/vdisk.h"
+#include "./global/kernel/driver/pci.h"
+#include "./global/kernel/driver/ahci.h"
 extern "C"
 {
 #include "./global/kernel/pctable/idt.h"

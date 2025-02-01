@@ -33,6 +33,13 @@ uint64_t init_kernel_thread(uint64_t arg)
     write_serial_dec(arg);
     write_serial_string(".\n");
 
+    init_vdisk();
+    init_pci();
+    write_serial_string("PCI initialized.\n");
+
+    init_ahci();
+    write_serial_string("AHCI initialized.\n");
+
     while (1)
     {
         __asm__ __volatile__("sti\n\thlt\n\t");

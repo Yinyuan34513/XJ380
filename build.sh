@@ -55,4 +55,4 @@ echo "]" >>out/compile_commands.json
 cp ./out/BOOTX64.efi ./esp/EFI/BOOT
 cp ./out/kernel.elf ./esp
 
-qemu-system-x86_64 -bios OVMF.fd -m 4096 -smp 4 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
+qemu-system-x86_64 -bios OVMF.fd -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=fat:rw:esp,index=0,format=vvfat -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
