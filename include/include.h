@@ -8,6 +8,7 @@
 #include "./cppinc/sheet.h"
 #include "./cppinc/proto.hpp"
 #include "./global/stdint.h"
+#include "./global/list.h"
 #include "./global/graphics/global_color.h"
 #include "./global/kernel/memory.h"
 #include "./global/kernel/pctable/gdt.h"
@@ -16,12 +17,16 @@
 #include "./global/kernel/apic/madt.h"
 #include "./global/kernel/apic/hpet.h"
 #include "./global/kernel/apic/apic.h"
+#include "./global/kernel/smp/smp.h"
+#include "./global/kernel/task/task.h"
+#include "./global/kernel/task/schedule.h"
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
 
-extern "C" {
+extern "C"
+{
 #include "./global/kernel/pctable/idt.h"
 #include "./efi.h"
 }
 
-#endif 
+#endif

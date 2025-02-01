@@ -5,9 +5,10 @@
 #define _STDINT_H_
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
-    #include "../efi.h"
+#include "../efi.h"
 #ifdef __cplusplus
 }
 #endif
@@ -36,7 +37,7 @@ typedef float64_t f64;
 // 中断入口
 typedef void (*int_func)();
 
-#define NULL    0
+#define NULL 0
 
 typedef unsigned long int size_t; // compatible to ELF toolchain
 

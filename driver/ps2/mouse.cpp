@@ -8,27 +8,35 @@ int mouse_y;
 extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 {
     send_eoi();
-        UINT8 data = inb(PORT_KB_DATA);
+    UINT8 data = inb(PORT_KB_DATA);
 
-    if (mousedecode(data)) {
+    if (mousedecode(data))
+    {
         mouse_x += ms_dec.x;
         mouse_y += ms_dec.y;
-        if (mouse_x < 0) mouse_x = 0;
-        if (mouse_y < 0) mouse_y = 0;
-        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
-        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
+        if (mouse_x < 0)
+            mouse_x = 0;
+        if (mouse_y < 0)
+            mouse_y = 0;
+        if (mouse_x > get_hor() - 1)
+            mouse_x = get_hor() - 1;
+        if (mouse_y > get_ver() - 1)
+            mouse_y = get_ver() - 1;
 
         ms_dec.left = false;
         ms_dec.center = false;
         ms_dec.right = false;
 
-        if(ms_dec.btn & 0x01){
+        if (ms_dec.btn & 0x01)
+        {
             ms_dec.left = true;
         }
-        if(ms_dec.btn & 0x02){
+        if (ms_dec.btn & 0x02)
+        {
             ms_dec.right = true;
         }
-        if(ms_dec.btn & 0x04) {
+        if (ms_dec.btn & 0x04)
+        {
             ms_dec.center = true;
         }
     }
@@ -42,45 +50,53 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 
 bool mousedecode(UINT8 data)
 {
-    if (ms_dec.phase == 0) {
-        if (data == 0xfa) {
+    if (ms_dec.phase == 0)
+    {
+        if (data == 0xfa)
+        {
             ms_dec.phase = 1;
         }
         return false;
     }
-    if (ms_dec.phase == 1) {
-        if ((data & 0xc8) == 0x08) {
+    if (ms_dec.phase == 1)
+    {
+        if ((data & 0xc8) == 0x08)
+        {
             ms_dec.buf[0] = data;
             ms_dec.phase = 2;
         }
         return 0;
     }
-    if (ms_dec.phase == 2) {
+    if (ms_dec.phase == 2)
+    {
         ms_dec.buf[1] = data;
         ms_dec.phase = 3;
         return 0;
     }
-    if (ms_dec.phase == 3) {
+    if (ms_dec.phase == 3)
+    {
         ms_dec.buf[2] = data;
         ms_dec.phase = 1;
         ms_dec.btn = ms_dec.buf[0] & 0x07;
         ms_dec.x = ms_dec.buf[1];
         ms_dec.y = ms_dec.buf[2];
 
-        if ((ms_dec.buf[0] & 0x10) != 0) ms_dec.x |= 0xffffff00;
-        if ((ms_dec.buf[0] & 0x20) != 0) ms_dec.y |= 0xffffff00;
+        if ((ms_dec.buf[0] & 0x10) != 0)
+            ms_dec.x |= 0xffffff00;
+        if ((ms_dec.buf[0] & 0x20) != 0)
+            ms_dec.y |= 0xffffff00;
         ms_dec.y = -ms_dec.y;
         return true;
     }
     return false;
 }
 
-int get_mouse_x() 
+int get_mouse_x()
 {
     return mouse_x;
 }
 
-int get_mouse_y() 
+int get_mouse_y()
 {
     return mouse_y;
 }
@@ -111,9 +127,12 @@ void Mouse_init()
     ms_dec.phase = 0;
 }
 
-void draw_mouse(SHEET_INFO *sht, UINT16* sheet_id) {
-    for (int y = 0; y < 21; y++) {
-        for (int x = 0; x < 10; x++) {
+void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id)
+{
+    for (int y = 0; y < 21; y++)
+    {
+        for (int x = 0; x < 10; x++)
+        {
             if (mouse[y][x] == '.')
             {
                 draw_point(sht, sheet_id, x, y, {0, 0, 0, 0});
@@ -130,7 +149,8 @@ void draw_mouse(SHEET_INFO *sht, UINT16* sheet_id) {
     }
 }
 
-void move_mouse(SHEET_INFO *sht, UINT16* sheet_id, int px, int py) {
+void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py)
+{
     setBX(sht, sheet_id, px);
     setBY(sht, sheet_id, py);
 }

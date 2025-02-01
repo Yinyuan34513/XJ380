@@ -1,19 +1,23 @@
 #include "../include/include.h"
 #include "../include/efi.h"
 #include "./build_settings.h"
-#define NULL        0
+#define NULL 0
 const FrameBufferConfig *fbc_addr;
 extern struct keyboard_buf p_mouse;
-static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, UINT64 n) {
+static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, UINT64 n)
+{
   char *s = buf + len;
-  *--s    = '\0';
-  if (n == 0) return (*--s = '0', s);
+  *--s = '\0';
+  if (n == 0)
+    return (*--s = '0', s);
   for (; n; n >>= 4)
     *--s = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"[n & 15];
   return s;
 }
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig) {
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
+{
+  __asm__ __volatile__("movq %0, %%rsp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
   fbc_addr = &fbc;
   disable_intr();
   init_gdt();
@@ -23,13 +27,18 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   EFI_TIME time;
   EFI_TIME_CAPABILITIES time_capab;
-  
+
   init_MemoryManager(fbc, BootConfig);
+
+  SMP_MANAGER.ap_startup(BootConfig->MADT);
+
+  schedule_init();
+  init_task_manager();
 
   UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
   UINT16 dock_sheet_id = 1145;
   UINT16 mouse_sheet_id = 1145;
-  SHEET_INFO          shtinf;
+  SHEET_INFO shtinf;
   init_sheet(fbc, &shtinf);
 
   enable_intr();
@@ -45,100 +54,103 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   // DEBUG
 #if BUILD_EDITION == DEBUG_VERSION
-    PrintString(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 40, "X:", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 24, "Y:", WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 40, shtinf.scrx, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 24, shtinf.scry, WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
-    //PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
-    PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BootConfig->MemoryMap.MapKey, WHITE);
-    // 别问为什么这么多-40，问就是因为改起来太麻烦
-    PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
-    draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 472, 320, WHITE);
-    draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 472, 320, BLACK);
-    draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 472, 320, XINGJI_BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 472, 320, XINGJI_YELLOW);
-    draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 472, 320, WIN_BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 472, 320, GRAY);
-    draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 472, 320, BGRAY);
-    draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 472, 320, PURPLE);
-    draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 472, 320, PINK);
-    draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 472, 320, RED);
-    draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 472, 320, CHINA_RED);
-    draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 472, 320, GOLD);
-    draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 472, 320, GREEN);
-    draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 472, 320, LIGHT_GREEN);
-    draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 472, 320, BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 472, 320, SKY_BLUE);
+  PrintString(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 40, "X:", WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 64, fbc.vertical_resolution - 24, "Y:", WHITE);
+  PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 40, shtinf.scrx, WHITE);
+  PrintDec(&shtinf, &desktop_sheet_id, fbc.horizontal_resolution - 48, fbc.vertical_resolution - 24, shtinf.scry, WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
+  // PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
+  PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BootConfig->MemoryMap.MapKey, WHITE);
+  // 别问为什么这么多-40，问就是因为改起来太麻烦
+  PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
+  draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 472, 320, WHITE);
+  draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 472, 320, BLACK);
+  draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 472, 320, XINGJI_BLUE);
+  draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 472, 320, XINGJI_YELLOW);
+  draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 472, 320, WIN_BLUE);
+  draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 472, 320, GRAY);
+  draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 472, 320, BGRAY);
+  draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 472, 320, PURPLE);
+  draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 472, 320, PINK);
+  draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 472, 320, RED);
+  draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 472, 320, CHINA_RED);
+  draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 472, 320, GOLD);
+  draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 472, 320, GREEN);
+  draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 472, 320, LIGHT_GREEN);
+  draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 472, 320, BLUE);
+  draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 472, 320, SKY_BLUE);
 
-    PrintString(&shtinf, &desktop_sheet_id, 8, 332, "MemoryMapTypeSheet", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 348, "0x0: Free", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 364, "0xB: EFI Code & Data", WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 332, "MemoryMapTypeSheet", WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 348, "0x0: Free", WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 364, "0xB: EFI Code & Data", WHITE);
 
-    PrintString(&shtinf, &desktop_sheet_id, 8, 400, "SheetManagerTest", WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (UINT64)desktop_sheet_id, WHITE);
-    //PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
-    
-    PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (UINT64)shtinf.sheet_num, WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 400, "SheetManagerTest", WHITE);
+  PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (UINT64)desktop_sheet_id, WHITE);
+  // PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
 
-    PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
-    //PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
+  PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
+  PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (UINT64)shtinf.sheet_num, WHITE);
 
-    // CPU型号
-    char CPU_Model[48];
-    get_cpu_name(CPU_Model);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 528, "CPU Model:", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
+  PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
+  // PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
+  // CPU型号
+  char CPU_Model[48];
+  get_cpu_name(CPU_Model);
+  PrintString(&shtinf, &desktop_sheet_id, 8, 528, "CPU Model:", WHITE);
+  PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
+
+  draw_rect(&shtinf, &desktop_sheet_id, 440, fbc.vertical_resolution - 70, 480, fbc.vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
 #endif
-  //wsod_debug();
+  // wsod_debug();
 
-	draw_mouse(&shtinf, &mouse_sheet_id);
+  draw_mouse(&shtinf, &mouse_sheet_id);
 
-	refresh_sheet(&shtinf);   // 刷新
+  refresh_sheet(&shtinf); // 刷新
 
-	
-	keyboard_init();
-	write_serial_string("Keyboard Initialize Success.\n");
-	Mouse_init();
-	write_serial_string("Operating System Initialize Success.\n");
-		UINT8 k_input;
-	int tby;
-	int tbx;
-	while (1) {
-		tbx = getBX(&shtinf, &mouse_sheet_id);
-		tby = getBY(&shtinf, &mouse_sheet_id);
-		move_mouse(&shtinf, &mouse_sheet_id, get_mouse_x(), get_mouse_y());
-		refresh_part_sheet(&shtinf, tbx, tby, 
-										tbx + getXsize(&shtinf, &mouse_sheet_id), 
-										tby + getYsize(&shtinf, &mouse_sheet_id));
-		refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id), 
-										getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id), 
-										getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
-		k_input = get_keyboard_input();
-		if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL 
-                        	&& k_input != KEY_CAPS  && k_input != KEY_BACKSPACE) {
-			PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
-			refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16);   // 刷新
-			fontx += 8;
-		} else if (k_input == KEY_ENTER) {
-			fontx = 8;
-			fonty += 16;
-		}
-		if (fontx > 304){
-			fontx = 8;
-			fonty += 16;
-		}
-		SystemTable.RuntimeServices->GetTime(&time, &time_capab);
-		int scdx = fbc.horizontal_resolution * 0.8125;
-		draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
-		PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
-		PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
-		PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
-		refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
+  keyboard_init();
+  write_serial_string("Keyboard Initialize Success.\n");
+  Mouse_init();
+  write_serial_string("Operating System Initialize Success.\n");
+  UINT8 k_input;
+  int tby;
+  int tbx;
+  while (1)
+  {
+    tbx = getBX(&shtinf, &mouse_sheet_id);
+    tby = getBY(&shtinf, &mouse_sheet_id);
+    move_mouse(&shtinf, &mouse_sheet_id, get_mouse_x(), get_mouse_y());
+    refresh_part_sheet(&shtinf, tbx, tby,
+                       tbx + getXsize(&shtinf, &mouse_sheet_id),
+                       tby + getYsize(&shtinf, &mouse_sheet_id));
+    refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
+                       getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
+                       getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
+    k_input = get_keyboard_input();
+    if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
+    {
+      PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
+      refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
+      fontx += 8;
+    }
+    else if (k_input == KEY_ENTER)
+    {
+      fontx = 8;
+      fonty += 16;
+    }
+    if (fontx > 304)
+    {
+      fontx = 8;
+      fonty += 16;
+    }
+    SystemTable.RuntimeServices->GetTime(&time, &time_capab);
+    int scdx = fbc.horizontal_resolution * 0.8125;
+    draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
+    PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
+    PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
+    PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
+    refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
   }
   // 按理来说不可能到这儿
 }

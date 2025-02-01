@@ -2,7 +2,7 @@
 
 /**
  * @brief 初始化8259A中断控制器
- * 
+ *
  */
 void init_8259A()
 {
@@ -24,7 +24,7 @@ void init_8259A()
 
 /**
  * @brief 禁用8259A中断控制器
- * 
+ *
  */
 void disable_8259A()
 {
