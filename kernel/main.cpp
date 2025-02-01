@@ -27,6 +27,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   ST = &SystemTable;
   BC = BootConfig;
 
+  init_serial();
+
   init_gdt();
   init_idt();
   ltr(GDT_TYPE_TSS);

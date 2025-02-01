@@ -82,11 +82,11 @@ for %%f in (%CPP_FILES%) do (
   set /a counter+=1
 )
 
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -z norelro -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kallsyms\kallsyms.c -o .\out\kallsyms
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-nm.exe -n .\out\kernel.elf | .\out\kallsyms > .\out\kallsyms.S
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe -O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -c .\out\kallsyms.S -o .\out\kallsyms.o
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z muldefs -e KernelMain -z norelro -T linker.ld --static -o .\out\kernel.elf out\*.o .\font\hankaku.o .\out\kallsyms.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z muldefs -e KernelMain -T linker.ld --static -o .\out\kernel.elf out\*.o .\font\hankaku.o .\out\kallsyms.o
 
 powershell -Command "(Get-Content out\compile_commands.json) -replace '},$', '}' | Set-Content out\compile_commands.json"
 echo ] >>out\compile_commands.json

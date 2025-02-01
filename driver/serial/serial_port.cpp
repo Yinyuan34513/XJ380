@@ -1,9 +1,13 @@
 #include "../../include/include.h"
 
+spinlock_t serial_lock;
+
 #define PORT 0x3f8 // COM1
 
 int init_serial()
 {
+	spin_init(&serial_lock);
+
 	outb(PORT + 1, 0x00); // Disable all interrupts
 	outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
 	outb(PORT + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
@@ -42,10 +46,12 @@ void write_serial(char a)
 
 void write_serial_string(const char *str)
 {
+	spin_lock(&serial_lock);
 	while (*str)
 	{
 		write_serial(*str++);
 	}
+	spin_unlock(&serial_lock);
 }
 
 void write_serial_dec(unsigned long long dec)

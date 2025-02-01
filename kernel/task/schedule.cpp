@@ -51,6 +51,8 @@ void insert_task_queue(struct task_struct *tsk)
 
 void schedule()
 {
+    disable_intr();
+
     spin_lock(&task_schedule_lock);
 
     struct task_struct *tsk = NULL;

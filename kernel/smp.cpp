@@ -91,6 +91,10 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     ltr(tr);
 
+    write_serial_string("APU ");
+    write_serial_dec(cpu_id);
+    write_serial_string(" load GDT & IDT done\n");
+
     current_task->cpu_id = cpu_id;
     list_init(&current_task->list);
     current_task->mm = &init_mm;
@@ -123,6 +127,10 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     init_task[cpu_id] = current_task;
     insert_task_queue(current_task);
 
+    write_serial_string("APU ");
+    write_serial_dec(cpu_id);
+    write_serial_string(" set current_task done\n");
+
     UINT64 ia32_apic_base = rdmsr(0x1b);
     ia32_apic_base |= 1 << 11;
     if (ApicInfo.x2Apic)
@@ -133,10 +141,18 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     init_lApic();
 
+    write_serial_string("APU ");
+    write_serial_dec(cpu_id);
+    write_serial_string(" init_lApic done\n");
+
     while (!TASK_INITIALIZED)
     {
         __asm__ __volatile__("pause");
     }
+
+    write_serial_string("APU ");
+    write_serial_dec(cpu_id);
+    write_serial_string(" ready to schedule\n");
 
     enable_intr();
 
