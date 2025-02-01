@@ -6,8 +6,8 @@ mkdir out
 mkdir esp\EFI\BOOT
 
 set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions -fno-rtti
-set C_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar
-set CPP_FLAGS=-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar
+set C_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c11 -fshort-wchar
+set CPP_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar
 
 set ASM_FILES=
 for /r kernel %%i in (*.S) do (

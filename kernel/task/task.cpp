@@ -23,7 +23,7 @@ uint64_t idle_entry(uint64_t arg)
 {
     while (1)
     {
-        __asm__ __volatile__("sti\n\thlt\n\t");
+        __asm__ __volatile__("sti\n\thlt");
     }
 }
 
@@ -33,6 +33,11 @@ uint64_t init_kernel_thread(uint64_t arg)
     write_serial_dec(arg);
     write_serial_string(".\n");
 
+    keyboard_init();
+    write_serial_string("Keyboard Initialize Success.\n");
+    Mouse_init();
+    write_serial_string("Mouse Initialize Success.\n");
+
     init_vdisk();
     init_pci();
     write_serial_string("PCI initialized.\n");
@@ -40,9 +45,11 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_ahci();
     write_serial_string("AHCI initialized.\n");
 
+    write_serial_string("Operating System Initialize Success.\n");
+
     while (1)
     {
-        __asm__ __volatile__("sti\n\thlt\n\t");
+        __asm__ __volatile__("sti\n\thlt");
     }
 }
 
@@ -129,11 +136,6 @@ uint64_t desktop_flusher(uint64_t arg)
     draw_mouse(&shtinf, &mouse_sheet_id);
 
     refresh_sheet(&shtinf); // 刷新
-
-    keyboard_init();
-    write_serial_string("Keyboard Initialize Success.\n");
-    Mouse_init();
-    write_serial_string("Operating System Initialize Success.\n");
 
     EFI_TIME time;
     EFI_TIME_CAPABILITIES time_capab;

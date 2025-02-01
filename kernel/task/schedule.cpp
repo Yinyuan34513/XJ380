@@ -101,6 +101,8 @@ void schedule()
             }
     }
 
+    enable_intr();
+
     spin_unlock(&task_schedule_lock);
 }
 

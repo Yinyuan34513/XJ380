@@ -4,8 +4,8 @@ mkdir -p ./out
 mkdir -p ./esp/EFI/BOOT
 
 ASM_FLAGS="-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions"
-C_FLAGS="-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc"
-CPP_FLAGS="-O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit"
+C_FLAGS="-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc"
+CPP_FLAGS="-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit"
 
 ASM_FILES=$(find ./kernel ./driver ./graphics ./font ./lib -name "*.S")
 C_FILES=$(find ./kernel ./driver ./graphics ./font ./lib -name "*.c")
@@ -46,7 +46,7 @@ done
 x86_64-linux-gnu-ld -z muldefs -e KernelMain -T linker.ld --static -o ./out/kernel.elf $(find ./out -name "*.o") ./font/hankaku.o
 gcc kallsyms/kallsyms.c -o ./out/kallsyms
 x86_64-linux-gnu-nm -n ./out/kernel.elf | ./out/kallsyms >./out/kallsyms.S
-x86_64-linux-gnu-gcc -O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -c ./out/kallsyms.S -o ./out/kallsyms.o
+x86_64-linux-gnu-gcc $C_FLAGS -c ./out/kallsyms.S -o ./out/kallsyms.o
 x86_64-linux-gnu-ld -z muldefs -e KernelMain -T linker.ld --static -o ./out/kernel.elf $(find ./out -name "*.o") ./font/hankaku.o ./out/kallsyms.o
 
 truncate -s-2 out/compile_commands.json
