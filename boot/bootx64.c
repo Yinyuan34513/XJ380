@@ -236,6 +236,65 @@ UINTN CompareGUID(EFI_GUID *src, EFI_GUID *obj)
   return 0;
 }
 
+#define PAGE_TABLE_MAPPED_ADDRESS 0xFFFFFFFFFFFFF000
+
+void CreateAndMapNewPageTable()
+{
+  uint64_t new_page_table_addr;
+  BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &new_page_table_addr);
+
+  uint64_t old_page_table_addr;
+  __asm__ __volatile__("mov %%cr3, %0"
+                       : "=r"(old_page_table_addr));
+
+  xmemcpy((void *)new_page_table_addr, (void *)old_page_table_addr, PAGE_SIZE);
+
+  // Map page_table to PAGE_TABLE_MAPPED_ADDRESS
+  uint64_t *pml4 = (uint64_t *)new_page_table_addr;
+  uint64_t pml4_id = (PAGE_TABLE_MAPPED_ADDRESS >> 39) & 0x1FF;
+  if (pml4[pml4_id] == 0)
+  {
+    uint64_t pml4_addr;
+    BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pml4_addr);
+    xmemset((void *)pml4_addr, 0, PAGE_SIZE);
+    pml4[pml4_id] = pml4_addr | 0x3;
+  }
+  uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
+  uint64_t pdpt_id = (PAGE_TABLE_MAPPED_ADDRESS >> 30) & 0x1FF;
+  if (pdpt[pdpt_id] == 0)
+  {
+    uint64_t pdpt_addr;
+    BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pdpt_addr);
+    xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
+    pdpt[pdpt_id] = pdpt_addr | 0x3;
+  }
+  uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
+  uint64_t pd_id = (PAGE_TABLE_MAPPED_ADDRESS >> 21) & 0x1FF;
+  if (pd[pd_id] == 0)
+  {
+    uint64_t pd_addr;
+    BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pd_addr);
+    xmemset((void *)pd_addr, 0, PAGE_SIZE);
+    pd[pd_id] = pd_addr | 0x3;
+  }
+  uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
+  uint64_t pt_id = (PAGE_TABLE_MAPPED_ADDRESS >> 12) & 0x1FF;
+  if (pt[pt_id] == 0)
+  {
+    pt[pt_id] = new_page_table_addr | 0x3;
+  }
+  else
+  {
+    write_serial_string(L"Failed to map page table to PAGE_TABLE_MAPPED_ADDRESS");
+    while (1)
+      __asm__ __volatile__("hlt");
+  }
+
+  __asm__ __volatile__("mov %0, %%cr3"
+                       :
+                       : "r"(new_page_table_addr));
+}
+
 typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, struct BOOT_CONFIG *);
 
@@ -247,6 +306,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   write_serial_string("OS Version: BuildVersion\n");
   efi_init(ImageHandle, SystemTable);
   write_serial_string("EFI Initialize Success.\n");
+
+  write_serial_string("Creating new page table\n");
+  CreateAndMapNewPageTable();
+  write_serial_string("New page table created\n");
 
   ST->ConOut->ClearScreen(ST->ConOut);
 
