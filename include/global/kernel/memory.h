@@ -295,4 +295,14 @@ extern "C"
 }
 #endif
 
+static inline uint64_t convert_physical_to_virtual(uint64_t physical_addr)
+{
+  return physical_addr + 0xFFFF800000000000;
+}
+
+static inline uint64_t convert_virtual_to_physical(uint64_t virtual_addr)
+{
+  return virtual_addr - 0xFFFF800000000000;
+}
+
 #endif

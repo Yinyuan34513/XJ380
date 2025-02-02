@@ -28,12 +28,12 @@ UINT8 check_apic()
 
 static inline void mmio_write32(UINT32 *addr, UINT32 data)
 {
-    *(volatile UINT32 *)addr = data;
+    *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr) = data;
 }
 
 static inline UINT32 mmio_read32(void *addr)
 {
-    return *(volatile UINT32 *)addr;
+    return *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr);
 }
 
 static inline uint64_t rdmsr(UINT32 msr)

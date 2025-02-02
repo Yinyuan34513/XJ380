@@ -1,16 +1,18 @@
 #include "../include/backtrace.h"
 
-extern unsigned long kallsyms_addresses[] __attribute__((weak));
+extern uint64_t kallsyms_addresses[] __attribute__((weak));
 extern long kallsyms_syms_num __attribute__((weak));
 extern long kallsyms_index[] __attribute__((weak));
 extern char *kallsyms_names __attribute__((weak));
 
-int lookup_kallsyms(unsigned long address)
+extern uint8_t _kernel_start[];
+
+int lookup_kallsyms(uint64_t address)
 {
     int index = 0;
     char *string = (char *)&kallsyms_names;
     for (index = 0; index < kallsyms_syms_num; index++)
-        if (address > kallsyms_addresses[index] && address <= kallsyms_addresses[index + 1] && address >= 0x100000)
+        if (address > kallsyms_addresses[index] && address <= kallsyms_addresses[index + 1] && address >= (uint64_t)&_kernel_start)
             break;
     if (index < kallsyms_syms_num)
     {
@@ -31,16 +33,32 @@ int lookup_kallsyms(unsigned long address)
 
 void backtrace(struct X64_REGS *regs)
 {
-    unsigned long *rbp = (unsigned long *)regs->rbp;
-    unsigned long ret_address = *(rbp + 1);
+    uint64_t *rbp = (uint64_t *)regs->rbp;
+    uint64_t ret_address = *(rbp + 1);
     int i = 0;
+
+    write_serial_string("Kernel backtrace:\n");
 
     lookup_kallsyms(regs->rip);
     for (i = 0; i < 32; i++)
     {
         if (lookup_kallsyms(ret_address))
             break;
-        rbp = (unsigned long *)*rbp;
+
+        if ((uint64_t)rbp < regs->rsp)
+            break;
+
+        if (rbp == nullptr)
+        {
+            break;
+        }
+        rbp = (uint64_t *)*rbp;
+        if (rbp == nullptr)
+        {
+            break;
+        }
         ret_address = *(rbp + 1);
     }
+
+    write_serial_string("Kernel backtrace end\n");
 }

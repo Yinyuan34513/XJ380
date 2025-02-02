@@ -5,7 +5,9 @@
 #define _GOP_HPP_
 
 #include "../global/stdint.h"
+#include "../global/kernel/memory.h"
 #include "../cinc/fbc.h"
+
 struct PixelColor
 {
     uint8_t r;
@@ -23,7 +25,7 @@ public:
 protected:
     uint8_t *PixelAt(int x, int y)
     {
-        return config.frame_buffer + 4 * (config.pixels_per_scan_line * y + x);
+        return (uint8_t *)config.frame_buffer + 4 * (config.pixels_per_scan_line * y + x);
     }
 
 private:

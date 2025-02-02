@@ -13,7 +13,7 @@ UINT64 nanoTime()
 
 void init_hpet(UINT64 hpet_ptr)
 {
-    info = (HpetInfo *)((Hpet *)hpet_ptr)->base_address.address;
+    info = (HpetInfo *)convert_physical_to_virtual(((Hpet *)hpet_ptr)->base_address.address);
     UINT32 counterClockPeriod = info->generalCapabilities >> 32;
     hpetPeriod = counterClockPeriod / 1000000;
     info->generalConfiguration |= 1;

@@ -1,7 +1,6 @@
 #include "../../include/include.h"
 
-__attribute__((aligned(0x10)))
-IDT_GATE_TYPE idt_gate[IDT_SIZE];
+IDT_GATE_TYPE idt_gate[IDT_SIZE] __attribute__((__aligned__(PAGE_SIZE)));
 IDTR_TYPE idt_ptr;
 
 void init_8259A();

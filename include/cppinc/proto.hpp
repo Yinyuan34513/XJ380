@@ -57,6 +57,8 @@ UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 char *Dec2Char(unsigned long long dec);
 char *Hex2Char(unsigned long long hex);
+char *strstr(const char *haystack, const char *needle);
+int str2float(const char *str, float *result);
 
 /*
  *   driver/*
@@ -94,6 +96,8 @@ extern const FrameBufferConfig *fbc_addr;
 // kernel/wsod.cpp
 // 异常处理
 extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_nmi(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);

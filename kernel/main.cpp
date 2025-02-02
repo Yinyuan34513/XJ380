@@ -1,6 +1,8 @@
+#include "./alloc/page.h"
 #include "../include/include.h"
 #include "../include/efi.h"
 #include "./build_settings.h"
+
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE *ST;
@@ -20,24 +22,40 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
 {
-  __asm__ __volatile__("movq %0, %%rsp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
-  disable_intr();
-
   fbc_addr = &fbc;
   ST = &SystemTable;
-  BC = BootConfig;
+  BC = (BOOT_CONFIG *)convert_physical_to_virtual((UINT64)BootConfig);
+
+  disable_intr();
+
+  __asm__ __volatile__("movq %0, %%rbp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
+  __asm__ __volatile__("movq %0, %%rsp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
+
+  init_tss[current_task->cpu_id] = INIT_TSS;
 
   init_serial();
 
   init_gdt();
   init_idt();
   ltr(GDT_TYPE_TSS);
-  init_hpet(BootConfig->HPET);
-  init_apic(BootConfig->MADT);
 
-  init_MemoryManager(fbc, BootConfig);
+  init_MemoryManager(fbc, BC);
 
-  SMP_MANAGER.ap_startup(BootConfig->MADT);
+  uint8_t *ptr = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE)) + STACK_SIZE;
+  ((struct task_struct *)(ptr - STACK_SIZE))->cpu_id = 0;
+
+  init_tss[current_task->cpu_id].ist1 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist2 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist3 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist4 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist5 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist6 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist7 = (unsigned long)ptr;
+
+  init_hpet(convert_physical_to_virtual((uint64_t)BC->HPET));
+  init_apic(convert_physical_to_virtual((uint64_t)BC->MADT));
+
+  SMP_MANAGER.ap_startup(convert_physical_to_virtual((uint64_t)BC->MADT));
 
   schedule_init();
   init_task_manager();

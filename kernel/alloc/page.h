@@ -18,6 +18,9 @@ public:
     void *alloc_page();
     void free_page(void *page);
 
+    void *alloc_pages(size_t page_count);
+    void free_pages(void *page, size_t page_count);
+
 private:
     void set_bit(uint64_t index);
     void clear_bit(uint64_t index);

@@ -418,7 +418,7 @@ void init_ahci()
     else
         write_serial_string("Find Serial ATA Controller.\n");
 
-    hba_mem = (HBA_MEM *)read_bar_n(device, 5);
+    hba_mem = (HBA_MEM *)convert_physical_to_virtual(read_bar_n(device, 5));
 
     // 允许产生中断
     uint32_t conf = pci_read_command_status(device->bus, device->slot, device->func);

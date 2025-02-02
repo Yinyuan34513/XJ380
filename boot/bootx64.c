@@ -249,6 +249,12 @@ void CreateAndMapNewPageTable()
 
   xmemcpy((void *)new_page_table_addr, (void *)old_page_table_addr, PAGE_SIZE);
 
+  uint64_t *pml4 = (uint64_t *)new_page_table_addr;
+  uint64_t *pdp = (uint64_t *)(pml4[0] & ~0xFFF);
+  pml4[0] = (uint64_t)pdp | 0x7;
+  pml4[256] = (uint64_t)pdp | 0x3;
+  pml4[511] = new_page_table_addr | 0x3;
+
   __asm__ __volatile__("mov %0, %%cr3"
                        :
                        : "r"(new_page_table_addr));
@@ -332,7 +338,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   SwitchToResolution(1280, 720); // 切换分辨率
 
   struct FrameBufferConfig config = {
-      (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
+      (UINT8 *)(GOP->Mode->FrameBufferBase + 0xFFFF800000000000), GOP->Mode->Info->PixelsPerScanLine,
       GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution};
 
   switch (GOP->Mode->Info->PixelFormat)
@@ -354,7 +360,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   }
   write_serial_string("Vedio Initialize Success.\n");
 
-  BOOT_CONFIG BootConfig; // 内核传参
+  BOOT_CONFIG *BootConfig;
+  BootConfig = malloc(sizeof(BOOT_CONFIG));
+  xmemset(BootConfig, 0, sizeof(BOOT_CONFIG));
 
   // 获取RSDP
   EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;
@@ -403,14 +411,14 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
           {
             write_serial_string("MADT Found Success.\n");
             // MADT!!!
-            BootConfig.MADT = (UINT64)(AcpiSdtPointer);
+            BootConfig->MADT = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
           }
           else if (!part_strcmp(AcpiSdtPointer->sign, "HPET", 4))
           {
             write_serial_string("HPET Found Success.\n");
             // HPET!!!
-            BootConfig.HPET = (UINT64)(AcpiSdtPointer);
+            BootConfig->HPET = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
           }
           if (ObjTableWasFound == 2)
@@ -431,7 +439,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1)
       ;
   }
-  if (BootConfig.MADT == 0)
+  if (BootConfig->MADT == 0)
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
@@ -442,18 +450,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   }
 
   // 获取memory map
-  BootConfig.MemoryMap.MapSize = 4096;
-  BootConfig.MemoryMap.Buffer = NULL;
-  BootConfig.MemoryMap.MapKey = 0;
-  BootConfig.MemoryMap.DescriptorSize = 0;
-  BootConfig.MemoryMap.DescriptorVersion = 0;
+  BootConfig->MemoryMap.MapSize = 4096;
+  BootConfig->MemoryMap.Buffer = NULL;
+  BootConfig->MemoryMap.MapKey = 0;
+  BootConfig->MemoryMap.DescriptorSize = 0;
+  BootConfig->MemoryMap.DescriptorVersion = 0;
 
-  GetMMP(&BootConfig.MemoryMap);
+  GetMMP(&BootConfig->MemoryMap);
 
   EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 
   // say goodbye~
-  ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig.MemoryMap.MapKey);
+  ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig->MemoryMap.MapKey);
 
   if (EFI_ERROR(ExitBSStatus))
   {
@@ -466,7 +474,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   }
 
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable, &BootConfig); // 滚进去！
+  kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig); // 滚进去！
 
   // 此处=kernel.elf
 

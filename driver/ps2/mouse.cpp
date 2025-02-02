@@ -2,8 +2,8 @@
 #include "../../graphics/mouse.hpp"
 
 mouse_dec ms_dec;
-int mouse_x;
-int mouse_y;
+int mouse_x = 0;
+int mouse_y = 0;
 
 extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 {
@@ -105,18 +105,15 @@ void Mouse_init()
 {
     wait_KB_write();
     outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
-    for (int i = 0; i < 1000; i++)
-        for (int j = 0; j < 1000; j++)
-            __asm__ volatile("nop");
+
+    delay_ms(100);
 
     wait_KB_write();
     outb(PORT_KB_CMD, KB_SEND2MOUSE);
     wait_KB_write();
     outb(PORT_KB_DATA, MOUSE_EN);
 
-    for (int i = 0; i < 1000; i++)
-        for (int j = 0; j < 1000; j++)
-            __asm__ volatile("nop");
+    delay_ms(100);
 
     wait_KB_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);

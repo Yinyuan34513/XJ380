@@ -5,9 +5,9 @@ rmdir /s /q esp
 mkdir out
 mkdir esp\EFI\BOOT
 
-set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions -fno-rtti
-set C_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c11 -fshort-wchar
-set CPP_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar
+set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions -mcmodel=large
+set C_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -mcmodel=large
+set CPP_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mcmodel=large
 
 set ASM_FILES=
 for /r kernel %%i in (*.S) do (
@@ -82,11 +82,12 @@ for %%f in (%CPP_FILES%) do (
   set /a counter+=1
 )
 
-..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -e KernelMain -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z muldefs -e KernelMain -T linker.ld --static -o out\kernel.elf out\*.o font\hankaku.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe kallsyms\kallsyms.c -o .\out\kallsyms
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-nm.exe -n .\out\kernel.elf | .\out\kallsyms > .\out\kallsyms.S
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-gcc.exe -O0 -Wall -g -ffreestanding -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -c .\out\kallsyms.S -o .\out\kallsyms.o
 ..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-ld.exe -z muldefs -e KernelMain -T linker.ld --static -o .\out\kernel.elf out\*.o .\font\hankaku.o .\out\kallsyms.o
+..\tools\x86_64-elf-tools-windows\bin\x86_64-elf-objdump -x -d -s ./out/kernel.elf > ./out/kernel.txt
 
 powershell -Command "(Get-Content out\compile_commands.json) -replace '},$', '}' | Set-Content out\compile_commands.json"
 echo ] >>out\compile_commands.json

@@ -7,8 +7,8 @@
 #define CLONE_FILES (1 << 1)
 #define CLONE_SIGNAL (1 << 2)
 
-// stack size 4K
-#define STACK_SIZE 4096
+// stack size 32K
+#define STACK_SIZE 32768UL
 
 #define TASK_RUNNING (1 << 0)
 #define TASK_INTERRUPTIBLE (1 << 1)
@@ -134,10 +134,6 @@ struct task_struct *get_current()
 }
 
 #define current_task get_current()
-
-#define GET_CURRENT        \
-    "movq	%rsp,	%rbx	\n\t" \
-    "andq	$-32768,%rbx	\n\t"
 
 static inline void switch_mm(struct task_struct *prev, struct task_struct *next)
 {

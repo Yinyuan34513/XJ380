@@ -1,4 +1,5 @@
 #include "../include/include.h"
+spinlock_t fb_print_lock;
 auto operator new(size_t size, void *ptr) -> void *;
 auto operator new[](size_t size, void *ptr) -> void *;
 auto operator delete(void *ptr, size_t size) -> void;
@@ -148,10 +149,12 @@ void PrintFont(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char ch, const S
 
 void PrintString(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color)
 {
+    spin_lock(&fb_print_lock);
     for (int i = 0; s[i]; i++)
     {                                                        // 遍历字符串每一个字符，看看是不是空字符
         PrintFont(sht, sheet_id, x + 8 * i, y, s[i], color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
     }
+    spin_unlock(&fb_print_lock);
 }
 
 void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)

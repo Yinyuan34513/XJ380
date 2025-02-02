@@ -12,6 +12,7 @@
 #include "./global/fifo8.h"
 #include "./global/spinlock.h"
 #include "./global/graphics/global_color.h"
+#include "./global/delay.h"
 #include "./global/kernel/memory.h"
 #include "./global/kernel/mmap.h"
 #include "./global/kernel/pctable/gdt.h"

@@ -18,14 +18,6 @@ extern uint8_t _APU_boot_end;
 
 SMP SMP_MANAGER;
 
-void delay()
-{
-    for (int i = 0; i < 1000000; i++)
-    {
-        __asm__ __volatile__("nop");
-    }
-}
-
 // 发送IPI的函数
 void send_ipi(UINT32 apic_id, UINT32 command)
 {
@@ -40,7 +32,7 @@ void send_init_and_startup_ipi(UINT32 apic_id)
 {
     // 发送INIT IPI
     send_ipi(apic_id, IPI_INIT);
-    delay();
+    delay_ms(100);
 
     // 发送STARTUP IPI
     send_ipi(apic_id, IPI_STARTUP | (APU_BASE_ADDR >> 12)); // 0x08是启动代码的段选择符
@@ -68,10 +60,7 @@ extern bool TASK_INITIALIZED;
 
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
-    disable_intr();
-
     __asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
-    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 
     __asm__ volatile(
         "movq %%rax, %%ds \n\t"
@@ -88,6 +77,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
         : [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
           [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
         :);
+
+    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 
     ltr(tr);
 
@@ -107,7 +98,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     current_task->thread = (struct thread_struct *)(current_task + 1);
     xmemset(current_task->thread, 0, sizeof(struct thread_struct));
-    uint64_t stack_start = (uint64_t)PAGE_ALLOC.alloc_page() + STACK_SIZE;
+    uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
     current_task->thread->rsp0 = stack_start;
     current_task->thread->rsp = stack_start - sizeof(struct X64_REGS);
     struct X64_REGS regs;
@@ -125,11 +116,12 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     init_task_union.task.next = current_task;
     current_task->parent = &init_task_union.task;
     init_task[cpu_id] = current_task;
-    insert_task_queue(current_task);
 
     write_serial_string("APU ");
     write_serial_dec(cpu_id);
     write_serial_string(" set current_task done\n");
+
+    disable_intr();
 
     UINT64 ia32_apic_base = rdmsr(0x1b);
     ia32_apic_base |= 1 << 11;
@@ -191,11 +183,11 @@ void SMP::ap_startup(uint64_t madt_addr)
         current += (UINT64)header->length;
     }
 
-    xmemcpy((void *)APU_BASE_ADDR, &_APU_boot_start, (UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start);
+    xmemcpy((void *)convert_physical_to_virtual(APU_BASE_ADDR), &_APU_boot_start, (UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start);
 
     uint64_t cr3;
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
-    uint64_t *page_table = (uint64_t *)(APU_BASE_ADDR + 8);
+    uint64_t *page_table = (uint64_t *)convert_physical_to_virtual(APU_BASE_ADDR + 8);
     uint64_t *ap_entry = page_table + 1;
     uint64_t *rsp = ap_entry + 1;
     uint64_t *cpu_id = rsp + 1;
@@ -204,29 +196,30 @@ void SMP::ap_startup(uint64_t madt_addr)
 
     *page_table = cr3;
     *ap_entry = (uint64_t)apu_entry;
-    *ready = 0;
+
+    uint64_t tr_value = GDT_TYPE_TSS;
 
     for (int i = 0; i < this->apu_count; i++)
     {
-        *ready = 0;
-        if (this->apu_list[i]->local_apic_id == (lapic_read(LAPIC_REG_ID) >> 24))
-        {
+        if (this->apu_list[i]->local_apic_id == lapic_id())
             continue;
-        }
 
         write_serial_string("Initializing CPU ");
         write_serial_dec(this->apu_list[i]->local_apic_id);
         write_serial_string("\n");
 
+        *ready = 0;
         *cpu_id = i;
-        uint64_t tr_value = GDT_TYPE_TSS + i * 2;
+        tr_value += 2;
         *tr = tr_value;
-        uint64_t stack_start = (uint64_t)PAGE_ALLOC.alloc_page() + STACK_SIZE;
+        init_tss[i] = INIT_TSS;
+        gdt_set_system_gate(tr_value, (UINT64)&init_tss[i], sizeof(init_tss[i]) - 1, 0x89, 0xAF);
+        uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
         *rsp = stack_start;
         init_tss[i].rsp0 = stack_start;
         init_tss[i].rsp1 = stack_start;
         init_tss[i].rsp2 = stack_start;
-        uint64_t ist_stack_start = (uint64_t)PAGE_ALLOC.alloc_page() + STACK_SIZE;
+        uint64_t ist_stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
         init_tss[i].ist1 = ist_stack_start;
         init_tss[i].ist2 = ist_stack_start;
         init_tss[i].ist3 = ist_stack_start;
@@ -235,18 +228,19 @@ void SMP::ap_startup(uint64_t madt_addr)
         init_tss[i].ist6 = ist_stack_start;
         init_tss[i].ist7 = ist_stack_start;
 
-        gdt_set_gate(tr_value, (UINT64)&init_tss[i], sizeof(init_tss[i]) - 1, 0x89, 0xAF);
-
         send_init_and_startup_ipi(this->apu_list[i]->local_apic_id);
 
         while (*ready == 0)
         {
             __asm__ __volatile__("pause");
         }
+
         write_serial_string("CPU ");
         write_serial_dec(this->apu_list[i]->local_apic_id);
         write_serial_string(" initialized\n");
     }
+
+    xmemset((void *)PAGE_TABLE_BASE_ADDR, 0, PAGE_SIZE / 2);
 }
 
 int SMP::ap_count()

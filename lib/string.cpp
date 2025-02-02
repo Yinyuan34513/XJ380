@@ -137,3 +137,133 @@ char *Dec2Char(unsigned long long dec)
     }
     return re;
 }
+
+// 在字符串中查找子串
+char *strstr(const char *haystack, const char *needle)
+{
+    if (!haystack || !needle)
+    {
+        return nullptr;
+    }
+
+    // 空字符串总是匹配
+    if (!*needle)
+    {
+        return (char *)haystack;
+    }
+
+    // 遍历主字符串
+    for (const char *h = haystack; *h; h++)
+    {
+        const char *n = needle;
+        const char *h_ahead = h;
+
+        // 尝试匹配子串
+        while (*n && *h_ahead && *n == *h_ahead)
+        {
+            n++;
+            h_ahead++;
+        }
+
+        // 如果子串完全匹配
+        if (!*n)
+        {
+            return (char *)h;
+        }
+    }
+
+    return nullptr;
+}
+
+// 字符串转浮点数
+int str2float(const char *str, float *result)
+{
+    if (!str || !result)
+    {
+        return 0;
+    }
+
+    // 跳过空白字符
+    while (*str == ' ' || *str == '\t')
+    {
+        str++;
+    }
+
+    // 处理符号
+    int sign = 1;
+    if (*str == '-')
+    {
+        sign = -1;
+        str++;
+    }
+    else if (*str == '+')
+    {
+        str++;
+    }
+
+    // 处理整数部分
+    float value = 0.0f;
+    bool has_digits = false;
+
+    while (*str >= '0' && *str <= '9')
+    {
+        value = value * 10.0f + (*str - '0');
+        str++;
+        has_digits = true;
+    }
+
+    // 处理小数部分
+    if (*str == '.')
+    {
+        str++;
+        float fraction = 0.1f;
+
+        while (*str >= '0' && *str <= '9')
+        {
+            value += (*str - '0') * fraction;
+            fraction *= 0.1f;
+            str++;
+            has_digits = true;
+        }
+    }
+
+    // 处理科学计数法
+    if ((*str == 'e' || *str == 'E') && has_digits)
+    {
+        str++;
+        int exp_sign = 1;
+
+        if (*str == '-')
+        {
+            exp_sign = -1;
+            str++;
+        }
+        else if (*str == '+')
+        {
+            str++;
+        }
+
+        int exponent = 0;
+        while (*str >= '0' && *str <= '9')
+        {
+            exponent = exponent * 10 + (*str - '0');
+            str++;
+        }
+
+        // 应用指数
+        while (exponent > 0)
+        {
+            value = exp_sign > 0 ? value * 10.0f : value * 0.1f;
+            exponent--;
+        }
+    }
+
+    // 如果没有找到任何有效数字
+    if (!has_digits)
+    {
+        return 0;
+    }
+
+    *result = sign * value;
+    return 1;
+}

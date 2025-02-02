@@ -101,10 +101,9 @@ Err_Code:
 
 // 0 #DE 除法错误
 ENTRY(divide_error)
-    
     pushq $0                                    // 由于#DE不会产生错误码，但是为了保持弹出结构的一致性，故也压入一个错误码0
     pushq %rax                                  // 先将rax入栈
-    leaq wsod_unexpect_intrrupt(%rip), %rax     // 获取中断服务程序的地址
+    leaq wsod_divide_error(%rip), %rax     // 获取中断服务程序的地址
     xchgq %rax, (%rsp)                          // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -155,7 +154,7 @@ ENTRY(bounds)
 ENTRY(undefined_opcode)
     pushq $0
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_undefined_opcode(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 

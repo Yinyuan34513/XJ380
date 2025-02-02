@@ -2,8 +2,8 @@
 #define _CPROTO_HPP_
 
 /*
-*   lib/*
-*/
+ *   lib/*
+ */
 // lib/string.c
 char *strncpy(char *dest, const char *src, UINT64 length);
 char *strcpy(char *dest, const char *src);
@@ -11,11 +11,9 @@ UINT64 strlen(const char *str);
 UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
-
-
 /*
-*   kernel/*
-*/
+ *   kernel/*
+ */
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 
@@ -23,10 +21,9 @@ void init_apic(UINT64 MADT);
  *   driver/*
  */
 
-
 // kernel/cpu/msr.cpp
 void GetMSR(UINT32 msr, UINT32 *lo, UINT32 *hi);
-void SetMSR(UINT32 msr, UINT32  lo, UINT32  hi);
+void SetMSR(UINT32 msr, UINT32 lo, UINT32 hi);
 
 // kernel/asm/common.cpp
 void outb(UINT16 port, UINT8 value);

@@ -17,7 +17,7 @@ union task_union init_task_union __attribute__((__section__(".data.init_task")))
 
 struct task_struct *init_task[MAX_CPU_NUM] = {&init_task_union.task, 0};
 
-struct tss_struct init_tss[MAX_CPU_NUM] = {INIT_TSS};
+struct tss_struct init_tss[MAX_CPU_NUM];
 
 uint64_t idle_entry(uint64_t arg)
 {
@@ -32,11 +32,6 @@ uint64_t init_kernel_thread(uint64_t arg)
     write_serial_string("init task is running,arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
-
-    keyboard_init();
-    write_serial_string("Keyboard Initialize Success.\n");
-    Mouse_init();
-    write_serial_string("Mouse Initialize Success.\n");
 
     init_vdisk();
     init_pci();
@@ -57,13 +52,15 @@ extern const FrameBufferConfig *fbc_addr;
 extern EFI_SYSTEM_TABLE *ST;
 extern BOOT_CONFIG *BC;
 
+extern spinlock_t fb_print_lock;
+
 uint64_t desktop_flusher(uint64_t arg)
 {
     write_serial_string("desktop flusher is running,arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
 
-    EFI_SYSTEM_TABLE *SystemTable = ST;
+    spin_init(&fb_print_lock);
 
     UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
     UINT16 dock_sheet_id = 1145;
@@ -71,27 +68,30 @@ uint64_t desktop_flusher(uint64_t arg)
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
 
-    create_sheet(&shtinf, 0, 0, (*fbc_addr).horizontal_resolution, (*fbc_addr).vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
-    create_sheet(&shtinf, 0, 0, (*fbc_addr).horizontal_resolution, (*fbc_addr).vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
     create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
 
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
+
+    write_serial_string("desktop initialized.\n");
 
     int fontx = 8;
     int fonty = 50;
 
     // DEBUG
 #if BUILD_EDITION == DEBUG_VERSION
-    PrintString(&shtinf, &desktop_sheet_id, (*fbc_addr).horizontal_resolution - 64, (*fbc_addr).vertical_resolution - 40, "X:", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, (*fbc_addr).horizontal_resolution - 64, (*fbc_addr).vertical_resolution - 24, "Y:", WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, (*fbc_addr).horizontal_resolution - 48, (*fbc_addr).vertical_resolution - 40, shtinf.scrx, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, (*fbc_addr).horizontal_resolution - 48, (*fbc_addr).vertical_resolution - 24, shtinf.scry, WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40, "X:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24, "Y:", WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 40, shtinf.scrx, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 24, shtinf.scry, WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
     // PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
     PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BC->MemoryMap.MapKey, WHITE);
     // 别问为什么这么多-40，问就是因为改起来太麻烦
     PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
+
     draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 472, 320, WHITE);
     draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 472, 320, BLACK);
     draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 472, 320, XINGJI_BLUE);
@@ -129,13 +129,18 @@ uint64_t desktop_flusher(uint64_t arg)
     PrintString(&shtinf, &desktop_sheet_id, 8, 528, "CPU Model:", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, (*fbc_addr).vertical_resolution - 70, 480, (*fbc_addr).vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 480, fbc_addr->vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
 #endif
     // wsod_debug();
 
     draw_mouse(&shtinf, &mouse_sheet_id);
 
     refresh_sheet(&shtinf); // 刷新
+
+    keyboard_init();
+    write_serial_string("Keyboard Initialize Success.\n");
+    Mouse_init();
+    write_serial_string("Mouse Initialize Success.\n");
 
     EFI_TIME time;
     EFI_TIME_CAPABILITIES time_capab;
@@ -150,7 +155,9 @@ uint64_t desktop_flusher(uint64_t arg)
 
         tbx = getBX(&shtinf, &mouse_sheet_id);
         tby = getBY(&shtinf, &mouse_sheet_id);
-        move_mouse(&shtinf, &mouse_sheet_id, get_mouse_x(), get_mouse_y());
+        int mouse_x = get_mouse_x();
+        int mouse_y = get_mouse_y();
+        move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
         refresh_part_sheet(&shtinf, tbx, tby,
                            tbx + getXsize(&shtinf, &mouse_sheet_id),
                            tby + getYsize(&shtinf, &mouse_sheet_id));
@@ -175,8 +182,12 @@ uint64_t desktop_flusher(uint64_t arg)
             fonty += 16;
         }
 
-        SystemTable->RuntimeServices->GetTime(&time, &time_capab);
-        int scdx = (*fbc_addr).horizontal_resolution * 0.8125;
+        EFI_STATUS status = ((EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)(ST->RuntimeServices->GetTime)))(&time, &time_capab);
+        if (status != EFI_SUCCESS)
+        {
+            write_serial_string("GetTime failed.\n");
+        }
+        int scdx = fbc_addr->horizontal_resolution * 0.8125;
         draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
         PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
         PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
@@ -196,11 +207,14 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     struct thread_struct *thd = NULL;
     void *p = (void *)NULL;
 
-    p = PAGE_ALLOC.alloc_page();
+    p = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE));
+    if (!p)
+    {
+        spin_unlock(&do_fork_lock);
+        return 0;
+    }
     tsk = (struct task_struct *)p;
-
-    xmemset(tsk, 0, sizeof(*tsk));
-    *tsk = *current_task;
+    xmemcpy(tsk, current_task, sizeof(struct task_struct));
 
     list_init(&tsk->list);
 
@@ -214,7 +228,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     tsk->parent = current_task;
 
     thd = (struct thread_struct *)(tsk + 1);
-    xmemset(thd, 0, sizeof(*thd));
+    xmemset(thd, 0, sizeof(struct thread_struct));
     tsk->thread = thd;
 
     thd->rsp0 = (uint64_t)tsk + STACK_SIZE;
@@ -232,7 +246,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
 
     spin_unlock(&do_fork_lock);
 
-    return 1;
+    return tsk->pid;
 }
 
 extern "C" uint64_t do_exit(uint64_t code)
@@ -244,7 +258,7 @@ extern "C" uint64_t do_exit(uint64_t code)
 int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
 {
     struct X64_REGS regs;
-    xmemset(&regs, 0, sizeof(regs));
+    xmemset(&regs, 0, sizeof(struct X64_REGS));
 
     regs.rbx = (uint64_t)fn;
     regs.rdx = (uint64_t)arg;
@@ -281,16 +295,26 @@ void init_task_manager()
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
     init_mm.pgd = (uint64_t *)cr3;
 
-    init_tss[0].rsp0 = init_thread.rsp0;
+    init_mm.start_code = 0x0;
+    init_mm.end_code = 0x0;
+    init_mm.start_data = 0x0;
+    init_mm.end_data = 0x0;
+    init_mm.start_rodata = 0x0;
+    init_mm.end_rodata = 0x0;
+    init_mm.start_brk = 0x0;
+    init_mm.end_brk = 0x0;
+    init_mm.start_stack = 0x0;
+
+    init_tss[current_task->cpu_id].rsp0 = init_thread.rsp0;
 
     list_init(&init_task_union.task.list);
-
-    kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
-    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;
     init_task_union.task.cpu_id = 0;
+
+    kernel_thread(init_kernel_thread, 100, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     TASK_INITIALIZED = true;
 }

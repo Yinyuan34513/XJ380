@@ -39,7 +39,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 {
   // 初始化
   write_serial_string("Initializing Memory Manager...\n");
-  EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
+  EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
 #if BUILD_EDITION == DEBUG_VERSION
   write_serial_string("MemoryMap:\n");
   for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++)
@@ -56,7 +56,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     write_serial_string("\n");
     EfiMemory++;
   }
-  EfiMemory = (EfiMemoryDesc *)(BootConfig->MemoryMap.Buffer);
+  EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
 #endif
 
   OS_MEMORY_DESCRIPTOR *OsMemory = NULL;
@@ -65,9 +65,9 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
   int EfiDescriptorCount = BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize;
   for (int i = 0; i < EfiDescriptorCount; i++)
   {
-    if (EfiMemoryPageSize < EfiMemory[i].NumberOfPages && EfiMemory[i].Type == 7)
+    if (EfiMemoryPageSize < EfiMemory[i].NumberOfPages && EfiMemory[i].Type == EfiConventionalMemory)
     {
-      OsMemoryAddress = EfiMemory[i].PhysicalStart;
+      OsMemoryAddress = convert_physical_to_virtual((uint64_t)EfiMemory[i].PhysicalStart);
       OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
       break;
     }
@@ -104,7 +104,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 
     if (OsMemory->Type == FREE_MEMORY && OsMemory->PageSize > maxpagesize)
     {
-      maxpageaddr = OsMemory->PhysicalStart;
+      maxpageaddr = convert_physical_to_virtual((uint64_t)OsMemory->PhysicalStart);
       maxpagesize = OsMemory->PageSize;
     }
 
@@ -121,6 +121,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     OsMemDescNum++;
   }
 
+  write_serial_string("maxpageaddr: ");
+  write_serial_hex((uint64_t)maxpageaddr);
+  write_serial_string(" ");
+  write_serial_string("maxpagesize: ");
+  write_serial_hex(maxpagesize);
+  write_serial_string("\n");
   memory_init((void *)maxpageaddr, maxpagesize * PAGE_SIZE);
 
   uint64_t page_start = 0;
@@ -128,11 +134,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 
   for (int i = 0; i < EfiDescriptorCount; i++)
   {
-    if (EfiMemory[i].Type == 7 && EfiMemory[i].PhysicalStart != OsMemoryAddress)
+    if (EfiMemory[i].Type == EfiConventionalMemory && EfiMemory[i].PhysicalStart != convert_virtual_to_physical((uint64_t)maxpageaddr) && EfiMemory[i].PhysicalStart != convert_virtual_to_physical((uint64_t)OsMemoryAddress))
     {
+      write_serial_string("Found free memory for page alloc\n");
       if (EfiMemory[i].NumberOfPages > page_count)
       {
-        page_start = EfiMemory[i].PhysicalStart;
+        page_start = (uint64_t)EfiMemory[i].PhysicalStart;
         page_count = EfiMemory[i].NumberOfPages;
       }
     }
@@ -148,6 +155,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
   }
 
   uint64_t bitmap_size = (page_count + 7) / 8;
+  write_serial_string("page_start: ");
+  write_serial_hex(page_start);
+  write_serial_string(" ");
+  write_serial_string("page_count: ");
+  write_serial_hex(page_count);
+  write_serial_string("\n");
   PAGE_ALLOC.init((void *)page_start, page_count, (uint8_t *)malloc(bitmap_size));
 
   // 输出合并后的

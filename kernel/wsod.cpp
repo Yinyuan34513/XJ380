@@ -4,8 +4,6 @@
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
-    backtrace(regs);
-
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
@@ -69,9 +67,11 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     write_serial_string(err_code);
     write_serial_string("\n");
 
+    backtrace(regs);
+
+    disable_intr();
     while (1)
     {
-        disable_intr();
         __asm__("hlt");
     };
 }
@@ -118,9 +118,10 @@ void no_regs_wsod(const char *err_code)
     WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
     write_serial_string("WSOD: ");
     write_serial_string(err_code);
+
+    disable_intr();
     while (1)
     {
-        disable_intr();
         __asm__ __volatile__("hlt");
     };
 }
@@ -135,6 +136,16 @@ void no_regs_wsod(const char *err_code)
 void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
 {
     do_wsod("UNEXPECT_INTRRUPT", regs);
+}
+
+void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)
+{
+    do_wsod("DIVIDE_ERROR", regs);
+}
+
+void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code)
+{
+    do_wsod("UNDEFINED_OPCODE", regs);
 }
 
 // 不可屏蔽中断
@@ -199,6 +210,12 @@ void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code)
     if (error_code & 0x10)
         write_serial_string(",Instruction fetch Cause Fault");
 
+    write_serial_string("\n");
+
+    uint64_t cr2;
+    __asm__("mov %%cr2, %0" : "=r"(cr2));
+    write_serial_string("cr2 = ");
+    write_serial_hex(cr2);
     write_serial_string("\n");
 
     do_wsod("PAGE_FAULT", regs);

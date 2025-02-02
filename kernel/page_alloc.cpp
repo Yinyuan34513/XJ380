@@ -62,3 +62,48 @@ bool PageAlloc::test_bit(uint64_t index)
 {
     return (bitmap[index / 8] & (1 << (index % 8))) != 0;
 }
+
+void *PageAlloc::alloc_pages(size_t page_count)
+{
+    if (page_count == 0 || page_count > this->page_count)
+    {
+        return nullptr;
+    }
+
+    // 查找连续的空闲页面
+    uint64_t start_page = 0;
+    uint64_t consecutive_free = 0;
+
+    for (uint64_t i = 0; i < this->page_count; i++)
+    {
+        if (!test_bit(i))
+        {
+            consecutive_free++;
+            if (consecutive_free == page_count)
+            {
+                // 找到足够的连续页面
+                start_page = i - page_count + 1;
+                // 标记这些页面为已使用
+                for (uint64_t j = 0; j < page_count; j++)
+                {
+                    set_bit(start_page + j);
+                }
+                return (void *)((char *)page_start + start_page * 4096);
+            }
+        }
+        else
+        {
+            consecutive_free = 0;
+        }
+    }
+
+    return nullptr; // 没有找到足够的连续页面
+}
+
+void PageAlloc::free_pages(void *page, size_t page_count)
+{
+    for (size_t i = 0; i < page_count; i++)
+    {
+        free_page((void *)((char *)page + i * 4096));
+    }
+}
