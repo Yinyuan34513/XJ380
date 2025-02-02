@@ -5,9 +5,9 @@ rmdir /s /q esp
 mkdir out
 mkdir esp\EFI\BOOT
 
-set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -ffreestanding -fno-exceptions -mcmodel=large
-set C_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -mcmodel=large
-set CPP_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mcmodel=large
+set ASM_FLAGS=-O0 -Wall -g -nostdlib -m64 -fno-stack-protector -ffreestanding -fno-exceptions -mcmodel=large
+set C_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -mcmodel=large
+set CPP_FLAGS=-O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mcmodel=large
 
 set ASM_FILES=
 for /r kernel %%i in (*.S) do (
@@ -95,7 +95,7 @@ echo ] >>out\compile_commands.json
 copy out\BOOTX64.efi esp\EFI\BOOT
 copy out\kernel.elf esp
 
-..\tools\qemu\qemu-system-x86_64.exe -bios OVMF.fd -m 4096 -smp 4 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log -device usb-ehci,id=usb -device usb-tablet,bus=usb.0 -device usb-kbd,bus=usb.0
+..\tools\qemu\qemu-system-x86_64.exe -bios OVMF.fd -m 4096 -smp 4 -net none -drive file=fat:rw:esp,index=0,format=vvfat -serial file:serial.log
 
 goto :eof
 

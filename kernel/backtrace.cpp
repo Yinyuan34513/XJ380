@@ -40,12 +40,12 @@ void backtrace(struct X64_REGS *regs)
     write_serial_string("Kernel backtrace:\n");
 
     lookup_kallsyms(regs->rip);
-    for (i = 0; i < 32; i++)
+    for (i = 0; i < 8; i++)
     {
         if (lookup_kallsyms(ret_address))
             break;
 
-        if ((uint64_t)rbp < regs->rsp)
+        if ((uint64_t)rbp >= current_task->thread->rsp0 || (uint64_t)rbp < regs->rsp)
             break;
 
         if (rbp == nullptr)

@@ -151,13 +151,13 @@ void delay_us(uint64_t us)
     {
         while (rdtsc() >= start)
         {
-            __asm__ volatile("pause");
+            __asm__ volatile("nop");
         }
     }
 
     while (rdtsc() < end)
     {
-        __asm__ volatile("pause");
+        __asm__ volatile("nop");
     }
 }
 
@@ -174,34 +174,4 @@ void delay_s(uint64_t s)
     {
         delay_ms(1000);
     }
-}
-
-// 更精确的校准版本
-void calibrate_delay()
-{
-    // 使用PIT进行校准
-    uint64_t start, end;
-    uint64_t ticks;
-
-    // 配置PIT通道0为一次性计数模式
-    outb(0x43, 0x30);
-    outb(0x40, 0xFF);
-    outb(0x40, 0xFF);
-
-    start = rdtsc();
-
-    // 等待计数完成
-    while ((inb(0x61) & 0x20) == 0)
-        ;
-
-    end = rdtsc();
-    ticks = end - start;
-
-    // 计算实际的CPU频率
-    // PIT频率是1.193182MHz
-    // 0xFFFF计数需要约54.925ms
-    uint64_t freq_mhz = ticks / 54925;
-
-    // 更新频率值
-    // 在实际应用中，您可能需要存储这个校准后的值
 }

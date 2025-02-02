@@ -7,8 +7,9 @@
 #define CLONE_FILES (1 << 1)
 #define CLONE_SIGNAL (1 << 2)
 
-// stack size 32K
-#define STACK_SIZE 32768UL
+// stack size 8K
+// UL一定要加，否则获取current_task之后读取值的时候会出错
+#define STACK_SIZE 8192UL
 
 #define TASK_RUNNING (1 << 0)
 #define TASK_INTERRUPTIBLE (1 << 1)
@@ -55,8 +56,8 @@ struct task_struct
 
     struct List list;
 
-    uint64_t addr_limit; /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/
-    /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
+    uint64_t addr_limit; /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/ /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
+
     long pid;
     long priority;
     long vrun_time;
@@ -74,7 +75,7 @@ union task_union
 {
     struct task_struct task;
     uint64_t stack[STACK_SIZE / sizeof(uint64_t)];
-} __attribute__((aligned(8))); // 8Bytes align
+} __attribute__((aligned(STACK_SIZE)));
 
 #define INIT_TASK(tsk)                    \
     {                                     \

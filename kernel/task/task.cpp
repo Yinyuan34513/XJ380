@@ -27,11 +27,21 @@ uint64_t idle_entry(uint64_t arg)
     }
 }
 
+bool keyboard_mouse_init_done = false;
+
 uint64_t init_kernel_thread(uint64_t arg)
 {
     write_serial_string("init task is running,arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
+
+    disable_intr();
+
+    keyboard_init();
+    write_serial_string("Keyboard Initialize Success.\n");
+    Mouse_init();
+    write_serial_string("Mouse Initialize Success.\n");
+    keyboard_mouse_init_done = true;
 
     init_vdisk();
     init_pci();
@@ -137,10 +147,11 @@ uint64_t desktop_flusher(uint64_t arg)
 
     refresh_sheet(&shtinf); // 刷新
 
-    keyboard_init();
-    write_serial_string("Keyboard Initialize Success.\n");
-    Mouse_init();
-    write_serial_string("Mouse Initialize Success.\n");
+    while (!keyboard_mouse_init_done)
+    {
+        enable_intr();
+        __asm__ __volatile__("pause");
+    }
 
     EFI_TIME time;
     EFI_TIME_CAPABILITIES time_capab;
@@ -213,6 +224,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
         spin_unlock(&do_fork_lock);
         return 0;
     }
+    xmemset(p, 0, STACK_SIZE);
     tsk = (struct task_struct *)p;
     xmemcpy(tsk, current_task, sizeof(struct task_struct));
 
@@ -235,11 +247,20 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     thd->rip = regs->rip;
     thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS);
     xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS));
-    thd->fs = SELECTOR_KERNEL_DS;
-    thd->gs = SELECTOR_KERNEL_DS;
 
     if (!(tsk->flags & PF_KTHREAD))
+    {
+        thd->fs = SELECTOR_USER_DS;
+        thd->gs = SELECTOR_USER_DS;
+
         thd->rip = regs->rip = (uint64_t)ret_from_intr;
+    }
+    else
+    {
+
+        thd->fs = SELECTOR_KERNEL_DS;
+        thd->gs = SELECTOR_KERNEL_DS;
+    }
 
     tsk->state = TASK_RUNNING;
     insert_task_queue(tsk);
@@ -251,6 +272,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
 
 extern "C" uint64_t do_exit(uint64_t code)
 {
+    enable_intr();
     while (1)
         __asm__ __volatile__("pause");
 }
@@ -276,7 +298,7 @@ int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
 
 extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
-    init_tss[next->cpu_id].rsp0 = next->thread->rsp0;
+    init_tss[current_task->cpu_id].rsp0 = next->thread->rsp0;
 
     __asm__ __volatile__("movq %%fs, %0\n\t" : "=a"(prev->thread->fs));
     __asm__ __volatile__("movq %%gs, %0\n\t" : "=a"(prev->thread->gs));

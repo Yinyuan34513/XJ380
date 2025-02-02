@@ -197,8 +197,6 @@ void SMP::ap_startup(uint64_t madt_addr)
     *page_table = cr3;
     *ap_entry = (uint64_t)apu_entry;
 
-    uint64_t tr_value = GDT_TYPE_TSS;
-
     for (int i = 0; i < this->apu_count; i++)
     {
         if (this->apu_list[i]->local_apic_id == lapic_id())
@@ -210,16 +208,18 @@ void SMP::ap_startup(uint64_t madt_addr)
 
         *ready = 0;
         *cpu_id = i;
-        tr_value += 2;
+        uint64_t tr_value = GDT_TYPE_TSS + i * 2;
         *tr = tr_value;
         init_tss[i] = INIT_TSS;
         gdt_set_system_gate(tr_value, (UINT64)&init_tss[i], sizeof(init_tss[i]) - 1, 0x89, 0xAF);
         uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
+        xmemset((void *)stack_start, 0, STACK_SIZE);
         *rsp = stack_start;
         init_tss[i].rsp0 = stack_start;
         init_tss[i].rsp1 = stack_start;
         init_tss[i].rsp2 = stack_start;
         uint64_t ist_stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
+        xmemset((void *)ist_stack_start, 0, STACK_SIZE);
         init_tss[i].ist1 = ist_stack_start;
         init_tss[i].ist2 = ist_stack_start;
         init_tss[i].ist3 = ist_stack_start;

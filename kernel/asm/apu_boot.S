@@ -128,8 +128,6 @@ _APU_Code64:
 
 	jmpq	*%r8
 
-	hlt
-
 .balign 4
 _APU_tmp_IDT:
 	.word	0

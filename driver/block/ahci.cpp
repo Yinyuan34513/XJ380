@@ -137,17 +137,17 @@ void ahci_port_rebase(HBA_PORT *port, int portno)
     // Command list maxim size = 32*32 = 1K per port
     port->clb = ahci_ports_base_addr + (portno << 10);
     port->clbu = 0;
-    xmemset((void *)(port->clb), 0, 1024);
+    xmemset((void *)convert_physical_to_virtual((uint64_t)port->clb), 0, 1024);
 
     // FIS offset: 32K+256*portno
     // FIS entry size = 256 bytes per port
     port->fb = ahci_ports_base_addr + (32 << 10) + (portno << 8);
     port->fbu = 0;
-    xmemset((void *)(port->fb), 0, 256);
+    xmemset((void *)convert_physical_to_virtual((uint64_t)port->fb), 0, 256);
 
     // Command table offset: 40K + 8K*portno
     // Command table size = 256*32 = 8K per port
-    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)(port->clb);
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)convert_physical_to_virtual((uint64_t)port->clb);
     for (int i = 0; i < 32; i++)
     {
         cmdheader[i].prdtl = 8; // 8 prdt entries per command table
@@ -155,7 +155,7 @@ void ahci_port_rebase(HBA_PORT *port, int portno)
         // Command table offset: 40K + 8K*portno + cmdheader_index*256
         cmdheader[i].ctba = ahci_ports_base_addr + (40 << 10) + (portno << 13) + (i << 8);
         cmdheader[i].ctbau = 0;
-        xmemset((void *)cmdheader[i].ctba, 0, 256);
+        xmemset((void *)convert_physical_to_virtual((uint64_t)cmdheader[i].ctba), 0, 256);
     }
 
     start_cmd(port); // Start command engine
@@ -169,13 +169,13 @@ bool ahci_identify(HBA_PORT *port, void *buf)
     if (slot == -1)
         return false;
 
-    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)port->clb;
+    HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)convert_physical_to_virtual((uint64_t)port->clb);
     cmdheader += slot;
     cmdheader->cfl = sizeof(FIS_REG_H2D) / sizeof(uint32_t); // Command FIS size
     cmdheader->w = 0;                                        // Read from device
     cmdheader->prdtl = 1;                                    // PRDT entries count
     cmdheader->c = 1;
-    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)(cmdheader->ctba);
+    HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)convert_physical_to_virtual((uint64_t)cmdheader->ctba);
     xmemset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
     cmdtbl->prdt_entry[0].dba = (uint32_t)((uint64_t)buf & 0xFFFFFFFF);

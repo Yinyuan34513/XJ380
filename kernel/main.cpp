@@ -42,15 +42,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   init_MemoryManager(fbc, BC);
 
   uint8_t *ptr = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE)) + STACK_SIZE;
+  xmemset(ptr, 0, STACK_SIZE);
   ((struct task_struct *)(ptr - STACK_SIZE))->cpu_id = 0;
 
-  init_tss[current_task->cpu_id].ist1 = (unsigned long)ptr;
-  init_tss[current_task->cpu_id].ist2 = (unsigned long)ptr;
-  init_tss[current_task->cpu_id].ist3 = (unsigned long)ptr;
-  init_tss[current_task->cpu_id].ist4 = (unsigned long)ptr;
-  init_tss[current_task->cpu_id].ist5 = (unsigned long)ptr;
-  init_tss[current_task->cpu_id].ist6 = (unsigned long)ptr;
-  init_tss[current_task->cpu_id].ist7 = (unsigned long)ptr;
+  init_tss[current_task->cpu_id].ist1 = (uint64_t)ptr;
+  init_tss[current_task->cpu_id].ist2 = (uint64_t)ptr;
+  init_tss[current_task->cpu_id].ist3 = (uint64_t)ptr;
+  init_tss[current_task->cpu_id].ist4 = (uint64_t)ptr;
+  init_tss[current_task->cpu_id].ist5 = (uint64_t)ptr;
+  init_tss[current_task->cpu_id].ist6 = (uint64_t)ptr;
+  init_tss[current_task->cpu_id].ist7 = (uint64_t)ptr;
 
   init_hpet(convert_physical_to_virtual((uint64_t)BC->HPET));
   init_apic(convert_physical_to_virtual((uint64_t)BC->MADT));

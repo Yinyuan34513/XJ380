@@ -320,22 +320,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   UINT64 kernel_first_addr, kernel_last_addr;                        // 计算的首尾
   CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
 
-  status = mallocAt(kernel_first_addr, kernel_last_addr - kernel_first_addr); // 分配内存
-  if (EFI_ERROR(status))
-  {
-    puts(L"XJ380 does not boot properly. Please visit "
-         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
-    write_serial_string("[bootx64.c:262]Memory Allocate Failed. Stop.\n");
-    while (1)
-      ;
-  }
-  write_serial_string("Kernel Memory Allocate Success.\n");
-
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
   // free(kernel_buffer);        // 释放内核文件，丢掉！
 
-  SwitchToResolution(1280, 720); // 切换分辨率
+  SwitchToResolution(1440, 900); // 切换分辨率
 
   struct FrameBufferConfig config = {
       (UINT8 *)(GOP->Mode->FrameBufferBase + 0xFFFF800000000000), GOP->Mode->Info->PixelsPerScanLine,

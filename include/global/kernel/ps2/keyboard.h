@@ -43,9 +43,11 @@ enum special_key_code
 	KEY_F11,
 	KEY_F12
 };
+#define wait_KB_write() \
+	while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
 
-#define wait_KB_write() while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
-#define wait_KB_read() while (inb(PORT_KB_STATUS) & KBSTATUS_OBF)
+#define wait_KB_read() \
+	while (inb(PORT_KB_STATUS) & KBSTATUS_OBF)
 
 struct keyboard_buf
 {

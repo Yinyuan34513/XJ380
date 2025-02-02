@@ -10,6 +10,7 @@ SECTIONS
 
     .text :  
     {  
+        _text = .; /* 定义text段的开始位置 */
         *(.text)  
         _etext = .; /* 定义text段的结束位置 */  
     }  
@@ -25,7 +26,7 @@ SECTIONS
         _edata = .; /* 定义data段的结束位置 */  
     }  
 
-    . = ALIGN(32K);
+    . = ALIGN(8K);
     .data.init_task :
     {
         *(.data.init_task)

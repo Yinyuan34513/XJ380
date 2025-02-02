@@ -94,7 +94,7 @@ Err_Code:
     movq %rdi, %es
 
     movq %rsp, %rdi // 把栈指针装入rdi，作为函数的第一个的参数
-    
+
     callq *%rdx //调用服务程序 带*号表示调用的是绝对地址
     jmp ret_from_exception
 

@@ -22,4 +22,4 @@ kernel_thread_func:
     movq %rdx, %rdi
     callq *%rbx
     movq %rax, %rdi
-    callq do_exit
+    jmp do_exit

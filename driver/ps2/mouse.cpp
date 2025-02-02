@@ -119,6 +119,7 @@ void Mouse_init()
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_write();
     outb(PORT_KB_DATA, KB_INIT_MODE);
+
     mouse_x = (get_hor() - 16) / 2;
     mouse_y = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
