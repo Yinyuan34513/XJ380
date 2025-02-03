@@ -163,8 +163,8 @@ uint64_t desktop_flusher(uint64_t arg)
     int tby;
     int tbx;
 
-    struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((UINT64)(ST->RuntimeServices));
-    EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)RuntimeServices->GetTime);
+    // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((UINT64)(ST->RuntimeServices));
+    // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)RuntimeServices->GetTime);
 
     while (1)
     {
@@ -199,11 +199,11 @@ uint64_t desktop_flusher(uint64_t arg)
             fonty += 16;
         }
 
-        EFI_STATUS status = GetTime(&time, &time_capab);
-        if (status != EFI_SUCCESS)
-        {
-            write_serial_string("GetTime failed.\n");
-        }
+        // EFI_STATUS status = GetTime(&time, &time_capab);
+        // if (status != EFI_SUCCESS)
+        // {
+        //     write_serial_string("GetTime failed.\n");
+        // }
         int scdx = fbc_addr->horizontal_resolution * 0.8125;
         draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
         PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);

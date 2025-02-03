@@ -50,9 +50,6 @@ void NVME::init()
     KERNEL_MAPPER mapper(PAGE_TABLE_BASE_ADDR);
     mapper.map_page(this->bar_addr, device->bars[0].address, 0x3);
 
-    write_serial_hex(this->bar_addr);
-    write_serial_string("\n");
-
     uint32_t version = this->get_regs32(NVME_REGS32_VS);
     uint8_t vs_h = (version >> 16) & 0xFFFF;
     uint8_t vs_m = (version >> 8) & 0xFF;
