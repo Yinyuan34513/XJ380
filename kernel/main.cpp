@@ -23,7 +23,7 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
 {
   fbc_addr = &fbc;
-  ST = &SystemTable;
+  ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)&SystemTable);
   BC = (BOOT_CONFIG *)convert_physical_to_virtual((UINT64)BootConfig);
 
   disable_intr();

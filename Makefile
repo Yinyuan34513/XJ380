@@ -4,7 +4,13 @@ CPP_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exception
 
 CPP_VERSION ?= 14
 
-QEMU_CMD = qemu-system-x86_64 -bios OVMF.fd -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=fat:rw:esp,index=0,format=vvfat -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log
+DEBUG ?= 0
+
+ifeq ($(DEBUG), 1)
+DEBUG_FLAG = -s -S
+endif
+
+QEMU_CMD = qemu-system-x86_64 -bios OVMF.fd -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=fat:rw:esp,index=0,format=vvfat -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 ifneq ($(OS), Windows_NT)
 COMPILER_PREFIX = x86_64-linux-gnu-
