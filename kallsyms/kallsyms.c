@@ -1,10 +1,11 @@
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct symbol_entry
 {
-    unsigned long address;
+    uint64_t address;
     char type;
     char *symbol;
     int symbol_length;
@@ -12,7 +13,7 @@ struct symbol_entry
 
 struct symbol_entry *table;
 int size, count;
-unsigned long _text, _etext;
+uint64_t _text, _etext;
 
 int read_symbol(FILE *filp, struct symbol_entry *sym_entry)
 {
@@ -66,7 +67,7 @@ int symbol_valid(struct symbol_entry *sym_entry)
 
 void write_src(void)
 {
-    unsigned long last_addr;
+    uint64_t last_addr;
     int i, valid = 0;
     long position = 0;
 
