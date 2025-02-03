@@ -19,7 +19,7 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     if (pml4[pml4_id] == 0)
     {
         uint64_t pml4_addr = (uint64_t)PAGE_ALLOC.alloc_page();
-        xmemset((void *)pml4_addr, 0, PAGE_SIZE);
+        xmemset((void *)convert_physical_to_virtual(pml4_addr), 0, PAGE_SIZE);
         pml4[pml4_id] = pml4_addr | 0x3;
     }
     else
@@ -27,12 +27,12 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
         write_serial_string("Failed to map page table to vaddr\n");
         return;
     }
-    uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
+    uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
     uint64_t pdpt_id = (vaddr >> 30) & 0x1FF;
     if (pdpt[pdpt_id] == 0)
     {
         uint64_t pdpt_addr = (uint64_t)PAGE_ALLOC.alloc_page();
-        xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
+        xmemset((void *)convert_physical_to_virtual(pdpt_addr), 0, PAGE_SIZE);
         pdpt[pdpt_id] = pdpt_addr | 0x3;
     }
     else
@@ -40,12 +40,12 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
         write_serial_string("Failed to map page table to vaddr\n");
         return;
     }
-    uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
+    uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
     uint64_t pd_id = (vaddr >> 21) & 0x1FF;
     if (pd[pd_id] == 0)
     {
         uint64_t pd_addr = (uint64_t)PAGE_ALLOC.alloc_page();
-        xmemset((void *)pd_addr, 0, PAGE_SIZE);
+        xmemset((void *)convert_physical_to_virtual(pd_addr), 0, PAGE_SIZE);
         pd[pd_id] = pd_addr | 0x3;
     }
     else
@@ -53,7 +53,7 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
         write_serial_string("Failed to map page table to vaddr\n");
         return;
     }
-    uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
+    uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFF));
     uint64_t pt_id = (vaddr >> 12) & 0x1FF;
     if (pt[pt_id] == 0)
     {

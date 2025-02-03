@@ -30,6 +30,7 @@
 #include "./global/kernel/driver/vdisk.h"
 #include "./global/kernel/driver/pci.h"
 #include "./global/kernel/driver/ahci.h"
+#include "./global/kernel/driver/nvme.h"
 extern "C"
 {
 #include "./global/kernel/pctable/idt.h"

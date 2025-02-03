@@ -27,6 +27,10 @@ uint64_t idle_entry(uint64_t arg)
     }
 }
 
+extern const FrameBufferConfig *fbc_addr;
+extern EFI_SYSTEM_TABLE *ST;
+extern BOOT_CONFIG *BC;
+
 bool keyboard_mouse_init_done = false;
 
 uint64_t init_kernel_thread(uint64_t arg)
@@ -44,11 +48,14 @@ uint64_t init_kernel_thread(uint64_t arg)
     keyboard_mouse_init_done = true;
 
     init_vdisk();
-    init_pci();
+    init_pci(convert_physical_to_virtual((uint64_t)BC->MCFG));
     write_serial_string("PCI initialized.\n");
 
     init_ahci();
     write_serial_string("AHCI initialized.\n");
+
+    NVME_MANAGER.init();
+    write_serial_string("NVME initialized.\n");
 
     write_serial_string("Operating System Initialize Success.\n");
 
@@ -57,10 +64,6 @@ uint64_t init_kernel_thread(uint64_t arg)
         __asm__ __volatile__("sti\n\thlt");
     }
 }
-
-extern const FrameBufferConfig *fbc_addr;
-extern EFI_SYSTEM_TABLE *ST;
-extern BOOT_CONFIG *BC;
 
 extern spinlock_t fb_print_lock;
 

@@ -290,7 +290,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
-    write_serial_string("[bootx64.c:230]Root Dir Open Failed. Stop.\n");
+    write_serial_string("[bootx64.c:293]Root Dir Open Failed. Stop.\n");
     while (1)
       ;
   }
@@ -300,7 +300,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
-    write_serial_string("[bootx64.c:239]Kernel Read Failed. Stop.\n");
+    write_serial_string("[bootx64.c:303]Kernel Read Failed. Stop.\n");
     while (1)
       ;
   }
@@ -310,7 +310,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
-    write_serial_string("[bootx64.c:248]Kernel Read Failed. Stop.\n");
+    write_serial_string("[bootx64.c:313]Kernel Read Failed. Stop.\n");
     while (1)
       ;
   }
@@ -343,7 +343,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"UNSUPPORTED_PIXEL_FORMAT");
-    write_serial_string("[bootx64.c:286]Vedio Initialize Failed. Stop.\n");
+    write_serial_string("[bootx64.c:346]Vedio Initialize Failed. Stop.\n");
     while (1)
       ;
   }
@@ -378,7 +378,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
         ACPI_TABLE_HEADER *XSDT = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr); // 指向XSDT的指针
         UINT64 *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);                    // 指向XSDT后面的其他SDT的地址的指针
-        UINT64 Entries = (XSDT->length - sizeof(XSDT->length)) / 8;          // SDT数量
+        UINT64 Entries = (XSDT->length - sizeof(ACPI_TABLE_HEADER)) / 8;     // SDT数量
         AcpiTableWasFound = 1;
         UINT8 ObjTableWasFound = 0;
         // 遍历所有ACPI表
@@ -410,8 +410,13 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             BootConfig->HPET = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
           }
-          if (ObjTableWasFound == 2)
-            break;
+          else if (!part_strcmp(AcpiSdtPointer->sign, "MCFG", 4))
+          {
+            write_serial_string("MCFG Found Success.\n");
+            // MCFG!!!
+            BootConfig->MCFG = (UINT64)(AcpiSdtPointer);
+            ObjTableWasFound++;
+          }
           write_serial_string("\n");
         }
         break;
@@ -424,7 +429,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"ACPI_TABLE_NOT_FOUND\r\n");
-    write_serial_string("[bootx64.c:329]ACPI Table Not Found. Stop.\n");
+    write_serial_string("[bootx64.c:432]ACPI Table Not Found. Stop.\n");
     while (1)
       ;
   }
@@ -433,7 +438,16 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"MADT_NOT_FOUND\r\n");
-    write_serial_string("[bootx64.c:337]MADT Not Found. Stop.\n");
+    write_serial_string("[bootx64.c:441]MADT Not Found. Stop.\n");
+    while (1)
+      ;
+  }
+  if (BootConfig->MCFG == 0)
+  {
+    puts(L"XJ380 does not boot properly. Please visit "
+         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+         L"MADT_NOT_FOUND\r\n");
+    write_serial_string("[bootx64.c:450]MCFG Not Found. Stop.\n");
     while (1)
       ;
   }
@@ -457,7 +471,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"CANNOT_BOOT_SYSTEM");
-    write_serial_string("[bootx64.c:352]Boot Services Exit Failed. Stop.\n");
+    write_serial_string("[bootx64.c:474]Boot Services Exit Failed. Stop.\n");
     while (1)
       ;
   }

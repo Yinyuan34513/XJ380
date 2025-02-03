@@ -418,15 +418,13 @@ void init_ahci()
     else
         write_serial_string("Find Serial ATA Controller.\n");
 
-    hba_mem = (HBA_MEM *)convert_physical_to_virtual(read_bar_n(device, 5));
+    if (!device->bars[5].mmio)
+    {
+        write_serial_string("NVME bar 0 is not mmio.\n");
+        return;
+    }
 
-    // 允许产生中断
-    uint32_t conf = pci_read_command_status(device->bus, device->slot, device->func);
-    conf &= 0xffff0000;
-    conf |= 0x7;
-    pci_write_command_status(device->bus, device->slot, device->func, conf);
-
-    hba_mem->ghc |= (1 << 31);
+    hba_mem = (HBA_MEM *)convert_physical_to_virtual((uint64_t)device->bars[5].address);
 
     ahci_search_ports(hba_mem);
     ahci_ports_base_addr = (uint64_t)malloc(1048576);

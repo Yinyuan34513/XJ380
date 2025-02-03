@@ -10,7 +10,7 @@ ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
 endif
 
-QEMU_CMD = qemu-system-x86_64 -bios OVMF.fd -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=fat:rw:esp,index=0,format=vvfat -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=fat:rw:esp,index=0,format=vvfat -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 ifneq ($(OS), Windows_NT)
 COMPILER_PREFIX = x86_64-linux-gnu-
