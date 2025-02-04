@@ -266,7 +266,7 @@ void MapVirtToPhys(uint64_t virt, uint64_t size)
   __asm__ __volatile__("mov %%cr3, %0"
                        : "=r"(page_table_addr));
 
-  const KERNEL_PERM = 0x03;
+#define KERNEL_PERM 0x03
 
   for (uint64_t addr = virt; addr < virt + size + PAGE_SIZE - 1; addr += PAGE_SIZE)
   {
@@ -409,7 +409,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;
   UINT8 AcpiTableWasFound = 0; // 0=找不着 1=找到了
   SystemConfigTable = ST->ConfigurationTable;
-  for (int i = 0; i < ST->NumberOfTableEntries; i++)
+  for (UINTN i = 0; i < ST->NumberOfTableEntries; i++)
   {
     if (CompareGUID(&SystemConfigTable->VendorGuid, &acpi_table_guid) == 1 ||
         CompareGUID(&SystemConfigTable->VendorGuid, &efi_acpi_table_guid) == 1)
@@ -434,7 +434,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         AcpiTableWasFound = 1;
         UINT8 ObjTableWasFound = 0;
         // 遍历所有ACPI表
-        for (int j = 0; j < Entries; j++, AcpiTableEntryPtr++)
+        for (UINT64 j = 0; j < Entries; j++, AcpiTableEntryPtr++)
         {
           write_serial_string("SDT Entry ");
           write_serial_string(Dec2Char(j));
