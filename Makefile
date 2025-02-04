@@ -86,14 +86,14 @@ ifneq ($(OS), Windows_NT)
 	@$(NM) -n ./out/kernel.elf | ./out/kallsyms >./out/kallsyms.S
 	@$(CC) $(C_FLAGS) -c ./out/kallsyms.S -o ./out/kallsyms.o
 	@$(LD) -z muldefs -e KernelMain -T linker.ld --static -o ./out/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o ./out/kallsyms.o
-	@$(OBJD) -x -d -s ./out/kernel.elf >./out/kernel.txt
+	@$(OBJD) -x -d -s ./out/kernel.elf > ./out/kernel.txt
 else
 	@$(LD) -z muldefs -e KernelMain -T linker.ld --static -o ./out/kernel.elf $(addprefix ./out/, $(shell powershell -Command Get-ChildItem -Name -Filter *.o -Recurse -Path ./out)) ./font/hankaku.o
 	@powershell -Command gcc kallsyms/kallsyms.c -o ./out/kallsyms.exe
 	@$(NM) -n ./out/kernel.elf | powershell -Command ./out/kallsyms.exe >./out/kallsyms.S
 	@$(CC) $(C_FLAGS) -c ./out/kallsyms.S -o ./out/kallsyms.o
 	@$(LD) -z muldefs -e KernelMain -T linker.ld --static -o ./out/kernel.elf $(addprefix ./out/, $(shell powershell -Command Get-ChildItem -Name -Filter *.o -Recurse -Path ./out)) ./font/hankaku.o ./out/kallsyms.o
-	@$(OBJD) -x -d -s ./out/kernel.elf >./out/kernel.txt
+	@$(OBJD) -x -d -s ./out/kernel.elf > ./out/kernel.txt
 endif
 
 	@$(COPY_CMD) ./out/BOOTX64.efi ./esp/EFI/BOOT/BOOTX64.efi

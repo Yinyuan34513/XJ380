@@ -261,7 +261,7 @@ void CreateAndMapNewPageTable()
 }
 
 typedef void (*__attribute__((sysv_abi))
-              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, struct BOOT_CONFIG *);
+              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {

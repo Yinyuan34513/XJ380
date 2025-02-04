@@ -54,7 +54,7 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_ahci();
     write_serial_string("AHCI initialized.\n");
 
-    NVME_MANAGER.init();
+    init_nvme();
     write_serial_string("NVME initialized.\n");
 
     write_serial_string("Operating System Initialize Success.\n");

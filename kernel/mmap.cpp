@@ -20,12 +20,7 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     {
         uint64_t pml4_addr = (uint64_t)PAGE_ALLOC.alloc_page();
         xmemset((void *)convert_physical_to_virtual(pml4_addr), 0, PAGE_SIZE);
-        pml4[pml4_id] = pml4_addr | 0x3;
-    }
-    else
-    {
-        write_serial_string("Failed to map page table to vaddr\n");
-        return;
+        pml4[pml4_id] = pml4_addr | flags;
     }
     uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
     uint64_t pdpt_id = (vaddr >> 30) & 0x1FF;
@@ -33,12 +28,7 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     {
         uint64_t pdpt_addr = (uint64_t)PAGE_ALLOC.alloc_page();
         xmemset((void *)convert_physical_to_virtual(pdpt_addr), 0, PAGE_SIZE);
-        pdpt[pdpt_id] = pdpt_addr | 0x3;
-    }
-    else
-    {
-        write_serial_string("Failed to map page table to vaddr\n");
-        return;
+        pdpt[pdpt_id] = pdpt_addr | flags;
     }
     uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
     uint64_t pd_id = (vaddr >> 21) & 0x1FF;
@@ -46,22 +36,13 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     {
         uint64_t pd_addr = (uint64_t)PAGE_ALLOC.alloc_page();
         xmemset((void *)convert_physical_to_virtual(pd_addr), 0, PAGE_SIZE);
-        pd[pd_id] = pd_addr | 0x3;
-    }
-    else
-    {
-        write_serial_string("Failed to map page table to vaddr\n");
-        return;
+        pd[pd_id] = pd_addr | flags;
     }
     uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFF));
     uint64_t pt_id = (vaddr >> 12) & 0x1FF;
     if (pt[pt_id] == 0)
     {
-        pt[pt_id] = paddr | 0x3;
-    }
-    else
-    {
-        write_serial_string("Failed to map page table to vaddr\n");
+        pt[pt_id] = paddr | flags;
     }
 }
 
