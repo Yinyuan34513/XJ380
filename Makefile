@@ -1,6 +1,6 @@
-ASM_FLAGS = -O0 -Wall -g -nostdlib -m64 -fno-stack-protector -ffreestanding -fno-exceptions
-C_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+ASM_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -nostdlib -mcmodel=kernel -m64 -fno-stack-protector -ffreestanding -fno-exceptions
+C_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+CPP_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 
