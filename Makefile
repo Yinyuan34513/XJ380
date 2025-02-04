@@ -1,5 +1,5 @@
 ASM_FLAGS = -O0 -Wall -g -nostdlib -m64 -fno-stack-protector -ffreestanding -fno-exceptions -mcmodel=large
-C_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c11 -fshort-wchar -nostdinc -mcmodel=large
+C_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c99 -fshort-wchar -nostdinc -mcmodel=large
 CPP_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mcmodel=large
 
 CPP_VERSION ?= 14

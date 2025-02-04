@@ -69,10 +69,10 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
         "movq %%rax, %%gs \n\t"
         "movq %%rax, %%ss \n\t"
         "pushq %[SELECTOR_CODE64] \n\t"
-        "leaq .next(%%RIP),%%rax \n\t"
+        "leaq .ap_next(%%RIP),%%rax \n\t"
         "pushq %%rax \n\t"
         "lretq \n\r"
-        ".next: \n\t"
+        ".ap_next: \n\t"
         :
         : [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
           [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
