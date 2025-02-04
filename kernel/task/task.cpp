@@ -47,7 +47,7 @@ uint64_t init_kernel_thread(uint64_t arg)
     write_serial_string("Mouse Initialize Success.\n");
     keyboard_mouse_init_done = true;
 
-    init_vdisk();
+    init_device();
     init_pci(convert_physical_to_virtual((uint64_t)BC->MCFG));
     write_serial_string("PCI initialized.\n");
 
@@ -56,6 +56,9 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     init_nvme();
     write_serial_string("NVME initialized.\n");
+
+    init_vfs();
+    write_serial_string("VFS initialized.\n");
 
     write_serial_string("Operating System Initialize Success.\n");
 

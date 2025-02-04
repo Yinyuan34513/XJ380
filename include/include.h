@@ -27,10 +27,12 @@
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
 // Drivers
-#include "./global/kernel/driver/vdisk.h"
+#include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/pci.h"
 #include "./global/kernel/driver/ahci.h"
 #include "./global/kernel/driver/nvme.h"
+// FS
+#include "./global/kernel/fs/vfs.h"
 extern "C"
 {
 #include "./global/kernel/pctable/idt.h"

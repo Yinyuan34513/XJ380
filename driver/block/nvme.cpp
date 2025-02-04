@@ -17,9 +17,6 @@
 
 void *NVME_DMA_MEMORY = 0;
 
-#define MAX_NAMESPACE_NUM 64
-NVME_NAMESPACE *global_ns[MAX_NAMESPACE_NUM];
-
 char *LeadingWhitespace(char *beg, char *end)
 {
     while (end > beg && *--end <= 0x20)
@@ -179,14 +176,14 @@ void failed_namespace(NVME_IDENTIFY_NAMESPACE *identifyNS)
     PAGE_ALLOC.free_pages((void *)convert_virtual_to_physical((uint64_t)identifyNS), 1);
 }
 
-void NvmeRead(int drive, uint8_t *buffer, uint32_t number, uint32_t lba)
+void NvmeRead(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    NVMETransfer(global_ns[drive], buffer, lba, number, false);
+    NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, false);
 }
 
-void NvmeWrite(int drive, uint8_t *buffer, uint32_t number, uint32_t lba)
+void NvmeWrite(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    NVMETransfer(global_ns[drive], buffer, lba, number, true);
+    NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, true);
 }
 
 void init_nvme()
@@ -455,16 +452,8 @@ void init_nvme()
             ns->MXRS = -1;
         }
 
-        global_ns[nsidx] = ns;
+        device_install(DEV_BLOCK, DEV_DISK, ns, "NVME", 0, nullptr, (void *)NvmeRead, (void *)NvmeWrite);
     }
-
-    vdisk vdisk;
-    vdisk.sector_size = 512;
-    vdisk.flag = 1;
-    vdisk.Read = NvmeRead;
-    vdisk.Write = NvmeWrite;
-
-    register_vdisk(vdisk);
 
     return;
 

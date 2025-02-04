@@ -83,15 +83,15 @@ static int find_cmdslot(HBA_PORT *port)
     return -1;
 }
 
-static void ahci_vdisk_read(int drive, uint8_t *buffer, uint32_t number, uint32_t lba)
+static void ahci_vdisk_read(void *dev, void *buf, size_t count, int idx, int flags)
 {
     //                    klog("mapping %d\n",drive_mapping[drive]);
-    ahci_read(&(hba_mem->ports[drive_mapping[drive]]), lba, 0, number, (uint16_t *)buffer);
+    ahci_read(&(hba_mem->ports[drive_mapping[(uint64_t)dev]]), idx, 0, count, (uint16_t *)buf);
 }
 
-static void ahci_vdisk_write(int drive, uint8_t *buffer, uint32_t number, uint32_t lba)
+static void ahci_vdisk_write(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    ahci_write(&(hba_mem->ports[drive_mapping[drive]]), lba, 0, number, (uint16_t *)buffer);
+    ahci_write(&(hba_mem->ports[drive_mapping[(uint64_t)dev]]), idx, 0, count, (uint16_t *)buf);
 }
 
 void ahci_search_ports(HBA_MEM *abar)
@@ -443,14 +443,8 @@ void init_ahci()
             continue;
         }
 
-        vdisk vd;
-        vd.flag = 1;
-        vd.Read = ahci_vdisk_read;
-        vd.Write = ahci_vdisk_write;
-        vd.size = buf.lba_capacity * 512;
-        int c = register_vdisk(vd);
-        drive_mapping[c] = i;
+        int dev = device_install(DEV_BLOCK, DEV_DISK, (void *)i, "NVME", 0, nullptr, (void *)ahci_vdisk_read, (void *)ahci_vdisk_write);
 
-        int type = check_type(&hba_mem->ports[drive_mapping[c]]);
+        int type = check_type(&hba_mem->ports[drive_mapping[dev]]);
     }
 }
