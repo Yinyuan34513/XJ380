@@ -1,8 +1,6 @@
-ASM_FLAGS = -O0 -Wall -g -nostdlib -m64 -fno-stack-protector -ffreestanding -fno-exceptions -mcmodel=large
-C_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c99 -fshort-wchar -nostdinc -mcmodel=large
-CPP_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mcmodel=large
-
-CPP_VERSION ?= 14
+ASM_FLAGS = -O0 -Wall -g -nostdlib -m64 -fno-stack-protector -ffreestanding -fno-exceptions
+C_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+CPP_FLAGS = -O0 -Wall -g -ffreestanding -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 
@@ -22,7 +20,6 @@ ASM_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.S")
 C_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.c")
 CPP_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.cpp")
 
-CPP = $(COMPILER_PREFIX)g++-$(CPP_VERSION)
 else
 COMPILER_PREFIX =  powershell -Command x86_64-elf-
 RMDIR_CMD = powershell -Command Remove-Item -Force
@@ -47,10 +44,10 @@ CPP_FILES += $(addprefix ./driver/, $(patsubst \, /, $(shell powershell -Command
 CPP_FILES += $(addprefix ./font/, $(patsubst \, /, $(shell powershell -Command "Get-ChildItem -Name -Filter *.cpp -Recurse -Path font")))
 CPP_FILES += $(addprefix ./lib/, $(patsubst \, /, $(shell powershell -Command "Get-ChildItem -Name -Filter *.cpp -Recurse -Path lib")))
 
-CPP = $(COMPILER_PREFIX)g++
 endif
 
 CC = $(COMPILER_PREFIX)gcc
+CPP = $(CC)
 LD = $(COMPILER_PREFIX)ld
 NM = $(COMPILER_PREFIX)nm
 OBJD = $(COMPILER_PREFIX)objdump

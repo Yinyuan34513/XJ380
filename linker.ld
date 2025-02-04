@@ -3,7 +3,7 @@ ENTRY(KernelMain)
   
 SECTIONS  
 {  
-    . = 0xFFFF800000000000;         /* 假设程序从1MB的内存地址开始 */  
+    . = 0xFFFFFFFF80000000;         /* 假设程序从1MB的内存地址开始 */  
     . = ALIGN(4K);  /* 确保起始地址是4KB对齐的 */  
   
     _kernel_start = .;

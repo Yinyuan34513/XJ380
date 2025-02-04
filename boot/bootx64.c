@@ -260,6 +260,56 @@ void CreateAndMapNewPageTable()
                        : "r"(new_page_table_addr));
 }
 
+void MapVirtToPhys(uint64_t virt, uint64_t size)
+{
+  uint64_t page_table_addr;
+  __asm__ __volatile__("mov %%cr3, %0"
+                       : "=r"(page_table_addr));
+
+  const KERNEL_PERM = 0x03;
+
+  for (uint64_t addr = virt; addr < virt + size + PAGE_SIZE - 1; addr += PAGE_SIZE)
+  {
+    // Map vaddr to paddr
+    uint64_t *pml4 = (uint64_t *)page_table_addr;
+    uint64_t pml4_id = (addr >> 39) & 0x1FF;
+    if (pml4[pml4_id] == 0)
+    {
+      uint64_t pml4_addr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pml4_addr);
+      xmemset((void *)pml4_addr, 0, PAGE_SIZE);
+      pml4[pml4_id] = pml4_addr | KERNEL_PERM;
+    }
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
+    uint64_t pdpt_id = (addr >> 30) & 0x1FF;
+    if (pdpt[pdpt_id] == 0)
+    {
+      uint64_t pdpt_addr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pdpt_addr);
+      xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
+      pdpt[pdpt_id] = pdpt_addr | KERNEL_PERM;
+    }
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
+    uint64_t pd_id = (addr >> 21) & 0x1FF;
+    if (pd[pd_id] == 0)
+    {
+      uint64_t pd_addr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pd_addr);
+      xmemset((void *)pd_addr, 0, PAGE_SIZE);
+      pd[pd_id] = pd_addr | KERNEL_PERM;
+    }
+    uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
+    uint64_t pt_id = (addr >> 12) & 0x1FF;
+    if (pt[pt_id] == 0)
+    {
+      uint64_t paddr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &paddr);
+      xmemset((void *)paddr, 0, PAGE_SIZE);
+      pt[pt_id] = paddr | KERNEL_PERM;
+    }
+  }
+}
+
 typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *);
 
@@ -319,6 +369,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel_buffer;
   UINT64 kernel_first_addr, kernel_last_addr;                        // 计算的首尾
   CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
+
+  MapVirtToPhys(kernel_first_addr, kernel_last_addr - kernel_first_addr);
 
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
