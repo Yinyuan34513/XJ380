@@ -7,7 +7,7 @@ extern char *kallsyms_names __attribute__((weak));
 
 extern uint8_t _kernel_start[];
 
-int lookup_kallsyms(uint64_t address)
+int lookup_kallsyms(uint64_t address, int i)
 {
     int index = 0;
     char *string = (char *)&kallsyms_names;
@@ -25,6 +25,12 @@ int lookup_kallsyms(uint64_t address)
         write_serial_string("(");
         write_serial_hex(kallsyms_addresses[index]);
         write_serial_string(")\n");
+
+        WriteString(*fbc_addr, 8, 400 + i * 60, "backtrace address:", {0, 0, 0});
+        WriteHex(*fbc_addr, 200, 400 + i * 60, address, {0, 0, 0});
+        WriteString(*fbc_addr, 8, 420 + i * 60, "backtrace function:", {0, 0, 0});
+        WriteString(*fbc_addr, 200, 420 + i * 60, &string[kallsyms_index[index]], {0, 0, 0});
+        WriteString(*fbc_addr, 8, 440 + i * 60, "--------------------------------", {0, 0, 0});
         return 0;
     }
     else
@@ -44,10 +50,10 @@ void backtrace(struct X64_REGS *regs)
 
     write_serial_string("Kernel backtrace:\n");
 
-    lookup_kallsyms(regs->rip);
+    lookup_kallsyms(regs->rip, 0);
     for (i = 0; i < 8; i++)
     {
-        if (lookup_kallsyms(ret_address))
+        if (lookup_kallsyms(ret_address, i + 1))
             break;
 
         if ((uint64_t)rbp >= current_task->thread->rsp0 || (uint64_t)rbp < regs->rsp)
