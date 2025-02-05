@@ -2,17 +2,17 @@
 
 extern VNodeOps fat32_ops;
 
-unsigned int fat32_read_fat_entry(FAT32_NodeInfo *fsbi, unsigned int fat_entry)
+uint32_t fat32_read_fat_entry(FAT32_NodeInfo *fsbi, uint32_t fat_entry)
 {
-    unsigned int buf[128];
+    uint32_t buf[128];
     xmemset(buf, 0, 512);
     device_read(fsbi->dev, buf, 1, fsbi->FAT1_firstsector + (fat_entry >> 7), 0);
     return buf[fat_entry & 0x7f] & 0x0fffffff;
 }
 
-unsigned long fat32_write_fat_entry(FAT32_NodeInfo *fsbi, unsigned int fat_entry, unsigned int value)
+uint64_t fat32_write_fat_entry(FAT32_NodeInfo *fsbi, uint32_t fat_entry, uint32_t value)
 {
-    unsigned int buf[128];
+    uint32_t buf[128];
     int i;
 
     xmemset(buf, 0, 512);
@@ -22,6 +22,58 @@ unsigned long fat32_write_fat_entry(FAT32_NodeInfo *fsbi, unsigned int fat_entry
     for (i = 0; i < fsbi->NumFATs; i++)
         device_write(fsbi->dev, buf, 1, fsbi->FAT1_firstsector + fsbi->sector_per_FAT * i + (fat_entry >> 7), 0);
     return 1;
+}
+
+uint64_t fat32_find_available_cluster(FAT32_NodeInfo *fsbi)
+{
+    int i, j;
+    int fat_entry;
+    uint64_t sector_per_fat = fsbi->sector_per_FAT;
+    uint32_t buf[128];
+
+    //	fsbi->fat_fsinfo->FSI_Free_Count & fsbi->fat_fsinfo->FSI_Nxt_Free not exactly,so unuse
+
+    for (i = 0; i < sector_per_fat; i++)
+    {
+        xmemset(buf, 0, 512);
+        device_read(fsbi->dev, buf, 1, fsbi->FAT1_firstsector + i, 0);
+
+        for (j = 0; j < 128; j++)
+        {
+            if ((buf[j] & 0x0fffffff) == 0)
+                return (i << 7) + j;
+        }
+    }
+    return 0;
+}
+
+int fat_write_node(VNode *node)
+{
+    struct FAT32_Directory *fdentry = NULL;
+    struct FAT32_Directory *buf = NULL;
+    FAT32_NodeInfo *info = (FAT32_NodeInfo *)node->desc;
+    unsigned long sector = 0;
+
+    if (info->dentry_location == 0)
+    {
+        write_serial_string("FS ERROR:write root inode!\n");
+        return -1;
+    }
+
+    sector = info->Data_firstsector + (info->dentry_location - 2) * info->sector_per_cluster;
+    buf = (struct FAT32_Directory *)malloc(info->bytes_per_cluster);
+    xmemset(buf, 0, info->bytes_per_cluster);
+    device_read(info->dev, buf, info->sector_per_cluster, sector, 0);
+    fdentry = buf + info->dentry_position;
+
+    ////alert fat32 dentry data
+    fdentry->DIR_FileSize = node->file_size;
+    fdentry->DIR_FstClusLO = info->first_cluster & 0xffff;
+    fdentry->DIR_FstClusHI = (fdentry->DIR_FstClusHI & 0xf000) | (info->first_cluster >> 16);
+
+    device_write(info->dev, buf, info->sector_per_cluster, sector, 0);
+
+    free(buf);
 }
 
 int fat_super(int dev, VNode *result)
@@ -75,7 +127,6 @@ int fat_super(int dev, VNode *result)
     desc->dev = dev;
 
     node->desc = desc;
-    node->type = NODE_TYPE_DIR;
 
     return 0;
 }
@@ -100,7 +151,7 @@ next_cluster:
     sector = info->Data_firstsector + (cluster - 2) * info->sector_per_cluster;
     if (device_read(info->dev, buf, info->sector_per_cluster, sector, 0) != 0)
     {
-        write_serial_string("FAT32 FS(lookup) read disk error!!!");
+        write_serial_string("FAT32 FS(lookup) read disk error!!!!!!!!!!");
         free(buf);
         return 0;
     }
@@ -329,14 +380,199 @@ find_lookup_success:
     search_node->ops = &fat32_ops;
     search_node->desc = desc;
     search_node->type = (tmpdentry->DIR_Attr & ATTR_DIRECTORY) ? NODE_TYPE_DIR : NODE_TYPE_FILE;
+    search_node->file_size = tmpdentry->DIR_FileSize;
 
     free(buf);
     return 1;
 }
 
+int fat_open(VNode *parent, const char *name, VNode *node)
+{
+    return 0;
+}
+
+void fat_close(VNode *current)
+{
+}
+
+int fat_resize(VNode *current, uint64_t size)
+{
+    return 0;
+}
+
+int fat_read(VNode *node, uint8_t *buf, size_t position, size_t count)
+{
+    FAT32_NodeInfo *info = (FAT32_NodeInfo *)node->desc;
+
+    uint64_t cluster = info->first_cluster;
+    uint64_t sector = 0;
+    int i, length = 0;
+    int retval = 0;
+    int index = position / info->bytes_per_cluster;
+    long offset = position % info->bytes_per_cluster;
+    char *buffer = (char *)malloc(info->bytes_per_cluster);
+
+    if (!cluster)
+    {
+        free(buffer);
+        return -1;
+    }
+
+    for (i = 0; i < index; i++)
+    {
+        cluster = fat32_read_fat_entry(info, cluster);
+    }
+
+    if (position + count > node->file_size)
+    {
+        count = node->file_size - position;
+        index = count;
+    }
+    else
+    {
+        index = count;
+    }
+
+    do
+    {
+        xmemset(buffer, 0, info->bytes_per_cluster);
+        sector = info->Data_firstsector + (cluster - 2) * info->sector_per_cluster;
+        if (device_read(info->dev, buffer, info->sector_per_cluster, sector, 0) != 0)
+        {
+            write_serial_string("FAT32 FS(read) read disk ERROR!!!!!!!!!!\n");
+            retval = -1;
+            break;
+        }
+
+        length = index <= info->bytes_per_cluster - offset ? index : info->bytes_per_cluster - offset;
+
+        xmemcpy(buf, buffer + offset, length);
+
+        index -= length;
+        buf += length;
+        offset -= offset;
+        position += length;
+    } while (index && (cluster = fat32_read_fat_entry(info, cluster)));
+
+    free(buffer);
+    if (!index)
+        retval = count;
+
+    return retval;
+}
+
+int fat_write(VNode *node, uint8_t *buf, size_t position, size_t count)
+{
+    FAT32_NodeInfo *info = (FAT32_NodeInfo *)node->desc;
+
+    uint64_t cluster = info->first_cluster;
+    uint64_t next_cluster = 0;
+    uint64_t sector = 0;
+    int i, length = 0;
+    int retval = 0;
+    long flags = 0;
+    int index = position / info->bytes_per_cluster;
+    long offset = position % info->bytes_per_cluster;
+    char *buffer = (char *)malloc(info->bytes_per_cluster);
+
+    if (!cluster)
+    {
+        cluster = fat32_find_available_cluster(info);
+        flags = 1;
+    }
+    else
+        for (i = 0; i < index; i++)
+            cluster = fat32_read_fat_entry(info, cluster);
+
+    if (!cluster)
+    {
+        free(buffer);
+        return -1;
+    }
+
+    if (flags)
+    {
+        info->first_cluster = cluster;
+        node->parent->ops->write_node(node);
+        fat32_write_fat_entry(info, cluster, 0x0ffffff8);
+    }
+
+    index = count;
+
+    do
+    {
+        if (!flags)
+        {
+            xmemset(buffer, 0, info->bytes_per_cluster);
+            sector = info->Data_firstsector + (cluster - 2) * info->sector_per_cluster;
+            if (device_read(info->dev, buffer, info->sector_per_cluster, sector, 0) != 0)
+            {
+                write_serial_string("FAT32 FS(write) read disk ERROR!!!!!!!!!!\n");
+                retval = -1;
+                break;
+            }
+        }
+
+        length = index <= info->bytes_per_cluster - offset ? index : info->bytes_per_cluster - offset;
+
+        xmemcpy(buffer + offset, buf, length);
+
+        if (device_write(info->dev, buffer, info->sector_per_cluster, sector, 0) != 0)
+        {
+            write_serial_string("FAT32 FS(write) write disk ERROR!!!!!!!!!!\n");
+            retval = -1;
+            break;
+        }
+
+        index -= length;
+        buf += length;
+        offset -= offset;
+        position += length;
+
+        if (index)
+            next_cluster = fat32_read_fat_entry(info, cluster);
+        else
+            break;
+
+        if (next_cluster >= 0x0ffffff8)
+        {
+            next_cluster = fat32_find_available_cluster(info);
+            if (!next_cluster)
+            {
+                free(buffer);
+                return -1;
+            }
+
+            fat32_write_fat_entry(info, cluster, next_cluster);
+            fat32_write_fat_entry(info, next_cluster, 0x0ffffff8);
+            cluster = next_cluster;
+            flags = 1;
+        }
+
+    } while (index);
+
+    if (position > node->file_size)
+    {
+        node->file_size = position;
+        node->parent->ops->write_node(node);
+    }
+
+    free(buffer);
+    if (!index)
+        retval = count;
+    return retval;
+}
+
 VNodeOps fat32_ops = {
     .lookup = fat_lookup,
     .super = fat_super,
+    .write_node = fat_write_node,
+
+    .open = fat_open,
+    .close = fat_close,
+    .resize = fat_resize,
+    .read = fat_read,
+    .write = fat_write,
 };
 
 void init_fat()

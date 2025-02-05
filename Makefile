@@ -8,7 +8,7 @@ ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
 endif
 
-QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX = x86_64-linux-gnu-
 
@@ -61,7 +61,7 @@ clean:
 vdisk: all
 	@rm -rf XJ380.img
 
-	@dd if=/dev/zero bs=1M count=0 seek=128 of=XJ380.img
+	@dd if=/dev/zero bs=1M count=0 seek=64 of=XJ380.img
 	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
 	@mformat -s 32 -c 1 -v "NO NAME" -i XJ380.img@@1M

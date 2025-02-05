@@ -173,6 +173,9 @@ void test_vfs()
     write_serial_string("bootx64_efi_node: name = ");
     write_serial_string(bootx64_efi_node->name);
     write_serial_string("\n");
+
+    uint8_t *buf = (uint8_t *)malloc(bootx64_efi_node->file_size);
+    bootx64_efi_node->ops->read(bootx64_efi_node, buf, 0, bootx64_efi_node->file_size);
 }
 
 void mount_root()
@@ -184,12 +187,13 @@ void mount_root()
 
     if (device)
     {
-        for (int i = 0; i < MAX_FS_NUM; i++)
+        for (int i = 0; i < fs_idx; i++)
         {
             FileSystem *filesystem = &filesystems[i];
             if (filesystem->ops && filesystem->ops->super && filesystem->ops->super(device->dev, root) == 0)
             {
                 root->ops = filesystem->ops;
+                root->type = NODE_TYPE_DIR;
                 write_serial_string("Mount root OK\n");
                 test_vfs();
                 return;

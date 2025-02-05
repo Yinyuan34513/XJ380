@@ -19,12 +19,13 @@ typedef struct
     // For kernel
     int (*lookup)(VNode *node, VNode *search_node);
     int (*super)(int drive, VNode *result);
+    int (*write_node)(VNode *node);
     // For user
     int (*open)(VNode *parent, const char *name, VNode *node);
     void (*close)(VNode *current);
     int (*resize)(VNode *current, uint64_t size);
-    int (*write)(VNode *file, void *addr, size_t offset, size_t size);
-    int (*read)(VNode *file, void *addr, size_t offset, size_t size);
+    int (*read)(VNode *file, uint8_t *addr, size_t offset, size_t size);
+    int (*write)(VNode *file, uint8_t *addr, size_t offset, size_t size);
     int (*stat)(VNode *file, VNode *node);
     int (*mkdir)(VNode *parent, const char *name, VNode *node);
     int (*creat)(VNode *parent, const char *name, VNode *node);
@@ -35,6 +36,8 @@ struct v_node
 {
     char *name;
     int name_len;
+
+    uint64_t file_size;
 
     VNode *parent;
 

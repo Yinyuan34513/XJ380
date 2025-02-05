@@ -118,6 +118,18 @@ NVME_COMPLETION_QUEUE_ENTRY NVMEWaitingCMD(NVME_SUBMISSION_QUEUE *sq, NVME_SUBMI
     cq->COM.DBL[0] = cq->COM.HAD;
     return *cqe;
 }
+
+void nvme_rwfail(uint16_t status)
+{
+    write_serial_string("Status: ");
+    write_serial_hex(status);
+    write_serial_string("\nStatus code: ");
+    write_serial_hex(status & 0xFF);
+    write_serial_string("\nStatus code type: ");
+    write_serial_hex((status >> 8) & 0x7);
+    write_serial_string("\n");
+}
+
 uint32_t NVMETransfer(NVME_NAMESPACE *ns, void *buf, uint64_t lba, uint32_t count, uint32_t write)
 {
     if (!count)
@@ -144,10 +156,17 @@ uint32_t NVMETransfer(NVME_NAMESPACE *ns, void *buf, uint64_t lba, uint32_t coun
     NVME_COMPLETION_QUEUE_ENTRY cqe = NVMEWaitingCMD(&ns->CTRL->ISQ, &sqe);
     if ((cqe.STS >> 1) & 0xFF)
     {
-        write_serial_string("NVME CANNOT READ\n");
+        if (write)
+        {
+            write_serial_string("NVME CANNOT WRITE\n");
+        }
+        else
+            write_serial_string("NVME CANNOT READ\n");
+
+        nvme_rwfail(cqe.STS);
         return -1;
     }
-    return count;
+    return count ? 0 : -1;
 }
 
 void failed_nvme(NVME_CONTROLLER *ctrl)
@@ -178,14 +197,12 @@ void failed_namespace(NVME_IDENTIFY_NAMESPACE *identifyNS)
 
 int NvmeRead(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, false);
-    return 0;
+    return NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, false);
 }
 
 int NvmeWrite(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, true);
-    return 0;
+    return NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, true);
 }
 
 void init_nvme()
