@@ -9,3 +9,5 @@ out/draw.o
 /out
 /nul
 .cache
+
+*.img
