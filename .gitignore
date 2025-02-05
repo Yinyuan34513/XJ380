@@ -12,3 +12,5 @@ out/draw.o
 
 *.img
 *.tags
+*.elf
+*.o

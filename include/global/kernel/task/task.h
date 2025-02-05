@@ -43,6 +43,8 @@ struct thread_struct
     uint64_t error_code;
 };
 
+#define MAX_FD_NUM 16
+
 struct task_struct
 {
     volatile long state;
@@ -61,6 +63,8 @@ struct task_struct
     long pid;
     long priority;
     long vrun_time;
+
+    struct VFile *fds[MAX_FD_NUM];
 
     struct task_struct *next;
     struct task_struct *parent;

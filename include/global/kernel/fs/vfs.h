@@ -1,6 +1,6 @@
 #pragma once
 
-#define MAX_VNODE_NUM 1024
+#define MAX_VNODE_NUM 2048
 #define MAX_CHILD_VNODE_NUM 256
 
 enum
@@ -9,6 +9,10 @@ enum
     NODE_TYPE_FILE,
     NODE_TYPE_DIR,
 };
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 
 struct v_node;
 
@@ -26,6 +30,7 @@ typedef struct
     int (*resize)(VNode *current, uint64_t size);
     int (*read)(VNode *file, uint8_t *addr, size_t offset, size_t size);
     int (*write)(VNode *file, uint8_t *addr, size_t offset, size_t size);
+    int (*lseek)(VNode *node, uint64_t offset, uint64_t origin);
     int (*stat)(VNode *file, VNode *node);
     int (*mkdir)(VNode *parent, const char *name, VNode *node);
     int (*creat)(VNode *parent, const char *name, VNode *node);
@@ -38,6 +43,7 @@ struct v_node
     int name_len;
 
     uint64_t file_size;
+    uint64_t position;
 
     VNode *parent;
 
@@ -73,5 +79,7 @@ typedef struct
 } FileSystem;
 
 void init_vfs();
+
+VNode *path_walk(VNode *parent, const char *path);
 
 void register_fs(const char *name, VNodeOps *ops);

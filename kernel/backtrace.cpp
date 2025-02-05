@@ -34,6 +34,11 @@ int lookup_kallsyms(uint64_t address)
 void backtrace(struct X64_REGS *regs)
 {
     uint64_t *rbp = (uint64_t *)regs->rbp;
+    if (regs->rbp < 0xFFFF800000000000)
+    {
+        write_serial_string("Fault in user land\n");
+        return;
+    }
     uint64_t ret_address = *(rbp + 1);
     int i = 0;
 

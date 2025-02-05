@@ -27,6 +27,161 @@ uint64_t idle_entry(uint64_t arg)
     }
 }
 
+VNode *open_exec_file(const char *name)
+{
+    return path_walk(nullptr, name);
+}
+
+uint64_t fail_parse_elf(void *buf, int retval)
+{
+    free(buf);
+    return (uint64_t)retval;
+}
+
+uint64_t parse_elf_file(struct X64_REGS *regs, VNode *file_node)
+{
+    int retval = 0;
+    KERNEL_MAPPER mapper(PAGE_TABLE_BASE_ADDR);
+
+    void *buf = malloc(PAGE_SIZE);
+    xmemset(buf, 0, PAGE_SIZE);
+    uint64_t pos = 0;
+    pos = file_node->ops->lseek(file_node, 0, SEEK_SET);
+    retval = file_node->ops->read(file_node, (uint8_t *)buf, pos, file_node->file_size);
+    retval = 0;
+
+    Elf32_Ehdr *ptr = (Elf32_Ehdr *)buf;
+    if (!(ptr->e_ident[EI_MAG0] == ELFMAG0 && ptr->e_ident[EI_MAG1] == ELFMAG1 && ptr->e_ident[EI_MAG2] == ELFMAG2 && ptr->e_ident[EI_MAG3] == ELFMAG3))
+    {
+        write_serial_string("Not an ELF file: %s");
+        retval = -1;
+        return fail_parse_elf(buf, retval);
+    }
+
+    // 暂时只支持64位的文件
+    if (ptr->e_ident[EI_CLASS] != ELFCLASS64)
+    {
+        write_serial_string("ptr->e_ident[EI_CLASS]=");
+        write_serial_dec(ptr->e_ident[EI_CLASS]);
+        retval = -1;
+        return fail_parse_elf(buf, retval);
+    }
+    Elf64_Ehdr ehdr = *(Elf64_Ehdr *)buf;
+    // 暂时只支持AMD64架构
+    if (ehdr.e_machine != EM_AMD64)
+    {
+        ("e_machine=%d", ehdr.e_machine);
+        retval = -1;
+        return fail_parse_elf(buf, retval);
+    }
+
+    if (ehdr.e_type != ET_EXEC)
+    {
+        retval = -1;
+        return fail_parse_elf(buf, retval);
+    }
+
+    regs->rip = ehdr.e_entry;
+
+    Elf64_Phdr *phdr = (Elf64_Phdr *)((uint64_t)buf + ehdr.e_phoff);
+
+    for (int i = 0; i < ehdr.e_phnum; i++)
+    {
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+
+        mapper.map_range(phdr[i].p_vaddr, 0, phdr[i].p_filesz, 0x7);
+        flush_tlb();
+
+        uint64_t segm_in_file = (uint64_t)buf + phdr[i].p_offset;
+        xmemcpy((VOID *)phdr[i].p_vaddr, (VOID *)segm_in_file, phdr[i].p_filesz);
+        uint64_t remain_bytes = phdr[i].p_memsz - phdr[i].p_filesz;
+        xmemset((VOID *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes);
+    }
+
+    free(buf);
+
+    uint64_t stack_start_addr = current_task->mm->start_stack - STACK_SIZE;
+    mapper.map_range(stack_start_addr, 0, STACK_SIZE, 0x7);
+    flush_tlb();
+
+    xmemset((void *)stack_start_addr, 0, STACK_SIZE);
+
+    return retval;
+}
+
+extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[])
+{
+    uint64_t stack_start_addr = 0x6ffff0a00000UL;
+    const uint64_t brk_start_addr = 0x700000000000UL;
+    uint64_t retval = 0;
+    uint64_t pos = 0;
+    VNode *file_node;
+
+    switch_mm(nullptr, current_task);
+
+    file_node = open_exec_file(name);
+    if (!file_node)
+    {
+        write_serial_string("Cannot open file: ");
+        write_serial_string(name);
+        write_serial_string("\n");
+        return 1;
+    }
+
+    if (!(current_task->flags & PF_KTHREAD))
+        current_task->addr_limit = 0x00007FFFFFFFFFFF;
+
+    current_task->mm->end_code = 0;
+    current_task->mm->start_data = 0;
+    current_task->mm->end_data = 0;
+    current_task->mm->start_rodata = 0;
+    current_task->mm->end_rodata = 0;
+    current_task->mm->start_brk = brk_start_addr;
+    current_task->mm->end_brk = brk_start_addr;
+    current_task->mm->start_stack = stack_start_addr;
+
+    current_task->flags &= ~PF_KTHREAD;
+
+    if (argv != NULL)
+    {
+        int len = 0;
+        int i = 0;
+        char **dargv = (char **)(stack_start_addr - 10 * sizeof(char *));
+        pos = (uint64_t)dargv;
+
+        for (i = 0; i < 10 && argv[i] != NULL; i++)
+        {
+            len = strlen(argv[i]) + 1;
+            strcpy((char *)(pos - len), argv[i]);
+            dargv[i] = (char *)(pos - len);
+            pos -= len;
+        }
+        stack_start_addr = pos - 10;
+        regs->rdi = i;               // argc
+        regs->rsi = (uint64_t)dargv; // argv
+    }
+
+    __asm__ __volatile__("movq	%0, %%gs\n\t"
+                         "movq	%0, %%fs\n\t" ::"r"(0UL));
+
+    retval = parse_elf_file(regs, file_node);
+
+    regs->cs = SELECTOR_USER_CS | 0x3;
+    regs->ds = SELECTOR_USER_DS | 0x3;
+    regs->es = SELECTOR_USER_DS | 0x3;
+    regs->ss = SELECTOR_USER_DS | 0x3;
+
+    regs->rsp = current_task->mm->start_stack;
+    regs->rbp = current_task->mm->start_stack;
+
+    regs->rflags = 0x200246;
+
+    regs->rax = current_task->mm->start_stack - STACK_SIZE;
+
+    return retval;
+}
+
 extern const FrameBufferConfig *fbc_addr;
 extern EFI_SYSTEM_TABLE *ST;
 extern BOOT_CONFIG *BC;
@@ -67,10 +222,20 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     write_serial_string("Operating System Initialize Success.\n");
 
-    while (1)
-    {
-        __asm__ __volatile__("sti\n\thlt");
-    }
+    disable_intr();
+
+    current_task->thread->rip = (uint64_t)ret_from_intr;
+    current_task->thread->rsp = (uint64_t)current_task + STACK_SIZE - sizeof(struct X64_REGS);
+    current_task->thread->gs = SELECTOR_USER_DS | 0x3;
+    current_task->thread->fs = SELECTOR_USER_DS | 0x3;
+    current_task->flags &= ~PF_KTHREAD;
+
+    __asm__ __volatile__("movq	%1,	%%rsp	\n\t"
+                         "pushq	%2		\n\t"
+                         "jmp	do_execve	\n\t"
+                         :
+                         : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(nullptr), "c"(nullptr)
+                         : "memory");
 }
 
 extern spinlock_t fb_print_lock;
@@ -271,7 +436,6 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     }
     else
     {
-
         thd->fs = SELECTOR_KERNEL_DS;
         thd->gs = SELECTOR_KERNEL_DS;
     }

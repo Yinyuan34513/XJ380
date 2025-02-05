@@ -1,6 +1,6 @@
-ASM_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -nostdlib -mcmodel=kernel -m64 -fno-stack-protector -ffreestanding -fno-exceptions
-C_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+export ASM_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -nostdlib -mcmodel=kernel -m64 -fno-stack-protector -ffreestanding -fno-exceptions
+export C_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+export CPP_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 
@@ -17,12 +17,11 @@ ASM_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.S")
 C_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.c")
 CPP_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.cpp")
 
-
-CC = $(COMPILER_PREFIX)gcc
-CPP = $(CC)
-LD = $(COMPILER_PREFIX)ld
-NM = $(COMPILER_PREFIX)nm
-OBJD = $(COMPILER_PREFIX)objdump
+export CC = $(COMPILER_PREFIX)gcc
+export CPP = $(CC)
+export LD = $(COMPILER_PREFIX)ld
+export NM = $(COMPILER_PREFIX)nm
+export OBJD = $(COMPILER_PREFIX)objdump
 
 ASM_OBJS := $(sort $(patsubst ./%.S, ./out/%.o, $(ASM_FILES)))
 C_OBJS := $(sort $(patsubst ./%.c, ./out/%.o, $(C_FILES)))
@@ -68,6 +67,10 @@ vdisk: all
 	@mmd -i XJ380.img@@1M ::/EFI ::/EFI/BOOT ::/usr
 	@mcopy -i XJ380.img@@1M out/kernel.elf ::/
 	@mcopy -i XJ380.img@@1M out/BOOTX64.efi ::/EFI/BOOT
+
+	@$(MAKE) -C user
+
+	@mcopy -i XJ380.img@@1M out/init.elf ::/usr
 
 run: vdisk
 	@$(QEMU_CMD)

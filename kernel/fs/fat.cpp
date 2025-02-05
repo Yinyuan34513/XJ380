@@ -563,6 +563,37 @@ int fat_write(VNode *node, uint8_t *buf, size_t position, size_t count)
     return retval;
 }
 
+int fat_lseek(VNode *node, uint64_t offset, uint64_t origin)
+{
+    long pos = 0;
+
+    switch (origin)
+    {
+    case SEEK_SET:
+        pos = offset;
+        break;
+
+    case SEEK_CUR:
+        pos = node->position + offset;
+        break;
+
+    case SEEK_END:
+        pos = node->file_size - offset;
+        break;
+
+    default:
+        return -1;
+        break;
+    }
+
+    if (pos < 0 || pos > node->file_size)
+        return -1;
+
+    node->position = pos;
+
+    return pos;
+}
+
 VNodeOps fat32_ops = {
     .lookup = fat_lookup,
     .super = fat_super,
@@ -573,9 +604,10 @@ VNodeOps fat32_ops = {
     .resize = fat_resize,
     .read = fat_read,
     .write = fat_write,
+    .lseek = fat_lseek,
 };
 
 void init_fat()
 {
-    register_fs("FAT", &fat32_ops);
+    register_fs("FAT32", &fat32_ops);
 }

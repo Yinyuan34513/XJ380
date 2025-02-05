@@ -164,18 +164,6 @@ void failed_to_mount_root()
 
 void test_vfs()
 {
-    VNode *bootx64_efi_node = path_walk(nullptr, "EFI/BOOT/BOOTX64.efi");
-    if (!bootx64_efi_node)
-    {
-        write_serial_string("Cannot path walk BOOTX64.efi\n");
-        return;
-    }
-    write_serial_string("bootx64_efi_node: name = ");
-    write_serial_string(bootx64_efi_node->name);
-    write_serial_string("\n");
-
-    uint8_t *buf = (uint8_t *)malloc(bootx64_efi_node->file_size);
-    bootx64_efi_node->ops->read(bootx64_efi_node, buf, 0, bootx64_efi_node->file_size);
 }
 
 void mount_root()

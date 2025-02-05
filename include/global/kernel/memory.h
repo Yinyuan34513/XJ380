@@ -305,4 +305,16 @@ static inline uint64_t convert_virtual_to_physical(uint64_t virtual_addr)
   return virtual_addr - 0xFFFF800000000000;
 }
 
+#define flush_tlb()             \
+  do                            \
+  {                             \
+    uint64_t tmp;               \
+    io_mfence();                \
+    __asm__ __volatile__(       \
+        "movq %%cr3, %0\n\t"    \
+        "movq %0, %%cr3\n\t"    \
+        : "=r"(tmp)::"memory"); \
+                                \
+  } while (0);
+
 #endif

@@ -13,7 +13,7 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
 {
     uint64_t *page_table_addr = this->page_table;
 
-    // Map vaddr to paddr
+    // Map paddr to vaddr
     uint64_t *pml4 = (uint64_t *)page_table_addr;
     uint64_t pml4_id = (vaddr >> 39) & 0x1FF;
     if (pml4[pml4_id] == 0)
@@ -42,7 +42,14 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     uint64_t pt_id = (vaddr >> 12) & 0x1FF;
     if (pt[pt_id] == 0)
     {
-        pt[pt_id] = paddr | flags;
+        if (paddr == 0)
+        {
+            pt[pt_id] = (uint64_t)PAGE_ALLOC.alloc_page() | flags;
+        }
+        else
+        {
+            pt[pt_id] = paddr | flags;
+        }
     }
 }
 
@@ -67,15 +74,22 @@ void KERNEL_MAPPER::unmap_page(uint64_t vaddr)
 
 void KERNEL_MAPPER::map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags)
 {
-    for (uint64_t i = 0; i < size + 4095; i += PAGE_SIZE)
+    for (uint64_t i = 0; i < size; i += PAGE_SIZE)
     {
-        map_page(vaddr + i, paddr + i, flags);
+        if (paddr == 0)
+        {
+            map_page(vaddr + i, 0, flags);
+        }
+        else
+        {
+            map_page(vaddr + i, paddr + i, flags);
+        }
     }
 }
 
 void KERNEL_MAPPER::unmap_range(uint64_t vaddr, uint64_t size)
 {
-    for (uint64_t i = 0; i < size + 4095; i += PAGE_SIZE)
+    for (uint64_t i = 0; i < size; i += PAGE_SIZE)
     {
         unmap_page(vaddr + i);
     }
