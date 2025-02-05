@@ -50,7 +50,6 @@ struct v_node
     VNode **childs;
     int childs_len;
 
-    int nr;
     uint16_t type;
 
     uint16_t ctime;

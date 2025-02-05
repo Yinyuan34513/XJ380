@@ -1,4 +1,5 @@
 #include "../../include/include.h"
+#include "../../include/cinc/elf.h"
 #include "../alloc/page.h"
 
 struct mm_struct init_mm = {0};
@@ -23,7 +24,7 @@ uint64_t idle_entry(uint64_t arg)
 {
     while (1)
     {
-        __asm__ __volatile__("sti\n\thlt");
+        __asm__ __volatile__("sti\n\tpause");
     }
 }
 
@@ -34,80 +35,109 @@ VNode *open_exec_file(const char *name)
 
 uint64_t fail_parse_elf(void *buf, int retval)
 {
-    free(buf);
+    if (buf)
+    {
+        free(buf);
+    }
     return (uint64_t)retval;
 }
 
 uint64_t parse_elf_file(struct X64_REGS *regs, VNode *file_node)
 {
-    int retval = 0;
+    Elf64_Ehdr ehdr;
+    Elf64_Phdr *phdrs = nullptr;
     KERNEL_MAPPER mapper(PAGE_TABLE_BASE_ADDR);
-
-    void *buf = malloc(PAGE_SIZE);
-    xmemset(buf, 0, PAGE_SIZE);
     uint64_t pos = 0;
+    int retval = 0;
+    char *buf = nullptr;
+    uint64_t file_size = file_node->file_size;
+
+    // 读取整个文件
+    buf = (char *)malloc(file_size);
+    if (!buf)
+    {
+        return -1;
+    }
+
     pos = file_node->ops->lseek(file_node, 0, SEEK_SET);
-    retval = file_node->ops->read(file_node, (uint8_t *)buf, pos, file_node->file_size);
-    retval = 0;
+    file_node->ops->read(file_node, (uint8_t *)buf, pos, file_size);
 
-    Elf32_Ehdr *ptr = (Elf32_Ehdr *)buf;
-    if (!(ptr->e_ident[EI_MAG0] == ELFMAG0 && ptr->e_ident[EI_MAG1] == ELFMAG1 && ptr->e_ident[EI_MAG2] == ELFMAG2 && ptr->e_ident[EI_MAG3] == ELFMAG3))
+    // 解析ELF头
+    ehdr = *(Elf64_Ehdr *)buf;
+
+    // 验证ELF魔数 (0x7F,'E','L','F')
+    if (*(uint32_t *)ehdr.e_ident != 0x464C457F)
     {
-        write_serial_string("Not an ELF file: %s");
-        retval = -1;
-        return fail_parse_elf(buf, retval);
+        free(buf);
+        return -1;
     }
 
-    // 暂时只支持64位的文件
-    if (ptr->e_ident[EI_CLASS] != ELFCLASS64)
-    {
-        write_serial_string("ptr->e_ident[EI_CLASS]=");
-        write_serial_dec(ptr->e_ident[EI_CLASS]);
-        retval = -1;
-        return fail_parse_elf(buf, retval);
-    }
-    Elf64_Ehdr ehdr = *(Elf64_Ehdr *)buf;
-    // 暂时只支持AMD64架构
-    if (ehdr.e_machine != EM_AMD64)
-    {
-        ("e_machine=%d", ehdr.e_machine);
-        retval = -1;
-        return fail_parse_elf(buf, retval);
-    }
-
-    if (ehdr.e_type != ET_EXEC)
-    {
-        retval = -1;
-        return fail_parse_elf(buf, retval);
-    }
-
+    // 设置程序入口点
     regs->rip = ehdr.e_entry;
 
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((uint64_t)buf + ehdr.e_phoff);
+    // 获取程序头表
+    phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
 
+    // 遍历并加载程序段
     for (int i = 0; i < ehdr.e_phnum; i++)
     {
-        if (phdr[i].p_type != PT_LOAD)
+        if (phdrs[i].p_type != PT_LOAD)
+        {
             continue;
+        }
 
-        mapper.map_range(phdr[i].p_vaddr, 0, phdr[i].p_filesz, 0x7);
+        // 对齐到页大小
+        uint64_t v_addr = phdrs[i].p_vaddr & ~(PAGE_SIZE - 1);
+        uint64_t v_size = (phdrs[i].p_memsz + (phdrs[i].p_vaddr & (PAGE_SIZE - 1)) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+        // 更新内存映射信息
+        if (phdrs[i].p_flags & 0x1)
+        { // 可执行
+            current_task->mm->start_code = min(current_task->mm->start_code, v_addr);
+            current_task->mm->end_code = max(current_task->mm->end_code, v_addr + v_size);
+        }
+        else if (phdrs[i].p_flags & 0x2)
+        { // 可写
+            current_task->mm->start_data = min(current_task->mm->start_data, v_addr);
+            current_task->mm->end_data = max(current_task->mm->end_data, v_addr + v_size);
+        }
+        else
+        {
+            current_task->mm->start_rodata = min(current_task->mm->start_rodata, v_addr);
+            current_task->mm->end_rodata = max(current_task->mm->end_rodata, v_addr + v_size);
+        }
+
+        // 映射内存
+        mapper.map_range(v_addr, 0, v_size, 0x7);
         flush_tlb();
 
-        uint64_t segm_in_file = (uint64_t)buf + phdr[i].p_offset;
-        xmemcpy((VOID *)phdr[i].p_vaddr, (VOID *)segm_in_file, phdr[i].p_filesz);
-        uint64_t remain_bytes = phdr[i].p_memsz - phdr[i].p_filesz;
-        xmemset((VOID *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes);
+        // 复制段内容
+        uint64_t segm_in_file = (uint64_t)buf + phdrs[i].p_offset;
+
+        uint8_t *segm_in_f = (uint8_t *)segm_in_file;
+
+        xmemcpy((void *)phdrs[i].p_vaddr,
+                (void *)segm_in_file,
+                phdrs[i].p_filesz);
+
+        // 清零未初始化数据
+        if (phdrs[i].p_memsz > phdrs[i].p_filesz)
+        {
+            xmemset((void *)(phdrs[i].p_vaddr + phdrs[i].p_filesz),
+                    0,
+                    phdrs[i].p_memsz - phdrs[i].p_filesz);
+        }
     }
 
     free(buf);
 
+    // 设置并映射用户栈
     uint64_t stack_start_addr = current_task->mm->start_stack - STACK_SIZE;
-    mapper.map_range(stack_start_addr, 0, STACK_SIZE, 0x7);
+    mapper.map_range(stack_start_addr, 0, STACK_SIZE, 0x7); // 用户栈可读可写可执行
     flush_tlb();
-
     xmemset((void *)stack_start_addr, 0, STACK_SIZE);
 
-    return retval;
+    return 0;
 }
 
 extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[])
@@ -141,9 +171,9 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
     current_task->mm->end_brk = brk_start_addr;
     current_task->mm->start_stack = stack_start_addr;
 
-    current_task->flags &= ~PF_KTHREAD;
+    retval = parse_elf_file(regs, file_node);
 
-    if (argv != NULL)
+    if (argv != nullptr)
     {
         int len = 0;
         int i = 0;
@@ -162,22 +192,20 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
         regs->rsi = (uint64_t)dargv; // argv
     }
 
-    __asm__ __volatile__("movq	%0, %%gs\n\t"
-                         "movq	%0, %%fs\n\t" ::"r"(0UL));
-
-    retval = parse_elf_file(regs, file_node);
-
-    regs->cs = SELECTOR_USER_CS | 0x3;
-    regs->ds = SELECTOR_USER_DS | 0x3;
-    regs->es = SELECTOR_USER_DS | 0x3;
-    regs->ss = SELECTOR_USER_DS | 0x3;
-
     regs->rsp = current_task->mm->start_stack;
     regs->rbp = current_task->mm->start_stack;
 
-    regs->rflags = 0x200246;
+    regs->cs = SELECTOR_USER_CS | RING3;
+    regs->ds = SELECTOR_USER_DS | RING3;
+    regs->es = SELECTOR_USER_DS | RING3;
+    regs->ss = SELECTOR_USER_DS | RING3;
 
-    regs->rax = current_task->mm->start_stack - STACK_SIZE;
+    __asm__ __volatile__("movq	%0, %%gs\n\t"
+                         "movq	%0, %%fs\n\t" ::"r"(0UL));
+
+    regs->rflags = (1 << 9) | (1 << 1);
+
+    regs->rax = 0;
 
     return retval;
 }
@@ -190,11 +218,9 @@ bool keyboard_mouse_init_done = false;
 
 uint64_t init_kernel_thread(uint64_t arg)
 {
-    write_serial_string("init task is running,arg:");
+    write_serial_string("init task is running, arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
-
-    disable_intr();
 
     keyboard_init();
     write_serial_string("Keyboard Initialize Success.\n");
@@ -226,13 +252,13 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     current_task->thread->rip = (uint64_t)ret_from_intr;
     current_task->thread->rsp = (uint64_t)current_task + STACK_SIZE - sizeof(struct X64_REGS);
-    current_task->thread->gs = SELECTOR_USER_DS | 0x3;
-    current_task->thread->fs = SELECTOR_USER_DS | 0x3;
-    current_task->flags &= ~PF_KTHREAD;
+    current_task->thread->gs = SELECTOR_USER_DS | RING3;
+    current_task->thread->fs = SELECTOR_USER_DS | RING3;
+    current_task->flags = 0;
 
     __asm__ __volatile__("movq	%1,	%%rsp	\n\t"
                          "pushq	%2		\n\t"
-                         "jmp	do_execve	\n\t"
+                         "jmp   do_execve	\n\t"
                          :
                          : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(nullptr), "c"(nullptr)
                          : "memory");
@@ -242,7 +268,7 @@ extern spinlock_t fb_print_lock;
 
 uint64_t desktop_flusher(uint64_t arg)
 {
-    write_serial_string("desktop flusher is running,arg:");
+    write_serial_string("desktop flusher is running, arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
 
@@ -429,8 +455,8 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
 
     if (!(tsk->flags & PF_KTHREAD))
     {
-        thd->fs = SELECTOR_USER_DS;
-        thd->gs = SELECTOR_USER_DS;
+        thd->fs = SELECTOR_USER_DS | RING3;
+        thd->gs = SELECTOR_USER_DS | RING3;
 
         thd->rip = regs->rip = (uint64_t)ret_from_intr;
     }
@@ -509,12 +535,12 @@ void init_task_manager()
 
     list_init(&init_task_union.task.list);
 
+    kernel_thread(init_kernel_thread, 100, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;
     init_task_union.task.cpu_id = 0;
-
-    kernel_thread(init_kernel_thread, 100, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
-    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     TASK_INITIALIZED = true;
 }

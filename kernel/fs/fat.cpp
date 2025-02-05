@@ -6,7 +6,7 @@ uint32_t fat32_read_fat_entry(FAT32_NodeInfo *fsbi, uint32_t fat_entry)
 {
     uint32_t buf[128];
     xmemset(buf, 0, 512);
-    device_read(fsbi->dev, buf, 1, fsbi->FAT1_firstsector + (fat_entry >> 7), 0);
+    device_read(fsbi->dev, (uint8_t *)buf, 1, fsbi->FAT1_firstsector + (fat_entry >> 7), 0);
     return buf[fat_entry & 0x7f] & 0x0fffffff;
 }
 
@@ -16,7 +16,7 @@ uint64_t fat32_write_fat_entry(FAT32_NodeInfo *fsbi, uint32_t fat_entry, uint32_
     int i;
 
     xmemset(buf, 0, 512);
-    device_read(fsbi->dev, buf, 1, fsbi->FAT1_firstsector + (fat_entry >> 7), 0);
+    device_read(fsbi->dev, (uint8_t *)buf, 1, fsbi->FAT1_firstsector + (fat_entry >> 7), 0);
     buf[fat_entry & 0x7f] = (buf[fat_entry & 0x7f] & 0xf0000000) | (value & 0x0fffffff);
 
     for (i = 0; i < fsbi->NumFATs; i++)
@@ -407,7 +407,7 @@ int fat_read(VNode *node, uint8_t *buf, size_t position, size_t count)
     uint64_t cluster = info->first_cluster;
     uint64_t sector = 0;
     int i, length = 0;
-    int retval = 0;
+    int64_t retval = 0;
     int index = position / info->bytes_per_cluster;
     long offset = position % info->bytes_per_cluster;
     char *buffer = (char *)malloc(info->bytes_per_cluster);
@@ -425,8 +425,7 @@ int fat_read(VNode *node, uint8_t *buf, size_t position, size_t count)
 
     if (position + count > node->file_size)
     {
-        count = node->file_size - position;
-        index = count;
+        index = count = node->file_size - position;
     }
     else
     {
@@ -493,7 +492,7 @@ int fat_write(VNode *node, uint8_t *buf, size_t position, size_t count)
     if (flags)
     {
         info->first_cluster = cluster;
-        node->parent->ops->write_node(node);
+        node->ops->write_node(node);
         fat32_write_fat_entry(info, cluster, 0x0ffffff8);
     }
 
@@ -554,7 +553,7 @@ int fat_write(VNode *node, uint8_t *buf, size_t position, size_t count)
     if (position > node->file_size)
     {
         node->file_size = position;
-        node->parent->ops->write_node(node);
+        node->ops->write_node(node);
     }
 
     free(buffer);

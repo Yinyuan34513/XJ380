@@ -65,6 +65,7 @@ struct task_struct
     long vrun_time;
 
     struct VFile *fds[MAX_FD_NUM];
+    struct v_node *cwd_node;
 
     struct task_struct *next;
     struct task_struct *parent;

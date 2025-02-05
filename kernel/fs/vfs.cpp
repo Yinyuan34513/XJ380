@@ -28,19 +28,6 @@ void put_free_node(VNode *node)
     node->type = NODE_TYPE_NONE;
 }
 
-VNode *find_node(int nr)
-{
-    for (int i = 0; i < MAX_VNODE_NUM; i++)
-    {
-        if (node_table[i].nr == nr)
-        {
-            return &node_table[i];
-        }
-    }
-
-    return nullptr;
-}
-
 void add_child_to(VNode *parent, VNode *child)
 {
     child->parent = parent;
@@ -158,7 +145,7 @@ void failed_to_mount_root()
     write_serial_string("Cannot mount root file system, halting...\n");
     while (true)
     {
-        __asm__ __volatile__("hlt");
+        __asm__ __volatile__("pause");
     }
 }
 

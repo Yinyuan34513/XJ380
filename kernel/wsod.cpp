@@ -72,7 +72,7 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     disable_intr();
     while (1)
     {
-        __asm__("hlt");
+        __asm__("pause");
     };
 }
 
@@ -122,7 +122,7 @@ void no_regs_wsod(const char *err_code)
     disable_intr();
     while (1)
     {
-        __asm__ __volatile__("hlt");
+        __asm__ __volatile__("pause");
     };
 }
 

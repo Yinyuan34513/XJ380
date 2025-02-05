@@ -32,6 +32,7 @@ typedef struct
     UINT16 e_shnum;     /* Section header table entry count */
     UINT16 e_shstrndx;  /* Section header string table index */
 } Elf64_Ehdr;
+
 void CalcLoadAddressRange(Elf64_Ehdr *ehdr, UINT64 *first, UINT64 *last)
 {
     Elf64_Phdr *phdr = (Elf64_Phdr *)((UINT64)ehdr + ehdr->e_phoff); // 第一个 program header 地址

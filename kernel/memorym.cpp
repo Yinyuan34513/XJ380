@@ -150,7 +150,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     write_serial_string("No free memory found.\n");
     while (1)
     {
-      __asm__("hlt");
+      __asm__("pause");
     }
   }
 
