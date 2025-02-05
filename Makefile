@@ -61,10 +61,10 @@ clean:
 vdisk: all
 	@rm -rf XJ380.img
 
-	@dd if=/dev/zero bs=1M count=0 seek=64 of=XJ380.img
+	@dd if=/dev/zero bs=1M count=0 seek=128 of=XJ380.img
 	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@mformat -i XJ380.img@@1M
+	@mformat -s 32 -c 1 -v "NO NAME" -i XJ380.img@@1M
 	@mmd -i XJ380.img@@1M ::/EFI ::/EFI/BOOT ::/usr
 	@mcopy -i XJ380.img@@1M out/kernel.elf ::/
 	@mcopy -i XJ380.img@@1M out/BOOTX64.efi ::/EFI/BOOT

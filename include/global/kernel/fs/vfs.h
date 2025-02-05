@@ -18,7 +18,7 @@ typedef struct
 {
     // For kernel
     int (*lookup)(VNode *node, VNode *search_node);
-    int (*super)(int drive, VNode **result);
+    int (*super)(int drive, VNode *result);
     // For user
     int (*open)(VNode *parent, const char *name, VNode *node);
     void (*close)(VNode *current);
@@ -44,9 +44,9 @@ struct v_node
     int nr;
     uint16_t type;
 
-    uint64_t ctime;
-    uint64_t mtime;
-    uint64_t atime;
+    uint16_t ctime;
+    uint16_t mtime;
+    uint16_t atime;
 
     VNodeOps *ops;
 
@@ -61,4 +61,14 @@ struct VFile
     bool writeable;
 };
 
+#define MAX_FS_NUM 8
+
+typedef struct
+{
+    char *name;
+    VNodeOps *ops;
+} FileSystem;
+
 void init_vfs();
+
+void register_fs(const char *name, VNodeOps *ops);

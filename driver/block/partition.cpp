@@ -3,7 +3,6 @@
 int partition_ioctl(void *dev, int cmd, void *args, int flags)
 {
     partition_dev_t *part_dev = (partition_dev_t *)dev;
-    GPTPartitionEntry *entry = part_dev->entry;
 
     return 0;
 }
@@ -11,9 +10,8 @@ int partition_ioctl(void *dev, int cmd, void *args, int flags)
 int partition_read(void *dev, void *buf, size_t count, int idx, int flags)
 {
     partition_dev_t *part_dev = (partition_dev_t *)dev;
-    GPTPartitionEntry *entry = part_dev->entry;
-    uint64_t new_idx = idx + entry->starting_lba;
-    uint64_t max_count = entry->ending_lba - entry->starting_lba + 1;
+    uint64_t new_idx = part_dev->entry->starting_lba + idx;
+    uint64_t max_count = part_dev->entry->ending_lba - part_dev->entry->starting_lba + 1;
 
     if (count > max_count)
     {
@@ -26,9 +24,8 @@ int partition_read(void *dev, void *buf, size_t count, int idx, int flags)
 int partition_write(void *dev, void *buf, size_t count, int idx, int flags)
 {
     partition_dev_t *part_dev = (partition_dev_t *)dev;
-    GPTPartitionEntry *entry = part_dev->entry;
-    uint64_t new_idx = idx + entry->starting_lba;
-    uint64_t max_count = entry->ending_lba - entry->starting_lba + 1;
+    uint64_t new_idx = part_dev->entry->starting_lba + idx;
+    uint64_t max_count = part_dev->entry->ending_lba - part_dev->entry->starting_lba + 1;
 
     if (count > max_count)
     {
@@ -76,7 +73,8 @@ void parse_disk(int dev)
 
             partition_dev_t *part_dev = (partition_dev_t *)malloc(sizeof(partition_dev_t));
             part_dev->parent_dev = dev;
-            part_dev->entry = ent;
+            part_dev->entry = (GPTPartitionEntry *)malloc(sizeof(GPTPartitionEntry));
+            xmemcpy(part_dev->entry, ent, sizeof(GPTPartitionEntry));
 
             device_install(DEV_BLOCK, DEV_PART, part_dev, "NO NAME", dev, (void *)partition_ioctl, (void *)partition_read, (void *)partition_write);
         }

@@ -59,8 +59,10 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     init_partition();
 
+    init_fat();
+
     init_vfs();
-    write_serial_string("VFS initialized.\n");
+    write_serial_string("FS initialized.\n");
 
     write_serial_string("Operating System Initialize Success.\n");
 

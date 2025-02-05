@@ -176,14 +176,16 @@ void failed_namespace(NVME_IDENTIFY_NAMESPACE *identifyNS)
     PAGE_ALLOC.free_pages((void *)convert_virtual_to_physical((uint64_t)identifyNS), 1);
 }
 
-void NvmeRead(void *dev, void *buf, size_t count, int idx, int flags)
+int NvmeRead(void *dev, void *buf, size_t count, int idx, int flags)
 {
     NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, false);
+    return 0;
 }
 
-void NvmeWrite(void *dev, void *buf, size_t count, int idx, int flags)
+int NvmeWrite(void *dev, void *buf, size_t count, int idx, int flags)
 {
     NVMETransfer((NVME_NAMESPACE *)dev, buf, idx, count, true);
+    return 0;
 }
 
 void init_nvme()

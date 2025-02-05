@@ -34,6 +34,7 @@
 #include "./global/kernel/driver/nvme.h"
 // FS
 #include "./global/kernel/fs/vfs.h"
+#include "./global/kernel/fs/fat.h"
 extern "C"
 {
 #include "./global/kernel/pctable/idt.h"

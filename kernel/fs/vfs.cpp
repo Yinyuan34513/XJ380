@@ -4,6 +4,11 @@ VNode node_table[MAX_VNODE_NUM];
 
 VNode *root;
 
+FileSystem filesystems[MAX_FS_NUM];
+int fs_idx = 0;
+
+spinlock_t fs_op_lock;
+
 VNode *get_free_node()
 {
     for (size_t i = 0; i < MAX_VNODE_NUM; i++)
@@ -59,6 +64,8 @@ VNode *search_child_list(VNode *parent, char *name)
 
 VNode *path_walk(VNode *parent, const char *path)
 {
+    spin_lock(&fs_op_lock);
+
     VNode *dir = parent;
 
     if (!dir)
@@ -66,8 +73,12 @@ VNode *path_walk(VNode *parent, const char *path)
         dir = root;
     }
 
-    const char *backup_path = path;
-    char *new_path = (char *)backup_path;
+    if (dir->type != NODE_TYPE_DIR)
+    {
+        return nullptr;
+    }
+
+    char *new_path = (char *)path;
 
     while (*new_path == '/' || *new_path == '\\')
         ++new_path;
@@ -81,22 +92,21 @@ VNode *path_walk(VNode *parent, const char *path)
     {
         if (dir == nullptr)
         {
+            spin_unlock(&fs_op_lock);
             return nullptr;
         }
 
         char *tmp_path = new_path;
-        while ((*new_path && *new_path != '\0') && (*new_path != '/' || *new_path != '\\'))
+        while ((*new_path && *new_path != '\0') && *new_path != '/')
             ++new_path;
 
-        int tmp_path_len = tmp_path - new_path;
+        int tmp_path_len = new_path - tmp_path;
 
         char *tmpname = (char *)malloc(tmp_path_len + 1);
         strncpy(tmpname, tmp_path, tmp_path_len);
         tmpname[tmp_path_len] = '\0';
 
         node = search_child_list(dir, tmpname);
-
-        free(tmpname);
 
         if (node == nullptr)
         {
@@ -113,49 +123,92 @@ VNode *path_walk(VNode *parent, const char *path)
                 write_serial_string("Cannot find file/dir: ");
                 write_serial_string(node->name);
                 write_serial_string("\n");
-                free(node->name);
-                free(node);
+                free(tmpname);
+                put_free_node(node);
+                spin_unlock(&fs_op_lock);
                 return nullptr;
             }
 
             add_child_to(dir, node);
         }
 
-        while (*new_path == '/' || *new_path == '\\')
+        free(tmpname);
+
+        if (!*new_path)
+            goto last_component;
+
+        while (*new_path == '/')
             ++new_path;
 
-        if ((!*path) || (*path == '\0'))
-        {
-            return node;
-        }
+        if (!*new_path)
+            goto last_slash;
 
         dir = node;
     }
+
+last_component:
+last_slash:
+    spin_unlock(&fs_op_lock);
+    return node;
 }
 
-extern VNodeOps fat32_ops;
+void failed_to_mount_root()
+{
+    put_free_node(root);
+    write_serial_string("Cannot mount root file system, halting...\n");
+    while (true)
+    {
+        __asm__ __volatile__("hlt");
+    }
+}
+
+void test_vfs()
+{
+    VNode *bootx64_efi_node = path_walk(nullptr, "EFI/BOOT/BOOTX64.efi");
+    if (!bootx64_efi_node)
+    {
+        write_serial_string("Cannot path walk BOOTX64.efi\n");
+        return;
+    }
+    write_serial_string("bootx64_efi_node: name = ");
+    write_serial_string(bootx64_efi_node->name);
+    write_serial_string("\n");
+}
 
 void mount_root()
 {
     root = get_free_node();
 
-    // if (0)
-    // {
-    // }
-    // else
-    // {
-    //     put_free_node(root);
-    //     write_serial_string("Cannot mount root file system, halting...\n");
-    //     while (true)
-    //     {
-    //         __asm__ __volatile__("hlt");
-    //     }
-    // }
+    // 假设第一个分区是根分区
+    device_t *device = device_find(DEV_PART, 0);
+
+    if (device)
+    {
+        for (int i = 0; i < MAX_FS_NUM; i++)
+        {
+            FileSystem *filesystem = &filesystems[i];
+            if (filesystem->ops && filesystem->ops->super && filesystem->ops->super(device->dev, root) == 0)
+            {
+                root->ops = filesystem->ops;
+                write_serial_string("Mount root OK\n");
+                test_vfs();
+                return;
+            }
+        }
+        failed_to_mount_root();
+    }
+    else
+    {
+        failed_to_mount_root();
+    }
 }
 
 void init_vfs()
 {
+    spin_init(&fs_op_lock);
+
     xmemset(node_table, 0, sizeof(node_table));
+
     for (size_t i = 0; i < MAX_VNODE_NUM; i++)
     {
         VNode *node = &node_table[i];
@@ -164,4 +217,14 @@ void init_vfs()
     }
 
     mount_root();
+}
+
+void register_fs(const char *name, VNodeOps *ops)
+{
+    FileSystem *filesystem = &filesystems[fs_idx];
+    fs_idx++;
+    filesystem->name = (char *)malloc(strlen(name) + 1);
+    strcpy(filesystem->name, name);
+
+    filesystem->ops = ops;
 }

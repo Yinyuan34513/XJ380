@@ -7,9 +7,9 @@
 #define CLONE_FILES (1 << 1)
 #define CLONE_SIGNAL (1 << 2)
 
-// stack size 8K
+// stack size 16K
 // UL一定要加，否则获取current_task之后读取值的时候会出错
-#define STACK_SIZE 8192UL
+#define STACK_SIZE 16384UL
 
 #define TASK_RUNNING (1 << 0)
 #define TASK_INTERRUPTIBLE (1 << 1)

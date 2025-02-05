@@ -83,15 +83,17 @@ static int find_cmdslot(HBA_PORT *port)
     return -1;
 }
 
-static void ahci_vdisk_read(void *dev, void *buf, size_t count, int idx, int flags)
+static int ahci_vdisk_read(void *dev, void *buf, size_t count, int idx, int flags)
 {
     //                    klog("mapping %d\n",drive_mapping[drive]);
     ahci_read(&(hba_mem->ports[drive_mapping[(uint64_t)dev]]), idx, 0, count, (uint16_t *)buf);
+    return 0;
 }
 
-static void ahci_vdisk_write(void *dev, void *buf, size_t count, int idx, int flags)
+static int ahci_vdisk_write(void *dev, void *buf, size_t count, int idx, int flags)
 {
     ahci_write(&(hba_mem->ports[drive_mapping[(uint64_t)dev]]), idx, 0, count, (uint16_t *)buf);
+    return 0;
 }
 
 void ahci_search_ports(HBA_MEM *abar)
