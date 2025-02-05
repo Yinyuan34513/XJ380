@@ -2,6 +2,8 @@
 
 APIC_INFO ApicInfo;
 
+IrqDesc irq_table[256 - 35];
+
 /**
  *
  * @brief 检测APIC是否存在
@@ -195,6 +197,8 @@ void init_apic(UINT64 MADT0)
     init_lApic();
     init_IOApic();
 
+    xmemset(irq_table, 0, sizeof(irq_table));
+
     write_serial_string("APIC Initialize Success.\n");
 }
 
@@ -228,4 +232,41 @@ extern "C" void c_timer_handler(void *regs_ptr, UINT64 error_code)
     {
         schedule();
     }
+}
+
+extern "C" void c_do_irq(struct X64_REGS *regs, uint64_t irq, uint64_t error_code)
+{
+    IrqDesc *desc = &irq_table[irq - 35];
+
+    if (desc && desc->handler)
+    {
+        desc->handler(regs, desc->arg, error_code);
+    }
+    else
+    {
+        write_serial_string("Unhandled IRQ: ");
+        write_serial_hex(irq);
+        write_serial_string("\n");
+    }
+}
+
+void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code), uint64_t arg)
+{
+    IrqDesc *desc = &irq_table[irq - 35];
+
+    desc->name = (char *)malloc(strlen(name) + 1);
+    strcpy(desc->name, name);
+
+    desc->handler = handler;
+    desc->arg = arg;
+}
+
+void unregister_irq(uint64_t irq)
+{
+    IrqDesc *desc = &irq_table[irq - 35];
+
+    free(desc->name);
+
+    desc->handler = nullptr;
+    desc->arg = 0;
 }
