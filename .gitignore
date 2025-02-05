@@ -11,3 +11,4 @@ out/draw.o
 .cache
 
 *.img
+*.tags

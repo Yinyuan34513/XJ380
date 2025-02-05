@@ -28,6 +28,7 @@
 #include "./global/kernel/ps2/mouse.h"
 // Drivers
 #include "./global/kernel/driver/device.h"
+#include "./global/kernel/driver/partition.h"
 #include "./global/kernel/driver/pci.h"
 #include "./global/kernel/driver/ahci.h"
 #include "./global/kernel/driver/nvme.h"

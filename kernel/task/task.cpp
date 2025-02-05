@@ -57,6 +57,8 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_nvme();
     write_serial_string("NVME initialized.\n");
 
+    init_partition();
+
     init_vfs();
     write_serial_string("VFS initialized.\n");
 

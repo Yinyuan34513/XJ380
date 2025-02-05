@@ -72,9 +72,9 @@ void init_device()
         device->subtype = DEV_NULL;
         device->dev = i;
         device->parent = 0;
-        device->ioctl = NULL;
-        device->read = NULL;
-        device->write = NULL;
+        device->ioctl = nullptr;
+        device->read = nullptr;
+        device->write = nullptr;
 
         device->direct = DIRECT_UP;
     }
@@ -92,7 +92,7 @@ device_t *device_find(int subtype, int idx)
             return device;
         nr++;
     }
-    return NULL;
+    return nullptr;
 }
 
 device_t *device_get(int dev)
