@@ -18,6 +18,8 @@ extern uint8_t _APU_boot_end;
 
 SMP SMP_MANAGER;
 
+uint64_t lapicid_to_cpuid[MAX_CPU_NUM];
+
 // 发送IPI的函数
 void send_ipi(UINT32 apic_id, UINT32 command)
 {
@@ -228,6 +230,8 @@ void SMP::ap_startup(uint64_t madt_addr)
         init_tss[i].ist6 = ist_stack_start;
         init_tss[i].ist7 = ist_stack_start;
 
+        lapicid_to_cpuid[i] = this->apu_list[i]->local_apic_id;
+
         send_init_and_startup_ipi(this->apu_list[i]->local_apic_id);
 
         while (*ready == 0)
@@ -246,4 +250,17 @@ void SMP::ap_startup(uint64_t madt_addr)
 int SMP::ap_count()
 {
     return this->apu_count;
+}
+
+uint64_t get_cpuid_by_lapicid(uint64_t lapicid)
+{
+    for (uint64_t i = 0; i < MAX_CPU_NUM; i++)
+    {
+        if (lapicid_to_cpuid[i] == lapicid)
+        {
+            return i;
+        }
+    }
+
+    return 0;
 }

@@ -281,3 +281,63 @@ ENTRY(mouse_handler)
     leaq c_mouse_handler(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
+
+ENTRY(syscall_handler)
+    cli
+
+    callq   syscall_save_stack
+
+    pushq	%rax
+	movq	%es,	%rax
+	pushq	%rax
+	movq	%ds,	%rax
+	pushq	%rax
+	xorq	%rax,	%rax
+
+	pushq	%rbp
+	pushq	%rdi
+	pushq	%rsi
+	pushq	%rdx
+	pushq	%rcx
+	pushq	%rbx
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+    movq    %rsp, %rdi
+
+    callq c_syscall_handler
+
+ENTRY(ret_from_syscall)
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbx
+    popq %rcx
+    popq %rdx
+    popq %rsi
+    popq %rdi
+    popq %rbp
+
+    popq %rax   //  不允许直接pop到ds
+    movq %rax, %ds
+
+    popq %rax
+    movq %rax, %es
+
+    popq %rax
+
+    callq syscall_restore_stack
+
+    sti
+    sysretq

@@ -21,10 +21,12 @@
 #include "./global/kernel/apic/hpet.h"
 #include "./global/kernel/apic/apic.h"
 #include "./global/kernel/smp/smp.h"
+#include "./global/kernel/task/waitqueue.h"
 #include "./global/kernel/task/task.h"
 #include "./global/kernel/task/schedule.h"
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
+#include "./global/kernel/syscall/syscall.h"
 // Drivers
 #include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/partition.h"
@@ -38,6 +40,7 @@ extern "C"
 {
 #include "./global/kernel/pctable/idt.h"
 #include "./efi.h"
+#include "./errno.h"
 }
 
 #endif

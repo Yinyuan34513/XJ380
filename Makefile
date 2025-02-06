@@ -1,6 +1,6 @@
-export ASM_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -nostdlib -fno-builtin -mcmodel=kernel -m64 -fno-stack-protector -ffreestanding -fno-exceptions
-export C_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -fno-builtin -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-export CPP_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -fno-builtin -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+export ASM_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -nostdlib -fno-builtin -mno-sse -mno-mmx -mno-sse2 -mcmodel=kernel -m64 -fno-stack-protector -ffreestanding -fno-exceptions
+export C_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+export CPP_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 
@@ -8,7 +8,7 @@ ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
 endif
 
-QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 4096 -smp 4 -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp 4 -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX = x86_64-linux-gnu-
 
@@ -71,6 +71,7 @@ vdisk: all
 	@$(MAKE) -C user
 
 	@mcopy -i XJ380.img@@1M out/init.elf ::/usr
+	@mcopy -i XJ380.img@@1M out/shell.elf ::/usr
 
 run: vdisk
 	@$(QEMU_CMD)

@@ -66,6 +66,10 @@ struct task_struct
 
     struct VFile *fds[MAX_FD_NUM];
     struct v_node *cwd_node;
+    int fd_count;
+
+    wait_queue_t wait_childexit;
+    uint64_t exit_code;
 
     struct task_struct *next;
     struct task_struct *parent;
@@ -132,10 +136,18 @@ struct tss_struct
      .reserved3 = 0,                                                            \
      .iomapbaseaddr = 0}
 
+extern struct task_struct *user_current[MAX_CPU_NUM];
+
 struct task_struct *get_current()
 {
     struct task_struct *current = NULL;
     __asm__ __volatile__("andq %%rsp, %0\n\t" : "=r"(current) : "0"(~(STACK_SIZE - 1)));
+    if ((uint64_t)current < 0xFFFF800000000000)
+    {
+        uint64_t lapicid = lapic_id();
+        uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
+        current = user_current[current_cpu_cpuid];
+    }
     return current;
 }
 
@@ -165,10 +177,21 @@ static inline void switch_mm(struct task_struct *prev, struct task_struct *next)
                              : "memory");                                                           \
     } while (0)
 
-uint64_t do_fork(struct pt_regs *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size);
+void insert_task_queue(struct task_struct *tsk, int cpu_id);
+
+static inline void wakeup_task(struct task_struct *tsk)
+{
+    tsk->state = TASK_RUNNING;
+    insert_task_queue(tsk, current_task->cpu_id);
+    current_task->flags |= NEED_SCHEDULE;
+}
+
+uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size);
+extern "C" uint64_t do_exit(uint64_t code);
+extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, char *argv[], char *envp[]);
 void init_task_manager();
 
-extern "C" void ret_from_intr(void);
+extern "C" void ret_from_syscall(void);
 extern "C" void kernel_thread_func(void);
 
 extern struct task_struct *init_task[MAX_CPU_NUM];

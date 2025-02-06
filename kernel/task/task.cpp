@@ -16,9 +16,11 @@ struct thread_struct init_thread =
 
 union task_union init_task_union __attribute__((__section__(".data.init_task"))) = {INIT_TASK(init_task_union.task)};
 
-struct task_struct *init_task[MAX_CPU_NUM] = {&init_task_union.task, 0};
+struct task_struct *init_task[MAX_CPU_NUM] = {&init_task_union.task, nullptr};
 
 struct tss_struct init_tss[MAX_CPU_NUM];
+
+struct task_struct *user_current[MAX_CPU_NUM] = {nullptr};
 
 uint64_t idle_entry(uint64_t arg)
 {
@@ -42,7 +44,7 @@ uint64_t fail_parse_elf(void *buf, int retval)
     return (uint64_t)retval;
 }
 
-uint64_t parse_elf_file(struct X64_REGS *regs, VNode *file_node)
+uint64_t parse_elf_file(struct X64_REGS_SYSCALL *regs, VNode *file_node)
 {
     Elf64_Ehdr ehdr;
     Elf64_Phdr *phdrs = nullptr;
@@ -73,7 +75,8 @@ uint64_t parse_elf_file(struct X64_REGS *regs, VNode *file_node)
     }
 
     // 设置程序入口点
-    regs->rip = ehdr.e_entry;
+    // 在sysret之后, rcx寄存器会被恢复为rip
+    regs->rcx = ehdr.e_entry;
 
     // 获取程序头表
     phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
@@ -140,7 +143,7 @@ uint64_t parse_elf_file(struct X64_REGS *regs, VNode *file_node)
     return 0;
 }
 
-extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[])
+extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, char *argv[], char *envp[])
 {
     uint64_t stack_start_addr = 0x6ffff0a00000UL;
     const uint64_t brk_start_addr = 0x700000000000UL;
@@ -192,18 +195,23 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
         regs->rsi = (uint64_t)dargv; // argv
     }
 
-    regs->rsp = current_task->mm->start_stack;
+    regs->rdx = (uint64_t)envp;
+
+    // set rsp
+    uint64_t lapicid = lapic_id();
+    uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
+    current_rsp_in_cpus[current_cpu_cpuid] = current_task->mm->start_stack;
+    // set rbp
     regs->rbp = current_task->mm->start_stack;
 
-    regs->cs = SELECTOR_USER_CS | RING3;
-    regs->ds = SELECTOR_USER_DS | RING3;
-    regs->es = SELECTOR_USER_DS | RING3;
-    regs->ss = SELECTOR_USER_DS | RING3;
+    regs->ds = SELECTOR_USER_DS;
+    regs->es = SELECTOR_USER_DS;
 
     __asm__ __volatile__("movq	%0, %%gs\n\t"
                          "movq	%0, %%fs\n\t" ::"r"(0UL));
 
-    regs->rflags = (1 << 9) | (1 << 1);
+    // 在sysret之后, r11寄存器会被恢复为rflags
+    regs->r11 = (1 << 9) | (1 << 1);
 
     regs->rax = 0;
 
@@ -243,17 +251,19 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     init_fat();
     init_vfs();
-
     write_serial_string("FS initialized.\n");
+
+    init_syscall();
+    write_serial_string("SYSCALL initialized.\n");
 
     write_serial_string("Operating System Initialize Success.\n");
 
     disable_intr();
 
-    current_task->thread->rip = (uint64_t)ret_from_intr;
-    current_task->thread->rsp = (uint64_t)current_task + STACK_SIZE - sizeof(struct X64_REGS);
-    current_task->thread->gs = SELECTOR_USER_DS | RING3;
-    current_task->thread->fs = SELECTOR_USER_DS | RING3;
+    current_task->thread->rip = (uint64_t)ret_from_syscall;
+    current_task->thread->rsp = (uint64_t)current_task + STACK_SIZE - sizeof(struct X64_REGS_SYSCALL);
+    current_task->thread->gs = SELECTOR_USER_DS;
+    current_task->thread->fs = SELECTOR_USER_DS;
     current_task->flags = 0;
 
     __asm__ __volatile__("movq	%1,	%%rsp	\n\t"
@@ -340,6 +350,9 @@ uint64_t desktop_flusher(uint64_t arg)
     get_cpu_name(CPU_Model);
     PrintString(&shtinf, &desktop_sheet_id, 8, 528, "CPU Model:", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
+    write_serial_string("CPU Model: ");
+    write_serial_string(CPU_Model);
+    write_serial_string("\n");
 
     draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 480, fbc_addr->vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
 #endif
@@ -414,71 +427,133 @@ uint64_t desktop_flusher(uint64_t arg)
     return 0xFFFFFFFFFFFFFFFF;
 }
 
+uint64_t alloc_cpu_id()
+{
+    static uint64_t cpu_id = 0;
+    uint64_t ap_count = SMP_MANAGER.ap_count();
+
+    uint64_t retval = cpu_id++;
+    if (cpu_id >= ap_count)
+    {
+        cpu_id = 0;
+    }
+
+    return retval;
+}
+
 spinlock_t do_fork_lock;
 
 uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size)
 {
+    // 获取fork锁，防止多个进程同时创建导致竞争
     spin_lock(&do_fork_lock);
-    struct task_struct *tsk = NULL;
-    struct thread_struct *thd = NULL;
-    void *p = (void *)NULL;
 
+    struct task_struct *tsk = NULL;   // 新任务结构体指针
+    struct thread_struct *thd = NULL; // 新线程结构体指针
+    void *p = (void *)NULL;           // 临时指针变量
+
+    // 为新进程分配内核栈空间并转换为虚拟地址
     p = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE));
     if (!p)
     {
+        // 如果内存分配失败，释放锁并返回0
         spin_unlock(&do_fork_lock);
         return 0;
     }
+    // 清零分配的内存空间
     xmemset(p, 0, STACK_SIZE);
+
+    // 将分配的空间起始处作为task_struct结构体
     tsk = (struct task_struct *)p;
+    // 复制父进程的task_struct到子进程
     xmemcpy(tsk, current_task, sizeof(struct task_struct));
 
+    // 初始化新进程的任务链表
     list_init(&tsk->list);
 
-    tsk->priority = 2;
-    tsk->pid++;
-    tsk->preempt_count = 0;
-    tsk->cpu_id = current_task->cpu_id;
-    tsk->state = TASK_UNINTERRUPTIBLE;
-    tsk->next = init_task_union.task.next;
+    // 设置新进程的基本属性
+    tsk->priority = 2;                     // 设置默认优先级
+    tsk->pid++;                            // 分配新的进程ID
+    tsk->preempt_count = 0;                // 重置抢占计数
+    tsk->cpu_id = alloc_cpu_id();          // 分配CPU核心ID
+    tsk->state = TASK_UNINTERRUPTIBLE;     // 设置初始状态为不可中断
+    tsk->next = init_task_union.task.next; // 加入任务链表
     init_task_union.task.next = tsk;
-    tsk->parent = current_task;
+    tsk->parent = current_task; // 设置父进程
+    // 初始化等待子进程退出的等待队列
+    wait_queue_init(&tsk->wait_childexit, NULL);
 
-    thd = (struct thread_struct *)(tsk + 1);
+    // 设置线程结构体
+    thd = (struct thread_struct *)(tsk + 1); // 线程结构体紧跟在task_struct后面
     xmemset(thd, 0, sizeof(struct thread_struct));
     tsk->thread = thd;
 
-    thd->rsp0 = (uint64_t)tsk + STACK_SIZE;
-    thd->rip = regs->rip;
-    thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS);
+    // 初始化文件描述符表
+    for (int i = 3; i < MAX_FD_NUM; i++)
+    {
+        tsk->fds[i] = (struct VFile *)malloc(sizeof(struct VFile));
+        tsk->fds[i]->file = nullptr;
+        tsk->fds[i]->offset = 0;
+        tsk->fds[i]->readable = false;
+        tsk->fds[i]->writeable = false;
+    }
+    tsk->fd_count = 3; // 设置初始文件描述符数量（0,1,2为标准输入输出错误）
+
+    // 设置线程上下文信息
+    thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                          // 内核栈顶
+    thd->rip = regs->rip;                                            // 指令指针
+    thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS); // 用户栈指针
+    // 复制寄存器状态
     xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS));
 
+    // 根据进程类型设置不同的段选择子
     if (!(tsk->flags & PF_KTHREAD))
     {
-        thd->fs = SELECTOR_USER_DS | RING3;
-        thd->gs = SELECTOR_USER_DS | RING3;
-
-        thd->rip = regs->rip = (uint64_t)ret_from_intr;
+        // 用户进程
+        thd->fs = SELECTOR_USER_DS;
+        thd->gs = SELECTOR_USER_DS;
+        thd->rip = regs->rip = (uint64_t)ret_from_syscall;
     }
     else
     {
+        // 内核线程
         thd->fs = SELECTOR_KERNEL_DS;
         thd->gs = SELECTOR_KERNEL_DS;
     }
 
+    // 设置进程为就绪状态
     tsk->state = TASK_RUNNING;
-    insert_task_queue(tsk);
+    // 将新进程加入调度队列
+    insert_task_queue(tsk, tsk->cpu_id);
 
+    // 设置父进程的返回值为0
+    regs->rax = 0;
+
+    // 释放fork锁
     spin_unlock(&do_fork_lock);
 
+    // 返回子进程的PID
     return tsk->pid;
 }
 
 extern "C" uint64_t do_exit(uint64_t code)
 {
+    disable_intr();
+
+    current_task->state = TASK_ZOMBIE;
+    for (int i = 0; i < MAX_FD_NUM; i++)
+    {
+        if (current_task->fds[i])
+        {
+            free(current_task->fds[i]);
+        }
+    }
+    uint64_t physical_addr = convert_virtual_to_physical((uint64_t)current_task);
+    PAGE_ALLOC.free_pages((void *)physical_addr, STACK_SIZE / PAGE_SIZE);
     enable_intr();
-    while (1)
-        __asm__ __volatile__("pause");
+    schedule();
+
+    return 0xFFFFFFFFFFFFFFFF;
 }
 
 int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
@@ -500,15 +575,25 @@ int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
     return do_fork(&regs, flags, 0, 0);
 }
 
+// 写入MSR寄存器的函数
+static inline void write_msr(uint32_t msr, uint64_t value)
+{
+    uint32_t low = value & 0xFFFFFFFF;
+    uint32_t high = value >> 32;
+    asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
+}
+
 extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
-    init_tss[current_task->cpu_id].rsp0 = next->thread->rsp0;
+    init_tss[next->cpu_id].rsp0 = next->thread->rsp0;
 
     __asm__ __volatile__("movq %%fs, %0\n\t" : "=a"(prev->thread->fs));
     __asm__ __volatile__("movq %%gs, %0\n\t" : "=a"(prev->thread->gs));
 
     __asm__ __volatile__("movq %0, %%fs\n\t" ::"a"(next->thread->fs));
     __asm__ __volatile__("movq %0, %%gs\n\t" ::"a"(next->thread->gs));
+
+    user_current[next->cpu_id] = next;
 }
 
 bool TASK_INITIALIZED = false;
@@ -536,7 +621,7 @@ void init_task_manager()
     list_init(&init_task_union.task.list);
 
     kernel_thread(init_kernel_thread, 100, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
-    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;

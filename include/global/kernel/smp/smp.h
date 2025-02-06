@@ -21,4 +21,6 @@ private:
 
 extern SMP SMP_MANAGER;
 
+uint64_t get_cpuid_by_lapicid(uint64_t lapicid);
+
 #endif

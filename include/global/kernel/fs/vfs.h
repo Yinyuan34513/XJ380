@@ -63,7 +63,7 @@ struct v_node
 
 struct VFile
 {
-    void *file;
+    VNode *file;
     size_t offset;
     bool readable;
     bool writeable;
