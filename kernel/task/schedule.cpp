@@ -44,7 +44,8 @@ void schedule()
 {
     disable_intr();
 
-    int cpu_id = current_task->cpu_id;
+    uint64_t lapicid = lapic_id();
+    uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
     spinlock_t *lock = &task_schedule[cpu_id].lock;
 
     spin_lock(lock);

@@ -285,6 +285,8 @@ ENTRY(mouse_handler)
 ENTRY(syscall_handler)
     cli
 
+    pushq   %rsp
+
     pushq	%rax
 
 	movq	%es,	%rax
@@ -309,15 +311,9 @@ ENTRY(syscall_handler)
 	pushq	%r15
 
     movq    %rsp, %rdi
-    callq   syscall_save_stack
-
-    movq    %rsp, %rdi
     callq c_syscall_handler
 
 ENTRY(ret_from_syscall)
-    jmp syscall_restore_stack
-
-ENTRY(continue_to_ret_from_syscall)
     popq %r15
     popq %r14
     popq %r13
@@ -340,6 +336,8 @@ ENTRY(continue_to_ret_from_syscall)
     movq %rax, %es
 
     popq %rax
+
+    popq %rsp
 
     sti
     sysretq

@@ -1,6 +1,6 @@
-export ASM_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -nostdlib -fno-builtin -mno-sse -mno-mmx -mno-sse2 -mcmodel=kernel -m64 -fno-stack-protector -ffreestanding -fno-exceptions
-export C_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-export CPP_FLAGS = -O0 -Wall -g -fno-pic -fno-pie -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -mcmodel=kernel -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+export ASM_FLAGS = -O0 -Wall -g -nostdlib -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -ffreestanding -fno-exceptions
+export C_FLAGS = -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+export CPP_FLAGS = -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 
@@ -29,17 +29,17 @@ CPP_OBJS := $(sort $(patsubst ./%.cpp, ./out/%.o, $(CPP_FILES)))
 
 out/%.o: %.S
 	@mkdir -p $(@D)
-	@$(CC) $(ASM_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
 	@echo "AS $< -> $@"
 
 out/%.o: %.c
 	@mkdir -p $(@D)
-	@$(CC) $(C_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(C_FLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
 out/%.o: %.cpp
 	@mkdir -p $(@D)
-	@$(CPP) $(CPP_FLAGS) -c $< -o $@
+	@$(CPP) -fno-pic -fno-pie -mcmodel=kernel $(CPP_FLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)

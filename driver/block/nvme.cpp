@@ -221,8 +221,9 @@ void init_nvme()
         return;
     }
 
-    KERNEL_MAPPER mapper(PAGE_TABLE_BASE_ADDR);
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
     mapper.map_range((uint64_t)cap, device->bars[0].address, PAGE_SIZE * 4, 0x3);
+    flush_tlb();
 
     if (!((cap->CAP >> 37) & 1))
     {

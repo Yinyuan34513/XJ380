@@ -22,27 +22,6 @@ static inline void write_msr(uint32_t msr, uint64_t value)
     asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
 }
 
-extern "C" void continue_to_ret_from_syscall();
-
-uint64_t current_rsp_in_cpus[MAX_CPU_NUM];
-
-extern "C" void syscall_save_stack(uint64_t rsp)
-{
-    uint64_t lapicid = lapic_id();
-    uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
-    current_rsp_in_cpus[current_cpu_cpuid] = rsp;
-}
-
-extern "C" void syscall_restore_stack()
-{
-    uint64_t lapicid = lapic_id();
-    uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
-    uint64_t rsp = current_rsp_in_cpus[current_cpu_cpuid];
-    __asm__ __volatile__("movq %0, %%rsp\n\t"
-                         "jmpq %1" ::"r"(rsp),
-                         "r"((uint64_t)continue_to_ret_from_syscall));
-}
-
 void init_syscall()
 {
     uint64_t efer;

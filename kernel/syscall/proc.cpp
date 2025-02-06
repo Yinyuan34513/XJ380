@@ -11,10 +11,9 @@ int sys_fork()
     return do_fork(regs, 0, regs->rsp, 0);
 }
 
-int sys_execve(struct X64_REGS_SYSCALL *regs_arg)
+int sys_execve(struct X64_REGS_SYSCALL *regs)
 {
-    struct X64_REGS_SYSCALL *regs = (struct X64_REGS_SYSCALL *)current_task->thread->rsp0 - 1;
-    return do_execve(regs, (const char *)regs_arg->rdi, (char **)regs_arg->rsi, (char **)regs_arg->rdx);
+    return do_execve(regs, (const char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
 }
 
 uint64_t sys_wait4(unsigned long pid, int *status, int options, void *rusage)

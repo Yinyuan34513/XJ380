@@ -440,9 +440,6 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         }
         else
         {
-            write_serial_string("Refreshing Sheet (Part) Index ");
-            write_serial_dec(front_p->index);
-            write_serial_string("\n");
             SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
             int offest_x = bex1 - front_p->bx; // 刷新区域相较于图层的偏移量
             int offest_y = bey1 - front_p->by; // 同上
@@ -508,7 +505,6 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         }
         TempBuffer += (sht->scrx - bex2 + bex1);
     }
-    write_serial_string("Refresh Success.\n");
 }
 
 UINT32 get_hor()

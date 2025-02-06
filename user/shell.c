@@ -76,7 +76,7 @@ uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, ui
 
 void _start(int argc, char *argv[], char *envp[])
 {
-    enter_syscall(SYS_WRITE, 1, (uint64_t)"shell process is running!!!\n", 29, 0, 0, 0);
+    enter_syscall(SYS_WRITE, 1, (uint64_t)"shell process is running!!!\n", 0, 0, 0, 0);
 
     while (1)
         __asm__ __volatile__("pause");

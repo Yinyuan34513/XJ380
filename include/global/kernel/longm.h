@@ -61,6 +61,7 @@ struct X64_REGS_SYSCALL
     UINT64 ds;
     UINT64 es;
     UINT64 rax;
+    UINT64 rsp;
 };
 
 #endif

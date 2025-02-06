@@ -55,13 +55,11 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
 
 void KERNEL_MAPPER::unmap_page(uint64_t vaddr)
 {
-    uint64_t *page_table_addr = this->page_table;
-
-    uint64_t *pml4 = (uint64_t *)page_table_addr;
+    uint64_t *pml4 = PAGE_TABLE_BASE_ADDR;
     uint64_t pml4_id = (vaddr >> 39) & 0x1FF;
-    uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
+    uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
     uint64_t pdpt_id = (vaddr >> 30) & 0x1FF;
-    uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
+    uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
     uint64_t pd_id = (vaddr >> 21) & 0x1FF;
 
     pd[pd_id] = 0;
