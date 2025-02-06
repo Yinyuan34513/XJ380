@@ -74,19 +74,9 @@ uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, ui
     return ret;
 }
 
-void _start(int argc, char *argv[])
+void _start(int argc, char *argv[], char *envp[])
 {
     enter_syscall(SYS_WRITE, 1, (uint64_t)"user process is running!!!\n", 27, 0, 0, 0);
 
-    // uint64_t pid = enter_syscall(SYS_FORK, 0, 0, 0, 0, 0, 0);
-    // if (pid == 0)
-    // {
-    //     enter_syscall(SYS_EXECVE, (uint64_t)"/usr/shell.elf", NULL, NULL, 0, 0, 0);
-    // }
-    // else
-    // {
-    //     enter_syscall(SYS_WRITE, 1, (uint64_t)"user process is running!!!\n", 27, 0, 0, 0);
-    while (1)
-        __asm__ __volatile__("pause");
-    // }
+    enter_syscall(SYS_EXECVE, (uint64_t)"/usr/shell.elf", NULL, NULL, 0, 0, 0);
 }

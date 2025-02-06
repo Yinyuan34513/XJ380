@@ -13,32 +13,8 @@ int sys_fork()
 
 int sys_execve(struct X64_REGS_SYSCALL *regs_arg)
 {
-    char *pathname = NULL;
-    long pathlen = 0;
-    long error = 0;
     struct X64_REGS_SYSCALL *regs = (struct X64_REGS_SYSCALL *)current_task->thread->rsp0 - 1;
-
-    pathname = (char *)malloc(PAGE_SIZE);
-    if (pathname == NULL)
-        return -1;
-    xmemset(pathname, 0, PAGE_SIZE);
-    pathlen = strlen((char *)regs_arg->rdi);
-    if (pathlen <= 0)
-    {
-        free(pathname);
-        return -1;
-    }
-    else if (pathlen >= PAGE_SIZE)
-    {
-        free(pathname);
-        return -1;
-    }
-    strncpy(pathname, (const char *)regs_arg->rdi, pathlen);
-
-    error = do_execve(regs, pathname, (char **)regs_arg->rsi, (char **)regs_arg->rdx);
-
-    free(pathname);
-    return error;
+    return do_execve(regs, (const char *)regs_arg->rdi, (char **)regs_arg->rsi, (char **)regs_arg->rdx);
 }
 
 uint64_t sys_wait4(unsigned long pid, int *status, int options, void *rusage)

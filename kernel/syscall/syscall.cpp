@@ -22,12 +22,12 @@ static inline void write_msr(uint32_t msr, uint64_t value)
     asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
 }
 
+extern "C" void continue_to_ret_from_syscall();
+
 uint64_t current_rsp_in_cpus[MAX_CPU_NUM];
 
-extern "C" void syscall_save_stack()
+extern "C" void syscall_save_stack(uint64_t rsp)
 {
-    uint64_t rsp;
-    __asm__ __volatile__("mov %%rsp, %0" : "=r"(rsp));
     uint64_t lapicid = lapic_id();
     uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
     current_rsp_in_cpus[current_cpu_cpuid] = rsp;
@@ -38,7 +38,9 @@ extern "C" void syscall_restore_stack()
     uint64_t lapicid = lapic_id();
     uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
     uint64_t rsp = current_rsp_in_cpus[current_cpu_cpuid];
-    __asm__ __volatile__("mov %0, %%rsp" ::"r"(rsp));
+    __asm__ __volatile__("movq %0, %%rsp\n\t"
+                         "jmpq %1" ::"r"(rsp),
+                         "r"((uint64_t)continue_to_ret_from_syscall));
 }
 
 void init_syscall()
@@ -98,9 +100,9 @@ extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
     case SYS_CLOSE:
         regs->rax = (uint64_t)sys_close(regs->rdi);
         break;
-    case SYS_FORK:
-        regs->rax = (uint64_t)sys_fork();
-        break;
+    // case SYS_FORK:
+    //     regs->rax = (uint64_t)sys_fork();
+    //     break;
     case SYS_EXECVE:
         regs->rax = (uint64_t)sys_execve(regs);
         break;
@@ -109,6 +111,11 @@ extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
         break;
     case SYS_WAIT4:
         regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r8);
+        break;
+    default:
+        write_serial_string("Unknown syscall index: ");
+        write_serial_dec(syscall_number);
+        write_serial_string("\n");
         break;
     }
 }

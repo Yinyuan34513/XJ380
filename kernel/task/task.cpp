@@ -175,6 +175,13 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
     current_task->mm->start_stack = stack_start_addr;
 
     retval = parse_elf_file(regs, file_node);
+    if (retval < 0)
+    {
+        write_serial_string("Cannot parse elf file: ");
+        write_serial_string(name);
+        write_serial_string("\n");
+        return -1;
+    }
 
     if (argv != nullptr)
     {
@@ -193,14 +200,12 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
         stack_start_addr = pos - 10;
         regs->rdi = i;               // argc
         regs->rsi = (uint64_t)dargv; // argv
+        regs->rdx = (uint64_t)envp;  // envp
     }
-
-    regs->rdx = (uint64_t)envp;
 
     // set rsp
     uint64_t lapicid = lapic_id();
     uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
-    current_rsp_in_cpus[current_cpu_cpuid] = current_task->mm->start_stack;
     // set rbp
     regs->rbp = current_task->mm->start_stack;
 
@@ -214,6 +219,10 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
     regs->r11 = (1 << 9) | (1 << 1);
 
     regs->rax = 0;
+
+    struct X64_REGS_SYSCALL *dest_regs = (struct X64_REGS_SYSCALL *)current_task->mm->start_stack - 1;
+    xmemcpy(dest_regs, regs, sizeof(struct X64_REGS_SYSCALL));
+    current_rsp_in_cpus[current_cpu_cpuid] = (uint64_t)dest_regs;
 
     return retval;
 }
@@ -621,7 +630,7 @@ void init_task_manager()
     list_init(&init_task_union.task.list);
 
     kernel_thread(init_kernel_thread, 100, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
-    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;
