@@ -284,9 +284,11 @@ ENTRY(mouse_handler)
 
 ENTRY(syscall_handler)
     cli
+    cld
 
     pushq   %rsp
 
+    // “压入” reserved 1~6
     subq    $0x30, %rsp
 
     pushq	%rax
@@ -344,4 +346,5 @@ ENTRY(ret_from_syscall)
     popq %rsp
 
     sti
+
     sysretq

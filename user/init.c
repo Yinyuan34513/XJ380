@@ -1,20 +1,21 @@
 #include "./xlibc/include/stdint.h"
-#include "./xlibc/include/libsys.h"
+#include "./xlibc/include/unistd.h"
+#include "./xlibc/include/stdlib.h"
 
 int main(int argc, char *argv[], char *envp[])
 {
-    enter_syscall(SYS_WRITE, 1, (uint64_t)"user process is running!!!\n", 0, 0, 0, 0);
+    write(1, "user process is running!!!\n", 0);
 
-    uint64_t pid = enter_syscall(SYS_FORK, 0, 0, 0, 0, 0, 0);
+    uint64_t pid = fork();
     if (pid == 0)
     {
-        enter_syscall(SYS_WRITE, 1, (uint64_t)"child process is running!!!\n", 0, 0, 0, 0);
+        write(1, "child process is running!!!\n", 0);
         // enter_syscall(SYS_EXECVE, (uint64_t)"/usr/shell.elf", NULL, NULL, 0, 0, 0);
-        enter_syscall(SYS_EXIT, 0, 0, 0, 0, 0, 0);
     }
     else
     {
-        enter_syscall(SYS_WRITE, 1, (uint64_t)"Parent process is running!!!\n", 0, 0, 0, 0);
-        enter_syscall(SYS_EXIT, 0, 0, 0, 0, 0, 0);
+        write(1, "Parent process is running!!!\n", 0);
     }
+
+    return 0;
 }

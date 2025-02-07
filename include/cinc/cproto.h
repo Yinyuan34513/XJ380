@@ -2,7 +2,7 @@
 #define _CPROTO_HPP_
 
 /*
- *   lib/*
+ *   lib
  */
 // lib/string.c
 char *strncpy(char *dest, const char *src, UINT64 length);
@@ -12,13 +12,13 @@ UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 
 /*
- *   kernel/*
+ *   kernel
  */
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 
 /*
- *   driver/*
+ *   driver
  */
 
 // kernel/cpu/msr.cpp

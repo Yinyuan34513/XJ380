@@ -84,7 +84,7 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs,
         task->thread->elf_mappings = (struct elf_mapping_space *)malloc(sizeof(struct elf_mapping_space));
     }
     struct elf_mapping_space *mapping_space = task->thread->elf_mappings;
-    CalcLoadAddressRange(&ehdr, (UINT64 *)&mapping_space->load_start, (UINT64 *)&mapping_space->load_end);
+    CalcLoadAddressRange((Elf64_Ehdr *)buf, (UINT64 *)&mapping_space->load_start, (UINT64 *)&mapping_space->load_end);
 
     mapper.map_range(mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start, 0x7);
     flush_tlb();
@@ -464,34 +464,34 @@ uint64_t fork_copy_mm(struct task_struct *tsk)
     __asm__ __volatile__("movq %%cr3, %0" : "=r"(old_page_table));
     xmemcpy((uint8_t *)(convert_physical_to_virtual(new_pgd) + PAGE_SIZE / 2), (uint8_t *)(convert_physical_to_virtual(old_page_table) + PAGE_SIZE / 2), PAGE_SIZE / 2);
 
-    // Map paddr to vaddr
-    uint64_t *pml4 = (uint64_t *)convert_physical_to_virtual(new_pgd);
-    uint64_t pml4_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 39) & 0x1FF;
-    if (pml4[pml4_id] == 0)
-    {
-        uint64_t pml4_addr = (uint64_t)PAGE_ALLOC.alloc_page();
-        xmemset((void *)convert_physical_to_virtual(pml4_addr), 0, PAGE_SIZE);
-        pml4[pml4_id] = pml4_addr | 0x3;
-    }
-    uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
-    uint64_t pdpt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 30) & 0x1FF;
-    if (pdpt[pdpt_id] == 0)
-    {
-        uint64_t pdpt_addr = (uint64_t)PAGE_ALLOC.alloc_page();
-        xmemset((void *)convert_physical_to_virtual(pdpt_addr), 0, PAGE_SIZE);
-        pdpt[pdpt_id] = pdpt_addr | 0x3;
-    }
-    uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
-    uint64_t pd_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 21) & 0x1FF;
-    if (pd[pd_id] == 0)
-    {
-        uint64_t pd_addr = (uint64_t)PAGE_ALLOC.alloc_page();
-        xmemset((void *)convert_physical_to_virtual(pd_addr), 0, PAGE_SIZE);
-        pd[pd_id] = pd_addr | 0x3;
-    }
-    uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFF));
-    uint64_t pt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 12) & 0x1FF;
-    pt[pt_id] = new_pgd | 0x3;
+    // // Map paddr to vaddr
+    // uint64_t *pml4 = (uint64_t *)convert_physical_to_virtual(new_pgd);
+    // uint64_t pml4_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 39) & 0x1FF;
+    // if (pml4[pml4_id] == 0)
+    // {
+    // uint64_t pml4_addr = (uint64_t)PAGE_ALLOC.alloc_page();
+    // xmemset((void *)convert_physical_to_virtual(pml4_addr), 0, PAGE_SIZE);
+    // pml4[pml4_id] = pml4_addr | 0x3;
+    // }
+    // uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
+    // uint64_t pdpt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 30) & 0x1FF;
+    // if (pdpt[pdpt_id] == 0)
+    // {
+    // uint64_t pdpt_addr = (uint64_t)PAGE_ALLOC.alloc_page();
+    // xmemset((void *)convert_physical_to_virtual(pdpt_addr), 0, PAGE_SIZE);
+    // pdpt[pdpt_id] = pdpt_addr | 0x3;
+    // }
+    // uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
+    // uint64_t pd_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 21) & 0x1FF;
+    // if (pd[pd_id] == 0)
+    // {
+    // uint64_t pd_addr = (uint64_t)PAGE_ALLOC.alloc_page();
+    // xmemset((void *)convert_physical_to_virtual(pd_addr), 0, PAGE_SIZE);
+    // pd[pd_id] = pd_addr | 0x3;
+    // }
+    // uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFF));
+    // uint64_t pt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 12) & 0x1FF;
+    // pt[pt_id] = new_pgd | 0x3;
 
     struct mm_struct *new_mm = (struct mm_struct *)malloc(sizeof(struct mm_struct));
     if (!new_mm)
@@ -511,19 +511,19 @@ uint64_t fork_exit_mm(struct task_struct *tsk)
         free(tsk->mm);
     }
 
-    uint64_t *pml4 = (uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd);
-    uint64_t pml4_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 39) & 0x1FF;
-    uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
-    uint64_t pdpt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 30) & 0x1FF;
-    uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
-    uint64_t pd_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 21) & 0x1FF;
+    // uint64_t *pml4 = (uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd);
+    // uint64_t pml4_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 39) & 0x1FF;
+    // uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
+    // uint64_t pdpt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 30) & 0x1FF;
+    // uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
+    // uint64_t pd_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 21) & 0x1FF;
 
-    pd[pd_id] = 0;
-    PAGE_ALLOC.free_page((void *)pd);
-    pdpt[pdpt_id] = 0;
-    PAGE_ALLOC.free_page((void *)pdpt);
-    pml4[pml4_id] = 0;
-    PAGE_ALLOC.free_page((void *)pml4);
+    // pd[pd_id] = 0;
+    // PAGE_ALLOC.free_page((void *)pd);
+    // pdpt[pdpt_id] = 0;
+    // PAGE_ALLOC.free_page((void *)pdpt);
+    // pml4[pml4_id] = 0;
+    // PAGE_ALLOC.free_page((void *)pml4);
 
     PAGE_ALLOC.free_page((void *)tsk->mm->pgd);
 
@@ -632,15 +632,12 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
         thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                          // 内核栈顶
         thd->rip = regs->rip;                                            // 指令指针
         thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS); // 用户栈指针
-        thd->elf_mappings = nullptr;
         // 复制寄存器状态
         xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS));
     }
 
-    // 设置进程为就绪状态
-    tsk->state = TASK_RUNNING;
     // 将新进程加入调度队列
-    insert_task_queue(tsk, tsk->cpu_id);
+    wakeup_task(tsk);
 
     uint64_t retval = tsk->pid;
 
@@ -666,7 +663,6 @@ extern "C" uint64_t do_exit(uint64_t code)
         }
     }
 
-    enable_intr();
     uint64_t lapicid = lapic_id();
     uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
     struct task_struct *tsk = NULL;
@@ -676,6 +672,8 @@ extern "C" uint64_t do_exit(uint64_t code)
     {
         goto failed;
     }
+    enable_intr();
+
     switch_to(current_task, tsk);
 
 failed:

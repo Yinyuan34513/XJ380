@@ -74,6 +74,8 @@ int fat_write_node(VNode *node)
     device_write(info->dev, buf, info->sector_per_cluster, sector, 0);
 
     free(buf);
+
+    return 0;
 }
 
 int fat_super(int dev, VNode *result)

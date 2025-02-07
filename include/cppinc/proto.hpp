@@ -6,7 +6,7 @@
 #include "../global/kernel/apic/apic.h"
 
 /*
- *   graphics/*
+ *   graphics
  */
 
 // graphics/draw.cpp
@@ -33,7 +33,7 @@ void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 
 /*
- *   font/*
+ *   font
  */
 
 // font/font.cpp
@@ -47,7 +47,7 @@ void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long lon
 void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color);
 
 /*
- *   lib/*
+ *   lib
  */
 // lib/string.c
 char *strncpy(char *dest, const char *src, UINT64 length);
@@ -61,7 +61,7 @@ char *strstr(const char *haystack, const char *needle);
 int str2float(const char *str, float *result);
 
 /*
- *   driver/*
+ *   driver
  */
 // driver/serial/serial_port.cpp
 int init_serial();
@@ -88,7 +88,7 @@ void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
 void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
 
 /*
- *   kernel/*
+ *   kernel
  */
 // kernel/main.cpp
 extern const FrameBufferConfig *fbc_addr;

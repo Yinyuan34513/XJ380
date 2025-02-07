@@ -244,7 +244,8 @@ void SMP::ap_startup(uint64_t madt_addr)
         write_serial_string(" initialized\n");
     }
 
-    xmemset((void *)PAGE_TABLE_BASE_ADDR, 0, PAGE_SIZE / 2);
+    // xmemset((void *)PAGE_TABLE_BASE_ADDR, 0, PAGE_SIZE / 2);
+    xmemset((void *)convert_physical_to_virtual(cr3), 0, PAGE_SIZE / 2);
 }
 
 int SMP::ap_count()

@@ -3,7 +3,7 @@
 
 #include "../../include.h"
 
-#define PAGE_TABLE_BASE_ADDR ((uint64_t *)0xFFFFFFFFFFFFF000)
+// #define PAGE_TABLE_BASE_ADDR ((uint64_t *)0xFFFFFFFFFFFFF000)
 
 class KERNEL_MAPPER
 {

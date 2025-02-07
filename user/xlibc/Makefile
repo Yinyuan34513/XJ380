@@ -5,10 +5,10 @@ all: $(OBJ_FILES)
 
 ../../out/xlibc/%.S.o: ./%.S
 	@mkdir -p $(@D)
-	@$(CC) $(C_FLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "AS $<"
 
 ../../out/xlibc/%.c.o: ./%.c
 	@mkdir -p $(@D)
-	@$(CC) $(C_FLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "CC $<"
