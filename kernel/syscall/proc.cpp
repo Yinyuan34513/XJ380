@@ -5,10 +5,9 @@ int sys_exit(int status)
     return do_exit(status);
 }
 
-int sys_fork()
+int sys_fork(struct X64_REGS_SYSCALL *regs)
 {
-    struct X64_REGS *regs = (struct X64_REGS *)current_task->thread->rsp0 - 1;
-    return do_fork(regs, 0, regs->rsp, 0);
+    return do_fork((struct X64_REGS *)regs, 0, regs->rsp, 0);
 }
 
 int sys_execve(struct X64_REGS_SYSCALL *regs)

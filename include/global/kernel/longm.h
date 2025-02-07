@@ -61,7 +61,13 @@ struct X64_REGS_SYSCALL
     UINT64 ds;
     UINT64 es;
     UINT64 rax;
-    UINT64 rsp;
+    UINT64 reserved1; // func
+    UINT64 reserved2; // errcode
+    UINT64 reserved3; // rip
+    UINT64 reserved4; // cs
+    UINT64 reserved5; // rflags
+    UINT64 reserved6; // rsp
+    UINT64 rsp;       // ss
 };
 
 #endif

@@ -44,11 +44,11 @@ uint64_t fail_parse_elf(void *buf, int retval)
     return (uint64_t)retval;
 }
 
-uint64_t parse_elf_file(struct X64_REGS_SYSCALL *regs, VNode *file_node)
+uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs, VNode *file_node)
 {
     Elf64_Ehdr ehdr;
     Elf64_Phdr *phdrs = nullptr;
-    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)task->mm->pgd));
     uint64_t pos = 0;
     int retval = 0;
     char *buf = nullptr;
@@ -78,6 +78,17 @@ uint64_t parse_elf_file(struct X64_REGS_SYSCALL *regs, VNode *file_node)
     // 在sysret之后, rcx寄存器会被恢复为rip
     regs->rcx = ehdr.e_entry;
 
+    // 保存加载信息
+    if (!task->thread->elf_mappings)
+    {
+        task->thread->elf_mappings = (struct elf_mapping_space *)malloc(sizeof(struct elf_mapping_space));
+    }
+    struct elf_mapping_space *mapping_space = task->thread->elf_mappings;
+    CalcLoadAddressRange(&ehdr, (UINT64 *)&mapping_space->load_start, (UINT64 *)&mapping_space->load_end);
+
+    mapper.map_range(mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start, 0x7);
+    flush_tlb();
+
     // 获取程序头表
     phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
 
@@ -96,23 +107,19 @@ uint64_t parse_elf_file(struct X64_REGS_SYSCALL *regs, VNode *file_node)
         // 更新内存映射信息
         if (phdrs[i].p_flags & 0x1)
         { // 可执行
-            current_task->mm->start_code = min(current_task->mm->start_code, v_addr);
-            current_task->mm->end_code = max(current_task->mm->end_code, v_addr + v_size);
+            task->mm->start_code = min(task->mm->start_code, v_addr);
+            task->mm->end_code = max(task->mm->end_code, v_addr + v_size);
         }
         else if (phdrs[i].p_flags & 0x2)
         { // 可写
-            current_task->mm->start_data = min(current_task->mm->start_data, v_addr);
-            current_task->mm->end_data = max(current_task->mm->end_data, v_addr + v_size);
+            task->mm->start_data = min(task->mm->start_data, v_addr);
+            task->mm->end_data = max(task->mm->end_data, v_addr + v_size);
         }
         else
         {
-            current_task->mm->start_rodata = min(current_task->mm->start_rodata, v_addr);
-            current_task->mm->end_rodata = max(current_task->mm->end_rodata, v_addr + v_size);
+            task->mm->start_rodata = min(task->mm->start_rodata, v_addr);
+            task->mm->end_rodata = max(task->mm->end_rodata, v_addr + v_size);
         }
-
-        // 映射内存
-        mapper.map_range(v_addr, 0, v_size, 0x7);
-        flush_tlb();
 
         // 复制段内容
         uint64_t segm_in_file = (uint64_t)buf + phdrs[i].p_offset;
@@ -135,17 +142,16 @@ uint64_t parse_elf_file(struct X64_REGS_SYSCALL *regs, VNode *file_node)
     free(buf);
 
     // 设置并映射用户栈
-    uint64_t stack_start_addr = current_task->mm->start_stack - STACK_SIZE;
-    mapper.map_range(stack_start_addr, 0, STACK_SIZE, 0x7); // 用户栈可读可写可执行
+    uint64_t stack_start_addr = task->mm->start_stack - STACK_SIZE;
+    mapper.map_range(stack_start_addr, 0, STACK_SIZE + PAGE_SIZE, 0x7); // 用户栈可读可写可执行
     flush_tlb();
-    xmemset((void *)stack_start_addr, 0, STACK_SIZE);
 
     return 0;
 }
 
 extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, char *argv[], char *envp[])
 {
-    uint64_t stack_start_addr = 0x6ffff0a00000UL;
+    uint64_t stack_start_addr = USER_STACK_START;
     const uint64_t brk_start_addr = 0x700000000000UL;
     uint64_t retval = 0;
     uint64_t pos = 0;
@@ -170,15 +176,15 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
         current_task->addr_limit = 0x00007FFFFFFFFFFF;
 
     current_task->mm->end_code = 0;
-    current_task->mm->start_data = 0;
+    current_task->mm->start_data = 0xFFFFFFFFFFFFFFFF;
     current_task->mm->end_data = 0;
-    current_task->mm->start_rodata = 0;
+    current_task->mm->start_rodata = 0xFFFFFFFFFFFFFFFF;
     current_task->mm->end_rodata = 0;
     current_task->mm->start_brk = brk_start_addr;
     current_task->mm->end_brk = brk_start_addr;
     current_task->mm->start_stack = stack_start_addr;
 
-    retval = parse_elf_file(regs, file_node);
+    retval = parse_elf_file(current_task, regs, file_node);
     if (retval < 0)
     {
         write_serial_string("Cannot parse elf file: ");
@@ -207,7 +213,7 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
         regs->rdx = (uint64_t)envp;  // envp
     }
 
-    // set rbp
+    // set rsp and rbp
     regs->rbp = current_task->mm->start_stack;
     regs->rsp = current_task->mm->start_stack;
 
@@ -219,8 +225,6 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
 
     // 在sysret之后, r11寄存器会被恢复为rflags
     regs->r11 = (1 << 9) | (1 << 1);
-
-    regs->rax = 0;
 
     return retval;
 }
@@ -569,6 +573,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     // 设置线程结构体
     thd = (struct thread_struct *)(tsk + 1); // 线程结构体紧跟在task_struct后面
     xmemset(thd, 0, sizeof(struct thread_struct));
+    thd->elf_mappings = current_task->thread->elf_mappings; // 复制内存映射区域信息
     tsk->thread = thd;
 
     if ((int64_t)fork_copy_mm(tsk) < 0)
@@ -589,12 +594,8 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     }
     tsk->fd_count = 3; // 设置初始文件描述符数量（0,1,2为标准输入输出错误）
 
-    // 设置线程上下文信息
-    thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                          // 内核栈顶
-    thd->rip = regs->rip;                                            // 指令指针
-    thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS); // 用户栈指针
-    // 复制寄存器状态
-    xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS));
+    // 设置子进程的返回值为0
+    regs->rax = 0;
 
     // 根据进程类型设置不同的段选择子
     if (!(tsk->flags & PF_KTHREAD))
@@ -602,22 +603,44 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
         // 用户进程
         thd->fs = SELECTOR_USER_DS;
         thd->gs = SELECTOR_USER_DS;
-        thd->rip = regs->rip = (uint64_t)ret_from_syscall;
+
+        // 设置线程上下文信息
+        thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                                  // 内核栈顶
+        thd->rip = (uint64_t)ret_from_syscall;                                   // 指令指针
+        thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS_SYSCALL); // 用户栈指针
+
+        // 设置一些数据
+        struct X64_REGS_SYSCALL *sys_regs = (struct X64_REGS_SYSCALL *)regs;
+
+        if (thd->elf_mappings)
+        {
+            KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)tsk->mm->pgd));
+            mapper.map_range(thd->elf_mappings->load_start, 0, thd->elf_mappings->load_end - thd->elf_mappings->load_start, 0x7);
+            flush_tlb();
+        }
+
+        // 复制寄存器状态
+        xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS_SYSCALL));
     }
     else
     {
         // 内核线程
         thd->fs = SELECTOR_KERNEL_DS;
         thd->gs = SELECTOR_KERNEL_DS;
+
+        // 设置线程上下文信息
+        thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                          // 内核栈顶
+        thd->rip = regs->rip;                                            // 指令指针
+        thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS); // 用户栈指针
+        thd->elf_mappings = nullptr;
+        // 复制寄存器状态
+        xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS));
     }
 
     // 设置进程为就绪状态
     tsk->state = TASK_RUNNING;
     // 将新进程加入调度队列
     insert_task_queue(tsk, tsk->cpu_id);
-
-    // 设置父进程的返回值为0
-    regs->rax = 0;
 
     uint64_t retval = tsk->pid;
 

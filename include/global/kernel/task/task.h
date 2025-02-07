@@ -10,12 +10,19 @@
 // stack size 16K
 // UL一定要加，否则获取current_task之后读取值的时候会出错
 #define STACK_SIZE 16384UL
+#define USER_STACK_START 0x6ffff0a00000UL
 
 #define TASK_RUNNING (1 << 0)
 #define TASK_INTERRUPTIBLE (1 << 1)
 #define TASK_UNINTERRUPTIBLE (1 << 2)
 #define TASK_ZOMBIE (1 << 3)
 #define TASK_STOPPED (1 << 4)
+
+struct elf_mapping_space
+{
+    uint64_t load_start;
+    uint64_t load_end;
+};
 
 struct mm_struct
 {
@@ -30,6 +37,8 @@ struct mm_struct
 
 struct thread_struct
 {
+    struct elf_mapping_space *elf_mappings;
+
     uint64_t rsp0; // in tss
 
     uint64_t rip;

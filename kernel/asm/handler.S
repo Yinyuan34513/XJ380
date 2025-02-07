@@ -287,13 +287,14 @@ ENTRY(syscall_handler)
 
     pushq   %rsp
 
+    subq    $0x30, %rsp
+
     pushq	%rax
 
 	movq	%es,	%rax
 	pushq	%rax
 	movq	%ds,	%rax
 	pushq	%rax
-	xorq	%rax,	%rax
 
 	pushq	%rbp
 	pushq	%rdi
@@ -336,6 +337,9 @@ ENTRY(ret_from_syscall)
     movq %rax, %es
 
     popq %rax
+
+    // 弹出 reserved 1～6
+    addq $0x30, %rsp
 
     popq %rsp
 

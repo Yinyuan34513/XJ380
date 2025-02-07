@@ -3,12 +3,13 @@ export C_FLAGS = -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno
 export CPP_FLAGS = -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
+SMP ?= 4
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
 endif
 
-QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp 4 -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp $(SMP) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX = x86_64-linux-gnu-
 
@@ -68,6 +69,7 @@ vdisk: all
 	@mcopy -i XJ380.img@@1M out/kernel.elf ::/
 	@mcopy -i XJ380.img@@1M out/BOOTX64.efi ::/EFI/BOOT
 
+	@$(MAKE) -C user build_xlibc
 	@$(MAKE) -C user
 
 	@mcopy -i XJ380.img@@1M out/init.elf ::/usr

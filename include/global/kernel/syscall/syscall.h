@@ -59,15 +59,13 @@
 
 #define SYS_MKNOD 133
 
-extern uint64_t current_rsp_in_cpus[MAX_CPU_NUM];
-
 int sys_read(uint32_t fd, uint8_t *buf, size_t count);
 int sys_write(uint32_t fd, uint8_t *buf, size_t count);
 int sys_open(const char *pathname, int flags, int mode);
 int sys_close(uint32_t fd);
 int sys_execve(struct X64_REGS_SYSCALL *regs);
 int sys_exit(int status);
-int sys_fork();
+int sys_fork(struct X64_REGS_SYSCALL *regs);
 uint64_t sys_wait4(unsigned long pid, int *status, int options, void *rusage);
 
 void init_syscall();

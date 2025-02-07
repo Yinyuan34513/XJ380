@@ -79,9 +79,9 @@ extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
     case SYS_CLOSE:
         regs->rax = (uint64_t)sys_close(regs->rdi);
         break;
-    // case SYS_FORK:
-    //     regs->rax = (uint64_t)sys_fork();
-    //     break;
+    case SYS_FORK:
+        regs->rax = (uint64_t)sys_fork(regs);
+        break;
     case SYS_EXECVE:
         regs->rax = (uint64_t)sys_execve(regs);
         break;
