@@ -11,6 +11,7 @@ out/draw.o
 .cache
 
 *.img
+*.vmdk
 *.tags
 *.elf
 *.o

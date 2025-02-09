@@ -79,7 +79,7 @@ void keyboard_init();
 UINT8 get_keyboard_input();
 
 // driver/ps2/mouse.cpp
-void Mouse_init();
+void mouse_init();
 UINT8 get_Mouse_output();
 bool mousedecode(UINT8 data);
 int get_mouse_x();

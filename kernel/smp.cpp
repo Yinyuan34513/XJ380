@@ -1,12 +1,14 @@
 #include "./alloc/page.h"
 #include "../include/include.h"
 
+extern APIC_INFO ApicInfo;
+
 extern uint64_t idle_entry(uint64_t arg);
 
 extern uint8_t _APU_boot_start;
 extern uint8_t _APU_boot_end;
 
-#define APU_BASE_ADDR 0x80000
+#define APU_BASE_ADDR 0x20000
 
 // 定义APIC寄存器的偏移量
 #define APIC_ICR_LOW 0x300
@@ -19,28 +21,6 @@ extern uint8_t _APU_boot_end;
 SMP SMP_MANAGER;
 
 uint64_t lapicid_to_cpuid[MAX_CPU_NUM];
-
-// 发送IPI的函数
-void send_ipi(UINT32 apic_id, UINT32 command)
-{
-    // 写入高32位，指定目标APIC ID
-    lapic_write(APIC_ICR_HIGH, apic_id << 24);
-    // 写入低32位，指定命令
-    lapic_write(APIC_ICR_LOW, command);
-}
-
-// 向AP发送INIT IPI和STARTUP IPI
-void send_init_and_startup_ipi(UINT32 apic_id)
-{
-    // 发送INIT IPI
-    send_ipi(apic_id, IPI_INIT);
-    delay_ms(100);
-
-    // 发送STARTUP IPI
-    send_ipi(apic_id, IPI_STARTUP | (APU_BASE_ADDR >> 12)); // 0x08是启动代码的段选择符
-}
-
-extern IDTR_TYPE idt_ptr;
 
 static inline uint64_t rdmsr(UINT32 msr)
 {
@@ -55,7 +35,35 @@ static inline void wrmsr(UINT32 msr, UINT64 value)
     UINT32 edx = value >> 32;
     __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
 }
-extern APIC_INFO ApicInfo;
+
+// 发送IPI的函数
+void send_ipi(UINT32 apic_id, UINT32 command)
+{
+    if (ApicInfo.x2Apic)
+    {
+        lapic_write(APIC_ICR_LOW, (((uint64_t)apic_id) << 32) | command);
+    }
+    else
+    {
+        // 写入高32位，指定目标APIC ID
+        lapic_write(APIC_ICR_HIGH, apic_id << 24);
+        // 写入低32位，指定命令
+        lapic_write(APIC_ICR_LOW, command);
+    }
+}
+
+// 向AP发送INIT IPI和STARTUP IPI
+void send_init_and_startup_ipi(UINT32 apic_id)
+{
+    // 发送INIT IPI
+    send_ipi(apic_id, IPI_INIT);
+    delay_ms(100);
+
+    // 发送STARTUP IPI
+    send_ipi(apic_id, IPI_STARTUP | (APU_BASE_ADDR >> 12));
+}
+
+extern IDTR_TYPE idt_ptr;
 extern void init_lApic();
 
 extern bool TASK_INITIALIZED;
@@ -176,12 +184,39 @@ void SMP::ap_startup(uint64_t madt_addr)
             break;
         }
         MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
+
+        if (header->entry_type == MADT_X2APIC_LOCAL)
+        {
+            if (!ApicInfo.x2Apic)
+            {
+                goto find_xapic;
+            }
+
+            MadtLocalX2apic *x2lapic = (MadtLocalX2apic *)((uint64_t)(&madt->entries) + current);
+            MadtLocalApic *lapic_struct = (MadtLocalApic *)malloc(sizeof(MadtLocalApic));
+            lapic_struct->ACPI_Processor_UID = x2lapic->acpi_processor_uid;
+            lapic_struct->flags = x2lapic->flags;
+            lapic_struct->local_apic_id = x2lapic->x2apic_id;
+            write_serial_string("Found x2apic lapicid = ");
+            write_serial_hex(lapic_struct->local_apic_id);
+            write_serial_string("\n");
+            this->apu_list[this->apu_count] = lapic_struct;
+            this->apu_count++;
+            goto next;
+        }
+    find_xapic:
         if (header->entry_type == MADT_APIC_LOCAL)
         {
             MadtLocalApic *lapic = (MadtLocalApic *)((uint64_t)(&madt->entries) + current);
+
+            write_serial_string("Found xapic lapicid = ");
+            write_serial_hex(lapic->local_apic_id);
+            write_serial_string("\n");
             this->apu_list[this->apu_count] = lapic;
             this->apu_count++;
+            goto next;
         }
+    next:
         current += (UINT64)header->length;
     }
 

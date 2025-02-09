@@ -101,7 +101,7 @@ int get_mouse_y()
     return mouse_y;
 }
 
-void Mouse_init()
+void mouse_init()
 {
     wait_KB_write();
     outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);

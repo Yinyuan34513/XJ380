@@ -52,11 +52,11 @@ static inline void wrmsr(UINT32 msr, UINT64 value)
     __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
 }
 
-void lapic_write(UINT32 reg, UINT32 value)
+void lapic_write(UINT32 reg, UINT64 value)
 {
     if (ApicInfo.x2Apic)
     {
-        wrmsr(0x800 + (reg >> 4), (UINT64)value);
+        wrmsr(0x800 + (reg >> 4), value);
         return;
     }
     mmio_write32((UINT32 *)((UINT64)ApicInfo.LocalApicAddr + reg), value);
@@ -73,6 +73,10 @@ UINT32 lapic_read(UINT32 reg)
 
 UINT64 lapic_id()
 {
+    if (ApicInfo.x2Apic)
+    {
+        return lapic_read(LAPIC_REG_ID);
+    }
     return (lapic_read(LAPIC_REG_ID) >> 24);
 }
 

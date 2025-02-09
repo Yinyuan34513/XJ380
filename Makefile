@@ -4,14 +4,20 @@ CPP_FLAGS = -O0 -Wall -g -nostdlib -ffreestanding -fno-builtin -mno-sse -mno-mmx
 
 DEBUG ?= 0
 SMP ?= 4
+KVM ?= 0
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
 endif
 
-QEMU_CMD = qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp $(SMP) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+ifeq ($(KVM), 1)
+SUDO_CMD = sudo
+KVM_ENABLE = --enable-kvm
+endif
 
-COMPILER_PREFIX = x86_64-linux-gnu-
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+
+COMPILER_PREFIX ?= x86_64-linux-gnu-
 
 # FILES
 ASM_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.S")

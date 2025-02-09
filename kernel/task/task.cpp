@@ -245,7 +245,7 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     keyboard_init();
     write_serial_string("Keyboard Initialize Success.\n");
-    Mouse_init();
+    mouse_init();
     write_serial_string("Mouse Initialize Success.\n");
     keyboard_mouse_init_done = true;
 

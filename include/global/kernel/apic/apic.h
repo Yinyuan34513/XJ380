@@ -62,6 +62,7 @@ struct APIC_INFO
 
 #define MADT_APIC_LOCAL 0x00
 #define MADT_APIC_IO 0x01
+#define MADT_X2APIC_LOCAL 0x09
 
 #define LAPIC_REG_ID 32
 #define LAPIC_REG_TIMER_CURCNT 0x390
@@ -72,7 +73,7 @@ struct APIC_INFO
 
 #include "hpet.h"
 
-void lapic_write(UINT32 reg, UINT32 value);
+void lapic_write(UINT32 reg, UINT64 value);
 UINT32 lapic_read(UINT32 reg);
 
 typedef struct
@@ -100,6 +101,14 @@ struct madt_local_apic
     uint32_t flags;
 };
 
+struct madt_x2_localapic {
+    struct madt_hander h;
+    uint8_t  reserved[2];
+    uint32_t x2apic_id;
+    uint32_t flags;
+    uint32_t acpi_processor_uid;
+} __attribute__((packed));
+
 struct madt_io_apic
 {
     struct madt_hander h;
@@ -111,6 +120,7 @@ struct madt_io_apic
 
 typedef struct madt_hander MadtHeader;
 typedef struct madt_local_apic MadtLocalApic;
+typedef struct madt_x2_localapic MadtLocalX2apic;
 typedef struct madt_io_apic MadtIOApic;
 
 extern UINT64 lapic_id();
