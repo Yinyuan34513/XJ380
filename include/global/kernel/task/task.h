@@ -23,6 +23,7 @@ struct elf_mapping_space
 {
     uint64_t load_start;
     uint64_t load_end;
+    uint64_t load_phys_start;
 };
 
 struct mm_struct
@@ -165,7 +166,7 @@ struct task_struct *get_current()
 
 static inline void switch_mm(struct task_struct *prev, struct task_struct *next)
 {
-    __asm__ __volatile__("movq %0, %%cr3" : : "r"(next->mm->pgd));
+    __asm__ __volatile__("movq %0, %%cr3" : : "r"(next->mm->pgd) : "memory");
 }
 
 #define switch_to(prev, next)                                                                       \
@@ -192,7 +193,7 @@ void insert_task_queue(struct task_struct *tsk, int cpu_id);
 static inline void wakeup_task(struct task_struct *tsk)
 {
     tsk->state = TASK_RUNNING;
-    insert_task_queue(tsk, current_task->cpu_id);
+    insert_task_queue(tsk, tsk->cpu_id);
     current_task->flags |= NEED_SCHEDULE;
 }
 

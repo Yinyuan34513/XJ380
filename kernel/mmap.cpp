@@ -9,7 +9,7 @@ KERNEL_MAPPER::~KERNEL_MAPPER()
 {
 }
 
-void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
+uint64_t KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
 {
     uint64_t *page_table_addr = this->page_table;
 
@@ -44,11 +44,14 @@ void KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     {
         if (paddr == 0)
         {
-            pt[pt_id] = (uint64_t)PAGE_ALLOC.alloc_page() | flags;
+            uint64_t phys = (uint64_t)PAGE_ALLOC.alloc_page();
+            pt[pt_id] = phys | flags;
+            return phys;
         }
         else
         {
             pt[pt_id] = paddr | flags;
+            return paddr;
         }
     }
 }
@@ -72,19 +75,28 @@ void KERNEL_MAPPER::unmap_page(uint64_t vaddr)
     PAGE_ALLOC.free_page((void *)pml4);
 }
 
-void KERNEL_MAPPER::map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags)
+uint64_t KERNEL_MAPPER::map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags)
 {
+    uint64_t start_phys = 0;
     for (uint64_t i = 0; i < size; i += PAGE_SIZE)
     {
+        uint64_t ret = 0;
         if (paddr == 0)
         {
-            map_page(vaddr + i, 0, flags);
+            ret = map_page(vaddr + i, 0, flags);
         }
         else
         {
-            map_page(vaddr + i, paddr + i, flags);
+            ret = map_page(vaddr + i, paddr + i, flags);
+        }
+
+        if (!start_phys)
+        {
+            start_phys = ret;
         }
     }
+
+    return start_phys;
 }
 
 void KERNEL_MAPPER::unmap_range(uint64_t vaddr, uint64_t size)

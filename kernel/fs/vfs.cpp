@@ -157,11 +157,14 @@ void mount_root()
 {
     root = get_free_node();
 
-    // 假设第一个分区是根分区
-    device_t *device = device_find(DEV_PART, 0);
-
-    if (device)
+    for (int i = 0; i < MAX_SUPPORTED_PARTITON_DEV_NUM; i++)
     {
+        device_t *device = device_find(DEV_PART, 0);
+        if (!device)
+        {
+            continue;
+        }
+
         for (int i = 0; i < fs_idx; i++)
         {
             FileSystem *filesystem = &filesystems[i];
@@ -174,12 +177,9 @@ void mount_root()
                 return;
             }
         }
-        failed_to_mount_root();
     }
-    else
-    {
-        failed_to_mount_root();
-    }
+
+    failed_to_mount_root();
 }
 
 void init_vfs()

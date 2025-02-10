@@ -2,6 +2,8 @@
 #include "../../include/cinc/elf.h"
 #include "../alloc/page.h"
 
+static long global_pid = 0;
+
 struct mm_struct init_mm = {0};
 
 struct thread_struct init_thread =
@@ -86,8 +88,11 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs,
     struct elf_mapping_space *mapping_space = task->thread->elf_mappings;
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (UINT64 *)&mapping_space->load_start, (UINT64 *)&mapping_space->load_end);
 
-    mapper.map_range(mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start, 0x7);
+    uint64_t load_phys_start = mapper.map_range(mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start, 0x7);
+    mapping_space->load_phys_start = load_phys_start;
     flush_tlb();
+
+    xmemset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
 
     // 获取程序头表
     phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
@@ -157,12 +162,6 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
     uint64_t pos = 0;
     VNode *file_node;
 
-    switch_mm(nullptr, current_task);
-
-    regs->rdi = 0;
-    regs->rsi = 0;
-    regs->rdx = 0;
-
     file_node = open_exec_file(name);
     if (!file_node)
     {
@@ -213,18 +212,19 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
         regs->rdx = (uint64_t)envp;  // envp
     }
 
-    // set rsp and rbp
     regs->rbp = current_task->mm->start_stack;
     regs->rsp = current_task->mm->start_stack;
 
-    regs->ds = SELECTOR_USER_DS;
-    regs->es = SELECTOR_USER_DS;
+    // 在sysret后，r11会被恢复为rflags
+    regs->r11 = (1 << 9) | (1 << 1);
 
     __asm__ __volatile__("movq	%0, %%gs\n\t"
                          "movq	%0, %%fs\n\t" ::"r"(0UL));
 
-    // 在sysret之后, r11寄存器会被恢复为rflags
-    regs->r11 = (1 << 9) | (1 << 1);
+    regs->ds = SELECTOR_USER_DS;
+    regs->es = SELECTOR_USER_DS;
+
+    regs->rax = 1;
 
     return retval;
 }
@@ -271,10 +271,11 @@ uint64_t init_kernel_thread(uint64_t arg)
     disable_intr();
 
     current_task->thread->rip = (uint64_t)ret_from_syscall;
-    current_task->thread->rsp = (uint64_t)current_task + STACK_SIZE - sizeof(struct X64_REGS_SYSCALL);
+    current_task->thread->rsp0 = (uint64_t)current_task + STACK_SIZE;
+    current_task->thread->rsp = current_task->thread->rsp0 - sizeof(struct X64_REGS);
     current_task->thread->gs = SELECTOR_USER_DS;
     current_task->thread->fs = SELECTOR_USER_DS;
-    current_task->flags = 0;
+    current_task->flags &= ~PF_KTHREAD;
 
     __asm__ __volatile__("movq	%1,	%%rsp	\n\t"
                          "pushq	%2		\n\t"
@@ -460,11 +461,18 @@ uint64_t fork_copy_mm(struct task_struct *tsk, uint64_t clone_flags)
         tsk->mm = current_task->mm;
         return 0;
     }
+
+    struct mm_struct *new_mm = (struct mm_struct *)malloc(sizeof(struct mm_struct));
+    if (!new_mm)
+    {
+        return (uint64_t)-ENOMEM;
+    }
+
     uint64_t new_pgd = (uint64_t)PAGE_ALLOC.alloc_page();
     xmemset((void *)convert_physical_to_virtual(new_pgd), 0, PAGE_SIZE);
     uint64_t old_page_table;
     __asm__ __volatile__("movq %%cr3, %0" : "=r"(old_page_table));
-    xmemcpy((uint8_t *)(convert_physical_to_virtual(new_pgd) + PAGE_SIZE / 2), (uint8_t *)(convert_physical_to_virtual(old_page_table) + PAGE_SIZE / 2), PAGE_SIZE / 2);
+    xmemcpy((uint8_t *)convert_physical_to_virtual(new_pgd), (uint8_t *)convert_physical_to_virtual(old_page_table), PAGE_SIZE);
 
     // // Map paddr to vaddr
     // uint64_t *pml4 = (uint64_t *)convert_physical_to_virtual(new_pgd);
@@ -495,11 +503,6 @@ uint64_t fork_copy_mm(struct task_struct *tsk, uint64_t clone_flags)
     // uint64_t pt_id = ((uint64_t)PAGE_TABLE_BASE_ADDR >> 12) & 0x1FF;
     // pt[pt_id] = new_pgd | 0x3;
 
-    struct mm_struct *new_mm = (struct mm_struct *)malloc(sizeof(struct mm_struct));
-    if (!new_mm)
-    {
-        return (uint64_t)-ENOMEM;
-    }
     new_mm->pgd = (uint64_t *)new_pgd;
     tsk->mm = new_mm;
 
@@ -508,6 +511,8 @@ uint64_t fork_copy_mm(struct task_struct *tsk, uint64_t clone_flags)
 
 uint64_t fork_exit_mm(struct task_struct *tsk)
 {
+    PAGE_ALLOC.free_page((void *)tsk->mm->pgd);
+
     if (tsk->mm)
     {
         free(tsk->mm);
@@ -527,10 +532,38 @@ uint64_t fork_exit_mm(struct task_struct *tsk)
     // pml4[pml4_id] = 0;
     // PAGE_ALLOC.free_page((void *)pml4);
 
-    PAGE_ALLOC.free_page((void *)tsk->mm->pgd);
+    return 0;
+}
+
+uint64_t fork_copy_thread(uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size, struct task_struct *tsk, struct X64_REGS *regs)
+{
+    struct thread_struct *thd = NULL;
+    struct X64_REGS *childregs = NULL;
+
+    thd = (struct thread_struct *)(tsk + 1);
+    xmemset(thd, 0, sizeof(struct thread_struct));
+    tsk->thread = thd;
+
+    childregs = (struct X64_REGS *)((uint64_t)tsk + STACK_SIZE) - 1;
+
+    xmemcpy(childregs, regs, sizeof(struct X64_REGS));
+    childregs->rax = 0;
+    childregs->rsp = stack_start;
+
+    thd->rsp0 = (uint64_t)tsk + STACK_SIZE;
+    thd->rsp = (uint64_t)childregs;
+    thd->fs = current_task->thread->fs;
+    thd->gs = current_task->thread->gs;
+
+    if (tsk->flags & PF_KTHREAD)
+        thd->rip = (uint64_t)kernel_thread_func;
+    else
+        thd->rip = (uint64_t)ret_from_syscall;
 
     return 0;
 }
+
+void fork_exit_thread(struct task_struct *tsk) {}
 
 uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size)
 {
@@ -562,7 +595,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
 
     // 设置新进程的基本属性
     tsk->priority = 2;                     // 设置默认优先级
-    tsk->pid++;                            // 分配新的进程ID
+    tsk->pid = global_pid++;               // 分配新的进程ID
     tsk->preempt_count = 0;                // 重置抢占计数
     tsk->cpu_id = alloc_cpu_id();          // 分配CPU核心ID
     tsk->state = TASK_UNINTERRUPTIBLE;     // 设置初始状态为不可中断
@@ -585,6 +618,13 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
         return (uint64_t)-ENOMEM;
     }
 
+    if ((int64_t)fork_copy_thread(clone_flags, stack_start, stack_size, tsk, regs) < 0)
+    {
+        fork_exit_thread(tsk);
+        PAGE_ALLOC.free_pages((void *)convert_virtual_to_physical((uint64_t)tsk), STACK_SIZE / PAGE_SIZE);
+        return (uint64_t)-ENOMEM;
+    }
+
     // 初始化文件描述符表
     for (int i = 3; i < MAX_FD_NUM; i++)
     {
@@ -596,58 +636,14 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     }
     tsk->fd_count = 3; // 设置初始文件描述符数量（0,1,2为标准输入输出错误）
 
-    // 设置子进程的返回值为0
-    regs->rax = 0;
-
-    // 根据进程类型设置不同的段选择子
-    if (!(tsk->flags & PF_KTHREAD))
-    {
-        // 用户进程
-        thd->fs = SELECTOR_USER_DS;
-        thd->gs = SELECTOR_USER_DS;
-
-        // 设置线程上下文信息
-        thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                                  // 内核栈顶
-        thd->rip = (uint64_t)ret_from_syscall;                                   // 指令指针
-        thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS_SYSCALL); // 用户栈指针
-
-        // 设置一些数据
-        struct X64_REGS_SYSCALL *sys_regs = (struct X64_REGS_SYSCALL *)regs;
-
-        if (thd->elf_mappings && !(clone_flags & CLONE_VM))
-        {
-            KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)tsk->mm->pgd));
-            mapper.map_range(thd->elf_mappings->load_start, 0, thd->elf_mappings->load_end - thd->elf_mappings->load_start, 0x7);
-            flush_tlb();
-        }
-
-        // 复制寄存器状态
-        xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS_SYSCALL));
-    }
-    else
-    {
-        // 内核线程
-        thd->fs = SELECTOR_KERNEL_DS;
-        thd->gs = SELECTOR_KERNEL_DS;
-
-        // 设置线程上下文信息
-        thd->rsp0 = (uint64_t)tsk + STACK_SIZE;                          // 内核栈顶
-        thd->rip = regs->rip;                                            // 指令指针
-        thd->rsp = (uint64_t)tsk + STACK_SIZE - sizeof(struct X64_REGS); // 用户栈指针
-        // 复制寄存器状态
-        xmemcpy((void *)thd->rsp, regs, sizeof(struct X64_REGS));
-    }
-
     // 将新进程加入调度队列
     wakeup_task(tsk);
-
-    uint64_t retval = tsk->pid;
 
     // 释放fork锁
     spin_unlock(&do_fork_lock);
 
     // 返回子进程的PID
-    return retval;
+    return tsk->pid;
 }
 
 extern "C" uint64_t do_exit(uint64_t code)
@@ -655,6 +651,7 @@ extern "C" uint64_t do_exit(uint64_t code)
     disable_intr();
 
     fork_exit_mm(current_task);
+    fork_exit_thread(current_task);
 
     current_task->state = TASK_ZOMBIE;
     for (int i = 0; i < MAX_FD_NUM; i++)
@@ -664,19 +661,16 @@ extern "C" uint64_t do_exit(uint64_t code)
             free(current_task->fds[i]);
         }
     }
+    list_del(&current_task->list);
 
-    uint64_t lapicid = lapic_id();
-    uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
-    struct task_struct *tsk = NULL;
-    current_task->flags &= ~NEED_SCHEDULE;
-    tsk = get_next_task(cpu_id);
-    if (!tsk)
-    {
-        goto failed;
-    }
+    current_task->flags |= NEED_SCHEDULE;
+
     enable_intr();
 
-    switch_to(current_task, tsk);
+    while (1)
+    {
+        __asm__ __volatile__("pause");
+    }
 
 failed:
     return 0xFFFFFFFFFFFFFFFF;
@@ -701,23 +695,22 @@ int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
     return do_fork(&regs, flags, 0, 0);
 }
 
-// 写入MSR寄存器的函数
-static inline void write_msr(uint32_t msr, uint64_t value)
+static inline void wrmsr(UINT32 msr, UINT64 value)
 {
-    uint32_t low = value & 0xFFFFFFFF;
-    uint32_t high = value >> 32;
-    asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
+    UINT32 eax = (UINT32)value;
+    UINT32 edx = value >> 32;
+    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
 }
 
 extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
     init_tss[next->cpu_id].rsp0 = next->thread->rsp0;
 
-    __asm__ __volatile__("movq %%fs, %0\n\t" : "=a"(prev->thread->fs));
-    __asm__ __volatile__("movq %%gs, %0\n\t" : "=a"(prev->thread->gs));
+    __asm__ __volatile__("movq  %%fs,    %0\n\t" : "=a"(prev->thread->fs));
+    __asm__ __volatile__("movq  %%gs,    %0\n\t" : "=a"(prev->thread->gs));
 
-    __asm__ __volatile__("movq %0, %%fs\n\t" ::"a"(next->thread->fs));
-    __asm__ __volatile__("movq %0, %%gs\n\t" ::"a"(next->thread->gs));
+    __asm__ __volatile__("movq  %0,     %%fs\n\t" ::"a"(next->thread->fs));
+    __asm__ __volatile__("movq  %0,     %%gs\n\t" ::"a"(next->thread->gs));
 
     user_current[next->cpu_id] = next;
 }

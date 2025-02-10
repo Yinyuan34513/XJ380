@@ -11,9 +11,9 @@ public:
     KERNEL_MAPPER(uint64_t *page_table);
     ~KERNEL_MAPPER();
 
-    void map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags);
+    uint64_t map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags);
     void unmap_page(uint64_t vaddr);
-    void map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags);
+    uint64_t map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags);
     void unmap_range(uint64_t vaddr, uint64_t size);
 
 private:

@@ -4,6 +4,7 @@ CPP_FLAGS = -O0 -Wall -g -nostdlib -ffreestanding -fno-builtin -mno-sse -mno-mmx
 
 DEBUG ?= 0
 SMP ?= 4
+SUDO ?= 0
 KVM ?= 0
 
 ifeq ($(DEBUG), 1)
@@ -11,11 +12,15 @@ DEBUG_FLAG = -s -S
 endif
 
 ifeq ($(KVM), 1)
-SUDO_CMD = sudo
+SUDO = 1
 KVM_ENABLE = --enable-kvm
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+ifeq ($(SUDO), 1)
+SUDO_CMD = sudo
+endif
+
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/OVMF.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= x86_64-linux-gnu-
 

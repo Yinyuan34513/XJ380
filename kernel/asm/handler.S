@@ -283,6 +283,9 @@ ENTRY(mouse_handler)
     jmp Err_Code
 
 ENTRY(syscall_handler)
+    cli
+    cld
+
     pushq   %rsp
 
     // “压入” reserved 1~6
@@ -341,5 +344,7 @@ ENTRY(ret_from_syscall)
     addq $0x30, %rsp
 
     popq %rsp
+
+    sti
 
     sysretq

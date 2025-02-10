@@ -58,7 +58,7 @@ void init_syscall()
     write_msr(MSR_LSTAR, (uint64_t)syscall_handler);
 
     // 4. 设置 SYSCALL_MASK MSR (RFLAGS 掩码)
-    write_msr(MSR_SYSCALL_MASK, (1 << 9) | (1 << 1));
+    write_msr(MSR_SYSCALL_MASK, (1 << 9));
 }
 
 extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
@@ -92,7 +92,7 @@ extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
         regs->rax = (uint64_t)sys_exit(regs->rdi);
         break;
     case SYS_WAIT4:
-        regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r8);
+        regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r10);
         break;
     default:
         regs->rax = (uint64_t)-ENOSYS;

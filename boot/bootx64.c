@@ -392,6 +392,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   MapVirtToPhys(kernel_first_addr, kernel_last_addr - kernel_first_addr);
 
+  xmemset(kernel_first_addr, 0, kernel_last_addr - kernel_first_addr);
+
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
   // free(kernel_buffer);        // 释放内核文件，丢掉！

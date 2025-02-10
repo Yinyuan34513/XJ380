@@ -3,6 +3,7 @@
 #include "../../../include.h"
 
 #define MAX_SUPPORTED_BLOCK_DEV_NUM 8
+#define MAX_SUPPORTED_PARTITON_DEV_NUM (MAX_SUPPORTED_BLOCK_DEV_NUM * 4)
 
 #define GPT_HEADER_SIGNATURE "EFI PART"
 
