@@ -15,7 +15,7 @@ SUDO_CMD = sudo
 KVM_ENABLE = --enable-kvm
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device nvme,serial=NVMEDISK,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -drive if=pflash,format=raw,file=OVMF_CODE.fd,readonly=on -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= x86_64-linux-gnu-
 

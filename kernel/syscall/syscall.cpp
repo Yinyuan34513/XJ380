@@ -58,7 +58,7 @@ void init_syscall()
     write_msr(MSR_LSTAR, (uint64_t)syscall_handler);
 
     // 4. 设置 SYSCALL_MASK MSR (RFLAGS 掩码)
-    write_msr(MSR_SYSCALL_MASK, 0x40700);
+    write_msr(MSR_SYSCALL_MASK, (1 << 9) | (1 << 1));
 }
 
 extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
@@ -82,6 +82,9 @@ extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
     case SYS_FORK:
         regs->rax = (uint64_t)sys_fork(regs);
         break;
+    case SYS_VFORK:
+        regs->rax = (uint64_t)sys_vfork(regs);
+        break;
     case SYS_EXECVE:
         regs->rax = (uint64_t)sys_execve(regs);
         break;
@@ -92,6 +95,7 @@ extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
         regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r8);
         break;
     default:
+        regs->rax = (uint64_t)-ENOSYS;
         write_serial_string("Unknown syscall index: ");
         write_serial_dec(syscall_number);
         write_serial_string("\n");

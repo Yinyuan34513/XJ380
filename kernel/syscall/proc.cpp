@@ -10,6 +10,11 @@ int sys_fork(struct X64_REGS_SYSCALL *regs)
     return do_fork((struct X64_REGS *)regs, 0, regs->rsp, 0);
 }
 
+int sys_vfork(struct X64_REGS_SYSCALL *regs)
+{
+    return do_fork((struct X64_REGS *)regs, CLONE_VM, regs->rsp, 0);
+}
+
 int sys_execve(struct X64_REGS_SYSCALL *regs)
 {
     return do_execve(regs, (const char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);

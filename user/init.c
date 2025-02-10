@@ -10,7 +10,7 @@ int main(int argc, char *argv[], char *envp[])
     if (pid == 0)
     {
         write(1, "child process is running!!!\n", 0);
-        // enter_syscall(SYS_EXECVE, (uint64_t)"/usr/shell.elf", NULL, NULL, 0, 0, 0);
+        execve("/usr/shell.elf", NULL, NULL);
     }
     else
     {

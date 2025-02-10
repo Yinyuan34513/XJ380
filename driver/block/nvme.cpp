@@ -17,19 +17,6 @@
 
 void *NVME_DMA_MEMORY = 0;
 
-char *LeadingWhitespace(char *beg, char *end)
-{
-    while (end > beg && *--end <= 0x20)
-    {
-        *end = 0;
-    }
-    while (beg < end && *beg <= 0x20)
-    {
-        beg++;
-    }
-    return beg;
-}
-
 void NVMEConfigureQ(NVME_CONTROLLER *ctrl, NVME_QUEUE_COMMON *q, uint32_t idx, uint32_t len)
 {
     xmemset(q, 0, sizeof(NVME_QUEUE_COMMON));
@@ -44,7 +31,7 @@ int NVMEConfigureCQ(NVME_CONTROLLER *ctrl, NVME_COMPLETION_QUEUE *cq, uint32_t i
     uint64_t pagCont = 1;
     phyAddr = (uint64_t)PAGE_ALLOC.alloc_pages(pagCont);
     cq->CQE = (NVME_COMPLETION_QUEUE_ENTRY *)convert_physical_to_virtual(phyAddr);
-    xmemset(cq->CQE, 0, 4096);
+    xmemset(cq->CQE, 0, PAGE_SIZE);
     cq->COM.HAD = 0;
     cq->COM.TAL = 0;
     cq->COM.PHA = 1;
@@ -58,7 +45,7 @@ int NVMEConfigureSQ(NVME_CONTROLLER *ctrl, NVME_SUBMISSION_QUEUE *sq, uint32_t i
     uint64_t pagCont = 1;
     phyAddr = (uint64_t)PAGE_ALLOC.alloc_pages(pagCont);
     sq->SQE = (NVME_SUBMISSION_QUEUE_ENTRY *)convert_physical_to_virtual(phyAddr);
-    xmemset(sq->SQE, 0, 4096);
+    xmemset(sq->SQE, 0, PAGE_SIZE);
     sq->COM.HAD = 0;
     sq->COM.TAL = 0;
     sq->COM.PHA = 0;
@@ -136,7 +123,7 @@ uint32_t NVMETransfer(NVME_NAMESPACE *ns, void *buf, uint64_t lba, uint32_t coun
         return 0;
 
     uint64_t bufAddr = (uint64_t)buf;
-    uint32_t maxCount = (4096 / ns->BSZ) - ((bufAddr & 0xFFF) / ns->BSZ);
+    uint32_t maxCount = (PAGE_SIZE / ns->BSZ) - ((bufAddr & 0xFFF) / ns->BSZ);
     if (count > maxCount)
         count = maxCount;
     if (count > ns->MXRS)
@@ -166,7 +153,7 @@ uint32_t NVMETransfer(NVME_NAMESPACE *ns, void *buf, uint64_t lba, uint32_t coun
         nvme_rwfail(cqe.STS);
         return -1;
     }
-    return count ? 0 : -1;
+    return count ? 0 : -EIO;
 }
 
 void failed_nvme(NVME_CONTROLLER *ctrl)
@@ -213,13 +200,13 @@ void init_nvme()
         return;
     }
 
-    NVME_CAPABILITY *cap = (NVME_CAPABILITY *)convert_physical_to_virtual(device->bars[0].address);
-
-    if (!cap)
+    if (!device->bars[0].address)
     {
         write_serial_string("Cannot find NVME Controller.");
         return;
     }
+
+    NVME_CAPABILITY *cap = (NVME_CAPABILITY *)convert_physical_to_virtual(device->bars[0].address);
 
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
     mapper.map_range((uint64_t)cap, device->bars[0].address, PAGE_SIZE * 4, 0x3);
@@ -247,14 +234,14 @@ void init_nvme()
     }
     ctrl->DST = 4ULL << ((cap->CAP >> 32) & 0xF);
 
-    int rc = NVMEConfigureCQ(ctrl, &ctrl->ACQ, 1, 4096 / sizeof(NVME_COMPLETION_QUEUE_ENTRY));
+    int rc = NVMEConfigureCQ(ctrl, &ctrl->ACQ, 1, PAGE_SIZE / sizeof(NVME_COMPLETION_QUEUE_ENTRY));
     if (rc)
     {
         failed_nvme(ctrl);
         return;
     }
 
-    rc = NVMEConfigureSQ(ctrl, &ctrl->ASQ, 0, 4096 / sizeof(NVME_SUBMISSION_QUEUE_ENTRY));
+    rc = NVMEConfigureSQ(ctrl, &ctrl->ASQ, 0, PAGE_SIZE / sizeof(NVME_SUBMISSION_QUEUE_ENTRY));
     if (rc)
     {
         failed_nvme(ctrl);
@@ -281,7 +268,7 @@ void init_nvme()
     uint64_t pagCont = 1;
     identify = (NVME_IDENTIFY_CONTROLLER *)PAGE_ALLOC.alloc_pages(pagCont);
     identify = (NVME_IDENTIFY_CONTROLLER *)convert_physical_to_virtual((uint64_t)identify);
-    xmemset(identify, 0, 4096);
+    xmemset(identify, 0, PAGE_SIZE);
 
     NVME_SUBMISSION_QUEUE_ENTRY sqe;
     xmemset(&sqe, 0, sizeof(NVME_SUBMISSION_QUEUE_ENTRY));
@@ -329,8 +316,8 @@ void init_nvme()
     {
         uint32_t qidx = 3;
         uint32_t entryCount = 1 + (ctrl->CAP->CAP & 0xFFFF);
-        if (entryCount > 4096 / sizeof(NVME_COMPLETION_QUEUE_ENTRY))
-            entryCount = 4096 / sizeof(NVME_COMPLETION_QUEUE_ENTRY);
+        if (entryCount > PAGE_SIZE / sizeof(NVME_COMPLETION_QUEUE_ENTRY))
+            entryCount = PAGE_SIZE / sizeof(NVME_COMPLETION_QUEUE_ENTRY);
         if (NVMEConfigureCQ(ctrl, &ctrl->ICQ, qidx, entryCount))
         {
             write_serial_string("CANNOT INIT I/O CQ\n");
@@ -359,8 +346,8 @@ void init_nvme()
     {
         uint32_t qidx = 2;
         uint32_t entryCount = 1 + (ctrl->CAP->CAP & 0xFFFF);
-        if (entryCount > 4096 / sizeof(NVME_SUBMISSION_QUEUE_ENTRY))
-            entryCount = 4096 / sizeof(NVME_SUBMISSION_QUEUE_ENTRY);
+        if (entryCount > PAGE_SIZE / sizeof(NVME_SUBMISSION_QUEUE_ENTRY))
+            entryCount = PAGE_SIZE / sizeof(NVME_SUBMISSION_QUEUE_ENTRY);
         if (NVMEConfigureSQ(ctrl, &ctrl->ISQ, qidx, entryCount))
         {
             write_serial_string("CANNOT INIT I/O SQ\n");
@@ -396,7 +383,7 @@ void init_nvme()
         pagCont = 1;
         identifyNS = (NVME_IDENTIFY_NAMESPACE *)PAGE_ALLOC.alloc_pages(pagCont);
         identifyNS = (NVME_IDENTIFY_NAMESPACE *)convert_physical_to_virtual((uint64_t)identifyNS);
-        xmemset(identifyNS, 0, 4096);
+        xmemset(identifyNS, 0, PAGE_SIZE);
 
         xmemset(&sqe, 0, sizeof(NVME_SUBMISSION_QUEUE_ENTRY));
         sqe.CDW0 = NVME_SQE_OPC_ADMIN_IDENTIFY;
@@ -451,7 +438,7 @@ void init_nvme()
 
         ns->BSZ = 1ULL << fmt->DS;
         ns->META = fmt->MS;
-        if (ns->BSZ > 4096)
+        if (ns->BSZ > PAGE_SIZE)
         {
             write_serial_string("NVME NAMESPACE ");
             write_serial_hex(nsid);
@@ -465,7 +452,7 @@ void init_nvme()
 
         if (mdts)
         {
-            ns->MXRS = ((1ULL << mdts) * 4096) / ns->BSZ;
+            ns->MXRS = ((1ULL << mdts) * PAGE_SIZE) / ns->BSZ;
         }
         else
         {

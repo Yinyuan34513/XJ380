@@ -85,3 +85,16 @@ int device_read(int dev, void *buf, size_t count, int idx, int flags);
 int device_write(int dev, void *buf, size_t count, int idx, int flags);
 
 void init_device();
+
+static inline char *LeadingWhitespace(char *beg, char *end)
+{
+  while (end > beg && *--end <= 0x20)
+  {
+    *end = 0;
+  }
+  while (beg < end && *beg <= 0x20)
+  {
+    beg++;
+  }
+  return beg;
+}

@@ -147,6 +147,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     write_serial_dec(cpu_id);
     write_serial_string(" init_lApic done\n");
 
+    init_syscall();
+
     while (!TASK_INITIALIZED)
     {
         __asm__ __volatile__("pause");

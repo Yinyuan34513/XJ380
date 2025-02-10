@@ -266,9 +266,6 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_vfs();
     write_serial_string("FS initialized.\n");
 
-    init_syscall();
-    write_serial_string("SYSCALL initialized.\n");
-
     write_serial_string("Operating System Initialize Success.\n");
 
     disable_intr();
@@ -456,8 +453,13 @@ uint64_t alloc_cpu_id()
 
 spinlock_t do_fork_lock;
 
-uint64_t fork_copy_mm(struct task_struct *tsk)
+uint64_t fork_copy_mm(struct task_struct *tsk, uint64_t clone_flags)
 {
+    if (clone_flags & CLONE_VM)
+    {
+        tsk->mm = current_task->mm;
+        return 0;
+    }
     uint64_t new_pgd = (uint64_t)PAGE_ALLOC.alloc_page();
     xmemset((void *)convert_physical_to_virtual(new_pgd), 0, PAGE_SIZE);
     uint64_t old_page_table;
@@ -576,7 +578,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     thd->elf_mappings = current_task->thread->elf_mappings; // 复制内存映射区域信息
     tsk->thread = thd;
 
-    if ((int64_t)fork_copy_mm(tsk) < 0)
+    if ((int64_t)fork_copy_mm(tsk, clone_flags) < 0)
     {
         fork_exit_mm(tsk);
         PAGE_ALLOC.free_pages((void *)convert_virtual_to_physical((uint64_t)tsk), STACK_SIZE / PAGE_SIZE);
@@ -612,7 +614,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
         // 设置一些数据
         struct X64_REGS_SYSCALL *sys_regs = (struct X64_REGS_SYSCALL *)regs;
 
-        if (thd->elf_mappings)
+        if (thd->elf_mappings && !(clone_flags & CLONE_VM))
         {
             KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)tsk->mm->pgd));
             mapper.map_range(thd->elf_mappings->load_start, 0, thd->elf_mappings->load_end - thd->elf_mappings->load_start, 0x7);
@@ -744,8 +746,8 @@ void init_task_manager()
 
     list_init(&init_task_union.task.list);
 
-    kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
-    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+    kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
+    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;

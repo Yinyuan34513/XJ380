@@ -8,7 +8,7 @@ int sys_read(uint32_t fd, uint8_t *buf, size_t count)
     }
     struct VFile *file = current_task->fds[fd];
     VNode *node = file->file;
-    if (node->ops->read == NULL)
+    if (node->ops->read == NULL && !file->readable)
     {
         return -1;
     }
@@ -28,7 +28,7 @@ int sys_write(uint32_t fd, uint8_t *buf, size_t count)
     }
     struct VFile *file = current_task->fds[fd];
     VNode *node = file->file;
-    if (node->ops->write == NULL)
+    if (node->ops->write == NULL && !file->writeable)
     {
         return -1;
     }

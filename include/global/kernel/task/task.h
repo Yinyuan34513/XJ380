@@ -6,6 +6,7 @@
 #define CLONE_FS (1 << 0)
 #define CLONE_FILES (1 << 1)
 #define CLONE_SIGNAL (1 << 2)
+#define CLONE_VM (1 << 3)
 
 // stack size 16K
 // UL一定要加，否则获取current_task之后读取值的时候会出错

@@ -59,6 +59,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   SMP_MANAGER.ap_startup(convert_physical_to_virtual((uint64_t)BC->MADT));
 
   schedule_init();
+  init_syscall();
   init_task_manager();
 
   enable_intr();
