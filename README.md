@@ -220,6 +220,61 @@ Makefile里有一个变量“REL”，填版本。
 2025年1月25日 Guoqiyu1115
 - 修复了图层管理在重启后卡死循环的bug
 
+### BuildVersion 36 【已虚拟机测试】
+2025年1月31日 VOID
+- SMP
+
+### BuildVersion 37 【已虚拟机测试】
+2025年1月31日 VOID
+- 重新映射页表
+
+### BuildVersion 38 【已虚拟机测试】
+2025年2月1日 VOID
+- 异常回溯
+
+### BuildVersion 39 【已虚拟机测试】
+2025年2月1日 VOID
+- 进程调度
+
+### BuildVersion 40 【已虚拟机测试】
+2025年2月1日 VOID
+- 多任务
+- 内核提升至高地址
+
+### BuildVersion 41 【已虚拟机测试】
+2025年2月3日 VOID & Code-Cube
+- 修复了亿点点bug
+- 更换为makefile
+
+### BuildVersion 42 【已虚拟机测试】
+2025年2月3日 VOID
+- PCI驱动
+- AHCI驱动
+
+### BuildVersion 43 【已虚拟机测试】
+2025年2月3日 VOID
+- PCIe驱动
+- NVMe驱动
+
+### BuildVersion 44 【已虚拟机测试】
+2025年2月4日 VOID & Code-Cube
+- 修复了亿些warning
+- 封装了通用中断处理函数
+
+### BuildVersion 45 【已虚拟机测试】
+2025年2月4日 VOID & Code-Cube
+- 修复了亿些warning
+- 封装了通用中断处理函数
+
+### BuildVersion 46 【已虚拟机测试】
+2025年2月4日 VOID
+- VFS
+- 文件系统（FAT32）
+
+### BuildVersion 47 【已虚拟机测试】
+2025年2月6日 VOID
+- syscall
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error
