@@ -199,11 +199,11 @@ Makefile里有一个变量“REL”，填版本。
 - IO APIC设置成功（大抵是吧）
 
 ### BuildVersion 31 【已虚拟机测试】
-2025年1月20日 XIAOYI
+2025年1月20日 XIAOYI12
 - 增加Hpet高精计时器解析,并成功获取 nanoTime
 
 ### BuildVersion 32 【已虚拟机测试】
-2025年1月21日 XIAOYI & CodeCube
+2025年1月21日 XIAOYI12 & CodeCube
 - 支持x2APIC (LocalAPIC/IO APIC)
 - 启用APIC时钟中断
 
