@@ -20,6 +20,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   __asm__ __volatile__("movq %0, %%rsp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
   fbc_addr = &fbc;
   disable_intr();
+  //config description table
   init_gdt();
   init_idt();
   hpet_init(BootConfig->HPET);
