@@ -20,6 +20,18 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
   return s;
 }
 
+void init_sse()
+{
+  __asm__ __volatile__(
+      "movq %cr0, %rax\n\t"
+      "and $0xFFFB, %ax\n\t" // clear coprocessor emulation CR0.EM
+      "or $0x2, %ax\n\t"     // set coprocessor monitoring  CR0.MP
+      "movq %rax, %cr0\n\t"
+      "movq %cr4, %rax\n\t"
+      "or $(3 << 9), %ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
+      "movq %rax, %cr4\n\t");
+}
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
 {
   fbc_addr = &fbc;
@@ -33,6 +45,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   init_tss[current_task->cpu_id] = INIT_TSS;
 
+  init_sse();
   init_serial();
 
   init_gdt();

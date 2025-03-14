@@ -5,17 +5,17 @@ int sys_exit(int status)
     return do_exit(status);
 }
 
-int sys_fork(struct X64_REGS_SYSCALL *regs)
+int sys_fork(struct X64_REGS *regs)
 {
-    return do_fork((struct X64_REGS *)regs, 0, regs->rsp, 0);
+    return do_fork(regs, 0, USER_STACK_START, 0);
 }
 
-int sys_vfork(struct X64_REGS_SYSCALL *regs)
+int sys_vfork(struct X64_REGS *regs)
 {
-    return do_fork((struct X64_REGS *)regs, CLONE_VM, regs->rsp, 0);
+    return do_fork(regs, CLONE_VM, USER_STACK_START, 0);
 }
 
-int sys_execve(struct X64_REGS_SYSCALL *regs)
+int sys_execve(struct X64_REGS *regs)
 {
     return do_execve(regs, (const char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
 }

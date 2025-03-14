@@ -155,6 +155,8 @@ uint32_t OperationATA(AHCI_HBA_PORT *port, uint64_t lba, uint16_t count, uint32_
 
 uint32_t OperationAHCI(bool write, void *dev, uint64_t idx, uint64_t count, void *buf)
 {
+    disable_intr();
+
     AHCI_PORT *port = (AHCI_PORT *)dev;
     uint32_t cc = 0;
     {
@@ -177,6 +179,8 @@ uint32_t OperationAHCI(bool write, void *dev, uint64_t idx, uint64_t count, void
         count = blocks;
     }
 AHCI_OVER:;
+    enable_intr();
+
     return count;
 }
 

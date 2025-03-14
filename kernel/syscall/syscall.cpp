@@ -61,7 +61,7 @@ void init_syscall()
     write_msr(MSR_SYSCALL_MASK, (1 << 9));
 }
 
-extern "C" void c_syscall_handler(struct X64_REGS_SYSCALL *regs)
+extern "C" void c_syscall_handler(struct X64_REGS *regs)
 {
     UINT64 syscall_number = regs->rax;
 

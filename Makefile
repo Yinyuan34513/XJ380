@@ -1,6 +1,6 @@
-ASM_FLAGS = -O0 -Wall -g -nostdlib -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -Wall -g -nostdlib -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -Wall -g -nostdlib -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+ASM_FLAGS = -O0 -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
+C_FLAGS = -O0 -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+CPP_FLAGS = -O0 -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 SMP ?= 4
@@ -20,7 +20,7 @@ ifeq ($(SUDO), 1)
 SUDO_CMD = sudo
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/OVMF.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/OVMF.fd -m 4096 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= x86_64-linux-gnu-
 
@@ -56,7 +56,7 @@ out/%.o: %.cpp
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
-	@x86_64-w64-mingw32-gcc -Wall -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o out/BOOTX64.efi boot/bootx64.c
+	@x86_64-w64-mingw32-gcc -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o out/BOOTX64.efi boot/bootx64.c
 
 	@$(LD) -z muldefs -e KernelMain -T linker.ld --static -o ./out/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
 	@gcc kallsyms/kallsyms.c -o ./out/kallsyms
@@ -72,10 +72,10 @@ clean:
 vdisk: all
 	@rm -rf XJ380.img
 
-	@dd if=/dev/zero bs=1M count=0 seek=64 of=XJ380.img
+	@dd if=/dev/zero bs=1M count=0 seek=128 of=XJ380.img
 	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@mformat -s 32 -c 1 -v "NO NAME" -i XJ380.img@@1M
+	@mformat -F -v "ROOT PART" -i XJ380.img@@1M
 	@mmd -i XJ380.img@@1M ::/EFI ::/EFI/BOOT ::/usr
 	@mcopy -i XJ380.img@@1M out/kernel.elf ::/
 	@mcopy -i XJ380.img@@1M out/BOOTX64.efi ::/EFI/BOOT
@@ -85,6 +85,8 @@ vdisk: all
 
 	@mcopy -i XJ380.img@@1M out/init.elf ::/usr
 	@mcopy -i XJ380.img@@1M out/shell.elf ::/usr
+
+	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
 
 run: vdisk
 	@$(QEMU_CMD)

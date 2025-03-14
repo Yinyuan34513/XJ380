@@ -1,5 +1,5 @@
-#include "./alloc/page.h"
 #include "../include/include.h"
+#include "./alloc/page.h"
 
 KERNEL_MAPPER::KERNEL_MAPPER(uint64_t *page_table_addr) : page_table(page_table_addr)
 {
@@ -54,6 +54,8 @@ uint64_t KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
             return paddr;
         }
     }
+
+    return 0;
 }
 
 void KERNEL_MAPPER::unmap_page(uint64_t vaddr)
@@ -105,4 +107,36 @@ void KERNEL_MAPPER::unmap_range(uint64_t vaddr, uint64_t size)
     {
         unmap_page(vaddr + i);
     }
+}
+
+uint64_t KERNEL_MAPPER::translate_address(uint64_t virtual_address)
+{
+    uint64_t *page_table_addr = this->page_table;
+
+    uint64_t *pml4 = (uint64_t *)page_table_addr;
+    uint64_t pml4_id = (virtual_address >> 39) & 0x1FF;
+    if (pml4[pml4_id] == 0)
+    {
+        return 0;
+    }
+    uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFF));
+    uint64_t pdpt_id = (virtual_address >> 30) & 0x1FF;
+    if (pdpt[pdpt_id] == 0)
+    {
+        return 0;
+    }
+    uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFF));
+    uint64_t pd_id = (virtual_address >> 21) & 0x1FF;
+    if (pd[pd_id] == 0)
+    {
+        return 0;
+    }
+    uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFF));
+    uint64_t pt_id = (virtual_address >> 12) & 0x1FF;
+    if (pt[pt_id] == 0)
+    {
+        return 0;
+    }
+
+    return pt[pt_id] & 0x00007FFFFFFFF000;
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#define MAX_VNODE_NUM 2048
+#define MAX_VNODE_NUM 4096
 #define MAX_CHILD_VNODE_NUM 256
 
 enum

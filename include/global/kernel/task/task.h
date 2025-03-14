@@ -199,9 +199,10 @@ static inline void wakeup_task(struct task_struct *tsk)
 
 uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size);
 extern "C" uint64_t do_exit(uint64_t code);
-extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, char *argv[], char *envp[]);
+extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[]);
 void init_task_manager();
 
+extern "C" void ret_from_intr();
 extern "C" void ret_from_syscall(void);
 extern "C" void kernel_thread_func(void);
 

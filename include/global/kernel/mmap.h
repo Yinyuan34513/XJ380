@@ -16,6 +16,8 @@ public:
     uint64_t map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags);
     void unmap_range(uint64_t vaddr, uint64_t size);
 
+    uint64_t translate_address(uint64_t virtual_address);
+
 private:
     uint64_t *page_table;
 };

@@ -47,7 +47,7 @@ typedef struct
 
 // 默认认为分页大小是 4k
 // 如果是 2M 请调整为 2097152
-#define PAGE_SIZE ((size_t)4096)
+#define PAGE_SIZE ((size_t)4096UL)
 
 #define SIZE_4k ((size_t)4096)
 #define SIZE_2M ((size_t)(2 * 1024 * 1024))

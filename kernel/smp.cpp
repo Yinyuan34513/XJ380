@@ -111,6 +111,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
     current_task->thread->rsp0 = stack_start;
     current_task->thread->rsp = stack_start - sizeof(struct X64_REGS);
+    current_task->thread->elf_mappings = nullptr;
     struct X64_REGS regs;
     regs.cs = SELECTOR_KERNEL_CS;
     regs.ds = SELECTOR_KERNEL_DS;

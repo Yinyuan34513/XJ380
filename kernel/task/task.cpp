@@ -1,5 +1,5 @@
-#include "../../include/include.h"
 #include "../../include/cinc/elf.h"
+#include "../../include/include.h"
 #include "../alloc/page.h"
 
 static long global_pid = 0;
@@ -34,7 +34,7 @@ uint64_t idle_entry(uint64_t arg)
 
 VNode *open_exec_file(const char *name)
 {
-    return path_walk(nullptr, name);
+    return path_walk(current_task->cwd_node, name);
 }
 
 uint64_t fail_parse_elf(void *buf, int retval)
@@ -46,22 +46,23 @@ uint64_t fail_parse_elf(void *buf, int retval)
     return (uint64_t)retval;
 }
 
-uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs, VNode *file_node)
+uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *file_node)
 {
     Elf64_Ehdr ehdr;
     Elf64_Phdr *phdrs = nullptr;
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)task->mm->pgd));
     uint64_t pos = 0;
     int retval = 0;
-    char *buf = nullptr;
+    uint8_t *buf = nullptr;
     uint64_t file_size = file_node->file_size;
 
     // 读取整个文件
-    buf = (char *)malloc(file_size);
+    buf = (uint8_t *)malloc(file_size);
     if (!buf)
     {
         return -1;
     }
+    xmemset(buf, 0, file_size);
 
     pos = file_node->ops->lseek(file_node, 0, SEEK_SET);
     file_node->ops->read(file_node, (uint8_t *)buf, pos, file_size);
@@ -77,8 +78,7 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs,
     }
 
     // 设置程序入口点
-    // 在sysret之后, rcx寄存器会被恢复为rip
-    regs->rcx = ehdr.e_entry;
+    regs->rip = ehdr.e_entry;
 
     // 保存加载信息
     if (!task->thread->elf_mappings)
@@ -89,8 +89,11 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs,
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (UINT64 *)&mapping_space->load_start, (UINT64 *)&mapping_space->load_end);
 
     uint64_t load_phys_start = mapper.map_range(mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start, 0x7);
-    mapping_space->load_phys_start = load_phys_start;
     flush_tlb();
+    if (load_phys_start != 0)
+    {
+        mapping_space->load_phys_start = load_phys_start;
+    }
 
     xmemset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
 
@@ -129,8 +132,6 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs,
         // 复制段内容
         uint64_t segm_in_file = (uint64_t)buf + phdrs[i].p_offset;
 
-        uint8_t *segm_in_f = (uint8_t *)segm_in_file;
-
         xmemcpy((void *)phdrs[i].p_vaddr,
                 (void *)segm_in_file,
                 phdrs[i].p_filesz);
@@ -154,7 +155,7 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS_SYSCALL *regs,
     return 0;
 }
 
-extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, char *argv[], char *envp[])
+extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[])
 {
     uint64_t stack_start_addr = USER_STACK_START;
     const uint64_t brk_start_addr = 0x700000000000UL;
@@ -211,22 +212,32 @@ extern "C" uint64_t do_execve(struct X64_REGS_SYSCALL *regs, const char *name, c
         regs->rsi = (uint64_t)dargv; // argv
         regs->rdx = (uint64_t)envp;  // envp
     }
+    else
+    {
+        regs->rdi = 0;
+        regs->rsi = 0;
+        regs->rdx = 0;
+    }
 
-    regs->rbp = current_task->mm->start_stack;
     regs->rsp = current_task->mm->start_stack;
-
-    // 在sysret后，r11会被恢复为rflags
-    regs->r11 = (1 << 9) | (1 << 1);
+    regs->rbp = current_task->mm->start_stack;
 
     __asm__ __volatile__("movq	%0, %%gs\n\t"
                          "movq	%0, %%fs\n\t" ::"r"(0UL));
+
+    regs->rflags = 0x200246;
+
+    regs->cs = SELECTOR_USER_CS;
+    regs->ss = SELECTOR_USER_DS;
 
     regs->ds = SELECTOR_USER_DS;
     regs->es = SELECTOR_USER_DS;
 
     regs->rax = 1;
 
-    return retval;
+    __asm__ __volatile__(
+        "movq %0, %%rsp\n\t"
+        "jmp ret_from_intr\n\t" ::"r"((uint64_t)regs));
 }
 
 extern const FrameBufferConfig *fbc_addr;
@@ -270,19 +281,22 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     disable_intr();
 
-    current_task->thread->rip = (uint64_t)ret_from_syscall;
+    current_task->thread->rip = (uint64_t)ret_from_intr;
     current_task->thread->rsp0 = (uint64_t)current_task + STACK_SIZE;
     current_task->thread->rsp = current_task->thread->rsp0 - sizeof(struct X64_REGS);
     current_task->thread->gs = SELECTOR_USER_DS;
     current_task->thread->fs = SELECTOR_USER_DS;
     current_task->flags &= ~PF_KTHREAD;
 
-    __asm__ __volatile__("movq	%1,	%%rsp	\n\t"
-                         "pushq	%2		\n\t"
-                         "jmp   do_execve	\n\t"
-                         :
-                         : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(nullptr), "c"(nullptr)
-                         : "memory");
+    __asm__ __volatile__(
+        "movq	%1,	%%rsp	\n\t"
+        "pushq	%2		\n\t"
+        "jmp   do_execve	\n\t"
+        :
+        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(nullptr), "c"(nullptr)
+        : "memory");
+
+    return (uint64_t)-1;
 }
 
 extern spinlock_t fb_print_lock;
@@ -673,7 +687,7 @@ extern "C" uint64_t do_exit(uint64_t code)
     }
 
 failed:
-    return 0xFFFFFFFFFFFFFFFF;
+    return -1;
 }
 
 int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
@@ -734,6 +748,8 @@ void init_task_manager()
     init_mm.start_brk = 0x0;
     init_mm.end_brk = 0x0;
     init_mm.start_stack = 0x0;
+
+    current_task->thread->elf_mappings = nullptr;
 
     init_tss[current_task->cpu_id].rsp0 = init_thread.rsp0;
 
