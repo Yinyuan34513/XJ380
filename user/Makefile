@@ -7,12 +7,18 @@ build_xlibc:
 
 init.elf: init.c
 	@$(CC) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xlibc -name "*.o") ../out/$@.o -o ../out/$@
+	@$(LD) -Ttext=0x200000 $(shell find ../xlibc -name "*.o") ../out/$@.o -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@rm -rf ../out/$@.o
 	@echo "CCLD $< -> ../out/$@"
 
 shell.elf: shell.c
 	@$(CC) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x400000 $(shell find ../out/xlibc -name "*.o") ../out/$@.o -o ../out/$@
+	@$(LD) -Ttext=0x400000 $(shell find ../xlibc -name "*.o") ../out/$@.o -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@rm -rf ../out/$@.o
 	@echo "CCLD $< -> ../out/$@"
+
+.PHONY: clean
+clean:
+	rm -rf ../out/xlibc ../out/init.* ../out/shell.*

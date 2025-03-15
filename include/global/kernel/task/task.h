@@ -149,7 +149,7 @@ struct tss_struct
 
 extern struct task_struct *user_current[MAX_CPU_NUM];
 
-struct task_struct *get_current()
+static inline struct task_struct *get_current()
 {
     struct task_struct *current = NULL;
     __asm__ __volatile__("andq %%rsp, %0\n\t" : "=r"(current) : "0"(~(STACK_SIZE - 1)));

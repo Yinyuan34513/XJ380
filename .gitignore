@@ -6,8 +6,9 @@ serial.log
 .idea/
 out/draw.o
 /esp
+/mnt
 /out
-/nul
+/xlibc
 .cache
 
 *.img

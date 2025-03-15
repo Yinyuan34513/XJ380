@@ -31,12 +31,17 @@ void put_free_node(VNode *node)
 void add_child_to(VNode *parent, VNode *child)
 {
     child->parent = parent;
+    if (!parent->childs)
+        parent->childs = (VNode **)malloc(sizeof(VNode *) * MAX_CHILD_VNODE_NUM);
     parent->childs[parent->childs_len] = child;
     parent->childs_len++;
 }
 
 VNode *search_child_list(VNode *parent, char *name)
 {
+    if (!parent->childs)
+        goto failed;
+
     for (int i = 0; i < parent->childs_len; i++)
     {
         VNode *node = parent->childs[i];
@@ -46,6 +51,7 @@ VNode *search_child_list(VNode *parent, char *name)
         }
     }
 
+failed:
     return nullptr;
 }
 
@@ -192,7 +198,6 @@ void init_vfs()
     {
         VNode *node = &node_table[i];
         node->type = NODE_TYPE_NONE;
-        node->childs = (VNode **)malloc(sizeof(VNode) * MAX_CHILD_VNODE_NUM);
     }
 
     mount_root();

@@ -37,15 +37,6 @@ VNode *open_exec_file(const char *name)
     return path_walk(current_task->cwd_node, name);
 }
 
-uint64_t fail_parse_elf(void *buf, int retval)
-{
-    if (buf)
-    {
-        free(buf);
-    }
-    return (uint64_t)retval;
-}
-
 uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *file_node)
 {
     Elf64_Ehdr ehdr;
@@ -57,15 +48,13 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *
     uint64_t file_size = file_node->file_size;
 
     // 读取整个文件
-    buf = (uint8_t *)malloc(file_size);
+    buf = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages((file_size + PAGE_SIZE - 1) / PAGE_SIZE));
     if (!buf)
-    {
-        return -1;
-    }
+        return (uint64_t)-ENOMEM;
     xmemset(buf, 0, file_size);
 
     pos = file_node->ops->lseek(file_node, 0, SEEK_SET);
-    file_node->ops->read(file_node, (uint8_t *)buf, pos, file_size);
+    file_node->ops->read(file_node, buf, pos, file_size);
 
     // 解析ELF头
     ehdr = *(Elf64_Ehdr *)buf;
@@ -145,7 +134,7 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *
         }
     }
 
-    free(buf);
+    PAGE_ALLOC.free_pages((void *)convert_virtual_to_physical((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
     // 设置并映射用户栈
     uint64_t stack_start_addr = task->mm->start_stack - STACK_SIZE;
