@@ -67,6 +67,6 @@ int sys_execve(struct X64_REGS *regs);
 int sys_exit(int status);
 int sys_fork(struct X64_REGS *regs);
 int sys_vfork(struct X64_REGS *regs);
-uint64_t sys_wait4(unsigned long pid, int *status, int options, void *rusage);
+uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
 
 void init_syscall();

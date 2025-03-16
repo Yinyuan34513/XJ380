@@ -202,7 +202,7 @@ void init_nvme()
 
     if (!device->bars[0].address)
     {
-        write_serial_string("Cannot find NVME Controller.");
+        write_serial_string("Cannot find NVME Controller.\n");
         return;
     }
 

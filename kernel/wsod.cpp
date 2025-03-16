@@ -4,6 +4,13 @@
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
+    uint64_t lapicid = lapic_id();
+    uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
+
+    write_serial_string("CPU ID = ");
+    write_serial_dec(cpu_id);
+    write_serial_string("\n");
+
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});

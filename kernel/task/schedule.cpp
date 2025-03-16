@@ -54,6 +54,11 @@ void schedule()
     current_task->flags &= ~NEED_SCHEDULE;
     tsk = get_next_task(cpu_id);
 
+    if (tsk == &init_task_union.task)
+    {
+        goto finish;
+    }
+
     if (current_task->vrun_time >= tsk->vrun_time)
     {
         if (current_task->state == TASK_RUNNING)
@@ -100,9 +105,10 @@ void schedule()
                 break;
             }
         }
-        spin_unlock(lock);
     }
 
+finish:
+    spin_unlock(lock);
     enable_intr();
 }
 

@@ -164,10 +164,7 @@ static inline struct task_struct *get_current()
 
 #define current_task get_current()
 
-static inline void switch_mm(struct task_struct *prev, struct task_struct *next)
-{
-    __asm__ __volatile__("movq %0, %%cr3" : : "r"(next->mm->pgd) : "memory");
-}
+void switch_mm(struct task_struct *prev, struct task_struct *next);
 
 #define switch_to(prev, next)                                                                       \
     do                                                                                              \
@@ -203,7 +200,8 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
 void init_task_manager();
 
 extern "C" void ret_from_intr();
-extern "C" void ret_from_syscall(void);
+extern "C" void ret_from_fork();
+extern "C" void ret_from_syscall();
 extern "C" void kernel_thread_func(void);
 
 extern struct task_struct *init_task[MAX_CPU_NUM];

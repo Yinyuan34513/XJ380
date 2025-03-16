@@ -80,6 +80,9 @@ void KERNEL_MAPPER::unmap_page(uint64_t vaddr)
 uint64_t KERNEL_MAPPER::map_range(uint64_t vaddr, uint64_t paddr, uint64_t size, uint64_t flags)
 {
     uint64_t start_phys = 0;
+    vaddr = vaddr & 0xFFFFFFFFFFFFF000;
+    paddr = paddr & 0xFFFFFFFFFFFFF000;
+
     for (uint64_t i = 0; i < size; i += PAGE_SIZE)
     {
         uint64_t ret = 0;

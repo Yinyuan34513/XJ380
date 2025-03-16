@@ -12,7 +12,7 @@ int sys_fork(struct X64_REGS *regs)
 
 int sys_vfork(struct X64_REGS *regs)
 {
-    return do_fork(regs, CLONE_VM, regs->rsp, 0);
+    return do_fork(regs, CLONE_VM | CLONE_SIGNAL | CLONE_FILES | CLONE_FS, regs->rsp, 0);
 }
 
 int sys_execve(struct X64_REGS *regs)
@@ -20,7 +20,7 @@ int sys_execve(struct X64_REGS *regs)
     return do_execve(regs, (const char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
 }
 
-uint64_t sys_wait4(unsigned long pid, int *status, int options, void *rusage)
+uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage)
 {
     long retval = 0;
     struct task_struct *child = NULL;

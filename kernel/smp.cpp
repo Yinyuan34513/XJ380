@@ -128,6 +128,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     current_task->parent = &init_task_union.task;
     init_task[cpu_id] = current_task;
 
+    wakeup_task(current_task);
+
     write_serial_string("APU ");
     write_serial_dec(cpu_id);
     write_serial_string(" set current_task done\n");

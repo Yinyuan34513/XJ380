@@ -558,10 +558,12 @@ uint64_t fork_copy_thread(uint64_t clone_flags, uint64_t stack_start, uint64_t s
     thd->fs = current_task->thread->fs;
     thd->gs = current_task->thread->gs;
 
+    thd->elf_mappings = tsk->thread->elf_mappings;
+
     if (tsk->flags & PF_KTHREAD)
         thd->rip = (uint64_t)kernel_thread_func;
     else
-        thd->rip = (uint64_t)ret_from_syscall;
+        thd->rip = (uint64_t)ret_from_fork;
 
     return 0;
 }
@@ -604,7 +606,8 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     tsk->state = TASK_UNINTERRUPTIBLE;     // 设置初始状态为不可中断
     tsk->next = init_task_union.task.next; // 加入任务链表
     init_task_union.task.next = tsk;
-    tsk->parent = current_task; // 设置父进程
+    tsk->parent = current_task;             // 设置父进程
+    tsk->cwd_node = current_task->cwd_node; // 设置 cwd
     // 初始化等待子进程退出的等待队列
     wait_queue_init(&tsk->wait_childexit, NULL);
 
@@ -668,10 +671,9 @@ extern "C" uint64_t do_exit(uint64_t code)
 
     current_task->flags |= NEED_SCHEDULE;
 
-    enable_intr();
-
     while (1)
     {
+        enable_intr();
         __asm__ __volatile__("pause");
     }
 
@@ -703,6 +705,11 @@ static inline void wrmsr(UINT32 msr, UINT64 value)
     UINT32 eax = (UINT32)value;
     UINT32 edx = value >> 32;
     __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
+}
+
+void switch_mm(struct task_struct *prev, struct task_struct *next)
+{
+    __asm__ __volatile__("movq %0, %%cr3" : : "r"(next->mm->pgd) : "memory");
 }
 
 extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)

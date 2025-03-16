@@ -63,6 +63,12 @@ void init_syscall()
 
 extern "C" void c_syscall_handler(struct X64_REGS *regs)
 {
+    regs->rip = regs->rcx;
+    regs->cs = SELECTOR_USER_CS;
+    regs->rflags = regs->r11;
+    regs->rsp = (uint64_t)(regs + 1);
+    regs->ss = SELECTOR_USER_DS;
+
     UINT64 syscall_number = regs->rax;
 
     switch (syscall_number)
@@ -92,7 +98,7 @@ extern "C" void c_syscall_handler(struct X64_REGS *regs)
         regs->rax = (uint64_t)sys_exit(regs->rdi);
         break;
     case SYS_WAIT4:
-        regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r10);
+        regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
         break;
     default:
         regs->rax = (uint64_t)-ENOSYS;

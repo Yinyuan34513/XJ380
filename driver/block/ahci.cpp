@@ -450,14 +450,20 @@ void init_ahci()
 {
     int i;
 
-    pci_device_t *device = pci_find_class(0x010601);
-OK:
+    pci_device_t *device = pci_find_class(0x010600);
+    if (!device)
+    {
+        write_serial_string("Cannot find SATA Controller.\n");
+        return;
+    }
+
     // cache_line_size = get_cache_line_size();
     // logk("cache line size = %d\n", cache_line_size);
     hba_mem_address = (HBA_MEM *)convert_physical_to_virtual(device->bars[5].address);
 
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
     mapper.map_range((uint64_t)hba_mem_address, device->bars[5].address, PAGE_SIZE * 4, 0x3);
+    flush_tlb();
 
     // 设置HBA中 GHC控制器的 AE（AHCI Enable）位，关闭AHCI控制器的IDE仿真模式
     hba_mem_address->ghc |= (1 << 31);
@@ -467,7 +473,7 @@ OK:
     ahci_ports_base_addr = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE));
 
     cache = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE));
-    write_serial_string("The Useable Ports:\n");
+    write_serial_string("The Usable Ports:\n");
     for (i = 0; i < port_total; i++)
     {
         write_serial_dec(ports[i]);
