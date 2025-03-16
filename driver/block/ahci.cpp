@@ -467,7 +467,7 @@ OK:
     ahci_ports_base_addr = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE));
 
     cache = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE));
-    write_serial_string("The Useable Ports:");
+    write_serial_string("The Useable Ports:\n");
     for (i = 0; i < port_total; i++)
     {
         write_serial_dec(ports[i]);

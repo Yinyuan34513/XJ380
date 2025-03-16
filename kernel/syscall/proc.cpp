@@ -7,12 +7,12 @@ int sys_exit(int status)
 
 int sys_fork(struct X64_REGS *regs)
 {
-    return do_fork(regs, 0, USER_STACK_START, 0);
+    return do_fork(regs, 0, regs->rsp, 0);
 }
 
 int sys_vfork(struct X64_REGS *regs)
 {
-    return do_fork(regs, CLONE_VM, USER_STACK_START, 0);
+    return do_fork(regs, CLONE_VM, regs->rsp, 0);
 }
 
 int sys_execve(struct X64_REGS *regs)
