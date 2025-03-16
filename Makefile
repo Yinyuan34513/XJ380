@@ -20,7 +20,7 @@ ifeq ($(SUDO), 1)
 SUDO_CMD = sudo
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/OVMF.fd -m 4096 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/OVMF.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= x86_64-linux-gnu-
 
@@ -33,6 +33,7 @@ export CC = $(COMPILER_PREFIX)gcc
 export CPP = $(CC)
 export LD = $(COMPILER_PREFIX)ld
 export NM = $(COMPILER_PREFIX)nm
+export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 
 ASM_OBJS := $(sort $(patsubst ./%.S, ./out/%.o, $(ASM_FILES)))
@@ -41,22 +42,24 @@ CPP_OBJS := $(sort $(patsubst ./%.cpp, ./out/%.o, $(CPP_FILES)))
 
 out/%.o: %.S
 	@mkdir -p $(@D)
-	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
 	@echo "AS $< -> $@"
 
 out/%.o: %.c
 	@mkdir -p $(@D)
-	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(C_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -mcmodel=kernel $(C_FLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
 out/%.o: %.cpp
 	@mkdir -p $(@D)
-	@$(CPP) -fno-pic -fno-pie -mcmodel=kernel $(CPP_FLAGS) -c $< -o $@
+	@$(CPP) -fno-pic -mcmodel=kernel  $(CPP_FLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o out/BOOTX64.efi boot/bootx64.c
+
+	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 
 	@$(LD) -T linker.ld --static -o ./out/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
 	@gcc kallsyms/kallsyms.c -o ./out/kallsyms
@@ -70,7 +73,7 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
 
 .PHONY: clean
 clean:
-	@rm -rf ./out ./XJ380.img
+	@rm -rf ./out ./XJ380.img ./font/hankaku.o
 	@$(MAKE) -C user clean
 
 LOOP := $(shell sudo losetup --find)

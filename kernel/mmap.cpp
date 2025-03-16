@@ -111,6 +111,8 @@ void KERNEL_MAPPER::unmap_range(uint64_t vaddr, uint64_t size)
 
 uint64_t KERNEL_MAPPER::translate_address(uint64_t virtual_address)
 {
+    uint64_t offset = virtual_address & 0xFFF;
+
     uint64_t *page_table_addr = this->page_table;
 
     uint64_t *pml4 = (uint64_t *)page_table_addr;
@@ -138,5 +140,5 @@ uint64_t KERNEL_MAPPER::translate_address(uint64_t virtual_address)
         return 0;
     }
 
-    return pt[pt_id] & 0x00007FFFFFFFF000;
+    return pt[pt_id] & 0x00007FFFFFFFF000 + offset;
 }

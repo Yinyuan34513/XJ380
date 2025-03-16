@@ -4,16 +4,16 @@ auto operator new(size_t size, void *ptr) -> void *;
 auto operator new[](size_t size, void *ptr) -> void *;
 auto operator delete(void *ptr, size_t size) -> void;
 auto operator delete[](void *ptr, size_t size) -> void;
-extern const UINT8 _binary_hankaku_bin_start;
-extern const UINT8 _binary_hankaku_bin_end;
-extern const UINT8 _binary_hankaku_bin_size; // 将三个常量声明
+extern const UINT8 _binary___font_hankaku_bin_start;
+extern const UINT8 _binary___font_hankaku_bin_end;
+extern const UINT8 _binary___font_hankaku_bin_size; // 将三个常量声明
 typedef size_t uintptr_t;
 const UINT8 *GetFont(char c)
 {
     auto index = 16 * static_cast<unsigned int>(c); // 每一个字符要对应16个char作为字体
-    if (index >= reinterpret_cast<uintptr_t>(&_binary_hankaku_bin_size))
-        return nullptr;                        // 指针指到字体外面去，返回空指针
-    return &_binary_hankaku_bin_start + index; // 取址获得首地址，加上索引返回
+    if (index >= reinterpret_cast<uintptr_t>(&_binary___font_hankaku_bin_size))
+        return nullptr;                               // 指针指到字体外面去，返回空指针
+    return &_binary___font_hankaku_bin_start + index; // 取址获得首地址，加上索引返回
 }
 
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c)
