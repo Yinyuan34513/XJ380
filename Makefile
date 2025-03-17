@@ -1,6 +1,6 @@
-ASM_FLAGS = -O0 -mno-sse2 -mno-sse -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -mno-sse2 -mno-sse -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -mno-sse2 -mno-sse -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+ASM_FLAGS = -O0 -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
+C_FLAGS = -O0 -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+CPP_FLAGS = -O0 -g -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 SMP ?= 4
