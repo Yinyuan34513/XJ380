@@ -752,7 +752,7 @@ void init_task_manager()
     list_init(&init_task_union.task.list);
 
     kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
-    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
+    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;
