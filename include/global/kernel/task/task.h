@@ -153,12 +153,12 @@ static inline struct task_struct *get_current()
 {
     struct task_struct *current = NULL;
     __asm__ __volatile__("andq %%rsp, %0\n\t" : "=r"(current) : "0"(~(STACK_SIZE - 1)));
-    if ((uint64_t)current < 0xFFFF800000000000)
-    {
-        uint64_t lapicid = lapic_id();
-        uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
-        current = user_current[current_cpu_cpuid];
-    }
+    // if ((uint64_t)current < 0xFFFF800000000000)
+    // {
+    //     uint64_t lapicid = lapic_id();
+    //     uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
+    //     current = user_current[current_cpu_cpuid];
+    // }
     return current;
 }
 

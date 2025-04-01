@@ -133,7 +133,7 @@ void init_lApic()
     UINT64 b = nanoTime();
     lapic_write(LAPIC_REG_TIMER_INITCNT, ~((UINT32)0));
     for (;;)
-        if (nanoTime() - b >= 1000000)
+        if (nanoTime() - b >= 100000000)
             break;
     UINT64 lapic_timer = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
     UINT64 calibrated_timer_initial = (UINT64)((UINT64)(lapic_timer * 1000) / 250);

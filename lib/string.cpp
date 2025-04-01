@@ -267,3 +267,8 @@ int str2float(const char *str, float *result)
     *result = sign * value;
     return 1;
 }
+
+extern "C" void *memcpy(void *dst_, void *src_, uint64_t size)
+{
+    return xmemcpy(dst_, src_, size);
+}

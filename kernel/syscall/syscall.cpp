@@ -61,12 +61,12 @@ void init_syscall()
     write_msr(MSR_SYSCALL_MASK, (1 << 9));
 }
 
-extern "C" void c_syscall_handler(struct X64_REGS *regs)
+extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 {
     regs->rip = regs->rcx;
     regs->cs = SELECTOR_USER_CS;
     regs->rflags = regs->r11;
-    regs->rsp = (uint64_t)(regs + 1);
+    regs->rsp = user_rsp + sizeof(struct X64_REGS);
     regs->ss = SELECTOR_USER_DS;
 
     UINT64 syscall_number = regs->rax;
@@ -107,4 +107,6 @@ extern "C" void c_syscall_handler(struct X64_REGS *regs)
         write_serial_string("\n");
         break;
     }
+
+    return user_rsp;
 }

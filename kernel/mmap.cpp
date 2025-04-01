@@ -40,19 +40,16 @@ uint64_t KERNEL_MAPPER::map_page(uint64_t vaddr, uint64_t paddr, uint64_t flags)
     }
     uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFF));
     uint64_t pt_id = (vaddr >> 12) & 0x1FF;
-    if (pt[pt_id] == 0)
+    if (paddr == 0)
     {
-        if (paddr == 0)
-        {
-            uint64_t phys = (uint64_t)PAGE_ALLOC.alloc_page();
-            pt[pt_id] = phys | flags;
-            return phys;
-        }
-        else
-        {
-            pt[pt_id] = paddr | flags;
-            return paddr;
-        }
+        uint64_t phys = (uint64_t)PAGE_ALLOC.alloc_page();
+        pt[pt_id] = phys | flags;
+        return phys;
+    }
+    else
+    {
+        pt[pt_id] = paddr | flags;
+        return paddr;
     }
 
     return 0;

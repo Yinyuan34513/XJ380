@@ -311,8 +311,25 @@ ENTRY(syscall_handler)
 	pushq	%r14
 	pushq	%r15
 
+    movq    %rsp,   %rsi
+
+    callq switch_to_kernel_stack
+    subq $0xc0,  %rax   
+    movq    %rax, %rsp
+
+    movq    %rsp,   %rdi
+    movq    $0xc0, %rdx 
+    callq memcpy
+
     movq    %rsp, %rdi
     callq c_syscall_handler
+
+    movq    %rax,   %rdi
+    movq    %rsp,   %rsi
+    movq    $0xc0, %rdx 
+    callq memcpy
+
+    movq    %rdi,   %rsp
 
 ENTRY(ret_from_syscall)
     popq %r15

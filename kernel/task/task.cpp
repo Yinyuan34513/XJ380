@@ -24,6 +24,13 @@ struct tss_struct init_tss[MAX_CPU_NUM];
 
 struct task_struct *user_current[MAX_CPU_NUM] = {nullptr};
 
+extern "C" uint64_t switch_to_kernel_stack()
+{
+    uint64_t lapicid = lapic_id();
+    uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
+    return (uint64_t)user_current[current_cpu_cpuid] + STACK_SIZE;
+}
+
 uint64_t idle_entry(uint64_t arg)
 {
     while (1)
@@ -752,7 +759,7 @@ void init_task_manager()
     list_init(&init_task_union.task.list);
 
     kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
-    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
+    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;
