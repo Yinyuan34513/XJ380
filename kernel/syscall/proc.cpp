@@ -12,7 +12,7 @@ int sys_fork(struct X64_REGS *regs)
 
 int sys_vfork(struct X64_REGS *regs)
 {
-    return do_fork(regs, CLONE_VM | CLONE_SIGNAL | CLONE_FILES | CLONE_FS, regs->rsp, 0);
+    return do_fork(regs, CLONE_VM, regs->rsp, 0);
 }
 
 int sys_execve(struct X64_REGS *regs)
