@@ -19,6 +19,7 @@ public:
     void free_page(void *page);
 
     void *alloc_pages(size_t page_count);
+    void *alloc_pages_align(size_t page_count, uint64_t align);
     void free_pages(void *page, size_t page_count);
 
 private:

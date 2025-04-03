@@ -54,8 +54,12 @@ extern void init_lApic();
 
 extern bool TASK_INITIALIZED;
 
+extern void init_cpu();
+
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
+    disable_intr();
+
     __asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
 
     __asm__ volatile(
@@ -82,6 +86,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     write_serial_dec(cpu_id);
     write_serial_string(" load GDT & IDT done\n");
 
+    xmemset(current_task, 0, sizeof(struct task_struct));
     current_task->cpu_id = cpu_id;
     list_init(&current_task->list);
     current_task->mm = &init_mm;
@@ -91,6 +96,16 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     current_task->signal = 0;
     current_task->vrun_time = 0;
     current_task->state = TASK_RUNNING;
+
+    init_cpu();
+
+    __asm__ __volatile__(
+        "fnclex \n\t"
+        "fninit \n\t");
+    current_task->fpu = (fpu_context *)malloc(sizeof(fpu_context));
+    xmemset(current_task->fpu, 0, sizeof(fpu_context));
+    current_task->fpu->mxscr = 0x1f80;
+    current_task->fpu->fcw = 0x037f;
 
     current_task->thread = (struct thread_struct *)(current_task + 1);
     xmemset(current_task->thread, 0, sizeof(struct thread_struct));
@@ -119,8 +134,6 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     write_serial_string("APU ");
     write_serial_dec(cpu_id);
     write_serial_string(" set current_task done\n");
-
-    disable_intr();
 
     UINT64 ia32_apic_base = rdmsr(0x1b);
     ia32_apic_base |= 1 << 11;
@@ -240,13 +253,13 @@ void SMP::ap_startup(uint64_t madt_addr)
         *tr = tr_value;
         init_tss[i] = INIT_TSS;
         gdt_set_system_gate(tr_value, (UINT64)&init_tss[i], sizeof(init_tss[i]) - 1, 0x89, 0xAF);
-        uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
+        uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE) + STACK_SIZE);
         xmemset((void *)stack_start, 0, STACK_SIZE);
         *rsp = stack_start;
         init_tss[i].rsp0 = stack_start;
         init_tss[i].rsp1 = stack_start;
         init_tss[i].rsp2 = stack_start;
-        uint64_t ist_stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
+        uint64_t ist_stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE) + STACK_SIZE);
         xmemset((void *)ist_stack_start, 0, STACK_SIZE);
         init_tss[i].ist1 = ist_stack_start;
         init_tss[i].ist2 = ist_stack_start;

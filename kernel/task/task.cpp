@@ -236,6 +236,8 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
     __asm__ __volatile__(
         "movq %0, %%rsp\n\t"
         "jmp ret_from_intr\n\t" ::"r"((uint64_t)regs));
+
+    return 0;
 }
 
 extern const FrameBufferConfig *fbc_addr;
@@ -256,11 +258,14 @@ uint64_t init_kernel_thread(uint64_t arg)
     write_serial_string("Keyboard Initialize Success.\n");
     mouse_init();
     write_serial_string("Mouse Initialize Success.\n");
-    keyboard_mouse_init_done = true;
 
     init_device();
     init_pci(convert_physical_to_virtual((uint64_t)BC->MCFG));
     write_serial_string("PCI initialized.\n");
+
+    // init_xhci();
+    // write_serial_string("XHCI initialized.\n");
+    keyboard_mouse_init_done = true;
 
     init_ahci();
     write_serial_string("AHCI initialized.\n");
@@ -301,6 +306,8 @@ extern spinlock_t fb_print_lock;
 
 uint64_t desktop_flusher(uint64_t arg)
 {
+    disable_intr();
+
     write_serial_string("desktop flusher is running, arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
@@ -618,7 +625,7 @@ uint64_t fork_copy_mm(struct task_struct *tsk, uint64_t clone_flags)
 {
     struct mm_struct *old_mm = tsk->mm;
     tsk->mm = (struct mm_struct *)malloc(sizeof(struct mm_struct));
-    *tsk->mm = *old_mm;
+    xmemcpy(tsk->mm, old_mm, sizeof(struct mm_struct));
 
     uint64_t old_page_table;
     __asm__ __volatile__("movq %%cr3, %0" : "=r"(old_page_table));
@@ -701,7 +708,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     void *p = (void *)NULL;           // 临时指针变量
 
     // 为新进程分配内核栈空间并转换为虚拟地址
-    p = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE));
+    p = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE));
     if (!p)
     {
         // 如果内存分配失败，释放锁并返回0
@@ -737,6 +744,12 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     xmemset(thd, 0, sizeof(struct thread_struct));
     thd->elf_mappings = current_task->thread->elf_mappings; // 复制内存映射区域信息
     tsk->thread = thd;
+
+    if (current_task->fpu)
+    {
+        tsk->fpu = (fpu_context *)malloc(sizeof(fpu_context));
+        xmemcpy(tsk->fpu, current_task->fpu, sizeof(fpu_context));
+    }
 
     if ((int64_t)fork_copy_mm(tsk, clone_flags) < 0)
     {
@@ -830,11 +843,15 @@ extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
     init_tss[next->cpu_id].rsp0 = next->thread->rsp0;
 
+    __asm__ __volatile__("fnsave (%%rax)" ::"a"(prev->fpu));
+
     __asm__ __volatile__("movq  %%fs,    %0\n\t" : "=a"(prev->thread->fs));
     __asm__ __volatile__("movq  %%gs,    %0\n\t" : "=a"(prev->thread->gs));
 
     prev->thread->fsbase = rdmsr(IA32_FS_BASE);
     prev->thread->gsbase = rdmsr(IA32_GS_BASE);
+
+    __asm__ __volatile__("fxrstor (%%rax)" ::"a"(next->fpu));
 
     __asm__ __volatile__("movq  %0,     %%fs\n\t" ::"a"(next->thread->fs));
     __asm__ __volatile__("movq  %0,     %%gs\n\t" ::"a"(next->thread->gs));
@@ -867,12 +884,20 @@ void init_task_manager()
 
     current_task->thread->elf_mappings = nullptr;
 
+    __asm__ __volatile__(
+        "fnclex \n\t"
+        "fninit \n\t");
+    current_task->fpu = (fpu_context *)malloc(sizeof(fpu_context));
+    xmemset(current_task->fpu, 0, sizeof(fpu_context));
+    current_task->fpu->mxscr = 0x1f80;
+    current_task->fpu->fcw = 0x037f;
+
     init_tss[current_task->cpu_id].rsp0 = init_thread.rsp0;
 
     list_init(&init_task_union.task.list);
 
     kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
-    // kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
+    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;

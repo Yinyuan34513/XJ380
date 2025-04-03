@@ -78,6 +78,24 @@ static uint32_t ioapic_read(UINT32 reg)
     return mmio_read32((UINT32 *)((UINT64)ApicInfo.ioApicAddr + 0x10));
 }
 
+void ioapic_disable(UINT8 vector)
+{
+    uint64_t index = 0x10 + ((vector - 32) * 2);
+    uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
+    value |= (0x10000UL);
+    ioapic_write(index, (uint32_t)(value & 0xFFFFFFFF));
+    ioapic_write(index + 1, (uint32_t)(value >> 32));
+}
+
+void ioapic_enable(UINT8 vector)
+{
+    uint64_t index = 0x10 + ((vector - 32) * 2);
+    uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
+    value &= (~0x10000UL);
+    ioapic_write(index, (uint32_t)(value & 0xFFFFFFFF));
+    ioapic_write(index + 1, (uint32_t)(value >> 32));
+}
+
 void ioapic_add(UINT8 vector, UINT32 irq)
 {
     UINT32 ioredtbl = (UINT32)(0x10 + (uint32_t)(irq * 2));
@@ -94,6 +112,11 @@ void init_IOApic()
     ioapic_add((UINT8)32, 0);
     ioapic_add((UINT8)33, 1);
     ioapic_add((UINT8)34, 12);
+
+    // XHCI interrupt vector
+    ioapic_add((UINT8)35, 3);
+    ioapic_enable((UINT8)35);
+
     write_serial_string("Setup I/O apic.\n");
 
     write_serial_string("IOAPIC Address: ");
@@ -111,7 +134,6 @@ void init_IOApic()
  */
 void init_lApic()
 {
-
     lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
     lapic_write(LAPIC_REG_SPURIOUS, 0xff | 1 << 8);
     lapic_write(LAPIC_REG_TIMER_DIV, 11);
@@ -119,7 +141,7 @@ void init_lApic()
     UINT64 b = nanoTime();
     lapic_write(LAPIC_REG_TIMER_INITCNT, ~((UINT32)0));
     for (;;)
-        if (nanoTime() - b >= 100000000)
+        if (nanoTime() - b >= 1000000)
             break;
     UINT64 lapic_timer = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
     UINT64 calibrated_timer_initial = (UINT64)((UINT64)(lapic_timer * 1000) / 250);

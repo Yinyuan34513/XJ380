@@ -12,6 +12,10 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     {
         // 没分配成，去世。
         // WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
+        while (1)
+        {
+            __asm__ __volatile__("hlt");
+        }
     }
     sht->sheet_num = 0;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
@@ -39,6 +43,8 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id)
 {
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
+    xmemset(new_sheet, 0, sizeof(SHEET));
+
     SHEET *front_p = sht->start;
     if (index > 0)
     {
@@ -99,6 +105,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 new_sheet->height = y;
                 new_sheet->type = type;
                 new_sheet->buffer = malloc((x * y * 4));
+                xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
             }
@@ -118,6 +125,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 new_sheet->height = y;
                 new_sheet->type = type;
                 new_sheet->buffer = malloc((x * y * 4));
+                xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
             }
@@ -135,6 +143,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             new_sheet->height = y;
             new_sheet->type = type;
             new_sheet->buffer = malloc((x * y * 4));
+            xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
         }
@@ -166,6 +175,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             new_sheet->height = y;
             new_sheet->type = type;
             new_sheet->buffer = malloc((x * y * 4));
+            xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
         }
@@ -182,6 +192,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             new_sheet->height = y;
             new_sheet->type = type;
             new_sheet->buffer = malloc((x * y * 4));
+            xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
         }

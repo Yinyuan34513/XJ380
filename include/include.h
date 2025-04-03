@@ -32,8 +32,11 @@
 #include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/partition.h"
 #include "./global/kernel/driver/pci.h"
+#include "./global/kernel/driver/msi.h"
 #include "./global/kernel/driver/ahci.h"
 #include "./global/kernel/driver/nvme.h"
+#include "./global/kernel/driver/usb.h"
+#include "./global/kernel/driver/xhci.h"
 // FS
 #include "./global/kernel/fs/vfs.h"
 #include "./global/kernel/fs/fat.h"

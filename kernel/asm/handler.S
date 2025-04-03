@@ -62,6 +62,8 @@ ENTRY(ret_from_intr)
     jmp Restore_all
 
 Err_Code:
+    cli
+
     pushq	%rax
 	movq	%es,	%rax
 	pushq	%rax

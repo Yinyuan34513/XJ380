@@ -127,6 +127,7 @@ void init_idt()
     }
 
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
     write_serial_string("IDT Initialize Success.\n");
 }
 

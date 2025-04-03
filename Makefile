@@ -1,6 +1,6 @@
-ASM_FLAGS = -O0 -g -mno-sse2 -mno-sse -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -g -mno-sse2 -mno-sse -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -g -mno-sse2 -mno-sse -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
+C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 SMP ?= 4
@@ -20,7 +20,7 @@ ifeq ($(SUDO), 1)
 SUDO_CMD = sudo
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/x64/OVMF.4m.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios /usr/share/ovmf/x64/OVMF.4m.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk  -usb -device nec-usb-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 

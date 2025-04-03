@@ -65,30 +65,48 @@ bool PageAlloc::test_bit(uint64_t index)
 
 void *PageAlloc::alloc_pages(size_t page_count)
 {
-    if (page_count == 0 || page_count > this->page_count)
+    return this->alloc_pages_align(page_count, PAGE_SIZE);
+}
+
+void *PageAlloc::alloc_pages_align(size_t page_count, uint64_t align)
+{
+    if (page_count == 0 || page_count > this->page_count || align == 0)
     {
         return nullptr;
     }
 
-    // 查找连续的空闲页面
+    // 确保对齐是页大小的倍数且是2的幂
+    if ((align % 4096) != 0 || (align & (align - 1)) != 0)
+    {
+        return nullptr;
+    }
+
     uint64_t start_page = 0;
     uint64_t consecutive_free = 0;
+    uint64_t align_pages = align / 4096; // 对齐要求的页面数
 
     for (uint64_t i = 0; i < this->page_count; i++)
     {
         if (!test_bit(i))
         {
             consecutive_free++;
-            if (consecutive_free == page_count)
+            if (consecutive_free >= page_count)
             {
-                // 找到足够的连续页面
                 start_page = i - page_count + 1;
-                // 标记这些页面为已使用
-                for (uint64_t j = 0; j < page_count; j++)
+
+                // 检查对齐要求
+                uint64_t addr = (uint64_t)this->page_start + start_page * 4096;
+                if ((addr & (align - 1)) == 0)
                 {
-                    set_bit(start_page + j);
+                    // 满足对齐要求，标记页面为已使用
+                    for (uint64_t j = 0; j < page_count; j++)
+                    {
+                        set_bit(start_page + j);
+                    }
+                    return (void *)addr;
                 }
-                return (void *)((char *)page_start + start_page * 4096);
+                // 不满足对齐要求，继续搜索
+                consecutive_free = page_count - 1; // 保留可能的连续空间
             }
         }
         else
@@ -97,7 +115,7 @@ void *PageAlloc::alloc_pages(size_t page_count)
         }
     }
 
-    return nullptr; // 没有找到足够的连续页面
+    return nullptr; // 没有找到满足条件的连续页面
 }
 
 void PageAlloc::free_pages(void *page, size_t page_count)

@@ -8,9 +8,9 @@
 #define CLONE_SIGNAL (1 << 2)
 #define CLONE_VM (1 << 3)
 
-// stack size 16K
+// stack size 8K
 // UL一定要加，否则获取current_task之后读取值的时候会出错
-#define STACK_SIZE 16384UL
+#define STACK_SIZE 8192UL
 #define USER_STACK_START 0x6ffff0a00000UL
 
 #define TASK_RUNNING (1 << 0)
@@ -28,7 +28,7 @@ struct elf_mapping_space
 
 struct mm_struct
 {
-    uint64_t *pgd; // page table point
+    uint64_t *pgd; // page table pointer
 
     uint64_t start_code, end_code;
     uint64_t start_data, end_data;
@@ -57,6 +57,21 @@ struct thread_struct
     uint64_t error_code;
 };
 
+typedef struct
+{
+    uint16_t fcw;
+    uint16_t fsw;
+    uint16_t ftw;
+    uint16_t fop;
+    uint64_t word2;
+    uint64_t word3;
+    uint32_t mxscr;
+    uint32_t mxcsr_mask;
+    uint64_t mm[16];
+    uint64_t xmm[32];
+    uint64_t rest[12];
+} __ALIGN16__ fpu_context;
+
 #define MAX_FD_NUM 16
 
 struct task_struct
@@ -71,6 +86,8 @@ struct task_struct
     struct thread_struct *thread;
 
     struct List list;
+
+    fpu_context *fpu;
 
     uint64_t addr_limit; /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/ /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
 
