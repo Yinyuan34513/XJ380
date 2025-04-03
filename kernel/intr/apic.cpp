@@ -38,20 +38,6 @@ static inline UINT32 mmio_read32(void *addr)
     return *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr);
 }
 
-static inline uint64_t rdmsr(UINT32 msr)
-{
-    UINT32 eax, edx;
-    __asm__ volatile("rdmsr" : "=a"(eax), "=d"(edx) : "c"(msr));
-    return ((UINT64)edx << 32) | eax;
-}
-
-static inline void wrmsr(UINT32 msr, UINT64 value)
-{
-    UINT32 eax = (UINT32)value;
-    UINT32 edx = value >> 32;
-    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
-}
-
 void lapic_write(UINT32 reg, UINT64 value)
 {
     if (ApicInfo.x2Apic)

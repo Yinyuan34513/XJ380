@@ -49,6 +49,9 @@ struct thread_struct
     uint64_t fs;
     uint64_t gs;
 
+    uint64_t fsbase;
+    uint64_t gsbase;
+
     uint64_t cr2;
     uint64_t trap_nr;
     uint64_t error_code;
@@ -85,6 +88,10 @@ struct task_struct
     struct task_struct *next;
     struct task_struct *parent;
 };
+
+#define IA32_FS_BASE 0xc0000100
+
+#define IA32_GS_BASE 0xc0000101
 
 ///////struct task_struct->flags:
 

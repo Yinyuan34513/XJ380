@@ -7,7 +7,7 @@ int main(int argc, char *argv[], char *envp[])
 {
     write(1, "init process is running!!!\n", 0);
 
-    int pid = fork();
+    int pid = vfork();
     if (pid == 0)
     {
         write(1, "child process is running!!!\n", 0);

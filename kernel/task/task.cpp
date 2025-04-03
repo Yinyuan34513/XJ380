@@ -12,6 +12,8 @@ struct thread_struct init_thread =
         .rsp = (uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t)),
         .fs = SELECTOR_KERNEL_DS,
         .gs = SELECTOR_KERNEL_DS,
+        .fsbase = 0,
+        .gsbase = 0,
         .cr2 = 0,
         .trap_nr = 0,
         .error_code = 0};
@@ -468,6 +470,12 @@ void cpu_halt()
         __asm__ __volatile__("hlt");
 }
 
+bool stack_range(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t pd_idx, uint64_t pt_idx, uint64_t user_stack_start, uint64_t user_stack_end)
+{
+    uint64_t addr = pml4_idx << 39 | pdpt_idx << 30 | pd_idx << 21 | pt_idx << 12;
+    return user_stack_start <= addr && addr < user_stack_end;
+}
+
 // 抄limine的，这样会出问题吗？
 // 我说的出问题是什么意思，你应该知道
 // 如果会，那你就自己换个名字，换个写法，这样就可以了吧
@@ -478,7 +486,7 @@ void cpu_halt()
 #define PT_FLAG_NX ((uint64_t)1 << 63)
 #define PT_PADDR_MASK ((uint64_t)0xFFFFFFFFFFFFF000)
 
-uint64_t clone_page_table(uint64_t cr3_old, uint64_t clone_flags)
+uint64_t clone_page_table(uint64_t cr3_old, uint64_t clone_flags, uint64_t user_stack_start, uint64_t user_stack_end)
 {
     uint64_t cr3_new = (uint64_t)PAGE_ALLOC.alloc_page(); // 就不判断申请失败的情况了，不然有点麻烦，你自己加上吧
     if (cr3_new == 0)
@@ -583,21 +591,20 @@ uint64_t clone_page_table(uint64_t cr3_old, uint64_t clone_flags)
                         continue;
 
                     uint64_t *page_old = (uint64_t *)convert_physical_to_virtual(pte_old & PT_PADDR_MASK);
-                    // if (clone_flags & CLONE_VM)
-                    // {
-                    uint64_t pte_new = (uint64_t)PAGE_ALLOC.alloc_page();
-                    pte_new |= PT_FLAG_VALID;
-                    pte_new |= pte_old_write ? PT_FLAG_WRITE : 0;
-                    pte_new |= pte_old_user ? PT_FLAG_USER : 0;
-                    pt_new[pt_idx] = pte_new;
+                    if (clone_flags & CLONE_VM || stack_range(pml4_idx, pdpt_idx, pd_idx, pt_idx, user_stack_start, user_stack_end))
+                    {
+                        uint64_t pte_new = (uint64_t)PAGE_ALLOC.alloc_page();
+                        pte_new |= PT_FLAG_VALID;
+                        pte_new |= pte_old_write ? PT_FLAG_WRITE : 0;
+                        pte_new |= pte_old_user ? PT_FLAG_USER : 0;
+                        pt_new[pt_idx] = pte_new;
 
-                    uint64_t *page_new = (uint64_t *)convert_physical_to_virtual(pte_new & PT_PADDR_MASK);
-                    xmemcpy(page_new, page_old, PAGE_SIZE);
-                    // }
-                    // else
-                    // {
-                    //     cpu_halt();
-                    // }
+                        uint64_t *page_old = (uint64_t *)convert_physical_to_virtual(pte_old & PT_PADDR_MASK);
+                        uint64_t *page_new = (uint64_t *)convert_physical_to_virtual(pte_new & PT_PADDR_MASK);
+                        xmemcpy(page_new, page_old, PAGE_SIZE);
+                    }
+                    else
+                        pt_new[pt_idx] = pte_old;
                 }
             }
         }
@@ -609,18 +616,19 @@ spinlock_t do_fork_lock;
 
 uint64_t fork_copy_mm(struct task_struct *tsk, uint64_t clone_flags)
 {
-    struct mm_struct *new_mm = (struct mm_struct *)malloc(sizeof(struct mm_struct));
-    if (!new_mm)
-    {
-        return (uint64_t)-ENOMEM;
-    }
+    struct mm_struct *old_mm = tsk->mm;
+    tsk->mm = (struct mm_struct *)malloc(sizeof(struct mm_struct));
+    *tsk->mm = *old_mm;
 
     uint64_t old_page_table;
     __asm__ __volatile__("movq %%cr3, %0" : "=r"(old_page_table));
-    uint64_t new_page_table = clone_page_table(old_page_table, clone_flags);
 
-    new_mm->pgd = (uint64_t *)new_page_table;
-    tsk->mm = new_mm;
+    uint64_t user_stack_start = tsk->mm->start_stack - STACK_SIZE;
+    uint64_t user_stack_end = tsk->mm->start_stack;
+
+    uint64_t new_page_table = clone_page_table(old_page_table, clone_flags, user_stack_start, user_stack_end);
+
+    tsk->mm->pgd = (uint64_t *)new_page_table;
 
     return 0;
 }
@@ -813,13 +821,6 @@ int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags)
     return do_fork(&regs, flags, 0, 0);
 }
 
-static inline void wrmsr(UINT32 msr, UINT64 value)
-{
-    UINT32 eax = (UINT32)value;
-    UINT32 edx = value >> 32;
-    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
-}
-
 void switch_mm(struct task_struct *prev, struct task_struct *next)
 {
     __asm__ __volatile__("movq %0, %%cr3" : : "r"(next->mm->pgd) : "memory");
@@ -832,8 +833,14 @@ extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
     __asm__ __volatile__("movq  %%fs,    %0\n\t" : "=a"(prev->thread->fs));
     __asm__ __volatile__("movq  %%gs,    %0\n\t" : "=a"(prev->thread->gs));
 
+    prev->thread->fsbase = rdmsr(IA32_FS_BASE);
+    prev->thread->gsbase = rdmsr(IA32_GS_BASE);
+
     __asm__ __volatile__("movq  %0,     %%fs\n\t" ::"a"(next->thread->fs));
     __asm__ __volatile__("movq  %0,     %%gs\n\t" ::"a"(next->thread->gs));
+
+    wrmsr(IA32_FS_BASE, next->thread->fsbase);
+    wrmsr(IA32_GS_BASE, next->thread->gsbase);
 
     user_current[next->cpu_id] = next;
 }

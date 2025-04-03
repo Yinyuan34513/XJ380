@@ -22,20 +22,6 @@ SMP SMP_MANAGER;
 
 uint64_t lapicid_to_cpuid[MAX_CPU_NUM];
 
-static inline uint64_t rdmsr(UINT32 msr)
-{
-    UINT32 eax, edx;
-    __asm__ volatile("rdmsr" : "=a"(eax), "=d"(edx) : "c"(msr));
-    return ((UINT64)edx << 32) | eax;
-}
-
-static inline void wrmsr(UINT32 msr, UINT64 value)
-{
-    UINT32 eax = (UINT32)value;
-    UINT32 edx = value >> 32;
-    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
-}
-
 // 发送IPI的函数
 void send_ipi(UINT32 apic_id, UINT32 command)
 {

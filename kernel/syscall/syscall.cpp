@@ -6,30 +6,14 @@
 #define MSR_LSTAR 0xC0000082        // LSTAR MSR寄存器
 #define MSR_SYSCALL_MASK 0xC0000084 // SYSCALL_MASK MSR寄存器
 
-// 读取MSR寄存器的函数
-static inline uint64_t read_msr(uint32_t msr)
-{
-    uint32_t low, high;
-    asm volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
-    return ((uint64_t)high << 32) | low;
-}
-
-// 写入MSR寄存器的函数
-static inline void write_msr(uint32_t msr, uint64_t value)
-{
-    uint32_t low = value & 0xFFFFFFFF;
-    uint32_t high = value >> 32;
-    asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
-}
-
 void init_syscall()
 {
     uint64_t efer;
 
     // 1. 启用 EFER.SCE (System Call Extensions)
-    efer = read_msr(MSR_EFER);
+    efer = rdmsr(MSR_EFER);
     efer |= 1; // 设置 SCE 位
-    write_msr(MSR_EFER, efer);
+    wrmsr(MSR_EFER, efer);
 
     uint16_t cs_sysret_cmp = SELECTOR_USER_CS - 16;
     uint16_t ss_sysret_cmp = SELECTOR_USER_DS - 8;
@@ -52,13 +36,13 @@ void init_syscall()
     uint64_t star = 0;
     star = ((uint64_t)(SELECTOR_USER_DS - 8) << 48) | // SYSRET 的基础 CS
            ((uint64_t)SELECTOR_KERNEL_CS << 32);      // SYSCALL 的 CS
-    write_msr(MSR_STAR, star);
+    wrmsr(MSR_STAR, star);
 
     // 3. 设置 LSTAR MSR (系统调用入口点)
-    write_msr(MSR_LSTAR, (uint64_t)syscall_handler);
+    wrmsr(MSR_LSTAR, (uint64_t)syscall_handler);
 
     // 4. 设置 SYSCALL_MASK MSR (RFLAGS 掩码)
-    write_msr(MSR_SYSCALL_MASK, (1 << 9));
+    wrmsr(MSR_SYSCALL_MASK, (1 << 9));
 }
 
 extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
@@ -100,6 +84,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_WAIT4:
         regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
         break;
+    case SYS_BRK:
+        regs->rax = (uint64_t)sys_brk(regs->rdi);
+
+    case ARCH_PRCTL:
+        regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);
     default:
         regs->rax = (uint64_t)-ENOSYS;
         write_serial_string("Unknown syscall index: ");

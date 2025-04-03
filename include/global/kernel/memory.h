@@ -317,4 +317,6 @@ static inline uint64_t convert_virtual_to_physical(uint64_t virtual_addr)
                                 \
   } while (0);
 
+uint64_t mm_do_brk(uint64_t start, uint64_t size);
+
 #endif
