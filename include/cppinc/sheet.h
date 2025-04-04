@@ -20,6 +20,7 @@ struct SHEET
     UINT32 width, height;
     UINT32 type;
     UINT16 index;
+    BOOLEAN is_change;
     SHEETP next;
 };
 

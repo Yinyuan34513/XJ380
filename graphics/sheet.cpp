@@ -105,6 +105,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 new_sheet->height = y;
                 new_sheet->type = type;
                 new_sheet->buffer = malloc((x * y * 4));
+                new_sheet->is_change = true;
                 xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
@@ -125,6 +126,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 new_sheet->height = y;
                 new_sheet->type = type;
                 new_sheet->buffer = malloc((x * y * 4));
+                new_sheet->is_change = true;
                 xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
@@ -143,6 +145,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             new_sheet->height = y;
             new_sheet->type = type;
             new_sheet->buffer = malloc((x * y * 4));
+            new_sheet->is_change = true;
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
@@ -175,6 +178,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             new_sheet->height = y;
             new_sheet->type = type;
             new_sheet->buffer = malloc((x * y * 4));
+            new_sheet->is_change = true;
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
@@ -192,6 +196,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             new_sheet->height = y;
             new_sheet->type = type;
             new_sheet->buffer = malloc((x * y * 4));
+            new_sheet->is_change = true;
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
@@ -357,38 +362,40 @@ void refresh_sheet(SHEET_INFO *sht)
         write_serial_string("Refreshing Sheet Index ");
         write_serial_dec(front_p->index);
         write_serial_string("\n");
-        SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-        UINT32 BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
-        for (int y = 0; y < front_p->height; y++)
-        {
-            for (int x = 0; x < front_p->width; x++)
+        if (front_p->is_change) {
+            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+            UINT32 BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
+            for (int y = 0; y < front_p->height; y++)
             {
-                // 起始位置 = sht->scrx * front_p->by + front_p->bx
-                // 偏移量 = 起始位置 + y * sht->scrx + x
-                // 即TempBuffer[起始位置 + y * sht->scrx + x] = SheetBuffer[y * front_p->width + x]
-                // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                if (SheetBuffer[y * front_p->width + x].a == 255)
+                for (int x = 0; x < front_p->width; x++)
                 {
-                    TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
-                    TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
-                    TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
+                    // 起始位置 = sht->scrx * front_p->by + front_p->bx
+                    // 偏移量 = 起始位置 + y * sht->scrx + x
+                    // 即TempBuffer[起始位置 + y * sht->scrx + x] = SheetBuffer[y * front_p->width + x]
+                    // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                    if (SheetBuffer[y * front_p->width + x].a == 255)
+                    {
+                        TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
+                        TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
+                        TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
+                    }
+                    else if (SheetBuffer[y * front_p->width + x].a == 0)
+                    {
+                        // pass
+                    }
+                    else
+                    {
+                        TempBuffer[BufferOffest].r =
+                            SheetBuffer[y * front_p->width + x].r * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].r * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                        TempBuffer[BufferOffest].g =
+                            SheetBuffer[y * front_p->width + x].g * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].g * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                        TempBuffer[BufferOffest].b =
+                            SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                    }
+                    BufferOffest++;
                 }
-                else if (SheetBuffer[y * front_p->width + x].a == 0)
-                {
-                    // pass
-                }
-                else
-                {
-                    TempBuffer[BufferOffest].r =
-                        SheetBuffer[y * front_p->width + x].r * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].r * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                    TempBuffer[BufferOffest].g =
-                        SheetBuffer[y * front_p->width + x].g * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].g * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                    TempBuffer[BufferOffest].b =
-                        SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                }
-                BufferOffest++;
+                BufferOffest += (sht->scrx - front_p->width);
             }
-            BufferOffest += (sht->scrx - front_p->width);
         }
         front_p = front_p->next;
     }
@@ -444,62 +451,64 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
     for (int i = 0; i < sht->sheet_num; i++)
     {
-        if ((front_p->bx > bex2 && front_p->by > bey2) ||
-            (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
-        {
-            // 不在刷新范围内，跳过
-        }
-        else
-        {
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-            int offest_x = bex1 - front_p->bx; // 刷新区域相较于图层的偏移量
-            int offest_y = bey1 - front_p->by; // 同上
-            if (offest_x < 0)
+        if (front_p->is_change) {
+            if ((front_p->bx > bex2 && front_p->by > bey2) ||
+                (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
             {
-                offest_x = 0;
+                // 不在刷新范围内，跳过
             }
-            if (offest_y < 0)
+            else
             {
-                offest_y = 0;
-            }
-            int dlo_x = (front_p->bx + front_p->width) - bex2;  // 图层末尾相较于刷新区域末尾的偏移量
-            int dlo_y = (front_p->by + front_p->height) - bey2; // 同上
-            if (dlo_x < 0 || dlo_x > front_p->width)
-            {
-                dlo_x = 0;
-            }
-            if (dlo_y < 0 || dlo_y > front_p->height)
-            {
-                dlo_y = 0;
-            }
-            UINT32 BufferOffest = sht->scrx * (front_p->by + offest_y) + front_p->bx + offest_x; // 起始位置
-            for (int y = offest_y; y < front_p->height - dlo_y; y++)
-            {
-                for (int x = offest_x; x < front_p->width - dlo_x; x++)
+                SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+                int offest_x = bex1 - front_p->bx; // 刷新区域相较于图层的偏移量
+                int offest_y = bey1 - front_p->by; // 同上
+                if (offest_x < 0)
                 {
-                    // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                    if (SheetBuffer[y * front_p->width + x].a == 255)
-                    {
-                        TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
-                        TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
-                        TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
-                    }
-                    else if (SheetBuffer[y * front_p->width + x].a == 0)
-                    {
-                        // pass
-                    }
-                    else
-                    {
-                        TempBuffer[BufferOffest].r =
-                            SheetBuffer[y * front_p->width + x].r * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].r * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                        TempBuffer[BufferOffest].g =
-                            SheetBuffer[y * front_p->width + x].g * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].g * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                        TempBuffer[BufferOffest].b =
-                            SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                    }
-                    BufferOffest++;
+                    offest_x = 0;
                 }
-                BufferOffest += sht->scrx - front_p->width + offest_x + dlo_x;
+                if (offest_y < 0)
+                {
+                    offest_y = 0;
+                }
+                int dlo_x = (front_p->bx + front_p->width) - bex2;  // 图层末尾相较于刷新区域末尾的偏移量
+                int dlo_y = (front_p->by + front_p->height) - bey2; // 同上
+                if (dlo_x < 0 || dlo_x > front_p->width)
+                {
+                    dlo_x = 0;
+                }
+                if (dlo_y < 0 || dlo_y > front_p->height)
+                {
+                    dlo_y = 0;
+                }
+                UINT32 BufferOffest = sht->scrx * (front_p->by + offest_y) + front_p->bx + offest_x; // 起始位置
+                for (int y = offest_y; y < front_p->height - dlo_y; y++)
+                {
+                    for (int x = offest_x; x < front_p->width - dlo_x; x++)
+                    {
+                        // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+                        if (SheetBuffer[y * front_p->width + x].a == 255)
+                        {
+                            TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
+                            TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
+                            TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
+                        }
+                        else if (SheetBuffer[y * front_p->width + x].a == 0)
+                        {
+                            // pass
+                        }
+                        else
+                        {
+                            TempBuffer[BufferOffest].r =
+                                SheetBuffer[y * front_p->width + x].r * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].r * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                            TempBuffer[BufferOffest].g =
+                                SheetBuffer[y * front_p->width + x].g * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].g * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                            TempBuffer[BufferOffest].b =
+                                SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 + TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                        }
+                        BufferOffest++;
+                    }
+                    BufferOffest += sht->scrx - front_p->width + offest_x + dlo_x;
+                }
             }
         }
         front_p = front_p->next;
