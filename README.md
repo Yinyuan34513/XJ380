@@ -251,6 +251,11 @@ XINGJI工作室A级机密 | 保密编号XSEC202212011-11-A
 2025年3月16日 VOID
 - 修复硬盘驱动（execve死循环bug）
 
+### BuildVersion 49 【已虚拟机测试】
+2025年4月4日 人造人 & Guoqiyu1115
+- 修复一堆bug
+- 优化图层刷新速度
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error
