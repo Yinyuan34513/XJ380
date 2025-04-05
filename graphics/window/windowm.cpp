@@ -38,7 +38,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
     }
 
     create_sheet(sht, 72, 72, width, height, MovableSheetType, -1, &(new_window->w_sheet));
-    draw_rect(sht, &(new_window->w_sheet), 0,  0, width - 1, 20, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(new_window->w_sheet), 0,  0, width - 1, 22, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
     draw_rect(sht, &(new_window->w_sheet), 0, 20, width - 1, height - 1, {0xff, 0xff, 0xff, 0xff});
 
     for (int y = 0; y < 9; y++) {
@@ -72,6 +72,24 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
             }
         }
     }
+
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (wbutton_cdl[y][x] == 'a') {
+                draw_point(sht, &(new_window->w_sheet), x, y + height - 4, {0, 0, 0, 0});
+            }
+        }
+    }
+
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (wbutton_cdr[y][x] == 'a') {
+                draw_point(sht, &(new_window->w_sheet), x + width - 4, y + height - 4, {0, 0, 0, 0});
+            }
+        }
+    }
+
+    PrintString(sht, &(new_window->w_sheet), 22, 3, title, WHITE);
 
     refresh_part_sheet(sht, 72, 72, width, height);
 }

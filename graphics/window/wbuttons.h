@@ -53,4 +53,18 @@ char wbutton_c[10][10] = {
     "a........",
 };
 
+char wbutton_cdl[5][5] = {
+    "a...",
+    "a...",
+    "aa..",
+    "aaaa"
+};
+
+char wbutton_cdr[5][5] = {
+    "...a",
+    "...a",
+    "..aa",
+    "aaaa"
+};
+
 #endif
