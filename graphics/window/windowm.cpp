@@ -7,7 +7,7 @@
 #include "../../include/include.h"
 #include "./wbuttons.h"
 
-#define WINDOW_ALPHA_VALUE 0x5d
+#define WINDOW_ALPHA_VALUE 0xaa
 
 void init_xwm(XWM_INFO *xwmi) {
     write_serial_string("Initializing XWM...\n");
