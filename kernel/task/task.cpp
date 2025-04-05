@@ -747,7 +747,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
 
     if (current_task->fpu)
     {
-        tsk->fpu = (fpu_context *)malloc(sizeof(fpu_context));
+        tsk->fpu = (fpu_context *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_page());
         xmemcpy(tsk->fpu, current_task->fpu, sizeof(fpu_context));
     }
 
@@ -887,7 +887,7 @@ void init_task_manager()
     __asm__ __volatile__(
         "fnclex \n\t"
         "fninit \n\t");
-    current_task->fpu = (fpu_context *)malloc(sizeof(fpu_context));
+    current_task->fpu = (fpu_context *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_page());
     xmemset(current_task->fpu, 0, sizeof(fpu_context));
     current_task->fpu->mxscr = 0x1f80;
     current_task->fpu->fcw = 0x037f;
@@ -896,8 +896,8 @@ void init_task_manager()
 
     list_init(&init_task_union.task.list);
 
-    kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
-    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL | CLONE_VM);
+    kernel_thread(init_kernel_thread, 10, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
+    kernel_thread(desktop_flusher, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     init_task_union.task.preempt_count = 0;
     init_task_union.task.state = TASK_RUNNING;

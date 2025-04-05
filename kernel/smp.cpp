@@ -102,7 +102,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     __asm__ __volatile__(
         "fnclex \n\t"
         "fninit \n\t");
-    current_task->fpu = (fpu_context *)malloc(sizeof(fpu_context));
+    current_task->fpu = (fpu_context *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_page());
     xmemset(current_task->fpu, 0, sizeof(fpu_context));
     current_task->fpu->mxscr = 0x1f80;
     current_task->fpu->fcw = 0x037f;

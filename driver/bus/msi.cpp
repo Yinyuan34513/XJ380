@@ -126,7 +126,7 @@ static inline void __msix_set_entry(struct msi_desc_t *msi_desc)
         (uint64_t *)(msi_desc->pci_dev->msix_mmio_vaddr + msi_desc->pci_dev->msix_offset + msi_desc->msi_index * 16);
     *ptr = ((uint64_t)(msi_desc->msg.address_hi) << 32) | (msi_desc->msg.address_lo);
     ++ptr;
-    *ptr = ((uint64_t)(msi_desc->msg.vector_control) << 32) | (msi_desc->msg.data);
+    *ptr = ((uint64_t)(msi_desc->msg.data) << 32) | (msi_desc->msg.vector_control);
 }
 
 /**

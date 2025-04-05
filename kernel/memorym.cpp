@@ -161,7 +161,8 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     write_serial_string("page_count: ");
     write_serial_hex(page_count);
     write_serial_string("\n");
-    PAGE_ALLOC.init((void *)page_start, page_count, (uint8_t *)malloc(bitmap_size));
+    uint8_t *bitmap = (uint8_t *)malloc(bitmap_size);
+    PAGE_ALLOC.init((void *)page_start, page_count, bitmap);
 
     // 输出合并后的
     OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;

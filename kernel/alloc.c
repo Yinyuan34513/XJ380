@@ -1,75 +1,84 @@
-#include "alloc/sized-pool.h"
-#define _detach mman_detach
-#define do_free mman_do_free
-#define try_split_and_free mman_try_split_and_free
-#include "alloc/mman.h"
-#define _detach mpool_detach
-#define do_free mpool_do_free
-#define try_split_and_free mpool_try_split_and_free
-#include "alloc/pool.h"
-
 #include "../include/cinclude.h"
 
-static struct mpool pool;
-
-/**
- *
- * @brief 初始化内存管理
- *
- * @param ptr  指向空闲内存起始地址的指针
- * @param size 大小（单位字节）
- *
- */
-void memory_init(void *ptr, size_t size)
+typedef struct heap_block
 {
-  mpool_init(&pool, ptr, size);
+  size_t size;
+  bool free;
+  struct heap_block *next;
+  struct heap_block *prev;
+} heap_block_t;
+
+#define HEAP_BLOCK_HEADER_SIZE sizeof(heap_block_t)
+#define HEAP_MIN_SIZE (4 * 1024)
+#define HEAP_ALIGNMENT 8
+
+static heap_block_t *heap_start = NULL;
+static heap_block_t *heap_end = NULL;
+
+void memory_init(uint64_t start_addr, uint64_t size)
+{
+  if (size < HEAP_MIN_SIZE)
+    return;
+  heap_start = (heap_block_t *)start_addr;
+  heap_start->size = size;
+  heap_start->free = true;
+  heap_start->next = NULL;
+  heap_start->prev = NULL;
+  heap_end = heap_start;
 }
 
-/**
- *
- * @brief 开辟内存空间
- *
- * @param size 大小（单位字节）
- *
- */
 void *malloc(size_t size)
 {
-  return mpool_alloc(&pool, size);
+  if (size == 0 || heap_start == NULL)
+    return NULL;
+  size = (size + HEAP_ALIGNMENT - 1) & ~(HEAP_ALIGNMENT - 1);
+
+  heap_block_t *current = heap_start;
+  while (current)
+  {
+    if (current->free && current->size >= size + HEAP_BLOCK_HEADER_SIZE)
+    {
+      if (current->size > size + HEAP_BLOCK_HEADER_SIZE * 2)
+      {
+        heap_block_t *new_block = (heap_block_t *)((char *)current + HEAP_BLOCK_HEADER_SIZE + size);
+        new_block->size = current->size - size - HEAP_BLOCK_HEADER_SIZE;
+        new_block->free = true;
+        new_block->next = current->next;
+        new_block->prev = current;
+
+        if (current->next)
+          current->next->prev = new_block;
+        current->next = new_block;
+        current->size = size + HEAP_BLOCK_HEADER_SIZE;
+      }
+      current->free = false;
+      return (void *)((char *)current + HEAP_BLOCK_HEADER_SIZE);
+    }
+    current = current->next;
+  }
+  return NULL;
 }
 
-/**
- *
- * @brief 一键免费内存空间
- *
- * @param size 指向需要释放的内存的指针
- *
- */
 void free(void *ptr)
 {
-  mpool_free(&pool, ptr);
-}
+  if (ptr == NULL || heap_start == NULL)
+    return;
+  heap_block_t *block = (heap_block_t *)((char *)ptr - HEAP_BLOCK_HEADER_SIZE);
+  block->free = true;
 
-/**
- *
- * @brief 获取分配的内存的大小
- *
- * @param ptr      分配的内存地址
- *
- */
-size_t malloc_usable_size(void *ptr)
-{
-  return mpool_msize(&pool, ptr);
-}
+  if (block->next && block->next->free)
+  {
+    block->size += block->next->size + HEAP_BLOCK_HEADER_SIZE;
+    block->next = block->next->next;
+    if (block->next)
+      block->next->prev = block;
+  }
 
-/**
- *
- * @brief 重新分配内存并复制
- *
- * @param ptr  指向目标的指针
- * @param size 大小（单位字节）
- *
- */
-void *realloc(void *ptr, size_t size)
-{
-  return mpool_realloc(&pool, ptr, size);
+  if (block->prev && block->prev->free)
+  {
+    block->prev->size += block->size + HEAP_BLOCK_HEADER_SIZE;
+    block->prev->next = block->next;
+    if (block->next)
+      block->next->prev = block->prev;
+  }
 }

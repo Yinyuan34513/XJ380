@@ -20,7 +20,7 @@ ifeq ($(SUDO), 1)
 SUDO_CMD = sudo
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk  -usb -device nec-usb-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 

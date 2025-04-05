@@ -101,9 +101,10 @@ struct madt_local_apic
     uint32_t flags;
 };
 
-struct madt_x2_localapic {
+struct madt_x2_localapic
+{
     struct madt_hander h;
-    uint8_t  reserved[2];
+    uint8_t reserved[2];
     uint32_t x2apic_id;
     uint32_t flags;
     uint32_t acpi_processor_uid;
@@ -157,15 +158,15 @@ extern UINT64 lapic_id();
 #define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
 
-#define BUILD_IRQ(nr)                                                          \
-    extern "C" void IRQ_NAME(nr);                                              \
-    __asm__(SYMBOL_NAME_STR(IRQ) #nr "_interrupt:		\n\t"                       \
-                                     "pushq	$0x00				\n\t" SAVE_ALL \
-                                     "movq	%rsp,	%rdi			\n\t"                  \
-                                     "leaq	ret_from_intr(%rip),	%rax	\n\t"     \
-                                     "pushq	%rax				\n\t"                      \
-                                     "movq	$" #nr ",	%rsi			\n\t"             \
-                                     "jmp	c_do_irq	\n\t");
+#define BUILD_IRQ(nr)                                                                                  \
+    extern "C" void IRQ_NAME(nr);                                                                      \
+    __asm__(".section .text\n\t" SYMBOL_NAME_STR(IRQ) #nr "_interrupt:		\n\t"                          \
+                                                          "pushq	$0x00				\n\t" SAVE_ALL \
+                                                          "movq	%rsp,	%rdi			\n\t"                     \
+                                                          "leaq	ret_from_intr(%rip),	%rax	\n\t"        \
+                                                          "pushq	%rax				\n\t"                         \
+                                                          "movq	$" #nr ",	%rsi			\n\t"                 \
+                                                          "jmp	c_do_irq	\n\t");
 
 typedef struct
 {
