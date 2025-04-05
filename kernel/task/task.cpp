@@ -393,7 +393,7 @@ uint64_t desktop_flusher(uint64_t arg)
     XWM_INFO xwmi;
     UINT16 test_win;
     init_xwm(&xwmi);
-    create_window(&xwmi, &shtinf, &test_win, "114514", 128, 64);
+    create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
 
     refresh_sheet(&shtinf); // 刷新
 
