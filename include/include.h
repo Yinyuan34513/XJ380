@@ -6,6 +6,7 @@
 #include "./cppinc/GOP.hpp"
 #include "./global/boot.h"
 #include "./cppinc/sheet.h"
+#include "./cppinc/window/window.h"
 #include "./cppinc/proto.hpp"
 #include "./global/stdint.h"
 #include "./global/list.h"
