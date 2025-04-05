@@ -53,8 +53,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
         }
     }
 
-    for (int y = 0; y < 9; y++) {
-        for (int x = 0; x < 9; x++) {
+    for (int y = 0; y < 17; y++) {
+        for (int x = 0; x < 32; x++) {
             if (wbutton_close[y][x] == '.') {
                 draw_point(sht, &(new_window->w_sheet), x + width - 32, y, {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
             } else if (wbutton_close[y][x] == 'a') {
@@ -65,13 +65,9 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
         }
     }
 
-    for (int y = 0; y < 9; y++) {
-        for (int x = 0; x < 9; x++) {
-            if (wbutton_close[y][x] == '.') {
-                // do nothing
-            } else if (wbutton_close[y][x] == 'a') {
-                draw_point(sht, &(new_window->w_sheet), x + width - 63, y, {0, 0, 0, 0});
-            } else if (wbutton_close[y][x] == '@') {
+    for (int y = 0; y < 17; y++) {
+        for (int x = 0; x < 32; x++) {
+            if (wbutton_little[y][x] == '@') {
                 draw_point(sht, &(new_window->w_sheet), x + width - 63, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
             }
         }
