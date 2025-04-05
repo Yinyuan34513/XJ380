@@ -17,7 +17,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
             __asm__ __volatile__("hlt");
         }
     }
-    sht->sheet_num = 0;
+    sht->sheet_num = -1;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     for (int y = 0; y < sht->scry; y++)
     {
@@ -136,7 +136,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
         {
             sht->start = new_sheet;
 
-            *sheet_id = 1;
+            *sheet_id = 0;
 
             new_sheet->index = 0;
             new_sheet->bx = bx;
@@ -157,19 +157,22 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
         // 直接分配下一个
         if (front_p != NULL)
         {
-            for (int i = 0; i < sht->sheet_num - 1; i++)
+            for (int i = 0; i < sht->sheet_num - 2; i++)
             {
-                if (front_p->next == NULL)
-                {
-                    // 链表.exe
-                    front_p->next = new_sheet;
-                    new_sheet->front = front_p;
-                    break;
-                }
                 front_p = front_p->next;
             }
 
-            *sheet_id = sht->sheet_num;
+            if (front_p->next == NULL) {
+                front_p->next = new_sheet;
+                new_sheet->front = front_p;
+            } else {
+                new_sheet->next = front_p->next;
+                front_p->next->front = new_sheet;
+                front_p->next = new_sheet;
+                new_sheet->front = front_p;
+            }
+
+            *sheet_id = sht->sheet_num - 1;
 
             new_sheet->index = front_p->index + 1;
             new_sheet->bx = bx;
@@ -357,7 +360,7 @@ void refresh_sheet(SHEET_INFO *sht)
     SHEET *front_p = sht->start;
     SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
 
-    for (int i = 0; i < sht->sheet_num; i++)
+    for (int i = 0; i < sht->sheet_num + 1; i++)
     {
         write_serial_string("Refreshing Sheet Index ");
         write_serial_dec(front_p->index);
@@ -447,7 +450,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
     SHEET *front_p = sht->start;
     SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
 
-    for (int i = 0; i < sht->sheet_num; i++)
+    for (int i = 0; i < sht->sheet_num + 1; i++)
     {
         if ((front_p->bx > bex2 && front_p->by > bey2) ||
                 (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))

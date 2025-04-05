@@ -32,6 +32,25 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id);
 void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 
+// graphics/sheet.cpp
+void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
+void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
+UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
+void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void refresh_sheet(SHEET_INFO *sht);
+void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
+UINT32 get_hor();
+UINT32 get_ver();
+
+// graphics/window/windowm.cpp
+void init_xwm(XWM_INFO *xwmi);
+void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *title, UINT32 width, UINT32 height);
+
 /*
  *   font
  */
@@ -110,21 +129,6 @@ void wsod_apic_not_found();
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
-
-// kernel/sheet.cpp
-void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
-void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
-UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
-void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void refresh_sheet(SHEET_INFO *sht);
-void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
-UINT32 get_hor();
-UINT32 get_ver();
 
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);

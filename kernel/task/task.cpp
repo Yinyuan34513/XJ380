@@ -389,6 +389,11 @@ uint64_t desktop_flusher(uint64_t arg)
     // wsod_debug();
 
     draw_mouse(&shtinf, &mouse_sheet_id);
+    
+    XWM_INFO xwmi;
+    UINT16 test_win;
+    init_xwm(&xwmi);
+    create_window(&xwmi, &shtinf, &test_win, "114514", 128, 64);
 
     refresh_sheet(&shtinf); // 刷新
 

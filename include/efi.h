@@ -28,7 +28,7 @@ typedef INT16 i16;
 typedef INT32 i32;
 typedef INT64 i64;
 // 字符
-typedef char CHAR8;
+typedef const char CHAR8;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
