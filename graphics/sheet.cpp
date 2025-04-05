@@ -340,6 +340,35 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
+void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id) 
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id)
+        {
+            front_p->next->front = front_p->front;
+            front_p->front->next = front_p->next;
+            SHEET *front_p2 = sht->start;
+            for (int i = 0; i < sht->sheet_num - 2; i++)
+            {
+                front_p2 = front_p2->next;  // 寻找最后一个
+            }
+
+            front_p->next = front_p2->next;
+            front_p->next->front = front_p;
+            front_p2->next = front_p;
+            front_p->front = front_p2;
+            return;
+        }
+        else if (front_p->next == NULL)
+        {
+            return;
+        }
+        front_p = front_p->next;
+    }
+}
+
 void refresh_sheet(SHEET_INFO *sht)
 {
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];

@@ -41,6 +41,7 @@ UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
 void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
 void refresh_sheet(SHEET_INFO *sht);
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
