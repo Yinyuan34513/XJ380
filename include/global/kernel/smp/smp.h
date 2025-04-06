@@ -4,7 +4,7 @@
 #include "../../stdint.h"
 #include "../apic/apic.h"
 
-#define MAX_CPU_NUM 32
+#define MAX_CPU_NUM 128
 
 class SMP
 {

@@ -905,7 +905,7 @@ extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
     init_tss[next->cpu_id].rsp0 = next->thread->rsp0;
 
-    __asm__ __volatile__("fnsave (%%rax)" ::"a"(prev->fpu));
+    __asm__ __volatile__("fxsave (%0)" ::"r"(prev->fpu));
 
     __asm__ __volatile__("movq  %%fs,    %0\n\t" : "=a"(prev->thread->fs));
     __asm__ __volatile__("movq  %%gs,    %0\n\t" : "=a"(prev->thread->gs));
@@ -913,7 +913,7 @@ extern "C" void __switch_to(struct task_struct *prev, struct task_struct *next)
     prev->thread->fsbase = rdmsr(IA32_FS_BASE);
     prev->thread->gsbase = rdmsr(IA32_GS_BASE);
 
-    __asm__ __volatile__("fxrstor (%%rax)" ::"a"(next->fpu));
+    __asm__ __volatile__("fxrstor (%0)" ::"r"(next->fpu));
 
     __asm__ __volatile__("movq  %0,     %%fs\n\t" ::"a"(next->thread->fs));
     __asm__ __volatile__("movq  %0,     %%gs\n\t" ::"a"(next->thread->gs));

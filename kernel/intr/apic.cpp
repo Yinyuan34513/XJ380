@@ -114,8 +114,8 @@ void init_IOApic()
     ioapic_add((UINT8)34, 12);
 
     // XHCI interrupt vector
-    ioapic_add((UINT8)35, 3);
-    ioapic_enable((UINT8)35);
+    // ioapic_add((UINT8)35, 3);
+    // ioapic_enable((UINT8)35);
 
     write_serial_string("Setup I/O apic.\n");
 
@@ -260,6 +260,8 @@ extern "C" void c_do_irq(struct X64_REGS *regs, uint64_t irq, uint64_t error_cod
         write_serial_hex(irq);
         write_serial_string("\n");
     }
+
+    send_eoi();
 }
 
 void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code), uint64_t arg)
