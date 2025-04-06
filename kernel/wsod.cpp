@@ -11,6 +11,14 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     write_serial_dec(cpu_id);
     write_serial_string("\n");
 
+    write_serial_string("RSP = ");
+    write_serial_hex(regs->rsp);
+    write_serial_string("\n");
+
+    write_serial_string("RIP = ");
+    write_serial_hex(regs->rip);
+    write_serial_string("\n");
+
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
@@ -143,6 +151,15 @@ void no_regs_wsod(const char *err_code)
 void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
 {
     do_wsod("UNEXPECT_INTRRUPT", regs);
+}
+
+void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
+{
+    __asm__ __volatile__(
+        "movq %cr0, %rax\n\t"
+        "and $0xFFF3, %ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+        "or $0x2, %ax\n\t"        // set coprocessor monitoring  CR0.MP
+        "movq %rax, %cr0\n\t");
 }
 
 void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)

@@ -42,17 +42,17 @@ CPP_OBJS := $(sort $(patsubst ./%.cpp, ./out/%.o, $(CPP_FILES)))
 
 out/%.o: %.S
 	@mkdir -p $(@D)
-	@$(CC) -fno-pic -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
 	@echo "AS $< -> $@"
 
 out/%.o: %.c
 	@mkdir -p $(@D)
-	@$(CC) -fno-pic -mcmodel=kernel $(C_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(C_FLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
 out/%.o: %.cpp
 	@mkdir -p $(@D)
-	@$(CPP) -fno-pic -mcmodel=kernel  $(CPP_FLAGS) -c $< -o $@
+	@$(CPP) -fno-pic -fno-pie -mcmodel=kernel  $(CPP_FLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)

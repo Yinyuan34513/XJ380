@@ -164,7 +164,7 @@ ENTRY(undefined_opcode)
 ENTRY(dev_not_avaliable)
     pushq $0
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq c_device_not_avaliable(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 

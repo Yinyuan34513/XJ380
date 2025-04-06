@@ -162,10 +162,13 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 front_p = front_p->next;
             }
 
-            if (front_p->next == NULL) {
+            if (front_p->next == NULL)
+            {
                 front_p->next = new_sheet;
                 new_sheet->front = front_p;
-            } else {
+            }
+            else
+            {
                 new_sheet->next = front_p->next;
                 front_p->next->front = new_sheet;
                 front_p->next = new_sheet;
@@ -278,16 +281,16 @@ UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-UINT16* found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y) 
+UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
         if (front_p->next == NULL)
         {
-            while (true) 
+            while (true)
             {
-                if (front_p->bx <= x && front_p->bx + front_p->width  >= x && 
+                if (front_p->bx <= x && front_p->bx + front_p->width >= x &&
                     front_p->by <= y && front_p->by + front_p->height >= y)
                 {
                     return &front_p->index;
@@ -304,17 +307,17 @@ UINT16* found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
-UINT16* found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y) 
+UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
         if (front_p->next == NULL)
         {
-            while (true) 
+            while (true)
             {
-                if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x && 
-                    front_p->by      <= y && front_p->by + 22                  >= y &&
+                if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x &&
+                    front_p->by <= y && front_p->by + 22 >= y &&
                     front_p->type == MovableSheetType)
                 {
                     return &front_p->index;
@@ -393,7 +396,7 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id) 
+void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -405,7 +408,7 @@ void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
             SHEET *front_p2 = sht->start;
             for (int i = 0; i < sht->sheet_num - 2; i++)
             {
-                front_p2 = front_p2->next;  // 寻找最后一个
+                front_p2 = front_p2->next; // 寻找最后一个
             }
 
             front_p->next = front_p2->next;
@@ -535,7 +538,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
     for (int i = 0; i < sht->sheet_num + 1; i++)
     {
         if ((front_p->bx > bex2 && front_p->by > bey2) ||
-                (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
+            (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
         {
             // 不在刷新范围内，跳过
         }
@@ -593,6 +596,10 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
             }
         }
         front_p = front_p->next;
+        if (front_p == nullptr)
+        {
+            break;
+        }
     }
 
     // 刷新
