@@ -153,6 +153,72 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *
     return 0;
 }
 
+uint64_t push_slice(uint64_t ustack, uint8_t *slice, uint64_t len)
+{
+    uint64_t tmp_stack = ustack;
+    tmp_stack -= len;
+    tmp_stack -= tmp_stack % alignof(uint64_t);
+
+    xmemcpy((void *)tmp_stack, slice, len);
+
+    return tmp_stack;
+}
+
+uint64_t push_infos(struct task_struct *task, uint64_t current_stack, char *argv[], char *envp[])
+{
+    uint64_t i;
+    uint64_t env_i = 0;
+    uint64_t argv_i = 0;
+
+    uint64_t tmp_stack = current_stack;
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)task->name, strlen(task->name) + 1);
+
+    uint64_t *envps = (uint64_t *)malloc(512);
+    xmemset(envps, 0, 512);
+    uint64_t *argvps = (uint64_t *)malloc(512);
+    xmemset(argvps, 0, 512);
+
+    if (envp != nullptr)
+    {
+        // push envs
+        for (env_i = 0; envp[env_i] != nullptr; env_i++)
+        {
+            tmp_stack = push_slice(tmp_stack, (uint8_t *)envp[env_i], strlen(envp[env_i]) + 1);
+            envps[env_i] = tmp_stack;
+        }
+    }
+
+    if (argv != nullptr)
+    {
+        // push argvs
+        for (argv_i = 0; argv[argv_i] != nullptr; argv_i++)
+        {
+            tmp_stack = push_slice(tmp_stack, (uint8_t *)argv[argv_i], strlen(argv[argv_i]) + 1);
+            argvps[argv_i] = tmp_stack;
+        }
+    }
+
+    // push auxv
+    uint8_t *tmp = (uint8_t *)malloc(2);
+    xmemset(tmp, 0, 2);
+    tmp_stack = push_slice(tmp_stack, tmp, 2);
+
+    // push envp
+    tmp_stack = push_slice(tmp_stack, tmp, 1);
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)envps, env_i * sizeof(uint64_t));
+
+    // push argvp
+    tmp_stack = push_slice(tmp_stack, tmp, 1);
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)argvps, argv_i * sizeof(uint64_t));
+
+    uint64_t *args_len = (uint64_t *)malloc(sizeof(uint64_t));
+    args_len[0] = argv_i;
+
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)args_len, sizeof(uint64_t));
+
+    return tmp_stack;
+}
+
 extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[])
 {
     uint64_t stack_start_addr = USER_STACK_START;
@@ -191,37 +257,12 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
         return -1;
     }
 
-    if (argv != nullptr)
-    {
-        int len = 0;
-        int i = 0;
-        char **dargv = (char **)(stack_start_addr - 10 * sizeof(char *));
-        pos = (uint64_t)dargv;
+    strcpy(current_task->name, name);
 
-        for (i = 0; i < 10 && argv[i] != NULL; i++)
-        {
-            len = strlen(argv[i]) + 1;
-            strcpy((char *)(pos - len), argv[i]);
-            dargv[i] = (char *)(pos - len);
-            pos -= len;
-        }
-        stack_start_addr = pos - 10;
-        regs->rdi = i;               // argc
-        regs->rsi = (uint64_t)dargv; // argv
-        regs->rdx = (uint64_t)envp;  // envp
-    }
-    else
-    {
-        regs->rdi = 0;
-        regs->rsi = 0;
-        regs->rdx = 0;
-    }
+    stack_start_addr = push_infos(current_task, current_task->mm->start_stack, argv, envp);
 
-    regs->rsp = current_task->mm->start_stack;
+    regs->rsp = stack_start_addr;
     regs->rbp = current_task->mm->start_stack;
-
-    __asm__ __volatile__("movq	%0, %%gs\n\t"
-                         "movq	%0, %%fs\n\t" ::"r"(0UL));
 
     regs->rflags = 0x200246;
 
@@ -291,12 +332,20 @@ uint64_t init_kernel_thread(uint64_t arg)
     current_task->thread->fs = SELECTOR_USER_DS;
     current_task->flags &= ~PF_KTHREAD;
 
+    char *arg0 = "-shell";
+    uint8_t **argv = (uint8_t **)malloc(sizeof(uint8_t *) * 2);
+    xmemset(argv, 0, sizeof(uint8_t *) * 2);
+    argv[0] = (uint8_t *)arg0;
+
+    uint8_t **envp = (uint8_t **)malloc(sizeof(uint8_t *) * 1);
+    xmemset(envp, 0, sizeof(uint8_t *) * 1);
+
     __asm__ __volatile__(
         "movq	%1,	%%rsp	\n\t"
         "pushq	%2		\n\t"
         "jmp   do_execve	\n\t"
         :
-        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(nullptr), "c"(nullptr)
+        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(argv), "c"(envp)
         : "memory");
 
     return (uint64_t)-1;
@@ -391,7 +440,7 @@ uint64_t desktop_flusher(uint64_t arg)
     // wsod_debug();
 
     draw_mouse(&shtinf, &mouse_sheet_id);
-    
+
     XWM_INFO xwmi;
     UINT16 test_win;
     init_xwm(&xwmi);

@@ -60,9 +60,13 @@
 
 #define SYS_MKNOD 133
 
-#define ARCH_PRCTL 158
+#define SYS_ARCH_PRCTL 158
 
+#define SYS_SET_TID_ADDRESS 218
 
+#define SYS_SET_ROBUST_LIST 273
+
+#define SYS_RSEQ 334
 
 // XJ380API XAPI Edition
 #define XAPI_OFFEST 380

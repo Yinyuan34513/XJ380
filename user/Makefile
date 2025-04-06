@@ -1,23 +1,14 @@
 all: init.elf shell.elf
 
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-
-build_xlibc:
-	make -C xlibc
-
 init.elf: init.c
-	@$(CC) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) $(shell find ../xlibc -name "*.o") ../out/$@.o -o ../out/$@
+	@x86_64-linux-musl-gcc -static $< -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@rm -rf ../out/$@.o
-	@echo "CCLD $< -> ../out/$@"
+	@echo "CC $< -> ../out/$@"
 
 shell.elf: shell.c
-	@$(CC) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) $(shell find ../xlibc -name "*.o") ../out/$@.o -o ../out/$@
+	@x86_64-linux-musl-gcc -static $< -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@rm -rf ../out/$@.o
-	@echo "CCLD $< -> ../out/$@"
+	@echo "CC $< -> ../out/$@"
 
 .PHONY: clean
 clean:

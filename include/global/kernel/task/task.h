@@ -72,10 +72,14 @@ typedef struct
     uint64_t rest[12];
 } __ALIGN16__ fpu_context;
 
+#define TASK_NAME_MAX 64
+
 #define MAX_FD_NUM 16
 
 struct task_struct
 {
+    char name[TASK_NAME_MAX];
+
     volatile long state;
     uint64_t flags;
     long preempt_count;

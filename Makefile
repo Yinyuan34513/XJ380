@@ -68,7 +68,6 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
 	@$(LD) -z muldefs -T linker.ld --static -o ./out/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o ./out/kallsyms.o
 	@$(OBJD) -x -d -s ./out/kernel.elf > ./out/kernel.txt
 
-	@$(MAKE) -C user build_xlibc
 	@$(MAKE) -C user
 
 .PHONY: clean

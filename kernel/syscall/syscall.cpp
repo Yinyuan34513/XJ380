@@ -86,9 +86,27 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_BRK:
         regs->rax = (uint64_t)sys_brk(regs->rdi);
+        break;
+    case SYS_MMAP:
+        // todo
+        regs->rax = 0;
+        break;
 
-    case ARCH_PRCTL:
+    case SYS_ARCH_PRCTL:
         regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);
+        break;
+    case SYS_SET_TID_ADDRESS:
+        // todo
+        regs->rax = current_task->pid;
+        break;
+    case SYS_SET_ROBUST_LIST:
+        // todo
+        regs->rax = 0;
+        break;
+    case SYS_RSEQ:
+        // todo
+        regs->rax = 0;
+        break;
     default:
         regs->rax = (uint64_t)-ENOSYS;
         write_serial_string("Unknown syscall index: ");

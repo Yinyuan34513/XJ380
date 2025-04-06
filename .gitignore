@@ -16,3 +16,4 @@ out/draw.o
 *.tags
 *.elf
 *.o
+*.xz
