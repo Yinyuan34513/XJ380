@@ -4,6 +4,8 @@
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
+    disable_intr();
+
     uint64_t lapicid = lapic_id();
     uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
 
@@ -17,6 +19,16 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
 
     write_serial_string("RIP = ");
     write_serial_hex(regs->rip);
+    write_serial_string("\n");
+
+    uint64_t fsbase = rdmsr(IA32_FS_BASE);
+    write_serial_string("FSBASE = ");
+    write_serial_hex(fsbase);
+    write_serial_string("\n");
+
+    uint64_t gsbase = rdmsr(IA32_GS_BASE);
+    write_serial_string("GSBASE = ");
+    write_serial_hex(gsbase);
     write_serial_string("\n");
 
     int scrx = fbc_addr->horizontal_resolution;
@@ -84,7 +96,6 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
 
     backtrace(regs);
 
-    disable_intr();
     while (1)
     {
         __asm__("pause");

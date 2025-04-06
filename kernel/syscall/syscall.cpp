@@ -103,7 +103,13 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_EXIT:
         regs->rax = (uint64_t)sys_exit(regs->rdi);
         break;
+    case SYS_EXIT_GROUP:
+        regs->rax = (uint64_t)sys_exit(regs->rdi);
+        break;
     case SYS_GETPID:
+        regs->rax = current_task->pid;
+        break;
+    case SYS_GETTID:
         regs->rax = current_task->pid;
         break;
     case SYS_WAIT4:
@@ -130,6 +136,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_RSEQ:
         // todo
+        regs->rax = 0;
+        break;
+
+    case SYS_RT_SIGPROCMASK:
         regs->rax = 0;
         break;
     default:

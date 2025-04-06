@@ -17,6 +17,8 @@
 #define SYS_MUNMAP 11
 #define SYS_BRK 12
 
+#define SYS_RT_SIGPROCMASK 14
+
 #define SYS_IOCTL 16
 
 #define SYS_READV 19
@@ -65,7 +67,11 @@
 
 #define SYS_ARCH_PRCTL 158
 
+#define SYS_GETTID 186
+
 #define SYS_SET_TID_ADDRESS 218
+
+#define SYS_EXIT_GROUP 231
 
 #define SYS_SET_ROBUST_LIST 273
 

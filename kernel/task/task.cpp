@@ -406,10 +406,8 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
         return -1;
     }
 
-    current_task->thread->fsbase = 0;
-    wrmsr(IA32_FS_BASE, current_task->thread->fsbase);
-    current_task->thread->gsbase = 0;
-    wrmsr(IA32_FS_BASE, current_task->thread->gsbase);
+    __asm__ __volatile__("movq  %0,     %%fs\n\t" ::"a"(current_task->thread->fs));
+    __asm__ __volatile__("movq  %0,     %%gs\n\t" ::"a"(current_task->thread->gs));
 
     strcpy(current_task->name, name);
 
@@ -747,6 +745,8 @@ uint64_t fork_copy_thread(uint64_t clone_flags, uint64_t stack_start, uint64_t s
     thd->rsp = (uint64_t)childregs;
     thd->fs = current_task->thread->fs;
     thd->gs = current_task->thread->gs;
+    thd->fsbase = current_task->thread->fsbase;
+    thd->gsbase = current_task->thread->gsbase;
 
     thd->elf_mappings = tsk->thread->elf_mappings;
 
@@ -852,20 +852,29 @@ extern "C" uint64_t do_exit(uint64_t code)
 {
     disable_intr();
 
-    fork_exit_mm(current_task);
-    fork_exit_thread(current_task);
+    write_serial_string("process ");
+    write_serial_dec(current_task->pid);
+    write_serial_string(" do_exit, code = ");
+    write_serial_dec(code);
+    write_serial_string("\n");
 
-    current_task->state = TASK_ZOMBIE;
-    for (int i = 0; i < MAX_FD_NUM; i++)
+    if (current_task->parent != &init_task_union.task)
     {
-        if (current_task->fds[i])
-        {
-            free(current_task->fds[i]);
-        }
-    }
-    list_del(&current_task->list);
+        fork_exit_mm(current_task);
+        fork_exit_thread(current_task);
 
-    current_task->flags |= NEED_SCHEDULE;
+        current_task->state = TASK_ZOMBIE;
+        for (int i = 0; i < MAX_FD_NUM; i++)
+        {
+            if (current_task->fds[i])
+            {
+                free(current_task->fds[i]);
+            }
+        }
+        list_del(&current_task->list);
+
+        current_task->flags |= NEED_SCHEDULE;
+    }
 
     while (1)
     {
