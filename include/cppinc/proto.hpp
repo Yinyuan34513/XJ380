@@ -39,6 +39,8 @@ UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT16* found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
+UINT16* found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
@@ -112,6 +114,7 @@ void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
  */
 // kernel/main.cpp
 extern const FrameBufferConfig *fbc_addr;
+extern SHEET_INFO *sht_img;
 
 // kernel/wsod.cpp
 // 异常处理

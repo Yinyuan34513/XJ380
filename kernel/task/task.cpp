@@ -320,6 +320,8 @@ uint64_t desktop_flusher(uint64_t arg)
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
 
+    sht_img = &shtinf;
+
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
     create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);

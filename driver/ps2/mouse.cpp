@@ -29,7 +29,44 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 
         if (ms_dec.btn & 0x01)
         {
+            // 左键按下
             ms_dec.left = true;
+            
+            if (!ms_dec.win_move_lock) 
+            {
+                ms_dec.sheet_id = found_sheet_movable(sht_img, mouse_x, mouse_y);
+                if (ms_dec.sheet_id == NULL) 
+                {
+                    // 点在了桌面或快捷栏上
+                    ms_dec.win_move_lock = false;
+                }
+                else 
+                {
+                    // 点在了窗口上
+                    ms_dec.win_move_lock = true;
+                    ms_dec.win_x_offset = mouse_x - getBX(sht_img, ms_dec.sheet_id);
+                    ms_dec.win_y_offset = mouse_y - getBY(sht_img, ms_dec.sheet_id);
+                }
+            }
+            else if (ms_dec.win_move_lock)
+            {
+                int his_x = getBX(sht_img, ms_dec.sheet_id);
+                int his_y = getBY(sht_img, ms_dec.sheet_id);
+                // 移动窗口
+                setBX(sht_img, ms_dec.sheet_id, mouse_x - ms_dec.win_x_offset);
+                setBY(sht_img, ms_dec.sheet_id, mouse_y - ms_dec.win_y_offset);
+                refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
+                                        getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
+                                        getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
+                refresh_part_sheet(sht_img, his_x, his_y,
+                                        his_x + getXsize(sht_img, ms_dec.sheet_id),
+                                        his_y + getYsize(sht_img, ms_dec.sheet_id));
+            }
+        }
+        else if ((ms_dec.btn & 0x01) == 0)
+        {
+            // 左键松开
+            ms_dec.win_move_lock = false;
         }
         if (ms_dec.btn & 0x02)
         {
@@ -123,6 +160,8 @@ void mouse_init()
     mouse_x = (get_hor() - 16) / 2;
     mouse_y = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
+
+    ms_dec.win_move_lock = false;
 }
 
 void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id)
