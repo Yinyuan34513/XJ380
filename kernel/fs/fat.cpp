@@ -595,6 +595,54 @@ int fat_lseek(VNode *node, uint64_t offset, uint64_t origin)
     return pos;
 }
 
+void fat_time_to_timespec(uint16_t date, uint16_t time, struct timespec *timespec)
+{
+    struct time_t tm = {0};
+
+    // 解析日期部分
+    tm.tm_year = ((date >> 9) & 0x7F) + 80; // 从1980开始
+    tm.tm_mon = ((date >> 5) & 0x0F) - 1;   // 0-11
+    tm.tm_mday = (date & 0x1F);             // 1-31
+
+    // 解析时间部分（如果提供了time参数）
+    if (time != 0)
+    {
+        tm.tm_hour = (time >> 11) & 0x1F; // 0-23
+        tm.tm_min = (time >> 5) & 0x3F;   // 0-59
+        tm.tm_sec = (time & 0x1F) * 2;    // 实际是秒/2
+    }
+    else
+    {
+        tm.tm_hour = 0;
+        tm.tm_min = 0;
+        tm.tm_sec = 0;
+    }
+
+    rtc_time_to_posix_timespec(&tm, timespec);
+}
+
+int fat_stat(VNode *node, struct stat *buf)
+{
+    FAT32_NodeInfo *info = (FAT32_NodeInfo *)node->desc;
+
+    buf->dev_id = info->dev;
+    buf->inode = 0;
+    buf->nlink = 0;
+    buf->mode = 0;
+    buf->uid = 0;
+    buf->gid = 0;
+    buf->rdev = info->dev;
+    buf->size = node->file_size;
+    buf->block_size = 512;
+    buf->blocks = (buf->size + buf->block_size - 1) / buf->block_size;
+
+    fat_time_to_timespec(info->write_date, info->write_time, &buf->atime);
+    fat_time_to_timespec(info->create_date, info->create_time, &buf->mtime);
+    fat_time_to_timespec(info->create_date, info->create_time, &buf->ctime);
+
+    return 0;
+}
+
 VNodeOps fat32_ops = {
     .lookup = fat_lookup,
     .super = fat_super,
@@ -606,6 +654,7 @@ VNodeOps fat32_ops = {
     .read = fat_read,
     .write = fat_write,
     .lseek = fat_lseek,
+    .stat = fat_stat,
 };
 
 void init_fat()

@@ -69,6 +69,28 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_CLOSE:
         regs->rax = (uint64_t)sys_close(regs->rdi);
         break;
+    case SYS_FSTAT:
+        regs->rax = (uint64_t)sys_fstat((uint32_t)regs->rdi, (struct stat *)regs->rsi);
+        break;
+    case SYS_IOCTL:
+        regs->rax = 0;
+        break;
+    case SYS_READV:
+    {
+        int fd = regs->rdi;
+        struct iovec *iovec = (struct iovec *)regs->rsi;
+        size_t count = regs->rdx;
+        regs->rax = sys_readv(fd, iovec, count);
+        break;
+    }
+    case SYS_WRITEV:
+    {
+        int fd = regs->rdi;
+        struct iovec *iovec = (struct iovec *)regs->rsi;
+        size_t count = regs->rdx;
+        regs->rax = sys_writev(fd, iovec, count);
+        break;
+    }
     case SYS_FORK:
         regs->rax = (uint64_t)sys_fork(regs);
         break;
@@ -80,6 +102,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_EXIT:
         regs->rax = (uint64_t)sys_exit(regs->rdi);
+        break;
+    case SYS_GETPID:
+        regs->rax = current_task->pid;
         break;
     case SYS_WAIT4:
         regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);

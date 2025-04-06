@@ -72,6 +72,7 @@ void parse_disk(int dev)
             write_serial_string("\n");
 
             partition_dev_t *part_dev = (partition_dev_t *)malloc(sizeof(partition_dev_t));
+            xmemset(part_dev, 0, sizeof(partition_dev_t));
             part_dev->parent_dev = dev;
             part_dev->entry = (GPTPartitionEntry *)malloc(sizeof(GPTPartitionEntry));
             xmemcpy(part_dev->entry, ent, sizeof(GPTPartitionEntry));

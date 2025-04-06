@@ -32,6 +32,7 @@
 // Drivers
 #include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/partition.h"
+#include "./global/kernel/driver/rtc.h"
 #include "./global/kernel/driver/pci.h"
 #include "./global/kernel/driver/msi.h"
 #include "./global/kernel/driver/ahci.h"

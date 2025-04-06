@@ -19,6 +19,9 @@
 
 #define SYS_IOCTL 16
 
+#define SYS_READV 19
+#define SYS_WRITEV 20
+
 #define SYS_PIPE 22
 
 #define SYS_MREMAP 25
@@ -72,56 +75,63 @@
 #define XAPI_OFFEST 380
 
 // P3.1
-#define XAPI_OUTPUT     381
-#define XAPI_INPUTW     382
-#define XAPI_INPUT      383
-#define XAPI_ENDLINE    384
-#define XAPI_PRINTLINE  385
+#define XAPI_OUTPUT 381
+#define XAPI_INPUTW 382
+#define XAPI_INPUT 383
+#define XAPI_ENDLINE 384
+#define XAPI_PRINTLINE 385
 
 // P3.2
-#define XAPI_OPEN_FILE  386
+#define XAPI_OPEN_FILE 386
 #define XAPI_CLOSE_FILE 387
 
 // P3.3（预留）
-#define XAPI_NULL_1     388
-#define XAPI_NULL_2     389
+#define XAPI_NULL_1 388
+#define XAPI_NULL_2 389
 
 // P4.1
-#define XAPI_CREATE_WINDOW      390
-#define XAPI_SET_WINDOW_TITLE   391
-#define XAPI_CLOSE_WINDOW       392
-#define XAPI_SET_ICON           393
+#define XAPI_CREATE_WINDOW 390
+#define XAPI_SET_WINDOW_TITLE 391
+#define XAPI_CLOSE_WINDOW 392
+#define XAPI_SET_ICON 393
 
 // P4.2
-#define XAPI_DRAW_POINT         394
-#define XAPI_DRAW_LINE          395
-#define XAPI_DRAW_RECT          396
-#define XAPI_DRAW_CIRCLE        397
-#define XAPI_DRAW_TEXT          398
+#define XAPI_DRAW_POINT 394
+#define XAPI_DRAW_LINE 395
+#define XAPI_DRAW_RECT 396
+#define XAPI_DRAW_CIRCLE 397
+#define XAPI_DRAW_TEXT 398
 
 // P4.3
-#define XAPI_DRAW_BMP           399
-#define XAPI_DRAW_PNG           400
+#define XAPI_DRAW_BMP 399
+#define XAPI_DRAW_PNG 400
 
 // P4.4
-#define XAPI_SET_MSH_PROCOR     401
+#define XAPI_SET_MSH_PROCOR 401
 
 // P4.5
-#define XAPI_READBUFFER         342
-#define XAPI_WRITEBUFFER        343
-#define XAPI_WRITEBUFFERA       344
+#define XAPI_READBUFFER 342
+#define XAPI_WRITEBUFFER 343
+#define XAPI_WRITEBUFFERA 344
 
 // P4.6
-#define XAPI_BUTTON             345
-#define XAPI_BUTTON_STYLE       346
+#define XAPI_BUTTON 345
+#define XAPI_BUTTON_STYLE 346
 
-
+struct iovec
+{
+    uint8_t *iov_base;
+    uint64_t len;
+};
 
 // Proto (POSIX Edition)
 int sys_read(uint32_t fd, uint8_t *buf, size_t count);
 int sys_write(uint32_t fd, uint8_t *buf, size_t count);
+int sys_readv(uint32_t fd, struct iovec *iovec, size_t count);
+int sys_writev(uint32_t fd, struct iovec *iovec, size_t count);
 int sys_open(const char *pathname, int flags, int mode);
 int sys_close(uint32_t fd);
+int sys_fstat(uint32_t fd, struct stat *stat);
 int sys_execve(struct X64_REGS *regs);
 int sys_exit(int status);
 int sys_fork(struct X64_REGS *regs);

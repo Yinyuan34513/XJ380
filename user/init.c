@@ -4,18 +4,19 @@
 
 int main(int argc, char *argv[], char *envp[])
 {
-    write(1, "init process is running!!!\n", 28);
+    printf("init process is running!!!\n");
 
     int pid = vfork();
     if (pid == 0)
     {
-        write(1, "child process is running!!!\n", 29);
+        printf("child process is running!!!\n");
         execve("/usr/shell.elf", NULL, NULL);
-        exit(-1);
+        while (1)
+            __asm__ __volatile__("pause");
     }
     else
     {
-        write(1, "parent process is running!!!\n", 30);
+        printf("parent process is running!!! child pid = %d\n", pid);
         while (1)
             __asm__ __volatile__("pause");
     }

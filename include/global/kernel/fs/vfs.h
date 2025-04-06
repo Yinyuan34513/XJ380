@@ -14,6 +14,31 @@ enum
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+struct timespec
+{
+    int64_t tv_sec;
+    int64_t tv_nsec;
+};
+
+struct stat
+{
+    uint64_t dev_id;
+    uint64_t inode;
+    uint64_t nlink;
+    uint32_t mode;
+    int32_t uid;
+    int32_t gid;
+    int64_t rdev;
+    int64_t size;
+    int64_t block_size;
+    uint64_t blocks;
+    struct timespec atime;
+    struct timespec mtime;
+    struct timespec ctime;
+
+    int8_t _pad[24];
+};
+
 struct v_node;
 
 typedef v_node VNode;
@@ -31,7 +56,7 @@ typedef struct
     int (*read)(VNode *file, uint8_t *addr, size_t offset, size_t size);
     int (*write)(VNode *file, uint8_t *addr, size_t offset, size_t size);
     int (*lseek)(VNode *node, uint64_t offset, uint64_t origin);
-    int (*stat)(VNode *file, VNode *node);
+    int (*stat)(VNode *file, struct stat *buf);
     int (*mkdir)(VNode *parent, const char *name, VNode *node);
     int (*creat)(VNode *parent, const char *name, VNode *node);
     int (*fmap)(VNode *file, size_t offset, size_t size);
@@ -76,6 +101,8 @@ typedef struct
     char *name;
     VNodeOps *ops;
 } FileSystem;
+
+void rtc_time_to_posix_timespec(struct time_t *time, struct timespec *spec);
 
 void init_vfs();
 

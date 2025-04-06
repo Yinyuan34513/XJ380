@@ -188,6 +188,24 @@ void mount_root()
     failed_to_mount_root();
 }
 
+void rtc_time_to_posix_timespec(struct time_t *time, struct timespec *spec)
+{
+    int year = time->tm_year + 1900;
+    int month = time->tm_mon + 1;
+
+    if (month <= 2)
+    {
+        year--;
+        month += 12;
+    }
+
+    int days = (365 * year) + (year / 4) - (year / 100) + (year / 400);
+    days += (30 * month + 3 * (month + 1) / 5 - 2) + time->tm_mday - 719561;
+
+    spec->tv_sec = days * 86400LL + time->tm_hour * 3600 + time->tm_min * 60 + time->tm_sec;
+    spec->tv_nsec = 0;
+}
+
 void init_vfs()
 {
     spin_init(&fs_op_lock);

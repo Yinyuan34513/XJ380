@@ -33,6 +33,154 @@ extern "C" uint64_t switch_to_kernel_stack()
     return (uint64_t)user_current[current_cpu_cpuid] + STACK_SIZE;
 }
 
+void cpu_halt()
+{
+    while (true)
+        __asm__ __volatile__("hlt");
+}
+
+bool stack_range(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t pd_idx, uint64_t pt_idx, uint64_t user_stack_start, uint64_t user_stack_end)
+{
+    uint64_t addr = pml4_idx << 39 | pdpt_idx << 30 | pd_idx << 21 | pt_idx << 12;
+    return user_stack_start <= addr && addr < user_stack_end;
+}
+
+// 抄limine的，这样会出问题吗？
+// 我说的出问题是什么意思，你应该知道
+// 如果会，那你就自己换个名字，换个写法，这样就可以了吧
+#define PT_FLAG_VALID ((uint64_t)1 << 0)
+#define PT_FLAG_WRITE ((uint64_t)1 << 1)
+#define PT_FLAG_USER ((uint64_t)1 << 2)
+#define PT_FLAG_LARGE ((uint64_t)1 << 7)
+#define PT_FLAG_NX ((uint64_t)1 << 63)
+#define PT_PADDR_MASK ((uint64_t)0xFFFFFFFFFFFFF000)
+
+uint64_t clone_page_table(uint64_t cr3_old, uint64_t clone_flags, uint64_t user_stack_start, uint64_t user_stack_end)
+{
+    uint64_t cr3_new = (uint64_t)PAGE_ALLOC.alloc_page(); // 就不判断申请失败的情况了，不然有点麻烦，你自己加上吧
+    if (cr3_new == 0)
+    {
+        write_serial_string("Cannot clone page table: no page can be allocated");
+        return cr3_old;
+    }
+    // 4层嵌套for循环，简单粗暴
+    // 你当然可以用算法优化一下的
+    // 我就这样写了，就是给你提供个思路
+    // 具体要怎么写，你自己看吧
+    uint64_t *pml4_old = (uint64_t *)convert_physical_to_virtual(cr3_old & PT_PADDR_MASK);
+    uint64_t *pml4_new = (uint64_t *)convert_physical_to_virtual(cr3_new & PT_PADDR_MASK);
+    xmemset(pml4_new, 0, PAGE_SIZE);
+
+    // 2048，半个页，后半个页，是内核空间，内核空间直接指针指过去就好，注意释放页表的时候不要给内核空间的页表也释放了
+    xmemcpy(pml4_new + 256, pml4_old + 256, PAGE_SIZE / 2); // 我就在代码里面假设是4k的页了，如果你认为这不妥，那就自己给这些常量换成宏定义
+
+    // for(size_t pml4_idx = 0; pml4_idx < 512; ++pml4_idx) {
+    for (size_t pml4_idx = 0; pml4_idx < 256; ++pml4_idx)
+    { // 256 没问题，这里只复制用户空间
+        uint64_t pml4e_old = pml4_old[pml4_idx];
+        bool pml4e_old_valid = pml4e_old & PT_FLAG_VALID;
+        bool pml4e_old_write = pml4e_old & PT_FLAG_WRITE;
+        bool pml4e_old_user = pml4e_old & PT_FLAG_USER;
+        // bool pml4e_old_large = pml4e_old & PT_FLAG_LARGE;
+        if (!pml4e_old_valid)
+            continue; // 这里给你挖上一个坑，不知道你未来会不会掉进去，^_^
+        // if(pml4e_old_large) cpu_halt();
+
+        uint64_t pml4e_new = (uint64_t)PAGE_ALLOC.alloc_page();
+        pml4e_new |= PT_FLAG_VALID;
+        pml4e_new |= pml4e_old_write ? PT_FLAG_WRITE : 0;
+        pml4e_new |= pml4e_old_user ? PT_FLAG_USER : 0;
+        pml4_new[pml4_idx] = pml4e_new;
+
+        uint64_t *pdpt_old = (uint64_t *)convert_physical_to_virtual(pml4e_old & PT_PADDR_MASK);
+        uint64_t *pdpt_new = (uint64_t *)convert_physical_to_virtual(pml4e_new & PT_PADDR_MASK);
+        xmemset(pdpt_new, 0, PAGE_SIZE);
+        for (size_t pdpt_idx = 0; pdpt_idx < 512; ++pdpt_idx)
+        {
+            uint64_t pdpte_old = pdpt_old[pdpt_idx];
+            bool pdpte_old_valid = pdpte_old & PT_FLAG_VALID;
+            bool pdpte_old_write = pdpte_old & PT_FLAG_WRITE;
+            bool pdpte_old_user = pdpte_old & PT_FLAG_USER;
+            bool pdpte_old_large = pdpte_old & PT_FLAG_LARGE;
+            if (!pdpte_old_valid)
+                continue;
+
+            // 1G的页，没见过，不会写代码
+            // 虽然说我感觉是我感觉的那个样子
+            // 这里就不写代码了，遇到1G的页就直接停机
+            // 如果真的遇到了1G的页，我倒是还真想跟一下代码，研究研究
+
+            // 嗯，现在大概是遇到了，至少是遇到2M的页了，但是要写这个代码吗？
+            // 之后再说吧
+            if (pdpte_old_large)
+                cpu_halt();
+
+            uint64_t pdpte_new = (uint64_t)PAGE_ALLOC.alloc_page();
+            pdpte_new |= PT_FLAG_VALID;
+            pdpte_new |= pdpte_old_write ? PT_FLAG_WRITE : 0;
+            pdpte_new |= pdpte_old_user ? PT_FLAG_USER : 0;
+            pdpt_new[pdpt_idx] = pdpte_new;
+
+            uint64_t *pd_old = (uint64_t *)convert_physical_to_virtual(pdpte_old & PT_PADDR_MASK);
+            uint64_t *pd_new = (uint64_t *)convert_physical_to_virtual(pdpte_new & PT_PADDR_MASK);
+            xmemset(pd_new, 0, PAGE_SIZE);
+            for (size_t pd_idx = 0; pd_idx < 512; ++pd_idx)
+            {
+                uint64_t pde_old = pd_old[pd_idx];
+                bool pde_old_valid = pde_old & PT_FLAG_VALID;
+                bool pde_old_write = pde_old & PT_FLAG_WRITE;
+                bool pde_old_user = pde_old & PT_FLAG_USER;
+                bool pde_old_large = pde_old & PT_FLAG_LARGE;
+                if (!pde_old_valid)
+                    continue;
+
+                // 现在是用户空间了，用户空间有2M的页吗？
+                // 不知道
+                // 还是一样的，等遇到了再说吧，^_^
+                if (pde_old_large)
+                    cpu_halt(); // 2M page
+
+                uint64_t pde_new = (uint64_t)PAGE_ALLOC.alloc_page();
+                pde_new |= PT_FLAG_VALID;
+                pde_new |= pde_old_write ? PT_FLAG_WRITE : 0;
+                pde_new |= pde_old_user ? PT_FLAG_USER : 0;
+                pd_new[pd_idx] = pde_new;
+
+                uint64_t *pt_old = (uint64_t *)convert_physical_to_virtual(pde_old & PT_PADDR_MASK);
+                uint64_t *pt_new = (uint64_t *)convert_physical_to_virtual(pde_new & PT_PADDR_MASK);
+                xmemset(pt_new, 0, PAGE_SIZE);
+                for (size_t pt_idx = 0; pt_idx < 512; ++pt_idx)
+                {
+                    uint64_t pte_old = pt_old[pt_idx];
+                    bool pte_old_valid = pte_old & PT_FLAG_VALID;
+                    bool pte_old_write = pte_old & PT_FLAG_WRITE;
+                    bool pte_old_user = pte_old & PT_FLAG_USER;
+                    bool pte_old_large = pte_old & PT_FLAG_LARGE;
+                    if (!pte_old_valid)
+                        continue;
+
+                    uint64_t *page_old = (uint64_t *)convert_physical_to_virtual(pte_old & PT_PADDR_MASK);
+                    if (clone_flags & CLONE_VM || stack_range(pml4_idx, pdpt_idx, pd_idx, pt_idx, user_stack_start, user_stack_end))
+                    {
+                        uint64_t pte_new = (uint64_t)PAGE_ALLOC.alloc_page();
+                        pte_new |= PT_FLAG_VALID;
+                        pte_new |= pte_old_write ? PT_FLAG_WRITE : 0;
+                        pte_new |= pte_old_user ? PT_FLAG_USER : 0;
+                        pt_new[pt_idx] = pte_new;
+
+                        uint64_t *page_old = (uint64_t *)convert_physical_to_virtual(pte_old & PT_PADDR_MASK);
+                        uint64_t *page_new = (uint64_t *)convert_physical_to_virtual(pte_new & PT_PADDR_MASK);
+                        xmemcpy(page_new, page_old, PAGE_SIZE);
+                    }
+                    else
+                        pt_new[pt_idx] = pte_old;
+                }
+            }
+        }
+    }
+    return cr3_new;
+}
+
 uint64_t idle_entry(uint64_t arg)
 {
     while (1)
@@ -147,7 +295,8 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *
 
     // 设置并映射用户栈
     uint64_t stack_start_addr = task->mm->start_stack - STACK_SIZE;
-    mapper.map_range(stack_start_addr, 0, STACK_SIZE + PAGE_SIZE, 0x7); // 用户栈可读可写可执行
+    mapper.map_range(stack_start_addr, 0, STACK_SIZE + STACK_SIZE, 0x7); // 用户栈可读可写可执行
+    xmemset((void *)stack_start_addr, 0, STACK_SIZE);
     flush_tlb();
 
     return 0;
@@ -256,6 +405,11 @@ extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *arg
         write_serial_string("\n");
         return -1;
     }
+
+    current_task->thread->fsbase = 0;
+    wrmsr(IA32_FS_BASE, current_task->thread->fsbase);
+    current_task->thread->gsbase = 0;
+    wrmsr(IA32_FS_BASE, current_task->thread->gsbase);
 
     strcpy(current_task->name, name);
 
@@ -525,154 +679,6 @@ uint64_t alloc_cpu_id()
     }
 
     return retval;
-}
-
-void cpu_halt()
-{
-    while (true)
-        __asm__ __volatile__("hlt");
-}
-
-bool stack_range(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t pd_idx, uint64_t pt_idx, uint64_t user_stack_start, uint64_t user_stack_end)
-{
-    uint64_t addr = pml4_idx << 39 | pdpt_idx << 30 | pd_idx << 21 | pt_idx << 12;
-    return user_stack_start <= addr && addr < user_stack_end;
-}
-
-// 抄limine的，这样会出问题吗？
-// 我说的出问题是什么意思，你应该知道
-// 如果会，那你就自己换个名字，换个写法，这样就可以了吧
-#define PT_FLAG_VALID ((uint64_t)1 << 0)
-#define PT_FLAG_WRITE ((uint64_t)1 << 1)
-#define PT_FLAG_USER ((uint64_t)1 << 2)
-#define PT_FLAG_LARGE ((uint64_t)1 << 7)
-#define PT_FLAG_NX ((uint64_t)1 << 63)
-#define PT_PADDR_MASK ((uint64_t)0xFFFFFFFFFFFFF000)
-
-uint64_t clone_page_table(uint64_t cr3_old, uint64_t clone_flags, uint64_t user_stack_start, uint64_t user_stack_end)
-{
-    uint64_t cr3_new = (uint64_t)PAGE_ALLOC.alloc_page(); // 就不判断申请失败的情况了，不然有点麻烦，你自己加上吧
-    if (cr3_new == 0)
-    {
-        write_serial_string("Cannot clone page table: no page can be allocated");
-        return cr3_old;
-    }
-    // 4层嵌套for循环，简单粗暴
-    // 你当然可以用算法优化一下的
-    // 我就这样写了，就是给你提供个思路
-    // 具体要怎么写，你自己看吧
-    uint64_t *pml4_old = (uint64_t *)convert_physical_to_virtual(cr3_old & PT_PADDR_MASK);
-    uint64_t *pml4_new = (uint64_t *)convert_physical_to_virtual(cr3_new & PT_PADDR_MASK);
-    xmemset(pml4_new, 0, PAGE_SIZE);
-
-    // 2048，半个页，后半个页，是内核空间，内核空间直接指针指过去就好，注意释放页表的时候不要给内核空间的页表也释放了
-    xmemcpy(pml4_new + 256, pml4_old + 256, PAGE_SIZE / 2); // 我就在代码里面假设是4k的页了，如果你认为这不妥，那就自己给这些常量换成宏定义
-
-    // for(size_t pml4_idx = 0; pml4_idx < 512; ++pml4_idx) {
-    for (size_t pml4_idx = 0; pml4_idx < 256; ++pml4_idx)
-    { // 256 没问题，这里只复制用户空间
-        uint64_t pml4e_old = pml4_old[pml4_idx];
-        bool pml4e_old_valid = pml4e_old & PT_FLAG_VALID;
-        bool pml4e_old_write = pml4e_old & PT_FLAG_WRITE;
-        bool pml4e_old_user = pml4e_old & PT_FLAG_USER;
-        // bool pml4e_old_large = pml4e_old & PT_FLAG_LARGE;
-        if (!pml4e_old_valid)
-            continue; // 这里给你挖上一个坑，不知道你未来会不会掉进去，^_^
-        // if(pml4e_old_large) cpu_halt();
-
-        uint64_t pml4e_new = (uint64_t)PAGE_ALLOC.alloc_page();
-        pml4e_new |= PT_FLAG_VALID;
-        pml4e_new |= pml4e_old_write ? PT_FLAG_WRITE : 0;
-        pml4e_new |= pml4e_old_user ? PT_FLAG_USER : 0;
-        pml4_new[pml4_idx] = pml4e_new;
-
-        uint64_t *pdpt_old = (uint64_t *)convert_physical_to_virtual(pml4e_old & PT_PADDR_MASK);
-        uint64_t *pdpt_new = (uint64_t *)convert_physical_to_virtual(pml4e_new & PT_PADDR_MASK);
-        xmemset(pdpt_new, 0, PAGE_SIZE);
-        for (size_t pdpt_idx = 0; pdpt_idx < 512; ++pdpt_idx)
-        {
-            uint64_t pdpte_old = pdpt_old[pdpt_idx];
-            bool pdpte_old_valid = pdpte_old & PT_FLAG_VALID;
-            bool pdpte_old_write = pdpte_old & PT_FLAG_WRITE;
-            bool pdpte_old_user = pdpte_old & PT_FLAG_USER;
-            bool pdpte_old_large = pdpte_old & PT_FLAG_LARGE;
-            if (!pdpte_old_valid)
-                continue;
-
-            // 1G的页，没见过，不会写代码
-            // 虽然说我感觉是我感觉的那个样子
-            // 这里就不写代码了，遇到1G的页就直接停机
-            // 如果真的遇到了1G的页，我倒是还真想跟一下代码，研究研究
-
-            // 嗯，现在大概是遇到了，至少是遇到2M的页了，但是要写这个代码吗？
-            // 之后再说吧
-            if (pdpte_old_large)
-                cpu_halt();
-
-            uint64_t pdpte_new = (uint64_t)PAGE_ALLOC.alloc_page();
-            pdpte_new |= PT_FLAG_VALID;
-            pdpte_new |= pdpte_old_write ? PT_FLAG_WRITE : 0;
-            pdpte_new |= pdpte_old_user ? PT_FLAG_USER : 0;
-            pdpt_new[pdpt_idx] = pdpte_new;
-
-            uint64_t *pd_old = (uint64_t *)convert_physical_to_virtual(pdpte_old & PT_PADDR_MASK);
-            uint64_t *pd_new = (uint64_t *)convert_physical_to_virtual(pdpte_new & PT_PADDR_MASK);
-            xmemset(pd_new, 0, PAGE_SIZE);
-            for (size_t pd_idx = 0; pd_idx < 512; ++pd_idx)
-            {
-                uint64_t pde_old = pd_old[pd_idx];
-                bool pde_old_valid = pde_old & PT_FLAG_VALID;
-                bool pde_old_write = pde_old & PT_FLAG_WRITE;
-                bool pde_old_user = pde_old & PT_FLAG_USER;
-                bool pde_old_large = pde_old & PT_FLAG_LARGE;
-                if (!pde_old_valid)
-                    continue;
-
-                // 现在是用户空间了，用户空间有2M的页吗？
-                // 不知道
-                // 还是一样的，等遇到了再说吧，^_^
-                if (pde_old_large)
-                    cpu_halt(); // 2M page
-
-                uint64_t pde_new = (uint64_t)PAGE_ALLOC.alloc_page();
-                pde_new |= PT_FLAG_VALID;
-                pde_new |= pde_old_write ? PT_FLAG_WRITE : 0;
-                pde_new |= pde_old_user ? PT_FLAG_USER : 0;
-                pd_new[pd_idx] = pde_new;
-
-                uint64_t *pt_old = (uint64_t *)convert_physical_to_virtual(pde_old & PT_PADDR_MASK);
-                uint64_t *pt_new = (uint64_t *)convert_physical_to_virtual(pde_new & PT_PADDR_MASK);
-                xmemset(pt_new, 0, PAGE_SIZE);
-                for (size_t pt_idx = 0; pt_idx < 512; ++pt_idx)
-                {
-                    uint64_t pte_old = pt_old[pt_idx];
-                    bool pte_old_valid = pte_old & PT_FLAG_VALID;
-                    bool pte_old_write = pte_old & PT_FLAG_WRITE;
-                    bool pte_old_user = pte_old & PT_FLAG_USER;
-                    bool pte_old_large = pte_old & PT_FLAG_LARGE;
-                    if (!pte_old_valid)
-                        continue;
-
-                    uint64_t *page_old = (uint64_t *)convert_physical_to_virtual(pte_old & PT_PADDR_MASK);
-                    if (clone_flags & CLONE_VM || stack_range(pml4_idx, pdpt_idx, pd_idx, pt_idx, user_stack_start, user_stack_end))
-                    {
-                        uint64_t pte_new = (uint64_t)PAGE_ALLOC.alloc_page();
-                        pte_new |= PT_FLAG_VALID;
-                        pte_new |= pte_old_write ? PT_FLAG_WRITE : 0;
-                        pte_new |= pte_old_user ? PT_FLAG_USER : 0;
-                        pt_new[pt_idx] = pte_new;
-
-                        uint64_t *page_old = (uint64_t *)convert_physical_to_virtual(pte_old & PT_PADDR_MASK);
-                        uint64_t *page_new = (uint64_t *)convert_physical_to_virtual(pte_new & PT_PADDR_MASK);
-                        xmemcpy(page_new, page_old, PAGE_SIZE);
-                    }
-                    else
-                        pt_new[pt_idx] = pte_old;
-                }
-            }
-        }
-    }
-    return cr3_new;
 }
 
 spinlock_t do_fork_lock;

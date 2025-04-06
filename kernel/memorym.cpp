@@ -162,6 +162,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     write_serial_hex(page_count);
     write_serial_string("\n");
     uint8_t *bitmap = (uint8_t *)malloc(bitmap_size);
+    xmemset(bitmap, 0xFF, bitmap_size);
     PAGE_ALLOC.init((void *)page_start, page_count, bitmap);
 
     // 输出合并后的
