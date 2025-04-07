@@ -239,7 +239,7 @@ char *Dec2Char(unsigned long long dec)
     int i = 0, j, k;                                       // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
 
     // 获取要转换的整数的绝对值
-    if (radix == 10 && dec < 0) // 要转换成十进制数并且是负数
+    if (radix == 10 && (long long)dec < 0) // 要转换成十进制数并且是负数
     {
         unum = (unsigned)-dec; // 将num的绝对值赋给unum
         str[i++] = '-';        // 在字符串最前面设置为'-'号，并且索引加1

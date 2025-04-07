@@ -12,6 +12,10 @@ typedef struct
 	bool left;
 	bool center;
 	bool right;
+	bool win_move_lock;
+	int win_x_offset;
+	int win_y_offset;
+	UINT16 *sheet_id;
 } mouse_dec;
 
 #define KB_SEND2MOUSE 0xd4

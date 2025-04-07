@@ -1,8 +1,36 @@
 #include "../include/include.h"
+#include "../include/backtrace.h"
 #include "./build_settings.h"
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
+    disable_intr();
+
+    uint64_t lapicid = lapic_id();
+    uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
+
+    write_serial_string("CPU ID = ");
+    write_serial_dec(cpu_id);
+    write_serial_string("\n");
+
+    write_serial_string("RSP = ");
+    write_serial_hex(regs->rsp);
+    write_serial_string("\n");
+
+    write_serial_string("RIP = ");
+    write_serial_hex(regs->rip);
+    write_serial_string("\n");
+
+    uint64_t fsbase = rdmsr(IA32_FS_BASE);
+    write_serial_string("FSBASE = ");
+    write_serial_hex(fsbase);
+    write_serial_string("\n");
+
+    uint64_t gsbase = rdmsr(IA32_GS_BASE);
+    write_serial_string("GSBASE = ");
+    write_serial_hex(gsbase);
+    write_serial_string("\n");
+
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
@@ -64,10 +92,13 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
     write_serial_string("WSOD: ");
     write_serial_string(err_code);
+    write_serial_string("\n");
+
+    backtrace(regs);
+
     while (1)
     {
-        disable_intr();
-        __asm__("hlt");
+        __asm__("pause");
     };
 }
 
@@ -113,10 +144,11 @@ void no_regs_wsod(const char *err_code)
     WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
     write_serial_string("WSOD: ");
     write_serial_string(err_code);
+
+    disable_intr();
     while (1)
     {
-        disable_intr();
-        __asm__("hlt");
+        __asm__ __volatile__("pause");
     };
 }
 
@@ -130,6 +162,25 @@ void no_regs_wsod(const char *err_code)
 void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
 {
     do_wsod("UNEXPECT_INTRRUPT", regs);
+}
+
+void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
+{
+    __asm__ __volatile__(
+        "movq %cr0, %rax\n\t"
+        "and $0xFFF3, %ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+        "or $0x2, %ax\n\t"        // set coprocessor monitoring  CR0.MP
+        "movq %rax, %cr0\n\t");
+}
+
+void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)
+{
+    do_wsod("DIVIDE_ERROR", regs);
+}
+
+void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code)
+{
+    do_wsod("UNDEFINED_OPCODE", regs);
 }
 
 // 不可屏蔽中断
@@ -153,15 +204,55 @@ void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code)
 // 一般保护性异常
 void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code)
 {
-    write_serial_string("ERROR CODE:");
-    write_serial_dec(error_code);
-    write_serial_string("\n");
+    if (error_code & 0x01)
+        write_serial_string(
+            "The exception occurred during delivery of an event external to the program,such as an interrupt "
+            "or an earlier exception.\n");
+
+    if (error_code & 0x02)
+        write_serial_string("Refers to a gate descriptor in the IDT;\n");
+    else
+        write_serial_string("Refers to a descriptor in the GDT or the current LDT;\n");
+
+    if ((error_code & 0x02) == 0)
+        if (error_code & 0x04)
+            write_serial_string("Refers to a segment or gate descriptor in the LDT;\n");
+        else
+            write_serial_string("Refers to a descriptor in the current GDT;\n");
+
     do_wsod("GENERAL_PROTECTION", regs);
 }
 
 // 页错误
 void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code)
 {
+    if (!(error_code & 0x01))
+        write_serial_string("Page Not-Present,\t");
+
+    if (error_code & 0x02)
+        write_serial_string("Write Cause Fault,\t");
+    else
+        write_serial_string("Read Cause Fault,\t");
+
+    if (error_code & 0x04)
+        write_serial_string("Fault in user(3)\t");
+    else
+        write_serial_string("Fault in supervisor(0,1,2)\t");
+
+    if (error_code & 0x08)
+        write_serial_string(",Reserved Bit Cause Fault\t");
+
+    if (error_code & 0x10)
+        write_serial_string(",Instruction fetch Cause Fault");
+
+    write_serial_string("\n");
+
+    uint64_t cr2;
+    __asm__("mov %%cr2, %0" : "=r"(cr2));
+    write_serial_string("cr2 = ");
+    write_serial_hex(cr2);
+    write_serial_string("\n");
+
     do_wsod("PAGE_FAULT", regs);
 }
 

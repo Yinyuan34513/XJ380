@@ -2,12 +2,11 @@
 #include "../../graphics/mouse.hpp"
 
 mouse_dec ms_dec;
-int mouse_x;
-int mouse_y;
+int mouse_x = 0;
+int mouse_y = 0;
 
 extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 {
-    send_eoi();
     UINT8 data = inb(PORT_KB_DATA);
 
     if (mousedecode(data))
@@ -29,7 +28,44 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 
         if (ms_dec.btn & 0x01)
         {
+            // 左键按下
             ms_dec.left = true;
+
+            if (!ms_dec.win_move_lock)
+            {
+                ms_dec.sheet_id = found_sheet_movable(sht_img, mouse_x, mouse_y);
+                if (ms_dec.sheet_id == NULL)
+                {
+                    // 点在了桌面或快捷栏上
+                    ms_dec.win_move_lock = false;
+                }
+                else
+                {
+                    // 点在了窗口上
+                    ms_dec.win_move_lock = true;
+                    ms_dec.win_x_offset = mouse_x - getBX(sht_img, ms_dec.sheet_id);
+                    ms_dec.win_y_offset = mouse_y - getBY(sht_img, ms_dec.sheet_id);
+                }
+            }
+            else if (ms_dec.win_move_lock)
+            {
+                int his_x = getBX(sht_img, ms_dec.sheet_id);
+                int his_y = getBY(sht_img, ms_dec.sheet_id);
+                // 移动窗口
+                setBX(sht_img, ms_dec.sheet_id, mouse_x - ms_dec.win_x_offset);
+                setBY(sht_img, ms_dec.sheet_id, mouse_y - ms_dec.win_y_offset);
+                refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
+                                   getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
+                                   getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
+                refresh_part_sheet(sht_img, his_x, his_y,
+                                   his_x + getXsize(sht_img, ms_dec.sheet_id),
+                                   his_y + getYsize(sht_img, ms_dec.sheet_id));
+            }
+        }
+        else if ((ms_dec.btn & 0x01) == 0)
+        {
+            // 左键松开
+            ms_dec.win_move_lock = false;
         }
         if (ms_dec.btn & 0x02)
         {
@@ -46,6 +82,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
     // write_serial_string("mouse Y:");
     // write_serial_dec(mouse_y);
     // write_serial_string("\n");
+    send_eoi();
 }
 
 bool mousedecode(UINT8 data)
@@ -101,30 +138,30 @@ int get_mouse_y()
     return mouse_y;
 }
 
-void Mouse_init()
+void mouse_init()
 {
     wait_KB_write();
     outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
-    for (int i = 0; i < 1000; i++)
-        for (int j = 0; j < 1000; j++)
-            __asm__ volatile("nop");
+
+    delay_ms(100);
 
     wait_KB_write();
     outb(PORT_KB_CMD, KB_SEND2MOUSE);
     wait_KB_write();
     outb(PORT_KB_DATA, MOUSE_EN);
 
-    for (int i = 0; i < 1000; i++)
-        for (int j = 0; j < 1000; j++)
-            __asm__ volatile("nop");
+    delay_ms(100);
 
     wait_KB_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_write();
     outb(PORT_KB_DATA, KB_INIT_MODE);
+
     mouse_x = (get_hor() - 16) / 2;
     mouse_y = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
+
+    ms_dec.win_move_lock = false;
 }
 
 void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id)

@@ -40,6 +40,9 @@ void timer_handler();
 void keyboard_handler();
 void mouse_handler();
 
+// 系统调用
+void syscall_handler();
+
 #include "../../stdint.h"
 
 typedef struct

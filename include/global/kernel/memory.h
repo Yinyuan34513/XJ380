@@ -47,7 +47,7 @@ typedef struct
 
 // 默认认为分页大小是 4k
 // 如果是 2M 请调整为 2097152
-#define PAGE_SIZE ((size_t)4096)
+#define PAGE_SIZE ((size_t)4096UL)
 
 #define SIZE_4k ((size_t)4096)
 #define SIZE_2M ((size_t)(2 * 1024 * 1024))
@@ -294,5 +294,29 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+static inline uint64_t convert_physical_to_virtual(uint64_t physical_addr)
+{
+  return physical_addr + 0xFFFF800000000000;
+}
+
+static inline uint64_t convert_virtual_to_physical(uint64_t virtual_addr)
+{
+  return virtual_addr - 0xFFFF800000000000;
+}
+
+#define flush_tlb()             \
+  do                            \
+  {                             \
+    uint64_t tmp;               \
+    io_mfence();                \
+    __asm__ __volatile__(       \
+        "movq %%cr3, %0\n\t"    \
+        "movq %0, %%cr3\n\t"    \
+        : "=r"(tmp)::"memory"); \
+                                \
+  } while (0);
+
+uint64_t mm_do_brk(uint64_t start, uint64_t size);
 
 #endif

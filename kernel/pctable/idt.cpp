@@ -1,8 +1,83 @@
 #include "../../include/include.h"
 
-__attribute__((aligned(0x10)))
-IDT_GATE_TYPE idt_gate[IDT_SIZE];
+IDT_GATE_TYPE idt_gate[IDT_SIZE] __attribute__((__aligned__(PAGE_SIZE)));
 IDTR_TYPE idt_ptr;
+
+// // Timer
+// // Keyboard
+// // Mouse
+BUILD_IRQ(0x23);
+BUILD_IRQ(0x24);
+BUILD_IRQ(0x25);
+BUILD_IRQ(0x26);
+BUILD_IRQ(0x27);
+BUILD_IRQ(0x28);
+BUILD_IRQ(0x29);
+BUILD_IRQ(0x2a);
+BUILD_IRQ(0x2b);
+BUILD_IRQ(0x2c);
+BUILD_IRQ(0x2d);
+BUILD_IRQ(0x2e);
+BUILD_IRQ(0x2f);
+BUILD_IRQ(0x30);
+BUILD_IRQ(0x31);
+BUILD_IRQ(0x32);
+BUILD_IRQ(0x33);
+BUILD_IRQ(0x34);
+BUILD_IRQ(0x35);
+BUILD_IRQ(0x36);
+BUILD_IRQ(0x37);
+BUILD_IRQ(0x38);
+BUILD_IRQ(0x39);
+BUILD_IRQ(0x40);
+BUILD_IRQ(0x41);
+BUILD_IRQ(0x42);
+BUILD_IRQ(0x43);
+BUILD_IRQ(0x44);
+BUILD_IRQ(0x45);
+BUILD_IRQ(0x46);
+BUILD_IRQ(0x47);
+BUILD_IRQ(0x48);
+BUILD_IRQ(0x49);
+BUILD_IRQ(0x50);
+
+void (*interrupt[34])(void) =
+    {
+        IRQ0x23_interrupt,
+        IRQ0x24_interrupt,
+        IRQ0x25_interrupt,
+        IRQ0x26_interrupt,
+        IRQ0x27_interrupt,
+        IRQ0x28_interrupt,
+        IRQ0x29_interrupt,
+        IRQ0x2a_interrupt,
+        IRQ0x2b_interrupt,
+        IRQ0x2c_interrupt,
+        IRQ0x2d_interrupt,
+        IRQ0x2e_interrupt,
+        IRQ0x2f_interrupt,
+        IRQ0x30_interrupt,
+        IRQ0x31_interrupt,
+        IRQ0x32_interrupt,
+        IRQ0x33_interrupt,
+        IRQ0x34_interrupt,
+        IRQ0x35_interrupt,
+        IRQ0x36_interrupt,
+        IRQ0x37_interrupt,
+        IRQ0x38_interrupt,
+        IRQ0x39_interrupt,
+        IRQ0x40_interrupt,
+        IRQ0x41_interrupt,
+        IRQ0x42_interrupt,
+        IRQ0x43_interrupt,
+        IRQ0x44_interrupt,
+        IRQ0x45_interrupt,
+        IRQ0x46_interrupt,
+        IRQ0x47_interrupt,
+        IRQ0x48_interrupt,
+        IRQ0x49_interrupt,
+        IRQ0x50_interrupt,
+};
 
 void init_8259A();
 
@@ -46,7 +121,13 @@ void init_idt()
     init_idt_desc(33, X86_64_INTR_GATE, keyboard_handler, RING0);
     init_idt_desc(34, X86_64_INTR_GATE, mouse_handler, RING0);
 
+    for (int i = 35; i < 35 + 34; i++)
+    {
+        init_idt_desc(i, X86_64_INTR_GATE, interrupt[i - 35], RING0);
+    }
+
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
     write_serial_string("IDT Initialize Success.\n");
 }
 

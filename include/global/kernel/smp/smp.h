@@ -4,7 +4,7 @@
 #include "../../stdint.h"
 #include "../apic/apic.h"
 
-#define MAX_CPU_NUM 32
+#define MAX_CPU_NUM 128
 
 class SMP
 {
@@ -12,6 +12,7 @@ public:
     SMP();
     ~SMP();
     void ap_startup(uint64_t madt_addr);
+    int ap_count();
 
 private:
     int apu_count;
@@ -19,5 +20,7 @@ private:
 };
 
 extern SMP SMP_MANAGER;
+
+uint64_t get_cpuid_by_lapicid(uint64_t lapicid);
 
 #endif

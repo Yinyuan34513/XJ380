@@ -6,9 +6,12 @@
 #define CLONE_FS (1 << 0)
 #define CLONE_FILES (1 << 1)
 #define CLONE_SIGNAL (1 << 2)
+#define CLONE_VM (1 << 3)
 
-// stack size 32K
-#define STACK_SIZE 32768
+// stack size 16K
+// UL一定要加，否则获取current_task之后读取值的时候会出错
+#define STACK_SIZE 16384UL
+#define USER_STACK_START 0x6ffff0a00000UL
 
 #define TASK_RUNNING (1 << 0)
 #define TASK_INTERRUPTIBLE (1 << 1)
@@ -16,9 +19,16 @@
 #define TASK_ZOMBIE (1 << 3)
 #define TASK_STOPPED (1 << 4)
 
+struct elf_mapping_space
+{
+    uint64_t load_start;
+    uint64_t load_end;
+    uint64_t load_phys_start;
+};
+
 struct mm_struct
 {
-    uint64_t *pgd; // page table point
+    uint64_t *pgd; // page table pointer
 
     uint64_t start_code, end_code;
     uint64_t start_data, end_data;
@@ -29,6 +39,8 @@ struct mm_struct
 
 struct thread_struct
 {
+    struct elf_mapping_space *elf_mappings;
+
     uint64_t rsp0; // in tss
 
     uint64_t rip;
@@ -37,13 +49,37 @@ struct thread_struct
     uint64_t fs;
     uint64_t gs;
 
+    uint64_t fsbase;
+    uint64_t gsbase;
+
     uint64_t cr2;
     uint64_t trap_nr;
     uint64_t error_code;
 };
 
+typedef struct
+{
+    uint16_t fcw;
+    uint16_t fsw;
+    uint16_t ftw;
+    uint16_t fop;
+    uint64_t word2;
+    uint64_t word3;
+    uint32_t mxscr;
+    uint32_t mxcsr_mask;
+    uint64_t mm[16];
+    uint64_t xmm[32];
+    uint64_t rest[12];
+} __ALIGN16__ fpu_context;
+
+#define TASK_NAME_MAX 64
+
+#define MAX_FD_NUM 16
+
 struct task_struct
 {
+    char name[TASK_NAME_MAX];
+
     volatile long state;
     uint64_t flags;
     long preempt_count;
@@ -55,12 +91,28 @@ struct task_struct
 
     struct List list;
 
-    uint64_t addr_limit; /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/
-    /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
+    fpu_context *fpu;
+
+    uint64_t addr_limit; /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/ /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
+
     long pid;
     long priority;
     long vrun_time;
+
+    struct VFile *fds[MAX_FD_NUM];
+    struct v_node *cwd_node;
+    int fd_count;
+
+    wait_queue_t wait_childexit;
+    uint64_t exit_code;
+
+    struct task_struct *next;
+    struct task_struct *parent;
 };
+
+#define IA32_FS_BASE 0xc0000100
+
+#define IA32_GS_BASE 0xc0000101
 
 ///////struct task_struct->flags:
 
@@ -71,7 +123,7 @@ union task_union
 {
     struct task_struct task;
     uint64_t stack[STACK_SIZE / sizeof(uint64_t)];
-} __attribute__((aligned(8))); // 8Bytes align
+} __attribute__((aligned(STACK_SIZE)));
 
 #define INIT_TASK(tsk)                    \
     {                                     \
@@ -123,18 +175,24 @@ struct tss_struct
      .reserved3 = 0,                                                            \
      .iomapbaseaddr = 0}
 
-struct task_struct *get_current()
+extern struct task_struct *user_current[MAX_CPU_NUM];
+
+static inline struct task_struct *get_current()
 {
     struct task_struct *current = NULL;
     __asm__ __volatile__("andq %%rsp, %0\n\t" : "=r"(current) : "0"(~(STACK_SIZE - 1)));
+    // if ((uint64_t)current < 0xFFFF800000000000)
+    // {
+    //     uint64_t lapicid = lapic_id();
+    //     uint64_t current_cpu_cpuid = get_cpuid_by_lapicid(lapicid);
+    //     current = user_current[current_cpu_cpuid];
+    // }
     return current;
 }
 
 #define current_task get_current()
 
-#define GET_CURRENT        \
-    "movq	%rsp,	%rbx	\n\t" \
-    "andq	$-32768,%rbx	\n\t"
+void switch_mm(struct task_struct *prev, struct task_struct *next);
 
 #define switch_to(prev, next)                                                                       \
     do                                                                                              \
@@ -155,10 +213,24 @@ struct task_struct *get_current()
                              : "memory");                                                           \
     } while (0)
 
-uint64_t do_fork(struct pt_regs *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size);
+void insert_task_queue(struct task_struct *tsk, int cpu_id);
+
+static inline void wakeup_task(struct task_struct *tsk)
+{
+    tsk->state = TASK_RUNNING;
+    insert_task_queue(tsk, tsk->cpu_id);
+    current_task->flags |= NEED_SCHEDULE;
+}
+
+uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size);
+extern "C" uint64_t do_exit(uint64_t code);
+extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[]);
 void init_task_manager();
 
-extern "C" void ret_from_intr(void);
+extern "C" void ret_from_intr();
+extern "C" void ret_from_fork();
+extern "C" void ret_from_syscall();
+extern "C" void kernel_thread_func(void);
 
 extern struct task_struct *init_task[MAX_CPU_NUM];
 extern union task_union init_task_union;

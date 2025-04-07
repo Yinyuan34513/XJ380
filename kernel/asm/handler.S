@@ -52,7 +52,7 @@ Restore_all:
 
     popq %rax
     addq $0x10, %rsp // 弹出变量FUNC和errcode
-    
+
     sti
     iretq
 
@@ -62,6 +62,8 @@ ENTRY(ret_from_intr)
     jmp Restore_all
 
 Err_Code:
+    cli
+
     pushq	%rax
 	movq	%es,	%rax
 	pushq	%rax
@@ -94,17 +96,16 @@ Err_Code:
     movq %rdi, %es
 
     movq %rsp, %rdi // 把栈指针装入rdi，作为函数的第一个的参数
-    
+
     callq *%rdx //调用服务程序 带*号表示调用的是绝对地址
     jmp ret_from_exception
 
 
 // 0 #DE 除法错误
 ENTRY(divide_error)
-    
     pushq $0                                    // 由于#DE不会产生错误码，但是为了保持弹出结构的一致性，故也压入一个错误码0
     pushq %rax                                  // 先将rax入栈
-    leaq wsod_unexpect_intrrupt(%rip), %rax     // 获取中断服务程序的地址
+    leaq wsod_divide_error(%rip), %rax     // 获取中断服务程序的地址
     xchgq %rax, (%rsp)                          // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -155,7 +156,7 @@ ENTRY(bounds)
 ENTRY(undefined_opcode)
     pushq $0
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq wsod_undefined_opcode(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -163,7 +164,7 @@ ENTRY(undefined_opcode)
 ENTRY(dev_not_avaliable)
     pushq $0
     pushq %rax
-    leaq wsod_unexpect_intrrupt(%rip), %rax    // 获取中断服务程序的地址
+    leaq c_device_not_avaliable(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
@@ -282,3 +283,83 @@ ENTRY(mouse_handler)
     leaq c_mouse_handler(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
+
+ENTRY(syscall_handler)
+    cli
+    cld
+
+    // “压入” reserved 1~6
+    subq    $0x38, %rsp
+
+    pushq	%rax
+
+	movq	%es,	%rax
+	pushq	%rax
+	movq	%ds,	%rax
+	pushq	%rax
+
+	pushq	%rbp
+	pushq	%rdi
+	pushq	%rsi
+	pushq	%rdx
+	pushq	%rcx
+	pushq	%rbx
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+    movq    %rsp,   %rsi
+
+    callq switch_to_kernel_stack
+    subq $0xc0,  %rax   
+    movq    %rax, %rsp
+
+    movq    %rsp,   %rdi
+    movq    $0xc0, %rdx 
+    callq memcpy
+
+    movq    %rsp, %rdi
+    callq c_syscall_handler
+
+    movq    %rax,   %rdi
+    movq    %rsp,   %rsi
+    movq    $0xc0, %rdx 
+    callq memcpy
+
+    movq    %rdi,   %rsp
+
+ENTRY(ret_from_syscall)
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbx
+    popq %rcx
+    popq %rdx
+    popq %rsi
+    popq %rdi
+    popq %rbp
+
+    popq %rax
+    movq %rax, %ds
+
+    popq %rax
+    movq %rax, %es
+
+    popq %rax
+
+    // 弹出 reserved 1~6
+    addq $0x38, %rsp
+
+    sti
+
+    sysretq

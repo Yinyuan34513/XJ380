@@ -11,13 +11,12 @@ UINT64 nanoTime()
     return mcv * hpetPeriod;
 }
 
-void hpet_init(UINT64 hpet_ptr)
+void init_hpet(UINT64 hpet_ptr)
 {
-    info = (HpetInfo *)((Hpet *)hpet_ptr)->base_address.address;
+    info = (HpetInfo *)convert_physical_to_virtual(((Hpet *)hpet_ptr)->base_address.address);
     UINT32 counterClockPeriod = info->generalCapabilities >> 32;
     hpetPeriod = counterClockPeriod / 1000000;
     info->generalConfiguration |= 1;
-    *(__volatile__ uint64_t *)(info + 0xf0)  = 0;
     write_serial_string("Setup acpi hpet table (nano_time: ");
     write_serial_dec((uint64_t)nanoTime());
     write_serial_string(").\n");

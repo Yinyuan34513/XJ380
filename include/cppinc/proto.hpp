@@ -6,7 +6,7 @@
 #include "../global/kernel/apic/apic.h"
 
 /*
- *   graphics/*
+ *   graphics
  */
 
 // graphics/draw.cpp
@@ -32,8 +32,30 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id);
 void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 
+// graphics/sheet.cpp
+void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
+void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
+UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
+UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
+void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void refresh_sheet(SHEET_INFO *sht);
+void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
+UINT32 get_hor();
+UINT32 get_ver();
+
+// graphics/window/windowm.cpp
+void init_xwm(XWM_INFO *xwmi);
+void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *title, UINT32 width, UINT32 height);
+
 /*
- *   font/*
+ *   font
  */
 
 // font/font.cpp
@@ -47,7 +69,7 @@ void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long lon
 void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color);
 
 /*
- *   lib/*
+ *   lib
  */
 // lib/string.c
 char *strncpy(char *dest, const char *src, UINT64 length);
@@ -57,9 +79,11 @@ UINT64 strcmp(char *from_str, char *cmp_str);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 char *Dec2Char(unsigned long long dec);
 char *Hex2Char(unsigned long long hex);
+char *strstr(const char *haystack, const char *needle);
+int str2float(const char *str, float *result);
 
 /*
- *   driver/*
+ *   driver
  */
 // driver/serial/serial_port.cpp
 int init_serial();
@@ -77,7 +101,7 @@ void keyboard_init();
 UINT8 get_keyboard_input();
 
 // driver/ps2/mouse.cpp
-void Mouse_init();
+void mouse_init();
 UINT8 get_Mouse_output();
 bool mousedecode(UINT8 data);
 int get_mouse_x();
@@ -86,14 +110,18 @@ void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
 void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
 
 /*
- *   kernel/*
+ *   kernel
  */
 // kernel/main.cpp
 extern const FrameBufferConfig *fbc_addr;
+extern SHEET_INFO *sht_img;
 
 // kernel/wsod.cpp
 // 异常处理
 extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_nmi(struct X64_REGS *regs, UINT64 error_code);
 extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);
@@ -107,27 +135,12 @@ void wsod_apic_not_found();
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 
-// kernel/sheet.cpp
-void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
-void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
-UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
-void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void refresh_sheet(SHEET_INFO *sht);
-void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
-UINT32 get_hor();
-UINT32 get_ver();
-
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT);
 void send_eoi();
 
 // kernel/intr/hpet.cpp
-void hpet_init(UINT64 hpet);
+void init_hpet(UINT64 hpet);
 UINT64 nanoTime();
 
 // kernel/cpu/msr.cpp

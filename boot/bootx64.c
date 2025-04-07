@@ -66,7 +66,7 @@ EFI_GUID efi_acpi_table_guid = {
  */
 void putc(unsigned short c)
 {
-  unsigned short str[2] = L" ";
+  __WCHAR_TYPE__ str[2] = L" ";
   str[0] = c;
   ST->ConOut->OutputString(ST->ConOut, str);
 }
@@ -249,54 +249,89 @@ void CreateAndMapNewPageTable()
 
   xmemcpy((void *)new_page_table_addr, (void *)old_page_table_addr, PAGE_SIZE);
 
-  // Map page_table to PAGE_TABLE_MAPPED_ADDRESS
   uint64_t *pml4 = (uint64_t *)new_page_table_addr;
-  uint64_t pml4_id = (PAGE_TABLE_MAPPED_ADDRESS >> 39) & 0x1FF;
-  if (pml4[pml4_id] == 0)
-  {
-    uint64_t pml4_addr;
-    BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pml4_addr);
-    xmemset((void *)pml4_addr, 0, PAGE_SIZE);
-    pml4[pml4_id] = pml4_addr | 0x3;
-  }
-  uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
-  uint64_t pdpt_id = (PAGE_TABLE_MAPPED_ADDRESS >> 30) & 0x1FF;
-  if (pdpt[pdpt_id] == 0)
-  {
-    uint64_t pdpt_addr;
-    BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pdpt_addr);
-    xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
-    pdpt[pdpt_id] = pdpt_addr | 0x3;
-  }
-  uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
-  uint64_t pd_id = (PAGE_TABLE_MAPPED_ADDRESS >> 21) & 0x1FF;
-  if (pd[pd_id] == 0)
-  {
-    uint64_t pd_addr;
-    BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pd_addr);
-    xmemset((void *)pd_addr, 0, PAGE_SIZE);
-    pd[pd_id] = pd_addr | 0x3;
-  }
-  uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
-  uint64_t pt_id = (PAGE_TABLE_MAPPED_ADDRESS >> 12) & 0x1FF;
-  if (pt[pt_id] == 0)
-  {
-    pt[pt_id] = new_page_table_addr | 0x3;
-  }
-  else
-  {
-    write_serial_string(L"Failed to map page table to PAGE_TABLE_MAPPED_ADDRESS");
-    while (1)
-      __asm__ __volatile__("hlt");
-  }
+  uint64_t *pdp = (uint64_t *)(pml4[0] & ~0xFFF);
+  pml4[0] = (uint64_t)pdp | 0x7;
+  pml4[256] = (uint64_t)pdp | 0x3;
+
+  // uint64_t pml4_id = (PAGE_TABLE_MAPPED_ADDRESS >> 39) & 0x1FF;
+  // uint64_t pml4_addr;
+  // BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pml4_addr);
+  // xmemset((void *)(pml4_addr), 0, PAGE_SIZE);
+  // pml4[pml4_id] = pml4_addr | 0x3;
+  // uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
+  // uint64_t pdpt_id = (PAGE_TABLE_MAPPED_ADDRESS >> 30) & 0x1FF;
+  // uint64_t pdpt_addr;
+  // BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pdpt_addr);
+  // xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
+  // pdpt[pdpt_id] = pdpt_addr | 0x3;
+  // uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
+  // uint64_t pd_id = (PAGE_TABLE_MAPPED_ADDRESS >> 21) & 0x1FF;
+  // uint64_t pd_addr;
+  // BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pd_addr);
+  // xmemset((void *)pd_addr, 0, PAGE_SIZE);
+  // pd[pd_id] = pd_addr | 0x3;
+  // uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
+  // uint64_t pt_id = (PAGE_TABLE_MAPPED_ADDRESS >> 12) & 0x1FF;
+  // pt[pt_id] = new_page_table_addr | 0x3;
 
   __asm__ __volatile__("mov %0, %%cr3"
                        :
                        : "r"(new_page_table_addr));
 }
 
+void MapVirtToPhys(uint64_t virt, uint64_t size)
+{
+  uint64_t page_table_addr;
+  __asm__ __volatile__("mov %%cr3, %0"
+                       : "=r"(page_table_addr));
+
+#define KERNEL_PERM 0x03
+
+  for (uint64_t addr = virt; addr < virt + size + PAGE_SIZE - 1; addr += PAGE_SIZE)
+  {
+    // Map vaddr to paddr
+    uint64_t *pml4 = (uint64_t *)page_table_addr;
+    uint64_t pml4_id = (addr >> 39) & 0x1FF;
+    if (pml4[pml4_id] == 0)
+    {
+      uint64_t pml4_addr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pml4_addr);
+      xmemset((void *)pml4_addr, 0, PAGE_SIZE);
+      pml4[pml4_id] = pml4_addr | KERNEL_PERM;
+    }
+    uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
+    uint64_t pdpt_id = (addr >> 30) & 0x1FF;
+    if (pdpt[pdpt_id] == 0)
+    {
+      uint64_t pdpt_addr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pdpt_addr);
+      xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
+      pdpt[pdpt_id] = pdpt_addr | KERNEL_PERM;
+    }
+    uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
+    uint64_t pd_id = (addr >> 21) & 0x1FF;
+    if (pd[pd_id] == 0)
+    {
+      uint64_t pd_addr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pd_addr);
+      xmemset((void *)pd_addr, 0, PAGE_SIZE);
+      pd[pd_id] = pd_addr | KERNEL_PERM;
+    }
+    uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
+    uint64_t pt_id = (addr >> 12) & 0x1FF;
+    if (pt[pt_id] == 0)
+    {
+      uint64_t paddr;
+      BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &paddr);
+      xmemset((void *)paddr, 0, PAGE_SIZE);
+      pt[pt_id] = paddr | KERNEL_PERM;
+    }
+  }
+}
+
 typedef void (*__attribute__((sysv_abi))
-              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, struct BOOT_CONFIG *);
+              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
@@ -325,7 +360,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: OPEN_ROOT_DIR_ERROR");
-    write_serial_string("[bootx64.c:230]Root Dir Open Failed. Stop.\n");
+    write_serial_string("[bootx64.c:293]Root Dir Open Failed. Stop.\n");
     while (1)
       ;
   }
@@ -335,7 +370,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: KERNEL_NOT_FOUND");
-    write_serial_string("[bootx64.c:239]Kernel Read Failed. Stop.\n");
+    write_serial_string("[bootx64.c:303]Kernel Read Failed. Stop.\n");
     while (1)
       ;
   }
@@ -345,7 +380,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_READ_KERNEL");
-    write_serial_string("[bootx64.c:248]Kernel Read Failed. Stop.\n");
+    write_serial_string("[bootx64.c:313]Kernel Read Failed. Stop.\n");
     while (1)
       ;
   }
@@ -355,25 +390,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
   UINT64 kernel_first_addr, kernel_last_addr;                        // 计算的首尾
   CalcLoadAddressRange(ehdr, &kernel_first_addr, &kernel_last_addr); // 计算范围
 
-  status = mallocAt(kernel_first_addr, kernel_last_addr - kernel_first_addr); // 分配内存
-  if (EFI_ERROR(status))
-  {
-    puts(L"XJ380 does not boot properly. Please visit "
-         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: CANNOT_ALLOC_MEMORY");
-    write_serial_string("[bootx64.c:262]Memory Allocate Failed. Stop.\n");
-    while (1)
-      ;
-  }
-  write_serial_string("Kernel Memory Allocate Success.\n");
+  MapVirtToPhys(kernel_first_addr, kernel_last_addr - kernel_first_addr);
+
+  xmemset((void *)kernel_first_addr, 0, kernel_last_addr - kernel_first_addr);
 
   CopyLoadSegments(ehdr);     // CV
   entry_addr = ehdr->e_entry; // 获取入口点
   // free(kernel_buffer);        // 释放内核文件，丢掉！
 
-  SwitchToResolution(1280, 720); // 切换分辨率
+  SwitchToResolution(1440, 900); // 切换分辨率
 
   struct FrameBufferConfig config = {
-      (UINT8 *)GOP->Mode->FrameBufferBase, GOP->Mode->Info->PixelsPerScanLine,
+      (UINT8 *)(GOP->Mode->FrameBufferBase + 0xFFFF800000000000), GOP->Mode->Info->PixelsPerScanLine,
       GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution};
 
   switch (GOP->Mode->Info->PixelFormat)
@@ -389,19 +417,21 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"UNSUPPORTED_PIXEL_FORMAT");
-    write_serial_string("[bootx64.c:286]Vedio Initialize Failed. Stop.\n");
+    write_serial_string("[bootx64.c:346]Vedio Initialize Failed. Stop.\n");
     while (1)
       ;
   }
   write_serial_string("Vedio Initialize Success.\n");
 
-  BOOT_CONFIG BootConfig; // 内核传参
+  BOOT_CONFIG *BootConfig;
+  BootConfig = malloc(sizeof(BOOT_CONFIG));
+  xmemset(BootConfig, 0, sizeof(BOOT_CONFIG));
 
   // 获取RSDP
   EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;
   UINT8 AcpiTableWasFound = 0; // 0=找不着 1=找到了
   SystemConfigTable = ST->ConfigurationTable;
-  for (int i = 0; i < ST->NumberOfTableEntries; i++)
+  for (UINTN i = 0; i < ST->NumberOfTableEntries; i++)
   {
     if (CompareGUID(&SystemConfigTable->VendorGuid, &acpi_table_guid) == 1 ||
         CompareGUID(&SystemConfigTable->VendorGuid, &efi_acpi_table_guid) == 1)
@@ -422,11 +452,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
         ACPI_TABLE_HEADER *XSDT = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr); // 指向XSDT的指针
         UINT64 *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1);                    // 指向XSDT后面的其他SDT的地址的指针
-        UINT64 Entries = (XSDT->length - sizeof(XSDT->length)) / 8;          // SDT数量
+        UINT64 Entries = (XSDT->length - sizeof(ACPI_TABLE_HEADER)) / 8;     // SDT数量
         AcpiTableWasFound = 1;
         UINT8 ObjTableWasFound = 0;
         // 遍历所有ACPI表
-        for (int j = 0; j < Entries; j++, AcpiTableEntryPtr++)
+        for (UINT64 j = 0; j < Entries; j++, AcpiTableEntryPtr++)
         {
           write_serial_string("SDT Entry ");
           write_serial_string(Dec2Char(j));
@@ -444,18 +474,23 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
           {
             write_serial_string("MADT Found Success.\n");
             // MADT!!!
-            BootConfig.MADT = (UINT64)(AcpiSdtPointer);
+            BootConfig->MADT = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
           }
           else if (!part_strcmp(AcpiSdtPointer->sign, "HPET", 4))
           {
             write_serial_string("HPET Found Success.\n");
             // HPET!!!
-            BootConfig.HPET = (UINT64)(AcpiSdtPointer);
+            BootConfig->HPET = (UINT64)(AcpiSdtPointer);
             ObjTableWasFound++;
           }
-          if (ObjTableWasFound == 2)
-            break;
+          else if (!part_strcmp(AcpiSdtPointer->sign, "MCFG", 4))
+          {
+            write_serial_string("MCFG Found Success.\n");
+            // MCFG!!!
+            BootConfig->MCFG = (UINT64)(AcpiSdtPointer);
+            ObjTableWasFound++;
+          }
           write_serial_string("\n");
         }
         break;
@@ -468,46 +503,55 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"ACPI_TABLE_NOT_FOUND\r\n");
-    write_serial_string("[bootx64.c:329]ACPI Table Not Found. Stop.\n");
+    write_serial_string("[bootx64.c:432]ACPI Table Not Found. Stop.\n");
     while (1)
       ;
   }
-  if (BootConfig.MADT == 0)
+  if (BootConfig->MADT == 0)
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"MADT_NOT_FOUND\r\n");
-    write_serial_string("[bootx64.c:337]MADT Not Found. Stop.\n");
+    write_serial_string("[bootx64.c:441]MADT Not Found. Stop.\n");
+    while (1)
+      ;
+  }
+  if (BootConfig->MCFG == 0)
+  {
+    puts(L"XJ380 does not boot properly. Please visit "
+         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+         L"MADT_NOT_FOUND\r\n");
+    write_serial_string("[bootx64.c:450]MCFG Not Found. Stop.\n");
     while (1)
       ;
   }
 
   // 获取memory map
-  BootConfig.MemoryMap.MapSize = 4096;
-  BootConfig.MemoryMap.Buffer = NULL;
-  BootConfig.MemoryMap.MapKey = 0;
-  BootConfig.MemoryMap.DescriptorSize = 0;
-  BootConfig.MemoryMap.DescriptorVersion = 0;
+  BootConfig->MemoryMap.MapSize = 4096;
+  BootConfig->MemoryMap.Buffer = NULL;
+  BootConfig->MemoryMap.MapKey = 0;
+  BootConfig->MemoryMap.DescriptorSize = 0;
+  BootConfig->MemoryMap.DescriptorVersion = 0;
 
-  GetMMP(&BootConfig.MemoryMap);
+  GetMMP(&BootConfig->MemoryMap);
 
   EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 
   // say goodbye~
-  ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig.MemoryMap.MapKey);
+  ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig->MemoryMap.MapKey);
 
   if (EFI_ERROR(ExitBSStatus))
   {
     puts(L"XJ380 does not boot properly. Please visit "
          L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
          L"CANNOT_BOOT_SYSTEM");
-    write_serial_string("[bootx64.c:352]Boot Services Exit Failed. Stop.\n");
+    write_serial_string("[bootx64.c:474]Boot Services Exit Failed. Stop.\n");
     while (1)
       ;
   }
 
   Kernel kernel = (Kernel)entry_addr;
-  kernel(&config, SystemTable, &BootConfig); // 滚进去！
+  kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig); // 滚进去！
 
   // 此处=kernel.elf
 

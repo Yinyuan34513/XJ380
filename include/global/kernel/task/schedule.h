@@ -5,16 +5,17 @@
 
 struct schedule
 {
-    long running_task_count;
-    long CPU_exec_task_jiffies;
-    struct task_struct task_queue;
+    spinlock_t lock;              // 每个CPU的调度锁
+    long running_task_count;      // 运行中的任务数
+    long CPU_exec_task_jiffies;   // CPU执行任务的时间片
+    struct task_struct task_queue;// 任务队列
 };
 
 extern struct schedule task_schedule[MAX_CPU_NUM];
 
 void schedule();
 void schedule_init();
-struct task_struct *get_next_task();
-void insert_task_queue(struct task_struct *tsk);
+struct task_struct *get_next_task(int cpu_id);
+void insert_task_queue(struct task_struct *tsk, int cpu_id);
 
 #endif

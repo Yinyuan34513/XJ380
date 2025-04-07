@@ -12,13 +12,13 @@ struct List
     struct List *next;
 };
 
-void list_init(struct List *list)
+static inline void list_init(struct List *list)
 {
     list->prev = list;
     list->next = list;
 }
 
-void list_add_to_behind(struct List *entry, struct List *ne_w) ////add to entry behind
+static inline void list_add_to_behind(struct List *entry, struct List *ne_w) ////add to entry behind
 {
     ne_w->next = entry->next;
     ne_w->prev = entry;
@@ -26,7 +26,7 @@ void list_add_to_behind(struct List *entry, struct List *ne_w) ////add to entry 
     entry->next = ne_w;
 }
 
-void list_add_to_before(struct List *entry, struct List *ne_w) ////add to entry behind
+static inline void list_add_to_before(struct List *entry, struct List *ne_w) ////add to entry behind
 {
     ne_w->next = entry;
     entry->prev->next = ne_w;
@@ -34,13 +34,13 @@ void list_add_to_before(struct List *entry, struct List *ne_w) ////add to entry 
     entry->prev = ne_w;
 }
 
-void list_del(struct List *entry)
+static inline void list_del(struct List *entry)
 {
     entry->next->prev = entry->prev;
     entry->prev->next = entry->next;
 }
 
-long list_is_empty(struct List *entry)
+static inline long list_is_empty(struct List *entry)
 {
     if (entry == entry->next && entry->prev == entry)
         return 1;
@@ -48,7 +48,7 @@ long list_is_empty(struct List *entry)
         return 0;
 }
 
-struct List *list_prev(struct List *entry)
+static inline struct List *list_prev(struct List *entry)
 {
     if (entry->prev != (struct List *)NULL)
         return entry->prev;
@@ -56,7 +56,7 @@ struct List *list_prev(struct List *entry)
         return (struct List *)NULL;
 }
 
-struct List *list_next(struct List *entry)
+static inline struct List *list_next(struct List *entry)
 {
     if (entry->next != (struct List *)NULL)
         return entry->next;

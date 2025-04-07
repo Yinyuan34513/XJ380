@@ -20,6 +20,7 @@ void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUF
     SheetBuffer->g = color.g;
     SheetBuffer->b = color.b;
     SheetBuffer->a = color.a;
+    front_p->is_change = true; // 标记需要更新
 }
 
 void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)

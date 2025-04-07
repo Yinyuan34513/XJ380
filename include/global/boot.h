@@ -5,10 +5,14 @@
 #include "./stdint.h"
 #include "./kernel/memory.h"
 #include "./kernel/apic/madt.h"
+
 typedef struct
 {
+    MEMORY_MAP MemoryMap;
+
     UINT64 MADT;
     UINT64 HPET;
-    MEMORY_MAP MemoryMap;
+    UINT64 MCFG;
 } BOOT_CONFIG;
+
 #endif

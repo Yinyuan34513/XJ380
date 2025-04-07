@@ -27,6 +27,8 @@ typedef INT8 i8;
 typedef INT16 i16;
 typedef INT32 i32;
 typedef INT64 i64;
+// 字符
+typedef const char CHAR8;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
@@ -153,14 +155,14 @@ typedef struct
   UINT64 Attribute;
 } __attribute__((__aligned__(16))) EFI_MEMORY_DESCRIPTOR;
 
-static void xmemset(void *dst_, UINT8 value, UINTN size)
+static inline void xmemset(void *dst_, UINT8 value, UINTN size)
 {
   UINT8 *dst = (UINT8 *)dst_;
   while (size-- > 0)
     *dst++ = value;
 }
 
-static void *xmemcpy(void *dst_, const void *src_, UINTN size)
+static inline void *xmemcpy(void *dst_, const void *src_, UINTN size)
 {
   UINT8 *dst = (UINT8 *)dst_;
   const UINT8 *src = (UINT8 *)src_;

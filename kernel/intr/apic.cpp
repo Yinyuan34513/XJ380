@@ -2,6 +2,8 @@
 
 APIC_INFO ApicInfo;
 
+IrqDesc irq_table[256 - 35];
+
 /**
  *
  * @brief 检测APIC是否存在
@@ -28,33 +30,19 @@ UINT8 check_apic()
 
 static inline void mmio_write32(UINT32 *addr, UINT32 data)
 {
-    *(volatile UINT32 *)addr = data;
+    *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr) = data;
 }
 
 static inline UINT32 mmio_read32(void *addr)
 {
-    return *(volatile UINT32 *)addr;
+    return *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr);
 }
 
-static inline uint64_t rdmsr(UINT32 msr)
-{
-    UINT32 eax, edx;
-    __asm__ volatile("rdmsr" : "=a"(eax), "=d"(edx) : "c"(msr));
-    return ((UINT64)edx << 32) | eax;
-}
-
-static inline void wrmsr(UINT32 msr, UINT64 value)
-{
-    UINT32 eax = (UINT32)value;
-    UINT32 edx = value >> 32;
-    __asm__ volatile("wrmsr" : : "c"(msr), "a"(eax), "d"(edx));
-}
-
-void lapic_write(UINT32 reg, UINT32 value)
+void lapic_write(UINT32 reg, UINT64 value)
 {
     if (ApicInfo.x2Apic)
     {
-        wrmsr(0x800 + (reg >> 4), (UINT64)value);
+        wrmsr(0x800 + (reg >> 4), value);
         return;
     }
     mmio_write32((UINT32 *)((UINT64)ApicInfo.LocalApicAddr + reg), value);
@@ -71,6 +59,10 @@ UINT32 lapic_read(UINT32 reg)
 
 UINT64 lapic_id()
 {
+    if (ApicInfo.x2Apic)
+    {
+        return lapic_read(LAPIC_REG_ID);
+    }
     return (lapic_read(LAPIC_REG_ID) >> 24);
 }
 
@@ -84,6 +76,24 @@ static uint32_t ioapic_read(UINT32 reg)
 {
     mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr), reg);
     return mmio_read32((UINT32 *)((UINT64)ApicInfo.ioApicAddr + 0x10));
+}
+
+void ioapic_disable(UINT8 vector)
+{
+    uint64_t index = 0x10 + ((vector - 32) * 2);
+    uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
+    value |= (0x10000UL);
+    ioapic_write(index, (uint32_t)(value & 0xFFFFFFFF));
+    ioapic_write(index + 1, (uint32_t)(value >> 32));
+}
+
+void ioapic_enable(UINT8 vector)
+{
+    uint64_t index = 0x10 + ((vector - 32) * 2);
+    uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
+    value &= (~0x10000UL);
+    ioapic_write(index, (uint32_t)(value & 0xFFFFFFFF));
+    ioapic_write(index + 1, (uint32_t)(value >> 32));
 }
 
 void ioapic_add(UINT8 vector, UINT32 irq)
@@ -102,6 +112,11 @@ void init_IOApic()
     ioapic_add((UINT8)32, 0);
     ioapic_add((UINT8)33, 1);
     ioapic_add((UINT8)34, 12);
+
+    // XHCI interrupt vector
+    // ioapic_add((UINT8)35, 3);
+    // ioapic_enable((UINT8)35);
+
     write_serial_string("Setup I/O apic.\n");
 
     write_serial_string("IOAPIC Address: ");
@@ -119,7 +134,6 @@ void init_IOApic()
  */
 void init_lApic()
 {
-
     lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
     lapic_write(LAPIC_REG_SPURIOUS, 0xff | 1 << 8);
     lapic_write(LAPIC_REG_TIMER_DIV, 11);
@@ -131,13 +145,8 @@ void init_lApic()
             break;
     UINT64 lapic_timer = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
     UINT64 calibrated_timer_initial = (UINT64)((UINT64)(lapic_timer * 1000) / 250);
-    write_serial_string("Calibrated LAPIC timer: ");
-    write_serial_dec(calibrated_timer_initial);
-    write_serial_string(" ticks per second.\n");
     lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
     lapic_write(LAPIC_REG_TIMER_INITCNT, calibrated_timer_initial);
-
-    write_serial_string("Local APIC Initialize Success.\n");
 }
 
 /**
@@ -190,7 +199,7 @@ void init_apic(UINT64 MADT0)
             break;
         }
         MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
-        if (header->entry_type == MADT_APIC_IO) //find I/O apic
+        if (header->entry_type == MADT_APIC_IO)
         {
             MadtIOApic *ioapic = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
             ApicInfo.ioApicAddr = (UINT64)ioapic->address;
@@ -199,6 +208,8 @@ void init_apic(UINT64 MADT0)
     }
     init_lApic();
     init_IOApic();
+
+    xmemset(irq_table, 0, sizeof(irq_table));
 
     write_serial_string("APIC Initialize Success.\n");
 }
@@ -233,4 +244,43 @@ extern "C" void c_timer_handler(void *regs_ptr, UINT64 error_code)
     {
         schedule();
     }
+}
+
+extern "C" void c_do_irq(struct X64_REGS *regs, uint64_t irq, uint64_t error_code)
+{
+    IrqDesc *desc = &irq_table[irq - 35];
+
+    if (desc && desc->handler)
+    {
+        desc->handler(regs, desc->arg, error_code);
+    }
+    else
+    {
+        write_serial_string("Unhandled IRQ: ");
+        write_serial_hex(irq);
+        write_serial_string("\n");
+    }
+
+    send_eoi();
+}
+
+void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code), uint64_t arg)
+{
+    IrqDesc *desc = &irq_table[irq - 35];
+
+    desc->name = (char *)malloc(strlen(name) + 1);
+    strcpy(desc->name, name);
+
+    desc->handler = handler;
+    desc->arg = arg;
+}
+
+void unregister_irq(uint64_t irq)
+{
+    IrqDesc *desc = &irq_table[irq - 35];
+
+    free(desc->name);
+
+    desc->handler = nullptr;
+    desc->arg = 0;
 }

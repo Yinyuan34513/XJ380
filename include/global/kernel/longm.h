@@ -30,7 +30,8 @@ struct X64_REGS
     UINT64 rsi;
     UINT64 rdi;
     UINT64 rbp;
-    UINT64 ds, es;
+    UINT64 ds;
+    UINT64 es;
     UINT64 rax;
     UINT64 func;
     UINT64 errcode;
