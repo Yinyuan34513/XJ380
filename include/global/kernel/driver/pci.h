@@ -2,7 +2,7 @@
 
 #pragma once
 
-#define PCI_MCFG_MAX_ENTRIES_LEN 512
+#define PCI_MCFG_MAX_ENTRIES_LEN 1024
 #define PCI_DEVICE_MAX 256
 
 typedef struct

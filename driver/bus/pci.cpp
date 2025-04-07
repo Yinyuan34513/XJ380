@@ -34,6 +34,10 @@ uint64_t get_mmio_address(uint32_t pci_address, uint16_t offset)
     uint8_t function = pci_address & 0x07;
 
     uint64_t phys = get_device_mmio_physical_address(segment, bus, device, function);
+    if (phys == 0)
+    {
+        return 0;
+    }
     uint64_t virt = convert_physical_to_virtual(phys);
 
     return virt + offset;
@@ -42,12 +46,20 @@ uint64_t get_mmio_address(uint32_t pci_address, uint16_t offset)
 uint32_t pci_read(uint32_t pci_address, uint16_t offset)
 {
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
+    if (mmio_address == 0)
+    {
+        write_serial_string("Cannot read pci: failed to get mmio address");
+    }
     return *(uint32_t *)mmio_address;
 }
 
 void pci_write(uint32_t pci_address, uint16_t offset, uint32_t value)
 {
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
+    if (mmio_address == 0)
+    {
+        write_serial_string("Cannot write pci: failed to get mmio address");
+    }
     *(uint32_t *)mmio_address = value;
 }
 
@@ -272,6 +284,8 @@ pci_device_t *pci_find_class(uint32_t class_code)
     return NULL;
 }
 
+void pci_scan_bus(uint16_t segment_group, uint8_t bus);
+
 void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint8_t function)
 {
     uint32_t pci_address = segment_bus_device_functon_to_pci_address(segment_group, bus, device, function);
@@ -359,14 +373,22 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
 
         pci_devices[device_number] = pci_device;
         device_number++;
-    }
 
-    break;
+        break;
+    }
     // PciPciBridge
     case 0x01:
-        // Ignore
+    {
+        uint32_t data = pci_read(pci_address, 0x18);
+        uint8_t start_bus = (uint8_t)((data >> 8) & 0xFF);
+        uint8_t end_bus = (uint8_t)((data >> 16) & 0xFF);
+        for (uint8_t bus = start_bus; bus <= end_bus; bus++)
+        {
+            pci_scan_bus(segment_group, bus);
+        }
         break;
-    // CardBusBridge
+    }
+        // CardBusBridge
     case 0x02:
         // Ignore
         break;

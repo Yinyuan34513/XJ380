@@ -83,11 +83,13 @@ int fat_super(int dev, VNode *result)
     VNode *node = result;
 
     uint8_t *super_buf = (uint8_t *)malloc(512);
+    xmemset(super_buf, 0, 512);
     device_read(dev, super_buf, 1, 0, 0);
 
     struct FAT32_BootSector *bootsector = (struct FAT32_BootSector *)super_buf;
 
     FAT32_NodeInfo *desc = (FAT32_NodeInfo *)malloc(sizeof(FAT32_NodeInfo));
+    xmemset(desc, 0, sizeof(FAT32_NodeInfo));
     desc->sector_per_cluster = bootsector->BPB_SecPerClus;
     desc->bytes_per_cluster = bootsector->BPB_SecPerClus * bootsector->BPB_BytesPerSec;
     desc->bytes_per_sector = bootsector->BPB_BytesPerSec;
