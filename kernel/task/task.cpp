@@ -606,15 +606,14 @@ uint64_t desktop_flusher(uint64_t arg)
         __asm__ __volatile__("pause");
     }
 
-    EFI_TIME time;
-    EFI_TIME_CAPABILITIES time_capab;
-
     UINT8 k_input;
     int tby;
     int tbx;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((UINT64)(ST->RuntimeServices));
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)RuntimeServices->GetTime);
+    int scdx = fbc_addr->horizontal_resolution * 0.8125;
+    struct time_t time;
 
     while (1)
     {
@@ -654,12 +653,13 @@ uint64_t desktop_flusher(uint64_t arg)
         // {
         //     write_serial_string("GetTime failed.\n");
         // }
-        int scdx = fbc_addr->horizontal_resolution * 0.8125;
-        draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
-        PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
-        PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
-        PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
-        refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
+        // time_read(&time);
+        // draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
+        // //12 小时制
+        // PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.tm_hour + UTC) % 24, BLACK);
+        // PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
+        // PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.tm_min, BLACK);
+        // refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
     }
 
     return 0xFFFFFFFFFFFFFFFF;
