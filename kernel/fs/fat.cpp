@@ -132,6 +132,8 @@ int fat_super(int dev, VNode *result)
 
     node->desc = desc;
 
+    free(super_buf);
+
     return 0;
 }
 
