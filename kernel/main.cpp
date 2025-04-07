@@ -37,6 +37,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)&SystemTable);
   BC = (BOOT_CONFIG *)convert_physical_to_virtual((UINT64)BootConfig);
 
+  WriteString(fbc, fbc.horizontal_resolution / 2 - 76, fbc.vertical_resolution * 0.75 - 20, "XJ380 is Loading...", {0xff, 0xff, 0xff});
+
   disable_intr();
 
   __asm__ __volatile__("movq %0, %%rbp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));

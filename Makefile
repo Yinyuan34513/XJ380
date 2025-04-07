@@ -72,7 +72,7 @@ clean:
 
 vdisk: all
 	dd if=/dev/zero of=XJ380.img bs=128M count=1
-	echo -e 'label:gpt\n2048, 258048, uefi' | sfdisk XJ380.img
+	echo 'label:gpt\n2048, 258048, uefi' | sfdisk XJ380.img
 
 	mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
 
