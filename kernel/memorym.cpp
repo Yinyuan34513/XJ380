@@ -37,13 +37,19 @@ void memory_test(const FrameBufferConfig &fbc)
 
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 {
+    // Setup PAGE_ALLOC
+    uint64_t total_pages = 0;
+
     // 初始化
     write_serial_string("Initializing Memory Manager...\n");
     EfiMemoryDesc *EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
 #if BUILD_EDITION == DEBUG_VERSION
     write_serial_string("MemoryMap:\n");
+#endif
+
     for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++)
     {
+#if BUILD_EDITION == DEBUG_VERSION
         write_serial_hex(EfiMemory->Type);
         write_serial_string(" ");
         write_serial_hex(EfiMemory->PhysicalStart);
@@ -54,143 +60,67 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
         write_serial_string(" ");
         write_serial_hex(EfiMemory->Attribute);
         write_serial_string("\n");
+#endif
+        if (EfiMemory->Type == EfiConventionalMemory)
+        {
+            total_pages += EfiMemory->NumberOfPages * PAGE_SIZE;
+        }
         EfiMemory++;
     }
     EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
-#endif
 
-    OS_MEMORY_DESCRIPTOR *OsMemory = NULL;
-    int EfiMemoryPageSize = (BootConfig->MemoryMap.MapSize >> 12) + 1;
-    EFI_PHYSICAL_ADDRESS OsMemoryAddress = 0;
-    int EfiDescriptorCount = BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize;
-    for (int i = 0; i < EfiDescriptorCount; i++)
-    {
-        if (EfiMemoryPageSize < EfiMemory[i].NumberOfPages && EfiMemory[i].Type == EfiConventionalMemory)
-        {
-            OsMemoryAddress = convert_physical_to_virtual((uint64_t)EfiMemory[i].PhysicalStart);
-            OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
-            break;
-        }
-    }
-
-    /*
-    if (BUILD_EDITION == DEBUG_VERSION) {
-      WriteString(fbc, 480, 480, "FirstFreeMemoryAddress:", WHITE);
-      WriteHex(fbc, 480, 496, (UINT64)OsMemory, WHITE);
-    }
-    */
-
-    size_t maxpageaddr = 0;
-    size_t maxpagesize = 0;
-
-    int OsMemDescNum = 0;
-    // 内存合并与分类
-    for (int i = 0; i < EfiDescriptorCount; i++)
-    {
-        if (EfiMemory[i].Type == EfiConventionalMemory || EfiMemory[i].Type == EfiBootServicesCode || EfiMemory[i].Type == EfiBootServicesData)
-        {
-            OsMemory->Type = FREE_MEMORY;
-        }
-        else if (EfiMemory[i].Type == EfiMemoryMappedIO)
-        {
-            OsMemory->Type = MMIO_MEMORY;
-        }
-        else
-        {
-            OsMemory->Type = UEFI_MEMORY;
-        }
-        OsMemory->PhysicalStart = EfiMemory[i].PhysicalStart;
-        OsMemory->PageSize = EfiMemory[i].NumberOfPages;
-
-        if (OsMemory->Type == FREE_MEMORY && OsMemory->PageSize > maxpagesize)
-        {
-            maxpageaddr = convert_physical_to_virtual((uint64_t)OsMemory->PhysicalStart);
-            maxpagesize = OsMemory->PageSize;
-        }
-
-        if (i > 0 && OsMemory->Type == (OsMemory - 1)->Type)
-        {
-            if (OsMemory->PhysicalStart ==
-                (OsMemory - 1)->PhysicalStart + ((OsMemory - 1)->PageSize << 12))
-            {
-                (OsMemory - 1)->PageSize += OsMemory->PageSize;
-                continue;
-            }
-        }
-        OsMemory++;
-        OsMemDescNum++;
-    }
-
-    write_serial_string("maxpageaddr: ");
-    write_serial_hex((uint64_t)maxpageaddr);
-    write_serial_string(" ");
-    write_serial_string("maxpagesize: ");
-    write_serial_hex(maxpagesize);
+    write_serial_string("Total pages: ");
+    write_serial_hex(total_pages);
     write_serial_string("\n");
-    memory_init((void *)maxpageaddr, maxpagesize * PAGE_SIZE);
 
-    uint64_t page_start = 0;
-    size_t page_count = 0;
+    uint64_t last_size = ~(0ULL);
+    uint8_t *bitmap = nullptr;
 
-    for (int i = 0; i < EfiDescriptorCount; i++)
+    uint64_t bitmap_size = ((total_pages / 8) + 7) / 8;
+    for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++)
     {
-        if (EfiMemory[i].Type == EfiConventionalMemory && EfiMemory[i].PhysicalStart != convert_virtual_to_physical((uint64_t)maxpageaddr) && EfiMemory[i].PhysicalStart != convert_virtual_to_physical((uint64_t)OsMemoryAddress))
+        if (EfiMemory->Type == EfiConventionalMemory && EfiMemory->NumberOfPages * PAGE_SIZE >= bitmap_size && EfiMemory->NumberOfPages * PAGE_SIZE < last_size)
         {
-            write_serial_string("Found free memory for page alloc\n");
-            if (EfiMemory[i].NumberOfPages > page_count)
-            {
-                page_start = (uint64_t)EfiMemory[i].PhysicalStart;
-                page_count = EfiMemory[i].NumberOfPages;
-            }
+            bitmap = (uint8_t *)convert_physical_to_virtual(EfiMemory->PhysicalStart);
         }
+        EfiMemory++;
     }
+    EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
 
-    if (page_count == 0)
-    {
-        write_serial_string("No free memory found.\n");
-        while (1)
-        {
-            __asm__("pause");
-        }
-    }
-
-    uint64_t bitmap_size = (page_count + 7) / 8;
-    write_serial_string("page_start: ");
-    write_serial_hex(page_start);
-    write_serial_string(" ");
-    write_serial_string("page_count: ");
-    write_serial_hex(page_count);
-    write_serial_string("\n");
-    uint8_t *bitmap = (uint8_t *)malloc(bitmap_size);
     xmemset(bitmap, 0xFF, bitmap_size);
-    PAGE_ALLOC.init((void *)page_start, page_count, bitmap);
+    write_serial_string("Masked all physical memory\n");
 
-    // 输出合并后的
-    OsMemory = (OS_MEMORY_DESCRIPTOR *)OsMemoryAddress;
-    UINT64 TotalMemory = 0;
-
-#if BUILD_EDITION == DEBUG_VERSION
-    write_serial_string("MemoryMap2:\n");
-    write_serial_string("Type | PhysicalStart | PageSize\n");
-    for (int i = 0; i < OsMemDescNum; i++)
+    PAGE_ALLOC.init((void *)0x100000, total_pages, bitmap);
+    for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++)
     {
-        write_serial_hex(OsMemory->Type);
-        write_serial_string("  | ");
-        write_serial_hex(OsMemory->PhysicalStart);
-        write_serial_string("       | ");
-        write_serial_hex(OsMemory->PageSize);
-        write_serial_string("\n");
-        if (OsMemory->Type != MMIO_MEMORY)
+        if (EfiMemory->Type == EfiConventionalMemory)
         {
-            TotalMemory += OsMemory->PageSize;
+            write_serial_string("Clearing physical memory mask at ");
+            write_serial_hex(EfiMemory->PhysicalStart);
+            write_serial_string(" - ");
+            write_serial_hex(EfiMemory->PhysicalStart + EfiMemory->NumberOfPages * PAGE_SIZE);
+            write_serial_string("\n");
+            for (uint64_t idx = (EfiMemory->PhysicalStart / PAGE_SIZE); idx < (EfiMemory->PhysicalStart / PAGE_SIZE) + EfiMemory->NumberOfPages; idx++)
+            {
+                PAGE_ALLOC.clear_bit(idx);
+            }
         }
-        OsMemory++;
+        EfiMemory++;
     }
-    write_serial_string("TotalMemory: ");
-    write_serial_dec(TotalMemory * 4); // 一个Page=4KB
-    write_serial_string("KB\n");
-    // memory_test(fbc);
-#endif
+    // EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
+
+    // Setup heap
+    uint64_t cr3;
+    __asm__ __volatile__("movq  %%cr3,  %0" : "=r"(cr3));
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual(cr3));
+
+#define KHEAP_START_VADDR 0xFFFFFFFFC0000000
+#define KHEAP_SIZE 64 * 1024 * 1024
+
+    mapper.map_range(KHEAP_START_VADDR, 0, KHEAP_SIZE, 0x3);
+    flush_tlb();
+
+    memory_init((void *)KHEAP_START_VADDR, KHEAP_SIZE);
 
     write_serial_string("Memory Manager Initialize Success.\n");
 }

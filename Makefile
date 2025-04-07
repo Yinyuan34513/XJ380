@@ -4,23 +4,18 @@ CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno
 
 DEBUG ?= 0
 SMP ?= 4
-SUDO ?= 0
-KVM ?= 0
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
-endif
-
-ifeq ($(KVM), 1)
-SUDO = 1
-KVM_ENABLE = --enable-kvm
 endif
 
 ifeq ($(SUDO), 1)
 SUDO_CMD = sudo
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_ENABLE) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
+BUILD_DIR := out
+
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 2048 -smp $(SMP) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -36,75 +31,63 @@ export NM = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 
-ASM_OBJS := $(sort $(patsubst ./%.S, ./out/%.o, $(ASM_FILES)))
-C_OBJS := $(sort $(patsubst ./%.c, ./out/%.o, $(C_FILES)))
-CPP_OBJS := $(sort $(patsubst ./%.cpp, ./out/%.o, $(CPP_FILES)))
+ASM_OBJS := $(sort $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES)))
+C_OBJS := $(sort $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES)))
+CPP_OBJS := $(sort $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES)))
 
-out/%.o: %.S
+$(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(@D)
 	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
 	@echo "AS $< -> $@"
 
-out/%.o: %.c
+$(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(@D)
 	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(C_FLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
-out/%.o: %.cpp
+$(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
 	@$(CPP) -fno-pic -fno-pie -mcmodel=kernel  $(CPP_FLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
-	@x86_64-w64-mingw32-gcc -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o out/BOOTX64.efi boot/bootx64.c
+	@x86_64-w64-mingw32-gcc -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
 
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 
-	@$(LD) -T linker.ld --static -o ./out/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
-	@gcc kallsyms/kallsyms.c -o ./out/kallsyms
-	@$(NM) -n ./out/kernel.elf | ./out/kallsyms >./out/kallsyms.S
-	@$(CC) $(C_FLAGS) -c ./out/kallsyms.S -o ./out/kallsyms.o
-	@$(LD) -z muldefs -T linker.ld --static -o ./out/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o ./out/kallsyms.o
-	@$(OBJD) -x -d -s ./out/kernel.elf > ./out/kernel.txt
+	@$(LD) -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
+	@gcc kallsyms/kallsyms.c -o ./$(BUILD_DIR)/kallsyms
+	@$(NM) -n ./$(BUILD_DIR)/kernel.elf | ./$(BUILD_DIR)/kallsyms >./$(BUILD_DIR)/kallsyms.S
+	@$(CC) $(C_FLAGS) -c ./$(BUILD_DIR)/kallsyms.S -o ./$(BUILD_DIR)/kallsyms.o
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o ./$(BUILD_DIR)/kallsyms.o
+	@$(OBJD) -x -d -s ./$(BUILD_DIR)/kernel.elf > ./$(BUILD_DIR)/kernel.txt
 
 	@$(MAKE) -C user
 
 .PHONY: clean
 clean:
-	@rm -rf ./out ./XJ380.img ./font/hankaku.o
+	@rm -rf $(BUILD_DIR) ./XJ380.img ./font/hankaku.o
 	@$(MAKE) -C user clean
 
-LOOP := $(shell sudo losetup --find)
-
 vdisk: all
-	@rm -rf XJ380.img
+	dd if=/dev/zero of=XJ380.img bs=128M count=1
+	echo -e 'label:gpt\n2048, 258048, uefi' | sfdisk XJ380.img
 
-	@mkdir -p mnt
+	mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
 
-	@dd if=/dev/zero bs=1M count=0 seek=1024 of=XJ380.img
-	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
+	mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
+	mkdir -p $(BUILD_DIR)/XJ380/usr
+	cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380
+	cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
+	cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/usr
+	cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/usr
 
-	@sudo losetup $(LOOP) --partscan XJ380.img
+	mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
-	@sudo mkfs.vfat -F 32 $(LOOP)p1
+	rm -rf $(BUILD_DIR)/XJ380
 
-	@sudo mount $(LOOP)p1 ./mnt
-
-	@sudo mkdir -p ./mnt/EFI/BOOT
-	@sudo mkdir -p ./mnt/usr
-
-	@sudo cp out/kernel.elf ./mnt
-	@sudo cp out/BOOTX64.efi ./mnt/EFI/BOOT
-
-	@sudo cp out/init.elf ./mnt/usr
-	@sudo cp out/shell.elf ./mnt/usr
-
-	@sudo umount ./mnt
-
-	@sudo losetup -d $(LOOP)
-
-	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
+	qemu-img convert -O vmdk XJ380.img XJ380.vmdk
 
 run: vdisk
 	@$(QEMU_CMD)

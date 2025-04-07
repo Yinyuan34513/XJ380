@@ -22,7 +22,6 @@ public:
     void *alloc_pages_align(size_t page_count, uint64_t align);
     void free_pages(void *page, size_t page_count);
 
-private:
     void set_bit(uint64_t index);
     void clear_bit(uint64_t index);
     bool test_bit(uint64_t index);

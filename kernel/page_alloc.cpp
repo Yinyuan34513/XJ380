@@ -14,16 +14,9 @@ PageAlloc::~PageAlloc()
 
 void PageAlloc::init(void *page_start, size_t page_count, uint8_t *bitmap)
 {
-    // 假设从boot_config获取内存信息
     this->page_start = page_start;
-    this->page_count = page_count; // 假设页大小为4KB
+    this->page_count = page_count;
     this->bitmap = (uint8_t *)bitmap;
-
-    // 初始化位图，全部标记为可用
-    for (uint64_t i = 0; i < (page_count + 7) / 8; i++)
-    {
-        bitmap[i] = 0;
-    }
 }
 
 void *PageAlloc::alloc_page()
