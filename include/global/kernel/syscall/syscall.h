@@ -146,6 +146,16 @@ uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
 
 uint64_t sys_brk(uint64_t addr);
 
+#define PROT_NONE 0x0
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#define PROT_EXEC 0x4
+
+#define MAP_SHARED 0x1
+#define MAP_PRIVATE 0x2
+#define MAP_FIXED 0x10
+uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
+
 uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
 
 void init_syscall();

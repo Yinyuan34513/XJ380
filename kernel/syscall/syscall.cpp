@@ -119,8 +119,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_brk(regs->rdi);
         break;
     case SYS_MMAP:
-        // todo
-        regs->rax = 0;
+        regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
 
     case SYS_ARCH_PRCTL:
