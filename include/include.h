@@ -39,6 +39,7 @@
 #include "./global/kernel/driver/nvme.h"
 #include "./global/kernel/driver/usb.h"
 #include "./global/kernel/driver/xhci.h"
+#include "./global/kernel/driver/hid.h"
 // FS
 #include "./global/kernel/fs/vfs.h"
 #include "./global/kernel/fs/fat.h"
