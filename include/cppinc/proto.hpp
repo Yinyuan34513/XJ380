@@ -40,6 +40,7 @@ UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
+UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);

@@ -307,6 +307,33 @@ UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
+UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->next == NULL)
+        {
+            while (true)
+            {
+                if (front_p->bx <= x && front_p->bx + front_p->width >= x &&
+                    front_p->by <= y && front_p->by + front_p->height >= y &&
+                    front_p->type == MovableSheetType)
+                {
+                    return &front_p->index;
+                }
+                else if (front_p->front == NULL)
+                {
+                    return NULL;
+                }
+                front_p = front_p->front;
+            }
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
 {
     SHEET *front_p = sht->start;
