@@ -43,8 +43,26 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
                 {
                     // 点在了窗口上
                     ms_dec.win_move_lock = true;
+                    lift_sheet(sht_img, ms_dec.sheet_id);
+                    refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
+                                        getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
+                                        getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
                     ms_dec.win_x_offset = mouse_x - getBX(sht_img, ms_dec.sheet_id);
                     ms_dec.win_y_offset = mouse_y - getBY(sht_img, ms_dec.sheet_id);
+                }
+                ms_dec.sheet_id = found_sheetmb(sht_img, mouse_x, mouse_y);
+                if (ms_dec.sheet_id == NULL)
+                {
+                    // 点在了桌面或快捷栏上
+                    // do nothing
+                }
+                else
+                {
+                    // 点在了窗口上
+                    lift_sheet(sht_img, ms_dec.sheet_id);
+                    refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
+                                        getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
+                                        getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
                 }
             }
             else if (ms_dec.win_move_lock)
