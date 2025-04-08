@@ -140,5 +140,5 @@ uint64_t KERNEL_MAPPER::translate_address(uint64_t virtual_address)
         return 0;
     }
 
-    return pt[pt_id] & 0x00007FFFFFFFF000 + offset;
+    return (pt[pt_id] & 0x00007FFFFFFFF000) + offset;
 }

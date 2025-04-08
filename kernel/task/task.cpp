@@ -456,8 +456,8 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_pci(convert_physical_to_virtual((uint64_t)BC->MCFG));
     write_serial_string("PCI initialized.\n");
 
-    // init_xhci();
-    // write_serial_string("XHCI initialized.\n");
+    init_xhci();
+    write_serial_string("XHCI initialized.\n");
     keyboard_mouse_init_done = true;
 
     init_ahci();

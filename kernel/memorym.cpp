@@ -135,5 +135,7 @@ uint64_t mm_do_brk(uint64_t start, uint64_t size)
         mapper.map_page(i, 0, 0x7);
     }
 
+    flush_tlb();
+
     return i;
 }

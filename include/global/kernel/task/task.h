@@ -227,6 +227,8 @@ extern "C" uint64_t do_exit(uint64_t code);
 extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[]);
 void init_task_manager();
 
+int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags);
+
 extern "C" void ret_from_intr();
 extern "C" void ret_from_fork();
 extern "C" void ret_from_syscall();
