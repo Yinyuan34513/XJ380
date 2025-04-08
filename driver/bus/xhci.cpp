@@ -27,8 +27,6 @@ USB_HUB_OPERATION XHCI_OPERARTION;
 
 void InterruptXHCI(struct X64_REGS *stack, uint64_t param, uint64_t error_code)
 {
-    write_serial_string("XHCI interrupt");
-
     XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
     while (XHCIProcessEvent(controller))
         ;
@@ -235,24 +233,6 @@ uint32_t XHCIWaitCompletion(XHCI_CONTROLLER *controller, XHCI_TRANSFER_RING *rin
     return ring->EVT.DATA[2] >> 24;
 }
 
-uint64_t usb_kernel_thread(uint64_t arg)
-{
-    write_serial_string("USB kernel thread is running\n");
-
-    XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
-
-    while (true)
-    {
-        enable_intr();
-        __asm__ __volatile__("pause");
-
-        while (XHCIProcessEvent(controller))
-            __asm__ __volatile__("pause");
-    }
-
-    return 0;
-}
-
 uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
 {
     uint64_t physicalAddress = (uint64_t)PAGE_ALLOC.alloc_page();
@@ -304,7 +284,7 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
 
     controller->EVT.CCS = 1;
     controller->RR->IR[0].IMOD = 0;
-    // controller->RR->IR[0].IMAN |= 2; // Interrupt Enable
+    controller->RR->IR[0].IMAN |= 3; // Interrupt Enable
     controller->RR->IR[0].TS = 1;
     controller->RR->IR[0].ERS = mapper.translate_address((uint64_t)controller->SEG);
     controller->RR->IR[0].ERD = mapper.translate_address((uint64_t)controller->EVT.RING);
@@ -333,8 +313,6 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
     hub->CTRL = &controller->USB;
     hub->PC = controller->PN;
     hub->OP = &XHCI_OPERARTION;
-
-    kernel_thread(usb_kernel_thread, 0, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 
     int count = USBEnumerate(hub);
     // xhci_free_pipes
@@ -367,18 +345,18 @@ void SetupXHCIControllerPCI(pci_device_t *dvc)
     mapper.map_range(bar, phys, PAGE_SIZE * 4, 0x3);
     flush_tlb();
 
-    // struct msi_desc_t msi_desc;
-    // xmemset(&msi_desc, 0, sizeof(struct msi_desc_t));
-    // msi_desc.irq_num = 35;
-    // msi_desc.msi_index = 0;
-    // msi_desc.pci_dev = dvc;
-    // msi_desc.assert = 1;
-    // msi_desc.edge_trigger = 1;
-    // msi_desc.processor = 0;
-    // msi_desc.pci.msi_attribute.is_64 = 1;
-    // msi_desc.pci.msi_attribute.is_msix = 1;
-    // register_irq("XHCI", msi_desc.irq_num, InterruptXHCI, 0);
-    // pci_enable_msi(&msi_desc);
+    struct msi_desc_t msi_desc;
+    xmemset(&msi_desc, 0, sizeof(struct msi_desc_t));
+    msi_desc.irq_num = 35;
+    msi_desc.msi_index = 0;
+    msi_desc.pci_dev = dvc;
+    msi_desc.assert = 1;
+    msi_desc.edge_trigger = 1;
+    msi_desc.processor = 0;
+    msi_desc.pci.msi_attribute.is_64 = 1;
+    msi_desc.pci.msi_attribute.is_msix = 0;
+    register_irq("XHCI", msi_desc.irq_num, InterruptXHCI, 0);
+    pci_enable_msi(&msi_desc);
 
     XHCI_CONTROLLER *controller = SetupXHCIController(bar);
     if (!controller)

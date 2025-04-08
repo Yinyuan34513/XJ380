@@ -242,9 +242,10 @@ int pci_enable_msi(struct msi_desc_t *msi_desc)
             pci_write(pci_address, cap_ptr + 0x8, tmp);
 
         // 使能msi
-        tmp = pci_read(pci_address, cap_ptr); // 读取cap+0x0处的值
-        tmp |= (1 << 16);
-        pci_write(pci_address, cap_ptr, tmp);
+        tmp = pci_read(pci_address, cap_ptr + 0x2); // 读取cap+0x0处的值
+        tmp |= 1;
+        tmp &= ~(7 << 4);
+        pci_write(pci_address, cap_ptr + 0x2, tmp);
     }
 
     return 0;
