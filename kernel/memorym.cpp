@@ -90,7 +90,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     xmemset(bitmap, 0xFF, bitmap_size);
     write_serial_string("Masked all physical memory\n");
 
-    PAGE_ALLOC.init((void *)0x100000, total_pages, bitmap);
+    PAGE_ALLOC.init((void *)0x0, total_pages, bitmap);
     for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++)
     {
         if (EfiMemory->Type == EfiConventionalMemory)
@@ -134,6 +134,8 @@ uint64_t mm_do_brk(uint64_t start, uint64_t size)
     {
         mapper.map_page(i, 0, 0x7);
     }
+
+    flush_tlb();
 
     return i;
 }

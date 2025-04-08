@@ -164,18 +164,6 @@ typedef struct _USB_PIPE
     struct _USB_CONTROLLER *CTRL;
     uint16_t MPS;
 } USB_PIPE;
-typedef struct _USB_COMMON
-{
-    struct _USB_COMMON *A0; // L
-    struct _USB_COMMON *A1; // R
-    struct _USB_CONTROLLER *CTRL;
-    USB_CONFIG *CFG;
-    USB_INTERFACE *IFC;
-    USB_HUB *HUB;
-    USB_PIPE *PIPE;
-    uint32_t PORT;
-    uint32_t SPD;
-} USB_COMMON;
 typedef struct _USB_CONTROLLER
 {
     USB_HUB RH; // Root Hub
@@ -210,6 +198,19 @@ typedef struct _USB_DISK_DRIVER
     USB_PIPE *BOP;
     uint32_t LUN;
 } USB_DISK_DRIVER;
+typedef struct _USB_COMMON
+{
+    struct _USB_COMMON *A0; // L
+    struct _USB_COMMON *A1; // R
+    struct _USB_CONTROLLER *CTRL;
+    USB_CONFIG *CFG;
+    USB_INTERFACE *IFC;
+    USB_HUB *HUB;
+    USB_PIPE *PIPE;
+    uint32_t PORT;
+    uint32_t SPD;
+    USB_DISK_DRIVER *DRV;
+} USB_COMMON;
 
 extern const uint32_t SPEED_TO_CTRL_SIZE[];
 extern USB_CONTROLLER *USB_CTRL;

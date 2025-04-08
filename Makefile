@@ -15,7 +15,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 2048 -smp $(SMP) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 2048 -smp $(SMP) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device nec-usb-xhci,id=xhci -serial file:serial.log -device usb-kbd,id=kbd,bus=xhci.0 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -72,7 +72,7 @@ clean:
 
 vdisk: all
 	dd if=/dev/zero of=XJ380.img bs=128M count=1
-	echo 'label:gpt\n2048, 258048, uefi' | sfdisk XJ380.img
+	sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
 	mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
 

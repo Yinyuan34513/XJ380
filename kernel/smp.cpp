@@ -99,6 +99,11 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     init_cpu();
 
+    uint64_t cr3;
+    __asm__ __volatile__("movq  %%cr3, %0" : "=r"(cr3));
+    cr3 &= (~0xFFFUL);
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual(cr3));
+
     __asm__ __volatile__(
         "fnclex \n\t"
         "fninit \n\t");
@@ -109,7 +114,12 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     current_task->thread = (struct thread_struct *)(current_task + 1);
     xmemset(current_task->thread, 0, sizeof(struct thread_struct));
-    uint64_t stack_start = convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE);
+    uint64_t stack_start_phys = (uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE) + STACK_SIZE;
+    uint64_t stack_start = convert_physical_to_virtual(stack_start_phys);
+
+    mapper.map_range(stack_start - STACK_SIZE, stack_start_phys - STACK_SIZE, STACK_SIZE, 0x3);
+    flush_tlb();
+
     current_task->thread->rsp0 = stack_start;
     current_task->thread->rsp = stack_start - sizeof(struct X64_REGS);
     current_task->thread->elf_mappings = nullptr;

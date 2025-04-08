@@ -273,6 +273,9 @@ void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REG
 
     desc->handler = handler;
     desc->arg = arg;
+
+    ioapic_add((UINT8)irq, (UINT32)(irq - 32));
+    ioapic_enable((UINT8)irq);
 }
 
 void unregister_irq(uint64_t irq)
