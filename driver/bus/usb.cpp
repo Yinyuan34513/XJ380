@@ -248,7 +248,7 @@ LABEL001:;
         else if (interface->IC == USB_CLASS_HID)
         {
             write_serial_string("HID device\n");
-            // cc = ConfigureHID(common);
+            cc = ConfigureHID(common);
         }
     }
     if (cc)
