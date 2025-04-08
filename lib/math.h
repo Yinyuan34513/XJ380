@@ -12,7 +12,7 @@ int32_t equal(float64_t elem1, float64_t elem2)
 	else
 		return 0;	//不相等
 }
- 
+
 float64_t power_unsigned_exp(float64_t base, uint32_t exponent)
 {
 	float64_t result = 0.0;
@@ -53,87 +53,50 @@ float64_t pow(float64_t base, int32_t exponent)
 	return result;
 }
 
-float32_t sqrt(float32_t x)  
-{  
-    float32_t xhalf = 0.5f*x;  
-    int32_t i = *(int*)&x;  
-    i = 0x5f375a86 - (i >> 1);  
-    x = *(float32_t*)&i;  
-    x = x*(1.5f - xhalf*x*x);  
-    x = x*(1.5f - xhalf*x*x);  
-    x = x*(1.5f - xhalf*x*x);  
-    return 1 / x;  
-} 
-
-float sin(float x)  
-{  
-    int sign = 1;  
-    int itemCnt = 4;  
-    int k = 0;  
-    float result = 0.0f;  
-    float tx = 0.0f;  
-    int factorial = 1;  
-    if(x < 0)  
-    {  
-        x = -x;  
-        sign *= -1;  
-    }  
-    while(x >= TAU)  
-    {  
-        x -= TAU;  
-    }  
-    if(x > PI)  
-    {  
-        x -= PI;  
-        sign *= -1;  
-    }  
-    if(x > PI_DIV_2)  
-    {  
-        x = PI - x;  
-    }  
-    tx = x;  
-    for (k = 0; k < itemCnt; k ++)  
-    {  
-        if(k%2 == 0)  
-        {  
-            result += (tx / factorial);  
-        }  
-        else  
-        {  
-            result -= (tx / factorial);  
-        }  
-        tx *= (x * x);  
-        factorial *= (2*(k+1));  
-        factorial *= (2*(k+1) + 1);  
-    }  
-    if (1 == sign)  
-        return result;  
-    else  
-        return -result;  
+double sqrt(double x) {
+    double result;
+    __asm__ (
+        "fsqrt" : "=t"(result) : "0"(x)
+    );
+    return result;
 }
 
-#define cos(x) sin(PI_DIV_2 - x)
+double sin(double x) {
+    double result;
+    __asm__ (
+        "fsin" : "=t"(result) : "0"(x)
+    );
+    return result;
+}
 
+double cos(double x) {
+    double result;
+    __asm__ (
+        "fcos" : "=t"(result) : "0"(x)
+    );
+    return result;
+}
+double acos(double x) {
+    double result;
+    __asm__ (
+        "fld1;"             // 将1加载到栈顶
+        "fld %1;"           // 将x加载到栈顶
+        "fsubp;"            // 计算栈顶两数的差，即 1 - x
+        "fsqrt;"            // 计算平方根
+        "fld %1;"           // 再次将x加载到栈顶
+        "fpatan;"           // 计算反正切
+        : "=t"(result)      // 输出
+        : "m"(x)            // 输入
+        : "st(1)"           // 栈顶寄存器被修改
+    );
+    return result;
+}
 unsigned int abs(int value)
 {
     unsigned int copyed_value = value;
     return (copyed_value > 0x80000000) ? -value : copyed_value;
 }
 
-double acos_taylor(double x) {
-
-    double sum = 0.0;
-    double term = 1.0;
-    int n = 0;
-
-    while (abs(term) > 1e-10) {
-        term = ((2 * n - 1) * pow(x, 2 * n)) / (2 * n * pow(2, 2 * n) * (n - 1));
-        sum += term;
-        n++;
-    }
-
-    return PI_DIV_2 - sum;
-}
 
 double fabs(double x) {
     return (x < 0.0) ? -x : x;
@@ -154,5 +117,14 @@ double ceil(double x) {
 }
 
 double fmod(double x, double y) {
-    return x - floor(x / y) * y;
+    double result;
+    __asm__ (
+        "fld %2;"           // 将y加载到栈顶
+        "fld %1;"           // 将x加载到栈顶
+        "fprem;"            // 计算x除以y的余数
+        "fstp %0;"          // 将结果存储到result并弹出栈顶
+        : "=m"(result)      // 输出
+        : "m"(x), "m"(y)    // 输入
+    );
+    return result;
 }
