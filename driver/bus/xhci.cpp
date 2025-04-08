@@ -233,6 +233,31 @@ uint32_t XHCIWaitCompletion(XHCI_CONTROLLER *controller, XHCI_TRANSFER_RING *rin
     return ring->EVT.DATA[2] >> 24;
 }
 
+bool use_kthread = false;
+
+uint64_t usb_kernel_thread(uint64_t arg)
+{
+    if (!use_kthread)
+    {
+        return 0;
+    }
+
+    write_serial_string("USB kernel thread is running\n");
+
+    XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
+
+    while (true)
+    {
+        enable_intr();
+        __asm__ __volatile__("pause");
+
+        while (XHCIProcessEvent(controller))
+            __asm__ __volatile__("pause");
+    }
+
+    return 0;
+}
+
 uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
 {
     uint64_t physicalAddress = (uint64_t)PAGE_ALLOC.alloc_page();
@@ -260,6 +285,7 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
     while (controller->OR->CMD & XHCI_CMD_HCRST) __asm__ __volatile__("pause");
     while (controller->OR->STS & XHCI_STS_CNR) __asm__ __volatile__("pause");
     */
+
     uint32_t reg = controller->OR->CMD;
     if (reg & XHCI_CMD_RS)
     {
@@ -284,7 +310,7 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
 
     controller->EVT.CCS = 1;
     controller->RR->IR[0].IMOD = 0;
-    controller->RR->IR[0].IMAN |= 3; // Interrupt Enable
+    controller->RR->IR[0].IMAN |= 3; // Interrupt Enable & Interrupt Pending
     controller->RR->IR[0].TS = 1;
     controller->RR->IR[0].ERS = mapper.translate_address((uint64_t)controller->SEG);
     controller->RR->IR[0].ERD = mapper.translate_address((uint64_t)controller->EVT.RING);
@@ -313,6 +339,11 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
     hub->CTRL = &controller->USB;
     hub->PC = controller->PN;
     hub->OP = &XHCI_OPERARTION;
+
+    if (use_kthread)
+    {
+        kernel_thread(usb_kernel_thread, 0, CLONE_FILES | CLONE_FS | CLONE_SIGNAL);
+    }
 
     int count = USBEnumerate(hub);
     // xhci_free_pipes
@@ -356,7 +387,12 @@ void SetupXHCIControllerPCI(pci_device_t *dvc)
     msi_desc.pci.msi_attribute.is_64 = 1;
     msi_desc.pci.msi_attribute.is_msix = 0;
     register_irq("XHCI", msi_desc.irq_num, InterruptXHCI, 0);
-    pci_enable_msi(&msi_desc);
+    int ret = pci_enable_msi(&msi_desc);
+    if (ret != 0)
+    {
+        unregister_irq(msi_desc.irq_num);
+        use_kthread = true;
+    }
 
     XHCI_CONTROLLER *controller = SetupXHCIController(bar);
     if (!controller)

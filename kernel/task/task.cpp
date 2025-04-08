@@ -762,6 +762,8 @@ void fork_exit_thread(struct task_struct *tsk) {}
 
 uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size)
 {
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+
     // 获取fork锁，防止多个进程同时创建导致竞争
     spin_lock(&do_fork_lock);
 
@@ -770,13 +772,18 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     void *p = (void *)NULL;           // 临时指针变量
 
     // 为新进程分配内核栈空间并转换为虚拟地址
-    p = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE));
+    uint64_t p_phys = (uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE);
+    p = (void *)convert_physical_to_virtual(p_phys);
     if (!p)
     {
         // 如果内存分配失败，释放锁并返回0
         spin_unlock(&do_fork_lock);
         return 0;
     }
+
+    mapper.map_range((uint64_t)p, p_phys, STACK_SIZE, 0x3);
+    flush_tlb();
+
     // 清零分配的内存空间
     xmemset(p, 0, STACK_SIZE);
 
@@ -941,7 +948,7 @@ void init_task_manager()
 
     uint64_t cr3;
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
-    init_mm.pgd = (uint64_t *)cr3;
+    init_mm.pgd = (uint64_t *)(cr3 & ~(0xFFFUL));
 
     init_mm.start_code = 0x0;
     init_mm.end_code = 0x0;

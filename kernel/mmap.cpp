@@ -117,25 +117,29 @@ uint64_t KERNEL_MAPPER::translate_address(uint64_t virtual_address)
 
     uint64_t *pml4 = (uint64_t *)page_table_addr;
     uint64_t pml4_id = (virtual_address >> 39) & 0x1FFUL;
-    if (pml4[pml4_id] == 0)
+    if ((pml4[pml4_id] & (1 << 0)) == 0)
     {
         return 0;
     }
     uint64_t *pdpt = (uint64_t *)convert_physical_to_virtual(pml4[pml4_id] & ~(0xFFFUL));
     uint64_t pdpt_id = (virtual_address >> 30) & 0x1FFUL;
-    if (pdpt[pdpt_id] == 0)
+    if ((pdpt[pdpt_id] & (1 << 0)) == 0)
     {
         return 0;
     }
     uint64_t *pd = (uint64_t *)convert_physical_to_virtual(pdpt[pdpt_id] & ~(0xFFFUL));
     uint64_t pd_id = (virtual_address >> 21) & 0x1FFUL;
-    if (pd[pd_id] == 0)
+    if ((pd[pd_id] & (1 << 0)) == 0)
     {
         return 0;
     }
+    // if (pd[pd_id] & (1 << 7))
+    // {
+    //     return (pd[pd_id] & ((1UL << 21) - 1)) + (virtual_address & ((1UL << 21) - 1));
+    // }
     uint64_t *pt = (uint64_t *)convert_physical_to_virtual(pd[pd_id] & ~(0xFFFUL));
     uint64_t pt_id = (virtual_address >> 12) & 0x1FFUL;
-    if (pt[pt_id] == 0)
+    if ((pt[pt_id] & (1 << 0)) == 0)
     {
         return 0;
     }
