@@ -227,7 +227,6 @@ uint32_t XHCIWaitCompletion(XHCI_CONTROLLER *controller, XHCI_TRANSFER_RING *rin
 {
     while (ring->EID != ring->NID)
     {
-        enable_intr();
         __asm__ __volatile__("sti\n\tpause\n\t");
     }
     return ring->EVT.DATA[2] >> 24;
@@ -790,7 +789,6 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
     else
     {
         // XHCI Transfer Normal
-        // while (1) __asm__ __volatile__("pause");
         XHCI_TRB_NORMAL trb;
         xmemset(&trb, 0, sizeof(XHCI_TRB_NORMAL));
         trb.DATA = mapper.translate_address((uint64_t)data);
@@ -804,6 +802,22 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
     if (!wait)
     {
         cc = XHCIWaitCompletion(controller, ring);
+        // if (cc == 6)
+        // {
+        //     XHCI_TRB_RESET_ENDPOINT trb0;
+        //     xmemset(&trb0, 0, sizeof(XHCI_TRB_RESET_ENDPOINT));
+        //     trb0.TYPE = TRB_RESET_ENDPOINT;
+        //     trb0.C = 1;
+        //     trb0.SID = xpipe->SID;
+        //     trb0.EPID = xpipe->EPID;
+        //     cc = XHCICommand(controller, &trb0.TRB);
+        //     if (cc != 1)
+        //     {
+        //         write_serial_string("RESET ENDPOINT FAILED\n");
+        //         return cc;
+        //     }
+
+        // }
     }
     if (cc != 1)
     {

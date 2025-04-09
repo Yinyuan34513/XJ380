@@ -269,6 +269,7 @@ void USBD2P(USB_PIPE *pipe, USB_COMMON *usbdev, USB_ENDPOINT *epdesc)
 {
     pipe->CTRL = usbdev->CTRL;
     pipe->MPS = epdesc->MPS;
+    pipe->C = usbdev;
 }
 USB_ENDPOINT *USBSearchEndpoint(USB_COMMON *usbdev, int type, int dir)
 {

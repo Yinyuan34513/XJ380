@@ -376,11 +376,14 @@ typedef union _XHCI_TRB_RESET_ENDPOINT
     struct
     {
         uint32_t RSV0[3];
+
         uint16_t C : 0x01; // Cycle
         uint16_t RSV1 : 0x09;
         uint16_t TYPE : 0x06; // TRB Type
-        uint8_t RSV2;
-        uint8_t SID; // Slot ID
+
+        uint16_t EPID : 0x04; // Endpoint ID
+        uint16_t RSV2 : 0x04;
+        uint16_t SID : 0x08; // Slot ID
     };
 } XHCI_TRB_RESET_ENDPOINT;
 typedef union _XHCI_TRB_EVALUATE_CONTEXT

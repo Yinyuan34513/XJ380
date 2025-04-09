@@ -163,6 +163,7 @@ typedef struct _USB_PIPE
 {
     struct _USB_CONTROLLER *CTRL;
     uint16_t MPS;
+    struct _USB_COMMON *C;
 } USB_PIPE;
 typedef struct _USB_CONTROLLER
 {
