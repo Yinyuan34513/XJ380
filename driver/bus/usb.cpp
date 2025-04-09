@@ -241,8 +241,11 @@ LABEL001:;
         {
             if (interface->IP == US_PR_BULK)
             {
-                write_serial_string("MASS device\n");
-                // cc = ConfigureMSC(common, interface);
+                write_serial_string("MASS BULK device\n");
+            }
+            else if (interface->IP == US_PR_UAS)
+            {
+                write_serial_string("MASS UAS device\n");
             }
         }
         else if (interface->IC == USB_CLASS_HID)
@@ -269,7 +272,6 @@ void USBD2P(USB_PIPE *pipe, USB_COMMON *usbdev, USB_ENDPOINT *epdesc)
 {
     pipe->CTRL = usbdev->CTRL;
     pipe->MPS = epdesc->MPS;
-    pipe->C = usbdev;
 }
 USB_ENDPOINT *USBSearchEndpoint(USB_COMMON *usbdev, int type, int dir)
 {
@@ -283,7 +285,7 @@ USB_ENDPOINT *USBSearchEndpoint(USB_COMMON *usbdev, int type, int dir)
             return 0;
         uint32_t edir = epdesc->EA & USB_ENDPOINT_DIR;
         uint32_t etyp = epdesc->AT & USB_ENDPOINT_XFER_TYPE;
-        if ((epdesc->DT == USB_DT_ENDPOINT) && (edir == dir) && (etyp == type))
+        if ((epdesc->DT == USB_DT_ENDPOINT) && (edir == (uint32_t)dir) && (etyp == (uint32_t)type))
             return epdesc;
         epdesc = (USB_ENDPOINT *)(((uint64_t)epdesc) + epdesc->L);
     }
