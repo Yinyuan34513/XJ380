@@ -43,6 +43,7 @@ void init_xhci()
     pci_device_t *dvc = pci_find_class(0x0C0330);
     if (!dvc)
     {
+        write_serial_string("No XHCI Controller found\n");
         return;
     }
     SetupXHCIControllerPCI(dvc);
@@ -842,7 +843,6 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
         //         write_serial_string("RESET ENDPOINT FAILED\n");
         //         return cc;
         //     }
-
         // }
     }
     if (cc != 1)
