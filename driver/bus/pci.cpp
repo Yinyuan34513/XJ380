@@ -116,7 +116,7 @@ uint32_t pci_read0(uint32_t b, uint32_t d, uint32_t f, uint32_t arg, uint32_t re
                   ((f & 0x07) << 8) | (registeroffset & 0xfc);
     outl(PCI_COMMAND_PORT, id);
     uint32_t result = inl(PCI_DATA_PORT);
-    return result >> (8 * (registeroffset & 2) & 0xff);
+    return result >> ((8 * (registeroffset & 2)) & 0xFF);
 }
 
 void pci_write0(uint32_t b, uint32_t d, uint32_t f, uint32_t arg, uint32_t registeroffset,
@@ -369,10 +369,8 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
 
             if (bar & 0x01)
             {
-                pci_device->bars[i] = pci_bar_base_address{
-                    .address = bar & 0xFFFFFFFC,
-                    .mmio = false,
-                };
+                pci_device->bars[i].address = bar & 0xFFFFFFFC;
+                pci_device->bars[i].mmio = false;
             }
             else
             {
@@ -383,10 +381,8 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
                 {
                 // 32 bit
                 case 0b00:
-                    pci_device->bars[i] = pci_bar_base_address{
-                        .address = bar & 0xFFFFFFFC,
-                        .mmio = true,
-                    };
+                    pci_device->bars[i].address = bar & 0xFFFFFFFC;
+                    pci_device->bars[i].mmio = false;
                     break;
 
                 // 64 bit
@@ -394,10 +390,9 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
                     uint32_t bar_address_upper = *((uint32_t *)bars_mmio_address + 1);
 
                     bar_address |= ((uint64_t)bar_address_upper << 32);
-                    pci_device->bars[i] = pci_bar_base_address{
-                        .address = bar_address,
-                        .mmio = true,
-                    };
+
+                    pci_device->bars[i].address = bar_address;
+                    pci_device->bars[i].mmio = false;
                     break;
                 }
             }
@@ -463,6 +458,7 @@ void pci_scan_segment(uint16_t segment_group)
 void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
 {
     pci_device_t *device = (pci_device_t *)malloc(sizeof(pci_device_t));
+    xmemset(device, 0, sizeof(pci_device_t));
     device->op = &pci_device_op;
 
     uint32_t value_c = device->op->read(bus, equipment, f, 0, PCI_CONF_REVISION);
@@ -487,6 +483,7 @@ void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
         int offset = 0x10 + i * 4;
         uint32_t bar_low = device->op->read(bus, equipment, f, 0, offset);
 
+        device->bars[i].mmio = false;
         device->bars[i].address = 0;
 
         if (bar_low & 0x1)
@@ -498,9 +495,12 @@ void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
         {
             device->bars[i].mmio = true;
             uint8_t bar_type = (bar_low >> 1) & 0x3;
-            device->bars[i].address = bar_low & 0xFFFFFFF0;
 
-            if (bar_type == 0x2)
+            if (bar_type == 0x0)
+            {
+                device->bars[i].address = bar_low & 0xFFFFFFF0;
+            }
+            else if (bar_type == 0x2)
             {
                 if (i >= 5)
                 {
@@ -509,7 +509,7 @@ void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
                 }
 
                 uint32_t bar_high = device->op->read(bus, equipment, f, 0, offset + 4);
-                device->bars[i].address |= ((uint64_t)bar_high << 32);
+                device->bars[i].address = ((uint64_t)bar_high << 32) | (bar_low & 0xFFFFFFF0);
 
                 i++;
                 device->bars[i].mmio = true;
@@ -532,13 +532,16 @@ static void pci_config0(uint32_t bus, uint32_t f, uint32_t equipment, uint32_t a
 
 void init_pci(uint64_t mcfg_addr)
 {
-    // Scan PCIe bus
-    mcfg_addr_to_entries((MCFG *)mcfg_addr, mcfg_entries, &mcfg_entries_len);
-
-    for (int i = 0; i < mcfg_entries_len; i++)
+    if (!mcfg_addr)
     {
-        uint16_t segment_group = mcfg_entries[i]->pci_segment_group;
-        pci_scan_segment(segment_group);
+        // Scan PCIe bus
+        mcfg_addr_to_entries((MCFG *)mcfg_addr, mcfg_entries, &mcfg_entries_len);
+
+        for (int i = 0; i < mcfg_entries_len; i++)
+        {
+            uint16_t segment_group = mcfg_entries[i]->pci_segment_group;
+            pci_scan_segment(segment_group);
+        }
     }
 
     // Scan PCI bus
