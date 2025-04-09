@@ -151,7 +151,7 @@ void failed_to_mount_root()
     write_serial_string("Cannot mount root file system, halting...\n");
     while (true)
     {
-        __asm__ __volatile__("pause");
+        __asm__ __volatile__("sti\n\tpause\n\t");
     }
 }
 

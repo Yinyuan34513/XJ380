@@ -5,6 +5,15 @@
 #define PCI_MCFG_MAX_ENTRIES_LEN 1024
 #define PCI_DEVICE_MAX 256
 
+#define PCI_CONF_VENDOR 0X0   // Vendor ID
+#define PCI_CONF_DEVICE 0X2   // Device ID
+#define PCI_CONF_COMMAND 0x4  // Command
+#define PCI_CONF_STATUS 0x6   // Status
+#define PCI_CONF_REVISION 0x8 // Revision ID
+
+#define PCI_COMMAND_PORT 0xCF8
+#define PCI_DATA_PORT 0xCFC
+
 typedef struct
 {
     ACPI_TABLE_HEADER Header;
@@ -27,11 +36,20 @@ uint32_t segment_bus_device_functon_to_pci_address(uint16_t segment, uint8_t bus
 uint32_t pci_read(uint32_t pci_address, uint16_t offset);
 void pci_write(uint32_t pci_address, uint16_t offset, uint32_t value);
 
+extern uint32_t (*read_pci)(uint32_t pci_address, uint16_t offset);
+extern void (*write_pci)(uint32_t pci_address, uint16_t offset, uint32_t value);
+
 typedef struct
 {
     uint64_t address;
     bool mmio;
 } pci_bar_base_address;
+
+typedef struct pci_device_op_t
+{
+    uint32_t (*read)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5);
+    void (*write)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t value);
+};
 
 typedef struct
 {
@@ -53,7 +71,7 @@ typedef struct
     uint32_t msix_offset;     // msix表的offset
     uint16_t msix_table_size; // msix表的表项数量
 
-    uint64_t device_controller;
+    pci_device_op_t *op;
 } pci_device_t;
 
 uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type);

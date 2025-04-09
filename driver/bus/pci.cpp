@@ -43,8 +43,14 @@ uint64_t get_mmio_address(uint32_t pci_address, uint16_t offset)
     return virt + offset;
 }
 
-uint32_t pci_read(uint32_t pci_address, uint16_t offset)
+uint32_t segment_bus_device_functon_to_pci_address(uint16_t segment, uint8_t bus, uint8_t device, uint8_t function)
 {
+    return ((uint32_t)segment << 16) | ((uint32_t)bus << 8) | ((uint32_t)device << 3) | (uint32_t)function;
+}
+
+uint32_t pci_read(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offset)
+{
+    uint32_t pci_address = segment_bus_device_functon_to_pci_address(s, b, d, f);
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
     if (mmio_address == 0)
     {
@@ -53,8 +59,9 @@ uint32_t pci_read(uint32_t pci_address, uint16_t offset)
     return *(uint32_t *)mmio_address;
 }
 
-void pci_write(uint32_t pci_address, uint16_t offset, uint32_t value)
+void pci_write(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offset, uint32_t value)
 {
+    uint32_t pci_address = segment_bus_device_functon_to_pci_address(s, b, d, f);
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
     if (mmio_address == 0)
     {
@@ -82,7 +89,7 @@ uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type)
     uint32_t tmp;
     while (1)
     {
-        tmp = pci_read(pci_address, cap_offset);
+        tmp = pci_dev->op->read(pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment, cap_offset);
         if ((tmp & 0xff) != cap_type)
         {
             if (((tmp & 0xff00) >> 8))
@@ -98,10 +105,33 @@ uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type)
     }
 }
 
-uint32_t segment_bus_device_functon_to_pci_address(uint16_t segment, uint8_t bus, uint8_t device, uint8_t function)
+pci_device_op_t pcie_device_op = {
+    .read = pci_read,
+    .write = pci_write,
+};
+
+uint32_t pci_read0(uint32_t b, uint32_t d, uint32_t f, uint32_t arg, uint32_t registeroffset)
 {
-    return ((uint32_t)segment << 16) | ((uint32_t)bus << 8) | ((uint32_t)device << 3) | (uint32_t)function;
+    uint32_t id = (1U << 31) | ((b & 0xff) << 16) | ((d & 0x1f) << 11) |
+                  ((f & 0x07) << 8) | (registeroffset & 0xfc);
+    outl(PCI_COMMAND_PORT, id);
+    uint32_t result = inl(PCI_DATA_PORT);
+    return result >> (8 * (registeroffset & 2) & 0xff);
 }
+
+void pci_write0(uint32_t b, uint32_t d, uint32_t f, uint32_t arg, uint32_t registeroffset,
+                uint32_t value)
+{
+    uint32_t id = (1U << 31) | ((b & 0xff) << 16) | ((d & 0x1f) << 11) |
+                  ((f & 0x07) << 8) | (registeroffset & 0xfc);
+    outl(PCI_COMMAND_PORT, id);
+    outl(PCI_DATA_PORT, value);
+}
+
+pci_device_op_t pci_device_op = {
+    .read = pci_read0,
+    .write = pci_write0,
+};
 
 struct
 {
@@ -310,6 +340,12 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     pci_device_t *pci_device = (pci_device_t *)malloc(sizeof(pci_device_t));
     xmemset(pci_device, 0, sizeof(pci_device_t));
     pci_device->header_type = header_type;
+    pci_device->op = &pcie_device_op;
+
+    pci_device->segment = segment_group;
+    pci_device->bus = bus;
+    pci_device->slot = device;
+    pci_device->func = function;
 
     switch (header_type)
     {
@@ -318,15 +354,11 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     {
         uint32_t class_code_24bit = (device_class << 16) | (device_subclass << 8) | device_interface;
         pci_device->class_code = class_code_24bit;
+        // pci_device->name = pci_classname(class_code_24bit);
         pci_device->vendor_id = vendor_id;
         pci_device->device_id = device_id;
 
-        pci_device->segment = segment_group;
-        pci_device->bus = bus;
-        pci_device->slot = device;
-        pci_device->func = function;
-
-        uint32_t capability_point = pci_read(pci_address, 0x34) & 0xff;
+        uint32_t capability_point = pci_device->op->read(pci_device->bus, pci_device->slot, pci_device->func, pci_device->segment, 0x34) & 0xff;
         pci_device->capability_point = capability_point;
 
         for (int i = 0; i < 6; i++)
@@ -379,7 +411,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     // PciPciBridge
     case 0x01:
     {
-        uint32_t data = pci_read(pci_address, 0x18);
+        uint32_t data = pci_device->op->read(pci_device->bus, pci_device->slot, pci_device->func, pci_device->segment, 0x18);
         uint8_t start_bus = (uint8_t)((data >> 8) & 0xFF);
         uint8_t end_bus = (uint8_t)((data >> 16) & 0xFF);
         for (uint8_t bus = start_bus; bus <= end_bus; bus++)
@@ -428,13 +460,101 @@ void pci_scan_segment(uint16_t segment_group)
     }
 }
 
+void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
+{
+    pci_device_t *device = (pci_device_t *)malloc(sizeof(pci_device_t));
+    device->op = &pci_device_op;
+
+    uint32_t value_c = device->op->read(bus, equipment, f, 0, PCI_CONF_REVISION);
+    uint32_t class_code = value_c >> 8;
+
+    uint16_t value_v = device->op->read(bus, equipment, f, 0, PCI_CONF_VENDOR);
+    uint16_t value_d = device->op->read(bus, equipment, f, 0, PCI_CONF_DEVICE);
+    uint16_t vendor_id = value_v & 0xffff;
+    uint16_t device_id = value_d & 0xffff;
+
+    // device->name = pci_classname(class_code);
+    device->vendor_id = vendor_id;
+    device->device_id = device_id;
+    device->class_code = class_code;
+    device->segment = 0;
+    device->bus = bus;
+    device->slot = equipment;
+    device->func = f;
+
+    for (int i = 0; i < 6; i++)
+    {
+        int offset = 0x10 + i * 4;
+        uint32_t bar_low = device->op->read(bus, equipment, f, 0, offset);
+
+        device->bars[i].address = 0;
+
+        if (bar_low & 0x1)
+        {
+            device->bars[i].mmio = false;
+            device->bars[i].address = bar_low & 0xFFFFFFFC;
+        }
+        else
+        {
+            device->bars[i].mmio = true;
+            uint8_t bar_type = (bar_low >> 1) & 0x3;
+            device->bars[i].address = bar_low & 0xFFFFFFF0;
+
+            if (bar_type == 0x2)
+            {
+                if (i >= 5)
+                {
+                    printf("Error: 64-bit BAR at position %d would overflow\n", i);
+                    continue;
+                }
+
+                uint32_t bar_high = device->op->read(bus, equipment, f, 0, offset + 4);
+                device->bars[i].address |= ((uint64_t)bar_high << 32);
+
+                i++;
+                device->bars[i].mmio = true;
+                device->bars[i].address = 0;
+            }
+        }
+    }
+
+    pci_devices[device_number] = device;
+    device_number++;
+}
+
+static void pci_config0(uint32_t bus, uint32_t f, uint32_t equipment, uint32_t adder)
+{
+    unsigned int cmd = 0;
+    cmd = 0x80000000 + (uint32_t)adder + ((uint32_t)f << 8) + ((uint32_t)equipment << 11) +
+          ((uint32_t)bus << 16);
+    outl(PCI_COMMAND_PORT, cmd);
+}
+
 void init_pci(uint64_t mcfg_addr)
 {
+    // Scan PCIe bus
     mcfg_addr_to_entries((MCFG *)mcfg_addr, mcfg_entries, &mcfg_entries_len);
 
     for (int i = 0; i < mcfg_entries_len; i++)
     {
         uint16_t segment_group = mcfg_entries[i]->pci_segment_group;
         pci_scan_segment(segment_group);
+    }
+
+    // Scan PCI bus
+    uint32_t BUS, Equipment, F;
+    for (BUS = 0; BUS < 256; BUS++)
+    {
+        for (Equipment = 0; Equipment < 32; Equipment++)
+        {
+            for (F = 0; F < 8; F++)
+            {
+                pci_config0(BUS, F, Equipment, 0);
+                if (inl(PCI_DATA_PORT) != 0xFFFFFFFF)
+                {
+                    pci_scan_device_legacy(BUS, Equipment, F);
+                }
+            }
+        }
     }
 }

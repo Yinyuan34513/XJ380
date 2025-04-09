@@ -425,13 +425,11 @@ void SetupXHCIControllerPCI(pci_device_t *dvc)
     {
         return;
     }
-    dvc->device_controller = (uint64_t)controller;
     USB_CTRL = (USB_CONTROLLER *)controller;
 
     if (ConfigureXHCI(controller))
     {
         free(controller);
-        dvc->device_controller = 0;
     }
 }
 
