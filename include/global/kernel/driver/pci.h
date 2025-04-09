@@ -49,7 +49,7 @@ typedef struct pci_device_op_t
 {
     uint32_t (*read)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5);
     void (*write)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t value);
-};
+} pci_device_op_t;
 
 typedef struct
 {
