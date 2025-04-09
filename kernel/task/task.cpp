@@ -472,7 +472,7 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_fat();
     init_vfs();
     write_serial_string("FS initialized.\n");
-
+    
     write_serial_string("Operating System Initialize Success.\n");
 
     disable_intr();
@@ -509,6 +509,8 @@ uint64_t desktop_flusher(uint64_t arg)
 {
     disable_intr();
 
+    // init_ttf(*fbc_addr);
+
     write_serial_string("desktop flusher is running, arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
@@ -533,7 +535,6 @@ uint64_t desktop_flusher(uint64_t arg)
 
     int fontx = 8;
     int fonty = 50;
-
     // DEBUG
 #if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40, "X:", WHITE);
@@ -599,9 +600,9 @@ uint64_t desktop_flusher(uint64_t arg)
     init_xwm(&xwmi);
     create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
     create_window(&xwmi, &shtinf, &test_win2, "1919810", 320, 180);
-
+    
     refresh_sheet(&shtinf); // 刷新
-
+    init_ttf(&shtinf,&desktop_sheet_id,*fbc_addr);
     while (!keyboard_mouse_init_done)
     {
         enable_intr();

@@ -20,6 +20,5 @@ int main(int argc, char *argv[], char *envp[])
         while (1)
             __asm__ __volatile__("pause");
     }
-
     return -1;
 }
