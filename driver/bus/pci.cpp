@@ -504,7 +504,7 @@ void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
             {
                 if (i >= 5)
                 {
-                    printf("Error: 64-bit BAR at position %d would overflow\n", i);
+                    write_serial_string("Error: 64-bit BAR at position overflow\n");
                     continue;
                 }
 

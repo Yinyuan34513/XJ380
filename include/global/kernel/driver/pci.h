@@ -1,6 +1,6 @@
-#include "../../../include.h"
-
 #pragma once
+
+#include "../../../include.h"
 
 #define PCI_MCFG_MAX_ENTRIES_LEN 1024
 #define PCI_DEVICE_MAX 256
@@ -33,11 +33,8 @@ void mcfg_addr_to_entries(MCFG *mcfg, MCFG_ENTRY **entries, uint64_t *len);
 uint64_t get_mmio_address(uint32_t pci_address, uint16_t offset);
 
 uint32_t segment_bus_device_functon_to_pci_address(uint16_t segment, uint8_t bus, uint8_t device, uint8_t function);
-uint32_t pci_read(uint32_t pci_address, uint16_t offset);
-void pci_write(uint32_t pci_address, uint16_t offset, uint32_t value);
-
-extern uint32_t (*read_pci)(uint32_t pci_address, uint16_t offset);
-extern void (*write_pci)(uint32_t pci_address, uint16_t offset, uint32_t value);
+uint32_t pci_read(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offset);
+void pci_write(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint16_t offset, uint32_t value);
 
 typedef struct
 {

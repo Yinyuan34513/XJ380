@@ -32,7 +32,6 @@ static inline struct pci_msi_cap_t __msi_read_cap_list(struct msi_desc_t *msi_de
     struct pci_msi_cap_t cap_list = {0};
     pci_device_t *ptr = msi_desc->pci_dev;
     uint32_t dw0;
-    uint32_t pci_address = segment_bus_device_functon_to_pci_address(msi_desc->pci_dev->segment, msi_desc->pci_dev->bus, msi_desc->pci_dev->slot, msi_desc->pci_dev->func);
     dw0 = ptr->op->read(ptr->bus, ptr->slot, ptr->func, ptr->segment, cap_off);
     cap_list.cap_id = dw0 & 0xff;
     cap_list.next_off = (dw0 >> 8) & 0xff;
@@ -96,7 +95,6 @@ static inline struct pci_msix_cap_t __msi_read_msix_cap_list(struct msi_desc_t *
 static inline int __msix_map_table(pci_device_t *pci_dev,
                                    struct pci_msix_cap_t *msix_cap)
 {
-    uint32_t pci_address = segment_bus_device_functon_to_pci_address(pci_dev->segment, pci_dev->bus, pci_dev->slot, pci_dev->func);
     // 计算bar寄存器的offset
     uint32_t bar_off = 0x10 + 4 * (msix_cap->dword1 & 0x7);
 
@@ -156,7 +154,6 @@ static inline void __msix_clear_entry(pci_device_t *pci_dev, uint16_t msi_index)
 int pci_enable_msi(struct msi_desc_t *msi_desc)
 {
     pci_device_t *ptr = msi_desc->pci_dev;
-    uint32_t pci_address = segment_bus_device_functon_to_pci_address(ptr->segment, ptr->bus, ptr->slot, ptr->func);
     uint32_t cap_ptr;
     uint32_t tmp;
     uint16_t message_control;
