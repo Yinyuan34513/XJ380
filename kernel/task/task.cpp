@@ -593,7 +593,8 @@ uint64_t desktop_flusher(uint64_t arg)
     // wsod_debug();
 
     draw_mouse(&shtinf, &mouse_sheet_id);
-
+    init_ttf(&shtinf,&desktop_sheet_id);
+    TTF_Print(&shtinf,&desktop_sheet_id,"t");
     XWM_INFO xwmi;
     UINT16 test_win;
     UINT16 test_win2;
@@ -602,7 +603,7 @@ uint64_t desktop_flusher(uint64_t arg)
     create_window(&xwmi, &shtinf, &test_win2, "1919810", 320, 180);
     
     refresh_sheet(&shtinf); // 刷新
-    init_ttf(&shtinf,&desktop_sheet_id,*fbc_addr);
+
     while (!keyboard_mouse_init_done)
     {
         enable_intr();
