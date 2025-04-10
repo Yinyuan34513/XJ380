@@ -1,5 +1,5 @@
 OUTPUT_FORMAT("elf64-x86-64")  
-ENTRY(KernelMain)  
+ENTRY(_start)  
   
 SECTIONS  
 {  
@@ -26,7 +26,7 @@ SECTIONS
         _edata = .; /* 定义data段的结束位置 */  
     }  
 
-    . = ALIGN(16K);
+    . = ALIGN(32K);
     .data.init_task :
     {
         *(.data.init_task)

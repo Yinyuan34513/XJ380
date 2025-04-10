@@ -76,23 +76,27 @@ clean:
 	@$(MAKE) -C user clean
 
 vdisk: all
-	dd if=/dev/zero of=XJ380.img bs=128M count=1
-	sgdisk XJ380.img -n 1:2048 -t 1:ef00
+	@rm -rf XJ380.img
 
-	mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
+	@dd if=/dev/zero of=XJ380.img bs=128M count=1
+	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
-	mkdir -p $(BUILD_DIR)/XJ380/usr
-	cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380
-	cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
-	cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/usr
-	cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/usr
+	@mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
 
-	mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
+	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
+	@mkdir -p $(BUILD_DIR)/XJ380/usr
+	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380
+	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
+	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/usr
+	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/usr
 
-	rm -rf $(BUILD_DIR)/XJ380
+	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
-	qemu-img convert -O vmdk XJ380.img XJ380.vmdk
+	@rm -rf $(BUILD_DIR)/XJ380
+
+vmdk: vdisk
+	@rm -rf XJ380.vmdk
+	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
 
 run: vdisk
 	@$(QEMU_CMD)

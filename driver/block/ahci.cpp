@@ -1,8 +1,6 @@
 #include "../../include/include.h"
 #include "../../kernel/alloc/page.h"
 
-static uint8_t *cache;
-
 static uint32_t ahci_bus, ahci_slot, ahci_func, port;
 static void *ahci_ports_base_addr;
 static uint32_t ports[32];
@@ -35,8 +33,10 @@ static int check_type(HBA_PORT *port)
         return AHCI_DEV_SEMB;
     case SATA_SIG_PM:
         return AHCI_DEV_PM;
-    default:
+    case SATA_SIG_ATA:
         return AHCI_DEV_SATA;
+    default:
+        return 0;
     }
 }
 void ahci_search_ports(HBA_MEM *abar)
@@ -71,6 +71,9 @@ void ahci_search_ports(HBA_MEM *abar)
             }
             else
             {
+                // write_serial_string("Unknown device found at port ");
+                // write_serial_dec(i);
+                // write_serial_string("\n");
             }
         }
 
@@ -456,16 +459,13 @@ void init_ahci()
 
     uint64_t ports_base_phys = (uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE);
     ahci_ports_base_addr = (void *)ports_base_phys;
+    uint64_t ports_base_virt = (uint64_t)convert_physical_to_virtual(ports_base_phys);
 
-    uint64_t cache_phys = (uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE);
-    cache = (uint8_t *)convert_physical_to_virtual(cache_phys);
-
-    mapper.map_range((uint64_t)cache, cache_phys, 1048576, 0x3);
+    mapper.map_range(ports_base_virt, ports_base_phys, PAGE_SIZE * 4, 0x3);
     flush_tlb();
 
-    xmemset(cache, 0, 1048576);
-
     write_serial_string("The Usable Ports:\n");
+
     for (i = 0; i < port_total; i++)
     {
         port_rebase(&(hba_mem_address->ports[ports[i]]), ports[i]);
@@ -480,60 +480,65 @@ void init_ahci()
             write_serial_string("SATA Drive identify error.");
             continue;
         }
-        write_serial_string("ports");
+        write_serial_string("ports[");
         write_serial_dec(ports[i]);
-        write_serial_string(": total sector = ");
+        write_serial_string("]: total sector = ");
         write_serial_dec(buf.lba_capacity);
         write_serial_string("\n");
 
-        device_install(DEV_BLOCK, DEV_DISK, (void *)i, "AHCI", 0, nullptr, (void *)ahci_dev_read, (void *)ahci_dev_write);
-    }
-}
-void io_delay(uint32_t delay_cycles)
-{
-    volatile uint32_t i;
+        AHCI_PORT *port = (AHCI_PORT *)malloc(sizeof(AHCI_PORT));
+        xmemset(port, 0, sizeof(AHCI_PORT));
+        port->i = i;
+        xmemcpy(&port->ident, &buf, sizeof(SATA_ident_t));
 
-    for (i = 0; i < delay_cycles; ++i)
-    {
-        // 添加一些无用的操作来占用时间
-        asm volatile("nop");
+        device_install(DEV_BLOCK, DEV_DISK, (void *)port, "AHCI", 0, nullptr, (void *)ahci_dev_read, (void *)ahci_dev_write);
     }
 }
+
 static int ahci_dev_read(void *dev, void *buf, size_t count, int idx, int flags)
 {
+    AHCI_PORT *port = (AHCI_PORT *)dev;
+
+    if (idx > port->ident.lba_capacity)
+    {
+        write_serial_string("AHCI Read Error: Out of range!");
+        return -1;
+    }
+
     int i;
     for (i = 0; i < 5; i++)
-        if (ahci_read(&(hba_mem_address->ports[(uint64_t)dev]), idx, 0, count, (uint16_t *)cache))
+        if (ahci_read(&(hba_mem_address->ports[port->i]), idx, 0, count, (uint16_t *)buf))
         {
             break;
         }
     if (i == 5)
     {
         write_serial_string("AHCI Read Error!");
-        while (true)
-            ;
+        return -1;
     }
-    __asm__ __volatile__("wbinvd");
-    xmemcpy(buf, cache, count * 512);
 
     return 0;
 }
 static int ahci_dev_write(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    xmemcpy(cache, buf, count * 512);
-    __asm__ __volatile__("wbinvd");
+    AHCI_PORT *port = (AHCI_PORT *)dev;
+
+    if (idx > port->ident.lba_capacity)
+    {
+        write_serial_string("AHCI Write Error: Out of range!");
+        return -1;
+    }
 
     int i;
     for (i = 0; i < 5; i++)
-        if (ahci_write(&(hba_mem_address->ports[(uint64_t)dev]), idx, 0, count, (uint16_t *)cache))
+        if (ahci_write(&(hba_mem_address->ports[port->i]), idx, 0, count, (uint16_t *)buf))
         {
             break;
         }
     if (i == 5)
     {
         write_serial_string("AHCI Write Error!");
-        while (true)
-            ;
+        return -1;
     }
 
     return 0;

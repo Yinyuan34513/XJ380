@@ -354,7 +354,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     {
         uint32_t class_code_24bit = (device_class << 16) | (device_subclass << 8) | device_interface;
         pci_device->class_code = class_code_24bit;
-        // pci_device->name = pci_classname(class_code_24bit);
+        pci_device->name = pci_classname(class_code_24bit);
         pci_device->vendor_id = vendor_id;
         pci_device->device_id = device_id;
 
@@ -469,7 +469,7 @@ void pci_scan_device_legacy(uint32_t bus, uint32_t equipment, uint32_t f)
     uint16_t vendor_id = value_v & 0xffff;
     uint16_t device_id = value_d & 0xffff;
 
-    // device->name = pci_classname(class_code);
+    device->name = pci_classname(class_code);
     device->vendor_id = vendor_id;
     device->device_id = device_id;
     device->class_code = class_code;
