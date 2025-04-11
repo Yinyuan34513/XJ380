@@ -516,15 +516,15 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     while (1)
       ;
   }
-  if (BootConfig->MCFG == 0)
-  {
-    puts(L"XJ380 does not boot properly. Please visit "
-         L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
-         L"MADT_NOT_FOUND\r\n");
-    write_serial_string("[bootx64.c:450]MCFG Not Found. Stop.\n");
-    while (1)
-      ;
-  }
+  // if (BootConfig->MCFG == 0)
+  // {
+  //   puts(L"XJ380 does not boot properly. Please visit "
+  //        L"https://xingjisoft.top/product/os/xj380/error.html. Error code: "
+  //        L"MADT_NOT_FOUND\r\n");
+  //   write_serial_string("[bootx64.c:450]MCFG Not Found. Stop.\n");
+  //   while (1)
+  //     ;
+  // }
 
   // 获取memory map
   BootConfig->MemoryMap.MapSize = 4096;

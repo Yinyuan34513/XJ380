@@ -1,8 +1,6 @@
 #include "../../include/include.h"
 #include "../../kernel/alloc/page.h"
 
-static uint8_t *cache;
-
 static uint32_t ahci_bus, ahci_slot, ahci_func, port;
 static void *ahci_ports_base_addr;
 static uint32_t ports[32];
@@ -35,8 +33,10 @@ static int check_type(HBA_PORT *port)
         return AHCI_DEV_SEMB;
     case SATA_SIG_PM:
         return AHCI_DEV_PM;
-    default:
+    case SATA_SIG_ATA:
         return AHCI_DEV_SATA;
+    default:
+        return 0;
     }
 }
 void ahci_search_ports(HBA_MEM *abar)
@@ -51,11 +51,17 @@ void ahci_search_ports(HBA_MEM *abar)
             int dt = check_type(&abar->ports[i]);
             if (dt == AHCI_DEV_SATA)
             {
+                write_serial_string("SATA drive found at port ");
+                write_serial_dec(i);
+                write_serial_string("\n");
                 port = i;
                 ports[port_total++] = i;
             }
             else if (dt == AHCI_DEV_SATAPI)
             {
+                write_serial_string("SATAPI drive found at port ");
+                write_serial_dec(i);
+                write_serial_string("\n");
             }
             else if (dt == AHCI_DEV_SEMB)
             {
@@ -65,6 +71,9 @@ void ahci_search_ports(HBA_MEM *abar)
             }
             else
             {
+                // write_serial_string("Unknown device found at port ");
+                // write_serial_dec(i);
+                // write_serial_string("\n");
             }
         }
 
@@ -108,9 +117,12 @@ void stop_cmd(HBA_PORT *port)
 #define ATA_DEV_DRQ 0x08
 #define AHCI_CMD_READ_DMA_EXT 0x25
 #define AHCI_CMD_WRITE_DMA_EXT 0x35
+
 bool ahci_read(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count, uint16_t *buf)
 {
-    uint64_t buf_addr = convert_virtual_to_physical((uint64_t)buf);
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+
+    uint64_t buf_addr = mapper.translate_address((uint64_t)buf);
 
     port->is = (uint32_t)-1; // Clear pending interrupt bits
     int spin = 0;            // Spin lock timeout counter
@@ -133,16 +145,17 @@ bool ahci_read(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
     int i;
     for (i = 0; i < cmdheader->prdtl - 1; i++)
     {
-        cmdtbl->prdt_entry[i].dba = (uint64_t)buf_addr;
-        cmdtbl->prdt_entry[i].dbau = 0;
+        cmdtbl->prdt_entry[i].dba = (uint32_t)(buf_addr & 0xFFFFFFFF);
+        cmdtbl->prdt_entry[i].dbau = (uint32_t)((buf_addr >> 32) & 0xFFFFFFFF);
         cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1; // 8K bytes (this value should always be set to 1 less
                                                   // than the actual value)
         cmdtbl->prdt_entry[i].i = 1;
-        buf_addr += 4 * 1024; // 4K words
-        count -= 16;          // 16 sectors
+        buf += 4 * 1024; // 4K words
+        count -= 16;     // 16 sectors
     }
     // Last entry
-    cmdtbl->prdt_entry[i].dba = (uint64_t)buf_addr;
+    cmdtbl->prdt_entry[i].dba = (uint32_t)(buf_addr & 0xFFFFFFFF);
+    cmdtbl->prdt_entry[i].dbau = (uint32_t)((buf_addr >> 32) & 0xFFFFFFFF);
     cmdtbl->prdt_entry[i].dbc = (count << 9) - 1; // 512 bytes per sector
     cmdtbl->prdt_entry[i].i = 1;
 
@@ -204,7 +217,9 @@ bool ahci_read(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count,
 
 bool ahci_identify(HBA_PORT *port, void *buf)
 {
-    uint64_t buf_addr = convert_virtual_to_physical((uint64_t)buf);
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+
+    uint64_t buf_addr = mapper.translate_address((uint64_t)buf);
 
     port->is = (uint32_t)-1; // Clear pending interrupt bits
     int spin = 0;            // Spin lock timeout counter
@@ -221,8 +236,8 @@ bool ahci_identify(HBA_PORT *port, void *buf)
     HBA_CMD_TBL *cmdtbl = (HBA_CMD_TBL *)convert_physical_to_virtual((uint64_t)cmdheader->ctba);
     xmemset(cmdtbl, 0, sizeof(HBA_CMD_TBL) + (cmdheader->prdtl - 1) * sizeof(HBA_PRDT_ENTRY));
 
-    cmdtbl->prdt_entry[0].dba = (uint64_t)buf_addr;
-    cmdtbl->prdt_entry[0].dbau = 0;
+    cmdtbl->prdt_entry[0].dba = (uint32_t)(buf_addr & 0xFFFFFFFF);
+    cmdtbl->prdt_entry[0].dbau = (uint32_t)((buf_addr >> 32) & 0xFFFFFFFF);
     cmdtbl->prdt_entry[0].dbc = 0x200 - 1;
     cmdtbl->prdt_entry[0].i = 1;
 
@@ -273,7 +288,9 @@ bool ahci_identify(HBA_PORT *port, void *buf)
 
 bool ahci_write(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count, uint16_t *buf)
 {
-    uint64_t buf_addr = convert_virtual_to_physical((uint64_t)buf);
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+
+    uint64_t buf_addr = mapper.translate_address((uint64_t)buf);
 
     port->is = (uint32_t)-1; // Clear pending interrupt bits
     int spin = 0;            // Spin lock timeout counter
@@ -296,8 +313,8 @@ bool ahci_write(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count
     int i;
     for (i = 0; i < cmdheader->prdtl - 1; i++)
     {
-        cmdtbl->prdt_entry[i].dba = (uint64_t)buf_addr;
-        cmdtbl->prdt_entry[i].dbau = 0;
+        cmdtbl->prdt_entry[i].dba = (uint32_t)(buf_addr & 0xFFFFFFFF);
+        cmdtbl->prdt_entry[i].dbau = (uint32_t)((buf_addr >> 32) & 0xFFFFFFFF);
         cmdtbl->prdt_entry[i].dbc = 8 * 1024 - 1; // 8K bytes (this value should always be set to 1 less
                                                   // than the actual value)
         cmdtbl->prdt_entry[i].i = 1;
@@ -305,7 +322,8 @@ bool ahci_write(HBA_PORT *port, uint32_t startl, uint32_t starth, uint32_t count
         count -= 16;     // 16 sectors
     }
     // Last entry
-    cmdtbl->prdt_entry[i].dba = (uint64_t)buf_addr;
+    cmdtbl->prdt_entry[i].dba = (uint32_t)(buf_addr & 0xFFFFFFFF);
+    cmdtbl->prdt_entry[i].dbau = (uint32_t)((buf_addr >> 32) & 0xFFFFFFFF);
     cmdtbl->prdt_entry[i].dbc = (count << 9) - 1; // 512 bytes per sector
     cmdtbl->prdt_entry[i].i = 1;
 
@@ -404,46 +422,17 @@ void port_rebase(HBA_PORT *port, int portno)
     HBA_CMD_HEADER *cmdheader = (HBA_CMD_HEADER *)convert_physical_to_virtual((uint64_t)port->clb);
     for (int i = 0; i < 32; i++)
     {
+        uint64_t phys_ctb = (uint64_t)ahci_ports_base_addr + (40 << 10) + (portno << 13) + (i << 8);
+
         cmdheader[i].prdtl = 8; // 8 prdt entries per command table
                                 // 256 bytes per command table, 64+16+48+16*8
         // Command table offset: 40K + 8K*portno + cmdheader_index*256
-        cmdheader[i].ctba = (size_t)ahci_ports_base_addr + (40 << 10) + (portno << 13) + (i << 8);
-        cmdheader[i].ctbau = 0;
+        cmdheader[i].ctba = (uint32_t)(phys_ctb & 0xFFFFFFFF);
+        cmdheader[i].ctbau = (uint32_t)((phys_ctb >> 32) & 0xFFFFFFFF);
         xmemset((void *)convert_physical_to_virtual((uint64_t)cmdheader[i].ctba), 0, 256);
     }
 
     start_cmd(port); // Start command engine
-}
-// static inline void cpuid(uint32_t leaf, uint32_t subleaf, uint32_t *regs) {
-//   asm volatile("cpuid"
-//                : "=a"(regs[0]), "=b"(regs[1]), "=c"(regs[2]), "=d"(regs[3])
-//                : "a"(leaf), "c"(subleaf));
-// }
-
-// 获取缓存行大小
-// uint32_t get_cache_line_size() {
-//   uint32_t regs[4] = {0};
-//   cpuid(0x00000001, 0, regs);
-
-//   // EAX寄存器的第8-11位包含缓存行的字节数
-//   return (regs[1] >> 8) & 0xFF;
-// }
-
-int cache_line_size = 0;
-// 刷新缓存函数
-void flush_cache(void *addr)
-{
-    uint64_t address = (uint64_t)addr;
-
-    // 计算需要刷新的页的起始地址
-    uint64_t page_start = address & ~(PAGE_SIZE - 1);
-
-    // 遍历并刷新整页的所有缓存行
-    for (uint64_t cache_line = page_start; cache_line < page_start + PAGE_SIZE;
-         cache_line += cache_line_size)
-    {
-        asm volatile("clflush (%0)" : : "r"(cache_line) : "memory");
-    }
 }
 
 void init_ahci()
@@ -457,8 +446,6 @@ void init_ahci()
         return;
     }
 
-    // cache_line_size = get_cache_line_size();
-    // logk("cache line size = %d\n", cache_line_size);
     hba_mem_address = (HBA_MEM *)convert_physical_to_virtual(device->bars[5].address);
 
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
@@ -470,14 +457,17 @@ void init_ahci()
 
     ahci_search_ports(hba_mem_address);
 
-    ahci_ports_base_addr = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(1048576 / PAGE_SIZE, 1048576));
+    uint64_t ports_base_phys = (uint64_t)PAGE_ALLOC.alloc_pages(1048576 / PAGE_SIZE);
+    ahci_ports_base_addr = (void *)ports_base_phys;
+    uint64_t ports_base_virt = (uint64_t)convert_physical_to_virtual(ports_base_phys);
 
-    cache = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(1048576 / PAGE_SIZE, 1048576));
+    mapper.map_range(ports_base_virt, ports_base_phys, PAGE_SIZE * 4, 0x3);
+    flush_tlb();
 
     write_serial_string("The Usable Ports:\n");
+
     for (i = 0; i < port_total; i++)
     {
-        write_serial_dec(ports[i]);
         port_rebase(&(hba_mem_address->ports[ports[i]]), ports[i]);
     }
 
@@ -490,60 +480,65 @@ void init_ahci()
             write_serial_string("SATA Drive identify error.");
             continue;
         }
-        write_serial_string("ports");
+        write_serial_string("ports[");
         write_serial_dec(ports[i]);
-        write_serial_string(": total sector = ");
+        write_serial_string("]: total sector = ");
         write_serial_dec(buf.lba_capacity);
         write_serial_string("\n");
 
-        device_install(DEV_BLOCK, DEV_DISK, (void *)i, "AHCI", 0, nullptr, (void *)ahci_dev_read, (void *)ahci_dev_write);
-    }
-}
-void io_delay(uint32_t delay_cycles)
-{
-    volatile uint32_t i;
+        AHCI_PORT *port = (AHCI_PORT *)malloc(sizeof(AHCI_PORT));
+        xmemset(port, 0, sizeof(AHCI_PORT));
+        port->i = i;
+        xmemcpy(&port->ident, &buf, sizeof(SATA_ident_t));
 
-    for (i = 0; i < delay_cycles; ++i)
-    {
-        // 添加一些无用的操作来占用时间
-        asm volatile("nop");
+        device_install(DEV_BLOCK, DEV_DISK, (void *)port, "AHCI", 0, nullptr, (void *)ahci_dev_read, (void *)ahci_dev_write);
     }
 }
+
 static int ahci_dev_read(void *dev, void *buf, size_t count, int idx, int flags)
 {
+    AHCI_PORT *port = (AHCI_PORT *)dev;
+
+    if (idx > port->ident.lba_capacity)
+    {
+        write_serial_string("AHCI Read Error: Out of range!");
+        return -1;
+    }
+
     int i;
     for (i = 0; i < 5; i++)
-        if (ahci_read(&(hba_mem_address->ports[(uint64_t)dev]), idx, 0, count, (uint16_t *)cache))
+        if (ahci_read(&(hba_mem_address->ports[port->i]), idx, 0, count, (uint16_t *)buf))
         {
             break;
         }
     if (i == 5)
     {
         write_serial_string("AHCI Read Error!");
-        while (true)
-            ;
+        return -1;
     }
-    __asm__ __volatile__("wbinvd");
-    xmemcpy(buf, cache, count * 512);
 
     return 0;
 }
 static int ahci_dev_write(void *dev, void *buf, size_t count, int idx, int flags)
 {
-    xmemcpy(cache, buf, count * 512);
-    __asm__ __volatile__("wbinvd");
+    AHCI_PORT *port = (AHCI_PORT *)dev;
+
+    if (idx > port->ident.lba_capacity)
+    {
+        write_serial_string("AHCI Write Error: Out of range!");
+        return -1;
+    }
 
     int i;
     for (i = 0; i < 5; i++)
-        if (ahci_write(&(hba_mem_address->ports[(uint64_t)dev]), idx, 0, count, (uint16_t *)cache))
+        if (ahci_write(&(hba_mem_address->ports[port->i]), idx, 0, count, (uint16_t *)buf))
         {
             break;
         }
     if (i == 5)
     {
         write_serial_string("AHCI Write Error!");
-        while (true)
-            ;
+        return -1;
     }
 
     return 0;

@@ -74,6 +74,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     write_serial_string("\n");
 
     uint64_t last_size = ~(0ULL);
+    uint64_t bitmap_phys = 0;
     uint8_t *bitmap = nullptr;
 
     uint64_t bitmap_size = ((total_pages / 8) + 7) / 8;
@@ -81,7 +82,8 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     {
         if (EfiMemory->Type == EfiConventionalMemory && EfiMemory->NumberOfPages * PAGE_SIZE >= bitmap_size && EfiMemory->NumberOfPages * PAGE_SIZE < last_size)
         {
-            bitmap = (uint8_t *)convert_physical_to_virtual(EfiMemory->PhysicalStart);
+            bitmap_phys = EfiMemory->PhysicalStart;
+            bitmap = (uint8_t *)convert_physical_to_virtual(bitmap_phys);
         }
         EfiMemory++;
     }
@@ -107,6 +109,12 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
         }
         EfiMemory++;
     }
+
+    for (uint64_t idx = ((uint64_t)bitmap_phys / PAGE_SIZE); idx < (bitmap_phys / PAGE_SIZE) + ((bitmap_size + PAGE_SIZE - 1) / PAGE_SIZE); idx++)
+    {
+        PAGE_ALLOC.set_bit(idx);
+    }
+
     // EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
 
     // Setup heap
@@ -115,7 +123,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual(cr3));
 
 #define KHEAP_START_VADDR 0xFFFFFFFFC0000000
-#define KHEAP_SIZE 64 * 1024 * 1024
+#define KHEAP_SIZE 32 * 1024 * 1024
 
     mapper.map_range(KHEAP_START_VADDR, 0, KHEAP_SIZE, 0x3);
     flush_tlb();
