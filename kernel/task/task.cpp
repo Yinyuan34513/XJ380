@@ -592,9 +592,10 @@ uint64_t desktop_flusher(uint64_t arg)
 #endif
     // wsod_debug();
 
-    draw_mouse(&shtinf, &mouse_sheet_id);
     init_ttf(&shtinf,&desktop_sheet_id);
-    TTF_Print(&shtinf,&desktop_sheet_id,"t");
+    TTF_Print(&shtinf, &desktop_sheet_id, 64, 64, "114514");
+
+    draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
     UINT16 test_win;
     UINT16 test_win2;

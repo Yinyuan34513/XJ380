@@ -437,8 +437,8 @@ int main(int arg, char **argv)
    typedef char stbtt__check_size16[sizeof(stbtt_int16)==2 ? 1 : -1];
 
    // e.g. #define your own STBTT_ifloor/STBTT_iceil() to avoid math.h
-   #include "../include/include.h"
-   #include "math.h"
+   #include "../../include/include.h"
+   #include "../../lib/math.h"
    #ifndef STBTT_ifloor
    #define STBTT_ifloor(x)   ((int) floor(x))
    #define STBTT_iceil(x)    ((int) ceil(x))
