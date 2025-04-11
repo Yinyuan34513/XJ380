@@ -472,7 +472,7 @@ uint64_t init_kernel_thread(uint64_t arg)
     init_fat();
     init_vfs();
     write_serial_string("FS initialized.\n");
-    
+
     write_serial_string("Operating System Initialize Success.\n");
 
     disable_intr();
@@ -592,7 +592,7 @@ uint64_t desktop_flusher(uint64_t arg)
 #endif
     // wsod_debug();
 
-    init_ttf(&shtinf,&desktop_sheet_id);
+    init_ttf(&shtinf, &desktop_sheet_id);
     TTF_Print(&shtinf, &desktop_sheet_id, 64, 64, "114514");
 
     draw_mouse(&shtinf, &mouse_sheet_id);
@@ -602,7 +602,7 @@ uint64_t desktop_flusher(uint64_t arg)
     init_xwm(&xwmi);
     create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
     create_window(&xwmi, &shtinf, &test_win2, "1919810", 320, 180);
-    
+
     refresh_sheet(&shtinf); // 刷新
 
     while (!keyboard_mouse_init_done)

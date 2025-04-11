@@ -80,18 +80,22 @@ void set_size(int s1)
 
 void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id)
 {
-    write_serial_string("Initializing TTF...\n");
+	write_serial_string("Initializing TTF...\n");
 
-    VNode *v;
+	VNode *v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
+	if (!v)
+	{
+		write_serial_string("Cannot find XJ380F.ttf");
+		return;
+	}
+	ttf_buffer = (char *)malloc(v->file_size);
+	write_serial_string("Reading TTF...\n");
+	v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
+	write_serial_string("Loading TTF...\n");
+	stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
+	set_size(50);
+	v->ops->close(v);
+	free(ttf_buffer);
 
-    write_serial_string("Reading TTF...\n");
-
-    v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
-    ttf_buffer = (char *)malloc(v->file_size);
-    v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
-    stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
-    set_size(50);
-    v->ops->close(v);
-
-    write_serial_string("TTF Initialize Success.\n");
+	write_serial_string("TTF Initialize Success.\n");
 }
