@@ -267,7 +267,7 @@ size_t utf(const T *src, U *des) // UTF-X(8/16) to UTF-Y(16/8)
 	while (*src)
 	{
 		// make utf-x to ucs4
-		uint32 tmp;
+		uint32_t tmp;
 		size_t len = utf(src, tmp);
 		if (len == 0)
 			break;
