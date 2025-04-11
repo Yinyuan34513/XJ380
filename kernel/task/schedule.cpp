@@ -112,7 +112,7 @@ finish:
     enable_intr();
 }
 
-void schedule_init()
+void init_schedule()
 {
     spin_init(&get_next_task_lock);
 

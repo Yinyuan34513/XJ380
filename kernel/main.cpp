@@ -31,18 +31,15 @@ void init_cpu()
                        "movq %rax, %cr4\n\t");
 }
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
+extern "C" void KernelMain(FrameBufferConfig *fbc, EFI_SYSTEM_TABLE *SystemTable, BOOT_CONFIG *BootConfig)
 {
-  fbc_addr = &fbc;
-  ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)&SystemTable);
+  fbc_addr = fbc;
+  ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)SystemTable);
   BC = (BOOT_CONFIG *)convert_physical_to_virtual((UINT64)BootConfig);
 
-  WriteString(fbc, fbc.horizontal_resolution / 2 - 76, fbc.vertical_resolution * 0.75 - 20, "XJ380 is Loading...", {0xff, 0xff, 0xff});
+  WriteString(*fbc_addr, fbc_addr->horizontal_resolution / 2 - 76, fbc_addr->vertical_resolution * 0.75 - 20, "XJ380 is Loading...", {0xff, 0xff, 0xff});
 
   disable_intr();
-
-  __asm__ __volatile__("movq %0, %%rbp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
-  __asm__ __volatile__("movq %0, %%rsp" : : "r"((uint64_t)(init_task_union.stack + STACK_SIZE / sizeof(uint64_t))));
 
   init_cpu();
 
@@ -54,11 +51,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
   init_idt();
   ltr(GDT_TYPE_TSS);
 
-  init_MemoryManager(fbc, BC);
+  init_MemoryManager(*fbc_addr, BC);
 
-  uint8_t *ptr = (uint8_t *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE)) + STACK_SIZE;
+  uint64_t ist_phys = (uint64_t)PAGE_ALLOC.alloc_pages(STACK_SIZE / PAGE_SIZE);
+  uint64_t ist_virt = convert_physical_to_virtual(ist_phys);
+  uint8_t *ptr = (uint8_t *)(ist_virt + STACK_SIZE);
   xmemset(ptr, 0, STACK_SIZE);
-  ((struct task_struct *)(ptr - STACK_SIZE))->cpu_id = 0;
+  ((struct task_struct *)ist_virt)->cpu_id = 0;
+
+  KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+  mapper.map_range(ist_virt, ist_phys, STACK_SIZE, 0x3);
 
   init_tss[current_task->cpu_id].ist1 = (uint64_t)ptr;
   init_tss[current_task->cpu_id].ist2 = (uint64_t)ptr;
@@ -73,7 +75,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
   SMP_MANAGER.ap_startup(convert_physical_to_virtual((uint64_t)BC->MADT));
 
-  schedule_init();
+  init_schedule();
   init_syscall();
   init_task_manager();
 

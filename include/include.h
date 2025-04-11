@@ -3,6 +3,7 @@
 #ifndef _INCLUDE_HPP_
 #define _INCLUDE_HPP_
 
+#include "../kernel/build_settings.h"
 #include "./cppinc/GOP.hpp"
 #include "./global/boot.h"
 #include "./cppinc/sheet.h"

@@ -82,11 +82,18 @@ uint64_t usb_keyboard_kernel_thread(uint64_t arg)
             XHCI_PIPE *xpipe = (XHCI_PIPE *)KEYBOARD_PIPE;
             if (xpipe->RING.NID == xpipe->RING.EID)
             {
-                KEYBOARD_PIPE->CTRL->XFER(KEYBOARD_PIPE, 0, KEYEVENT1, sizeof(HID_STANDARD_KEYEVENT), 1);
+                int cc = KEYBOARD_PIPE->CTRL->XFER(KEYBOARD_PIPE, 0, KEYEVENT1, sizeof(HID_STANDARD_KEYEVENT), 0);
+                if (cc != 0)
+                {
+                    write_serial_string("HID KEYBOARD XFER ERROR: ");
+                    write_serial_hex(cc);
+                    write_serial_string("\n");
+                    return cc;
+                }
             }
         }
 
-        __asm__ __volatile__("pause");
+        __asm__ __volatile__("sti\n\tpause\n\t");
     }
 
     return 0;
@@ -189,6 +196,7 @@ uint32_t ConfigureHID(USB_COMMON *common)
 
     if (iface->IP == USB_INTERFACE_PROTOCOL_KEYBOARD)
     {
+        write_serial_string("CONFIGURING HID KEYBOARD\n");
         return ConfigureHIDKeyboard(common, epdesc);
     }
     else if (iface->IP == USB_INTERFACE_PROTOCOL_MOUSE)

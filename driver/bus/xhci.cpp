@@ -43,6 +43,7 @@ void init_xhci()
     pci_device_t *dvc = pci_find_class(0x0C0330);
     if (!dvc)
     {
+        write_serial_string("No XHCI Controller found\n");
         return;
     }
     SetupXHCIControllerPCI(dvc);
@@ -165,6 +166,8 @@ void XHCIDoorbell(XHCI_CONTROLLER *controller, uint32_t slot, uint32_t value)
     controller->DR[slot] = value;
 }
 
+bool have_new_device = false;
+
 uint32_t XHCIProcessEvent(XHCI_CONTROLLER *controller)
 {
     // Check for event
@@ -199,6 +202,7 @@ uint32_t XHCIProcessEvent(XHCI_CONTROLLER *controller)
         uint32_t port = ((trb->DATA[0] >> 24) & 0xFF) - 1;
         uint32_t psc = controller->PR[port].PSC;
         // uint32_t pcl = (((psc & ~(XHCI_PORTSC_PED | XHCI_PORTSC_PR)) & ~(0x1E0)) | (0x20));
+        have_new_device = true;
         uint32_t pcl = (((psc & ~(XHCI_PORTSC_PED | XHCI_PORTSC_PR)) & ~(0xF << 5)) | (1 << 5));
         controller->PR[port].PSC = pcl;
         break;
@@ -227,7 +231,6 @@ uint32_t XHCIWaitCompletion(XHCI_CONTROLLER *controller, XHCI_TRANSFER_RING *rin
 {
     while (ring->EID != ring->NID)
     {
-        enable_intr();
         __asm__ __volatile__("sti\n\tpause\n\t");
     }
     return ring->EVT.DATA[2] >> 24;
@@ -237,22 +240,40 @@ bool use_kthread = false;
 
 uint64_t usb_kernel_thread(uint64_t arg)
 {
-    if (!use_kthread)
-    {
-        return 0;
-    }
-
     write_serial_string("USB kernel thread is running\n");
 
     XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
 
     while (true)
     {
-        enable_intr();
-        __asm__ __volatile__("pause");
-
         while (XHCIProcessEvent(controller))
             __asm__ __volatile__("pause");
+
+        __asm__ __volatile__("sti\n\tpause\n\t");
+    }
+
+    return 0;
+}
+
+uint64_t usb_new_dev_kernel_thread(uint64_t arg)
+{
+    write_serial_string("USB new device kernel thread is running\n");
+
+    XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
+
+    while (true)
+    {
+        if (have_new_device)
+        {
+            int count = USBEnumerate(&controller->USB.RH);
+            have_new_device = false;
+
+            write_serial_string("USB device count: ");
+            write_serial_dec(count);
+            write_serial_string("\n");
+        }
+
+        __asm__ __volatile__("sti\n\tpause\n\t");
     }
 
     return 0;
@@ -310,7 +331,10 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
 
     controller->EVT.CCS = 1;
     controller->RR->IR[0].IMOD = 0;
-    controller->RR->IR[0].IMAN |= 3; // Interrupt Enable & Interrupt Pending
+    if (!use_kthread)
+    {
+        controller->RR->IR[0].IMAN |= 3; // Interrupt Enable & Interrupt Pending
+    }
     controller->RR->IR[0].TS = 1;
     controller->RR->IR[0].ERS = mapper.translate_address((uint64_t)controller->SEG);
     controller->RR->IR[0].ERD = mapper.translate_address((uint64_t)controller->EVT.RING);
@@ -339,6 +363,8 @@ uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
     hub->CTRL = &controller->USB;
     hub->PC = controller->PN;
     hub->OP = &XHCI_OPERARTION;
+
+    kernel_thread(usb_new_dev_kernel_thread, 0, CLONE_FILES | CLONE_FS | CLONE_SIGNAL);
 
     if (use_kthread)
     {
@@ -399,13 +425,11 @@ void SetupXHCIControllerPCI(pci_device_t *dvc)
     {
         return;
     }
-    dvc->device_controller = (uint64_t)controller;
     USB_CTRL = (USB_CONTROLLER *)controller;
 
     if (ConfigureXHCI(controller))
     {
         free(controller);
-        dvc->device_controller = 0;
     }
 }
 
@@ -790,7 +814,6 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
     else
     {
         // XHCI Transfer Normal
-        // while (1) __asm__ __volatile__("pause");
         XHCI_TRB_NORMAL trb;
         xmemset(&trb, 0, sizeof(XHCI_TRB_NORMAL));
         trb.DATA = mapper.translate_address((uint64_t)data);
@@ -804,6 +827,21 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
     if (!wait)
     {
         cc = XHCIWaitCompletion(controller, ring);
+        // if (cc == 6)
+        // {
+        //     XHCI_TRB_RESET_ENDPOINT trb0;
+        //     xmemset(&trb0, 0, sizeof(XHCI_TRB_RESET_ENDPOINT));
+        //     trb0.TYPE = TRB_RESET_ENDPOINT;
+        //     trb0.C = 1;
+        //     trb0.SID = xpipe->SID;
+        //     trb0.EPID = xpipe->EPID;
+        //     cc = XHCICommand(controller, &trb0.TRB);
+        //     if (cc != 1)
+        //     {
+        //         write_serial_string("RESET ENDPOINT FAILED\n");
+        //         return cc;
+        //     }
+        // }
     }
     if (cc != 1)
     {

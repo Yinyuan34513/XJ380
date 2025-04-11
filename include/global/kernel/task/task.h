@@ -10,7 +10,6 @@
 
 // stack size 16K
 // UL一定要加，否则获取current_task之后读取值的时候会出错
-#define STACK_SIZE 16384UL
 #define USER_STACK_START 0x6ffff0a00000UL
 
 #define TASK_RUNNING (1 << 0)
