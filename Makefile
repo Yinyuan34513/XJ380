@@ -4,6 +4,7 @@ CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno
 
 DEBUG ?= 0
 SMP ?= 4
+SUDO ?= 0
 KVM ?= 0
 
 ifeq ($(DEBUG), 1)
@@ -89,6 +90,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/usr
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/usr
+	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/XJ380F.ttf
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

@@ -123,7 +123,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual(cr3));
 
 #define KHEAP_START_VADDR 0xFFFFFFFFC0000000
-#define KHEAP_SIZE 32 * 1024 * 1024
+#define KHEAP_SIZE 64 * 1024 * 1024
 
     mapper.map_range(KHEAP_START_VADDR, 0, KHEAP_SIZE, 0x3);
     flush_tlb();

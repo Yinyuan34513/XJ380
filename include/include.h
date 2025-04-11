@@ -50,5 +50,5 @@ extern "C"
 #include "./efi.h"
 #include "./errno.h"
 }
-#include "../kernel/ttf/ttf.h"
+
 #endif

@@ -59,6 +59,12 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
  *   font
  */
 
+// font/ttf/ttf.cpp
+void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id,int x, int y, int ch,const SHEET_BUFFER& color);
+void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char *buf,const SHEET_BUFFER& color);
+void set_size(int s1);
+void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id);
+
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
 void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec, const PixelColor &c);
