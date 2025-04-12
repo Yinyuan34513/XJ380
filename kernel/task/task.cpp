@@ -593,7 +593,7 @@ uint64_t desktop_flusher(uint64_t arg)
     // wsod_debug();
 
     init_ttf(&shtinf, &desktop_sheet_id);
-    TTF_Print_Ch(&shtinf, &desktop_sheet_id, 64, 64, L"你好", WHITE);
+    TTF_Print(&shtinf, &desktop_sheet_id, 64, 64, L"1234567890哦欧克", WHITE,40);
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
     UINT16 test_win;
