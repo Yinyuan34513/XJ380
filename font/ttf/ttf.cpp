@@ -9,7 +9,7 @@ int w, h, s = (20);
 float xpos = 2;
 int y_shift = 0;
 int height = 0;
-int width = 0;
+int width = 500;
 int b;
 
 void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, const SHEET_BUFFER &color)
@@ -51,17 +51,37 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 	}
 	free(bitmap);
 }
-
-void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int *buf, const SHEET_BUFFER &color)
+size_t wcslen(const wchar_t* str) {
+    if (str == nullptr) return 0;  // 处理空指针（可选，标准库的 wcslen 不检查）
+    
+    const wchar_t* p = str;
+    while (*p != L'\0') {  // 遍历直到遇到宽空字符
+        p++;
+    }
+    return p - str;  // 指针差值即为长度
+}
+void TTF_Print_Ch(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t * buf, const SHEET_BUFFER &color)
+{
+	int start_x = x;
+	int code_point = 0;
+		code_point = 0;
+		for (const wchar_t* ptr = buf; *ptr != L'\0'; ++ptr) {
+			code_point = (int)(*ptr);
+			write_serial_hex(code_point);
+			write_serial_string("\n");
+			TTF_Draw_Char(sht, sheet_id, start_x, y, code_point, color);
+			start_x += width;
+		}
+		
+}
+void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char *buf, const SHEET_BUFFER &color)
 {
 	int start_x = 0;
-	for (int l = 0; l < 1; l++)
+	for (int l = 0; l < strlen(buf); l++)
 	{
 		TTF_Draw_Char(sht, sheet_id, x, y, buf[l], color);
-		x += width;
 	}
 }
-
 void set_size(int s1)
 {
 	float sc;
