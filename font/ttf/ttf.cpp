@@ -50,7 +50,7 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		{
 			if (bitmap[j * w + i] != 0)
 			{
-				SHEET_BUFFER *btptr = (SHEET_BUFFER *)(bitmap[j * w + i]);
+				SHEET_BUFFER *btptr = (SHEET_BUFFER *)(&bitmap[j * w + i]);
 				if (btptr->a == 255) {
 					SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r;
 					SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g;
@@ -142,7 +142,7 @@ void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id)
 	ttf_buffer = (char *)malloc(v->file_size);
 	write_serial_string("Reading TTF...\n");
 	v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
-	if (*(uint8_t *)ttf_buffer == 0) 
+	if (*(uint64_t *)ttf_buffer == 0) 
 	{
 		write_serial_string("Cannot read XJ380F.ttf\n");
 		wsod_cannot_load_ttf();
