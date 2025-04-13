@@ -7,16 +7,26 @@ unsigned char *bitmap;
 unsigned int *vram_buffer;
 int w, h, s = (20);
 float xpos = 2;
+float sc_h = 0;
 int y_shift = 0;
 int height = 0;
 int width = 0;
 int b;
 void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, const SHEET_BUFFER &color)
 {
+	int ascent = 0;
+    int descent = 0;
+    int lineGap = 0;
+    stbtt_GetFontVMetrics(&font, &ascent, &descent, &lineGap);
+	ascent = ascent * sc_h;
+
 	int x0, y0, x1, y1;
 	stbtt_GetCodepointBitmapBoxSubpixel(
 		&font, ch, stbtt_ScaleForPixelHeight(&font, s),
 		stbtt_ScaleForPixelHeight(&font, s), 0, 0, &x0, &y0, &x1, &y1);
+		
+	h = ascent + y1;
+
 	bitmap = stbtt_GetCodepointBitmap(
 		&font, 0, stbtt_ScaleForPixelHeight(&font, s), ch, &w, &h, 0, 0);
 
@@ -62,30 +72,42 @@ size_t wcslen(const wchar_t *str)
 	}
 	return p - str; // 指针差值即为长度
 }
-void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, const SHEET_BUFFER &color,int font_size)
+void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, const SHEET_BUFFER &color, int font_size)
 {
 	int code_point = 0;
 	for (const wchar_t *ptr = buf; *ptr != L'\0'; ++ptr)
 	{
 		code_point = 0;
 		code_point = (int)(*ptr);
-		if (code_point <= 0x007F&&code_point>0x001F)
-		{
-			set_size(font_size+5);
-			TTF_Draw_Char(sht, sheet_id, x, y+(font_size/5-5), code_point, color);
-			x += width;
-		}
-		else if(code_point>=0x0041&&code_point<=0x005A)
+        int advanceWidth = 0;
+        int leftSideBearing = 0;
+        int kern;
+		if (code_point <= 0x007F && code_point > 0x001F)
 		{
 			set_size(font_size);
 			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			x += width+(font_size/3);
+			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
+			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
+			x += advanceWidth * sc_h;
+			x += kern * sc_h;
 		}
-		else if(code_point>=0x4E00&&code_point<=0x9FFF)
+		else if(code_point >= 0x0041 && code_point <= 0x005A)
 		{
 			set_size(font_size);
 			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			x += width+(font_size/3+3);
+			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
+			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
+			x += advanceWidth * sc_h;
+			x += kern * sc_h;
+		}
+		else if(code_point >= 0x4E00 && code_point <= 0x9FFF)
+		{
+			set_size(font_size);
+			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
+			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
+			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
+			x += advanceWidth * sc_h;
+			x += kern * sc_h;
 		}
 	}
 }
@@ -94,6 +116,7 @@ void set_size(int s1)
 	float sc;
 	s = s1;
 	sc = stbtt_ScaleForPixelHeight(&font, s);
+	sc_h = sc;
 	int advance, lsb;
 	stbtt_GetCodepointHMetrics(&font, 'A', &advance, &lsb);
 	width = advance * sc + stbtt_GetCodepointKernAdvance(&font, 'A', 'B') * sc;
