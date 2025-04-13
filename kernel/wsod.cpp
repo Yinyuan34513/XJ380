@@ -273,3 +273,15 @@ void wsod_apic_not_found()
 {
     no_regs_wsod("APIC_NOT_FOUND");
 }
+
+/**
+ *
+ *      较次要功能初始化错误处理函数
+ *
+ */
+
+// 未找到APIC
+void wsod_cannot_load_ttf()
+{
+    no_regs_wsod("CANNOT_LOAD_TTF");
+}

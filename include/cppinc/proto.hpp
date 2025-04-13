@@ -139,6 +139,9 @@ extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
 // APIC初始化错误处理
 void wsod_apic_not_found();
 
+// 较次要功能初始化错误处理
+void wsod_cannot_load_ttf();
+
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);
 

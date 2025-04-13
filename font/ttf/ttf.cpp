@@ -4,7 +4,6 @@
 char *ttf_buffer;
 stbtt_fontinfo font;
 unsigned char *bitmap;
-unsigned int *vram_buffer;
 int w, h, s = (20);
 float xpos = 2;
 float sc_h = 0;
@@ -51,10 +50,13 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		{
 			if (bitmap[j * w + i] != 0)
 			{
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = color.a;
+				SHEET_BUFFER *btptr = (SHEET_BUFFER *)(bitmap[j * w + i]);
+				if (btptr->a == 255) {
+					SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r;
+					SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g;
+					SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b;
+					SheetBuffer[(j + y) * sht->scrx + (i + x)].a = color.a;
+				}
 			}
 		}
 	}
@@ -133,12 +135,19 @@ void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id)
 	VNode *v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
 	if (!v)
 	{
-		write_serial_string("Cannot find XJ380F.ttf");
+		write_serial_string("Cannot find XJ380F.ttf\n");
+		wsod_cannot_load_ttf();
 		return;
 	}
 	ttf_buffer = (char *)malloc(v->file_size);
 	write_serial_string("Reading TTF...\n");
 	v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
+	if (*(uint8_t *)ttf_buffer == 0) 
+	{
+		write_serial_string("Cannot read XJ380F.ttf\n");
+		wsod_cannot_load_ttf();
+		return;
+	}
 	write_serial_string("Loading TTF...\n");
 	stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
 	set_size(40);
