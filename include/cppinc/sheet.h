@@ -41,4 +41,11 @@ typedef struct
     UINT8 a; // 在TempBuffer里，这个没用
 } SHEET_BUFFER;
 
+typedef struct
+{
+    UINT8 r;
+    UINT8 g;
+    UINT8 b;
+} __attribute__((packed)) SHEET_BUFFER_WOA;
+
 #endif

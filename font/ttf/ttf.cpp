@@ -50,9 +50,11 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		{
 			if (bitmap[j * w + i] != 0)
 			{
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b;
+				// 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
+				SHEET_BUFFER OrgBuffer = SheetBuffer[(j + y) * sht->scrx + (i + x)];
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r * bitmap[j * w + i] / 255 + OrgBuffer.r * (255 - bitmap[j * w + i]) / 255;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g * bitmap[j * w + i] / 255 + OrgBuffer.g * (255 - bitmap[j * w + i]) / 255;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b * bitmap[j * w + i] / 255 + OrgBuffer.b * (255 - bitmap[j * w + i]) / 255;
 				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = color.a;
 			}
 		}
