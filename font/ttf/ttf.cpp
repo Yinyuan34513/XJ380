@@ -14,16 +14,16 @@ int b;
 void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, const SHEET_BUFFER &color)
 {
 	int ascent = 0;
-    int descent = 0;
-    int lineGap = 0;
-    stbtt_GetFontVMetrics(&font, &ascent, &descent, &lineGap);
+	int descent = 0;
+	int lineGap = 0;
+	stbtt_GetFontVMetrics(&font, &ascent, &descent, &lineGap);
 	ascent = ascent * sc_h;
 
 	int x0, y0, x1, y1;
 	stbtt_GetCodepointBitmapBoxSubpixel(
 		&font, ch, stbtt_ScaleForPixelHeight(&font, s),
 		stbtt_ScaleForPixelHeight(&font, s), 0, 0, &x0, &y0, &x1, &y1);
-		
+
 	h = ascent + y1;
 
 	bitmap = stbtt_GetCodepointBitmap(
@@ -50,13 +50,10 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		{
 			if (bitmap[j * w + i] != 0)
 			{
-				SHEET_BUFFER *btptr = (SHEET_BUFFER *)(&bitmap[j * w + i]);
-				if (btptr->a == 255) {
-					SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r;
-					SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g;
-					SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b;
-					SheetBuffer[(j + y) * sht->scrx + (i + x)].a = color.a;
-				}
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = color.a;
 			}
 		}
 	}
@@ -81,9 +78,9 @@ void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, co
 	{
 		code_point = 0;
 		code_point = (int)(*ptr);
-        int advanceWidth = 0;
-        int leftSideBearing = 0;
-        int kern;
+		int advanceWidth = 0;
+		int leftSideBearing = 0;
+		int kern;
 		if (code_point <= 0x007F && code_point > 0x001F)
 		{
 			set_size(font_size);
@@ -93,7 +90,7 @@ void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, co
 			x += advanceWidth * sc_h;
 			x += kern * sc_h;
 		}
-		else if(code_point >= 0x0041 && code_point <= 0x005A)
+		else if (code_point >= 0x0041 && code_point <= 0x005A)
 		{
 			set_size(font_size);
 			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
@@ -102,7 +99,7 @@ void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, co
 			x += advanceWidth * sc_h;
 			x += kern * sc_h;
 		}
-		else if(code_point >= 0x4E00 && code_point <= 0x9FFF)
+		else if (code_point >= 0x4E00 && code_point <= 0x9FFF)
 		{
 			set_size(font_size);
 			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
@@ -142,7 +139,7 @@ void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id)
 	ttf_buffer = (char *)malloc(v->file_size);
 	write_serial_string("Reading TTF...\n");
 	v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
-	if (*(uint64_t *)ttf_buffer == 0) 
+	if (*(uint64_t *)ttf_buffer == 0)
 	{
 		write_serial_string("Cannot read XJ380F.ttf\n");
 		wsod_cannot_load_ttf();
