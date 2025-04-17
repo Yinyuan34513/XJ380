@@ -11,6 +11,7 @@ int y_shift = 0;
 int height = 0;
 int width = 0;
 int b;
+
 void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, const SHEET_BUFFER &color)
 {
 	int ascent = 0;
@@ -48,16 +49,30 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 	{
 		for (int i = 0; i < w; ++i)
 		{
+			write_serial_hex(bitmap[j * w + i]);
 			if (bitmap[j * w + i] != 0)
 			{
-				// 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
 				SHEET_BUFFER OrgBuffer = SheetBuffer[(j + y) * sht->scrx + (i + x)];
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = color.r * bitmap[j * w + i] / 255 + OrgBuffer.r * (255 - bitmap[j * w + i]) / 255;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = color.g * bitmap[j * w + i] / 255 + OrgBuffer.g * (255 - bitmap[j * w + i]) / 255;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = color.b * bitmap[j * w + i] / 255 + OrgBuffer.b * (255 - bitmap[j * w + i]) / 255;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = color.a;
+				uint32_t final_alpha = (color.a * bitmap[j * w + i]) / 255;
+				uint16_t src_alpha = final_alpha;		  // 0-255
+				uint16_t inv_src_alpha = 255 - src_alpha; // 0-255
+				// 计算背景颜色的实际贡献（考虑目标 Alpha）
+				uint16_t dest_contrib_a = (OrgBuffer.a * inv_src_alpha) / 255;
+
+				// 混合颜色（非预乘模式）
+				uint16_t blended_r = (color.r * src_alpha + OrgBuffer.r * dest_contrib_a) / 255;
+				uint16_t blended_g = (color.g * src_alpha + OrgBuffer.g * dest_contrib_a) / 255;
+				uint16_t blended_b = (color.b * src_alpha + OrgBuffer.b * dest_contrib_a) / 255;
+				// 混合 Alpha
+				uint16_t blended_a = src_alpha + (OrgBuffer.a * inv_src_alpha) / 255;
+				// 写入结果（确保值在 0-255 范围内）
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = (blended_r > 255) ? 255 : blended_r;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = (blended_g > 255) ? 255 : blended_g;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = (blended_b > 255) ? 255 : blended_b;
+				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = (blended_a > 255) ? 255 : blended_a;
 			}
 		}
+		write_serial_string("\n");
 	}
 	free(bitmap);
 }
