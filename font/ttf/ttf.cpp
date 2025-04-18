@@ -43,7 +43,7 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		}
 		front_p = front_p->next;
 	}
-
+	y=y+y0+ascent-15;
 	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
 	for (int j = 0; j < h; ++j)
 	{
@@ -91,40 +91,24 @@ size_t wcslen(const wchar_t *str)
 void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, const SHEET_BUFFER &color, int font_size)
 {
 	int code_point = 0;
-	for (const wchar_t *ptr = buf; *ptr != L'\0'; ++ptr)
+	int perv_code_point = 0;
+	for (int i=0;i<wcslen(buf);i++)
 	{
 		code_point = 0;
-		code_point = (int)(*ptr);
+		code_point = buf[i];
 		int advanceWidth = 0;
 		int leftSideBearing = 0;
 		int kern;
-		if (code_point <= 0x007F && code_point > 0x001F)
+		set_size(font_size);
+		if(i>0)
 		{
-			set_size(font_size);
-			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
-			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
-			x += advanceWidth * sc_h;
+			kern = stbtt_GetCodepointKernAdvance(&font, perv_code_point, code_point);
 			x += kern * sc_h;
 		}
-		else if (code_point >= 0x0041 && code_point <= 0x005A)
-		{
-			set_size(font_size);
-			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
-			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
-			x += advanceWidth * sc_h;
-			x += kern * sc_h;
-		}
-		else if (code_point >= 0x4E00 && code_point <= 0x9FFF)
-		{
-			set_size(font_size);
-			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
-			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
-			x += advanceWidth * sc_h;
-			x += kern * sc_h;
-		}
+		stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
+		TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
+		x += advanceWidth * sc_h;
+		perv_code_point = code_point;
 	}
 }
 void set_size(int s1)
@@ -145,7 +129,7 @@ void set_size(int s1)
 void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id)
 {
 	write_serial_string("Initializing TTF...\n");
-
+	delay_s(10);
 	VNode *v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
 	if (!v)
 	{
