@@ -43,28 +43,26 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		}
 		front_p = front_p->next;
 	}
-
+	y = y + y0 + ascent - 15;
 	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
 	for (int j = 0; j < h; ++j)
 	{
 		for (int i = 0; i < w; ++i)
 		{
-			write_serial_hex(bitmap[j * w + i]);
 			if (bitmap[j * w + i] != 0)
 			{
 				SHEET_BUFFER OrgBuffer = SheetBuffer[(j + y) * sht->scrx + (i + x)];
+
 				uint32_t final_alpha = (color.a * bitmap[j * w + i]) / 255;
-				uint16_t src_alpha = final_alpha;		  // 0-255
-				uint16_t inv_src_alpha = 255 - src_alpha; // 0-255
 				// 计算背景颜色的实际贡献（考虑目标 Alpha）
-				uint16_t dest_contrib_a = (OrgBuffer.a * inv_src_alpha) / 255;
+				uint16_t dest_contrib_a = (OrgBuffer.a * (255 - final_alpha)) / 255;
 
 				// 混合颜色（非预乘模式）
-				uint16_t blended_r = (color.r * src_alpha + OrgBuffer.r * dest_contrib_a) / 255;
-				uint16_t blended_g = (color.g * src_alpha + OrgBuffer.g * dest_contrib_a) / 255;
-				uint16_t blended_b = (color.b * src_alpha + OrgBuffer.b * dest_contrib_a) / 255;
+				uint16_t blended_r = (color.r * final_alpha + OrgBuffer.r * dest_contrib_a) / 255;
+				uint16_t blended_g = (color.g * final_alpha + OrgBuffer.g * dest_contrib_a) / 255;
+				uint16_t blended_b = (color.b * final_alpha + OrgBuffer.b * dest_contrib_a) / 255;
 				// 混合 Alpha
-				uint16_t blended_a = src_alpha + (OrgBuffer.a * inv_src_alpha) / 255;
+				uint16_t blended_a = final_alpha + (OrgBuffer.a * (255 - final_alpha)) / 255;
 				// 写入结果（确保值在 0-255 范围内）
 				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = (blended_r > 255) ? 255 : blended_r;
 				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = (blended_g > 255) ? 255 : blended_g;
@@ -72,7 +70,6 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = (blended_a > 255) ? 255 : blended_a;
 			}
 		}
-		write_serial_string("\n");
 	}
 	free(bitmap);
 }
@@ -91,40 +88,24 @@ size_t wcslen(const wchar_t *str)
 void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, const SHEET_BUFFER &color, int font_size)
 {
 	int code_point = 0;
-	for (const wchar_t *ptr = buf; *ptr != L'\0'; ++ptr)
+	int perv_code_point = 0;
+	for (int i = 0; i < wcslen(buf); i++)
 	{
 		code_point = 0;
-		code_point = (int)(*ptr);
+		code_point = buf[i];
 		int advanceWidth = 0;
 		int leftSideBearing = 0;
 		int kern;
-		if (code_point <= 0x007F && code_point > 0x001F)
+		set_size(font_size);
+		if (i > 0)
 		{
-			set_size(font_size);
-			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
-			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
-			x += advanceWidth * sc_h;
+			kern = stbtt_GetCodepointKernAdvance(&font, perv_code_point, code_point);
 			x += kern * sc_h;
 		}
-		else if (code_point >= 0x0041 && code_point <= 0x005A)
-		{
-			set_size(font_size);
-			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
-			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
-			x += advanceWidth * sc_h;
-			x += kern * sc_h;
-		}
-		else if (code_point >= 0x4E00 && code_point <= 0x9FFF)
-		{
-			set_size(font_size);
-			TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
-			stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
-			kern = stbtt_GetCodepointKernAdvance(&font, code_point, code_point + 1);
-			x += advanceWidth * sc_h;
-			x += kern * sc_h;
-		}
+		stbtt_GetCodepointHMetrics(&font, code_point, &advanceWidth, &leftSideBearing);
+		TTF_Draw_Char(sht, sheet_id, x, y, code_point, color);
+		x += advanceWidth * sc_h;
+		perv_code_point = code_point;
 	}
 }
 void set_size(int s1)
@@ -145,7 +126,7 @@ void set_size(int s1)
 void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id)
 {
 	write_serial_string("Initializing TTF...\n");
-
+	delay_s(10);
 	VNode *v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
 	if (!v)
 	{
