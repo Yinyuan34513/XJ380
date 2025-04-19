@@ -51,7 +51,7 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 		{
 			if (bitmap[j * w + i] != 0)
 			{
-				SHEET_BUFFER OrgBuffer = SheetBuffer[(j + y) * sht->scrx + (i + x)];
+				SHEET_BUFFER OrgBuffer = SheetBuffer[(j + y) * front_p->width + (i + x)];
 
 				uint32_t final_alpha = (color.a * bitmap[j * w + i]) / 255;
 				// 计算背景颜色的实际贡献（考虑目标 Alpha）
@@ -64,10 +64,10 @@ void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ch, cons
 				// 混合 Alpha
 				uint16_t blended_a = final_alpha + (OrgBuffer.a * (255 - final_alpha)) / 255;
 				// 写入结果（确保值在 0-255 范围内）
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].r = (blended_r > 255) ? 255 : blended_r;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].g = (blended_g > 255) ? 255 : blended_g;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].b = (blended_b > 255) ? 255 : blended_b;
-				SheetBuffer[(j + y) * sht->scrx + (i + x)].a = (blended_a > 255) ? 255 : blended_a;
+				SheetBuffer[(j + y) * front_p->width + (i + x)].r = (blended_r > 255) ? 255 : blended_r;
+				SheetBuffer[(j + y) * front_p->width + (i + x)].g = (blended_g > 255) ? 255 : blended_g;
+				SheetBuffer[(j + y) * front_p->width + (i + x)].b = (blended_b > 255) ? 255 : blended_b;
+				SheetBuffer[(j + y) * front_p->width + (i + x)].a = (blended_a > 255) ? 255 : blended_a;
 			}
 		}
 	}
@@ -85,10 +85,11 @@ size_t wcslen(const wchar_t *str)
 	}
 	return p - str; // 指针差值即为长度
 }
-void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, const SHEET_BUFFER &color, int font_size)
+void PrintTTF(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t *buf, const SHEET_BUFFER &color, int font_size)
 {
 	int code_point = 0;
 	int perv_code_point = 0;
+	font_size += 6;
 	for (int i = 0; i < wcslen(buf); i++)
 	{
 		code_point = 0;
