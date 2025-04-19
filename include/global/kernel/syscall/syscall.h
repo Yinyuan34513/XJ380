@@ -77,6 +77,8 @@
 
 #define SYS_RSEQ 334
 
+
+
 // XJ380API XAPI Edition
 #define XAPI_OFFEST 380
 
@@ -92,8 +94,8 @@
 #define XAPI_CLOSE_FILE 387
 
 // P3.3（预留）
-#define XAPI_NULL_1 388
-#define XAPI_NULL_2 389
+#define XAPI_FORK 388
+#define XAPI_EXECVE 389
 
 // P4.1
 #define XAPI_CREATE_WINDOW 390

@@ -4,7 +4,7 @@
 
 int main(int argc, char *argv[], char *envp[])
 {
-    // printf("init process is running!!!\n");
+    printf("init process is running!!!\n");
 
     // int pid = fork();
     // if (pid == 0)
