@@ -42,10 +42,10 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
 
     draw_studio_logo(sht, sheet_id, x1 + 4, 4);
 
-    PrintTTF(sht, sheet_id, x1 + 32, 4, L"文件", BLACK, 16);
-    PrintTTF(sht, sheet_id, x1 + 32 + 40 + 8, 4, L"设置", BLACK, 16);
-    // PrintString(sht, sheet_id, x1 + 32, 4, "Files", BLACK);
-    // PrintString(sht, sheet_id, x1 + 32 + 40 + 8, 4, "Settings", BLACK);
+    // PrintTTF(sht, sheet_id, x1 + 32, 4, L"文件", BLACK, 16);
+    // PrintTTF(sht, sheet_id, x1 + 32 + 40 + 8, 4, L"设置", BLACK, 16);
+    PrintString(sht, sheet_id, x1 + 32, 4, "Files", BLACK);
+    PrintString(sht, sheet_id, x1 + 32 + 40 + 8, 4, "Settings", BLACK);
     PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8, 4, "Terminal", BLACK);
     PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8, 4, "Graphics", BLACK);
     PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8 + 64 + 8, 4, "About", BLACK);
