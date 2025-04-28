@@ -539,7 +539,7 @@ uint64_t desktop_flusher(uint64_t arg)
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
     create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
 
-    init_ttf(&shtinf, &desktop_sheet_id);
+    init_ttf();
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
     write_serial_string("desktop initialized.\n");
@@ -603,7 +603,8 @@ uint64_t desktop_flusher(uint64_t arg)
 #endif
     // wsod_debug();
 
-    PrintTTF(&shtinf, &desktop_sheet_id, 64, 64, L"MAKE XJ380 GREAT AGAIN 实现XJ380的伟大复兴的强国梦,加油!", WHITE, 16);
+    // PrintTTF(&shtinf, &desktop_sheet_id, 64, 64, L"MAKE XJ380 GREAT AGAIN 实现XJ380的伟大复兴的强国梦,加油!", WHITE, 16);
+    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN", 0xffffffff, 64, 64);
 
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
