@@ -1,7 +1,8 @@
+#define STB_TRUETYPE_IMPLEMENTATION
 #include "../../include/include.h"
 #include "../../lib/math.h"
 #include "./stb_ttf.h"
-#define STB_TRUETYPE_IMPLEMENTATION
+
 
 char *ttf_buffer;
 stbtt_fontinfo font;
