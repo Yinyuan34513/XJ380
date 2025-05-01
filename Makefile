@@ -1,6 +1,6 @@
 ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc -I./include
+CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
 
 DEBUG ?= 0
 SMP ?= 4
@@ -52,7 +52,7 @@ $(BUILD_DIR)/%.o: %.cpp
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
-	@x86_64-w64-mingw32-gcc -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
+	@x86_64-w64-mingw32-gcc -I./include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
 
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 
