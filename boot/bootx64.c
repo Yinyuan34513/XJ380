@@ -402,7 +402,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
   struct FrameBufferConfig config = {
       (UINT8 *)(GOP->Mode->FrameBufferBase + 0xFFFF800000000000), GOP->Mode->Info->PixelsPerScanLine,
-      GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution};
+      GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution, kRGBR};
 
   switch (GOP->Mode->Info->PixelFormat)
   {
