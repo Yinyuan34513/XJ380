@@ -1,5 +1,5 @@
-#ifndef _PROTO_HPP_
-#define _PROTO_HPP_
+#ifndef PROTO_HPP_
+#define PROTO_HPP_
 
 #include "../include.h"
 #include "../efi.h"

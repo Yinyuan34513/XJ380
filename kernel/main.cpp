@@ -1,7 +1,7 @@
 #include "./alloc/page.h"
-#include "../include/include.h"
-#include "../include/efi.h"
-#include "./build_settings.h"
+// #include "../include/include.h"
+// #include "../include/efi.h"
+// #include "./build_settings.h"
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -31,13 +31,13 @@ void init_cpu()
                        "movq %rax, %cr4\n\t");
 }
 
-extern "C" void KernelMain(FrameBufferConfig *fbc, EFI_SYSTEM_TABLE *SystemTable, BOOT_CONFIG *BootConfig)
+extern "C" [[noreturn]] void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
 {
-  fbc_addr = fbc;
-  ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)SystemTable);
+  fbc_addr = &fbc;
+  ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)&SystemTable);
   BC = (BOOT_CONFIG *)convert_physical_to_virtual((UINT64)BootConfig);
 
-  WriteString(*fbc_addr, fbc_addr->horizontal_resolution / 2 - 76, fbc_addr->vertical_resolution * 0.75 - 20, "XJ380 is Loading...", {0xff, 0xff, 0xff});
+  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 76), int(fbc.vertical_resolution * 0.75 - 20), "XJ380 is Loading...", {0xff, 0xff, 0xff});
 
   disable_intr();
 
@@ -81,7 +81,7 @@ extern "C" void KernelMain(FrameBufferConfig *fbc, EFI_SYSTEM_TABLE *SystemTable
 
   enable_intr();
 
-  while (1)
+  while (true)
   {
     __asm__ __volatile__("pause");
   }
