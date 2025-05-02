@@ -361,6 +361,23 @@ UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
+SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id)
+        {
+            return front_p;
+        }
+        else if (front_p->next == NULL)
+        {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
 {
     SHEET *front_p = sht->start;

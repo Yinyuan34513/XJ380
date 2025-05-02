@@ -39,7 +39,20 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 0,  0, width + 10, height + 27, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
-    draw_rect(sht, &(new_window->w_sheet), 5, 23, width + 4, height + 22, {0xff, 0xff, 0xff, 0xff});
+    
+    for (int y = 0; y < height + 27; y++) {
+        for (int x = width / 3; x < width / 3 + 114; x++) {
+            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, {0x0f, 0xb1, 0xf7, WINDOW_ALPHA_VALUE});
+        }
+    }
+    
+    for (int y = 0; y < height + 27; y++) {
+        for (int x = width / 3 + 256; x < width / 3 + 48 + 256; x++) {
+            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, {0x0f, 0xb1, 0xf7, WINDOW_ALPHA_VALUE});
+        }
+    }
+
+    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 4, height + 22, {0xff, 0xff, 0xff, 0xff});
 
     for (int y = 0; y < 9; y++) {
         for (int x = 0; x < 9; x++) {

@@ -63,7 +63,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 #endif
         if (EfiMemory->Type == EfiConventionalMemory)
         {
-            total_pages += EfiMemory->NumberOfPages * PAGE_SIZE;
+            total_pages += EfiMemory->NumberOfPages;
         }
         EfiMemory++;
     }
