@@ -302,7 +302,7 @@ struct EFI_SYSTEM_TABLE
   UINTN NumberOfTableEntries;
   EFI_CONFIGURATION_TABLE *ConfigurationTable;
 };
-
+struct EFI_SIMPLE_POINTER_STATE;
 // 简单（鼠标）指针协议
 struct EFI_SIMPLE_POINTER_PROTOCOL
 {
