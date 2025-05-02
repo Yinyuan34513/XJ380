@@ -302,7 +302,7 @@ struct EFI_SYSTEM_TABLE
   UINTN NumberOfTableEntries;
   EFI_CONFIGURATION_TABLE *ConfigurationTable;
 };
-struct EFI_SIMPLE_POINTER_STATE;
+struct EFI_SIMPLE_POINTER_STATE; // 用之前声明
 // 简单（鼠标）指针协议
 struct EFI_SIMPLE_POINTER_PROTOCOL
 {
@@ -410,6 +410,7 @@ typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL
   EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL;
 
+struct EFI_KEY_DATA; // 用之前声明
 struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL
 {
   /* 重置输入设备 */
