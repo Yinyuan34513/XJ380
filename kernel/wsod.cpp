@@ -167,10 +167,10 @@ void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
 void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
 {
     __asm__ __volatile__(
-        "movq %cr0, %rax\n\t"
-        "and $0xFFF3, %ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
-        "or $0x2, %ax\n\t"        // set coprocessor monitoring  CR0.MP
-        "movq %rax, %cr0\n\t");
+        "movq %%cr0, %%rax\n\t"
+        "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+        "or $0x2, %%ax\n\t"        // set coprocessor monitoring  CR0.MP
+        "movq %%rax, %%cr0\n\t":::"rax");
 }
 
 void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)

@@ -22,13 +22,13 @@ static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t
 
 void init_cpu()
 {
-  __asm__ __volatile__("movq %cr0, %rax\n\t"
-                       "and $0xFFF3, %ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
-                       "or $0x2, %ax\n\t"       // set coprocessor monitoring  CR0.MP
-                       "movq %rax, %cr0\n\t"
-                       "movq %cr4, %rax\n\t"
-                       "or $(3 << 9), %ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
-                       "movq %rax, %cr4\n\t");
+  __asm__ __volatile__("movq %%cr0, %%rax\n\t"
+                       "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+                       "or $0x2, %%ax\n\t"       // set coprocessor monitoring  CR0.MP
+                       "movq %%rax, %%cr0\n\t"
+                       "movq %%cr4, %%rax\n\t"
+                       "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
+                       "movq %%rax, %%cr4\n\t":::"rax");
 }
 
 extern "C" [[noreturn]] void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
