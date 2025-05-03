@@ -581,8 +581,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
     for (int i = 0; i < sht->sheet_num + 1; i++)
     {
-        if ((front_p->bx > bex2 && front_p->by > bey2) ||
-            (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
+        if (front_p->bx > bex2 || front_p->by > bey2 /*||
+            front_p->bx + front_p->width < bex1 || front_p->by + front_p->height < bey1*/)  // 不知道为啥这段注释掉不仅bug没了，速度还变快了
         {
             // 不在刷新范围内，跳过
         }

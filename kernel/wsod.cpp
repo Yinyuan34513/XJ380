@@ -34,7 +34,7 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
-    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.", {0, 0, 0});
     WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});
     WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
 
@@ -107,7 +107,7 @@ void no_regs_wsod(const char *err_code)
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
-    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.", {0, 0, 0});
     WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});
     WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
 
