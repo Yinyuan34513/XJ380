@@ -136,7 +136,7 @@ void put_bitmap(SHEET_INFO *sht, UINT16 *sheet_id, unsigned char *bitmap,
     {
         if (front_p->index == *sheet_id)
         {
-            return;
+            break;
         }
         else if (front_p->next == NULL)
         {
@@ -169,7 +169,7 @@ void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, unsigned fc,
     {
         if (front_p->index == *sheet_id)
         {
-            return;
+            break;
         }
         else if (front_p->next == NULL)
         {
