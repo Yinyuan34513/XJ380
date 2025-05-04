@@ -204,9 +204,22 @@ void init_ttf()
 	v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
 	if (*(uint64_t *)ttf_buffer == 0)
 	{
-		write_serial_string("Cannot read XJ380F.ttf\n");
-		wsod_cannot_load_ttf();
-		return;
+		// try again
+		v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
+		if (!v)
+		{
+			write_serial_string("Cannot find XJ380F.ttf\n");
+			wsod_cannot_load_ttf();
+			return;
+		}
+		ttf_buffer = (char *)malloc(v->file_size);
+		v->ops->read(v, (uint8_t *)ttf_buffer, 0, v->file_size);
+		if (*(uint64_t *)ttf_buffer == 0)
+		{
+			write_serial_string("Cannot read XJ380F.ttf\n");
+			wsod_cannot_load_ttf();
+			return;
+		}
 	}
 	write_serial_string("Loading TTF...\n");
 	stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
