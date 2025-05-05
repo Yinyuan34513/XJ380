@@ -61,7 +61,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
  */
 
 // font/ttf/ttf.cpp
-void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x, unsigned y);
+void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x, unsigned y, int size);
 void init_ttf();
 
 // font/font.cpp
