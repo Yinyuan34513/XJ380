@@ -603,8 +603,8 @@ uint64_t desktop_flusher(uint64_t arg)
 #endif
     // wsod_debug();
 
-    // PrintTTF(&shtinf, &desktop_sheet_id, 64, 64, L"MAKE XJ380 GREAT AGAIN 实现XJ380的伟大复兴的强国梦,加油!", WHITE, 16);
-    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN", 0xffffffff, 64, 64);
+    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN", WHITE, 64, 64);
+    print_box_ttf(&shtinf, &desktop_sheet_id, "实现XJ380伟大复兴的强国梦", WHITE, 64, 128);
 
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
