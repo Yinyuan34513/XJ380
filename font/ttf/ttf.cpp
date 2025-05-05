@@ -205,6 +205,7 @@ void init_ttf()
 	if (*(uint64_t *)ttf_buffer == 0)
 	{
 		// try again
+		free(ttf_buffer);
 		v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
 		if (!v)
 		{
@@ -222,7 +223,11 @@ void init_ttf()
 		}
 	}
 	write_serial_string("Loading TTF...\n");
-	stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
+	if (!stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0))) {
+		write_serial_string("Cannot Initialize TTF.\n");
+		wsod_cannot_load_ttf();
+		return;
+	}
 	set_size(16);
 	v->ops->close(v);
 
