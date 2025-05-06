@@ -37,9 +37,22 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
         }
     }
 
-    create_sheet(sht, 72, 72, width, height, MovableSheetType, -1, &(new_window->w_sheet));
-    draw_rect(sht, &(new_window->w_sheet), 0,  0, width - 1, 22, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
-    draw_rect(sht, &(new_window->w_sheet), 0, 20, width - 1, height - 1, {0xff, 0xff, 0xff, 0xff});
+    create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
+    draw_rect(sht, &(new_window->w_sheet), 0,  0, width + 10, height + 27, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    
+    for (int y = 0; y < height + 27; y++) {
+        for (int x = width / 3; x < width / 3 + 114; x++) {
+            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, {0x0f, 0xb1, 0xf7, WINDOW_ALPHA_VALUE});
+        }
+    }
+    
+    for (int y = 0; y < height + 27; y++) {
+        for (int x = width / 3 + 256; x < width / 3 + 48 + 256; x++) {
+            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, {0x0f, 0xb1, 0xf7, WINDOW_ALPHA_VALUE});
+        }
+    }
+
+    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 4, height + 22, {0xff, 0xff, 0xff, 0xff});
 
     for (int y = 0; y < 9; y++) {
         for (int x = 0; x < 9; x++) {
@@ -56,11 +69,11 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
     for (int y = 0; y < 17; y++) {
         for (int x = 0; x < 32; x++) {
             if (wbutton_close[y][x] == '.') {
-                draw_point(sht, &(new_window->w_sheet), x + width - 32, y, {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
+                draw_point(sht, &(new_window->w_sheet), x + width - 22, y, {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
             } else if (wbutton_close[y][x] == 'a') {
-                draw_point(sht, &(new_window->w_sheet), x + width - 32, y, {0, 0, 0, 0});
+                draw_point(sht, &(new_window->w_sheet), x + width - 22, y, {0, 0, 0, 0});
             } else if (wbutton_close[y][x] == '@') {
-                draw_point(sht, &(new_window->w_sheet), x + width - 32, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
+                draw_point(sht, &(new_window->w_sheet), x + width - 22, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
             }
         }
     }
@@ -68,7 +81,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
     for (int y = 0; y < 17; y++) {
         for (int x = 0; x < 32; x++) {
             if (wbutton_little[y][x] == '@') {
-                draw_point(sht, &(new_window->w_sheet), x + width - 63, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
+                draw_point(sht, &(new_window->w_sheet), x + width - 53, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
             }
         }
     }
@@ -76,7 +89,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
             if (wbutton_cdl[y][x] == 'a') {
-                draw_point(sht, &(new_window->w_sheet), x, y + height - 4, {0, 0, 0, 0});
+                draw_point(sht, &(new_window->w_sheet), x, y + height + 23, {0, 0, 0, 0});
             }
         }
     }
@@ -84,12 +97,12 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
             if (wbutton_cdr[y][x] == 'a') {
-                draw_point(sht, &(new_window->w_sheet), x + width - 4, y + height - 4, {0, 0, 0, 0});
+                draw_point(sht, &(new_window->w_sheet), x + width + 6, y + height + 23, {0, 0, 0, 0});
             }
         }
     }
 
     PrintString(sht, &(new_window->w_sheet), 22, 3, title, WHITE);
 
-    refresh_part_sheet(sht, 72, 72, width, height);
+    refresh_part_sheet(sht, 72, 72, width + 10, height + 27);
 }

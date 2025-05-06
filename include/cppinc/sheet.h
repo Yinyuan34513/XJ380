@@ -16,7 +16,7 @@ struct SHEET
 {
     SHEETP front;
     VOID *buffer;
-    UINT32 bx, by;
+    int bx, by;
     UINT32 width, height;
     UINT32 type;
     UINT16 index;

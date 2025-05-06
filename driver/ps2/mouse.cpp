@@ -43,12 +43,13 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
                 {
                     // 点在了窗口上
                     ms_dec.win_move_lock = true;
+                    ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
                     lift_sheet(sht_img, ms_dec.sheet_id);
-                    refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
-                                        getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
-                                        getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
-                    ms_dec.win_x_offset = mouse_x - getBX(sht_img, ms_dec.sheet_id);
-                    ms_dec.win_y_offset = mouse_y - getBY(sht_img, ms_dec.sheet_id);
+                    refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->by + ms_dec.sht_now->height);
+                    ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
+                    ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
                 }
                 ms_dec.sheet_id = found_sheetmb(sht_img, mouse_x, mouse_y);
                 if (ms_dec.sheet_id == NULL)
@@ -59,25 +60,26 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
                 else
                 {
                     // 点在了窗口上
+                    ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
                     lift_sheet(sht_img, ms_dec.sheet_id);
-                    refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
-                                        getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
-                                        getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
+                    refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->by + ms_dec.sht_now->height);
                 }
             }
             else if (ms_dec.win_move_lock)
             {
-                int his_x = getBX(sht_img, ms_dec.sheet_id);
-                int his_y = getBY(sht_img, ms_dec.sheet_id);
+                int his_x = ms_dec.sht_now->bx;
+                int his_y = ms_dec.sht_now->by;
                 // 移动窗口
                 setBX(sht_img, ms_dec.sheet_id, mouse_x - ms_dec.win_x_offset);
                 setBY(sht_img, ms_dec.sheet_id, mouse_y - ms_dec.win_y_offset);
-                refresh_part_sheet(sht_img, getBX(sht_img, ms_dec.sheet_id), getBY(sht_img, ms_dec.sheet_id),
-                                   getBX(sht_img, ms_dec.sheet_id) + getXsize(sht_img, ms_dec.sheet_id),
-                                   getBY(sht_img, ms_dec.sheet_id) + getYsize(sht_img, ms_dec.sheet_id));
+                refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->by + ms_dec.sht_now->height);
                 refresh_part_sheet(sht_img, his_x, his_y,
-                                   his_x + getXsize(sht_img, ms_dec.sheet_id),
-                                   his_y + getYsize(sht_img, ms_dec.sheet_id));
+                                   his_x + ms_dec.sht_now->width,
+                                   his_y + ms_dec.sht_now->height);
             }
         }
         else if ((ms_dec.btn & 0x01) == 0)

@@ -2,6 +2,8 @@
 #include "../../include/include.h"
 #include "../alloc/page.h"
 
+bool ttfFS_lock = false;
+
 static long global_pid = 0;
 
 struct mm_struct init_mm = {0};
@@ -492,6 +494,8 @@ uint64_t init_kernel_thread(uint64_t arg)
     uint8_t **envp = (uint8_t **)malloc(sizeof(uint8_t *) * 1);
     xmemset(envp, 0, sizeof(uint8_t *) * 1);
 
+    ttfFS_lock = true;
+
     __asm__ __volatile__(
         "movq	%1,	%%rsp	\n\t"
         "pushq	%2		\n\t"
@@ -517,6 +521,12 @@ uint64_t desktop_flusher(uint64_t arg)
 
     spin_init(&fb_print_lock);
 
+    if (!ttfFS_lock) 
+    {
+        enable_intr();
+        __asm__ __volatile__("pause");
+    }
+
     UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
     UINT16 dock_sheet_id = 1145;
     UINT16 mouse_sheet_id = 1145;
@@ -529,6 +539,7 @@ uint64_t desktop_flusher(uint64_t arg)
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
     create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
 
+    init_ttf();
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
     write_serial_string("desktop initialized.\n");
@@ -592,15 +603,15 @@ uint64_t desktop_flusher(uint64_t arg)
 #endif
     // wsod_debug();
 
-    init_ttf(&shtinf, &desktop_sheet_id);
-    TTF_Print(&shtinf, &desktop_sheet_id, 64, 64, L"MAKE XJ380 GREAT AGAIN 实现XJ380的伟大复兴的强国梦,加油!", {0xFF, 0xFF, 0xEE, 0x66}, 48);
+    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
+
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
     UINT16 test_win;
     UINT16 test_win2;
     init_xwm(&xwmi);
     create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
-    create_window(&xwmi, &shtinf, &test_win2, "1919810", 320, 180);
+    create_window(&xwmi, &shtinf, &test_win2, "1919810", 800, 600);
 
     refresh_sheet(&shtinf); // 刷新
 

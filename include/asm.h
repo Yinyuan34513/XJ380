@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef _ASM_H_
-#define _ASM_H_
+#ifndef ASM_H_
+#define ASM_H_
 
 // 符号名
 #define SYMBOL_NAME(X) X

@@ -361,6 +361,23 @@ UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
+SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id)
+        {
+            return front_p;
+        }
+        else if (front_p->next == NULL)
+        {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
 {
     SHEET *front_p = sht->start;
@@ -433,7 +450,7 @@ void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
             front_p->next->front = front_p->front;
             front_p->front->next = front_p->next;
             SHEET *front_p2 = sht->start;
-            for (int i = 0; i < sht->sheet_num - 2; i++)
+            for (int i = 0; i < sht->sheet_num - 3; i++)
             {
                 front_p2 = front_p2->next; // 寻找最后一个
             }
@@ -564,8 +581,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
     for (int i = 0; i < sht->sheet_num + 1; i++)
     {
-        if ((front_p->bx > bex2 && front_p->by > bey2) ||
-            (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
+        if (front_p->bx > bex2 || front_p->by > bey2 /*||
+            front_p->bx + front_p->width < bex1 || front_p->by + front_p->height < bey1*/)  // 不知道为啥这段注释掉不仅bug没了，速度还变快了
         {
             // 不在刷新范围内，跳过
         }

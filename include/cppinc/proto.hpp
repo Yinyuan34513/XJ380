@@ -1,5 +1,5 @@
-#ifndef _PROTO_HPP_
-#define _PROTO_HPP_
+#ifndef PROTO_HPP_
+#define PROTO_HPP_
 
 #include "../include.h"
 #include "../efi.h"
@@ -42,6 +42,7 @@ UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
+SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
@@ -60,10 +61,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
  */
 
 // font/ttf/ttf.cpp
-void TTF_Draw_Char(SHEET_INFO *sht, UINT16 *sheet_id,int x, int y, int ch, const SHEET_BUFFER &color);
-void TTF_Print(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, wchar_t * buf, const SHEET_BUFFER &color,int font_size);
-void set_size(int s1);
-void init_ttf(SHEET_INFO *sht, UINT16 *sheet_id);
+void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x, unsigned y, int size);
+void init_ttf();
 
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
@@ -88,6 +87,23 @@ char *Dec2Char(unsigned long long dec);
 char *Hex2Char(unsigned long long hex);
 char *strstr(const char *haystack, const char *needle);
 int str2float(const char *str, float *result);
+
+// lib/utflib.c
+typedef int32_t Rune;
+#define UTFmax 6 /* maximum bytes per rune */
+#define Runeerror ((Rune)-1)         /* decoding error in utf */
+#ifdef __cplusplus
+extern "C" {
+#endif
+int charntorune(Rune *, const char *, size_t);
+int chartorune(Rune *, const char *);
+size_t utflen(const char *);
+size_t utfnlen(const char *, size_t);
+
+extern const unsigned char utftab[64];
+#ifdef __cplusplus
+}
+#endif
 
 /*
  *   driver

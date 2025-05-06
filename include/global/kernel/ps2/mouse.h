@@ -16,6 +16,7 @@ typedef struct
 	int win_x_offset;
 	int win_y_offset;
 	UINT16 *sheet_id;
+	SHEET *sht_now;
 } mouse_dec;
 
 #define KB_SEND2MOUSE 0xd4
