@@ -74,11 +74,11 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
 
     draw_studio_logo(sht, sheet_id, x1 + 4, 4);
 
-    print_box_ttf(sht, sheet_id, "文件", BLACK, x1 + 32, 2, 10);
-    print_box_ttf(sht, sheet_id, "设置", BLACK, x1 + 32 + 25 + 8, 2, 10);
-    print_box_ttf(sht, sheet_id, "终端", BLACK, x1 + 32 + 25 + 8 + 25 + 8, 2, 10);
-    print_box_ttf(sht, sheet_id, "图形", BLACK, x1 + 32 + 25 + 8 + 25 + 8 + 25 + 8, 2, 10);
-    print_box_ttf(sht, sheet_id, "关于", BLACK, x1 + 32 + 25 + 8 + 25 + 8 + 25 + 8 + 25 + 8, 2, 10);
+    print_box_ttf(sht, sheet_id, "文件", BLACK, x1 + 32, 1, 10);
+    print_box_ttf(sht, sheet_id, "设置", BLACK, x1 + 32 + 25 + 8, 1, 10);
+    print_box_ttf(sht, sheet_id, "终端", BLACK, x1 + 32 + 25 + 8 + 25 + 9, 1, 10);
+    print_box_ttf(sht, sheet_id, "图形", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
+    print_box_ttf(sht, sheet_id, "关于", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8, 1, 10);
     // PrintString(sht, sheet_id, x1 + 32, 4, "Files", BLACK);
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8, 4, "Settings", BLACK);
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8, 4, "Terminal", BLACK);

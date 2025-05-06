@@ -3,7 +3,6 @@
 #include "../../lib/math.h"
 #include "./stb_ttf.h"
 
-
 char *ttf_buffer;
 stbtt_fontinfo font;
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color,
@@ -13,57 +12,22 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 	temp.r = foreground_color.r * alpha / 255 + background_color.r * (255 - alpha) / 255;
 	temp.g = foreground_color.g * alpha / 255 + background_color.g * (255 - alpha) / 255;
 	temp.b = foreground_color.b * alpha / 255 + background_color.b * (255 - alpha) / 255;
-	temp.a = background_color.a;
+	temp.a = background_color.a + ((float)(foreground_color.a - background_color.a) / (float)foreground_color.a) * alpha;
 	return temp;
-
-	// uint32_t final_alpha = (foreground_color.a * alpha) / 255;
-	// // 计算背景颜色的实际贡献（考虑目标 Alpha）
-	// uint16_t dest_contrib_a = (background_color.a * (255 - final_alpha)) / 255;
-
-	// // 混合颜色（非预乘模式）
-	// uint16_t blended_r = (foreground_color.r * final_alpha + background_color.r * dest_contrib_a) / 255;
-	// uint16_t blended_g = (foreground_color.g * final_alpha + background_color.g * dest_contrib_a) / 255;
-	// uint16_t blended_b = (foreground_color.b * final_alpha + background_color.b * dest_contrib_a) / 255;
-	// // 混合 Alpha
-	// uint16_t blended_a = final_alpha + (background_color.a * (255 - final_alpha)) / 255;
-	// // 写入结果（确保值在 0-255 范围内）
-	// temp.r = (blended_r > 255) ? 255 : blended_r;
-	// temp.g = (blended_g > 255) ? 255 : blended_g;
-	// temp.b = (blended_b > 255) ? 255 : blended_b;
-	// temp.a = (blended_a > 255) ? 255 : blended_a;
 }
 
 void set_size(int s1) {}
 #define EPS (2.22044604925031308085e-16)
 static const float32_t toint = 1 / EPS;
 
-// float roundf(float x) {
-// 	union {
-// 		float f;
-// 		uint32_t i;
-// 	} u = {x};
-// 	int e = u.i >> 23 & 0xff;
-// 	float32_t y;
-
-// 	if (e >= 0x7f + 23)
-// 		return x;
-// 	if (u.i >> 31)
-// 		x = -x;
-// 	if (e < 0x7f - 1) {
-// 		FORCE_EVAL(x + toint);
-// 		return 0 * u.f;
-// 	}
-// 	y = x + toint - toint - x;
-// 	if (y > 0.5f)
-// 		y = y + x - 1;
-// 	else if (y <= -0.5f)
-// 		y = y + x + 1;
-// 	else
-// 		y = y + x;
-// 	if (u.i >> 31)
-// 		y = -y;
-// 	return y;
-// }
+int roundf(double n)
+{
+    // 若为负数，则先化为正数再进行四舍五入
+    if (n > 0)
+        return n - int(n) >= 0.5 ? int(n) + 1 : int(n);
+    else
+        return -n - int(-n) >= 0.5 ? -(int(-n) + 1) : -int(-n);
+}
 
 unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 	/* 创建位图 */
@@ -93,8 +57,8 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 	stbtt_GetFontVMetrics(&font, &ascent, &descent, &lineGap);
 
 	/* 根据缩放调整字高 */
-	ascent = ascent * scale;
-	descent = descent * scale;
+	ascent = roundf(ascent * scale);
+	descent = roundf(descent * scale);
 
 	int x = 0; /*位图的x*/
 	/* 循环加载word中每个字符 */
@@ -123,12 +87,12 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 								c_y2 - c_y1, bitmap_w, scale, scale, word[i]);
 
 		/* 调整x */
-		x += advanceWidth * scale;
+		x += roundf(advanceWidth * scale);
 
 		/* 调整字距 */
 		int kern;
 		kern = stbtt_GetCodepointKernAdvance(&font, word[i], word[i + 1]);
-		x += kern * scale;
+		x += roundf(kern * scale);
 	}
 	*width = x;
 	*heigh = h;
