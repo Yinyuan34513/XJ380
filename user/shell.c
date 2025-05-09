@@ -1,8 +1,8 @@
-#include <stdio.h>
+#include "./xapi/include/xposix.h"
 
 int main(int argc, char *argv[], char *envp[])
 {
-    printf("shell process is running!!!\n");
+    write(1, "shell process is running!!!\n", 0);
 
     while (1)
         __asm__ __volatile__("pause");

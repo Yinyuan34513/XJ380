@@ -6,20 +6,17 @@ int main(int argc, char *argv[], char *envp[])
 {
     printf("init process is running!!!\n");
 
-    // int pid = fork();
+    // uint64_t pid = vfork();
     // if (pid == 0)
     // {
-    //     printf("child process is running!!!\n");
-    //     execve("/usr/shell.elf", NULL, NULL);
-    //     while (1)
-    //         __asm__ __volatile__("pause");
+    //     write(1, "child process is running!!!\n", 0);
+    execve("/usr/shell.elf", NULL, NULL);
     // }
     // else
     // {
-    //     printf("parent process is running!!! child pid = %d\n", pid);
-    //     while (1)
-    //         __asm__ __volatile__("pause");
+    //     write(1, "Parent process is running!!!\n", 0);
     // }
+    
     while(1)__asm__ __volatile__("pause");
     return -1;
 }

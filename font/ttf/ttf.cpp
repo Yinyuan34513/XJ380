@@ -97,15 +97,6 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 	*width = x;
 	*heigh = h;
 
-	UINT8 *p = bitmap;
-	for (int y = 0; y < h; y++) {
-		for (int z = 0; z < x; z++) {
-			write_serial_hex(*p);
-			write_serial_string("\n");
-			p++;
-		}
-	}
-
 	return bitmap;
 }
 
