@@ -12,3 +12,8 @@ all: $(OBJ_FILES)
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "CC $<"
+
+../../out/xapi/%.cpp.o: ./%.cpp
+	@mkdir -p $(@D)
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CC $<"

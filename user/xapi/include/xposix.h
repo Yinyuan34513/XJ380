@@ -1,3 +1,15 @@
+/*
+ *
+ *      XINGJI XJ380 Application Compile Tools (XACT) 
+ *      XACT C\C++ Header
+ *      XJ380API POSIX Edition
+ *      Release Version 1.0.0 - 2025/5/9
+ *      Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.
+ * 
+ *      A XINGJI Interactive Software Production
+ * 
+ */
+
 #pragma once
 
 #include "./xposix/unistd.h"
