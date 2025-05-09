@@ -12,9 +12,9 @@ init.elf: init.c
 
 shell.elf: shell.c
 	@$(CC) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xlibc -name "*.o") ../out/$@.o -o ../out/$@
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 	@echo "CCLD $< -> ../out/$@"
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xlibc ../out/init.* ../out/shell.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.*

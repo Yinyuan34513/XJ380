@@ -2,6 +2,7 @@
 
 #include "./stdint.h"
 
+// XJ380API POSIX Edition
 #define SYS_READ 0
 #define SYS_WRITE 1
 #define SYS_OPEN 2
@@ -16,7 +17,12 @@
 #define SYS_MUNMAP 11
 #define SYS_BRK 12
 
+#define SYS_RT_SIGPROCMASK 14
+
 #define SYS_IOCTL 16
+
+#define SYS_READV 19
+#define SYS_WRITEV 20
 
 #define SYS_PIPE 22
 
@@ -58,5 +64,66 @@
 #define SYS_FCHMOD 91
 
 #define SYS_MKNOD 133
+
+#define SYS_ARCH_PRCTL 158
+
+#define SYS_GETTID 186
+
+#define SYS_SET_TID_ADDRESS 218
+
+#define SYS_EXIT_GROUP 231
+
+#define SYS_SET_ROBUST_LIST 273
+
+#define SYS_RSEQ 334
+
+
+
+// XJ380API XAPI Edition
+#define XAPI_OFFEST 380
+
+// P3.1
+#define XAPI_OUTPUT 381
+#define XAPI_INPUTW 382
+#define XAPI_INPUT 383
+#define XAPI_ENDLINE 384
+#define XAPI_PRINTLINE 385
+
+// P3.2
+#define XAPI_OPEN_FILE 386
+#define XAPI_CLOSE_FILE 387
+
+// P3.3（预留）
+#define XAPI_FORK 388
+#define XAPI_EXECVE 389
+
+// P4.1
+#define XAPI_CREATE_WINDOW 390
+#define XAPI_SET_WINDOW_TITLE 391
+#define XAPI_CLOSE_WINDOW 392
+#define XAPI_SET_ICON 393
+
+// P4.2
+#define XAPI_DRAW_POINT 394
+#define XAPI_DRAW_LINE 395
+#define XAPI_DRAW_RECT 396
+#define XAPI_DRAW_CIRCLE 397
+#define XAPI_DRAW_TEXT 398
+
+// P4.3
+#define XAPI_DRAW_BMP 399
+#define XAPI_DRAW_PNG 400
+
+// P4.4
+#define XAPI_SET_MSH_PROCOR 401
+
+// P4.5
+#define XAPI_READBUFFER 342
+#define XAPI_WRITEBUFFER 343
+#define XAPI_WRITEBUFFERA 344
+
+// P4.6
+#define XAPI_BUTTON 345
+#define XAPI_BUTTON_STYLE 346
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

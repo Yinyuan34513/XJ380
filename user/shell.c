@@ -1,6 +1,4 @@
-#include "./xapi/include/unistd.h"
-#include "./xapi/include/stdio.h"
-#include "./xapi/include/stdlib.h"
+#include "./xapi/include/xposix.h"
 
 int main(int argc, char *argv[], char *envp[])
 {

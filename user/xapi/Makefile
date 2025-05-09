@@ -1,14 +1,14 @@
 SRC_FILES := $(shell find . -name "*.[Sc]")
-OBJ_FILES := $(patsubst ./%, ../../out/xlibc/%.o, $(SRC_FILES))
+OBJ_FILES := $(patsubst ./%, ../../out/xapi/%.o, $(SRC_FILES))
 
 all: $(OBJ_FILES)
 
-../../out/xlibc/%.S.o: ./%.S
+../../out/xapi/%.S.o: ./%.S
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "AS $<"
 
-../../out/xlibc/%.c.o: ./%.c
+../../out/xapi/%.c.o: ./%.c
 	@mkdir -p $(@D)
 	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "CC $<"
