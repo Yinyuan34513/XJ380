@@ -2,7 +2,7 @@
 
 int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin) {
     while (true) {
-        if (ttfFS_lock) 
+        if (winRD_lock) 
         {
             break;
         }

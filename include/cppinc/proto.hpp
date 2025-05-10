@@ -139,7 +139,7 @@ void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
 extern const FrameBufferConfig *fbc_addr;
 extern SHEET_INFO *sht_img;
 extern XWM_INFO *xwmii;
-extern bool ttfFS_lock;
+extern bool winRD_lock;
 
 // kernel/wsod.cpp
 // 异常处理
