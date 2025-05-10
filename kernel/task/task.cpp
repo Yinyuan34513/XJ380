@@ -607,11 +607,12 @@ uint64_t desktop_flusher(uint64_t arg)
 
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
-    UINT16 test_win;
-    UINT16 test_win2;
+    WINDOWLS *test_win;
+    WINDOWLS *test_win2;
     init_xwm(&xwmi);
-    create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
-    create_window(&xwmi, &shtinf, &test_win2, "1919810", 800, 600);
+    xwmii = &xwmi;
+    create_window(&xwmi, &shtinf, test_win, "114514", 320, 180);
+    create_window(&xwmi, &shtinf, test_win2, "窗口", 800, 600);
 
     refresh_sheet(&shtinf); // 刷新
 

@@ -8,6 +8,7 @@ const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE *ST;
 BOOT_CONFIG *BC;
 SHEET_INFO *sht_img;
+XWM_INFO *xwmii;
 
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, UINT64 n)
 {

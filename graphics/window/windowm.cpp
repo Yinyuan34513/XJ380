@@ -15,7 +15,7 @@ void init_xwm(XWM_INFO *xwmi) {
     write_serial_string("XWM Initializing Success.\n");
 }
 
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *title, UINT32 width, UINT32 height) {
+void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, UINT32 width, UINT32 height) {
     WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
     xmemset(new_window, 0, sizeof(WINDOWLS));
 
@@ -36,6 +36,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
             front_p = front_p->next;
         }
     }
+
+    windowls = new_window;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 0,  0, width + 10, height + 27, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
@@ -102,7 +104,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *ti
         }
     }
 
-    PrintString(sht, &(new_window->w_sheet), 22, 3, title, WHITE);
+    print_box_ttf(sht, &(new_window->w_sheet), title, WHITE, 22, 0, 11);
+    // PrintString(sht, &(new_window->w_sheet), 22, 3, title, WHITE);
 
     refresh_part_sheet(sht, 72, 72, width + 10, height + 27);
 }
