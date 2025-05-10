@@ -1,6 +1,6 @@
 all: init.elf shell.elf
 
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
+export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc
 
 build_xapi:
 	make -C xapi
@@ -10,10 +10,11 @@ init.elf: init.c
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CC $< -> ../out/$@"
 
-shell.elf: shell.c
-	@$(CC) $(CFLAGS) -c $< -o ../out/$@.o
+shell.elf: shell.cpp
+	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
-	@echo "CCLD $< -> ../out/$@"
+	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "CPPLD $< -> ../out/$@"
 
 .PHONY: clean
 clean:
