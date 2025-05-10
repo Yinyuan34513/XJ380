@@ -17,3 +17,14 @@ int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin) {
     
     return true;
 }
+
+int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str) {
+    handle = (UINT64)(malloc(sizeof(WINDOW_HANDLE)));
+    WINDOW_HANDLE   *WindowHandle   = (WINDOW_HANDLE *)(handle);
+    char            *WindowTitle    = (char *)(str);
+    change_title(xwmii, sht_img, 
+                    WindowHandle->WindowNodePtr,
+                    WindowTitle);
+    
+    return true;
+}

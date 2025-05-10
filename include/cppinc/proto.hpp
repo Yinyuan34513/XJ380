@@ -55,6 +55,7 @@ UINT32 get_ver();
 // graphics/window/windowm.cpp
 void init_xwm(XWM_INFO *xwmi);
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, UINT32 width, UINT32 height);
+void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 
 /*
  *   font

@@ -2,8 +2,8 @@
 #include "./include/libsys.h"
 
 // 4-1
-void xapi_CreateWindow(HDLE* handle, XWINDOW* xwin) {
-	enter_syscall(XAPI_CREATE_WINDOW, (UINT64)(handle), (UINT64)(xwin), 0, 0, 0, 0);
+void xapi_CreateWindow(HDLE handle, XWINDOW* xwin) {
+	enter_syscall(XAPI_CREATE_WINDOW, handle, (UINT64)(xwin), 0, 0, 0, 0);
 }
 
 void xapi_SetWindowTitle(HDLE handle, WSTR str) {

@@ -167,6 +167,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)do_xapi_CreateWindow(regs->rdi, regs->rsi);
         break;
     case XAPI_SET_WINDOW_TITLE:
+        regs->rax = (uint64_t)do_xapi_SetWindowTitle(regs->rdi, regs->rsi);
         break;
     case XAPI_CLOSE_WINDOW:
         break;

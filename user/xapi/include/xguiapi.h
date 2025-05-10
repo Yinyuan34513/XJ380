@@ -44,7 +44,7 @@ struct XCOLORA
 
 // 4-1
 void  xapi_CreateWindow(
-	HDLE*		handle,
+	HDLE		handle,
 	XWINDOW* 	xwin
 );
 
