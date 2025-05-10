@@ -72,8 +72,8 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
                 int his_x = ms_dec.sht_now->bx;
                 int his_y = ms_dec.sht_now->by;
                 // 移动窗口
-                setBX(sht_img, ms_dec.sheet_id, mouse_x - ms_dec.win_x_offset);
-                setBY(sht_img, ms_dec.sheet_id, mouse_y - ms_dec.win_y_offset);
+                ms_dec.sht_now->bx = mouse_x - ms_dec.win_x_offset;
+                ms_dec.sht_now->by = mouse_y - ms_dec.win_y_offset;
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                         ms_dec.sht_now->bx + ms_dec.sht_now->width,
                                         ms_dec.sht_now->by + ms_dec.sht_now->height);

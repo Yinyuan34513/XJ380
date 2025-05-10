@@ -8,7 +8,6 @@ typedef struct WINDOWLS *WINDOWLSP;
 struct WINDOWLS
 {
     UINT16    w_sheet;
-    UINT16    id;
     UINT8     title_length;
     CHAR8    *title;
     WINDOWLSP next;
