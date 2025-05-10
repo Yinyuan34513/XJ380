@@ -107,23 +107,25 @@
 #define XAPI_DRAW_POINT 394
 #define XAPI_DRAW_LINE 395
 #define XAPI_DRAW_RECT 396
-#define XAPI_DRAW_CIRCLE 397
-#define XAPI_DRAW_TEXT 398
+#define XAPI_DRAW_RECT_FILL 397
+#define XAPI_DRAW_CIRCLE 398
+#define XAPI_DRAW_CIRCLE_FILL 399
+#define XAPI_DRAW_TEXT 400
 
 // P4.3
-#define XAPI_DRAW_BMP 399
-#define XAPI_DRAW_PNG 400
+#define XAPI_DRAW_BMP 401
+#define XAPI_DRAW_PNG 402
 
 // P4.4
-#define XAPI_SET_MSH_PROCOR 401
+#define XAPI_SET_MSH_PROCOR 403
 
 // P4.5
-#define XAPI_READBUFFER 342
-#define XAPI_WRITEBUFFER 343
-#define XAPI_WRITEBUFFERA 344
+#define XAPI_READBUFFER 404
+#define XAPI_WRITEBUFFER 405
+#define XAPI_WRITEBUFFERA 406
 
 // P4.6
-#define XAPI_BUTTON 345
-#define XAPI_BUTTON_STYLE 346
+#define XAPI_BUTTON 407
+#define XAPI_BUTTON_STYLE 408
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

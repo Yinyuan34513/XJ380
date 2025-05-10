@@ -2,8 +2,8 @@
 #include "./include/libsys.h"
 
 // 4-1
-void xapi_CreateWindow(HDLE	handle, XWINDOW* xwin) {
-	enter_syscall(XAPI_CREATE_WINDOW, handle, (UINT64)(xwin), 0, 0, 0, 0);
+void xapi_CreateWindow(HDLE* handle, XWINDOW* xwin) {
+	enter_syscall(XAPI_CREATE_WINDOW, (UINT64)(handle), (UINT64)(xwin), 0, 0, 0, 0);
 }
 
 void xapi_SetWindowTitle(HDLE handle, WSTR str) {
@@ -30,7 +30,9 @@ void xapi_DrawLine(
 	UINT32 	x2,
 	UINT32 	y2,
 	UINT32 	color
-);
+) {
+	enter_syscall(XAPI_DRAW_LINE, handle, x1, y1, x2, y2, color);
+}
 
 void xapi_DrawRect(
 	HDLE 	handle,
@@ -40,7 +42,13 @@ void xapi_DrawRect(
 	UINT32 	y2,
 	UINT32 	color,
 	bool  	fill
-);
+) {
+	if (fill) {
+		enter_syscall(XAPI_DRAW_RECT_FILL, handle, x1, y1, x2, y2, color);
+	} else {
+		enter_syscall(XAPI_DRAW_RECT, handle, x1, y1, x2, y2, color);
+	}
+}
 
 void xapi_DrawCircle(
 	HDLE  	handle,
@@ -50,31 +58,51 @@ void xapi_DrawCircle(
 	UINT32 	y2,
 	UINT32 	color,
 	bool  	fill
-);
+) {
+	if (fill) {
+		enter_syscall(XAPI_DRAW_CIRCLE_FILL, handle, x1, y1, x2, y2, color);
+	} else {
+		enter_syscall(XAPI_DRAW_CIRCLE, handle, x1, y1, x2, y2, color);
+	}
+}
 
 void xapi_DrawText(
 	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
 	WSTR 	str,
 	UINT32  color
-);
+) {
+	enter_syscall(XAPI_DRAW_TEXT, handle, x, y, (UINT64)(str), color, 0);
+}
 
 // 4-3
 void xapi_DrawBMP (
 	HDLE  	handle,
 	UINT32 	x,
 	UINT32 	y,
+	UINT32	width,
+	UINT32	height,
 	WSTR    path
-);
+) {
+	enter_syscall(XAPI_DRAW_BMP, handle, x, y, width, height, (UINT64)(path));
+}
 
 void xapi_DrawPNG(
 	HDLE  	handle,
 	UINT32  x,
 	UINT32  y,
+	UINT32	width,
+	UINT32	height,
 	WSTR  	path
-);
+) {
+	enter_syscall(XAPI_DRAW_PNG, handle, x, y, width, height, (UINT64)(path));
+}
 
 // 4-4
-void SetMsgPrcor(MsgPrcor func);
+void SetMsgPrcor(MsgPrcor func) {
+	enter_syscall(XAPI_SET_MSH_PROCOR, (UINT64)(func), 0, 0, 0, 0, 0);
+}
 
 // 4-5
 void xapi_ReadBuffer(
@@ -84,6 +112,49 @@ void xapi_ReadBuffer(
 	UINT32  	width,
 	UINT32		height,
 	XCOLOR*  	buffer
-);
+) {
+	enter_syscall(XAPI_READBUFFER, handle, x, y, width, height, (UINT64)(buffer));
+}
+
+void xapi_WriteBuffer(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32  	height,
+	XCOLOR*  	buffer
+) {
+	enter_syscall(XAPI_WRITEBUFFER, handle, x, y, width, height, (UINT64)(buffer));
+}
+
+void xapi_WriteBufferA(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32  	height,
+	XCOLORA*  	buffer
+) {
+	enter_syscall(XAPI_WRITEBUFFERA, handle, x, y, width, height, (UINT64)(buffer));
+}
+
+// 4-6
+void xapi_Button(
+	HDLE  	handle,
+	UINT64  CRLid,
+	WSTR  	text
+) {
+	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), 0, 0, 0);
+}
+
+void xapi_StyleButton(
+	HDLE  	handle,
+	UINT64  CRLid,
+	WSTR  	text,
+	WSTR  	path
+) {
+	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), (UINT64)(path), 0, 0);
+}
+
 
 

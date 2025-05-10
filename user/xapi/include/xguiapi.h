@@ -3,7 +3,7 @@
  *      XINGJI XJ380 Application Compile Tools (XACT) 
  *      XACT C\C++ Header
  *      XJ380API XAPI Edition GUI Part
- *      Release Version 1.0.0 - 2025/5/9
+ *      Release Version 1.0.0 - 2025/5/10
  *      Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
@@ -44,7 +44,7 @@ struct XCOLORA
 
 // 4-1
 void  xapi_CreateWindow(
-	HDLE		handle,
+	HDLE*		handle,
 	XWINDOW* 	xwin
 );
 
@@ -108,15 +108,19 @@ void  xapi_DrawText(
 // 4-3
 void  xapi_DrawBMP (
 	HDLE  	handle,
-	UINT32 	x,
-	UINT32 	y,
-	WSTR    path
+	UINT32  x,
+	UINT32  y,
+	UINT32	width,
+	UINT32	height,
+	WSTR  	path
 );
 
 void  xapi_DrawPNG(
 	HDLE  	handle,
 	UINT32  x,
 	UINT32  y,
+	UINT32	width,
+	UINT32	height,
 	WSTR  	path
 );
 
@@ -133,3 +137,34 @@ void  xapi_ReadBuffer(
 	XCOLOR*  	buffer
 );
 
+void xapi_WriteBuffer(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32  	height,
+	XCOLOR*  	buffer
+);
+
+void xapi_WriteBufferA(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32  	height,
+	XCOLORA*  	buffer
+);
+
+// 4-6
+void xapi_Button(
+	HDLE  	handle,
+	UINT64  CRLid,
+	WSTR  	text
+);
+
+void xapi_StyleButton(
+	HDLE  	handle,
+	UINT64  CRLid,
+	WSTR  	text,
+	WSTR  	path
+);
