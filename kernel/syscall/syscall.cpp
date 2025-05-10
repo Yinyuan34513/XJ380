@@ -45,6 +45,7 @@ void init_syscall()
     wrmsr(MSR_SYSCALL_MASK, (1 << 9));
 }
 
+// regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9
 extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 {
     regs->rip = regs->rcx;
@@ -163,6 +164,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_execve(regs);
         break;
     case XAPI_CREATE_WINDOW:
+        regs->rax = (uint64_t)do_xapi_CreateWindow(regs->rdi, regs->rsi);
         break;
     case XAPI_SET_WINDOW_TITLE:
         break;
