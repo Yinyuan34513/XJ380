@@ -9,7 +9,7 @@ extern int main(int argc, char *argv[], char *envp[]);
 // extern void __fini_array_start();
 // extern void __fini_array_end();
 
-void xapi_start(int argc, char *argv[], char *envp[])
+extern "C" void xapi_start(int argc, char *argv[], char *envp[])
 {
     //{
     //    void (*fn)() = __preinit_array_start;

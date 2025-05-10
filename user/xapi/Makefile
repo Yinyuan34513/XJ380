@@ -1,4 +1,4 @@
-SRC_FILES := $(shell find . -name "*.[Sc]")
+SRC_FILES := $(shell find . \( -name "*.cpp" -o -name "*.S" \))
 OBJ_FILES := $(patsubst ./%, ../../out/xapi/%.o, $(SRC_FILES))
 
 all: $(OBJ_FILES)
@@ -8,7 +8,7 @@ all: $(OBJ_FILES)
 	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "AS $<"
 
-../../out/xapi/%.c.o: ./%.c
+../../out/xapi/%.cpp.o: ./%.cpp
 	@mkdir -p $(@D)
-	@$(CC) $(CFLAGS) -c $< -o $@
-	@echo "CC $<"
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CPP $<"

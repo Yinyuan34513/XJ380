@@ -30,6 +30,7 @@
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
 #include "./global/kernel/syscall/syscall.h"
+#include "./global/kernel/syscall/pxapi.h"
 // Drivers
 #include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/partition.h"
