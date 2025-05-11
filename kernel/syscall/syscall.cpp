@@ -170,12 +170,16 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)do_xapi_SetWindowTitle(regs->rdi, regs->rsi);
         break;
     case XAPI_CLOSE_WINDOW:
+        regs->rax = (uint64_t)do_xapi_CloseWindow(regs->rdi);
         break;
     case XAPI_SET_ICON:
+        regs->rax = (uint64_t)do_xapi_SetIcon(regs->rdi, regs->rsi);
         break;
     case XAPI_DRAW_POINT:
+        regs->rax = (uint64_t)do_xapi_DrawPoint(regs->rdi, regs->rsi, regs->rdx, regs->r10);
         break;
     case XAPI_DRAW_LINE:
+        regs->rax = (uint64_t)do_xapi_DrawLine(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
     case XAPI_DRAW_RECT:
         break;

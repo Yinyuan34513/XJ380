@@ -33,3 +33,38 @@ int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str) {
     
     return true;
 }
+
+int do_xapi_CloseWindow(UINT64 handle) {
+    WINDOW_HANDLE   *WindowHandle   = (WINDOW_HANDLE *)(handle);
+    // 呃现在还没做删除图层和窗口，等会儿再说吧（（（
+
+    return true;
+}
+
+int do_xapi_SetIcon(UINT64 handle, UINT64 path) {
+    WINDOW_HANDLE   *WindowHandle   = (WINDOW_HANDLE *)(handle);
+    char            *WindowTitle    = (char *)(path);
+    // 你也给我等着
+
+    return true;
+}
+
+int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color) {
+    WINDOW_HANDLE   *WindowHandle   = (WINDOW_HANDLE *)(handle);
+    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, {(UINT8)(color & 0xFF000000), 
+                                                                        (UINT8)(color & 0x00FF0000),
+                                                                        (UINT8)(color & 0x0000FF00),
+                                                                        (UINT8)(color & 0x000000FF)});
+
+    return true;
+}
+
+int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color) {
+    WINDOW_HANDLE   *WindowHandle   = (WINDOW_HANDLE *)(handle);
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y2, {(UINT8)(color & 0xFF000000), 
+                                                                                 (UINT8)(color & 0x00FF0000),
+                                                                                 (UINT8)(color & 0x0000FF00),
+                                                                                 (UINT8)(color & 0x000000FF)});
+
+    return true;
+}

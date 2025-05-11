@@ -137,6 +137,10 @@ struct iovec
 // Proto (XAPI Edition)
 int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin);
 int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str);
+int do_xapi_CloseWindow(UINT64 handle);
+int do_xapi_SetIcon(UINT64 handle, UINT64 path);
+int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color);
+int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
 
 
 
