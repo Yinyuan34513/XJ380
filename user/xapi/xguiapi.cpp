@@ -6,8 +6,8 @@ void xapi_CreateWindow(HDLE* handle, XWINDOW* xwin) {
 	enter_syscall(XAPI_CREATE_WINDOW, (UINT64)(handle), (UINT64)(xwin), 0, 0, 0, 0);
 }
 
-void xapi_SetWindowTitle(HDLE handle, WSTR str) {
-	enter_syscall(XAPI_SET_WINDOW_TITLE, handle, (UINT64)(str), 0, 0, 0, 0);
+void xapi_SetWindowTitle(HDLE* handle, WSTR str) {
+	enter_syscall(XAPI_SET_WINDOW_TITLE, (UINT64)handle, (UINT64)(str), 0, 0, 0, 0);
 }
 
 void xapi_CloseWindow(HDLE handle) {

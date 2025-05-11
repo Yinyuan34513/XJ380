@@ -49,7 +49,7 @@ void  xapi_CreateWindow(
 );
 
 void  xapi_SetWindowTitle(
-	HDLE  	handle,
+	HDLE*  	handle,
 	WSTR  	str
 );
 
