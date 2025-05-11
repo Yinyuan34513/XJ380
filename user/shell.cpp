@@ -12,7 +12,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.height = 180;
     xapi_CreateWindow(&handle, &Winfo);
     xapi_SetWindowTitle(handle, "Terminal");
-    xapi_DrawLine(handle, 0, 0, 12, 12, 0x000000ff);
+    xapi_DrawLine(handle, 0, 0, 12, 13, 0x000000ff);
 
     while (1)
         __asm__ __volatile__("pause");
