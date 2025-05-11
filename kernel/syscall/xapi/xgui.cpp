@@ -61,10 +61,10 @@ int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color) {
 
 int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color) {
     WINDOW_HANDLE   *WindowHandle   = (WINDOW_HANDLE *)(handle);
-    // draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y2, {(UINT8)((color >> 24) & 0xFF), 
-    //                                                                              (UINT8)((color >> 16) & 0xFF),
-    //                                                                              (UINT8)((color >>  8) & 0xFF),
-    //                                                                              (UINT8)((color) & 0xFF)});
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                 (UINT8)((color >> 16) & 0xFF),
+                                                                                 (UINT8)((color >>  8) & 0xFF),
+                                                                                 (UINT8)((color) & 0xFF)});
 
     return true;
 }

@@ -214,3 +214,37 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     return user_rsp;
 }
+
+
+        // write_serial_dec(regs->r10);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r11);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r12);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r13);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r14);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r15);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r8);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r9);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rax);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rbp);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rbx);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rcx);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rdi);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rdx);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rsi);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rsp);
+        // write_serial_string("\n");
