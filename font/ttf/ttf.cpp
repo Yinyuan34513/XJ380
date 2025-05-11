@@ -6,33 +6,63 @@
 char *ttf_buffer;
 stbtt_fontinfo font;
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color,
-                        uint8_t alpha) {
-	SHEET_BUFFER temp;
-	// 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-	temp.r = foreground_color.r * alpha / 255 + background_color.r * (255 - alpha) / 255;
-	temp.g = foreground_color.g * alpha / 255 + background_color.g * (255 - alpha) / 255;
-	temp.b = foreground_color.b * alpha / 255 + background_color.b * (255 - alpha) / 255;
-	temp.a = background_color.a + ((float)(foreground_color.a - background_color.a) / (float)foreground_color.a) * alpha;
-	return temp;
+							uint8_t alpha)
+{
+	uint8_t text_r = foreground_color.r;
+	uint8_t text_g = foreground_color.g;
+	uint8_t text_b = foreground_color.b;
+	uint8_t text_a = foreground_color.a;
+	uint8_t coverage = alpha;
+	SHEET_BUFFER *dst = &background_color;
+
+	// 转换为浮点运算（0.0-1.0范围）
+	float cov = coverage / 255.0f;
+	float txt_alpha = text_a / 255.0f;
+	float src_alpha = cov * txt_alpha;
+
+	// 源颜色预乘alpha
+	float src_r = (text_r / 255.0f) * src_alpha;
+	float src_g = (text_g / 255.0f) * src_alpha;
+	float src_b = (text_b / 255.0f) * src_alpha;
+
+	// 目标颜色预乘alpha
+	float dst_a = dst->a / 255.0f;
+	float dst_r = (dst->r / 255.0f) * dst_a;
+	float dst_g = (dst->g / 255.0f) * dst_a;
+	float dst_b = (dst->b / 255.0f) * dst_a;
+
+	// 混合计算
+	float blended_alpha = src_alpha + dst_a * (1.0f - src_alpha);
+
+	// 颜色混合
+	float blended_r = (src_r + dst_r * (1.0f - src_alpha)) / blended_alpha;
+	float blended_g = (src_g + dst_g * (1.0f - src_alpha)) / blended_alpha;
+	float blended_b = (src_b + dst_b * (1.0f - src_alpha)) / blended_alpha;
+
+	// 转换回0-255并存储
+	dst->r = (uint8_t)(blended_r * 255 + 0.5f);
+	dst->g = (uint8_t)(blended_g * 255 + 0.5f);
+	dst->b = (uint8_t)(blended_b * 255 + 0.5f);
+	dst->a = (uint8_t)(blended_alpha * 255 + 0.5f);
+	return *dst;
 }
 
 void set_size(int s1) {}
-#define EPS (2.22044604925031308085e-16)
-static const float32_t toint = 1 / EPS;
 
 int roundf(double n)
 {
-    // 若为负数，则先化为正数再进行四舍五入
-    if (n > 0)
-        return n - int(n) >= 0.5 ? int(n) + 1 : int(n);
-    else
-        return -n - int(-n) >= 0.5 ? -(int(-n) + 1) : -int(-n);
+	// 若为负数，则先化为正数再进行四舍五入
+	if (n > 0)
+		return n - int(n) >= 0.5 ? int(n) + 1 : int(n);
+	else
+		return -n - int(-n) >= 0.5 ? -(int(-n) + 1) : -int(-n);
 }
 
-unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
+unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
+{
 	/* 创建位图 */
 	int bitmap_w = 1024; /* 位图的宽 */
-	int bitmap_h = 512; /* 位图的高 */
+	int bitmap_h = 512;	 /* 位图的高 */
 	unsigned char *bitmap = (unsigned char *)(malloc(bitmap_w * bitmap_h));
 	xmemset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
@@ -63,7 +93,8 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 	int x = 0; /*位图的x*/
 	/* 循环加载word中每个字符 */
 	unsigned h = (int)((float)(ascent - descent + lineGap * scale));
-	for (int i = 0; word[i] != 0; ++i) {
+	for (int i = 0; word[i] != 0; ++i)
+	{
 		/**
 		 * 获取水平方向上的度量
 		 * advanceWidth：字宽；
@@ -80,11 +111,11 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 
 		/* 计算位图的y (不同字符的高度不同） */
 		int y = ascent + c_y1;
-		
+
 		/* 渲染字符 */
 		int byteOffset = x + leftSideBearing * scale + (y * bitmap_w);
 		stbtt_MakeCodepointBitmap(&font, bitmap + byteOffset, c_x2 - c_x1,
-								c_y2 - c_y1, bitmap_w, scale, scale, word[i]);
+								  c_y2 - c_y1, bitmap_w, scale, scale, word[i]);
 
 		/* 调整x */
 		x += roundf(advanceWidth * scale);
@@ -100,28 +131,31 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size) {
 	return bitmap;
 }
 
-void put_bitmap(SHEET_INFO *sht, UINT16 *sheet_id, unsigned char *bitmap, 
-				unsigned x, unsigned y, 
-				unsigned width, unsigned heigh, 
-				unsigned bitmap_xsize, SHEET_BUFFER fc) {
+void put_bitmap(SHEET_INFO *sht, UINT16 *sheet_id, unsigned char *bitmap,
+				unsigned x, unsigned y,
+				unsigned width, unsigned heigh,
+				unsigned bitmap_xsize, SHEET_BUFFER fc)
+{
 	// 查找图层
 	SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id)
-        {
-            break;
-        }
-        else if (front_p->next == NULL)
-        {
-            return;
-        }
-        front_p = front_p->next;
-    }
+	while (true)
+	{
+		if (front_p->index == *sheet_id)
+		{
+			break;
+		}
+		else if (front_p->next == NULL)
+		{
+			return;
+		}
+		front_p = front_p->next;
+	}
 
 	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-	for (int i = 0; i < width; i++) {
-		for (int j = 0; j < heigh; j++) {
+	for (int i = 0; i < width; i++)
+	{
+		for (int j = 0; j < heigh; j++)
+		{
 			SheetBuffer[(y + j) * front_p->width + (x + i)] = LCD_AlphaBlend(
 				fc, SheetBuffer[(y + j) * front_p->width + (x + i)], bitmap[j * bitmap_xsize + i]);
 		}
@@ -129,35 +163,37 @@ void put_bitmap(SHEET_INFO *sht, UINT16 *sheet_id, unsigned char *bitmap,
 }
 
 void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc,
-                   /*unsigned bc, */unsigned x, unsigned y, int size) {
+				   /*unsigned bc, */ unsigned x, unsigned y, int size)
+{
 	Rune *r = (Rune *)malloc((utflen(buf) + 1) * sizeof(Rune));
 	r[utflen(buf)] = 0;
 	int i = 0;
-	while (*buf != '\0') {
+	while (*buf != '\0')
+	{
 		buf += chartorune(&(r[i++]), buf);
 	}
 
 	// 查找图层
 	SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id)
-        {
-            break;
-        }
-        else if (front_p->next == NULL)
-        {
-            return;
-        }
-        front_p = front_p->next;
-    }
+	while (true)
+	{
+		if (front_p->index == *sheet_id)
+		{
+			break;
+		}
+		else if (front_p->next == NULL)
+		{
+			return;
+		}
+		front_p = front_p->next;
+	}
 	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
 
 	unsigned width, heigh;
 	unsigned char *bitmap = TTF_Print(r, &width, &heigh, size);
 	put_bitmap(sht, sheet_id, bitmap, x, y, width, heigh, 1024, fc);
-	refresh_part_sheet(sht, front_p->bx + x, front_p->by + y, 
-							front_p->bx + x + width, front_p->by + y + heigh);
+	refresh_part_sheet(sht, front_p->bx + x, front_p->by + y,
+					   front_p->bx + x + width, front_p->by + y + heigh);
 	free(bitmap);
 	free(r);
 }
@@ -197,7 +233,8 @@ void init_ttf()
 		}
 	}
 	write_serial_string("Loading TTF...\n");
-	if (!stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0))) {
+	if (!stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0)))
+	{
 		write_serial_string("Cannot Initialize TTF.\n");
 		wsod_cannot_load_ttf();
 		return;

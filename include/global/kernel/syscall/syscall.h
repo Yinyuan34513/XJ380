@@ -134,6 +134,13 @@ struct iovec
     uint64_t len;
 };
 
+// Proto (XAPI Edition)
+int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin);
+int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str);
+
+
+
+
 // Proto (POSIX Edition)
 int sys_read(uint32_t fd, uint8_t *buf, size_t count);
 int sys_write(uint32_t fd, uint8_t *buf, size_t count);
