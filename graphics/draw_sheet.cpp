@@ -24,6 +24,8 @@ void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUF
 
 void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
 {
+    x1++;
+    x2++;
     for (int y = y1; y < y2; y++)
     {
         for (int x = x1; x < x2; x++)
@@ -35,6 +37,8 @@ void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2
 
 void draw_line(SHEET_INFO *sht, UINT16 *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
 {
+    x0++;
+    x1++;
     int dx = x1 - x0;
     int dy = y1 - y0;
     int k;

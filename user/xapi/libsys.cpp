@@ -16,3 +16,4 @@ uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, ui
         : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
     return ret;
 }
+

@@ -182,6 +182,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)do_xapi_DrawLine(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
     case XAPI_DRAW_RECT:
+        regs->rax = (uint64_t)do_xapi_DrawRect(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_RECT_FILL:
+        regs->rax = (uint64_t)do_xapi_DrawRect_fill(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
     case XAPI_DRAW_CIRCLE:
         break;
