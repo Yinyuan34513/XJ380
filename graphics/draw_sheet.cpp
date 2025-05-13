@@ -24,9 +24,9 @@ void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUF
 
 void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
 {
-    for (int y = y1; y < y2; y++)
+    for (int y = y1; y <= y2; y++)
     {
-        for (int x = x1; x < x2; x++)
+        for (int x = x1; x <= x2; x++)
         {
             draw_point(sht, sheet_id, x, y, color);
         }
@@ -35,70 +35,48 @@ void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2
 
 void draw_line(SHEET_INFO *sht, UINT16 *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
 {
-    int dx = x1 - x0;
-    int dy = y1 - y0;
-    int sx = (x0 < x1) ? 1 : -1;
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx - dy;
 
-    while (true)
-    {
-        draw_point(sht, sheet_id, x0, y0, color); // 绘制当前点
+    int i, x, y, len, dx, dy;
 
-        if (x0 == x1 && y0 == y1) // 如果到达终点，退出循环
-            break;
+	dx = x1 - x0;
+	dy = y1 - y0;
+	x = x0 << 10;
+	y = y0 << 10;
+	if (dx < 0) {
+		dx = - dx;
+	}
+	if (dy < 0) {
+		dy = - dy;
+	}
+	if (dx >= dy) {
+		len = dx + 1;
+		if (x0 > x1) {
+			dx = -1024;
+		} else {
+			dx =  1024;
+		}
+		if (y0 <= y1) {
+			dy = ((y1 - y0 + 1) << 10) / len;
+		} else {
+			dy = ((y1 - y0 - 1) << 10) / len;
+		}
+	} else {
+		len = dy + 1;
+		if (y0 > y1) {
+			dy = -1024;
+		} else {
+			dy =  1024;
+		}
+		if (x0 <= x1) {
+			dx = ((x1 - x0 + 1) << 10) / len;
+		} else {
+			dx = ((x1 - x0 - 1) << 10) / len;
+		}
+	}
 
-        int e2 = 2 * err;
-        if (e2 > -dy)
-        {
-            err -= dy;
-            x0 += sx;
-        }
-        if (e2 < dx)
-        {
-            err += dx;
-            y0 += sy;
-        }
-    }
-    // int dx = x1 - x0;
-    // int dy = y1 - y0;
-    // int k;
-    // int xIncrement;
-    // int err;
-
-    // // 确定迭代方向和步数
-    // if (dx < 0)
-    // {
-    //     dx = -dx;
-    //     xIncrement = -1;
-    // }
-    // else
-    // {
-    //     xIncrement = 1;
-    // }
-
-    // // 初始化斜率（2*dy，因为我们后面会乘以2来避免浮点运算）
-    // k = 2 * dy;
-
-    // // 初始化误差项和y的增量
-    // err = k - dx;
-    // int y = y0;
-
-    // // 绘制直线上的点
-    // for (int x = x0; x != x1 + xIncrement; x += xIncrement)
-    // {
-    //     // 这里可以添加代码来绘制点(x, y)
-    //     draw_point(sht, sheet_id, x, y, color);
-
-    //     // 更新误差项
-    //     if (err < 0)
-    //     {
-    //         err += 2 * dy;
-    //     }
-    //     else
-    //     {
-    //         y += (y1 > y0) ? 1 : -1;
-    //         err += 2 * (dy - dx);
-    //     }
-    // }
+	for (i = 0; i < len; i++) {
+		draw_point(sht, sheet_id, x >> 10, y >> 10, color);
+		x += dx;
+		y += dy;
+	}
 }

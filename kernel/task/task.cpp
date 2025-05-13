@@ -560,22 +560,22 @@ uint64_t desktop_flusher(uint64_t arg)
     // 别问为什么这么多-40，问就是因为改起来太麻烦
     PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
 
-    draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 472, 320, WHITE);
-    draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 472, 320, BLACK);
-    draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 472, 320, XINGJI_BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 472, 320, XINGJI_YELLOW);
-    draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 472, 320, WIN_BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 472, 320, GRAY);
-    draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 472, 320, BGRAY);
-    draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 472, 320, PURPLE);
-    draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 472, 320, PINK);
-    draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 472, 320, RED);
-    draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 472, 320, CHINA_RED);
-    draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 472, 320, GOLD);
-    draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 472, 320, GREEN);
-    draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 472, 320, LIGHT_GREEN);
-    draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 472, 320, BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 472, 320, SKY_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 473, 319, WHITE);
+    draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 473, 319, BLACK);
+    draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 473, 319, XINGJI_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 473, 319, XINGJI_YELLOW);
+    draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 473, 319, WIN_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 473, 319, GRAY);
+    draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 473, 319, BGRAY);
+    draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 473, 319, PURPLE);
+    draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 473, 319, PINK);
+    draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 473, 319, RED);
+    draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 473, 319, CHINA_RED);
+    draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 473, 319, GOLD);
+    draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 473, 319, GREEN);
+    draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 473, 319, LIGHT_GREEN);
+    draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 473, 319, BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 473, 319, SKY_BLUE);
 
     PrintString(&shtinf, &desktop_sheet_id, 8, 332, "MemoryMapTypeSheet", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 348, "0x0: Free", WHITE);
@@ -600,7 +600,7 @@ uint64_t desktop_flusher(uint64_t arg)
     write_serial_string(CPU_Model);
     write_serial_string("\n");
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 480, fbc_addr->vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479, fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
 #endif
     // wsod_debug();
 
@@ -672,7 +672,7 @@ uint64_t desktop_flusher(uint64_t arg)
         //     write_serial_string("GetTime failed.\n");
         // }
         // time_read(&time);
-        // draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
+        // draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
         // //12 小时制
         // PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.tm_hour + UTC) % 24, BLACK);
         // PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);

@@ -45,7 +45,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     *windowls = new_window;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
-    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 10, height + 27, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
 
     for (int y = 0; y < height + 27; y++)
     {
@@ -63,7 +63,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
         }
     }
 
-    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 4, height + 22, {0xff, 0xff, 0xff, 0xff});
+    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 3, height + 21, {0xff, 0xff, 0xff, 0xff});
 
     for (int y = 0; y < 9; y++)
     {
@@ -143,7 +143,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
 {
-    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 80, 21, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 81, 20, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
     print_box_ttf(sht, &(windowls->w_sheet), title, WHITE, 22, 0, 11);
     refresh_part_sheet(sht, getBX(sht, &(windowls->w_sheet)), getBY(sht, &(windowls->w_sheet)),
                        getBX(sht, &(windowls->w_sheet)) + getXsize(sht, &(windowls->w_sheet)) + 10,

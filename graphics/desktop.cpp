@@ -8,7 +8,7 @@ void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id)
     int scrx = sht->scrx;
     int scry = sht->scry;
     // #136dff
-    draw_rect(sht, sheet_id, 0, 0, scrx, scry, WIN_BLUE);
+    draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
     init_dock(sht, dock_sheet_id);
     init_shortcut_dock(sht, dock_sheet_id);
 }
@@ -19,7 +19,7 @@ void init_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     int scry = sht->scry;
     int tmpx = scrx * 0.75; // 75%
     int tmpy = scry - 48;
-    draw_rect(sht, sheet_id, 0, scry - 48, tmpx, scry, DOCK_COL);
+    draw_rect(sht, sheet_id, 0, scry - 48, tmpx - 1, scry - 1, DOCK_COL);
 
     for (int y = scry - 48; y < scry; y++) {
         for (int x = tmpx / 3; x < tmpx / 3 + 256; x++) {
@@ -50,15 +50,7 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     int y1 = 0;
     int x2 = sht->scrx * 0.8125;
     int y2 = 24;
-    // draw_rect(sht, sheet_id, x1, y1, x2, y2, DOCK_COL);
-
-    for (int y = y1; y < y2; y++)
-    {
-        for (int x = x1; x < x2; x++)
-        {
-            draw_point(sht, sheet_id, x, y, {0xe6, 0xe6, 0xe6, 0xaa});
-        }
-    }
+    draw_rect(sht, sheet_id, x1, y1, x2 - 1, y2 - 1, DOCK_COL);
 
     for (int y = y1; y < y2; y++) {
         for (int x = x2 / 3; x < x2 / 3 + 256; x++) {
@@ -72,7 +64,7 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
         }
     }
 
-    draw_studio_logo(sht, sheet_id, x1 + 4, 4);
+    draw_studio_logo(sht, sheet_id, x1 + 8, 4);
 
     print_box_ttf(sht, sheet_id, "文件", BLACK, x1 + 32, 1, 10);
     print_box_ttf(sht, sheet_id, "设置", BLACK, x1 + 32 + 25 + 8, 1, 10);
