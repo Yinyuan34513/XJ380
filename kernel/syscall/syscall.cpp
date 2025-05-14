@@ -194,6 +194,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     //     regs->rax = (uint64_t)do_xapi_DrawCircle_fill(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
     //     break;
     case XAPI_DRAW_TEXT:
+        regs->rax = (uint64_t)do_xapi_DrawText(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
     case XAPI_DRAW_BMP:
         break;

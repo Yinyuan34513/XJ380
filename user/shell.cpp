@@ -14,6 +14,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_SetWindowTitle(handle, "Terminal");
     xapi_DrawLine(handle, 0, 0, 12, 12, 0x000000ff);
     xapi_DrawRect(handle, 0, 0, 12, 12, 0x000000ff, true);
+    xapi_DrawText(handle, 20, 20, "文本Text", 10, 0x000000FF);
 
     while (1)
         __asm__ __volatile__("pause");

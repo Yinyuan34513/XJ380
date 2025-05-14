@@ -57,7 +57,10 @@ int do_xapi_SetIcon(UINT64 handle, UINT64 path)
 int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, {(UINT8)((color >> 24) & 0xFF), 
+                                                                        (UINT8)((color >> 16) & 0xFF), 
+                                                                        (UINT8)((color >> 8) & 0xFF), 
+                                                                        (UINT8)((color) & 0xFF)});
 
     return true;
 }
@@ -65,7 +68,10 @@ int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color)
 int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                                    (UINT8)((color >> 16) & 0xFF), 
+                                                                                                    (UINT8)((color >> 8) & 0xFF), 
+                                                                                                    (UINT8)((color) & 0xFF)});
 
     return true;
 }
@@ -73,7 +79,10 @@ int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, 
 int do_xapi_DrawRect_fill(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+    draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                                    (UINT8)((color >> 16) & 0xFF), 
+                                                                                                    (UINT8)((color >> 8) & 0xFF), 
+                                                                                                    (UINT8)((color) & 0xFF)});
 
     return true;
 }
@@ -82,11 +91,23 @@ int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, 
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
 
-    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y1 + 22, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
-    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y2 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x2 + 5, y1 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                                    (UINT8)((color >> 16) & 0xFF), 
+                                                                                                    (UINT8)((color >> 8) & 0xFF), 
+                                                                                                    (UINT8)((color) & 0xFF)});
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y2 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                                    (UINT8)((color >> 16) & 0xFF), 
+                                                                                                    (UINT8)((color >> 8) & 0xFF), 
+                                                                                                    (UINT8)((color) & 0xFF)});
 
-    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x1 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
-    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x2 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 5, y1 + 22, x1 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                                    (UINT8)((color >> 16) & 0xFF), 
+                                                                                                    (UINT8)((color >> 8) & 0xFF), 
+                                                                                                    (UINT8)((color) & 0xFF)});
+    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x2 + 5, y1 + 22, x2 + 5, y2 + 22, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                                    (UINT8)((color >> 16) & 0xFF), 
+                                                                                                    (UINT8)((color >> 8) & 0xFF), 
+                                                                                                    (UINT8)((color) & 0xFF)});
 
     return true;
 }
@@ -103,3 +124,13 @@ int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, 
 //     draw_circle(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22, radius, false, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
 // }
 
+int do_xapi_DrawText(UINT64 handle, UINT32 x, UINT32 y, UINT64 str, UINT32 size, UINT32 color) {
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char *TextString = (char *)(str);
+
+    print_box_ttf(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), TextString, {(UINT8)((color >> 24) & 0xFF), 
+                                                                                (UINT8)((color >> 16) & 0xFF), 
+                                                                                (UINT8)((color >> 8) & 0xFF), 
+                                                                                (UINT8)((color) & 0xFF)}, x, y, size);
+    return true;
+}
