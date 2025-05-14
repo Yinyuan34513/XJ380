@@ -50,27 +50,27 @@ void xapi_DrawRect(
 	}
 }
 
-void xapi_DrawCircle(
-	HDLE  	handle,
-	UINT32 	x1,
-	UINT32 	y1,
-	UINT32 	x2,
-	UINT32 	y2,
-	UINT32 	color,
-	bool  	fill
-) {
-	if (fill) {
-		enter_syscall(XAPI_DRAW_CIRCLE_FILL, handle, x1, y1, x2, y2, color);
-	} else {
-		enter_syscall(XAPI_DRAW_CIRCLE, handle, x1, y1, x2, y2, color);
-	}
-}
+// void xapi_DrawCircle(
+// 	HDLE  	handle,
+// 	UINT32 	x,
+// 	UINT32 	y,
+// 	UINT32 	radius,
+// 	UINT32 	color,
+// 	bool  	fill
+// ) {
+// 	if (fill) {
+// 		enter_syscall(XAPI_DRAW_CIRCLE_FILL, handle, x, y, radius, color, 0);
+// 	} else {
+// 		enter_syscall(XAPI_DRAW_CIRCLE, handle, x, y, radius, color, 0);
+// 	}
+// }
 
 void xapi_DrawText(
 	HDLE  	handle,
 	UINT32 	x,
 	UINT32 	y,
 	WSTR 	str,
+	UINT32	size,
 	UINT32  color
 ) {
 	enter_syscall(XAPI_DRAW_TEXT, handle, x, y, (UINT64)(str), color, 0);

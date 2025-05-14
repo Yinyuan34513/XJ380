@@ -90,3 +90,16 @@ int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, 
 
     return true;
 }
+
+// int do_xapi_DrawCircle_fill(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color) {
+//     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+
+//     draw_circle(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22, radius, true, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+// }
+
+// int do_xapi_DrawCircle(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color) {
+//     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+
+//     draw_circle(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22, radius, false, {(UINT8)((color >> 24) & 0xFF), (UINT8)((color >> 16) & 0xFF), (UINT8)((color >> 8) & 0xFF), (UINT8)((color) & 0xFF)});
+// }
+
