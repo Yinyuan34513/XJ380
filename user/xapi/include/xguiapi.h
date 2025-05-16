@@ -62,6 +62,7 @@ void  xapi_SetIcon(
 	WSTR  	path
 );
 
+
 // 4-2
 void  xapi_DrawPoint (
 	HDLE  	handle,

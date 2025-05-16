@@ -162,7 +162,6 @@ int sys_exit(int status);
 int sys_fork(struct X64_REGS *regs);
 int sys_vfork(struct X64_REGS *regs);
 uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
-
 uint64_t sys_brk(uint64_t addr);
 
 #define PROT_NONE 0x0

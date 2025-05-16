@@ -73,8 +73,9 @@ void xapi_DrawText(
 	UINT32	size,
 	UINT32  color
 ) {
-	enter_syscall(XAPI_DRAW_TEXT, handle, x, y, (UINT64)(str), color, 0);
+	enter_syscall(XAPI_DRAW_TEXT, handle, x, y, (UINT64)(str), size, color);
 }
+
 
 // 4-3
 void xapi_DrawBMP (

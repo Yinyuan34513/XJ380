@@ -149,3 +149,11 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
                        getBX(sht, &(windowls->w_sheet)) + getXsize(sht, &(windowls->w_sheet)) + 10,
                        getBY(sht, &(windowls->w_sheet)) + 22);
 }
+
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color)
+{
+    write_serial_string("size:");
+    write_serial_dec(size);
+    write_serial_string("\n");
+    print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
+}

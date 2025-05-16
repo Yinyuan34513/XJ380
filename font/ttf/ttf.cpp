@@ -198,6 +198,13 @@ void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc
 	free(r);
 }
 
+// void draw_text(SHEET_INFO *sht, WINDOWLS* wls, char *buf, SHEET_BUFFER fc,
+// 				/*unsigned bc, */ unsigned x, unsigned y, int size)
+// {
+// 	print_box_ttf(sht, &(wls->w_sheet), buf, fc,
+// 				  /*bc, */ x, y, size);
+// }
+
 void init_ttf()
 {
 	write_serial_string("Initializing TTF...\n");

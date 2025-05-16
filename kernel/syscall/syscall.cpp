@@ -194,6 +194,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     //     regs->rax = (uint64_t)do_xapi_DrawCircle_fill(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
     //     break;
     case XAPI_DRAW_TEXT:
+        write_serial_string("size:\n");
+        write_serial_dec(regs->r8);
+        write_serial_string("\n");
         regs->rax = (uint64_t)do_xapi_DrawText(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
     case XAPI_DRAW_BMP:
@@ -212,6 +215,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case XAPI_BUTTON_STYLE:
         break;
+
 
     default:
         regs->rax = (uint64_t)-ENOSYS;
