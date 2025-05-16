@@ -10,7 +10,8 @@ int main(int argc, char *argv[], char *envp[])
     // if (pid == 0)
     // {
     //     write(1, "child process is running!!!\n", 0);
-    execve("/usr/shell.elf", NULL, NULL);
+    // execve("/usr/shell.elf", NULL, NULL);
+    execve("/usr/cp537.elf", NULL, NULL);
     // }
     // else
     // {
