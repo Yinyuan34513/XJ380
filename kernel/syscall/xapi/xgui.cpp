@@ -113,3 +113,14 @@ int do_xapi_DrawText(UINT64 handle, UINT32 x, UINT32 y, UINT64 str, UINT32 size,
                                                                                              (UINT8)((color) & 0xFF)});
     return true;
 }
+
+int do_xapi_RefreshWindow(UINT64 handle) {
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    int bx = getBX(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int by = getBY(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int ex = bx + getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int ey = by + getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    refresh_part_sheet(sht_img, bx, by, ex, ey);
+
+    return true;
+}

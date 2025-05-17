@@ -139,6 +139,10 @@ void xapi_WriteBufferA(
 	enter_syscall(XAPI_WRITEBUFFERA, handle, x, y, width, height, (UINT64)(buffer));
 }
 
+void xapi_RefreshWindow(HDLE handle) {
+	enter_syscall(XAPI_REFRESH_WINDOW, handle, 0, 0, 0, 0, 0);
+}
+
 // 4-6
 void xapi_Button(
 	HDLE  	handle,

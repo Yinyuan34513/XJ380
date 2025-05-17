@@ -211,6 +211,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case XAPI_WRITEBUFFERA:
         break;
+    case XAPI_REFRESH_WINDOW:
+        break;
     case XAPI_BUTTON:
         break;
     case XAPI_BUTTON_STYLE:

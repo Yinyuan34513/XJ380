@@ -158,6 +158,10 @@ void xapi_WriteBufferA(
 	XCOLORA*  	buffer
 );
 
+void xapi_RefreshWindow(
+	HDLE		handle
+);
+
 // 4-6
 void xapi_Button(
 	HDLE  	handle,

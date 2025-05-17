@@ -59,6 +59,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_DrawText(handle, 28, 106, "@Hmtc", 10, 0x000000ff);
     xapi_DrawText(handle, 80, 106, "老兄，中文不支持UTF-8，因为中文是双字符", 10, 0x000000ff);
     draw_uparrow(handle, 365, 75);
+    xapi_RefreshWindow(handle);
     return 0;
 }
 
