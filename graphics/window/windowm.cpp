@@ -13,6 +13,7 @@ void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
     xwmi->start = NULL;
+    xwmi->win_num = 0;
     write_serial_string("XWM Initializing Success.\n");
 }
 
@@ -43,6 +44,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     }
 
     *windowls = new_window;
+    xwmi->win_num++;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
@@ -152,8 +154,32 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
 
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color)
 {
-    write_serial_string("size:");
-    write_serial_dec(size);
-    write_serial_string("\n");
     print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
+}
+
+void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
+    WINDOWLS *front_p = xwmi->start;
+    WINDOWLS *front_p2;
+    while (true)
+    {
+        if (front_p->number == windowls->number)
+        {
+            if (!front_p2)
+                front_p2->next = front_p->next;
+            else
+                xwmi->start = front_p->next;
+            delete_sheet(sht, &(windowls->w_sheet));
+            xmemset(windowls, 0, sizeof(SHEET));
+            free((void *)(windowls));
+            // xwmi->win_num--;
+            return;
+        }
+        else if (front_p->next == NULL)
+        {
+            write_serial_string("Window Delete Faild.");
+            return;
+        }
+        front_p2 = front_p;
+        front_p = front_p->next;
+    }
 }

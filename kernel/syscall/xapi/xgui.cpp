@@ -40,7 +40,7 @@ int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str)
 int do_xapi_CloseWindow(UINT64 handle)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    // 呃现在还没做删除图层和窗口，等会儿再说吧（（（
+    delete_window(xwmii, sht_img, WindowHandle->WindowNodePtr);
 
     return true;
 }

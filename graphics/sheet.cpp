@@ -18,6 +18,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
         }
     }
     sht->sheet_num = -1;
+    sht->sht_numed = -1;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     for (int y = 0; y < sht->scry; y++)
     {
@@ -109,6 +110,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
+                sht->sht_numed++;
             }
             else
             {
@@ -130,6 +132,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
+                sht->sht_numed++;
             }
         }
         else
@@ -149,6 +152,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
+            sht->sht_numed++;
         }
     }
     else
@@ -175,7 +179,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 new_sheet->front = front_p;
             }
 
-            *sheet_id = sht->sheet_num - 1;
+            *sheet_id = sht->sht_numed - 1;
 
             new_sheet->index = front_p->index + 1;
             new_sheet->bx = bx;
@@ -188,6 +192,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
+            sht->sht_numed++;
         }
         else
         {
@@ -206,6 +211,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
+            sht->sht_numed++;
         }
     }
     write_serial_string("Sheet Create Success. SheetID: ");
@@ -424,10 +430,13 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
             front_p->front->next = front_p->next;
             front_p->next->front = front_p->front;
             free(front_p->buffer);
+            xmemset(front_p, 0, sizeof(SHEET));
+            free((void *)(front_p));
             sht->sheet_num--;
             write_serial_string("Sheet Delete Success. SheetID: ");
             write_serial_dec(*sheet_id);
             write_serial_string("\n");
+            return;
         }
         else if (front_p->next == NULL)
         {

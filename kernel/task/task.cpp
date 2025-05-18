@@ -614,9 +614,13 @@ uint64_t desktop_flusher(uint64_t arg)
     xwmii = &xwmi;
     create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
     create_window(&xwmi, &shtinf, &test_win2, "窗口", 800, 600);
+
+    delete_window(&xwmi, &shtinf, test_win);
+
     winRD_lock = true;
 
     refresh_sheet(&shtinf); // 刷新
+    // delete_sheet(&shtinf, &dock_sheet_id);
 
     while (!keyboard_mouse_init_done)
     {
