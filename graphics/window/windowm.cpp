@@ -152,7 +152,7 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
                        getBY(sht, &(windowls->w_sheet)) + 22);
 }
 
-void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color)
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size, SHEET_BUFFER color)
 {
     print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
 }
@@ -160,6 +160,26 @@ void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
     WINDOWLS *front_p = xwmi->start;
     WINDOWLS *front_p2;
+    SHEET    *front_p3 = sht->start;
+    int bx, by, ex, ey;
+
+    while (true)
+    {
+        if (front_p3->index == windowls->w_sheet)
+        {
+            bx = front_p3->bx;
+            by = front_p3->by;
+            ex = bx + front_p3->width;
+            ey = by + front_p3->height;
+        }
+        else if (front_p3->next == NULL)
+        {
+            write_serial_string("Window Delete Faild.");
+            return;
+        }
+        front_p3 = front_p3->next;
+    }
+
     while (true)
     {
         if (front_p->number == windowls->number)
@@ -172,6 +192,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
             xmemset(windowls, 0, sizeof(SHEET));
             free((void *)(windowls));
             // xwmi->win_num--;
+            refresh_part_sheet(sht_img, bx, by, ex, ey);
             return;
         }
         else if (front_p->next == NULL)

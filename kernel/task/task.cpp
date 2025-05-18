@@ -219,8 +219,9 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *
     // 解析ELF头
     ehdr = *(Elf64_Ehdr *)buf;
 
-    // 验证ELF魔数 (0x7F,'E','L','F')
-    if (*(uint32_t *)ehdr.e_ident != 0x464C457F)
+    // 验证ELF&EPF魔数 (0x7F,'E','L','F') (0x7F, 'E', 'P', 'F')
+    if ((*(uint32_t *)ehdr.e_ident != 0x464C457F)
+         && (*(uint32_t *)ehdr.e_ident != 0x4650457F))
     {
         free(buf);
         return -1;

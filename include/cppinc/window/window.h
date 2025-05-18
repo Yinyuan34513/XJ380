@@ -11,6 +11,8 @@ struct WINDOWLS
     UINT8     title_length;
     CHAR8    *title;
     UINT16    number;
+    UINT32    width;
+    UINT32    height;
     WINDOWLSP next;
 };
 
