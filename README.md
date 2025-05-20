@@ -278,6 +278,12 @@ XINGJI工作室A级机密 | 保密编号XSEC202212011-11-A
 2025年5月10日 Guoqiyu1115
 - XAPI准备完毕（可以开始编写实现）
 
+### BuildVersion 55 【已虚拟机测试】
+2025年5月20日 Guoqiyu1115
+- XAPI GUI大部分完成
+- 修复了读写文件有概率失败或PF的bug
+- 修改开机动画
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error
