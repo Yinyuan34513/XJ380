@@ -10,11 +10,15 @@ struct WINDOWLS
     UINT16    w_sheet;
     UINT8     title_length;
     CHAR8    *title;
+    UINT16    number;
+    UINT32    width;
+    UINT32    height;
     WINDOWLSP next;
 };
 
 typedef struct
 {
+    UINT16    win_num;
     WINDOWLS *start;
 } XWM_INFO;
 

@@ -61,8 +61,8 @@ int roundf(double n)
 unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
 {
 	/* 创建位图 */
-	int bitmap_w = 1024; /* 位图的宽 */
-	int bitmap_h = 512;	 /* 位图的高 */
+	int bitmap_w = 1920; /* 位图的宽 */
+	int bitmap_h = 786;	 /* 位图的高 */
 	unsigned char *bitmap = (unsigned char *)(malloc(bitmap_w * bitmap_h));
 	xmemset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
@@ -191,12 +191,19 @@ void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc
 
 	unsigned width, heigh;
 	unsigned char *bitmap = TTF_Print(r, &width, &heigh, size);
-	put_bitmap(sht, sheet_id, bitmap, x, y, width, heigh, 1024, fc);
-	refresh_part_sheet(sht, front_p->bx + x, front_p->by + y,
-					   front_p->bx + x + width, front_p->by + y + heigh);
+	put_bitmap(sht, sheet_id, bitmap, x, y, width, heigh, 1920, fc);
+	refresh_part_sheet(sht, x, y,
+					   x + width, y + heigh);
 	free(bitmap);
 	free(r);
 }
+
+// void draw_text(SHEET_INFO *sht, WINDOWLS* wls, char *buf, SHEET_BUFFER fc,
+// 				/*unsigned bc, */ unsigned x, unsigned y, int size)
+// {
+// 	print_box_ttf(sht, &(wls->w_sheet), buf, fc,
+// 				  /*bc, */ x, y, size);
+// }
 
 void init_ttf()
 {

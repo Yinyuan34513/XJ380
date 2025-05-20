@@ -30,6 +30,7 @@ typedef struct
     VOID *temp_buffer;
     UINT32 scrx, scry;
     UINT16 sheet_num; // 图层数量 - 1
+    UINT16 sht_numed; // 图层数量 - 1，用于编号
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 

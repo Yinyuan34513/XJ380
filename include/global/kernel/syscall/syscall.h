@@ -124,6 +124,8 @@
 #define XAPI_WRITEBUFFER 405
 #define XAPI_WRITEBUFFERA 406
 
+#define XAPI_REFRESH_WINDOW 409
+
 // P4.6
 #define XAPI_BUTTON 407
 #define XAPI_BUTTON_STYLE 408
@@ -137,7 +139,15 @@ struct iovec
 // Proto (XAPI Edition)
 int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin);
 int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str);
-
+int do_xapi_CloseWindow(UINT64 handle);
+int do_xapi_SetIcon(UINT64 handle, UINT64 path);
+int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color);
+int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
+int do_xapi_DrawRect_fill(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
+int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
+// int do_xapi_DrawCircle_fill(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
+// int do_xapi_DrawCircle(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
+int do_xapi_DrawText(UINT64 handle, UINT32 x, UINT32 y, UINT64 str, UINT32 size, UINT32 color);
 
 
 
@@ -154,7 +164,6 @@ int sys_exit(int status);
 int sys_fork(struct X64_REGS *regs);
 int sys_vfork(struct X64_REGS *regs);
 uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
-
 uint64_t sys_brk(uint64_t addr);
 
 #define PROT_NONE 0x0

@@ -43,6 +43,10 @@ struct XCOLORA
 
 
 // 4-1
+#define XWIN_NORMAL				0
+#define XWIN_FRAME_OFF			1
+#define XWIN_FULL_SCR			2
+
 void  xapi_CreateWindow(
 	HDLE*		handle,
 	XWINDOW* 	xwin
@@ -61,6 +65,7 @@ void  xapi_SetIcon(
 	HDLE  	handle,
 	WSTR  	path
 );
+
 
 // 4-2
 void  xapi_DrawPoint (
@@ -89,19 +94,21 @@ void  xapi_DrawRect(
 	bool  	fill
 );
 
-void  xapi_DrawCircle(
-	HDLE  	handle,
-	UINT32 	x1,
-	UINT32 	y1,
-	UINT32 	x2,
-	UINT32 	y2,
-	UINT32 	color,
-	bool  	fill
-);
+// void  xapi_DrawCircle(
+// 	HDLE  	handle,
+// 	UINT32 	x,
+// 	UINT32 	y,
+// 	UINT32 	radius,
+// 	UINT32 	color,
+// 	bool  	fill
+// );
 
 void  xapi_DrawText(
 	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
 	WSTR 	str,
+	UINT32	size,
 	UINT32  color
 );
 
@@ -126,6 +133,12 @@ void  xapi_DrawPNG(
 
 // 4-4
 void SetMsgPrcor(MsgPrcor func);
+#define MSG_CHAR		0
+#define MSG_MOVE		1
+#define MSG_LBUTTON		2
+#define MSG_RBUTTON		3
+#define MSG_MBUTTON		4
+#define MSG_ROLLER		5
 
 // 4-5
 void  xapi_ReadBuffer(
@@ -153,6 +166,10 @@ void xapi_WriteBufferA(
 	UINT32  	width,
 	UINT32  	height,
 	XCOLORA*  	buffer
+);
+
+void xapi_RefreshWindow(
+	HDLE		handle
 );
 
 // 4-6

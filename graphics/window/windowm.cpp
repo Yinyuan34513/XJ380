@@ -13,6 +13,7 @@ void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
     xwmi->start = NULL;
+    xwmi->win_num = 0;
     write_serial_string("XWM Initializing Success.\n");
 }
 
@@ -43,9 +44,10 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     }
 
     *windowls = new_window;
+    xwmi->win_num++;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
-    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 10, height + 27, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
 
     for (int y = 0; y < height + 27; y++)
     {
@@ -63,7 +65,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
         }
     }
 
-    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 4, height + 22, {0xff, 0xff, 0xff, 0xff});
+    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 3, height + 21, {0xff, 0xff, 0xff, 0xff});
 
     for (int y = 0; y < 9; y++)
     {
@@ -143,9 +145,62 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
 {
-    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 80, 21, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 81, 20, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
     print_box_ttf(sht, &(windowls->w_sheet), title, WHITE, 22, 0, 11);
     refresh_part_sheet(sht, getBX(sht, &(windowls->w_sheet)), getBY(sht, &(windowls->w_sheet)),
                        getBX(sht, &(windowls->w_sheet)) + getXsize(sht, &(windowls->w_sheet)) + 10,
                        getBY(sht, &(windowls->w_sheet)) + 22);
+}
+
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size, SHEET_BUFFER color)
+{
+    print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
+}
+
+void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
+    WINDOWLS *front_p = xwmi->start;
+    WINDOWLS *front_p2;
+    SHEET    *front_p3 = sht->start;
+    int bx, by, ex, ey;
+
+    while (true)
+    {
+        if (front_p3->index == windowls->w_sheet)
+        {
+            bx = front_p3->bx;
+            by = front_p3->by;
+            ex = bx + front_p3->width;
+            ey = by + front_p3->height;
+        }
+        else if (front_p3->next == NULL)
+        {
+            write_serial_string("Window Delete Faild.\n");
+            return;
+        }
+        front_p3 = front_p3->next;
+    }
+
+    while (true)
+    {
+        if (front_p->number == windowls->number)
+        {
+            if (!front_p2)
+                front_p2->next = front_p->next;
+            else
+                xwmi->start = front_p->next;
+            delete_sheet(sht, &(windowls->w_sheet));
+            xmemset(windowls, 0, sizeof(SHEET));
+            free((void *)(windowls));
+            // xwmi->win_num--;
+            refresh_part_sheet(sht_img, bx, by, ex, ey);
+            return;
+        }
+        else if (front_p->next == NULL)
+        {
+            write_serial_string("Window Delete Faild.\n");
+            return;
+        }
+        front_p2 = front_p;
+        front_p = front_p->next;
+    }
 }

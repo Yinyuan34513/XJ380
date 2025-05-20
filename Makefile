@@ -91,6 +91,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/usr
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/usr
+	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/usr
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/XJ380F.ttf
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
