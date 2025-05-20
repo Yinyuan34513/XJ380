@@ -456,6 +456,13 @@ uint64_t init_kernel_thread(uint64_t arg)
     mouse_init();
     write_serial_string("Mouse Initialize Success.\n");
 
+    rect(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 116), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+            int(fbc_addr->horizontal_resolution / 2 + 116), int(fbc_addr->vertical_resolution * 0.75 - 4), {0, 0, 0});
+    rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.55, int((fbc_addr->vertical_resolution - 48) * 0.65), {0x23, 0xcf, 0x3e});
+    WriteString(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 124), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+                "Initializing PCI & Hard Disk...", {0xff, 0xff, 0xff});
+
     init_device();
     init_pci(convert_physical_to_virtual((uint64_t)BC->MCFG));
     write_serial_string("PCI initialized.\n");
@@ -472,6 +479,13 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     init_partition();
     write_serial_string("PARTITION initialized.\n");
+
+    rect(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 124), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+            int(fbc_addr->horizontal_resolution / 2 + 124), int(fbc_addr->vertical_resolution * 0.75 - 4), {0, 0, 0});
+    rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.6, int((fbc_addr->vertical_resolution - 48) * 0.8), {0x23, 0xcf, 0x3e});
+    WriteString(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 108), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+                "Initializing File System...", {0xff, 0xff, 0xff});
 
     init_fat();
     init_vfs();
@@ -495,6 +509,9 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     uint8_t **envp = (uint8_t **)malloc(sizeof(uint8_t *) * 1);
     xmemset(envp, 0, sizeof(uint8_t *) * 1);
+
+    rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.9, int(fbc_addr->vertical_resolution - 48), {0x23, 0xcf, 0x3e});
 
     ttfFS_lock = true;
 
@@ -523,10 +540,12 @@ uint64_t desktop_flusher(uint64_t arg)
 
     spin_init(&fb_print_lock);
 
-    if (!ttfFS_lock) 
+    while (true)
     {
-        enable_intr();
-        __asm__ __volatile__("pause");
+        if (ttfFS_lock)
+        {
+            break;
+        }
     }
 
     UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题

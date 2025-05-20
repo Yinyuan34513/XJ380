@@ -10,6 +10,10 @@ BOOT_CONFIG *BC;
 SHEET_INFO *sht_img;
 XWM_INFO *xwmii;
 
+#if BUILD_VERSION == DEBUG_VERSION
+bool MemoryWasInit = false;
+#endif
+
 static inline __attribute__((always_inline)) char *u64tostrb16(char *buf, size_t len, UINT64 n)
 {
   char *s = buf + len;
@@ -38,7 +42,10 @@ extern "C" [[noreturn]] void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM
   ST = (EFI_SYSTEM_TABLE *)convert_physical_to_virtual((uint64_t)&SystemTable);
   BC = (BOOT_CONFIG *)convert_physical_to_virtual((UINT64)BootConfig);
 
-  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 76), int(fbc.vertical_resolution * 0.75 - 20), "XJ380 is Loading...", {0xff, 0xff, 0xff});
+  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 76), int(fbc.vertical_resolution * 0.75 - 40), "XJ380 is Loading...", {0xff, 0xff, 0xff});
+  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 76), int(fbc.vertical_resolution * 0.75 - 20), "Initializing CPU...", {0xff, 0xff, 0xff});
+  rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48), int(fbc_addr->vertical_resolution - 48), {0xe6, 0xe6, 0xe6});
 
   disable_intr();
 
@@ -51,6 +58,12 @@ extern "C" [[noreturn]] void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM
   init_gdt();
   init_idt();
   ltr(GDT_TYPE_TSS);
+
+  rect(fbc, int(fbc.horizontal_resolution / 2 - 76), int(fbc.vertical_resolution * 0.75 - 20), 
+            int(fbc.horizontal_resolution / 2 + 76), int(fbc.vertical_resolution * 0.75 - 4), {0, 0, 0});
+  rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.1, int(fbc_addr->vertical_resolution - 48), {0x23, 0xcf, 0x3e});
+  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 88), int(fbc.vertical_resolution * 0.75 - 20), "Initializing Memory...", {0xff, 0xff, 0xff});
 
   init_MemoryManager(*fbc_addr, BC);
 
@@ -71,10 +84,22 @@ extern "C" [[noreturn]] void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM
   init_tss[current_task->cpu_id].ist6 = (uint64_t)ptr;
   init_tss[current_task->cpu_id].ist7 = (uint64_t)ptr;
 
+  rect(fbc, int(fbc.horizontal_resolution / 2 - 88), int(fbc.vertical_resolution * 0.75 - 20), 
+            int(fbc.horizontal_resolution / 2 + 88), int(fbc.vertical_resolution * 0.75 - 4), {0, 0, 0});
+  rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.4, int(fbc_addr->vertical_resolution - 48), {0x23, 0xcf, 0x3e});
+  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 80), int(fbc.vertical_resolution * 0.75 - 20), "Initializing APIC...", {0xff, 0xff, 0xff});
+
   init_hpet(convert_physical_to_virtual((uint64_t)BC->HPET));
   init_apic(convert_physical_to_virtual((uint64_t)BC->MADT));
 
   SMP_MANAGER.ap_startup(convert_physical_to_virtual((uint64_t)BC->MADT));
+
+  rect(fbc, int(fbc.horizontal_resolution / 2 - 80), int(fbc.vertical_resolution * 0.75 - 20), 
+            int(fbc.horizontal_resolution / 2 + 80), int(fbc.vertical_resolution * 0.75 - 4), {0, 0, 0});
+  rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.5, int(fbc_addr->vertical_resolution - 48), {0x23, 0xcf, 0x3e});
+  WriteString(fbc, int(fbc.horizontal_resolution / 2 - 116), int(fbc.vertical_resolution * 0.75 - 20), "Initializing Multi Tasking...", {0xff, 0xff, 0xff});
 
   init_schedule();
   init_syscall();

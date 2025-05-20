@@ -43,6 +43,10 @@ struct XCOLORA
 
 
 // 4-1
+#define XWIN_NORMAL				0
+#define XWIN_FRAME_OFF			1
+#define XWIN_FULL_SCR			2
+
 void  xapi_CreateWindow(
 	HDLE*		handle,
 	XWINDOW* 	xwin
@@ -129,6 +133,12 @@ void  xapi_DrawPNG(
 
 // 4-4
 void SetMsgPrcor(MsgPrcor func);
+#define MSG_CHAR		0
+#define MSG_MOVE		1
+#define MSG_LBUTTON		2
+#define MSG_RBUTTON		3
+#define MSG_MBUTTON		4
+#define MSG_ROLLER		5
 
 // 4-5
 void  xapi_ReadBuffer(

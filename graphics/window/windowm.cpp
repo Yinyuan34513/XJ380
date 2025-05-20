@@ -174,7 +174,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
         }
         else if (front_p3->next == NULL)
         {
-            write_serial_string("Window Delete Faild.");
+            write_serial_string("Window Delete Faild.\n");
             return;
         }
         front_p3 = front_p3->next;
@@ -197,7 +197,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
         }
         else if (front_p->next == NULL)
         {
-            write_serial_string("Window Delete Faild.");
+            write_serial_string("Window Delete Faild.\n");
             return;
         }
         front_p2 = front_p;

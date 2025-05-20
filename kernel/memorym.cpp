@@ -2,6 +2,10 @@
 #include "./build_settings.h"
 #include "./alloc/page.h"
 
+#if BUILD_VERSION == DEBUG_VERSION
+extern bool MemoryWasInit;
+#endif
+
 typedef struct
 {
     UINT32 Type;
@@ -129,6 +133,10 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     flush_tlb();
 
     memory_init((void *)KHEAP_START_VADDR, KHEAP_SIZE);
+
+#if BUILD_EDITION == DEBUG_VERSION
+    MemoryWasInit = true;
+#endif
 
     write_serial_string("Memory Manager Initialize Success.\n");
 }

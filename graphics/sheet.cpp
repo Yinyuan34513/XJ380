@@ -1,5 +1,7 @@
 #include "../include/include.h"
 
+bool SheetIsRefreshing = false;
+
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 {
     write_serial_string("Initializing Sheet Manager...\n");
@@ -43,6 +45,13 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id)
 {
+    while (true)
+    {
+        if (!SheetIsRefreshing)
+        {
+            break;
+        }
+    }
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     xmemset(new_sheet, 0, sizeof(SHEET));
 
@@ -480,6 +489,8 @@ void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
 
 void refresh_sheet(SHEET_INFO *sht)
 {
+    SheetIsRefreshing = true;
+
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];
     static PixelWriter *pixel_writer = nullptr;
 
@@ -548,11 +559,15 @@ void refresh_sheet(SHEET_INFO *sht)
             TempBuffer++;
         }
     }
+
+    SheetIsRefreshing = false;
     write_serial_string("Refresh Success.\n");
 }
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
+    SheetIsRefreshing = true;
+
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];
     static PixelWriter *pixel_writer = nullptr;
 
@@ -666,6 +681,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         }
         TempBuffer += (sht->scrx - bex2 + bex1);
     }
+
+    SheetIsRefreshing = false;
 }
 
 UINT32 get_hor()

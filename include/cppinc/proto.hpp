@@ -16,9 +16,6 @@ auto operator delete(void *ptr, size_t size) -> void;
 auto operator delete[](void *ptr, size_t size) -> void;
 void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor &c);
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
-void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const PixelColor &c);
-void circle(const FrameBufferConfig &fbc, int centerX, int centerY, int radius, int solid, const PixelColor &c);
-void drawtime(EFI_SYSTEM_TABLE &table, const FrameBufferConfig &fbc, const int x, const int y, float UTC);
 
 // graphics/draw_sheet.cpp
 void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUFFER &color);
