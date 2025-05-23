@@ -64,6 +64,9 @@ extern "C" void c_keyboard_handler(void *regs_ptr, UINT64 error_code)
         {
             temp = keyboard_code1[*kb_fifo.p_tail];
         }
+        write_serial_string("Keyborad: ");
+        write_serial(temp);
+        write_serial_string("\n");
         WinMPf(MSG_CHAR, 0, temp);
     }
 
