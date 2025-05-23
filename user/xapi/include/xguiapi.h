@@ -16,7 +16,11 @@
 
 // define
 typedef UINT64 		HDLE;
-typedef void 		(*MsgPrcor)();
+typedef void 		(*MsgPrcor)(
+	UINT64 Type, 
+	UINT64 hData, 
+	UINT64 lData
+);
 
 struct XWINDOW
 {
@@ -132,13 +136,14 @@ void  xapi_DrawPNG(
 );
 
 // 4-4
-void SetMsgPrcor(MsgPrcor func);
+void SetMsgPrcor(HDLE handle, MsgPrcor func);
 #define MSG_CHAR		0
 #define MSG_MOVE		1
 #define MSG_LBUTTON		2
 #define MSG_RBUTTON		3
 #define MSG_MBUTTON		4
 #define MSG_ROLLER		5
+#define MSG_CRL			6
 
 // 4-5
 void  xapi_ReadBuffer(

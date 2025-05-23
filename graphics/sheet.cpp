@@ -1,6 +1,7 @@
 #include "../include/include.h"
 
 bool SheetIsRefreshing = false;
+bool SheetIsCreating = false;
 
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 {
@@ -47,11 +48,13 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
 {
     while (true)
     {
-        if (!SheetIsRefreshing)
+        if (!SheetIsRefreshing && !SheetIsCreating)
         {
             break;
         }
     }
+
+    SheetIsCreating = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     xmemset(new_sheet, 0, sizeof(SHEET));
 
@@ -226,6 +229,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
     write_serial_string("Sheet Create Success. SheetID: ");
     write_serial_dec(*sheet_id);
     write_serial_string("\n");
+    SheetIsCreating = false;
 }
 
 UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id)
@@ -431,6 +435,13 @@ void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
 
 void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
 {
+    while (true) {
+        if (!SheetIsCreating && !SheetIsRefreshing) {
+            break;
+        }
+    }
+
+    SheetIsCreating = true;
     SHEET *front_p = sht->start;
     while (true)
     {
@@ -456,6 +467,8 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
         }
         front_p = front_p->next;
     }
+    
+    SheetIsCreating = false;
 }
 
 void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)

@@ -9,6 +9,8 @@
 
 #define WINDOW_ALPHA_VALUE 0xaa
 
+bool WindowIsCreating = false;
+
 void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
@@ -19,6 +21,8 @@ void init_xwm(XWM_INFO *xwmi)
 
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, UINT32 width, UINT32 height)
 {
+    WindowIsCreating = true;
+
     WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
     xmemset(new_window, 0, sizeof(WINDOWLS));
 
@@ -45,6 +49,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     *windowls = new_window;
     xwmi->win_num++;
+    new_window->WinMPf = NULL;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
@@ -141,6 +146,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     print_box_ttf(sht, &(new_window->w_sheet), title, WHITE, 22, 0, 11);
 
     refresh_part_sheet(sht, 72, 72, width + 10, height + 27);
+    WindowIsCreating = false;
 }
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
@@ -158,6 +164,13 @@ void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title
 }
 
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
+    while (true) {
+        if (!WindowIsCreating) {
+            break;
+        }
+    }
+
+    WindowIsCreating = true;
     WINDOWLS *front_p = xwmi->start;
     WINDOWLS *front_p2;
     SHEET    *front_p3 = sht->start;
@@ -174,7 +187,9 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
         }
         else if (front_p3->next == NULL)
         {
-            write_serial_string("Window Delete Faild.\n");
+            write_serial_string("Window Delete Faild. (Cannot found sheet) SheetID: ");
+            write_serial_dec(windowls->w_sheet);
+            write_serial_string("\n");
             return;
         }
         front_p3 = front_p3->next;
@@ -197,10 +212,46 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
         }
         else if (front_p->next == NULL)
         {
-            write_serial_string("Window Delete Faild.\n");
+            write_serial_string("Window Delete Faild. (Cannot found window) WindowID: ");
             return;
         }
         front_p2 = front_p;
+        front_p = front_p->next;
+    }
+
+    WindowIsCreating = false;
+}
+
+WINDOWLS* shtid_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *sheet_id) {
+    WINDOWLS *front_p = xwmi->start;
+    while (true)
+    {
+        SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
+        if (sheet->index == *sheet_id)
+        {
+            return front_p;
+        }
+        else if (front_p->next == NULL)
+        {
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet) {
+    WINDOWLS *front_p = xwmi->start;
+    while (true)
+    {
+        SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
+        if (sheet->index == csheet->index)
+        {
+            return front_p;
+        }
+        else if (front_p->next == NULL)
+        {
+            return NULL;
+        }
         front_p = front_p->next;
     }
 }

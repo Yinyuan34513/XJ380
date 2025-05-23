@@ -1,5 +1,7 @@
 #include "../../include/include.h"
 
+extern mouse_dec ms_dec;
+
 struct keyboard_buf kb_fifo;
 UINT8 keyboard_code[256] = {
     0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', KEY_BACKSPACE,
@@ -52,6 +54,19 @@ extern "C" void c_keyboard_handler(void *regs_ptr, UINT64 error_code)
         kb_fifo.p_head = kb_fifo.buf;
     }
     *kb_fifo.p_head = x;
+
+    WINDOWLS *Window_now = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+    MsgPrcor WinMPf = Window_now->WinMPf;
+
+    if ((UINT64)(WinMPf) != NULL) {
+        UINT8 temp = keyboard_code[*kb_fifo.p_tail];
+        if (kb_fifo.shift == 1 || kb_fifo.caps == 1)
+        {
+            temp = keyboard_code1[*kb_fifo.p_tail];
+        }
+        WinMPf(MSG_CHAR, 0, temp);
+    }
+
     kb_fifo.count++;
     kb_fifo.p_head++;
     send_eoi();

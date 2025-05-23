@@ -119,6 +119,14 @@
 // P4.4
 #define XAPI_SET_MSH_PROCOR 403
 
+#define MSG_CHAR		0
+#define MSG_MOVE		1
+#define MSG_LBUTTON		2
+#define MSG_RBUTTON		3
+#define MSG_MBUTTON		4
+#define MSG_ROLLER		5
+#define MSG_CRL			6
+
 // P4.5
 #define XAPI_READBUFFER 404
 #define XAPI_WRITEBUFFER 405
