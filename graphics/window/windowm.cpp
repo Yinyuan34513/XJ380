@@ -145,7 +145,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     print_box_ttf(sht, &(new_window->w_sheet), title, WHITE, 22, 0, 11);
 
-    refresh_part_sheet(sht, 72, 72, width + 10, height + 27);
+    refresh_part_sheet(sht, 72, 72, width + 10 + 72, height + 27 + 72);
     WindowIsCreating = false;
 }
 

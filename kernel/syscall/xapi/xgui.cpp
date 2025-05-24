@@ -125,9 +125,9 @@ int do_xapi_RefreshWindow(UINT64 handle) {
     return true;
 }
 
-int do_xapi_SetMsgProc(UINT64 handle, MsgPrcor func) {
+int do_xapi_SetMsgProc(UINT64 handle, UINT64 func) {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    WindowHandle->WindowNodePtr->WinMPf = func;
+    WindowHandle->WindowNodePtr->WinMPf = (MsgPrcor)(func);
 
     return true;
 }
