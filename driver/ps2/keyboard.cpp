@@ -58,14 +58,14 @@ extern "C" void c_keyboard_handler(void *regs_ptr, UINT64 error_code)
     WINDOWLS *Window_now = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     MsgPrcor WinMPf = Window_now->WinMPf;
 
-    if ((UINT64)(WinMPf) != NULL) {
+    if ((UINT64)(WinMPf) != NULL && Window_now != NULL) {
         UINT8 temp = keyboard_code[*kb_fifo.p_tail];
         if (kb_fifo.shift == 1 || kb_fifo.caps == 1)
         {
             temp = keyboard_code1[*kb_fifo.p_tail];
         }
-        write_serial_string("Keyborad: ");
-        write_serial(temp);
+        write_serial_string("WMPF Address: ");
+        write_serial_hex((UINT64)(WinMPf));
         write_serial_string("\n");
         WinMPf(MSG_CHAR, 0, temp);
     }

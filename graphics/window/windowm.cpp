@@ -222,24 +222,11 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
     WindowIsCreating = false;
 }
 
-WINDOWLS* shtid_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *sheet_id) {
-    WINDOWLS *front_p = xwmi->start;
-    while (true)
-    {
-        SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
-        if (sheet->index == *sheet_id)
-        {
-            return front_p;
-        }
-        else if (front_p->next == NULL)
-        {
-            return NULL;
-        }
-        front_p = front_p->next;
-    }
-}
-
 WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet) {
+    if (csheet == NULL) {
+        return NULL;
+    }
+
     WINDOWLS *front_p = xwmi->start;
     while (true)
     {
