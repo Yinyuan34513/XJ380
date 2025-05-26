@@ -67,7 +67,7 @@ extern "C" void c_keyboard_handler(void *regs_ptr, UINT64 error_code)
         write_serial_string("WMPF Address: ");
         write_serial_hex((UINT64)(WinMPf));
         write_serial_string("\n");
-        WinMPf(MSG_CHAR, 0, temp);
+        // WinMPf(MSG_CHAR, 0, temp);
     }
 
     kb_fifo.count++;
