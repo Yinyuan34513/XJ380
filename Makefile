@@ -1,6 +1,6 @@
 ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc
-CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
+C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc
+CXX_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics
 
 DEBUG ?= 0
 SMP ?= 4
@@ -22,18 +22,18 @@ COMPILER_PREFIX ?=
 # FILES
 ASM_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.S")
 C_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.c")
-CPP_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.cpp")
+CXX_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.cpp")
 
 export CC = $(COMPILER_PREFIX)gcc
-export CPP = $(CC)
+export CXX = $(COMPILER_PREFIX)g++
 export LD = $(COMPILER_PREFIX)ld
 export NM = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 
-ASM_OBJS := $(sort $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES)))
-C_OBJS := $(sort $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES)))
-CPP_OBJS := $(sort $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES)))
+ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
+C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
+CXX_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CXX_FILES))
 
 $(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(@D)
@@ -47,20 +47,20 @@ $(BUILD_DIR)/%.o: %.c
 
 $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
-	@$(CPP) -fno-pic -fno-pie -mcmodel=kernel  $(CPP_FLAGS) -c $< -o $@
-	@echo "CPP $< -> $@"
+	@$(CXX) -fno-pic -fno-pie -mcmodel=kernel  $(CXX_FLAGS) -c $< -o $@
+	@echo "CXX $< -> $@"
 
-all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS)
+all: $(ASM_OBJS) $(C_OBJS) $(CXX_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
 
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 
-	@$(LD) -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
+	@$(LD) -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(ASM_OBJS) $(C_OBJS) $(CXX_OBJS) ./font/hankaku.o
 	@gcc kallsyms/kallsyms.c -o ./$(BUILD_DIR)/kallsyms
 	@$(NM) -n ./$(BUILD_DIR)/kernel.elf | ./$(BUILD_DIR)/kallsyms >./$(BUILD_DIR)/kallsyms.S
 	@$(CC) $(C_FLAGS) -c ./$(BUILD_DIR)/kallsyms.S -o ./$(BUILD_DIR)/kallsyms.o
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o ./$(BUILD_DIR)/kallsyms.o
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(ASM_OBJS) $(C_OBJS) $(CXX_OBJS) ./font/hankaku.o ./$(BUILD_DIR)/kallsyms.o
 	@$(OBJD) -x -d -s ./$(BUILD_DIR)/kernel.elf > ./$(BUILD_DIR)/kernel.txt
 
 	@$(MAKE) -C user
