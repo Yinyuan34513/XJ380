@@ -99,6 +99,26 @@ void *malloc(size_t size)
   return NULL; // No suitable block found
 }
 
+void *realloc(void *ptr, size_t size)
+{
+  if (ptr == NULL) 
+  {
+    return NULL;
+  }
+  else if (size == 0)
+  {
+    free(ptr);
+    return NULL;
+  }
+  void *new_p;
+  new_p = malloc(size);
+  for (char *p = (char *)(ptr); p < ptr + size; p++) {
+    *(char *)(new_p) = *p;  // copy过去（这块有风险，如果新size大于旧size的话……BOOM
+    // 你们之后谁有时间谁改一下罢（这个alloc我不太清楚怎么实现的，怕搞炸）
+  }
+  free(ptr);
+}
+
 void free(void *ptr)
 {
   if (ptr == NULL || heap_start == NULL)

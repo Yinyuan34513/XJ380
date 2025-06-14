@@ -93,6 +93,7 @@ WSTR xcr_int2char(UINT64 dec) {
 
 	return str;
 } 
+
 WSTR xcr_hex2char(UINT64 hex) {
 	// 输出16进制
 	char buf[32];

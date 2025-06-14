@@ -167,3 +167,11 @@ double fmod(double x, double y) {
     );
     return result;
 }
+
+double ldexp(double x, int exp) {
+    int n = 2;
+    for (int i = 0; i < exp - 1; i++) {
+        n *= 2;
+    }
+    return x * (double)(n);
+}
