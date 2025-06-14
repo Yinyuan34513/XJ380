@@ -77,6 +77,8 @@
 
 #define SYS_RSEQ 334
 
+
+
 // XJ380API XAPI Edition
 #define XAPI_OFFEST 380
 
@@ -92,8 +94,8 @@
 #define XAPI_CLOSE_FILE 387
 
 // P3.3（预留）
-#define XAPI_NULL_1 388
-#define XAPI_NULL_2 389
+#define XAPI_FORK 388
+#define XAPI_EXECVE 389
 
 // P4.1
 #define XAPI_CREATE_WINDOW 390
@@ -105,30 +107,59 @@
 #define XAPI_DRAW_POINT 394
 #define XAPI_DRAW_LINE 395
 #define XAPI_DRAW_RECT 396
-#define XAPI_DRAW_CIRCLE 397
-#define XAPI_DRAW_TEXT 398
+#define XAPI_DRAW_RECT_FILL 397
+#define XAPI_DRAW_CIRCLE 398
+#define XAPI_DRAW_CIRCLE_FILL 399
+#define XAPI_DRAW_TEXT 400
 
 // P4.3
-#define XAPI_DRAW_BMP 399
-#define XAPI_DRAW_PNG 400
+#define XAPI_DRAW_BMP 401
+#define XAPI_DRAW_PNG 402
 
 // P4.4
-#define XAPI_SET_MSH_PROCOR 401
+#define XAPI_SET_MSH_PROCOR 403
+
+#define MSG_CHAR		0
+#define MSG_MOVE		1
+#define MSG_LBUTTON		2
+#define MSG_RBUTTON		3
+#define MSG_MBUTTON		4
+#define MSG_ROLLER		5
+#define MSG_CRL			6
 
 // P4.5
-#define XAPI_READBUFFER 342
-#define XAPI_WRITEBUFFER 343
-#define XAPI_WRITEBUFFERA 344
+#define XAPI_READBUFFER 404
+#define XAPI_WRITEBUFFER 405
+#define XAPI_WRITEBUFFERA 406
+
+#define XAPI_REFRESH_WINDOW 409
 
 // P4.6
-#define XAPI_BUTTON 345
-#define XAPI_BUTTON_STYLE 346
+#define XAPI_BUTTON 407
+#define XAPI_BUTTON_STYLE 408
 
 struct iovec
 {
     uint8_t *iov_base;
     uint64_t len;
 };
+
+// Proto (XAPI Edition)
+int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin);
+int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str);
+int do_xapi_CloseWindow(UINT64 handle);
+int do_xapi_SetIcon(UINT64 handle, UINT64 path);
+int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color);
+int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
+int do_xapi_DrawRect_fill(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
+int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
+// int do_xapi_DrawCircle_fill(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
+// int do_xapi_DrawCircle(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
+int do_xapi_DrawText(UINT64 handle, UINT32 x, UINT32 y, UINT64 str, UINT32 size, UINT32 color);
+int do_xapi_RefreshWindow(UINT64 handle);
+int do_xapi_SetMsgProc(UINT64 handle, UINT64 func);
+
+
 
 // Proto (POSIX Edition)
 int sys_read(uint32_t fd, uint8_t *buf, size_t count);
@@ -143,8 +174,17 @@ int sys_exit(int status);
 int sys_fork(struct X64_REGS *regs);
 int sys_vfork(struct X64_REGS *regs);
 uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
-
 uint64_t sys_brk(uint64_t addr);
+
+#define PROT_NONE 0x0
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#define PROT_EXEC 0x4
+
+#define MAP_SHARED 0x1
+#define MAP_PRIVATE 0x2
+#define MAP_FIXED 0x10
+uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
 
 uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
 

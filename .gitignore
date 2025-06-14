@@ -9,6 +9,7 @@ out/draw.o
 /mnt
 /out
 /xlibc
+/open-vmdk-master
 .cache
 
 *.img
@@ -17,3 +18,4 @@ out/draw.o
 *.elf
 *.o
 *.xz
+*.zip

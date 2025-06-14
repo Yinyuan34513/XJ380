@@ -10,7 +10,6 @@
 
 // stack size 16K
 // UL一定要加，否则获取current_task之后读取值的时候会出错
-#define STACK_SIZE 16384UL
 #define USER_STACK_START 0x6ffff0a00000UL
 
 #define TASK_RUNNING (1 << 0)
@@ -226,6 +225,8 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
 extern "C" uint64_t do_exit(uint64_t code);
 extern "C" uint64_t do_execve(struct X64_REGS *regs, const char *name, char *argv[], char *envp[]);
 void init_task_manager();
+
+int kernel_thread(uint64_t (*fn)(uint64_t), uint64_t arg, uint64_t flags);
 
 extern "C" void ret_from_intr();
 extern "C" void ret_from_fork();

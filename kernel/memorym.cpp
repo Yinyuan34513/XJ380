@@ -2,6 +2,10 @@
 #include "./build_settings.h"
 #include "./alloc/page.h"
 
+#if BUILD_VERSION == DEBUG_VERSION
+extern bool MemoryWasInit;
+#endif
+
 typedef struct
 {
     UINT32 Type;
@@ -35,6 +39,45 @@ void memory_test(const FrameBufferConfig &fbc)
     */
 }
 
+// 检查 CPU 是否支持 SSE2 (x86_64 必备)
+bool supports_sse2() {
+    uint32_t eax, ebx, ecx, edx;
+    // 获取 CPU 特征信息
+    asm volatile("cpuid"
+                 : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                 : "a"(1));
+    return edx & (1 << 26);  // SSE2 位于 EDX 第 26 位
+}
+
+// 检查 CPU 是否支持 AVX
+bool supports_avx() {
+    uint32_t eax, ebx, ecx, edx;
+    asm volatile("cpuid"
+                 : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                 : "a"(1), "c"(0));
+    return ecx & (1 << 28);  // AVX 位于 ECX 第 28 位
+}
+
+void set_bitmap(void* bitmap, size_t size) {
+    // 检测 AVX2 支持 (可选)
+    if (supports_avx()) {
+        asm volatile(
+            "call set_bitmap_avx2"
+            : 
+            : "D"(bitmap), "S"(size)
+            : "rax", "rcx", "ymm0", "memory"
+        );
+    } else {
+        // 默认使用 SSE2 (x86_64 必须支持)
+        asm volatile(
+            "call set_bitmap_sse"
+            : 
+            : "D"(bitmap), "S"(size)
+            : "rax", "rcx", "xmm0", "memory"
+        );
+    }
+}
+
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 {
     // Setup PAGE_ALLOC
@@ -63,7 +106,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 #endif
         if (EfiMemory->Type == EfiConventionalMemory)
         {
-            total_pages += EfiMemory->NumberOfPages * PAGE_SIZE;
+            total_pages += EfiMemory->NumberOfPages;
         }
         EfiMemory++;
     }
@@ -74,6 +117,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     write_serial_string("\n");
 
     uint64_t last_size = ~(0ULL);
+    uint64_t bitmap_phys = 0;
     uint8_t *bitmap = nullptr;
 
     uint64_t bitmap_size = ((total_pages / 8) + 7) / 8;
@@ -81,7 +125,8 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     {
         if (EfiMemory->Type == EfiConventionalMemory && EfiMemory->NumberOfPages * PAGE_SIZE >= bitmap_size && EfiMemory->NumberOfPages * PAGE_SIZE < last_size)
         {
-            bitmap = (uint8_t *)convert_physical_to_virtual(EfiMemory->PhysicalStart);
+            bitmap_phys = EfiMemory->PhysicalStart;
+            bitmap = (uint8_t *)convert_physical_to_virtual(bitmap_phys);
         }
         EfiMemory++;
     }
@@ -90,7 +135,7 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     xmemset(bitmap, 0xFF, bitmap_size);
     write_serial_string("Masked all physical memory\n");
 
-    PAGE_ALLOC.init((void *)0x100000, total_pages, bitmap);
+    PAGE_ALLOC.init((void *)0x0, total_pages, bitmap);
     for (int i = 0; i < (BootConfig->MemoryMap.MapSize / BootConfig->MemoryMap.DescriptorSize); i++)
     {
         if (EfiMemory->Type == EfiConventionalMemory)
@@ -107,6 +152,9 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
         }
         EfiMemory++;
     }
+
+    set_bitmap(bitmap, bitmap_size);
+
     // EfiMemory = (EfiMemoryDesc *)convert_physical_to_virtual((uint64_t)(BootConfig->MemoryMap.Buffer));
 
     // Setup heap
@@ -122,6 +170,10 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
 
     memory_init((void *)KHEAP_START_VADDR, KHEAP_SIZE);
 
+#if BUILD_EDITION == DEBUG_VERSION
+    MemoryWasInit = true;
+#endif
+
     write_serial_string("Memory Manager Initialize Success.\n");
 }
 
@@ -134,6 +186,8 @@ uint64_t mm_do_brk(uint64_t start, uint64_t size)
     {
         mapper.map_page(i, 0, 0x7);
     }
+
+    flush_tlb();
 
     return i;
 }

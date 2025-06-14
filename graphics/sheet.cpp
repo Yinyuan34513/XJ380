@@ -1,5 +1,8 @@
 #include "../include/include.h"
 
+bool SheetIsRefreshing = false;
+bool SheetIsCreating = false;
+
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 {
     write_serial_string("Initializing Sheet Manager...\n");
@@ -18,6 +21,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
         }
     }
     sht->sheet_num = -1;
+    sht->sht_numed = -1;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     for (int y = 0; y < sht->scry; y++)
     {
@@ -42,6 +46,15 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 
 void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id)
 {
+    while (true)
+    {
+        if (!SheetIsRefreshing && !SheetIsCreating)
+        {
+            break;
+        }
+    }
+
+    SheetIsCreating = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     xmemset(new_sheet, 0, sizeof(SHEET));
 
@@ -109,6 +122,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
+                sht->sht_numed++;
             }
             else
             {
@@ -130,6 +144,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 xmemset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
+                sht->sht_numed++;
             }
         }
         else
@@ -149,6 +164,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
+            sht->sht_numed++;
         }
     }
     else
@@ -175,7 +191,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 new_sheet->front = front_p;
             }
 
-            *sheet_id = sht->sheet_num - 1;
+            *sheet_id = sht->sht_numed - 1;
 
             new_sheet->index = front_p->index + 1;
             new_sheet->bx = bx;
@@ -188,6 +204,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
+            sht->sht_numed++;
         }
         else
         {
@@ -206,11 +223,13 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             xmemset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
+            sht->sht_numed++;
         }
     }
     write_serial_string("Sheet Create Success. SheetID: ");
     write_serial_dec(*sheet_id);
     write_serial_string("\n");
+    SheetIsCreating = false;
 }
 
 UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id)
@@ -307,6 +326,33 @@ UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
+UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->next == NULL)
+        {
+            while (true)
+            {
+                if (front_p->bx <= x && front_p->bx + front_p->width >= x &&
+                    front_p->by <= y && front_p->by + front_p->height >= y &&
+                    front_p->type == MovableSheetType)
+                {
+                    return &front_p->index;
+                }
+                else if (front_p->front == NULL)
+                {
+                    return NULL;
+                }
+                front_p = front_p->front;
+            }
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
 {
     SHEET *front_p = sht->start;
@@ -328,6 +374,23 @@ UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
                 }
                 front_p = front_p->front;
             }
+            return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id)
+        {
+            return front_p;
+        }
+        else if (front_p->next == NULL)
+        {
             return NULL;
         }
         front_p = front_p->next;
@@ -372,6 +435,13 @@ void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
 
 void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
 {
+    while (true) {
+        if (!SheetIsCreating && !SheetIsRefreshing) {
+            break;
+        }
+    }
+
+    SheetIsCreating = true;
     SHEET *front_p = sht->start;
     while (true)
     {
@@ -380,10 +450,13 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
             front_p->front->next = front_p->next;
             front_p->next->front = front_p->front;
             free(front_p->buffer);
+            xmemset(front_p, 0, sizeof(SHEET));
+            free((void *)(front_p));
             sht->sheet_num--;
             write_serial_string("Sheet Delete Success. SheetID: ");
             write_serial_dec(*sheet_id);
             write_serial_string("\n");
+            return;
         }
         else if (front_p->next == NULL)
         {
@@ -394,6 +467,8 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
         }
         front_p = front_p->next;
     }
+    
+    SheetIsCreating = false;
 }
 
 void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
@@ -406,7 +481,7 @@ void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
             front_p->next->front = front_p->front;
             front_p->front->next = front_p->next;
             SHEET *front_p2 = sht->start;
-            for (int i = 0; i < sht->sheet_num - 2; i++)
+            for (int i = 0; i < sht->sheet_num - 3; i++)
             {
                 front_p2 = front_p2->next; // 寻找最后一个
             }
@@ -427,6 +502,8 @@ void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
 
 void refresh_sheet(SHEET_INFO *sht)
 {
+    SheetIsRefreshing = true;
+
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];
     static PixelWriter *pixel_writer = nullptr;
 
@@ -495,11 +572,15 @@ void refresh_sheet(SHEET_INFO *sht)
             TempBuffer++;
         }
     }
+
+    SheetIsRefreshing = false;
     write_serial_string("Refresh Success.\n");
 }
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
+    SheetIsRefreshing = true;
+
     static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];
     static PixelWriter *pixel_writer = nullptr;
 
@@ -537,8 +618,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
     for (int i = 0; i < sht->sheet_num + 1; i++)
     {
-        if ((front_p->bx > bex2 && front_p->by > bey2) ||
-            (front_p->bx + front_p->width < bex1 && front_p->by + front_p->height < bey1))
+        if (front_p->bx > bex2 || front_p->by > bey2 /*||
+            front_p->bx + front_p->width < bex1 || front_p->by + front_p->height < bey1*/)  // 不知道为啥这段注释掉不仅bug没了，速度还变快了
         {
             // 不在刷新范围内，跳过
         }
@@ -613,6 +694,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         }
         TempBuffer += (sht->scrx - bex2 + bex1);
     }
+
+    SheetIsRefreshing = false;
 }
 
 UINT32 get_hor()

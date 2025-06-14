@@ -34,7 +34,7 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
-    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.", {0, 0, 0});
     WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});
     WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
 
@@ -107,7 +107,7 @@ void no_regs_wsod(const char *err_code)
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
-    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/product/os/xj380/error.html.", {0, 0, 0});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.", {0, 0, 0});
     WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});
     WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
 
@@ -167,10 +167,10 @@ void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
 void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
 {
     __asm__ __volatile__(
-        "movq %cr0, %rax\n\t"
-        "and $0xFFF3, %ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
-        "or $0x2, %ax\n\t"        // set coprocessor monitoring  CR0.MP
-        "movq %rax, %cr0\n\t");
+        "movq %%cr0, %%rax\n\t"
+        "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+        "or $0x2, %%ax\n\t"        // set coprocessor monitoring  CR0.MP
+        "movq %%rax, %%cr0\n\t":::"rax");
 }
 
 void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)
@@ -272,4 +272,16 @@ void wsod_debug(struct X64_REGS *regs, UINT64 error_code)
 void wsod_apic_not_found()
 {
     no_regs_wsod("APIC_NOT_FOUND");
+}
+
+/**
+ *
+ *      较次要功能初始化错误处理函数
+ *
+ */
+
+// 未找到APIC
+void wsod_cannot_load_ttf()
+{
+    no_regs_wsod("CANNOT_LOAD_TTF");
 }

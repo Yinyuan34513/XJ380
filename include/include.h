@@ -3,6 +3,7 @@
 #ifndef _INCLUDE_HPP_
 #define _INCLUDE_HPP_
 
+#include "../kernel/build_settings.h"
 #include "./cppinc/GOP.hpp"
 #include "./global/boot.h"
 #include "./cppinc/sheet.h"
@@ -28,7 +29,9 @@
 #include "./global/kernel/task/schedule.h"
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
+#include "./global/kernel/syscall/signal.h"
 #include "./global/kernel/syscall/syscall.h"
+#include "./global/kernel/syscall/pxapi.h"
 // Drivers
 #include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/partition.h"
@@ -39,6 +42,7 @@
 #include "./global/kernel/driver/nvme.h"
 #include "./global/kernel/driver/usb.h"
 #include "./global/kernel/driver/xhci.h"
+#include "./global/kernel/driver/hid.h"
 // FS
 #include "./global/kernel/fs/vfs.h"
 #include "./global/kernel/fs/fat.h"

@@ -1,15 +1,27 @@
-all: init.elf shell.elf
+all: init.elf shell.elf cp537.elf
+
+export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -mno-sse -mno-mmx -mno-sse2 -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc
+
+build_xapi:
+	make -C xapi
 
 init.elf: init.c
 	@x86_64-linux-musl-gcc -static $< -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CC $< -> ../out/$@"
 
-shell.elf: shell.c
-	@x86_64-linux-musl-gcc -static $< -o ../out/$@
+shell.elf: shell.cpp
+	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@echo "CC $< -> ../out/$@"
+	@echo "CPPLD $< -> ../out/$@"
+
+cp537.elf: cp537.cpp
+	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
+	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "CPPLD $< -> ../out/$@"
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xlibc ../out/init.* ../out/shell.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/cp537.*

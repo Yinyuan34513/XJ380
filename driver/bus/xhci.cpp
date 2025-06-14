@@ -27,8 +27,6 @@ USB_HUB_OPERATION XHCI_OPERARTION;
 
 void InterruptXHCI(struct X64_REGS *stack, uint64_t param, uint64_t error_code)
 {
-    write_serial_string("XHCI interrupt");
-
     XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
     while (XHCIProcessEvent(controller))
         ;
@@ -45,49 +43,10 @@ void init_xhci()
     pci_device_t *dvc = pci_find_class(0x0C0330);
     if (!dvc)
     {
+        write_serial_string("No XHCI Controller found\n");
         return;
     }
     SetupXHCIControllerPCI(dvc);
-}
-
-void SetupXHCIControllerPCI(pci_device_t *dvc)
-{
-    XHCI_OPERARTION.DTC = XHCIHUBDetect;
-    XHCI_OPERARTION.RST = XHCIHUBReset;
-    XHCI_OPERARTION.DCC = XHCIHUBDisconnect;
-
-    uint64_t phys = dvc->bars[0].address;
-    uint64_t bar = convert_physical_to_virtual(phys);
-
-    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
-    mapper.map_range(bar, phys, PAGE_SIZE * 4, 0x3);
-    flush_tlb();
-
-    struct msi_desc_t msi_desc;
-    xmemset(&msi_desc, 0, sizeof(struct msi_desc_t));
-    msi_desc.irq_num = 35;
-    msi_desc.msi_index = 0;
-    msi_desc.pci_dev = dvc;
-    msi_desc.assert = 1;
-    msi_desc.edge_trigger = 1;
-    msi_desc.processor = 0;
-    msi_desc.pci.msi_attribute.is_64 = 1;
-    msi_desc.pci.msi_attribute.is_msix = 1;
-    register_irq("XHCI", msi_desc.irq_num, InterruptXHCI, 0);
-    pci_enable_msi(&msi_desc);
-
-    XHCI_CONTROLLER *controller = SetupXHCIController(bar);
-    if (!controller)
-    {
-        return;
-    }
-    dvc->device_controller = (uint64_t)controller;
-    USB_CTRL = (USB_CONTROLLER *)controller;
-    if (ConfigureXHCI(controller))
-    {
-        free(controller);
-        dvc->device_controller = 0;
-    }
 }
 
 XHCI_CONTROLLER *SetupXHCIController(uint64_t bar)
@@ -175,102 +134,6 @@ XHCI_CONTROLLER *SetupXHCIController(uint64_t bar)
     return controller;
 }
 
-uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
-{
-    uint64_t physicalAddress = (uint64_t)PAGE_ALLOC.alloc_page();
-    uint64_t virtualAddress = convert_physical_to_virtual(physicalAddress);
-
-    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
-    mapper.map_range(virtualAddress, physicalAddress, PAGE_SIZE, 0x3);
-    flush_tlb();
-
-    controller->DVC = (uint64_t *)(virtualAddress + 0x000);
-    controller->SEG = (XHCI_RING_SEGMENT *)(virtualAddress + 0x800);
-    XHCICreateTransferRing(&controller->CMD);
-    XHCICreateTransferRing(&controller->EVT);
-
-    // Reset controller
-    /*
-    uint32_t reg = controller->OR->CMD;
-    reg &= ~XHCI_CMD_INTE;
-    reg &= ~XHCI_CMD_HSEE;
-    reg &= ~XHCI_CMD_EWE;
-    reg &= ~XHCI_CMD_RS;
-    controller->OR->CMD = reg;
-    while (!(controller->OR->STS & XHCI_STS_HCH)) __asm__ __volatile__("pause");
-    controller->OR->CMD |= XHCI_CMD_HCRST;
-    while (controller->OR->CMD & XHCI_CMD_HCRST) __asm__ __volatile__("pause");
-    while (controller->OR->STS & XHCI_STS_CNR) __asm__ __volatile__("pause");
-    */
-    uint32_t reg = controller->OR->CMD;
-    if (reg & XHCI_CMD_RS)
-    {
-        reg &= ~XHCI_CMD_RS;
-        controller->OR->CMD = reg;
-        while (!(controller->OR->STS & XHCI_STS_HCH))
-            __asm__ __volatile__("pause");
-    }
-    controller->OR->CMD = XHCI_CMD_HCRST;
-    while (controller->OR->CMD & XHCI_CMD_HCRST)
-        __asm__ __volatile__("pause");
-    while (controller->OR->STS & XHCI_STS_CNR)
-        __asm__ __volatile__("pause");
-
-    controller->OR->CFG = controller->SN;
-    controller->CMD.CCS = 1;
-    controller->OR->CRC = mapper.translate_address((uint64_t)controller->CMD.RING) | 1;
-    controller->OR->DCA = mapper.translate_address((uint64_t)controller->DVC);
-
-    controller->SEG->A = mapper.translate_address((uint64_t)controller->EVT.RING);
-    controller->SEG->S = XHCI_RING_ITEMS;
-
-    controller->EVT.CCS = 1;
-    controller->RR->IR[0].IMOD = 0;
-    controller->RR->IR[0].IMAN |= 2; // Interrupt Enable
-    controller->RR->IR[0].TS = 1;
-    controller->RR->IR[0].ERS = mapper.translate_address((uint64_t)controller->SEG);
-    controller->RR->IR[0].ERD = mapper.translate_address((uint64_t)controller->EVT.RING);
-
-    reg = controller->CR->SP2;
-    uint32_t spb = (reg >> 21 & 0x1F) << 5 | reg >> 27;
-    if (spb)
-    {
-        uint64_t pageAddress = (uint64_t)PAGE_ALLOC.alloc_page();
-        uint64_t *spba = (uint64_t *)convert_physical_to_virtual(pageAddress);
-        xmemset(spba, 0, PAGE_SIZE);
-        for (uint32_t i = 0; i < spb; i++)
-        {
-            uint64_t pageAddress = (uint64_t)PAGE_ALLOC.alloc_page();
-            xmemset((void *)convert_physical_to_virtual(pageAddress), 0, PAGE_SIZE);
-            spba[i] = pageAddress;
-        }
-        controller->DVC[0] = mapper.translate_address((uint64_t)spba);
-    }
-
-    controller->OR->CMD |= XHCI_CMD_INTE;
-    controller->OR->CMD |= XHCI_CMD_RS;
-
-    // Find devices
-    USB_HUB *hub = &controller->USB.RH;
-    hub->CTRL = &controller->USB;
-    hub->PC = controller->PN;
-    hub->OP = &XHCI_OPERARTION;
-    int count = USBEnumerate(hub);
-    // xhci_free_pipes
-    if (count)
-        return 0; // Success
-
-    // No devices found - shutdown and free controller.
-    write_serial_string("XHCI NO DEVICE FOUND\n");
-    controller->OR->CMD &= ~XHCI_CMD_RS;
-    while (!(controller->OR->STS & XHCI_STS_HCH))
-        __asm__ __volatile__("pause");
-
-FAILED:;
-    PAGE_ALLOC.free_page((void *)physicalAddress);
-    return 1;
-}
-
 void XHCIQueueTRB(XHCI_TRANSFER_RING *ring, XHCI_TRANSFER_BLOCK *block)
 {
     if (ring->NID >= XHCI_RING_ITEMS - 1)
@@ -302,6 +165,8 @@ void XHCIDoorbell(XHCI_CONTROLLER *controller, uint32_t slot, uint32_t value)
 {
     controller->DR[slot] = value;
 }
+
+bool have_new_device = false;
 
 uint32_t XHCIProcessEvent(XHCI_CONTROLLER *controller)
 {
@@ -337,6 +202,7 @@ uint32_t XHCIProcessEvent(XHCI_CONTROLLER *controller)
         uint32_t port = ((trb->DATA[0] >> 24) & 0xFF) - 1;
         uint32_t psc = controller->PR[port].PSC;
         // uint32_t pcl = (((psc & ~(XHCI_PORTSC_PED | XHCI_PORTSC_PR)) & ~(0x1E0)) | (0x20));
+        have_new_device = true;
         uint32_t pcl = (((psc & ~(XHCI_PORTSC_PED | XHCI_PORTSC_PR)) & ~(0xF << 5)) | (1 << 5));
         controller->PR[port].PSC = pcl;
         break;
@@ -365,10 +231,206 @@ uint32_t XHCIWaitCompletion(XHCI_CONTROLLER *controller, XHCI_TRANSFER_RING *rin
 {
     while (ring->EID != ring->NID)
     {
-        // XHCIProcessEvent(controller); // Use xhci interrupt
         __asm__ __volatile__("sti\n\tpause\n\t");
     }
     return ring->EVT.DATA[2] >> 24;
+}
+
+bool use_kthread = false;
+
+uint64_t usb_kernel_thread(uint64_t arg)
+{
+    write_serial_string("USB kernel thread is running\n");
+
+    // XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
+
+    // while (true)
+    // {
+    //     while (XHCIProcessEvent(controller))
+    //         __asm__ __volatile__("pause");
+
+    //     __asm__ __volatile__("sti\n\tpause\n\t");
+    // }
+
+    return 0;
+}
+
+uint64_t usb_new_dev_kernel_thread(uint64_t arg)
+{
+    write_serial_string("USB new device kernel thread is running\n");
+
+    XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
+
+    while (true)
+    {
+        if (have_new_device)
+        {
+            int count = USBEnumerate(&controller->USB.RH);
+            have_new_device = false;
+
+            write_serial_string("USB device count: ");
+            write_serial_dec(count);
+            write_serial_string("\n");
+        }
+
+        __asm__ __volatile__("sti\n\tpause\n\t");
+    }
+
+    return 0;
+}
+
+uint32_t ConfigureXHCI(XHCI_CONTROLLER *controller)
+{
+    uint64_t physicalAddress = (uint64_t)PAGE_ALLOC.alloc_page();
+    uint64_t virtualAddress = convert_physical_to_virtual(physicalAddress);
+
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+    mapper.map_range(virtualAddress, physicalAddress, PAGE_SIZE, 0x3);
+    flush_tlb();
+
+    controller->DVC = (uint64_t *)(virtualAddress + 0x000);
+    controller->SEG = (XHCI_RING_SEGMENT *)(virtualAddress + 0x800);
+    XHCICreateTransferRing(&controller->CMD);
+    XHCICreateTransferRing(&controller->EVT);
+
+    // Reset controller
+    /*
+    uint32_t reg = controller->OR->CMD;
+    reg &= ~XHCI_CMD_INTE;
+    reg &= ~XHCI_CMD_HSEE;
+    reg &= ~XHCI_CMD_EWE;
+    reg &= ~XHCI_CMD_RS;
+    controller->OR->CMD = reg;
+    while (!(controller->OR->STS & XHCI_STS_HCH)) __asm__ __volatile__("pause");
+    controller->OR->CMD |= XHCI_CMD_HCRST;
+    while (controller->OR->CMD & XHCI_CMD_HCRST) __asm__ __volatile__("pause");
+    while (controller->OR->STS & XHCI_STS_CNR) __asm__ __volatile__("pause");
+    */
+
+    uint32_t reg = controller->OR->CMD;
+    if (reg & XHCI_CMD_RS)
+    {
+        reg &= ~XHCI_CMD_RS;
+        controller->OR->CMD = reg;
+        while (!(controller->OR->STS & XHCI_STS_HCH))
+            __asm__ __volatile__("pause");
+    }
+    controller->OR->CMD = XHCI_CMD_HCRST;
+    while (controller->OR->CMD & XHCI_CMD_HCRST)
+        __asm__ __volatile__("pause");
+    while (controller->OR->STS & XHCI_STS_CNR)
+        __asm__ __volatile__("pause");
+
+    controller->OR->CFG = controller->SN;
+    controller->CMD.CCS = 1;
+    controller->OR->CRC = mapper.translate_address((uint64_t)controller->CMD.RING) | 1;
+    controller->OR->DCA = mapper.translate_address((uint64_t)controller->DVC);
+
+    controller->SEG->A = mapper.translate_address((uint64_t)controller->EVT.RING);
+    controller->SEG->S = XHCI_RING_ITEMS;
+
+    controller->EVT.CCS = 1;
+    controller->RR->IR[0].IMOD = 0;
+    if (!use_kthread)
+    {
+        controller->RR->IR[0].IMAN |= 3; // Interrupt Enable & Interrupt Pending
+    }
+    controller->RR->IR[0].TS = 1;
+    controller->RR->IR[0].ERS = mapper.translate_address((uint64_t)controller->SEG);
+    controller->RR->IR[0].ERD = mapper.translate_address((uint64_t)controller->EVT.RING);
+
+    reg = controller->CR->SP2;
+    uint32_t spb = (reg >> 21 & 0x1F) << 5 | reg >> 27;
+    if (spb)
+    {
+        uint64_t pageAddress = (uint64_t)PAGE_ALLOC.alloc_page();
+        uint64_t *spba = (uint64_t *)convert_physical_to_virtual(pageAddress);
+        xmemset(spba, 0, PAGE_SIZE);
+        for (uint32_t i = 0; i < spb; i++)
+        {
+            uint64_t pageAddress = (uint64_t)PAGE_ALLOC.alloc_page();
+            xmemset((void *)convert_physical_to_virtual(pageAddress), 0, PAGE_SIZE);
+            spba[i] = pageAddress;
+        }
+        controller->DVC[0] = mapper.translate_address((uint64_t)spba);
+    }
+
+    controller->OR->CMD |= XHCI_CMD_INTE;
+    controller->OR->CMD |= XHCI_CMD_RS;
+
+    // Find devices
+    USB_HUB *hub = &controller->USB.RH;
+    hub->CTRL = &controller->USB;
+    hub->PC = controller->PN;
+    hub->OP = &XHCI_OPERARTION;
+
+    kernel_thread(usb_new_dev_kernel_thread, 0, CLONE_FILES | CLONE_FS | CLONE_SIGNAL);
+
+    if (use_kthread)
+    {
+        kernel_thread(usb_kernel_thread, 0, CLONE_FILES | CLONE_FS | CLONE_SIGNAL);
+    }
+
+    int count = USBEnumerate(hub);
+    // xhci_free_pipes
+    // if (count)
+    //     return 0; // Success
+
+    // // No devices found - shutdown and free controller.
+    // write_serial_string("XHCI NO DEVICE FOUND\n");
+    // controller->OR->CMD &= ~XHCI_CMD_RS;
+    // while (!(controller->OR->STS & XHCI_STS_HCH))
+    //     __asm__ __volatile__("pause");
+
+    return 0;
+
+FAILED:;
+    PAGE_ALLOC.free_page((void *)physicalAddress);
+    return 1;
+}
+
+void SetupXHCIControllerPCI(pci_device_t *dvc)
+{
+    XHCI_OPERARTION.DTC = XHCIHUBDetect;
+    XHCI_OPERARTION.RST = XHCIHUBReset;
+    XHCI_OPERARTION.DCC = XHCIHUBDisconnect;
+
+    uint64_t phys = dvc->bars[0].address;
+    uint64_t bar = convert_physical_to_virtual(phys);
+
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+    mapper.map_range(bar, phys, PAGE_SIZE * 4, 0x3);
+    flush_tlb();
+
+    struct msi_desc_t msi_desc;
+    xmemset(&msi_desc, 0, sizeof(struct msi_desc_t));
+    msi_desc.irq_num = 35;
+    msi_desc.msi_index = 0;
+    msi_desc.pci_dev = dvc;
+    msi_desc.assert = 1;
+    msi_desc.edge_trigger = 1;
+    msi_desc.processor = 0;
+    msi_desc.pci.msi_attribute.is_64 = 1;
+    msi_desc.pci.msi_attribute.is_msix = 0;
+    register_irq("XHCI", msi_desc.irq_num, InterruptXHCI, 0);
+    int ret = pci_enable_msi(&msi_desc);
+    if (ret != 0)
+    {
+        unregister_irq(msi_desc.irq_num);
+        use_kthread = true;
+    }
+
+    XHCI_CONTROLLER *controller = SetupXHCIController(bar);
+    if (!controller)
+    {
+        return;
+    }
+    USB_CTRL = (USB_CONTROLLER *)controller;
+
+    if (ConfigureXHCI(controller))
+    {
+        free(controller);
+    }
 }
 
 uint32_t XHCICommand(XHCI_CONTROLLER *controller, XHCI_TRANSFER_BLOCK *trb)
@@ -430,9 +492,16 @@ uint32_t XHCIHUBDisconnect(USB_HUB *hub, uint32_t port)
 }
 uint64_t XHCICreateInputContext(USB_COMMON *usbdev, uint32_t maxepid)
 {
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+
     XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)usbdev->CTRL;
     uint64_t size = (sizeof(XHCI_INPUT_CONTROL_CONTEXT) << controller->CSZ) * 33;
-    XHCI_INPUT_CONTROL_CONTEXT *icctx = (XHCI_INPUT_CONTROL_CONTEXT *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_page());
+    uint64_t icctx_phys = (uint64_t)PAGE_ALLOC.alloc_page();
+    XHCI_INPUT_CONTROL_CONTEXT *icctx = (XHCI_INPUT_CONTROL_CONTEXT *)convert_physical_to_virtual(icctx_phys);
+
+    mapper.map_range((uint64_t)icctx, icctx_phys, size, 0x3);
+    flush_tlb();
+
     xmemset(icctx, 0, size);
 
     XHCI_SLOT_CONTEXT *sctx = (XHCI_SLOT_CONTEXT *)(icctx + (1ULL << controller->CSZ));
@@ -745,7 +814,6 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
     else
     {
         // XHCI Transfer Normal
-        // while (1) __asm__ __volatile__("pause");
         XHCI_TRB_NORMAL trb;
         xmemset(&trb, 0, sizeof(XHCI_TRB_NORMAL));
         trb.DATA = mapper.translate_address((uint64_t)data);
@@ -759,6 +827,21 @@ uint32_t XHCITransfer(USB_PIPE *pipe, USB_DEVICE_REQUEST *req, void *data, uint3
     if (!wait)
     {
         cc = XHCIWaitCompletion(controller, ring);
+        // if (cc == 6)
+        // {
+        //     XHCI_TRB_RESET_ENDPOINT trb0;
+        //     xmemset(&trb0, 0, sizeof(XHCI_TRB_RESET_ENDPOINT));
+        //     trb0.TYPE = TRB_RESET_ENDPOINT;
+        //     trb0.C = 1;
+        //     trb0.SID = xpipe->SID;
+        //     trb0.EPID = xpipe->EPID;
+        //     cc = XHCICommand(controller, &trb0.TRB);
+        //     if (cc != 1)
+        //     {
+        //         write_serial_string("RESET ENDPOINT FAILED\n");
+        //         return cc;
+        //     }
+        // }
     }
     if (cc != 1)
     {

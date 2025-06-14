@@ -8,6 +8,7 @@ extern const UINT8 _binary___font_hankaku_bin_start;
 extern const UINT8 _binary___font_hankaku_bin_end;
 extern const UINT8 _binary___font_hankaku_bin_size; // 将三个常量声明
 typedef size_t uintptr_t;
+
 const UINT8 *GetFont(char c)
 {
     auto index = 16 * static_cast<unsigned int>(c); // 每一个字符要对应16个char作为字体

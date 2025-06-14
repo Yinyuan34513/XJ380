@@ -1,5 +1,5 @@
-#ifndef _PROTO_HPP_
-#define _PROTO_HPP_
+#ifndef PROTO_HPP_
+#define PROTO_HPP_
 
 #include "../include.h"
 #include "../efi.h"
@@ -16,9 +16,6 @@ auto operator delete(void *ptr, size_t size) -> void;
 auto operator delete[](void *ptr, size_t size) -> void;
 void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor &c);
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
-void line(const FrameBufferConfig &fbc, int x0, int y0, int x1, int y1, const PixelColor &c);
-void circle(const FrameBufferConfig &fbc, int centerX, int centerY, int radius, int solid, const PixelColor &c);
-void drawtime(EFI_SYSTEM_TABLE &table, const FrameBufferConfig &fbc, const int x, const int y, float UTC);
 
 // graphics/draw_sheet.cpp
 void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUFFER &color);
@@ -40,7 +37,9 @@ UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
+UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
+SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
 void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
 void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
@@ -52,11 +51,18 @@ UINT32 get_ver();
 
 // graphics/window/windowm.cpp
 void init_xwm(XWM_INFO *xwmi);
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, UINT16 *window_id, CHAR8 *title, UINT32 width, UINT32 height);
-
+void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, UINT32 width, UINT32 height);
+void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color);
+void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 /*
  *   font
  */
+
+// font/ttf/ttf.cpp
+void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x, unsigned y, int size);
+void init_ttf();
 
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
@@ -75,12 +81,31 @@ void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long lon
 char *strncpy(char *dest, const char *src, UINT64 length);
 char *strcpy(char *dest, const char *src);
 UINT64 strlen(const char *str);
-UINT64 strcmp(char *from_str, char *cmp_str);
+UINT64 strcmp(const char *from_str, const char *cmp_str);
+UINT64 strncmp(char *from_str, char *cmp_str, UINT64 size);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
+UINT64 strtol(char *str, char **endptr, int base);
 char *Dec2Char(unsigned long long dec);
 char *Hex2Char(unsigned long long hex);
 char *strstr(const char *haystack, const char *needle);
 int str2float(const char *str, float *result);
+
+// lib/utflib.c
+typedef int32_t Rune;
+#define UTFmax 6 /* maximum bytes per rune */
+#define Runeerror ((Rune)-1)         /* decoding error in utf */
+#ifdef __cplusplus
+extern "C" {
+#endif
+int charntorune(Rune *, const char *, size_t);
+int chartorune(Rune *, const char *);
+size_t utflen(const char *);
+size_t utfnlen(const char *, size_t);
+
+extern const unsigned char utftab[64];
+#ifdef __cplusplus
+}
+#endif
 
 /*
  *   driver
@@ -115,6 +140,8 @@ void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
 // kernel/main.cpp
 extern const FrameBufferConfig *fbc_addr;
 extern SHEET_INFO *sht_img;
+extern XWM_INFO *xwmii;
+extern bool winRD_lock;
 
 // kernel/wsod.cpp
 // 异常处理
@@ -131,6 +158,9 @@ extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
 
 // APIC初始化错误处理
 void wsod_apic_not_found();
+
+// 较次要功能初始化错误处理
+void wsod_cannot_load_ttf();
 
 // kernel/memorym.cpp
 void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig);

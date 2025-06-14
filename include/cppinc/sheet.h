@@ -16,7 +16,7 @@ struct SHEET
 {
     SHEETP front;
     VOID *buffer;
-    UINT32 bx, by;
+    int bx, by;
     UINT32 width, height;
     UINT32 type;
     UINT16 index;
@@ -30,6 +30,7 @@ typedef struct
     VOID *temp_buffer;
     UINT32 scrx, scry;
     UINT16 sheet_num; // 图层数量 - 1
+    UINT16 sht_numed; // 图层数量 - 1，用于编号
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 
@@ -40,5 +41,12 @@ typedef struct
     UINT8 b;
     UINT8 a; // 在TempBuffer里，这个没用
 } SHEET_BUFFER;
+
+typedef struct
+{
+    UINT8 r;
+    UINT8 g;
+    UINT8 b;
+} __attribute__((packed)) SHEET_BUFFER_WOA;
 
 #endif

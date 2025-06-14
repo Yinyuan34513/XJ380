@@ -402,4 +402,10 @@ typedef struct SATA_Ident
     uint16_t integrity;           /* Cheksum, Signature */
 } SATA_ident_t;
 
+typedef struct
+{
+    int i;
+    SATA_ident_t ident;
+} AHCI_PORT;
+
 void init_ahci();

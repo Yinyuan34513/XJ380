@@ -2,6 +2,9 @@
 #include "../../include/include.h"
 #include "../alloc/page.h"
 
+bool ttfFS_lock = false;
+bool winRD_lock = false;
+
 static long global_pid = 0;
 
 struct mm_struct init_mm = {0};
@@ -216,8 +219,9 @@ uint64_t parse_elf_file(struct task_struct *task, struct X64_REGS *regs, VNode *
     // 解析ELF头
     ehdr = *(Elf64_Ehdr *)buf;
 
-    // 验证ELF魔数 (0x7F,'E','L','F')
-    if (*(uint32_t *)ehdr.e_ident != 0x464C457F)
+    // 验证ELF&EPF魔数 (0x7F,'E','L','F') (0x7F, 'E', 'P', 'F')
+    if ((*(uint32_t *)ehdr.e_ident != 0x464C457F)
+         && (*(uint32_t *)ehdr.e_ident != 0x4650457F))
     {
         free(buf);
         return -1;
@@ -452,12 +456,19 @@ uint64_t init_kernel_thread(uint64_t arg)
     mouse_init();
     write_serial_string("Mouse Initialize Success.\n");
 
+    rect(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 116), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+            int(fbc_addr->horizontal_resolution / 2 + 116), int(fbc_addr->vertical_resolution * 0.75 - 4), {0, 0, 0});
+    rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.55, int((fbc_addr->vertical_resolution - 48) * 0.65), {0x23, 0xcf, 0x3e});
+    WriteString(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 124), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+                "Initializing PCI & Hard Disk...", {0xff, 0xff, 0xff});
+
     init_device();
     init_pci(convert_physical_to_virtual((uint64_t)BC->MCFG));
     write_serial_string("PCI initialized.\n");
 
-    // init_xhci();
-    // write_serial_string("XHCI initialized.\n");
+    init_xhci();
+    write_serial_string("XHCI initialized.\n");
     keyboard_mouse_init_done = true;
 
     init_ahci();
@@ -468,6 +479,13 @@ uint64_t init_kernel_thread(uint64_t arg)
 
     init_partition();
     write_serial_string("PARTITION initialized.\n");
+
+    rect(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 124), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+            int(fbc_addr->horizontal_resolution / 2 + 124), int(fbc_addr->vertical_resolution * 0.75 - 4), {0, 0, 0});
+    rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.6, int((fbc_addr->vertical_resolution - 48) * 0.8), {0x23, 0xcf, 0x3e});
+    WriteString(*fbc_addr, int(fbc_addr->horizontal_resolution / 2 - 108), int(fbc_addr->vertical_resolution * 0.75 - 20), 
+                "Initializing File System...", {0xff, 0xff, 0xff});
 
     init_fat();
     init_vfs();
@@ -492,6 +510,11 @@ uint64_t init_kernel_thread(uint64_t arg)
     uint8_t **envp = (uint8_t **)malloc(sizeof(uint8_t *) * 1);
     xmemset(envp, 0, sizeof(uint8_t *) * 1);
 
+    rect(*fbc_addr, 48, int(fbc_addr->vertical_resolution - 68), 
+            int(fbc_addr->horizontal_resolution - 48) * 0.9, int(fbc_addr->vertical_resolution - 48), {0x23, 0xcf, 0x3e});
+
+    ttfFS_lock = true;
+
     __asm__ __volatile__(
         "movq	%1,	%%rsp	\n\t"
         "pushq	%2		\n\t"
@@ -509,11 +532,21 @@ uint64_t desktop_flusher(uint64_t arg)
 {
     disable_intr();
 
+    // init_ttf(*fbc_addr);
+
     write_serial_string("desktop flusher is running, arg:");
     write_serial_dec(arg);
     write_serial_string(".\n");
 
     spin_init(&fb_print_lock);
+
+    while (true)
+    {
+        if (ttfFS_lock)
+        {
+            break;
+        }
+    }
 
     UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
     UINT16 dock_sheet_id = 1145;
@@ -527,13 +560,13 @@ uint64_t desktop_flusher(uint64_t arg)
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
     create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
 
+    init_ttf();
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
     write_serial_string("desktop initialized.\n");
 
     int fontx = 8;
     int fonty = 50;
-
     // DEBUG
 #if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40, "X:", WHITE);
@@ -547,22 +580,22 @@ uint64_t desktop_flusher(uint64_t arg)
     // 别问为什么这么多-40，问就是因为改起来太麻烦
     PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
 
-    draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 472, 320, WHITE);
-    draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 472, 320, BLACK);
-    draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 472, 320, XINGJI_BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 472, 320, XINGJI_YELLOW);
-    draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 472, 320, WIN_BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 472, 320, GRAY);
-    draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 472, 320, BGRAY);
-    draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 472, 320, PURPLE);
-    draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 472, 320, PINK);
-    draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 472, 320, RED);
-    draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 472, 320, CHINA_RED);
-    draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 472, 320, GOLD);
-    draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 472, 320, GREEN);
-    draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 472, 320, LIGHT_GREEN);
-    draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 472, 320, BLUE);
-    draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 472, 320, SKY_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 473, 319, WHITE);
+    draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 473, 319, BLACK);
+    draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 473, 319, XINGJI_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 473, 319, XINGJI_YELLOW);
+    draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 473, 319, WIN_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 473, 319, GRAY);
+    draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 473, 319, BGRAY);
+    draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 473, 319, PURPLE);
+    draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 473, 319, PINK);
+    draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 473, 319, RED);
+    draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 473, 319, CHINA_RED);
+    draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 473, 319, GOLD);
+    draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 473, 319, GREEN);
+    draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 473, 319, LIGHT_GREEN);
+    draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 473, 319, BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 473, 319, SKY_BLUE);
 
     PrintString(&shtinf, &desktop_sheet_id, 8, 332, "MemoryMapTypeSheet", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 348, "0x0: Free", WHITE);
@@ -587,18 +620,27 @@ uint64_t desktop_flusher(uint64_t arg)
     write_serial_string(CPU_Model);
     write_serial_string("\n");
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 480, fbc_addr->vertical_resolution - 20, {0x00, 0xa2, 0xe8, 0xff});
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479, fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
 #endif
     // wsod_debug();
 
-    draw_mouse(&shtinf, &mouse_sheet_id);
+    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
 
+    draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
-    UINT16 test_win;
+    WINDOWLS *test_win;
+    WINDOWLS *test_win2;
     init_xwm(&xwmi);
+    xwmii = &xwmi;
     create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
+    create_window(&xwmi, &shtinf, &test_win2, "窗口", 800, 600);
+
+    // delete_window(&xwmi, &shtinf, test_win);
+
+    winRD_lock = true;
 
     refresh_sheet(&shtinf); // 刷新
+    // delete_sheet(&shtinf, &dock_sheet_id);
 
     while (!keyboard_mouse_init_done)
     {
@@ -606,15 +648,14 @@ uint64_t desktop_flusher(uint64_t arg)
         __asm__ __volatile__("pause");
     }
 
-    EFI_TIME time;
-    EFI_TIME_CAPABILITIES time_capab;
-
     UINT8 k_input;
     int tby;
     int tbx;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((UINT64)(ST->RuntimeServices));
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)RuntimeServices->GetTime);
+    int scdx = fbc_addr->horizontal_resolution * 0.8125;
+    struct time_t time;
 
     while (1)
     {
@@ -654,12 +695,13 @@ uint64_t desktop_flusher(uint64_t arg)
         // {
         //     write_serial_string("GetTime failed.\n");
         // }
-        int scdx = fbc_addr->horizontal_resolution * 0.8125;
-        draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 4, 24, DOCK_COL);
-        PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.Hour + 8) % 24, BLACK);
-        PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
-        PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.Minute, BLACK);
-        refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
+        // time_read(&time);
+        // draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
+        // //12 小时制
+        // PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.tm_hour + UTC) % 24, BLACK);
+        // PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
+        // PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.tm_min, BLACK);
+        // refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
     }
 
     return 0xFFFFFFFFFFFFFFFF;
@@ -762,6 +804,8 @@ void fork_exit_thread(struct task_struct *tsk) {}
 
 uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size)
 {
+    KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
+
     // 获取fork锁，防止多个进程同时创建导致竞争
     spin_lock(&do_fork_lock);
 
@@ -770,13 +814,18 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     void *p = (void *)NULL;           // 临时指针变量
 
     // 为新进程分配内核栈空间并转换为虚拟地址
-    p = (void *)convert_physical_to_virtual((uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE));
+    uint64_t p_phys = (uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE);
+    p = (void *)convert_physical_to_virtual(p_phys);
     if (!p)
     {
         // 如果内存分配失败，释放锁并返回0
         spin_unlock(&do_fork_lock);
         return 0;
     }
+
+    mapper.map_range((uint64_t)p, p_phys, STACK_SIZE, 0x3);
+    flush_tlb();
+
     // 清零分配的内存空间
     xmemset(p, 0, STACK_SIZE);
 
@@ -941,7 +990,7 @@ void init_task_manager()
 
     uint64_t cr3;
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
-    init_mm.pgd = (uint64_t *)cr3;
+    init_mm.pgd = (uint64_t *)(cr3 & ~(0xFFFUL));
 
     init_mm.start_code = 0x0;
     init_mm.end_code = 0x0;

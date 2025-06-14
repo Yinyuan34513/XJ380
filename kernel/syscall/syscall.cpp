@@ -45,6 +45,7 @@ void init_syscall()
     wrmsr(MSR_SYSCALL_MASK, (1 << 9));
 }
 
+// regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9
 extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 {
     regs->rip = regs->rcx;
@@ -119,8 +120,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_brk(regs->rdi);
         break;
     case SYS_MMAP:
-        // todo
-        regs->rax = 0;
+        regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
 
     case SYS_ARCH_PRCTL:
@@ -142,6 +142,82 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_RT_SIGPROCMASK:
         regs->rax = 0;
         break;
+
+    case XAPI_OUTPUT:
+        break;
+    case XAPI_INPUTW:
+        break;
+    case XAPI_INPUT:
+        break;
+    case XAPI_ENDLINE:
+        break;
+    case XAPI_PRINTLINE:
+        break;
+    case XAPI_OPEN_FILE:
+        break;
+    case XAPI_CLOSE_FILE:
+        break;
+    case XAPI_FORK:
+        regs->rax = (uint64_t)sys_fork(regs);
+        break;
+    case XAPI_EXECVE:
+        regs->rax = (uint64_t)sys_execve(regs);
+        break;
+    case XAPI_CREATE_WINDOW:
+        regs->rax = (uint64_t)do_xapi_CreateWindow(regs->rdi, regs->rsi);
+        break;
+    case XAPI_SET_WINDOW_TITLE:
+        regs->rax = (uint64_t)do_xapi_SetWindowTitle(regs->rdi, regs->rsi);
+        break;
+    case XAPI_CLOSE_WINDOW:
+        regs->rax = (uint64_t)do_xapi_CloseWindow(regs->rdi);
+        break;
+    case XAPI_SET_ICON:
+        regs->rax = (uint64_t)do_xapi_SetIcon(regs->rdi, regs->rsi);
+        break;
+    case XAPI_DRAW_POINT:
+        regs->rax = (uint64_t)do_xapi_DrawPoint(regs->rdi, regs->rsi, regs->rdx, regs->r10);
+        break;
+    case XAPI_DRAW_LINE:
+        regs->rax = (uint64_t)do_xapi_DrawLine(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_RECT:
+        regs->rax = (uint64_t)do_xapi_DrawRect(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_RECT_FILL:
+        regs->rax = (uint64_t)do_xapi_DrawRect_fill(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    // case XAPI_DRAW_CIRCLE:
+    //     regs->rax = (uint64_t)do_xapi_DrawCircle(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
+    //     break;
+    // case XAPI_DRAW_CIRCLE_FILL:
+    //     regs->rax = (uint64_t)do_xapi_DrawCircle_fill(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
+    //     break;
+    case XAPI_DRAW_TEXT:
+        regs->rax = (uint64_t)do_xapi_DrawText(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_BMP:
+        break;
+    case XAPI_DRAW_PNG:
+        break;
+    case XAPI_SET_MSH_PROCOR:
+        regs->rax = (uint64_t)do_xapi_SetMsgProc(regs->rdi, regs->rsi);
+        break;
+    case XAPI_READBUFFER:
+        break;
+    case XAPI_WRITEBUFFER:
+        break;
+    case XAPI_WRITEBUFFERA:
+        break;
+    case XAPI_REFRESH_WINDOW:
+        regs->rax = (uint64_t)do_xapi_RefreshWindow(regs->rdi);
+        break;
+    case XAPI_BUTTON:
+        break;
+    case XAPI_BUTTON_STYLE:
+        break;
+
+
     default:
         regs->rax = (uint64_t)-ENOSYS;
         write_serial_string("Unknown syscall index: ");
@@ -152,3 +228,37 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     return user_rsp;
 }
+
+
+        // write_serial_dec(regs->r10);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r11);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r12);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r13);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r14);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r15);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r8);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->r9);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rax);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rbp);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rbx);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rcx);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rdi);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rdx);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rsi);
+        // write_serial_string("\n");
+        // write_serial_dec(regs->rsp);
+        // write_serial_string("\n");

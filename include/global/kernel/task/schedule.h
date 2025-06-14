@@ -14,7 +14,7 @@ struct schedule
 extern struct schedule task_schedule[MAX_CPU_NUM];
 
 void schedule();
-void schedule_init();
+void init_schedule();
 struct task_struct *get_next_task(int cpu_id);
 void insert_task_queue(struct task_struct *tsk, int cpu_id);
 

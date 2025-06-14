@@ -1,7 +1,7 @@
 // 版权所有©XINGJI Studios 2017-2025 保留所有权利。
 // XJ380图像头文件
-#ifndef _FBC_HPP_
-#define _FBC_HPP_
+#ifndef FBC_HPP_
+#define FBC_HPP_
 
 #include "../global/stdint.h"
 

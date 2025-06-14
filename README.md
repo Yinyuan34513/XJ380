@@ -270,6 +270,31 @@ XINGJI工作室A级机密 | 保密编号XSEC202212011-11-A
 - 修复了一些bug
 - 加了个字符串防止有人以为XJ380卡在哪了
 
+### BuildVersion 53 【已虚拟机测试】
+2025年5月5日 Guoqiyu1115
+- 矢量字体
+
+### BuildVersion 54 【已虚拟机测试】
+2025年5月10日 Guoqiyu1115
+- XAPI准备完毕（可以开始编写实现）
+
+### BuildVersion 55 【已虚拟机测试】
+2025年5月20日 Guoqiyu1115
+- XAPI GUI大部分完成
+- 修复了读写文件有概率失败或PF的bug
+- 修改开机动画
+
+### BuildVersion 56 【已虚拟机测试】
+2025年5月20日 Guoqiyu1115
+- 在debug模式下将串口打印至屏幕
+
+### BuildVersion 57 【已虚拟机测试】
+2025年6月14日 Guoqiyu1115
+- stbi（未测试，可过编译）
+- 及其生草未经测试的stdio（文件）
+- 修复了莫名其妙卡住的bug
+- 优化了一丢丢内存管理的初始化速度
+
 ## 中断号分配表
 ### 0   ~   31	异常
     0	devide error

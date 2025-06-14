@@ -132,6 +132,8 @@ int fat_super(int dev, VNode *result)
 
     node->desc = desc;
 
+    free(super_buf);
+
     return 0;
 }
 
@@ -403,9 +405,11 @@ int fat_resize(VNode *current, uint64_t size)
 {
     return 0;
 }
-
+spinlock_t r_sp;
 int fat_read(VNode *node, uint8_t *buf, size_t position, size_t count)
 {
+    spin_init(&r_sp);
+    spin_lock(&r_sp);
     FAT32_NodeInfo *info = (FAT32_NodeInfo *)node->desc;
 
     uint64_t cluster = info->first_cluster;
@@ -419,6 +423,7 @@ int fat_read(VNode *node, uint8_t *buf, size_t position, size_t count)
     if (!cluster)
     {
         free(buffer);
+        spin_unlock(&r_sp);
         return -1;
     }
 
@@ -460,7 +465,7 @@ int fat_read(VNode *node, uint8_t *buf, size_t position, size_t count)
     free(buffer);
     if (!index)
         retval = count;
-
+    spin_unlock(&r_sp);
     return retval;
 }
 
