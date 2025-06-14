@@ -1,6 +1,6 @@
 ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc -I./include
-CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
+C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -I./include
+CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
 
 DEBUG ?= 0
 SMP ?= 4
@@ -31,19 +31,19 @@ C_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.c")
 CPP_FILES := $(shell find ./kernel ./graphics ./driver ./lib ./font -name "*.cpp")
 
 export CC = $(COMPILER_PREFIX)gcc
-export CPP = $(CC)
+export CPP = $(COMPILER_PREFIX)g++
 export LD = $(COMPILER_PREFIX)ld
 export NM = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 
-ASM_OBJS := $(sort $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES)))
-C_OBJS := $(sort $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES)))
-CPP_OBJS := $(sort $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES)))
+ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
+C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
+CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 
 $(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(@D)
-	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(ASM_FLAGS) -c $< -o $@
+	@$(CC) -mcmodel=large $(ASM_FLAGS) -c $< -o $@
 	@echo "AS $< -> $@"
 
 $(BUILD_DIR)/%.o: %.c

@@ -29,6 +29,7 @@
 #include "./global/kernel/task/schedule.h"
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
+#include "./global/kernel/syscall/signal.h"
 #include "./global/kernel/syscall/syscall.h"
 #include "./global/kernel/syscall/pxapi.h"
 // Drivers

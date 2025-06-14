@@ -4,6 +4,32 @@
 #define PI (float64_t)3.1415926535 // 搞笑版:3.14159265358979323846264338327950288419716939937510582097494459230781640628620899
 #define TAU (float64_t)6.2831853071 // 搞笑版:6.28318530717958647692528676655900576839433879875021164194988918553642212019584998
 #define PI_DIV_2 (float64_t)1.5707963267 // 搞笑版:1.570796326794896619231321691639751442098584699687552910487840454326648213393607260249141273724587006606315588174881520920962829254091715364367892590360011330530548820466521384146951941511609433057270365759591953092186117381932611793105118548074462379962749567351885752724891227938183011949128831426076896280457
+#define LONG_LONG_MAX (0x7FFFFFFFFFFFFFFFLL) // 最大的long long整数
+#define LONG_LONG_MIN (-0x7FFFFFFFFFFFFFFFLL - 1) // 最小的long long整数Add commentMore actions
+#define UINT64_MAX (0xFFFFFFFFFFFFFFFFULL) // 最大的unsigned long long整数
+#define UINT64_MIN (0x0000000000000000ULL) // 最小的unsigned long long整数
+#define INT64_MAX (0x7FFFFFFFFFFFFFFFLL) // 最大的signed long long整数
+#define INT64_MIN (-0x7FFFFFFFFFFFFFFFLL - 1) // 最小的signed long long整数
+#define UINT32_MAX (0xFFFFFFFFUL) // 最大的unsigned int整数
+#define UINT32_MIN (0x00000000UL) // 最小的unsigned int整数
+#define INT32_MAX (0x7FFFFFFFUL) // 最大的signed int整数
+#define INT32_MIN (-0x7FFFFFFFUL - 1) // 最小的signed int整数
+#define UINT16_MAX (0xFFFFU) // 最大的unsigned short整数
+#define UINT16_MIN (0x0000U) // 最小的unsigned short整数
+#define INT16_MAX (0x7FFF) // 最大的signed short整数
+#define INT16_MIN (-0x7FFF - 1) // 最小的signed short整数
+#define UINT8_MAX (0xFFU) // 最大的unsigned char整数
+#define UINT8_MIN (0x00U) // 最小的unsigned char整数
+#define INT8_MAX (0x7F) // 最大的signed char整数
+#define INT8_MIN (-0x7F - 1) // 最小的signed char整数
+#define SHRT_MAX (0x7FFF) // 最大的short整数
+#define SHRT_MIN (-0x7FFF - 1) // 最小的short整数
+#define INT_MAX (0x7FFFFFFF) // 最大的int整数
+#define INT_MIN (-0x7FFFFFFF - 1) // 最小的int整数
+#define UINT_MAX (0xFFFFFFFFU) // 最大的unsigned int整数
+#define UINT_MIN (0x00000000U) // 最小的unsigned int整数
+#define LONG_MAX (0x7FFFFFFFFFFFFFFFL) // 最大的long整数
+#define LONG_MIN (-0x7FFFFFFFFFFFFFFFL - 1) // 最小的long整数
 
 #define FORCE_EVAL(x) do {									\
 	if (sizeof(x) == sizeof(float)) {						\

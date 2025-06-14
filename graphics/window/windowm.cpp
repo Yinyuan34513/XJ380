@@ -7,7 +7,17 @@
 #include "../../include/include.h"
 #include "./wbuttons.h"
 
-#define WINDOW_ALPHA_VALUE 0xaa
+#define WINDOW_ALPHA_VALUE  0xaa
+#define WINDOW_COLOR_R      0x00
+#define WINDOW_COLOR_G      0xa2
+#define WINDOW_COLOR_B      0xe8
+#define WINDOW_COLOR        {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE}
+#define WINDOW_LIGHT_OFFEST 0x0f
+// #define WINDOW_LIGHT_COLOR  {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, (UINT8)(WINDOW_ALPHA_VALUE + WINDOW_LIGHT_OFFEST)}
+#define WINDOW_LIGHT_COLOR  {(UINT8)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST),      \
+                                (UINT8)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),   \
+                                (UINT8)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST),   \
+                                WINDOW_ALPHA_VALUE}
 
 bool WindowIsCreating = false;
 
@@ -52,13 +62,13 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->WinMPf = NULL;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
-    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, WINDOW_COLOR);
 
     for (int y = 0; y < height + 27; y++)
     {
         for (int x = width / 3; x < width / 3 + 114; x++)
         {
-            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, {0x0f, 0xb1, 0xf7, WINDOW_ALPHA_VALUE});
+            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, WINDOW_LIGHT_COLOR);
         }
     }
 
@@ -66,7 +76,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     {
         for (int x = width / 3 + 256; x < width / 3 + 48 + 256; x++)
         {
-            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, {0x0f, 0xb1, 0xf7, WINDOW_ALPHA_VALUE});
+            draw_point(sht, &(new_window->w_sheet), (x + y) % (width + 10), y, WINDOW_LIGHT_COLOR);
         }
     }
 
@@ -151,7 +161,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
 {
-    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 81, 20, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 81, 20, WINDOW_COLOR);
     print_box_ttf(sht, &(windowls->w_sheet), title, WHITE, 22, 0, 11);
     refresh_part_sheet(sht, getBX(sht, &(windowls->w_sheet)), getBY(sht, &(windowls->w_sheet)),
                        getBX(sht, &(windowls->w_sheet)) + getXsize(sht, &(windowls->w_sheet)) + 10,
