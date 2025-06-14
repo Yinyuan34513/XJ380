@@ -33,7 +33,7 @@ UINT64 strlen(const char *str)
     return p - str - 1;
 }
 
-UINT64 strcmp(char *from_str, char *cmp_str)
+UINT64 strcmp(const char *from_str, const char *cmp_str)
 {
     while ((*from_str != '\0') && (*from_str == *cmp_str))
     {
@@ -41,6 +41,21 @@ UINT64 strcmp(char *from_str, char *cmp_str)
         cmp_str++;
     }
     return *from_str - *cmp_str;
+}
+
+UINT64 strncmp(char *from_str, char *cmp_str, UINT64 size)
+{
+    char temp[32], from[32];
+    for (UINT64 i = 0; i < size; i++)
+    {
+        temp[i] = from_str[i];
+        from[i] = cmp_str[i];
+    }
+    temp[size] = '\0';
+    from[size] = '\0';
+    UINT64 ret;
+    ret = strcmp(from, temp);
+    return ret;
 }
 
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size)
@@ -56,6 +71,28 @@ UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size)
     UINT64 ret;
     ret = strcmp(from, temp);
     return ret;
+}
+
+UINT64 strtol(char *str, char **endptr, int base) {
+    if (base != 10) {
+        // 懒得做了之后再说
+        return 114514;
+    }
+    char *p = str;
+    UINT64 num = 0;
+    int w = 10;
+    int len = 0;
+    while (*p > '0' && *p < '9') {
+        len++;
+        p++;
+    }
+    *endptr = p;
+    num += *p - '0';
+    p--;
+    for (int i = 1; i < len; i++, p--, w *= 10) {
+        num += (*p - '0') * w;
+    }
+    return num;
 }
 
 char *Hex2Char(unsigned long long hex)

@@ -242,15 +242,15 @@ uint64_t usb_kernel_thread(uint64_t arg)
 {
     write_serial_string("USB kernel thread is running\n");
 
-    XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
+    // XHCI_CONTROLLER *controller = (XHCI_CONTROLLER *)USB_CTRL;
 
-    while (true)
-    {
-        while (XHCIProcessEvent(controller))
-            __asm__ __volatile__("pause");
+    // while (true)
+    // {
+    //     while (XHCIProcessEvent(controller))
+    //         __asm__ __volatile__("pause");
 
-        __asm__ __volatile__("sti\n\tpause\n\t");
-    }
+    //     __asm__ __volatile__("sti\n\tpause\n\t");
+    // }
 
     return 0;
 }

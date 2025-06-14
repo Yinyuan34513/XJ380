@@ -5,6 +5,12 @@ mouse_dec ms_dec;
 int mouse_x = 0;
 int mouse_y = 0;
 
+extern char wbutton_close[18][33];
+extern char wbutton_little[18][33];
+bool win_c_bt_isl = false;
+bool win_m_bt_isl = false;
+#define WINDOW_ALPHA_VALUE 0xaa
+
 extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
 {
     UINT8 data = inb(PORT_KB_DATA);
@@ -25,6 +31,101 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code)
         ms_dec.left = false;
         ms_dec.center = false;
         ms_dec.right = false;
+
+        
+        if (ms_dec.sht_now != NULL &&
+            mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
+            mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width &&
+            mouse_y >= ms_dec.sht_now->by && mouse_y <= ms_dec.sht_now->by + 17) {
+            if (!win_c_bt_isl) {
+                for (int y = 0; y < 17; y++)
+                {
+                    for (int x = 0; x < 32; x++)
+                    {
+                        if (wbutton_close[y][x] == '.')
+                        {
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0xed, 0x1c, 0x24, 0xff});
+                        }
+                        else if (wbutton_close[y][x] == 'a')
+                        {
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0, 0, 0, 0});
+                        }
+                        else if (wbutton_close[y][x] == '@')
+                        {
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0, 0, 0, 0xff});
+                        }
+                    }
+                }
+                refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 33, ms_dec.sht_now->by,
+                                                ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + 17);
+                win_c_bt_isl = true;
+            }
+        } else if (win_c_bt_isl) {
+            for (int y = 0; y < 17; y++)
+            {
+                for (int x = 0; x < 32; x++)
+                {
+                    if (wbutton_close[y][x] == '.')
+                    {
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
+                    }
+                    else if (wbutton_close[y][x] == 'a')
+                    {
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0, 0, 0, 0});
+                    }
+                    else if (wbutton_close[y][x] == '@')
+                    {
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
+                    }
+                }
+            }
+            refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by,
+                                            ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + 17);
+            win_c_bt_isl = false;
+        } 
+        
+        if (ms_dec.sht_now != NULL &&
+                    mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 63 &&
+                    mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
+                    mouse_y >= ms_dec.sht_now->by && mouse_y <= ms_dec.sht_now->by + 17) {
+            if (!win_m_bt_isl) {
+                for (int y = 0; y < 17; y++)
+                {
+                    for (int x = 0; x < 32; x++)
+                    {
+                        if (wbutton_little[y][x] == '@')
+                        {
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0, 0, 0, 0xff});
+                        }
+                        else if (wbutton_little[y][x] == '.')
+                        {
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0x00, 0xa2, 0xe8, 0xff});
+                        }
+                    }
+                }
+                refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 63, ms_dec.sht_now->by,
+                                                ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by + 17);
+                win_m_bt_isl = true;
+            }
+        } else if (win_m_bt_isl) {
+            for (int y = 0; y < 17; y++)
+            {
+                for (int x = 0; x < 32; x++)
+                {
+                    if (wbutton_little[y][x] == '@')
+                    {
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
+                    }
+                    else if (wbutton_little[y][x] == '.')
+                    {
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+                    }
+                }
+            }
+            refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 63, ms_dec.sht_now->by,
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by + 17);
+            win_m_bt_isl = false;
+        } 
 
         if (ms_dec.btn & 0x01)
         {
@@ -182,6 +283,7 @@ void mouse_init()
     ms_dec.phase = 0;
 
     ms_dec.win_move_lock = false;
+    ms_dec.sht_now = NULL;
 }
 
 void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id)

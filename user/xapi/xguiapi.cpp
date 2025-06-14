@@ -101,8 +101,8 @@ void xapi_DrawPNG(
 }
 
 // 4-4
-void SetMsgPrcor(MsgPrcor func) {
-	enter_syscall(XAPI_SET_MSH_PROCOR, (UINT64)(func), 0, 0, 0, 0, 0);
+void SetMsgPrcor(HDLE handle, MsgPrcor func) {
+	enter_syscall(XAPI_SET_MSH_PROCOR, handle, (UINT64)(func), 0, 0, 0, 0);
 }
 
 // 4-5

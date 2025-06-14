@@ -635,7 +635,7 @@ uint64_t desktop_flusher(uint64_t arg)
     create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
     create_window(&xwmi, &shtinf, &test_win2, "窗口", 800, 600);
 
-    delete_window(&xwmi, &shtinf, test_win);
+    // delete_window(&xwmi, &shtinf, test_win);
 
     winRD_lock = true;
 

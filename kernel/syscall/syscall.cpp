@@ -201,6 +201,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_DRAW_PNG:
         break;
     case XAPI_SET_MSH_PROCOR:
+        regs->rax = (uint64_t)do_xapi_SetMsgProc(regs->rdi, regs->rsi);
         break;
     case XAPI_READBUFFER:
         break;
@@ -209,6 +210,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_WRITEBUFFERA:
         break;
     case XAPI_REFRESH_WINDOW:
+        regs->rax = (uint64_t)do_xapi_RefreshWindow(regs->rdi);
         break;
     case XAPI_BUTTON:
         break;

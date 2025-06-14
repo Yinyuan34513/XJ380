@@ -119,6 +119,14 @@
 // P4.4
 #define XAPI_SET_MSH_PROCOR 403
 
+#define MSG_CHAR		0
+#define MSG_MOVE		1
+#define MSG_LBUTTON		2
+#define MSG_RBUTTON		3
+#define MSG_MBUTTON		4
+#define MSG_ROLLER		5
+#define MSG_CRL			6
+
 // P4.5
 #define XAPI_READBUFFER 404
 #define XAPI_WRITEBUFFER 405
@@ -148,6 +156,8 @@ int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, 
 // int do_xapi_DrawCircle_fill(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
 // int do_xapi_DrawCircle(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
 int do_xapi_DrawText(UINT64 handle, UINT32 x, UINT32 y, UINT64 str, UINT32 size, UINT32 color);
+int do_xapi_RefreshWindow(UINT64 handle);
+int do_xapi_SetMsgProc(UINT64 handle, UINT64 func);
 
 
 

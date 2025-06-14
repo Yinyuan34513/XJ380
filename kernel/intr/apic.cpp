@@ -198,10 +198,10 @@ void init_apic(UINT64 MADT0)
         {
             break;
         }
-        MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
+        MadtHeader *header = (MadtHeader *)((UINT64)(&madt->entries) + current);
         if (header->entry_type == MADT_APIC_IO)
         {
-            MadtIOApic *ioapic = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
+            MadtIOApic *ioapic = (MadtIOApic *)((UINT64)(&madt->entries) + current);
             ApicInfo.ioApicAddr = (UINT64)ioapic->address;
         }
         current += (UINT64)header->length;

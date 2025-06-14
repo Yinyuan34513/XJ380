@@ -55,6 +55,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 /*
  *   font
  */
@@ -80,8 +81,10 @@ void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long lon
 char *strncpy(char *dest, const char *src, UINT64 length);
 char *strcpy(char *dest, const char *src);
 UINT64 strlen(const char *str);
-UINT64 strcmp(char *from_str, char *cmp_str);
+UINT64 strcmp(const char *from_str, const char *cmp_str);
+UINT64 strncmp(char *from_str, char *cmp_str, UINT64 size);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
+UINT64 strtol(char *str, char **endptr, int base);
 char *Dec2Char(unsigned long long dec);
 char *Hex2Char(unsigned long long hex);
 char *strstr(const char *haystack, const char *needle);
