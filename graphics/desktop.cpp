@@ -21,18 +21,6 @@ void init_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     int tmpy = scry - 48;
     draw_rect(sht, sheet_id, 0, scry - 48, tmpx - 1, scry - 1, DOCK_COL);
 
-    for (int y = scry - 48; y < scry; y++) {
-        for (int x = tmpx / 3; x < tmpx / 3 + 256; x++) {
-            draw_point(sht, sheet_id, (x + y) % tmpx, y, {0xf5, 0xf5, 0xf5, 0xaa});
-        }
-    }
-
-    for (int y = scry - 48; y < scry; y++) {
-        for (int x = tmpx / 3 + 475; x < tmpx / 3 + 475 + 132; x++) {
-            draw_point(sht, sheet_id, (x + y) % tmpx, y, {0xf5, 0xf5, 0xf5, 0xaa});
-        }
-    }
-
     for (int y = 0; y <= 47; y++)
     {
         for (int x = 0; x <= y; x++)
@@ -51,18 +39,6 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     int x2 = sht->scrx * 0.8125;
     int y2 = 24;
     draw_rect(sht, sheet_id, x1, y1, x2 - 1, y2 - 1, DOCK_COL);
-
-    for (int y = y1; y < y2; y++) {
-        for (int x = x2 / 3; x < x2 / 3 + 256; x++) {
-            draw_point(sht, sheet_id, (x + y) % x2, y, {0xf5, 0xf5, 0xf5, 0xaa});
-        }
-    }
-
-    for (int y = y1; y < y2; y++) {
-        for (int x = x2 / 3 + 475; x < x2 / 3 + 475 + 132; x++) {
-            draw_point(sht, sheet_id, (x + y) % x2, y, {0xf5, 0xf5, 0xf5, 0xaa});
-        }
-    }
 
     draw_studio_logo(sht, sheet_id, x1 + 8, 4);
 

@@ -17,6 +17,8 @@ static heap_block_t *heap_end = NULL;
 static uint64_t heap_base_addr = 0;
 static uint64_t heap_total_size = 0;
 
+spinlock_t malloc_lock;
+
 void memory_init(uint64_t start_addr, uint64_t size)
 {
   if (size < HEAP_MIN_SIZE)
@@ -38,8 +40,12 @@ void memory_init(uint64_t start_addr, uint64_t size)
 
 void *malloc(size_t size)
 {
-  if (size == 0 || heap_start == NULL)
+  spin_lock(&malloc_lock);
+
+  if (size == 0 || heap_start == NULL) {
+    spin_unlock(&malloc_lock);
     return NULL;
+  }
 
   // Align the requested size
   size = (size + HEAP_ALIGNMENT - 1) & ~(HEAP_ALIGNMENT - 1);
@@ -51,6 +57,7 @@ void *malloc(size_t size)
     if ((uint64_t)current < heap_base_addr ||
         (uint64_t)current >= heap_base_addr + heap_total_size)
     {
+      spin_unlock(&malloc_lock);
       return NULL; // Corrupted heap
     }
 
@@ -69,6 +76,7 @@ void *malloc(size_t size)
           {
             // Can't split - just use the whole block
             current->free = false;
+            spin_unlock(&malloc_lock);
             return (void *)((char *)current + HEAP_BLOCK_HEADER_SIZE);
           }
 
@@ -91,23 +99,28 @@ void *malloc(size_t size)
         }
 
         current->free = false;
+        spin_unlock(&malloc_lock);
         return (void *)((char *)current + HEAP_BLOCK_HEADER_SIZE);
       }
     }
     current = current->next;
   }
+  spin_unlock(&malloc_lock);
   return NULL; // No suitable block found
 }
 
 void *realloc(void *ptr, size_t size)
 {
+  spin_lock(&malloc_lock);
   if (ptr == NULL) 
   {
+    spin_unlock(&malloc_lock);
     return NULL;
   }
   else if (size == 0)
   {
     free(ptr);
+    spin_unlock(&malloc_lock);
     return NULL;
   }
   void *new_p;
@@ -117,6 +130,8 @@ void *realloc(void *ptr, size_t size)
     // 你们之后谁有时间谁改一下罢（这个alloc我不太清楚怎么实现的，怕搞炸）
   }
   free(ptr);
+  spin_unlock(&malloc_lock);
+  return new_p;
 }
 
 void free(void *ptr)
