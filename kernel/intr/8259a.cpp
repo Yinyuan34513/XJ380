@@ -4,7 +4,8 @@
  * @brief 初始化8259A中断控制器
  *
  */
-void init_8259A() {
+void init_8259A()
+{
     outb(INT_M_CTL, 0x11);
     outb(INT_S_CTL, 0x11);
 
@@ -25,7 +26,8 @@ void init_8259A() {
  * @brief 禁用8259A中断控制器
  *
  */
-void disable_8259A() {
+void disable_8259A()
+{
     outb(INT_M_CTLMASK, 0xff);
     outb(INT_S_CTLMASK, 0xff);
 }

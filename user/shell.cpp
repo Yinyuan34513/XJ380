@@ -1,21 +1,26 @@
-#include "./xapi/include/xguiapi.h"
 #include "./xapi/include/xposix.h"
+#include "./xapi/include/xguiapi.h"
 
 HDLE handle;
-void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData) {
+void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData) 
+{
     WSTR str;
     str[0] = lData;
-    switch (Type) {
-    case MSG_CHAR: xapi_DrawText(handle, 100, 100, str, 11, 0x000000ff); break;
+    switch (Type) 
+    {
+        case MSG_CHAR:
+            xapi_DrawText(handle, 100, 100, str, 11, 0x000000ff);
+            break;
     }
 }
 
-int main(int argc, char *argv[], char *envp[]) {
+int main(int argc, char *argv[], char *envp[])
+{
     write(1, "shell process is running!!!\n", 0);
 
     XWINDOW Winfo;
-    Winfo.title  = "终端";
-    Winfo.width  = 320;
+    Winfo.title = "终端";
+    Winfo.width = 320;
     Winfo.height = 180;
     xapi_CreateWindow(&handle, &Winfo);
     xapi_SetWindowTitle(handle, "Terminal");

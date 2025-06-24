@@ -2,7 +2,8 @@
 
 #include "../../../include.h"
 
-typedef struct _KEY_EVENT_RING {
+typedef struct _KEY_EVENT_RING
+{
     uint16_t CNT;
     uint16_t NID;
     uint16_t EID;

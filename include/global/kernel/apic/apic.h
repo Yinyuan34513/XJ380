@@ -3,7 +3,8 @@
 
 #pragma pack(1)
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 #include "../../../efi.h"
 #ifdef __cplusplus
@@ -16,161 +17,166 @@ extern "C" {
 
 // CPUID命令
 #define CPUID_ECX_x2APIC 1 << 21
-#define CPUID_EDX_APIC   1 << 9
+#define CPUID_EDX_APIC 1 << 9
 
 // MSR IA32_APIC_BASE
-#define MSR_IA32_APIC_BASE      0x1b
-#define xAPIC_ENABLE            1 << 11
-#define x2APIC_ENABLE           1 << 10
+#define MSR_IA32_APIC_BASE 0x1b
+#define xAPIC_ENABLE 1 << 11
+#define x2APIC_ENABLE 1 << 10
 #define IA32_APIC_SVR_MSR_LAPIC 1 << 8
 
 // LocalAPIC寄存器偏移量
 // 0x00 ~ 0x10 Reserved.
-#define LAPIC_ID_OFFEST          0x20
-#define LAPIC_VERSION_OFFEST     0x30
+#define LAPIC_ID_OFFEST 0x20
+#define LAPIC_VERSION_OFFEST 0x30
 // 0x40 ~ 0x70 Reserved.
-#define LAPIC_TPR_OFFEST         0x80
-#define LAPIC_APR_OFFEST         0x90
-#define LAPIC_PPR_OFFEST         0xa0
-#define LAPIC_EOI_OFFEST         0xb0
-#define LAPIC_RRD_OFFEST         0xc0
-#define LAPIC_LDR_OFFEST         0xd0
-#define LAPIC_DFR_OFFEST         0xe0
-#define LAPIC_SVR_OFFEST         0xf0
+#define LAPIC_TPR_OFFEST 0x80
+#define LAPIC_APR_OFFEST 0x90
+#define LAPIC_PPR_OFFEST 0xa0
+#define LAPIC_EOI_OFFEST 0xb0
+#define LAPIC_RRD_OFFEST 0xc0
+#define LAPIC_LDR_OFFEST 0xd0
+#define LAPIC_DFR_OFFEST 0xe0
+#define LAPIC_SVR_OFFEST 0xf0
 // 0x100 ~ 0x2e0 懒得一个个打了，反正也用不着，要用了再说
-#define LAPIC_LVT_CMCI_OFFEST    0x2f0
-#define LAPIC_ICR_OFFEST         0x300
+#define LAPIC_LVT_CMCI_OFFEST 0x2f0
+#define LAPIC_ICR_OFFEST 0x300
 // 懒得打了
-#define LAPIC_LVT_TIMER_OFFEST   0x320
+#define LAPIC_LVT_TIMER_OFFEST 0x320
 #define LAPIC_LVT_THERMAL_OFFEST 0x330
 #define LAPIC_LVT_PERFORM_OFFEST 0x340
-#define LAPIC_LVT_LINT0_OFFEST   0x350
-#define LAPIC_LVT_LINT1_OFFEST   0x360
-#define LAPIC_LVT_ERROR_OFFEST   0x370
-#define LAPIC_INITCNT_OFFEST     0x380
-#define LAPIC_CURCNT_OFFEST      0x390
+#define LAPIC_LVT_LINT0_OFFEST 0x350
+#define LAPIC_LVT_LINT1_OFFEST 0x360
+#define LAPIC_LVT_ERROR_OFFEST 0x370
+#define LAPIC_INITCNT_OFFEST 0x380
+#define LAPIC_CURCNT_OFFEST 0x390
 // 0x3a0 ~ 0x3d0 Reserved.
-#define LAPIC_DIVTIMER_OFFEST    0x3e0
+#define LAPIC_DIVTIMER_OFFEST 0x3e0
 
-struct APIC_INFO {
-    bool   x2Apic;
+struct APIC_INFO
+{
+    bool x2Apic;
     UINT64 LocalApicAddr;
     UINT64 ioApicAddr;
 };
 
-#define MADT_APIC_LOCAL   0x00
-#define MADT_APIC_IO      0x01
+#define MADT_APIC_LOCAL 0x00
+#define MADT_APIC_IO 0x01
 #define MADT_X2APIC_LOCAL 0x09
 
-#define LAPIC_REG_ID            32
-#define LAPIC_REG_TIMER_CURCNT  0x390
+#define LAPIC_REG_ID 32
+#define LAPIC_REG_TIMER_CURCNT 0x390
 #define LAPIC_REG_TIMER_INITCNT 0x380
-#define LAPIC_REG_TIMER         0x320
-#define LAPIC_REG_SPURIOUS      0xf0
-#define LAPIC_REG_TIMER_DIV     0x3e0
+#define LAPIC_REG_TIMER 0x320
+#define LAPIC_REG_SPURIOUS 0xf0
+#define LAPIC_REG_TIMER_DIV 0x3e0
 
 #include "hpet.h"
 
-void   lapic_write(UINT32 reg, UINT64 value);
+void lapic_write(UINT32 reg, UINT64 value);
 UINT32 lapic_read(UINT32 reg);
 
-typedef struct {
+typedef struct
+{
     struct ACPISDTHeader h;
-    uint32_t             local_apic_address;
-    uint32_t             flags;
-    void                *entries;
+    uint32_t local_apic_address;
+    uint32_t flags;
+    void *entries;
 } __attribute__((packed)) MADT;
 
-struct madt_hander {
+struct madt_hander
+{
     uint8_t entry_type;
     uint8_t length;
 } __attribute__((packed));
 
-struct madt_local_apic {
+struct madt_local_apic
+{
     // type=0
     struct madt_hander h;
-    uint8_t            ACPI_Processor_UID;
+    uint8_t ACPI_Processor_UID;
     // 处理器的local apic id
-    uint8_t            local_apic_id;
+    uint8_t local_apic_id;
     // 详见 ACPI Specification Version 6.3, Table 5-47
-    uint32_t           flags;
+    uint32_t flags;
 };
 
-struct madt_x2_localapic {
+struct madt_x2_localapic
+{
     struct madt_hander h;
-    uint8_t            reserved[2];
-    uint32_t           x2apic_id;
-    uint32_t           flags;
-    uint32_t           acpi_processor_uid;
+    uint8_t reserved[2];
+    uint32_t x2apic_id;
+    uint32_t flags;
+    uint32_t acpi_processor_uid;
 } __attribute__((packed));
 
-struct madt_io_apic {
+struct madt_io_apic
+{
     struct madt_hander h;
-    uint8_t            apic_id;
-    uint8_t            reserved;
-    uint32_t           address;
-    uint32_t           gsib;
+    uint8_t apic_id;
+    uint8_t reserved;
+    uint32_t address;
+    uint32_t gsib;
 } __attribute__((packed));
 
-typedef struct madt_hander       MadtHeader;
-typedef struct madt_local_apic   MadtLocalApic;
+typedef struct madt_hander MadtHeader;
+typedef struct madt_local_apic MadtLocalApic;
 typedef struct madt_x2_localapic MadtLocalX2apic;
-typedef struct madt_io_apic      MadtIOApic;
+typedef struct madt_io_apic MadtIOApic;
 
 extern UINT64 lapic_id();
 
 // About register irq
 
-#define SAVE_ALL                                                                                   \
-    "cld;			\n\t"                                                                                  \
-    "pushq	%rax;		\n\t"                                                                            \
-    "pushq	%rax;		\n\t"                                                                            \
-    "movq	%es,	%rax;	\n\t"                                                                         \
-    "pushq	%rax;		\n\t"                                                                            \
-    "movq	%ds,	%rax;	\n\t"                                                                         \
-    "pushq	%rax;		\n\t"                                                                            \
-    "xorq	%rax,	%rax;	\n\t"                                                                        \
-    "pushq	%rbp;		\n\t"                                                                            \
-    "pushq	%rdi;		\n\t"                                                                            \
-    "pushq	%rsi;		\n\t"                                                                            \
-    "pushq	%rdx;		\n\t"                                                                            \
-    "pushq	%rcx;		\n\t"                                                                            \
-    "pushq	%rbx;		\n\t"                                                                            \
-    "pushq	%r8;		\n\t"                                                                             \
-    "pushq	%r9;		\n\t"                                                                             \
-    "pushq	%r10;		\n\t"                                                                            \
-    "pushq	%r11;		\n\t"                                                                            \
-    "pushq	%r12;		\n\t"                                                                            \
-    "pushq	%r13;		\n\t"                                                                            \
-    "pushq	%r14;		\n\t"                                                                            \
-    "pushq	%r15;		\n\t"                                                                            \
-    "movq	$0x10,	%rdx;	\n\t"                                                                       \
-    "movq	%rdx,	%ds;	\n\t"                                                                         \
+#define SAVE_ALL             \
+    "cld;			\n\t"            \
+    "pushq	%rax;		\n\t"      \
+    "pushq	%rax;		\n\t"      \
+    "movq	%es,	%rax;	\n\t"   \
+    "pushq	%rax;		\n\t"      \
+    "movq	%ds,	%rax;	\n\t"   \
+    "pushq	%rax;		\n\t"      \
+    "xorq	%rax,	%rax;	\n\t"  \
+    "pushq	%rbp;		\n\t"      \
+    "pushq	%rdi;		\n\t"      \
+    "pushq	%rsi;		\n\t"      \
+    "pushq	%rdx;		\n\t"      \
+    "pushq	%rcx;		\n\t"      \
+    "pushq	%rbx;		\n\t"      \
+    "pushq	%r8;		\n\t"       \
+    "pushq	%r9;		\n\t"       \
+    "pushq	%r10;		\n\t"      \
+    "pushq	%r11;		\n\t"      \
+    "pushq	%r12;		\n\t"      \
+    "pushq	%r13;		\n\t"      \
+    "pushq	%r14;		\n\t"      \
+    "pushq	%r15;		\n\t"      \
+    "movq	$0x10,	%rdx;	\n\t" \
+    "movq	%rdx,	%ds;	\n\t"   \
     "movq	%rdx,	%es;	\n\t"
 
 #define IRQ_NAME2(nr) nr##_interrupt(void)
-#define IRQ_NAME(nr)  IRQ_NAME2(IRQ##nr)
+#define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
 
-#define BUILD_IRQ(nr)                                                                              \
-    extern "C" void IRQ_NAME(nr);                                                                  \
-    __asm__(".section .text\n\t" SYMBOL_NAME_STR(IRQ) #nr                                          \
-            "_interrupt:		\n\t"                                                                    \
-            "pushq	$0x00				\n\t" SAVE_ALL "movq	%rsp,	%rdi			\n\t"                    \
-            "leaq	ret_from_intr(%rip),	%rax	\n\t"                                                  \
-            "pushq	%rax				\n\t"                                                                   \
-            "movq	$" #nr ",	%rsi			\n\t"                                                         \
-            "jmp	c_do_irq	\n\t");
+#define BUILD_IRQ(nr)                                                                                  \
+    extern "C" void IRQ_NAME(nr);                                                                      \
+    __asm__(".section .text\n\t" SYMBOL_NAME_STR(IRQ) #nr "_interrupt:		\n\t"                          \
+                                                          "pushq	$0x00				\n\t" SAVE_ALL \
+                                                          "movq	%rsp,	%rdi			\n\t"                     \
+                                                          "leaq	ret_from_intr(%rip),	%rax	\n\t"        \
+                                                          "pushq	%rax				\n\t"                         \
+                                                          "movq	$" #nr ",	%rsi			\n\t"                 \
+                                                          "jmp	c_do_irq	\n\t");
 
-typedef struct {
+typedef struct
+{
     char *name;
     void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code);
     uint64_t arg;
     uint64_t flags;
 } IrqDesc;
 
-void register_irq(const char *name, uint64_t irq,
-                  void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code),
-                  uint64_t arg);
+void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code), uint64_t arg);
 void unregister_irq(uint64_t irq);
 
 #pragma pack()

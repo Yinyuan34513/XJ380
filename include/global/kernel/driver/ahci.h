@@ -2,35 +2,37 @@
 
 #include "../../../include.h"
 
-#define SATA_SIG_ATA   0x00000101 // SATA drive
+#define SATA_SIG_ATA 0x00000101   // SATA drive
 #define SATA_SIG_ATAPI 0xEB140101 // SATAPI drive
-#define SATA_SIG_SEMB  0xC33C0101 // Enclosure management bridge
-#define SATA_SIG_PM    0x96690101 // Port multiplier
-#define HBA_PxCMD_ST   0x0001
-#define HBA_PxCMD_FRE  0x0010
-#define HBA_PxCMD_FR   0x4000
-#define HBA_PxCMD_CR   0x8000
-#define HBA_PxIS_TFES  (1 << 30) /* TFES - Task File Error Status */
+#define SATA_SIG_SEMB 0xC33C0101  // Enclosure management bridge
+#define SATA_SIG_PM 0x96690101    // Port multiplier
+#define HBA_PxCMD_ST 0x0001
+#define HBA_PxCMD_FRE 0x0010
+#define HBA_PxCMD_FR 0x4000
+#define HBA_PxCMD_CR 0x8000
+#define HBA_PxIS_TFES (1 << 30) /* TFES - Task File Error Status */
 
-#define AHCI_DEV_NULL   0
-#define AHCI_DEV_SATA   1
-#define AHCI_DEV_SEMB   2
-#define AHCI_DEV_PM     3
+#define AHCI_DEV_NULL 0
+#define AHCI_DEV_SATA 1
+#define AHCI_DEV_SEMB 2
+#define AHCI_DEV_PM 3
 #define AHCI_DEV_SATAPI 4
 
-#define HBA_PORT_IPM_ACTIVE  1
+#define HBA_PORT_IPM_ACTIVE 1
 #define HBA_PORT_DET_PRESENT 3
-typedef enum {
-    FIS_TYPE_REG_H2D   = 0x27, // Register FIS - host to device
-    FIS_TYPE_REG_D2H   = 0x34, // Register FIS - device to host
-    FIS_TYPE_DMA_ACT   = 0x39, // DMA activate FIS - device to host
+typedef enum
+{
+    FIS_TYPE_REG_H2D = 0x27,   // Register FIS - host to device
+    FIS_TYPE_REG_D2H = 0x34,   // Register FIS - device to host
+    FIS_TYPE_DMA_ACT = 0x39,   // DMA activate FIS - device to host
     FIS_TYPE_DMA_SETUP = 0x41, // DMA setup FIS - bidirectional
-    FIS_TYPE_DATA      = 0x46, // Data FIS - bidirectional
-    FIS_TYPE_BIST      = 0x58, // BIST activate FIS - bidirectional
+    FIS_TYPE_DATA = 0x46,      // Data FIS - bidirectional
+    FIS_TYPE_BIST = 0x58,      // BIST activate FIS - bidirectional
     FIS_TYPE_PIO_SETUP = 0x5F, // PIO setup FIS - device to host
-    FIS_TYPE_DEV_BITS  = 0xA1, // Set device bits FIS - device to host
+    FIS_TYPE_DEV_BITS = 0xA1,  // Set device bits FIS - device to host
 } FIS_TYPE;
-typedef volatile struct tagHBA_PORT {
+typedef volatile struct tagHBA_PORT
+{
     uint32_t clb;       // 0x00, command list base address, 1K-byte aligned
     uint32_t clbu;      // 0x04, command list base address upper 32 bits
     uint32_t fb;        // 0x08, FIS base address, 256-byte aligned
@@ -51,7 +53,8 @@ typedef volatile struct tagHBA_PORT {
     uint32_t rsv1[11];  // 0x44 ~ 0x6F, Reserved
     uint32_t vendor[4]; // 0x70 ~ 0x7F, vendor specific
 } HBA_PORT;
-typedef volatile struct tagHBA_MEM {
+typedef volatile struct tagHBA_MEM
+{
     // 0x00 - 0x2B, Generic Host Control
     uint32_t cap;     // 0x00, Host capability
     uint32_t ghc;     // 0x04, Global host control
@@ -74,18 +77,19 @@ typedef volatile struct tagHBA_MEM {
     // 0x100 - 0x10FF, Port control registers
     HBA_PORT ports[1]; // 1 ~ 32
 } HBA_MEM;
-typedef struct tagHBA_CMD_HEADER {
+typedef struct tagHBA_CMD_HEADER
+{
     // DW0
     uint8_t cfl : 5; // Command FIS length in DWORDS, 2 ~ 16
-    uint8_t a   : 1; // ATAPI
-    uint8_t w   : 1; // Write, 1: H2D, 0: D2H
-    uint8_t p   : 1; // Prefetchable
+    uint8_t a : 1;   // ATAPI
+    uint8_t w : 1;   // Write, 1: H2D, 0: D2H
+    uint8_t p : 1;   // Prefetchable
 
-    uint8_t r    : 1; // Reset
-    uint8_t b    : 1; // BIST
-    uint8_t c    : 1; // Clear busy upon R_OK
+    uint8_t r : 1;    // Reset
+    uint8_t b : 1;    // BIST
+    uint8_t c : 1;    // Clear busy upon R_OK
     uint8_t rsv0 : 1; // Reserved
-    uint8_t pmp  : 4; // Port multiplier port
+    uint8_t pmp : 4;  // Port multiplier port
 
     uint16_t prdtl; // Physical region descriptor table length in entries
 
@@ -99,13 +103,14 @@ typedef struct tagHBA_CMD_HEADER {
     // DW4 - 7
     uint32_t rsv1[4]; // Reserved
 } HBA_CMD_HEADER;
-typedef struct tagFIS_REG_H2D {
+typedef struct tagFIS_REG_H2D
+{
     // DWORD 0
     uint8_t fis_type; // FIS_TYPE_REG_H2D
 
     uint8_t pmport : 4; // Port multiplier
-    uint8_t rsv0   : 3; // Reserved
-    uint8_t c      : 1; // 1: Command, 0: Control
+    uint8_t rsv0 : 3;   // Reserved
+    uint8_t c : 1;      // 1: Command, 0: Control
 
     uint8_t command;  // Command register
     uint8_t featurel; // Feature register, 7:0
@@ -131,14 +136,15 @@ typedef struct tagFIS_REG_H2D {
     // DWORD 4
     uint8_t rsv1[4]; // Reserved
 } FIS_REG_H2D;
-typedef struct tagFIS_REG_D2H {
+typedef struct tagFIS_REG_D2H
+{
     // DWORD 0
     uint8_t fis_type; // FIS_TYPE_REG_D2H
 
     uint8_t pmport : 4; // Port multiplier
-    uint8_t rsv0   : 2; // Reserved
-    uint8_t i      : 1; // Interrupt bit
-    uint8_t rsv1   : 1; // Reserved
+    uint8_t rsv0 : 2;   // Reserved
+    uint8_t i : 1;      // Interrupt bit
+    uint8_t rsv1 : 1;   // Reserved
 
     uint8_t status; // Status register
     uint8_t error;  // Error register
@@ -163,27 +169,29 @@ typedef struct tagFIS_REG_D2H {
     // DWORD 4
     uint8_t rsv4[4]; // Reserved
 } FIS_REG_D2H;
-typedef struct tagFIS_DATA {
+typedef struct tagFIS_DATA
+{
     // DWORD 0
     uint8_t fis_type; // FIS_TYPE_DATA
 
     uint8_t pmport : 4; // Port multiplier
-    uint8_t rsv0   : 4; // Reserved
+    uint8_t rsv0 : 4;   // Reserved
 
     uint8_t rsv1[2]; // Reserved
 
     // DWORD 1 ~ N
     uint32_t data[1]; // Payload
 } FIS_DATA;
-typedef struct tagFIS_PIO_SETUP {
+typedef struct tagFIS_PIO_SETUP
+{
     // DWORD 0
     uint8_t fis_type; // FIS_TYPE_PIO_SETUP
 
     uint8_t pmport : 4; // Port multiplier
-    uint8_t rsv0   : 1; // Reserved
-    uint8_t d      : 1; // Data transfer direction, 1 - device to host
-    uint8_t i      : 1; // Interrupt bit
-    uint8_t rsv1   : 1;
+    uint8_t rsv0 : 1;   // Reserved
+    uint8_t d : 1;      // Data transfer direction, 1 - device to host
+    uint8_t i : 1;      // Interrupt bit
+    uint8_t rsv1 : 1;
 
     uint8_t status; // Status register
     uint8_t error;  // Error register
@@ -207,18 +215,19 @@ typedef struct tagFIS_PIO_SETUP {
     uint8_t e_status; // New value of status register
 
     // DWORD 4
-    uint16_t tc;      // Transfer count
-    uint8_t  rsv4[2]; // Reserved
+    uint16_t tc;     // Transfer count
+    uint8_t rsv4[2]; // Reserved
 } FIS_PIO_SETUP;
-typedef struct tagFIS_DMA_SETUP {
+typedef struct tagFIS_DMA_SETUP
+{
     // DWORD 0
     uint8_t fis_type; // FIS_TYPE_DMA_SETUP
 
     uint8_t pmport : 4; // Port multiplier
-    uint8_t rsv0   : 1; // Reserved
-    uint8_t d      : 1; // Data transfer direction, 1 - device to host
-    uint8_t i      : 1; // Interrupt bit
-    uint8_t a      : 1; // Auto-activate. Specifies if DMA Activate FIS is needed
+    uint8_t rsv0 : 1;   // Reserved
+    uint8_t d : 1;      // Data transfer direction, 1 - device to host
+    uint8_t i : 1;      // Interrupt bit
+    uint8_t a : 1;      // Auto-activate. Specifies if DMA Activate FIS is needed
 
     uint8_t rsved[2]; // Reserved
 
@@ -241,17 +250,19 @@ typedef struct tagFIS_DMA_SETUP {
     uint32_t resvd; // Reserved
 
 } FIS_DMA_SETUP;
-typedef struct tagHBA_PRDT_ENTRY {
+typedef struct tagHBA_PRDT_ENTRY
+{
     uint32_t dba;  // Data base address
     uint32_t dbau; // Data base address upper 32 bits
     uint32_t rsv0; // Reserved
 
     // DW3
-    uint32_t dbc  : 22; // Byte count, 4M max
-    uint32_t rsv1 : 9;  // Reserved
-    uint32_t i    : 1;  // Interrupt on completion
+    uint32_t dbc : 22; // Byte count, 4M max
+    uint32_t rsv1 : 9; // Reserved
+    uint32_t i : 1;    // Interrupt on completion
 } HBA_PRDT_ENTRY;
-typedef struct tagHBA_CMD_TBL {
+typedef struct tagHBA_CMD_TBL
+{
     // 0x00
     uint8_t cfis[64]; // Command FIS
 
@@ -265,39 +276,40 @@ typedef struct tagHBA_CMD_TBL {
     HBA_PRDT_ENTRY
     prdt_entry[1]; // Physical region descriptor table entries, 0 ~ 65535
 } HBA_CMD_TBL;
-typedef struct SATA_Ident {
-    uint16_t config;        /* lots of obsolete bit flags */
-    uint16_t cyls;          /* obsolete */
-    uint16_t reserved2;     /* special config */
-    uint16_t heads;         /* "physical" heads */
-    uint16_t track_bytes;   /* unformatted bytes per track */
-    uint16_t sector_bytes;  /* unformatted bytes per sector */
-    uint16_t sectors;       /* "physical" sectors per track */
-    uint16_t vendor0;       /* vendor unique */
-    uint16_t vendor1;       /* vendor unique */
-    uint16_t vendor2;       /* vendor unique */
-    uint8_t  serial_no[20]; /* 0 = not_specified */
+typedef struct SATA_Ident
+{
+    uint16_t config;       /* lots of obsolete bit flags */
+    uint16_t cyls;         /* obsolete */
+    uint16_t reserved2;    /* special config */
+    uint16_t heads;        /* "physical" heads */
+    uint16_t track_bytes;  /* unformatted bytes per track */
+    uint16_t sector_bytes; /* unformatted bytes per sector */
+    uint16_t sectors;      /* "physical" sectors per track */
+    uint16_t vendor0;      /* vendor unique */
+    uint16_t vendor1;      /* vendor unique */
+    uint16_t vendor2;      /* vendor unique */
+    uint8_t serial_no[20]; /* 0 = not_specified */
     uint16_t buf_type;
     uint16_t buf_size;             /* 512 byte increments; 0 = not_specified */
     uint16_t ecc_bytes;            /* for r/w long cmds; 0 = not_specified */
-    uint8_t  fw_rev[8];            /* 0 = not_specified */
-    uint8_t  model[40];            /* 0 = not_specified */
+    uint8_t fw_rev[8];             /* 0 = not_specified */
+    uint8_t model[40];             /* 0 = not_specified */
     uint16_t multi_count;          /* Multiple Count */
     uint16_t dword_io;             /* 0=not_implemented; 1=implemented */
     uint16_t capability1;          /* vendor unique */
     uint16_t capability2;          /* bits 0:DMA 1:LBA 2:IORDYsw 3:IORDYsup word: 50 */
-    uint8_t  vendor5;              /* vendor unique */
-    uint8_t  tPIO;                 /* 0=slow, 1=medium, 2=fast */
-    uint8_t  vendor6;              /* vendor unique */
-    uint8_t  tDMA;                 /* 0=slow, 1=medium, 2=fast */
+    uint8_t vendor5;               /* vendor unique */
+    uint8_t tPIO;                  /* 0=slow, 1=medium, 2=fast */
+    uint8_t vendor6;               /* vendor unique */
+    uint8_t tDMA;                  /* 0=slow, 1=medium, 2=fast */
     uint16_t field_valid;          /* bits 0:cur_ok 1:eide_ok */
     uint16_t cur_cyls;             /* logical cylinders */
     uint16_t cur_heads;            /* logical heads word 55*/
     uint16_t cur_sectors;          /* logical sectors per track */
     uint16_t cur_capacity0;        /* logical total sectors on drive */
     uint16_t cur_capacity1;        /*  (2 words, misaligned int)     */
-    uint8_t  multsect;             /* current multiple sector count */
-    uint8_t  multsect_valid;       /* when (bit0==1) multsect is ok */
+    uint8_t multsect;              /* current multiple sector count */
+    uint8_t multsect_valid;        /* when (bit0==1) multsect is ok */
     uint32_t lba_capacity;         /* total number of sectors */
     uint16_t dma_1word;            /* single-word dma info */
     uint16_t dma_mword;            /* multiple-word dma info */
@@ -366,7 +378,7 @@ typedef struct SATA_Ident {
     uint16_t words157_159[3];     /* reserved vendor words 157-159 */
     uint16_t cfa;                 /* CFA Power mode 1 */
     uint16_t words161_175[15];    /* Reserved */
-    uint8_t  media_serial[60];    /* words 176-205 Current Media serial number */
+    uint8_t media_serial[60];     /* words 176-205 Current Media serial number */
     uint16_t sct_cmd_transport;   /* SCT Command Transport */
     uint16_t words207_208[2];     /* reserved */
     uint16_t block_align;         /* Alignement of logical blocks in larger physical blocks */
@@ -390,8 +402,9 @@ typedef struct SATA_Ident {
     uint16_t integrity;           /* Cheksum, Signature */
 } SATA_ident_t;
 
-typedef struct {
-    int          i;
+typedef struct
+{
+    int i;
     SATA_ident_t ident;
 } AHCI_PORT;
 
