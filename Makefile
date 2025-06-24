@@ -1,8 +1,8 @@
 ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -I./include
-CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
+C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c99 -fshort-wchar -nostdinc -I./include
+CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
 
-DEBUG ?= 1
+DEBUG ?= 0
 SMP ?= 4
 SUDO ?= 0
 KVM ?= 0
