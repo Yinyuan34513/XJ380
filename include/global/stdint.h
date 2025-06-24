@@ -4,8 +4,7 @@
 #define _STDINT_H_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 #include "../efi.h"
 #ifdef __cplusplus
@@ -14,18 +13,18 @@ extern "C"
 
 // 规范类型
 // 无符号整型
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
+typedef unsigned char      uint8_t;
+typedef unsigned short     uint16_t;
+typedef unsigned int       uint32_t;
 typedef unsigned long long uint64_t;
 // 有符号整型
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef long long int64_t;
+typedef char               int8_t;
+typedef short              int16_t;
+typedef int                int32_t;
+typedef long long          int64_t;
 // 浮点型
-typedef float float32_t;
-typedef double float64_t;
+typedef float              float32_t;
+typedef double             float64_t;
 
 // 自定义类型
 // 其他的在efi.h里

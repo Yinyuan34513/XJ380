@@ -1,21 +1,20 @@
 #include "../include/backtrace.h"
 
 extern uint64_t kallsyms_addresses[] __attribute__((weak));
-extern long kallsyms_syms_num __attribute__((weak));
-extern long kallsyms_index[] __attribute__((weak));
-extern char *kallsyms_names __attribute__((weak));
+extern long     kallsyms_syms_num __attribute__((weak));
+extern long     kallsyms_index[] __attribute__((weak));
+extern char    *kallsyms_names __attribute__((weak));
 
 extern uint8_t _kernel_start[];
 
-int lookup_kallsyms(uint64_t address, int i)
-{
-    int index = 0;
+int lookup_kallsyms(uint64_t address, int i) {
+    int   index  = 0;
     char *string = (char *)&kallsyms_names;
     for (index = 0; index < kallsyms_syms_num; index++)
-        if (address > kallsyms_addresses[index] && address <= kallsyms_addresses[index + 1] && address >= (uint64_t)&_kernel_start)
+        if (address > kallsyms_addresses[index] && address <= kallsyms_addresses[index + 1] &&
+            address >= (uint64_t)&_kernel_start)
             break;
-    if (index < kallsyms_syms_num)
-    {
+    if (index < kallsyms_syms_num) {
         write_serial_string("backtrace address:");
         write_serial_hex(address);
         write_serial_string(" (+) ");
@@ -32,42 +31,30 @@ int lookup_kallsyms(uint64_t address, int i)
         WriteString(*fbc_addr, 200, 420 + i * 60, &string[kallsyms_index[index]], {0, 0, 0});
         WriteString(*fbc_addr, 8, 440 + i * 60, "--------------------------------", {0, 0, 0});
         return 0;
-    }
-    else
+    } else
         return -1;
 }
 
-void backtrace(struct X64_REGS *regs)
-{
+void backtrace(struct X64_REGS *regs) {
     uint64_t *rbp = (uint64_t *)regs->rbp;
-    if (regs->rbp < 0xFFFF800000000000)
-    {
+    if (regs->rbp < 0xFFFF800000000000) {
         write_serial_string("Fault in user land\n");
         return;
     }
     uint64_t ret_address = *(rbp + 1);
-    int i = 0;
+    int      i           = 0;
 
     write_serial_string("Kernel backtrace:\n");
 
     lookup_kallsyms(regs->rip, 0);
-    for (i = 0; i < 8; i++)
-    {
-        if (lookup_kallsyms(ret_address, i + 1))
-            break;
+    for (i = 0; i < 8; i++) {
+        if (lookup_kallsyms(ret_address, i + 1)) break;
 
-        if ((uint64_t)rbp >= current_task->thread->rsp0 || (uint64_t)rbp < regs->rsp)
-            break;
+        if ((uint64_t)rbp >= current_task->thread->rsp0 || (uint64_t)rbp < regs->rsp) break;
 
-        if (rbp == nullptr)
-        {
-            break;
-        }
+        if (rbp == nullptr) { break; }
         rbp = (uint64_t *)*rbp;
-        if (rbp == nullptr)
-        {
-            break;
-        }
+        if (rbp == nullptr) { break; }
         ret_address = *(rbp + 1);
     }
 

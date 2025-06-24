@@ -4,14 +4,10 @@
 #include "../../include.h"
 
 typedef struct WINDOWLS *WINDOWLSP;
-typedef void (*MsgPrcor)(
-	UINT64 Type, 
-	UINT64 hData, 
-	UINT64 lData
-);  // 别问为什么放在这儿 不放这儿会爆炸
+typedef void (*MsgPrcor)(UINT64 Type, UINT64 hData,
+                         UINT64 lData); // 别问为什么放在这儿 不放这儿会爆炸
 
-struct WINDOWLS
-{
+struct WINDOWLS {
     UINT16    w_sheet;
     UINT8     title_length;
     CHAR8    *title;
@@ -22,8 +18,7 @@ struct WINDOWLS
     WINDOWLSP next;
 };
 
-typedef struct
-{
+typedef struct {
     UINT16    win_num;
     WINDOWLS *start;
 } XWM_INFO;

@@ -2,12 +2,11 @@
 #ifndef _BOOT_H_
 #define _BOOT_H_
 #include "../efi.h"
-#include "./stdint.h"
-#include "./kernel/memory.h"
 #include "./kernel/apic/madt.h"
+#include "./kernel/memory.h"
+#include "./stdint.h"
 
-typedef struct
-{
+typedef struct {
     MEMORY_MAP MemoryMap;
 
     UINT64 MADT;

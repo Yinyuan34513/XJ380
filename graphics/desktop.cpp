@@ -1,10 +1,9 @@
 #include "../include/include.h"
-#include "xj380_logo_rect_72x64px.hpp"
 #include "xingji_logo_16px.hpp"
+#include "xj380_logo_rect_72x64px.hpp"
 
 // 初始化桌面
-void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id)
-{
+void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id) {
     int scrx = sht->scrx;
     int scry = sht->scry;
     // #136dff
@@ -13,18 +12,15 @@ void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id)
     init_shortcut_dock(sht, dock_sheet_id);
 }
 
-void init_dock(SHEET_INFO *sht, UINT16 *sheet_id)
-{
+void init_dock(SHEET_INFO *sht, UINT16 *sheet_id) {
     int scrx = sht->scrx;
     int scry = sht->scry;
     int tmpx = scrx * 0.75; // 75%
     int tmpy = scry - 48;
     draw_rect(sht, sheet_id, 0, scry - 48, tmpx - 1, scry - 1, DOCK_COL);
 
-    for (int y = 0; y <= 47; y++)
-    {
-        for (int x = 0; x <= y; x++)
-        {
+    for (int y = 0; y <= 47; y++) {
+        for (int x = 0; x <= y; x++) {
             draw_point(sht, sheet_id, x + tmpx, y + tmpy, {0xe6, 0xe6, 0xe6, 0xaa});
         }
     }
@@ -32,8 +28,7 @@ void init_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     draw_logo(sht, sheet_id, 24, scry - 24 - 63);
 }
 
-void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
-{
+void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id) {
     int x1 = sht->scrx * 0.1875;
     int y1 = 0;
     int x2 = sht->scrx * 0.8125;
@@ -54,44 +49,28 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8 + 64 + 8, 4, "About", BLACK);
 }
 
-void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi)
-{
-    for (int y = 0; y < 63; y++)
-    {
-        for (int x = 0; x < 73; x++)
-        {
-            if (xj380_logo_rect_72x64px[y][x] == '.')
-            {
+void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi) {
+    for (int y = 0; y < 63; y++) {
+        for (int x = 0; x < 73; x++) {
+            if (xj380_logo_rect_72x64px[y][x] == '.') {
                 // pass
-            }
-            else if (xj380_logo_rect_72x64px[y][x] == '#')
-            {
+            } else if (xj380_logo_rect_72x64px[y][x] == '#') {
                 draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE);
-            }
-            else if (xj380_logo_rect_72x64px[y][x] == '@')
-            {
+            } else if (xj380_logo_rect_72x64px[y][x] == '@') {
                 draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW);
             }
         }
     }
 }
 
-void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi)
-{
-    for (int y = 0; y < 16; y++)
-    {
-        for (int x = 0; x < 16; x++)
-        {
-            if (xingji_logo_16px[y][x] == '.')
-            {
+void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi) {
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            if (xingji_logo_16px[y][x] == '.') {
                 // pass
-            }
-            else if (xingji_logo_16px[y][x] == '@')
-            {
+            } else if (xingji_logo_16px[y][x] == '@') {
                 draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE);
-            }
-            else if (xingji_logo_16px[y][x] == '#')
-            {
+            } else if (xingji_logo_16px[y][x] == '#') {
                 draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW);
             }
         }

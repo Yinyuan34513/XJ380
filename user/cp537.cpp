@@ -8,31 +8,21 @@ char buf[400 * 160];
 #define _ )*2+1
 #define e
 
-int uparrow[16] = {
-    s v v v v v v v v v v v v v v v v e,
-    s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e,
-    s v v v v v v v v v v v v v v v v e,
-    s v v v v v v v v _ v v v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v _ _ _ _ _ _ _ _ _ v v v e,
-    s v v v _ _ _ _ _ _ _ _ _ _ _ v v e,
-    s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v v v v v v v v v v v e
-};
+int uparrow[16] = {s v v v v v v v v v v v v v v v v e, s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e,
+                   s v v v v v v v v v v v v v v v v e, s v v v v v v v v _ v v v v v v v e,
+                   s v v v v v v _ _ _ _ _ v v v v v e, s v v v v _ _ _ _ _ _ _ _ _ v v v e,
+                   s v v v _ _ _ _ _ _ _ _ _ _ _ v v e, s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e,
+                   s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e,
+                   s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e,
+                   s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e,
+                   s v v v v v v v v v v v v v v v v e};
 
 #undef s
 #undef v
 #undef _
 #undef e
 
-void draw_uparrow(HDLE handle, int x, int y)
-{
+void draw_uparrow(HDLE handle, int x, int y) {
     for (int j = 15; j >= 0; j--) {
         for (int i = 0; i < 16; i++) {
             if ((uparrow[i] >> j) & 1) xapi_DrawPoint(handle, x + j, y + i, 0x000000ff);
@@ -40,12 +30,11 @@ void draw_uparrow(HDLE handle, int x, int y)
     }
 }
 
-int main(int argc, char *argv[], char *envp[])
-{
+int main(int argc, char *argv[], char *envp[]) {
     XWINDOW window;
-    window.width = 400;
+    window.width  = 400;
     window.height = 160;
-    window.title = "CP537 Demo";
+    window.title  = "CP537 Demo";
     // window.sets = NORMAL;
     HDLE handle;
     xapi_CreateWindow(&handle, &window);
@@ -55,7 +44,8 @@ int main(int argc, char *argv[], char *envp[])
     xapi_DrawText(handle, 34, 47, "Hmtc 2023/8/14 20:34:37", 10, 0x000000ff);
     xapi_DrawText(handle, 34, 65, "@山地奥斯卡537 另外，不是", 10, 0x000000ff);
     xapi_DrawText(handle, 34, 83, "utf-8吗？", 10, 0x000000ff);
-    xapi_DrawRect(handle, 26, 107, 76, 126, 0x92bbffff, true); // @Hmtc长度5*8=40，此处沿用旧设定，如果不对需要改
+    xapi_DrawRect(handle, 26, 107, 76, 126, 0x92bbffff,
+                  true); // @Hmtc长度5*8=40，此处沿用旧设定，如果不对需要改
     xapi_DrawText(handle, 28, 106, "@Hmtc", 10, 0x000000ff);
     xapi_DrawText(handle, 80, 106, "老兄，中文不支持UTF-8，因为中文是双字符", 10, 0x000000ff);
     draw_uparrow(handle, 365, 75);

@@ -1,12 +1,10 @@
-#include "./include/xposix.h"
 #include "./include/libsys.h"
+#include "./include/xposix.h"
 
-int read(int fd, char *buf, uint64_t len)
-{
+int read(int fd, char *buf, uint64_t len) {
     return enter_syscall(SYS_READ, fd, (uint64_t)buf, len, 0, 0, 0);
 }
 
-int write(int fd, char *buf, uint64_t len)
-{
+int write(int fd, char *buf, uint64_t len) {
     return enter_syscall(SYS_WRITE, fd, (uint64_t)buf, len, 0, 0, 0);
 }

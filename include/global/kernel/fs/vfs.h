@@ -1,10 +1,9 @@
 #pragma once
 
-#define MAX_VNODE_NUM 4096
+#define MAX_VNODE_NUM       4096
 #define MAX_CHILD_VNODE_NUM 512
 
-enum
-{
+enum {
     NODE_TYPE_NONE,
     NODE_TYPE_FILE,
     NODE_TYPE_DIR,
@@ -14,24 +13,22 @@ enum
 #define SEEK_CUR 1
 #define SEEK_END 2
 
-struct timespec
-{
+struct timespec {
     int64_t tv_sec;
     int64_t tv_nsec;
 };
 
-struct stat
-{
-    uint64_t dev_id;
-    uint64_t inode;
-    uint64_t nlink;
-    uint32_t mode;
-    int32_t uid;
-    int32_t gid;
-    int64_t rdev;
-    int64_t size;
-    int64_t block_size;
-    uint64_t blocks;
+struct stat {
+    uint64_t        dev_id;
+    uint64_t        inode;
+    uint64_t        nlink;
+    uint32_t        mode;
+    int32_t         uid;
+    int32_t         gid;
+    int64_t         rdev;
+    int64_t         size;
+    int64_t         block_size;
+    uint64_t        blocks;
     struct timespec atime;
     struct timespec mtime;
     struct timespec ctime;
@@ -43,8 +40,7 @@ struct v_node;
 
 typedef v_node VNode;
 
-typedef struct
-{
+typedef struct {
     // For kernel
     int (*lookup)(VNode *node, VNode *search_node);
     int (*super)(int drive, VNode *result);
@@ -62,10 +58,9 @@ typedef struct
     int (*fmap)(VNode *file, size_t offset, size_t size);
 } VNodeOps;
 
-struct v_node
-{
+struct v_node {
     char *name;
-    int name_len;
+    int   name_len;
 
     uint64_t file_size;
     uint64_t position;
@@ -73,7 +68,7 @@ struct v_node
     VNode *parent;
 
     VNode **childs;
-    int childs_len;
+    int     childs_len;
 
     uint16_t type;
 
@@ -86,19 +81,17 @@ struct v_node
     void *desc;
 };
 
-struct VFile
-{
+struct VFile {
     VNode *file;
     size_t offset;
-    bool readable;
-    bool writeable;
+    bool   readable;
+    bool   writeable;
 };
 
 #define MAX_FS_NUM 8
 
-typedef struct
-{
-    char *name;
+typedef struct {
+    char     *name;
     VNodeOps *ops;
 } FileSystem;
 

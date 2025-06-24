@@ -2,8 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int main(int argc, char *argv[], char *envp[])
-{
+int main(int argc, char *argv[], char *envp[]) {
     printf("init process is running!!!\n");
 
     // uint64_t pid = vfork();
@@ -17,7 +16,8 @@ int main(int argc, char *argv[], char *envp[])
     // {
     //     write(1, "Parent process is running!!!\n", 0);
     // }
-    
-    while(1)__asm__ __volatile__("pause");
+
+    while (1)
+        __asm__ __volatile__("pause");
     return -1;
 }

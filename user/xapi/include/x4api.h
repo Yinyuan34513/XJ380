@@ -12,6 +12,6 @@
 
 #pragma once
 
-#include "xapi.h"
 #include "BridgeEngine.h"
+#include "xapi.h"
 #include "xposix.h"

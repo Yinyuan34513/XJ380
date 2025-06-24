@@ -4,9 +4,8 @@
 
 #include "../../../include.h"
 
-typedef struct wait_queue
-{
-    struct List wait_list;
+typedef struct wait_queue {
+    struct List         wait_list;
     struct task_struct *tsk;
 } wait_queue_t;
 
