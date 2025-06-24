@@ -49,12 +49,4 @@ typedef struct
     UINT8 b;
 } __attribute__((packed)) SHEET_BUFFER_WOA;
 
-typedef struct
-{
-    UINT8 a;
-    UINT8 r;
-    UINT8 g;
-    UINT8 b;
-} SHEET_BUFFER_ARGB;
-
 #endif

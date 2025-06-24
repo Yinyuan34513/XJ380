@@ -111,29 +111,41 @@ void *malloc(size_t size)
 
 void *realloc(void *ptr, size_t size)
 {
-  spin_lock(&malloc_lock);
-  if (ptr == NULL) 
-  {
-    spin_unlock(&malloc_lock);
-    return NULL;
-  }
-  else if (size == 0)
-  {
-    free(ptr);
-    spin_unlock(&malloc_lock);
-    return NULL;
-  }
-  void *new_p;
-  new_p = malloc(size);
-  for (char *p = (char *)(ptr); p < ptr + size; p++) {
-    *(char *)(new_p) = *p;  // copy过去（这块有风险，如果新size大于旧size的话……BOOM
-    // 你们之后谁有时间谁改一下罢（这个alloc我不太清楚怎么实现的，怕搞炸）
-  }
-  free(ptr);
-  spin_unlock(&malloc_lock);
-  return new_p;
-}
+    if (ptr == NULL) {
+        // 如果指针为空，相当于调用 malloc
+        return malloc(size);
+    }
 
+    if (size == 0) {
+        // 如果大小为 0，相当于调用 free
+        free(ptr);
+        return NULL;
+    }
+
+    // 获取当前块的头部
+    heap_block_t *block = (heap_block_t *)((char *)ptr - HEAP_BLOCK_HEADER_SIZE);
+
+    // 如果当前块的大小足够，则直接返回原指针
+    if (block->size >= size) {
+        return ptr;
+    }
+
+    // 分配新的内存块
+    void *new_ptr = malloc(size);
+    if (new_ptr == NULL) {
+        // 如果分配失败，返回 NULL
+        return NULL;
+    }
+
+    // 复制旧数据到新内存块
+    size_t copy_size = block->size < size ? block->size : size;
+    xmemcpy(new_ptr, ptr, copy_size);
+
+    // 释放旧内存块
+    free(ptr);
+
+    return new_ptr;
+}
 void free(void *ptr)
 {
   if (ptr == NULL || heap_start == NULL)
