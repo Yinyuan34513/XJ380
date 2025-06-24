@@ -1,6 +1,8 @@
 #ifndef _CPROTO_HPP_
 #define _CPROTO_HPP_
 
+#include "../efi.h"
+
 /*
  *   lib
  */

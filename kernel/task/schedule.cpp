@@ -5,7 +5,7 @@ struct schedule task_schedule[MAX_CPU_NUM];
 
 struct task_struct *get_next_task(int cpu_id) {
     spin_lock(&get_next_task_lock);
-    struct task_struct *tsk = NULL;
+    struct task_struct *tsk = nullptr;
 
     if (list_is_empty(&task_schedule[cpu_id].task_queue.list)) {
         spin_unlock(&get_next_task_lock);
@@ -44,7 +44,7 @@ void schedule() {
 
     spin_lock(lock);
 
-    struct task_struct *tsk  = NULL;
+    struct task_struct *tsk  = nullptr;
     current_task->flags     &= ~NEED_SCHEDULE;
     tsk                      = get_next_task(cpu_id);
 

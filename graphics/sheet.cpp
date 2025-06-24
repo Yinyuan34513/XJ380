@@ -8,9 +8,9 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht) {
     sht->fbc         = &fbc;
     sht->scrx        = fbc.horizontal_resolution;
     sht->scry        = fbc.vertical_resolution;
-    sht->start       = NULL;
+    sht->start       = nullptr;
     sht->temp_buffer = malloc((sht->scrx * sht->scry * 4) + 4); // 多分配4字节防止溢出啥的
-    if (sht->temp_buffer == NULL) {
+    if (sht->temp_buffer == nullptr) {
         // 没分配成，去世。
         // WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
         while (1) {
@@ -51,21 +51,21 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
     SHEET *front_p = sht->start;
     if (index > 0) {
         // 指定图层高度
-        if (front_p != NULL) {
+        if (front_p != nullptr) {
             SHEET *record = front_p;
             while (true) {
-                if (front_p->next == NULL) {
+                if (front_p->next == nullptr) {
                     break;
                 } else if (front_p->next->index >= index) {
                     break;
                 } else if (record == front_p->next || front_p == front_p->next) {
-                    front_p->next = NULL;
+                    front_p->next = nullptr;
                     break;
                 }
                 front_p = front_p->next;
             }
 
-            if (front_p->next != NULL) {
+            if (front_p->next != nullptr) {
                 // 后继有人，给他踢出去换成自己
                 new_sheet->next      = front_p->next;   // 把自己的下一个标记为曾经的
                 new_sheet->front     = front_p;         // 把自己的上一个标记为上一个
@@ -76,10 +76,10 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
                 // 给后面的全++
                 while (true) {
                     front_p->index++;
-                    if (front_p->next == NULL) {
+                    if (front_p->next == nullptr) {
                         break;
                     } else if (record == front_p->next || front_p == front_p->next) {
-                        front_p->next = NULL;
+                        front_p->next = nullptr;
                         break;
                     }
                     front_p = front_p->next;
@@ -142,12 +142,12 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
     } else {
         // 随便分配
         // 直接分配下一个
-        if (front_p != NULL) {
+        if (front_p != nullptr) {
             for (int i = 0; i < sht->sheet_num - 2; i++) {
                 front_p = front_p->next;
             }
 
-            if (front_p->next == NULL) {
+            if (front_p->next == nullptr) {
                 front_p->next    = new_sheet;
                 new_sheet->front = front_p;
             } else {
@@ -201,8 +201,8 @@ UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id) {
     while (true) {
         if (front_p->index == *sheet_id) {
             return front_p->bx;
-        } else if (front_p->next == NULL) {
-            return NULL;
+        } else if (front_p->next == nullptr) {
+            return 0;
         }
         front_p = front_p->next;
     }
@@ -213,8 +213,8 @@ UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id) {
     while (true) {
         if (front_p->index == *sheet_id) {
             return front_p->by;
-        } else if (front_p->next == NULL) {
-            return NULL;
+        } else if (front_p->next == nullptr) {
+            return 0;
         }
         front_p = front_p->next;
     }
@@ -225,8 +225,8 @@ UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id) {
     while (true) {
         if (front_p->index == *sheet_id) {
             return front_p->width;
-        } else if (front_p->next == NULL) {
-            return NULL;
+        } else if (front_p->next == nullptr) {
+            return 0;
         }
         front_p = front_p->next;
     }
@@ -237,8 +237,8 @@ UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id) {
     while (true) {
         if (front_p->index == *sheet_id) {
             return front_p->height;
-        } else if (front_p->next == NULL) {
-            return NULL;
+        } else if (front_p->next == nullptr) {
+            return 0;
         }
         front_p = front_p->next;
     }
@@ -247,17 +247,17 @@ UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id) {
 UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y) {
     SHEET *front_p = sht->start;
     while (true) {
-        if (front_p->next == NULL) {
+        if (front_p->next == nullptr) {
             while (true) {
                 if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
                     front_p->by + front_p->height >= y) {
                     return &front_p->index;
-                } else if (front_p->front == NULL) {
-                    return NULL;
+                } else if (front_p->front == nullptr) {
+                    return nullptr;
                 }
                 front_p = front_p->front;
             }
-            return NULL;
+            return nullptr;
         }
         front_p = front_p->next;
     }
@@ -266,17 +266,17 @@ UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y) {
 UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y) {
     SHEET *front_p = sht->start;
     while (true) {
-        if (front_p->next == NULL) {
+        if (front_p->next == nullptr) {
             while (true) {
                 if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
                     front_p->by + front_p->height >= y && front_p->type == MovableSheetType) {
                     return &front_p->index;
-                } else if (front_p->front == NULL) {
-                    return NULL;
+                } else if (front_p->front == nullptr) {
+                    return nullptr;
                 }
                 front_p = front_p->front;
             }
-            return NULL;
+            return nullptr;
         }
         front_p = front_p->next;
     }
@@ -285,18 +285,18 @@ UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y) {
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y) {
     SHEET *front_p = sht->start;
     while (true) {
-        if (front_p->next == NULL) {
+        if (front_p->next == nullptr) {
             while (true) {
                 if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x &&
                     front_p->by <= y && front_p->by + 22 >= y &&
                     front_p->type == MovableSheetType) {
                     return &front_p->index;
-                } else if (front_p->front == NULL) {
-                    return NULL;
+                } else if (front_p->front == nullptr) {
+                    return nullptr;
                 }
                 front_p = front_p->front;
             }
-            return NULL;
+            return nullptr;
         }
         front_p = front_p->next;
     }
@@ -307,8 +307,8 @@ SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id) {
     while (true) {
         if (front_p->index == *sheet_id) {
             return front_p;
-        } else if (front_p->next == NULL) {
-            return NULL;
+        } else if (front_p->next == nullptr) {
+            return nullptr;
         }
         front_p = front_p->next;
     }
@@ -320,7 +320,7 @@ void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num) {
         if (front_p->index == *sheet_id) {
             front_p->bx = num;
             return;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;
@@ -333,7 +333,7 @@ void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num) {
         if (front_p->index == *sheet_id) {
             front_p->by = num;
             return;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;
@@ -359,7 +359,7 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id) {
             write_serial_dec(*sheet_id);
             write_serial_string("\n");
             return;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             write_serial_string("Sheet Delete Faild. SheetID: ");
             write_serial_dec(*sheet_id);
             write_serial_string("\n");
@@ -387,7 +387,7 @@ void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id) {
             front_p2->next       = front_p;
             front_p->front       = front_p2;
             return;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;

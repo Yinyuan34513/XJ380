@@ -47,13 +47,13 @@ FILE *fopen(const char *filename, const char *mode) {
     if (v->file_size <= 0) {
         if (flag & READ) {
             free(fp);
-            return NULL; // 找不到
+            return nullptr; // 找不到
         }
         // vfs似乎没有创建文件
         // if (flag & WRITE || flag & APPEND) {
         // 	if (!mkfile(filename)) {
         // 		free(fp);
-        // 		return NULL;
+        // 		return nullptr;
         // 	}
         // 	fp->read_flag = 2;
         // }
@@ -82,7 +82,7 @@ FILE *fopen(const char *filename, const char *mode) {
 }
 
 int fclose(FILE *fp) {
-    if (fp == NULL) { return EOF; }
+    if (fp == nullptr) { return EOF; }
     free(fp->buffer);
     free(fp->name);
     free(fp);

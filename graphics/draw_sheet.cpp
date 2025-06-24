@@ -4,7 +4,7 @@ void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUF
     while (true) {
         if (front_p->index == *sheet_id) {
             break;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;
@@ -23,7 +23,7 @@ void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2
     while (true) {
         if (front_p->index == *sheet_id) {
             break;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;
@@ -45,7 +45,7 @@ void draw_line(SHEET_INFO *sht, UINT16 *sheet_id, int x0, int y0, int x1, int y1
     while (true) {
         if (front_p->index == *sheet_id) {
             break;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;

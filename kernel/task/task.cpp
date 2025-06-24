@@ -649,7 +649,7 @@ uint64_t desktop_flusher(uint64_t arg) {
                            getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
                            getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
         k_input = get_keyboard_input();
-        if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT &&
+        if (k_input != '\0' && k_input != KEY_ENTER && k_input != KEY_SHIFT &&
             k_input != KEY_CTRL && k_input != KEY_CAPS && k_input != KEY_BACKSPACE) {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
@@ -735,8 +735,8 @@ uint64_t fork_exit_mm(struct task_struct *tsk) {
 
 uint64_t fork_copy_thread(uint64_t clone_flags, uint64_t stack_start, uint64_t stack_size,
                           struct task_struct *tsk, struct X64_REGS *regs) {
-    struct thread_struct *thd       = NULL;
-    struct X64_REGS      *childregs = NULL;
+    struct thread_struct *thd       = nullptr;
+    struct X64_REGS      *childregs = nullptr;
 
     thd = (struct thread_struct *)(tsk + 1);
     xmemset(thd, 0, sizeof(struct thread_struct));
@@ -774,9 +774,9 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     // 获取fork锁，防止多个进程同时创建导致竞争
     spin_lock(&do_fork_lock);
 
-    struct task_struct   *tsk = NULL;         // 新任务结构体指针
-    struct thread_struct *thd = NULL;         // 新线程结构体指针
-    void                 *p   = (void *)NULL; // 临时指针变量
+    struct task_struct   *tsk = nullptr;         // 新任务结构体指针
+    struct thread_struct *thd = nullptr;         // 新线程结构体指针
+    void                 *p   = (void *)nullptr; // 临时指针变量
 
     // 为新进程分配内核栈空间并转换为虚拟地址
     uint64_t p_phys = (uint64_t)PAGE_ALLOC.alloc_pages_align(STACK_SIZE / PAGE_SIZE, STACK_SIZE);
@@ -812,7 +812,7 @@ uint64_t do_fork(struct X64_REGS *regs, uint64_t clone_flags, uint64_t stack_sta
     tsk->parent               = current_task;           // 设置父进程
     tsk->cwd_node             = current_task->cwd_node; // 设置 cwd
     // 初始化等待子进程退出的等待队列
-    wait_queue_init(&tsk->wait_childexit, NULL);
+    wait_queue_init(&tsk->wait_childexit, nullptr);
 
     // 设置线程结构体
     thd = (struct thread_struct *)(tsk + 1); // 线程结构体紧跟在task_struct后面

@@ -3,12 +3,26 @@
 #ifndef _INCLUDE_HPP_
 #define _INCLUDE_HPP_
 
+#include "./efi.h"
+//
 #include "../kernel/build_settings.h"
+#include "./attribute.h"
+#include "./global/list.h"
+#include "./global/spinlock.h"
+#include "./global/stdint.h"
+//
+#include "./global/kernel/smp/smp.h"
+#include "./global/kernel/task/schedule.h"
+#include "./global/kernel/task/waitqueue.h"
+//
 #include "./cppinc/GOP.hpp"
-#include "./cppinc/proto.hpp"
 #include "./cppinc/sheet.h"
+#include "./global/kernel/task/task.h"
+//
 #include "./cppinc/window/window.h"
 #include "./global/boot.h"
+//
+#include "./cppinc/proto.hpp"
 #include "./global/delay.h"
 #include "./global/graphics/global_color.h"
 #include "./global/kernel/acpi.h"
@@ -21,27 +35,21 @@
 #include "./global/kernel/pctable/gdt.h"
 #include "./global/kernel/ps2/keyboard.h"
 #include "./global/kernel/ps2/mouse.h"
-#include "./global/kernel/smp/smp.h"
 #include "./global/kernel/syscall/pxapi.h"
 #include "./global/kernel/syscall/signal.h"
 #include "./global/kernel/syscall/syscall.h"
-#include "./global/kernel/task/schedule.h"
-#include "./global/kernel/task/task.h"
-#include "./global/kernel/task/waitqueue.h"
-#include "./global/list.h"
 #include "./global/msr.h"
-#include "./global/spinlock.h"
-#include "./global/stdint.h"
 // Drivers
+#include "./global/kernel/driver/pci.h"
+#include "./global/kernel/driver/usb.h"
+//
 #include "./global/kernel/driver/ahci.h"
 #include "./global/kernel/driver/device.h"
 #include "./global/kernel/driver/hid.h"
 #include "./global/kernel/driver/msi.h"
 #include "./global/kernel/driver/nvme.h"
 #include "./global/kernel/driver/partition.h"
-#include "./global/kernel/driver/pci.h"
 #include "./global/kernel/driver/rtc.h"
-#include "./global/kernel/driver/usb.h"
 #include "./global/kernel/driver/xhci.h"
 // FS
 #include "./global/kernel/fs/fat.h"

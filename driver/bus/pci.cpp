@@ -242,14 +242,14 @@ struct {
     {0x111000, "Communication Synchronizer"                 },
     {0x112000, "Signal Processing Management"               },
     {0x118000, "Other Signal Processing Controller"         },
-    {0x000000, (char *)NULL                                 }
+    {0x000000, (char *)nullptr                              }
 };
 
 pci_device_t *pci_devices[PCI_DEVICE_MAX];
 uint32_t      device_number = 0;
 
 const char *pci_classname(uint32_t classcode) {
-    for (size_t i = 0; pci_classnames[i].name != NULL; i++) {
+    for (size_t i = 0; pci_classnames[i].name != nullptr; i++) {
         if (pci_classnames[i].classcode == classcode) { return pci_classnames[i].name; }
         if (pci_classnames[i].classcode == (classcode & 0xFFFF00)) {
             return pci_classnames[i].name;
@@ -263,7 +263,7 @@ pci_device_t *pci_find_vid_did(uint16_t vendor_id, uint16_t device_id) {
         if (pci_devices[i]->vendor_id == vendor_id && pci_devices[i]->device_id == device_id)
             return pci_devices[i];
     }
-    return NULL;
+    return nullptr;
 }
 
 pci_device_t *pci_find_class(uint32_t class_code) {
@@ -271,7 +271,7 @@ pci_device_t *pci_find_class(uint32_t class_code) {
         if (pci_devices[i]->class_code == class_code) { return pci_devices[i]; }
         if (class_code == (pci_devices[i]->class_code & 0xFFFF00)) { return pci_devices[i]; }
     }
-    return NULL;
+    return nullptr;
 }
 
 void pci_scan_bus(uint16_t segment_group, uint8_t bus);

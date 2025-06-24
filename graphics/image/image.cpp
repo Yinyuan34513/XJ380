@@ -17,7 +17,7 @@ void PrintPic_PNG(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ow, int o
     while (true) {
         if (front_p->index == *sheet_id) {
             break;
-        } else if (front_p->next == NULL) {
+        } else if (front_p->next == nullptr) {
             return;
         }
         front_p = front_p->next;

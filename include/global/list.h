@@ -1,4 +1,5 @@
 #include "../include.h"
+#define NULL 0
 
 #define container_of(ptr, type, member)                                                            \
     ({                                                                                             \

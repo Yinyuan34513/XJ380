@@ -1,13 +1,13 @@
 #include "../include/include.h"
 #include "math.h"
 int printf(const char *str, ...) {
-    if (str == NULL) return -1;
+    if (str == nullptr) return -1;
 
     unsigned int  ret_num   = 0;           // 返回打印字符的个数
     char         *pStr      = (char *)str; // 指向str
     int           ArgIntVal = 0;           // 接收整型
     unsigned long ArgHexVal = 0;           // 接十六进制
-    char         *ArgStrVal = NULL;        // 接收字符型
+    char         *ArgStrVal = nullptr;     // 接收字符型
     double        ArgFloVal = 0.0;         // 接受浮点型
     unsigned long val_seg   = 0;           // 数据切分
     unsigned long val_temp  = 0;           // 临时保存数据
