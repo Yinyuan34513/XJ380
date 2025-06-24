@@ -6,12 +6,12 @@ typedef struct
     __volatile__ unsigned long lock; // 1:unlock,0:lock
 } spinlock_t;
 
-inline void spin_init(spinlock_t *lock)
+static inline void spin_init(spinlock_t *lock)
 {
     lock->lock = 1;
 }
 
-inline void spin_lock(spinlock_t *lock)
+static inline void spin_lock(spinlock_t *lock)
 {
     __asm__ __volatile__("1:	\n\t"
                          "lock	decq	%0	\n\t"
@@ -27,7 +27,7 @@ inline void spin_lock(spinlock_t *lock)
                          : "memory");
 }
 
-inline void spin_unlock(spinlock_t *lock)
+static inline void spin_unlock(spinlock_t *lock)
 {
     __asm__ __volatile__("movq	$1,	%0	\n\t"
                          : "=m"(lock->lock)
