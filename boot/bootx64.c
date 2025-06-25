@@ -365,7 +365,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
       ;
   }
   write_serial_string("Root Dir Open Success.\n");
-  status = root->Open(root, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
+  status = root->Open(root, &kernel_file, L"\\system\\kernel.elf", EFI_FILE_MODE_READ, 0);
   if (EFI_ERROR(status))
   {
     puts(L"XJ380 does not boot properly. Please visit "

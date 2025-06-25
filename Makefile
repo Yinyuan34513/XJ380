@@ -2,7 +2,7 @@ ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno
 C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -I./include
 CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
 
-DEBUG ?= 0
+DEBUG ?= 1
 SMP ?= 4
 SUDO ?= 0
 KVM ?= 0
@@ -86,15 +86,16 @@ vdisk: all
 	@mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
-	@mkdir -p $(BUILD_DIR)/XJ380/usr
-	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380
+	@mkdir -p $(BUILD_DIR)/XJ380/system
+	@mkdir -p $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
-	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/usr
-	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/usr
-	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/usr
-	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/XJ380F.ttf
-	@cp -a ./test.png $(BUILD_DIR)/XJ380/test.png
-	@cp -a ./bg.png $(BUILD_DIR)/XJ380/bg.png
+	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system
+	@cp -a ./test.png $(BUILD_DIR)/XJ380
+	@cp -a ./bg.png $(BUILD_DIR)/XJ380/system
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

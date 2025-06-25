@@ -520,7 +520,7 @@ uint64_t init_kernel_thread(uint64_t arg)
         "pushq	%2		\n\t"
         "jmp   do_execve	\n\t"
         :
-        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(argv), "c"(envp)
+        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/apps/init.elf"), "d"(argv), "c"(envp)
         : "memory");
 
     return (uint64_t)-1;

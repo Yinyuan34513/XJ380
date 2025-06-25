@@ -11,7 +11,8 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     sht->scry = fbc.vertical_resolution;
     sht->start = NULL;
     sht->temp_buffer = malloc((sht->scrx * sht->scry * 4) + 4); // 多分配4字节防止溢出啥的
-    if (sht->temp_buffer == NULL)
+    sht->rtp_buffer = (SHEET_BUFFER *)(malloc((sht->scrx * sht->scry * 4) + 4));
+    if (sht->temp_buffer == nullptr || sht->rtp_buffer == nullptr)
     {
         // 没分配成，去世。
         // WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
@@ -41,6 +42,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
             SheetBuffer++;
         }
     }
+    // LoadPicture(sht->rtp_buffer, sht->scrx, sht->scry, "/");
     write_serial_string("Sheet Manager Initialize Success.\n");
 }
 

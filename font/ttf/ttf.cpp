@@ -209,7 +209,7 @@ void init_ttf()
 {
 	write_serial_string("Initializing TTF...\n");
 	delay_s(10);
-	VNode *v = path_walk(current_task->cwd_node, "/XJ380F.ttf");
+	VNode *v = path_walk(current_task->cwd_node, "/system/XJ380F.ttf");
 	if (!v)
 	{
 		write_serial_string("Cannot find XJ380F.ttf\n");
