@@ -639,7 +639,7 @@ uint64_t desktop_flusher(uint64_t arg)
 
     winRD_lock = true;
 
-    PrintPic_PNG(&shtinf, &desktop_sheet_id, 200, 200, 200, 60, "/test.png");
+    PrintPicture_blend(&shtinf, &desktop_sheet_id, 200, 200, 200, 60, "/test.png");
 
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
