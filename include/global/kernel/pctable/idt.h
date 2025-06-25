@@ -1,7 +1,7 @@
 #ifndef _IDT_H_
 #define _IDT_H_
 
-#define IDT_SIZE         256
+#define IDT_SIZE 256
 #define X86_64_INTR_GATE 0x8E
 #define X86_64_TRAP_GATE 0x8F
 
@@ -45,20 +45,21 @@ void syscall_handler();
 
 #include "../../stdint.h"
 
-typedef struct {
+typedef struct
+{
     UINT16 size; // 大小，单位字节
     UINT64 base; // IDT的地址（不是物理地址，但是XJ380是1：1页表好像也没啥区别）
 } __attribute__((packed)) IDTR_TYPE;
 
-typedef struct {
-    UINT16 offset_1; // 地址偏移量的第0~15位，BaseAddress + Offset = 函数地址
-    UINT16 selector; // 指向GDT的一个代码段
-    UINT8  ist; // Interrupt Stack Table的偏移量，存储在Task State Segment中。全部为零则不使用IST。
-    UINT8
-        type_attributes; // 门类型，DPL和Present位。详见https://wiki.osdev.org/Interrupt_Descriptor_Table#Structure_on_x86-64。
-    UINT16 offset_2;     // 地址偏移量的第16~31位
-    UINT32 offset_3;     // 地址偏移量的第32~63位
-    UINT32 zero;         // 保留
+typedef struct
+{
+    UINT16 offset_1;       // 地址偏移量的第0~15位，BaseAddress + Offset = 函数地址
+    UINT16 selector;       // 指向GDT的一个代码段
+    UINT8 ist;             // Interrupt Stack Table的偏移量，存储在Task State Segment中。全部为零则不使用IST。
+    UINT8 type_attributes; // 门类型，DPL和Present位。详见https://wiki.osdev.org/Interrupt_Descriptor_Table#Structure_on_x86-64。
+    UINT16 offset_2;       // 地址偏移量的第16~31位
+    UINT32 offset_3;       // 地址偏移量的第32~63位
+    UINT32 zero;           // 保留
 } __attribute__((packed)) IDT_GATE_TYPE;
 
 #endif

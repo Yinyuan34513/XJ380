@@ -1,15 +1,18 @@
 #ifndef _SPINLOCK_H
 #define _SPINLOCK_H
 
-typedef struct {
+typedef struct
+{
     __volatile__ unsigned long lock; // 1:unlock,0:lock
 } spinlock_t;
 
-static inline void spin_init(spinlock_t *lock) {
+static inline void spin_init(spinlock_t *lock)
+{
     lock->lock = 1;
 }
 
-static inline void spin_lock(spinlock_t *lock) {
+static inline void spin_lock(spinlock_t *lock)
+{
     __asm__ __volatile__("1:	\n\t"
                          "lock	decq	%0	\n\t"
                          "jns	3f	\n\t"
@@ -24,8 +27,12 @@ static inline void spin_lock(spinlock_t *lock) {
                          : "memory");
 }
 
-static inline void spin_unlock(spinlock_t *lock) {
-    __asm__ __volatile__("movq	$1,	%0	\n\t" : "=m"(lock->lock) : : "memory");
+static inline void spin_unlock(spinlock_t *lock)
+{
+    __asm__ __volatile__("movq	$1,	%0	\n\t"
+                         : "=m"(lock->lock)
+                         :
+                         : "memory");
 }
 
 #endif

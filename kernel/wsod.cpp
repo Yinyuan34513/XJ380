@@ -1,12 +1,13 @@
-#include "../include/backtrace.h"
 #include "../include/include.h"
+#include "../include/backtrace.h"
 #include "./build_settings.h"
 
-void do_wsod(const char *err_code, struct X64_REGS *regs) {
+void do_wsod(const char *err_code, struct X64_REGS *regs)
+{
     disable_intr();
 
     uint64_t lapicid = lapic_id();
-    uint64_t cpu_id  = get_cpuid_by_lapicid(lapicid);
+    uint64_t cpu_id = get_cpuid_by_lapicid(lapicid);
 
     write_serial_string("CPU ID = ");
     write_serial_dec(cpu_id);
@@ -33,17 +34,11 @@ void do_wsod(const char *err_code, struct X64_REGS *regs) {
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
-    WriteString(
-        *fbc_addr, 8, 8,
-        "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.",
-        {0, 0, 0});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.", {0, 0, 0});
     WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});
     WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
 
-    WriteString(*fbc_addr, 8, 64,
-                "We've stored the breakpoint, and you can send a screenshot of this screen or "
-                "error log file to a technician.",
-                {0, 0, 0});
+    WriteString(*fbc_addr, 8, 64, "We've stored the breakpoint, and you can send a screenshot of this screen or error log file to a technician.", {0, 0, 0});
 
     WriteString(*fbc_addr, 8, 84, "Register Data:", {0, 0, 0});
     WriteString(*fbc_addr, 8, 104, "CS  = ", {0, 0, 0});
@@ -94,34 +89,29 @@ void do_wsod(const char *err_code, struct X64_REGS *regs) {
     WriteString(*fbc_addr, 144, 360, OS_EDITION, {0, 0, 0});
     WriteString(*fbc_addr, 8, 340, "Kernel Version = ", {0, 0, 0});
     WriteString(*fbc_addr, 144, 340, KN_VERSION, {0, 0, 0});
-    WriteString(*fbc_addr, scrx - 424, scry - 24,
-                "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
+    WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
     write_serial_string("WSOD: ");
     write_serial_string(err_code);
     write_serial_string("\n");
 
     backtrace(regs);
 
-    while (1) {
+    while (1)
+    {
         __asm__("pause");
     };
 }
 
-void no_regs_wsod(const char *err_code) {
+void no_regs_wsod(const char *err_code)
+{
     int scrx = fbc_addr->horizontal_resolution;
     int scry = fbc_addr->vertical_resolution;
     rect(*fbc_addr, 0, 0, scrx, scry, {255, 255, 255});
-    WriteString(
-        *fbc_addr, 8, 8,
-        "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.",
-        {0, 0, 0});
+    WriteString(*fbc_addr, 8, 8, "XJ380 has encountered a problem. Please visit https://xingjisoft.top/os/xj380/error.", {0, 0, 0});
     WriteString(*fbc_addr, 8, 28, "Error code: ", {0, 0, 0});
     WriteString(*fbc_addr, 104, 28, err_code, {0, 0, 0});
 
-    WriteString(*fbc_addr, 8, 64,
-                "We've stored the breakpoint, and you can send a screenshot of this screen or "
-                "error log file to a technician.",
-                {0, 0, 0});
+    WriteString(*fbc_addr, 8, 64, "We've stored the breakpoint, and you can send a screenshot of this screen or error log file to a technician.", {0, 0, 0});
 
     WriteString(*fbc_addr, 8, 84, "Register Data:", {0, 0, 0});
     WriteString(*fbc_addr, 8, 104, "CS  = N/A", {0, 0, 0});
@@ -151,13 +141,13 @@ void no_regs_wsod(const char *err_code) {
     WriteString(*fbc_addr, 144, 360, OS_EDITION, {0, 0, 0});
     WriteString(*fbc_addr, 8, 340, "Kernel Version = ", {0, 0, 0});
     WriteString(*fbc_addr, 144, 340, KN_VERSION, {0, 0, 0});
-    WriteString(*fbc_addr, scrx - 424, scry - 24,
-                "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
+    WriteString(*fbc_addr, scrx - 424, scry - 24, "XINGJI Interactive Software - XJ380 Operating System", {0, 0, 0});
     write_serial_string("WSOD: ");
     write_serial_string(err_code);
 
     disable_intr();
-    while (1) {
+    while (1)
+    {
         __asm__ __volatile__("pause");
     };
 }
@@ -169,47 +159,55 @@ void no_regs_wsod(const char *err_code) {
  */
 
 // 预期外的中断
-void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("UNEXPECT_INTRRUPT", regs);
 }
 
-void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code) {
-    __asm__ __volatile__("movq %%cr0, %%rax\n\t"
-                         "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
-                         "or $0x2, %%ax\n\t"      // set coprocessor monitoring  CR0.MP
-                         "movq %%rax, %%cr0\n\t" ::
-                             : "rax");
+void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
+{
+    __asm__ __volatile__(
+        "movq %%cr0, %%rax\n\t"
+        "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+        "or $0x2, %%ax\n\t"        // set coprocessor monitoring  CR0.MP
+        "movq %%rax, %%cr0\n\t":::"rax");
 }
 
-void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("DIVIDE_ERROR", regs);
 }
 
-void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("UNDEFINED_OPCODE", regs);
 }
 
 // 不可屏蔽中断
-void wsod_nmi(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_nmi(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("NMI", regs);
 }
 
 // 双重错误
-void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("DOUBLE_FAULT", regs);
 }
 
 // 内核错误
-void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("SYSTEM_KERNEL_ERROR", regs);
 }
 
 // 一般保护性异常
-void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code)
+{
     if (error_code & 0x01)
-        write_serial_string("The exception occurred during delivery of an event external to the "
-                            "program,such as an interrupt "
-                            "or an earlier exception.\n");
+        write_serial_string(
+            "The exception occurred during delivery of an event external to the program,such as an interrupt "
+            "or an earlier exception.\n");
 
     if (error_code & 0x02)
         write_serial_string("Refers to a gate descriptor in the IDT;\n");
@@ -226,8 +224,10 @@ void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code) {
 }
 
 // 页错误
-void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code) {
-    if (!(error_code & 0x01)) write_serial_string("Page Not-Present,\t");
+void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code)
+{
+    if (!(error_code & 0x01))
+        write_serial_string("Page Not-Present,\t");
 
     if (error_code & 0x02)
         write_serial_string("Write Cause Fault,\t");
@@ -239,9 +239,11 @@ void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code) {
     else
         write_serial_string("Fault in supervisor(0,1,2)\t");
 
-    if (error_code & 0x08) write_serial_string(",Reserved Bit Cause Fault\t");
+    if (error_code & 0x08)
+        write_serial_string(",Reserved Bit Cause Fault\t");
 
-    if (error_code & 0x10) write_serial_string(",Instruction fetch Cause Fault");
+    if (error_code & 0x10)
+        write_serial_string(",Instruction fetch Cause Fault");
 
     write_serial_string("\n");
 
@@ -255,7 +257,8 @@ void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code) {
 }
 
 // DEBUG
-void wsod_debug(struct X64_REGS *regs, UINT64 error_code) {
+void wsod_debug(struct X64_REGS *regs, UINT64 error_code)
+{
     do_wsod("DEBUG_BREAKPOINT", regs);
 }
 
@@ -266,7 +269,8 @@ void wsod_debug(struct X64_REGS *regs, UINT64 error_code) {
  */
 
 // 未找到APIC
-void wsod_apic_not_found() {
+void wsod_apic_not_found()
+{
     no_regs_wsod("APIC_NOT_FOUND");
 }
 
@@ -277,6 +281,7 @@ void wsod_apic_not_found() {
  */
 
 // 未找到APIC
-void wsod_cannot_load_ttf() {
+void wsod_cannot_load_ttf()
+{
     no_regs_wsod("CANNOT_LOAD_TTF");
 }

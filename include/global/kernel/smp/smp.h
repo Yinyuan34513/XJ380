@@ -6,15 +6,16 @@
 
 #define MAX_CPU_NUM 128
 
-class SMP {
-  public:
+class SMP
+{
+public:
     SMP();
     ~SMP();
     void ap_startup(uint64_t madt_addr);
-    int  ap_count();
+    int ap_count();
 
-  private:
-    int            apu_count;
+private:
+    int apu_count;
     MadtLocalApic *apu_list[MAX_CPU_NUM];
 };
 

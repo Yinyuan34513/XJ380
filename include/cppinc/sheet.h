@@ -3,7 +3,8 @@
 
 #include "../include.h"
 
-enum SystemSheetType {
+enum SystemSheetType
+{
     FixedSheetType,
     MovableSheetType,
     TopSheetType
@@ -11,34 +12,38 @@ enum SystemSheetType {
 
 typedef struct SHEET *SHEETP;
 
-struct SHEET {
-    SHEETP  front;
-    VOID   *buffer;
-    int     bx, by;
-    UINT32  width, height;
-    UINT32  type;
-    UINT16  index;
+struct SHEET
+{
+    SHEETP front;
+    VOID *buffer;
+    int bx, by;
+    UINT32 width, height;
+    UINT32 type;
+    UINT16 index;
     BOOLEAN is_change;
-    SHEETP  next;
+    SHEETP next;
 };
 
-typedef struct {
-    SHEET                   *start;
-    VOID                    *temp_buffer;
-    UINT32                   scrx, scry;
-    UINT16                   sheet_num; // 图层数量 - 1
-    UINT16                   sht_numed; // 图层数量 - 1，用于编号
+typedef struct
+{
+    SHEET *start;
+    VOID *temp_buffer;
+    UINT32 scrx, scry;
+    UINT16 sheet_num; // 图层数量 - 1
+    UINT16 sht_numed; // 图层数量 - 1，用于编号
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 
-typedef struct {
+typedef struct
+{
     UINT8 r;
     UINT8 g;
     UINT8 b;
     UINT8 a; // 在TempBuffer里，这个没用
 } SHEET_BUFFER;
 
-typedef struct {
+typedef struct
+{
     UINT8 r;
     UINT8 g;
     UINT8 b;

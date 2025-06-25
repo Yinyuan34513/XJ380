@@ -1,50 +1,62 @@
-#include "../../include/include.h"
 #include "../../kernel/alloc/page.h"
+#include "../../include/include.h"
 
-USB_CONTROLLER *USB_CTRL       = 0;
-USB_COMMON     *ALL_USB_DEVICE = 0;
+USB_CONTROLLER *USB_CTRL = 0;
+USB_COMMON *ALL_USB_DEVICE = 0;
 
-const uint32_t SPEED_TO_CTRL_SIZE[] = {
-    8,   // FULL  SPEED
-    8,   // LOW   SPEED
-    64,  // HIGH  SPEED
-    512, // SUPER SPEED
+const uint32_t SPEED_TO_CTRL_SIZE[] =
+    {
+        8,   // FULL  SPEED
+        8,   // LOW   SPEED
+        64,  // HIGH  SPEED
+        512, // SUPER SPEED
 };
 
-uint32_t USBEnumerate(USB_HUB *hub) {
-    for (uint32_t port = 0; port < hub->PC; port++) {
+uint32_t USBEnumerate(USB_HUB *hub)
+{
+    for (uint32_t port = 0; port < hub->PC; port++)
+    {
         USB_COMMON *common;
-        uint32_t    count;
+        uint32_t count;
 
-        if (!hub->OP->DTC(hub, port)) {
+        if (!hub->OP->DTC(hub, port))
+        {
             // No device found.
             goto NEXT_PORT;
         }
         common = (USB_COMMON *)malloc(sizeof(USB_COMMON));
         xmemset(common, 0, sizeof(USB_COMMON));
         common->CTRL = hub->CTRL;
-        common->HUB  = hub;
+        common->HUB = hub;
         common->PORT = port;
 
         // Reset port and determine device speed
         common->SPD = hub->OP->RST(hub, port);
-        if (common->SPD < 0) { goto RESET_FAILED; }
+        if (common->SPD < 0)
+        {
+            goto RESET_FAILED;
+        }
 
         // Set address of port
-        if (USBSetAddress(common)) {
+        if (USBSetAddress(common))
+        {
             hub->OP->DCC(hub, port);
             goto RESET_FAILED;
         }
 
         // Configure device
         count = ConfigureUSB(common);
-        if (!count) {
+        if (!count)
+        {
             hub->OP->DCC(hub, port);
             free(common);
         }
-        hub->DC    += count;
-        common->A1  = ALL_USB_DEVICE;
-        if (ALL_USB_DEVICE) { ALL_USB_DEVICE->A0 = common; }
+        hub->DC += count;
+        common->A1 = ALL_USB_DEVICE;
+        if (ALL_USB_DEVICE)
+        {
+            ALL_USB_DEVICE->A0 = common;
+        }
         ALL_USB_DEVICE = common;
 
         continue;
@@ -56,27 +68,33 @@ uint32_t USBEnumerate(USB_HUB *hub) {
     }
     return hub->DC;
 }
-uint32_t USBSetAddress(USB_COMMON *device) {
+uint32_t USBSetAddress(USB_COMMON *device)
+{
     USB_CONTROLLER *controller = device->CTRL;
-    if (controller->MA >= USB_MAXADDR) return 1;
+    if (controller->MA >= USB_MAXADDR)
+        return 1;
 
     // Create a pipe for the default address
     USB_ENDPOINT epdesc;
     xmemset(&epdesc, 0, sizeof(USB_ENDPOINT));
-    epdesc.MPS   = SPEED_TO_CTRL_SIZE[device->SPD];
-    epdesc.AT    = USB_ENDPOINT_XFER_CONTROL;
+    epdesc.MPS = SPEED_TO_CTRL_SIZE[device->SPD];
+    epdesc.AT = USB_ENDPOINT_XFER_CONTROL;
     device->PIPE = controller->CPIP(device, 0, &epdesc);
-    if (!device->PIPE) { return -1; }
+    if (!device->PIPE)
+    {
+        return -1;
+    }
 
     // Send SET_ADDRESS command.
     USB_DEVICE_REQUEST req;
     req.T = USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE;
     req.C = USB_REQ_SET_ADDRESS;
     req.V = controller->MA = 1;
-    req.I                  = 0;
-    req.L                  = 0;
-    uint32_t cc            = controller->XFER(device->PIPE, &req, 0, 0, 0);
-    if (cc) {
+    req.I = 0;
+    req.L = 0;
+    uint32_t cc = controller->XFER(device->PIPE, &req, 0, 0, 0);
+    if (cc)
+    {
         write_serial_string("CANNOT SET ADDRESS\n");
         // Free pipe
         return -1;
@@ -84,17 +102,21 @@ uint32_t USBSetAddress(USB_COMMON *device) {
 
     controller->MA++;
     device->PIPE = controller->CPIP(device, device->PIPE, &epdesc);
-    if (!device->PIPE) { return -1; }
+    if (!device->PIPE)
+    {
+        return -1;
+    }
     return 0;
 }
-uint32_t ConfigureUSB(USB_COMMON *common) {
+uint32_t ConfigureUSB(USB_COMMON *common)
+{
     KERNEL_MAPPER mapper((uint64_t *)convert_physical_to_virtual((uint64_t)current_task->mm->pgd));
 
     USB_CONTROLLER *controller = common->CTRL;
     // Set the max packet size for endpoint 0 of this device
     // Get first 8 byte of device desc
-    uint64_t        devinfo_phys = (uint64_t)PAGE_ALLOC.alloc_page();
-    USB_DEVICE     *devinfo      = (USB_DEVICE *)convert_physical_to_virtual(devinfo_phys);
+    uint64_t devinfo_phys = (uint64_t)PAGE_ALLOC.alloc_page();
+    USB_DEVICE *devinfo = (USB_DEVICE *)convert_physical_to_virtual(devinfo_phys);
 
     mapper.map_page((uint64_t)devinfo, devinfo_phys, 0x3);
     flush_tlb();
@@ -102,26 +124,29 @@ uint32_t ConfigureUSB(USB_COMMON *common) {
     xmemset(devinfo, 0, sizeof(USB_DEVICE));
 
     USB_DEVICE_REQUEST req;
-    req.T       = USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE;
-    req.C       = USB_REQ_GET_DESCRIPTOR;
-    req.V       = USB_DT_DEVICE << 8;
-    req.I       = 0;
-    req.L       = 8;
+    req.T = USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE;
+    req.C = USB_REQ_GET_DESCRIPTOR;
+    req.V = USB_DT_DEVICE << 8;
+    req.I = 0;
+    req.L = 8;
     uint32_t cc = controller->XFER(common->PIPE, &req, devinfo, 0, 0);
-    if (cc) {
+    if (cc)
+    {
         write_serial_string("TRANSFER FAILED\n");
         return 0;
     }
 
     uint16_t maxpacket = devinfo->MPS;
-    if (devinfo->VER >= 0x0300) maxpacket = 1 << devinfo->MPS;
-    if (maxpacket < 8) return 0;
+    if (devinfo->VER >= 0x0300)
+        maxpacket = 1 << devinfo->MPS;
+    if (maxpacket < 8)
+        return 0;
 
     USB_ENDPOINT epdesc = {
-        .L   = 0,
-        .DT  = 0,
-        .EA  = 0,
-        .AT  = USB_ENDPOINT_XFER_CONTROL,
+        .L = 0,
+        .DT = 0,
+        .EA = 0,
+        .AT = USB_ENDPOINT_XFER_CONTROL,
         .MPS = maxpacket,
         .ITV = 0,
     };
@@ -133,8 +158,8 @@ uint32_t ConfigureUSB(USB_COMMON *common) {
     USB_CONFIG *config = 0;
 
     {
-        uint64_t    cfg_phys = (uint64_t)PAGE_ALLOC.alloc_page();
-        USB_CONFIG *cfg      = (USB_CONFIG *)convert_physical_to_virtual(cfg_phys);
+        uint64_t cfg_phys = (uint64_t)PAGE_ALLOC.alloc_page();
+        USB_CONFIG *cfg = (USB_CONFIG *)convert_physical_to_virtual(cfg_phys);
 
         mapper.map_page((uint64_t)cfg, cfg_phys, 0x3);
         flush_tlb();
@@ -146,33 +171,41 @@ uint32_t ConfigureUSB(USB_COMMON *common) {
         req.I = 0;
         req.L = sizeof(USB_CONFIG);
 
-        if (controller->XFER(common->PIPE, &req, cfg, 0, 0)) { goto LABEL001; }
+        if (controller->XFER(common->PIPE, &req, cfg, 0, 0))
+        {
+            goto LABEL001;
+        }
 
         config = (USB_CONFIG *)malloc(cfg->TL);
         xmemset(config, 0, cfg->TL);
 
         req.L = cfg->TL;
-        if (controller->XFER(common->PIPE, &req, config, 0, 0) || config->TL != cfg->TL) {
+        if (controller->XFER(common->PIPE, &req, config, 0, 0) || config->TL != cfg->TL)
+        {
             free(config);
             config = 0;
         }
     }
 
 LABEL001:;
-    if (!config) {
+    if (!config)
+    {
         write_serial_string("CANNOT GET CONFIG\n");
         return 0;
     }
 
-    uint64_t ic    = config->IC;
+    uint64_t ic = config->IC;
     uint64_t iface = ((uint64_t)config) + 9;
     uint64_t cfend = ((uint64_t)config) + config->TL;
 
-    while (1) {
+    while (1)
+    {
         USB_INTERFACE *interface = (USB_INTERFACE *)iface;
-        if ((!ic) || ((iface + interface->L) > cfend)) goto CONFIG_FAIL; // goto FAILED;
+        if ((!ic) || ((iface + interface->L) > cfend))
+            goto CONFIG_FAIL; // goto FAILED;
 
-        if (interface->DT == USB_DT_INTERFACE) {
+        if (interface->DT == USB_DT_INTERFACE)
+        {
             ic--;
             break;
         }
@@ -186,32 +219,43 @@ LABEL001:;
     req.V = config->CV;
     req.I = 0;
     req.L = 0;
-    cc    = controller->XFER(common->PIPE, &req, 0, 0, 0);
-    if (cc) {
+    cc = controller->XFER(common->PIPE, &req, 0, 0, 0);
+    if (cc)
+    {
         write_serial_string("CANNOT SET CONFIGURATION\n");
         goto CONFIG_FAIL;
     }
 
-    interface   = (USB_INTERFACE *)iface;
+    interface = (USB_INTERFACE *)iface;
     common->CFG = config;
     common->IFC = interface;
-    cc          = -1;
-    if (interface->DT == USB_DT_INTERFACE) {
-        if (interface->IC == USB_CLASS_HUB) {
+    cc = -1;
+    if (interface->DT == USB_DT_INTERFACE)
+    {
+        if (interface->IC == USB_CLASS_HUB)
+        {
             write_serial_string("HUB device\n");
             // cc = ConfigureHUB(common);
-        } else if (interface->IC == USB_CLASS_MASS_STORAGE) {
-            if (interface->IP == US_PR_BULK) {
+        }
+        else if (interface->IC == USB_CLASS_MASS_STORAGE)
+        {
+            if (interface->IP == US_PR_BULK)
+            {
                 write_serial_string("MASS BULK device\n");
-            } else if (interface->IP == US_PR_UAS) {
+            }
+            else if (interface->IP == US_PR_UAS)
+            {
                 write_serial_string("MASS UAS device\n");
             }
-        } else if (interface->IC == USB_CLASS_HID) {
+        }
+        else if (interface->IC == USB_CLASS_HID)
+        {
             write_serial_string("HID device\n");
             cc = ConfigureHID(common);
         }
     }
-    if (cc) {
+    if (cc)
+    {
         // write_serial_string("CANNOT CONFIGURE DEVICE\n");
         goto CONFIG_FAIL;
     }
@@ -224,16 +268,19 @@ CONFIG_FAIL:;
     common->IFC = 0;
     return 0;
 }
-void USBD2P(USB_PIPE *pipe, USB_COMMON *usbdev, USB_ENDPOINT *epdesc) {
+void USBD2P(USB_PIPE *pipe, USB_COMMON *usbdev, USB_ENDPOINT *epdesc)
+{
     pipe->CTRL = usbdev->CTRL;
-    pipe->MPS  = epdesc->MPS;
+    pipe->MPS = epdesc->MPS;
 }
-USB_ENDPOINT *USBSearchEndpoint(USB_COMMON *usbdev, int type, int dir) {
-    USB_CONFIG    *config = usbdev->CFG;
-    USB_INTERFACE *iface  = usbdev->IFC;
-    uint64_t       imax   = ((uint64_t)config) + config->TL - ((uint64_t)iface);
-    USB_ENDPOINT  *epdesc = (USB_ENDPOINT *)(((uint64_t)iface) + 9);
-    while (1) {
+USB_ENDPOINT *USBSearchEndpoint(USB_COMMON *usbdev, int type, int dir)
+{
+    USB_CONFIG *config = usbdev->CFG;
+    USB_INTERFACE *iface = usbdev->IFC;
+    uint64_t imax = ((uint64_t)config) + config->TL - ((uint64_t)iface);
+    USB_ENDPOINT *epdesc = (USB_ENDPOINT *)(((uint64_t)iface) + 9);
+    while (1)
+    {
         if ((((uint64_t)epdesc) >= ((uint64_t)iface) + imax) || (epdesc->DT == USB_DT_INTERFACE))
             return 0;
         uint32_t edir = epdesc->EA & USB_ENDPOINT_DIR;

@@ -16,8 +16,8 @@
 
 // define
 typedef struct {
-    UINT64 length;
-    void  *buffer;
+	UINT64	length;
+	void*	buffer;
 } XFILE;
 
 // 3-1
@@ -28,16 +28,19 @@ void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
 
 // 3-2
-void xapi_OpenFile(WSTR path, XFILE *fsptr);
+void xapi_OpenFile(
+	WSTR	path,
+	XFILE*	fsptr
+);
 
-void xapi_CloseFile(XFILE *fsptr);
+void xapi_CloseFile(XFILE* fsptr); 
 
 // 3-3
-UINT64 xcr_char2int(WSTR str);
-WSTR   xcr_int2char(UINT64 dec);
-WSTR   xcr_hex2char(UINT64 hex);
-UINT32 xapi_toRGB(UINT8 r, UINT8 g, UINT8 b);
+UINT64 	xcr_char2int(WSTR str);
+WSTR 	xcr_int2char(UINT64 dec); 
+WSTR 	xcr_hex2char(UINT64  hex);
+UINT32 	xapi_toRGB(UINT8 r, UINT8 g, UINT8 b);
 
 // 3-4
-UINT64 xapi_fork();
-UINT64 xapi_execve(WSTR filename, WSTR argv[], WSTR envp[]);
+UINT64  xapi_fork();
+UINT64  xapi_execve(WSTR filename, WSTR argv[], WSTR envp[]);

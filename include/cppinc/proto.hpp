@@ -1,9 +1,9 @@
 #ifndef PROTO_HPP_
 #define PROTO_HPP_
 
+#include "../include.h"
 #include "../efi.h"
 #include "../global/kernel/apic/apic.h"
-#include "../include.h"
 
 /*
  *   graphics
@@ -19,10 +19,8 @@ void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
 
 // graphics/draw_sheet.cpp
 void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUFFER &color);
-void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2,
-               const SHEET_BUFFER &color);
-void draw_line(SHEET_INFO *sht, UINT16 *sheet_id, int x0, int y0, int x1, int y1,
-               const SHEET_BUFFER &color);
+void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color);
+void draw_line(SHEET_INFO *sht, UINT16 *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
 void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id);
@@ -32,88 +30,80 @@ void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 
 // graphics/sheet.cpp
-void    init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
-void    create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type,
-                     INT16 index, UINT16 *sheet_id);
-UINT32  getBX(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32  getBY(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32  getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32  getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
+void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
+void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
+UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
-SHEET  *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void    setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void    setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void    lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void    delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void    refresh_sheet(SHEET_INFO *sht);
-void    refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
-UINT32  get_hor();
-UINT32  get_ver();
+SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void refresh_sheet(SHEET_INFO *sht);
+void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
+UINT32 get_hor();
+UINT32 get_ver();
 
 // graphics/window/windowm.cpp
 void init_xwm(XWM_INFO *xwmi);
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, UINT32 width,
-                   UINT32 height);
+void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, UINT32 width, UINT32 height);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
-void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y,
-               int size, SHEET_BUFFER color);
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
-WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
+WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 
 // graphics/image/image.cpp
 void PrintPic_PNG(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ow, int oh, char *path);
+
 
 /*
  *   font
  */
 
 // font/ttf/ttf.cpp
-void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x,
-                   unsigned y, int size);
+void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x, unsigned y, int size);
 void init_ttf();
 
 // font/font.cpp
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
-void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec,
-              const PixelColor &c);
+void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec, const PixelColor &c);
 void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
-void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex,
-              const PixelColor &c);
+void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
 void PrintFont(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char ch, const SHEET_BUFFER &color);
-void PrintString(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const char *s,
-                 const SHEET_BUFFER &color);
-void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long hex,
-              const SHEET_BUFFER &color);
-void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long dec,
-              const SHEET_BUFFER &color);
+void PrintString(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color);
+void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color);
+void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color);
 
 /*
  *   lib
  */
 // lib/string.c
-char  *strncpy(char *dest, const char *src, UINT64 length);
-char  *strcpy(char *dest, const char *src);
+char *strncpy(char *dest, const char *src, UINT64 length);
+char *strcpy(char *dest, const char *src);
 UINT64 strlen(const char *str);
 UINT64 strcmp(const char *from_str, const char *cmp_str);
 UINT64 strncmp(char *from_str, char *cmp_str, UINT64 size);
 UINT64 part_strcmp(char *from_str, char *cmp_str, UINT64 size);
 UINT64 strtol(char *str, char **endptr, int base);
-char  *Dec2Char(unsigned long long dec);
-char  *Hex2Char(unsigned long long hex);
-char  *strstr(const char *haystack, const char *needle);
-int    str2float(const char *str, float *result);
+char *Dec2Char(unsigned long long dec);
+char *Hex2Char(unsigned long long hex);
+char *strstr(const char *haystack, const char *needle);
+int str2float(const char *str, float *result);
 
 // lib/utflib.c
 typedef int32_t Rune;
-#define UTFmax    6            /* maximum bytes per rune */
-#define Runeerror ((Rune) - 1) /* decoding error in utf */
+#define UTFmax 6 /* maximum bytes per rune */
+#define Runeerror ((Rune)-1)         /* decoding error in utf */
 #ifdef __cplusplus
 extern "C" {
 #endif
-int    charntorune(Rune *, const char *, size_t);
-int    chartorune(Rune *, const char *);
+int charntorune(Rune *, const char *, size_t);
+int chartorune(Rune *, const char *);
 size_t utflen(const char *);
 size_t utfnlen(const char *, size_t);
 
@@ -126,8 +116,8 @@ extern const unsigned char utftab[64];
  *   driver
  */
 // driver/serial/serial_port.cpp
-int  init_serial();
-int  is_transmit_empty();
+int init_serial();
+int is_transmit_empty();
 void write_serial(char a);
 void write_serial_string(const char *str);
 void write_serial_dec(unsigned long long dec);
@@ -135,28 +125,28 @@ void write_serial_hex(unsigned long long hex);
 
 // driver/ps2/keyboard.cpp
 extern struct keyboard_buf kb_fifo;
-extern UINT8               keyboard_code[256];
-extern UINT8               keyboard_code1[256];
-void                       keyboard_init();
-UINT8                      get_keyboard_input();
+extern UINT8 keyboard_code[256];
+extern UINT8 keyboard_code1[256];
+void keyboard_init();
+UINT8 get_keyboard_input();
 
 // driver/ps2/mouse.cpp
-void  mouse_init();
+void mouse_init();
 UINT8 get_Mouse_output();
-bool  mousedecode(UINT8 data);
-int   get_mouse_x();
-int   get_mouse_y();
-void  draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
-void  move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
+bool mousedecode(UINT8 data);
+int get_mouse_x();
+int get_mouse_y();
+void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
+void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
 
 /*
  *   kernel
  */
 // kernel/main.cpp
 extern const FrameBufferConfig *fbc_addr;
-extern SHEET_INFO              *sht_img;
-extern XWM_INFO                *xwmii;
-extern bool                     winRD_lock;
+extern SHEET_INFO *sht_img;
+extern XWM_INFO *xwmii;
+extern bool winRD_lock;
 
 // kernel/wsod.cpp
 // 异常处理
@@ -185,7 +175,7 @@ void init_apic(UINT64 MADT);
 void send_eoi();
 
 // kernel/intr/hpet.cpp
-void   init_hpet(UINT64 hpet);
+void init_hpet(UINT64 hpet);
 UINT64 nanoTime();
 
 // kernel/cpu/msr.cpp
@@ -197,19 +187,19 @@ void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UI
 void get_cpu_name(char *c);
 
 // kernel/asm/common.cpp
-void   outb(UINT16 port, UINT8 value);
-UINT8  inb(UINT16 port);
-void   outw(UINT16 port, UINT16 value);
+void outb(UINT16 port, UINT8 value);
+UINT8 inb(UINT16 port);
+void outw(UINT16 port, UINT16 value);
 UINT16 inw(UINT16 port);
-void   outl(UINT16 port, UINT32 value);
+void outl(UINT16 port, UINT32 value);
 UINT32 inl(UINT16 port);
-void   insw(UINT16 port, VOID *buf, unsigned long n);
-void   outsw(UINT16 port, const VOID *buf, unsigned long n);
-void   insl(UINT32 port, VOID *addr, int cnt);
-void   outsl(UINT32 port, const VOID *addr, int cnt);
-void   enable_intr();
-void   disable_intr();
-void   io_mfence();
+void insw(UINT16 port, VOID *buf, unsigned long n);
+void outsw(UINT16 port, const VOID *buf, unsigned long n);
+void insl(UINT32 port, VOID *addr, int cnt);
+void outsl(UINT32 port, const VOID *addr, int cnt);
+void enable_intr();
+void disable_intr();
+void io_mfence();
 
 // kernel/intr/8259A.cpp
 void init_8259A();
