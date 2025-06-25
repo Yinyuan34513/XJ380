@@ -63,6 +63,7 @@ void PrintPicture(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ow, int o
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char* path);
 
 
+
 /*
  *   font
  */
