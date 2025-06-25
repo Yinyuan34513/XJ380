@@ -2,7 +2,6 @@
 #define __TASK_H__
 
 #include "../../../include.h"
-#include "./waitqueue.h"
 
 #define CLONE_FS     (1 << 0)
 #define CLONE_FILES  (1 << 1)
@@ -89,7 +88,7 @@ struct task_struct {
     fpu_context *fpu;
 
     uint64_t addr_limit;
-    /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/ /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
+        /*0x0000,0000,0000,0000 - 0x0000,7fff,ffff,ffff user*/ /*0xffff,8000,0000,0000 - 0xffff,ffff,ffff,ffff kernel*/
 
     long pid;
     long priority;

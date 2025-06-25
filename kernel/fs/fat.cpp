@@ -43,8 +43,8 @@ uint64_t fat32_find_available_cluster(FAT32_NodeInfo *fsbi) {
 }
 
 int fat_write_node(VNode *node) {
-    struct FAT32_Directory *fdentry = nullptr;
-    struct FAT32_Directory *buf     = nullptr;
+    struct FAT32_Directory *fdentry = NULL;
+    struct FAT32_Directory *buf     = NULL;
     FAT32_NodeInfo         *info    = (FAT32_NodeInfo *)node->desc;
     unsigned long           sector  = 0;
 

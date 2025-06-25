@@ -26,8 +26,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code) {
         ms_dec.center = false;
         ms_dec.right  = false;
 
-        if (ms_dec.sht_now != nullptr &&
-            mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
+        if (ms_dec.sht_now != NULL && mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
             mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width &&
             mouse_y >= ms_dec.sht_now->by && mouse_y <= ms_dec.sht_now->by + 17) {
             if (!win_c_bt_isl) {
@@ -71,8 +70,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code) {
             win_c_bt_isl = false;
         }
 
-        if (ms_dec.sht_now != nullptr &&
-            mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 63 &&
+        if (ms_dec.sht_now != NULL && mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 63 &&
             mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
             mouse_y >= ms_dec.sht_now->by && mouse_y <= ms_dec.sht_now->by + 17) {
             if (!win_m_bt_isl) {
@@ -116,7 +114,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code) {
 
             if (!ms_dec.win_move_lock) {
                 ms_dec.sheet_id = found_sheet_movable(sht_img, mouse_x, mouse_y);
-                if (ms_dec.sheet_id == nullptr) {
+                if (ms_dec.sheet_id == NULL) {
                     // 点在了桌面或快捷栏上
                     ms_dec.win_move_lock = false;
                 } else {
@@ -131,7 +129,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, UINT64 error_code) {
                     ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
                 }
                 ms_dec.sheet_id = found_sheetmb(sht_img, mouse_x, mouse_y);
-                if (ms_dec.sheet_id == nullptr) {
+                if (ms_dec.sheet_id == NULL) {
                     // 点在了桌面或快捷栏上
                     // do nothing
                 } else {
@@ -233,7 +231,7 @@ void mouse_init() {
     ms_dec.phase = 0;
 
     ms_dec.win_move_lock = false;
-    ms_dec.sht_now       = nullptr;
+    ms_dec.sht_now       = NULL;
 }
 
 void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id) {

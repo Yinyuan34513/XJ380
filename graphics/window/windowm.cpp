@@ -22,7 +22,7 @@ bool WindowIsCreating = false;
 
 void init_xwm(XWM_INFO *xwmi) {
     write_serial_string("Initializing XWM...\n");
-    xwmi->start   = nullptr;
+    xwmi->start   = NULL;
     xwmi->win_num = 0;
     write_serial_string("XWM Initializing Success.\n");
 }
@@ -35,13 +35,13 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     xmemset(new_window, 0, sizeof(WINDOWLS));
 
     WINDOWLS *front_p = xwmi->start;
-    if (front_p == nullptr) {
+    if (front_p == NULL) {
         // 哦亲爱的孩子我不说了你知道这是干什么的
         xwmi->start = new_window;
     } else {
         WINDOWLS *front_p = xwmi->start;
         while (true) {
-            if (front_p->next == nullptr) {
+            if (front_p->next == NULL) {
                 // 链表.exe
                 front_p->next = new_window;
                 break;
@@ -52,7 +52,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     *windowls = new_window;
     xwmi->win_num++;
-    new_window->WinMPf = nullptr;
+    new_window->WinMPf = NULL;
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1,
                  &(new_window->w_sheet));
@@ -149,7 +149,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
             by = front_p3->by;
             ex = bx + front_p3->width;
             ey = by + front_p3->height;
-        } else if (front_p3->next == nullptr) {
+        } else if (front_p3->next == NULL) {
             write_serial_string("Window Delete Faild. (Cannot found sheet) SheetID: ");
             write_serial_dec(windowls->w_sheet);
             write_serial_string("\n");
@@ -170,7 +170,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
             // xwmi->win_num--;
             refresh_part_sheet(sht_img, bx, by, ex, ey);
             return;
-        } else if (front_p->next == nullptr) {
+        } else if (front_p->next == NULL) {
             write_serial_string("Window Delete Faild. (Cannot found window) WindowID: ");
             return;
         }
@@ -182,15 +182,15 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
 }
 
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet) {
-    if (csheet == nullptr) { return nullptr; }
+    if (csheet == NULL) { return NULL; }
 
     WINDOWLS *front_p = xwmi->start;
     while (true) {
         SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
         if (sheet->index == csheet->index) {
             return front_p;
-        } else if (front_p->next == nullptr) {
-            return nullptr;
+        } else if (front_p->next == NULL) {
+            return NULL;
         }
         front_p = front_p->next;
     }

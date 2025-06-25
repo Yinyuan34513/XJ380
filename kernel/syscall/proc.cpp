@@ -18,8 +18,8 @@ int sys_execve(struct X64_REGS *regs) {
 
 uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage) {
     long                retval = 0;
-    struct task_struct *child  = nullptr;
-    struct task_struct *tsk    = nullptr;
+    struct task_struct *child  = NULL;
+    struct task_struct *tsk    = NULL;
 
     for (tsk = &init_task_union.task; tsk->next != &init_task_union.task; tsk = tsk->next) {
         if (tsk->next->pid == pid) {
@@ -28,7 +28,7 @@ uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage) {
         }
     }
 
-    if (child == nullptr) return -1;
+    if (child == NULL) return -1;
     if (options != 0) return -1;
 
     if (child->state == TASK_ZOMBIE) {

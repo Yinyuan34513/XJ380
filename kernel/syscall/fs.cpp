@@ -7,7 +7,7 @@ int sys_read(uint32_t fd, uint8_t *buf, size_t count) {
     if (fd == 1 || fd == 2) { return 0; }
     struct VFile *file = current_task->fds[fd];
     VNode        *node = file->file;
-    if (node->ops->read == nullptr && !file->readable) { return -1; }
+    if (node->ops->read == NULL && !file->readable) { return -1; }
     return node->ops->read(node, buf, file->offset, count);
 }
 
@@ -21,13 +21,13 @@ int sys_write(uint32_t fd, uint8_t *buf, size_t count) {
     }
     struct VFile *file = current_task->fds[fd];
     VNode        *node = file->file;
-    if (node->ops->write == nullptr && !file->writeable) { return -1; }
+    if (node->ops->write == NULL && !file->writeable) { return -1; }
     return node->ops->write(node, buf, file->offset, count);
 }
 
 int sys_open(const char *pathname, int flags, int mode) {
     VNode *node = path_walk(current_task->cwd_node, pathname);
-    if (node == nullptr) { return -1; }
+    if (node == NULL) { return -1; }
     int           fd   = current_task->fd_count++;
     struct VFile *file = current_task->fds[fd];
 
@@ -42,7 +42,7 @@ int sys_open(const char *pathname, int flags, int mode) {
 
 int sys_close(uint32_t fd) {
     if (fd >= MAX_FD_NUM) { return -1; }
-    current_task->fds[fd] = nullptr;
+    current_task->fds[fd] = NULL;
     return 0;
 }
 
@@ -51,7 +51,7 @@ int sys_fstat(uint32_t fd, struct stat *stat) {
     if (fd >= MAX_FD_NUM) { return -1; }
     struct VFile *file = current_task->fds[fd];
     VNode        *node = file->file;
-    if (node->ops->stat == nullptr) { return -1; }
+    if (node->ops->stat == NULL) { return -1; }
     xmemset(stat, 0, sizeof(struct stat));
     return node->ops->stat(node, stat);
 }

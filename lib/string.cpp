@@ -14,7 +14,7 @@ char *strncpy(char *dest, const char *src, UINT64 length) {
     return r;
 }
 char *strcpy(char *dest, const char *src) {
-    // assert(dest != nullptr && src != nullptr);
+    // assert(dest != NULL && src != NULL);
     char *r = dest;
     while ((*dest++ = *src++))
         ;
@@ -22,7 +22,7 @@ char *strcpy(char *dest, const char *src) {
 }
 
 UINT64 strlen(const char *str) {
-    // assert(str != nullptr);
+    // assert(str != NULL);
     const char *p = str;
     while (*p++)
         ;

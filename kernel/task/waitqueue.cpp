@@ -24,7 +24,7 @@ void interruptible_sleep_on(wait_queue_t *wait_queue_head) {
 }
 
 void wakeup(wait_queue_t *wait_queue_head, long state) {
-    wait_queue_t *wait = nullptr;
+    wait_queue_t *wait = NULL;
 
     if (list_is_empty(&wait_queue_head->wait_list)) return;
 
