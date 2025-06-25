@@ -26,16 +26,6 @@ struct SHEET
 
 typedef struct
 {
-    SHEET *start;
-    VOID *temp_buffer;
-    UINT32 scrx, scry;
-    UINT16 sheet_num; // 图层数量 - 1
-    UINT16 sht_numed; // 图层数量 - 1，用于编号
-    const FrameBufferConfig *fbc;
-} SHEET_INFO;
-
-typedef struct
-{
     UINT8 r;
     UINT8 g;
     UINT8 b;
@@ -48,5 +38,16 @@ typedef struct
     UINT8 g;
     UINT8 b;
 } __attribute__((packed)) SHEET_BUFFER_WOA;
+
+typedef struct
+{
+    SHEET *start;
+    VOID *temp_buffer;
+    UINT32 scrx, scry;
+    UINT16 sheet_num; // 图层数量 - 1
+    UINT16 sht_numed; // 图层数量 - 1，用于编号
+    const FrameBufferConfig *fbc;
+    SHEET_BUFFER *rtp_buffer;
+} SHEET_INFO;
 
 #endif

@@ -520,7 +520,7 @@ uint64_t init_kernel_thread(uint64_t arg)
         "pushq	%2		\n\t"
         "jmp   do_execve	\n\t"
         :
-        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/usr/init.elf"), "d"(argv), "c"(envp)
+        : "D"(current_task->thread->rsp), "m"(current_task->thread->rsp), "m"(current_task->thread->rip), "S"("/apps/init.elf"), "d"(argv), "c"(envp)
         : "memory");
 
     return (uint64_t)-1;
@@ -639,7 +639,7 @@ uint64_t desktop_flusher(uint64_t arg)
 
     winRD_lock = true;
 
-    PrintPic_PNG(&shtinf, &desktop_sheet_id, 200, 200, 200, 60, "/test.png");
+    PrintPicture_blend(&shtinf, &desktop_sheet_id, 200, 200, 200, 60, "/test.png");
 
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);

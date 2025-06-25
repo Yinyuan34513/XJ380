@@ -58,7 +58,10 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 
 // graphics/image/image.cpp
-void PrintPic_PNG(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ow, int oh, char *path);
+void PrintPicture_blend(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ow, int oh, char *path);
+void PrintPicture(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, int ow, int oh, char *path);
+void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char* path);
+
 
 
 /*

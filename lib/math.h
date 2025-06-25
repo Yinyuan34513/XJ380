@@ -115,6 +115,7 @@ double cos(double x) {
     );
     return result;
 }
+
 double acos(double x) {
     double result;
     __asm__ (
@@ -130,6 +131,7 @@ double acos(double x) {
     );
     return result;
 }
+
 unsigned int abs(int value)
 {
     unsigned int copyed_value = value;
