@@ -61,7 +61,7 @@ int main(int argc, char *argv[], char *envp[])
     draw_uparrow(handle, 365, 75);
     xapi_RefreshWindow(handle);
     // xapi_CloseWindow(handle);
-    execve("/usr/shell.elf", NULL, NULL);
+    execve("/apps/shell.elf", NULL, NULL);
     return 0;
 }
 

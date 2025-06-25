@@ -16,6 +16,7 @@ typedef struct
 } __attribute__((__aligned__(16))) EfiMemoryDesc;
 
 extern "C" void memory_init(void *ptr, size_t size);
+extern spinlock_t malloc_lock;
 
 void memory_test(const FrameBufferConfig &fbc)
 {
@@ -169,6 +170,8 @@ void init_MemoryManager(const FrameBufferConfig &fbc, BOOT_CONFIG *BootConfig)
     flush_tlb();
 
     memory_init((void *)KHEAP_START_VADDR, KHEAP_SIZE);
+
+    spin_init(&malloc_lock);
 
 #if BUILD_EDITION == DEBUG_VERSION
     MemoryWasInit = true;
