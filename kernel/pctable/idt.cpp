@@ -7,6 +7,8 @@
 IDT_GATE_TYPE idt_gate[IDT_SIZE] __attribute__((__aligned__(PAGE_SIZE)));
 IDTR_TYPE idt_ptr;
 
+void init_idt_desc(UINT8 number, UINT8 gate_type, int_func function, UINT8 privilege);
+
 /**
  * @brief 初始化中断描述符表（IDT）
  */
@@ -18,7 +20,7 @@ void init_idt()
     UINT64 *p_idt_base = (UINT64 *)(&idt_ptr.base);
 
     *p_idt_limit = IDT_SIZE * sizeof(IDT_GATE_TYPE) - 1;
-    *p_idt_base = (UINT64)&idt_gate;
+    *p_idt_base = (UINT64)(&idt_gate);
 
     init_idt_desc(0, X86_64_INTR_GATE, divide_error, RING0);
     init_idt_desc(1, X86_64_INTR_GATE, debug, RING0);

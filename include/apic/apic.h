@@ -69,6 +69,8 @@ struct APIC_INFO
 #define LAPIC_REG_SPURIOUS 0xf0
 #define LAPIC_REG_TIMER_DIV 0x3e0
 
+#include <acpi/acpi.h>
+
 typedef struct
 {
     struct ACPISDTHeader h;

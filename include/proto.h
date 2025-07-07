@@ -18,6 +18,25 @@ void write_serial_hex(unsigned long long hex);
 
 /*
  *
+ *  kernel/
+ * 
+ */
+
+// kernel/wsod.cpp
+extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_nmi(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void default_isr(struct X64_REGS *regs, UINT64 error_code);
+
+/*
+ *
  *  kernel/cpu/
  * 
  */
@@ -53,5 +72,17 @@ void disable_8259A();
 
 // kernel/intr/apic.cpp
 void init_apic(UINT64 MADT0);
+
+/*
+ *
+ *  kernel/pctable/
+ * 
+ */
+
+// kernel/pctable/idt.cpp
+void init_idt();
+
+// kernel/pctable/gdt.cpp
+void init_gdt();
 
 #endif
