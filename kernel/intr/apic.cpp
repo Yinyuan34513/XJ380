@@ -1,8 +1,9 @@
-#include "../../include/include.h"
+#include <apic/apic.h>
+#include <apic/madt.h>
+#include <cpu/msr.h>
+#include <proto.h>
 
 APIC_INFO ApicInfo;
-
-IrqDesc irq_table[256 - 35];
 
 /**
  *
@@ -105,50 +106,6 @@ void ioapic_add(UINT8 vector, UINT32 irq)
     ioapic_write(ioredtbl + 1, (UINT32)(redirect >> 32));
 }
 
-void init_IOApic()
-{
-    write_serial_string("Initializing IOAPIC...\n");
-
-    ioapic_add((UINT8)32, 0);
-    ioapic_add((UINT8)33, 1);
-    ioapic_add((UINT8)34, 12);
-
-    // XHCI interrupt vector
-    // ioapic_add((UINT8)35, 3);
-    // ioapic_enable((UINT8)35);
-
-    write_serial_string("Setup I/O apic.\n");
-
-    write_serial_string("IOAPIC Address: ");
-    write_serial_hex(ApicInfo.ioApicAddr);
-    write_serial_string("\n");
-    write_serial_string("IOAPIC Initialize Success.\n");
-}
-
-/**
- *
- * @brief 初始化(Local) x2APIC
- *
- * @param MADT MADT表地址
- *
- */
-void init_lApic()
-{
-    lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
-    lapic_write(LAPIC_REG_SPURIOUS, 0xff | 1 << 8);
-    lapic_write(LAPIC_REG_TIMER_DIV, 11);
-    lapic_write(LAPIC_REG_TIMER_INITCNT, 0);
-    UINT64 b = nanoTime();
-    lapic_write(LAPIC_REG_TIMER_INITCNT, ~((UINT32)0));
-    for (;;)
-        if (nanoTime() - b >= 1000000)
-            break;
-    UINT64 lapic_timer = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
-    UINT64 calibrated_timer_initial = (UINT64)((UINT64)(lapic_timer * 1000) / 250);
-    lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
-    lapic_write(LAPIC_REG_TIMER_INITCNT, calibrated_timer_initial);
-}
-
 /**
  *
  * @brief 初始化Local APIC
@@ -169,15 +126,15 @@ void init_apic(UINT64 MADT0)
     switch (check_apic())
     {
     case 2:
-        write_serial_string("You PC support x2APIC\n");
+        write_serial_string("You PC support x2APIC.\n");
         ApicInfo.x2Apic = true;
         break;
     case 1:
-        write_serial_string("You PC support xAPIC\n");
+        write_serial_string("You PC support xAPIC.\n");
         ApicInfo.x2Apic = false;
         break;
     default:
-        wsod_apic_not_found();
+        // wsod_apic_not_found();
         break; // 虽然这里理论上永远都不会执行...
     }
 
@@ -206,84 +163,6 @@ void init_apic(UINT64 MADT0)
         }
         current += (UINT64)header->length;
     }
-    init_lApic();
-    init_IOApic();
-
-    xmemset(irq_table, 0, sizeof(irq_table));
 
     write_serial_string("APIC Initialize Success.\n");
-}
-
-void send_eoi()
-{
-    lapic_write(0xb0, 0);
-}
-
-extern "C" void c_timer_handler(void *regs_ptr, UINT64 error_code)
-{
-    send_eoi();
-
-    switch (current_task->priority)
-    {
-    case 0:
-    case 1:
-        task_schedule[current_task->cpu_id].CPU_exec_task_jiffies--;
-        current_task->vrun_time += 1;
-        break;
-    case 2:
-    default:
-        task_schedule[current_task->cpu_id].CPU_exec_task_jiffies -= 2;
-        current_task->vrun_time += 2;
-        break;
-    }
-
-    if (task_schedule[current_task->cpu_id].CPU_exec_task_jiffies <= 0)
-        current_task->flags |= NEED_SCHEDULE;
-
-    if (current_task->flags & NEED_SCHEDULE)
-    {
-        schedule();
-    }
-}
-
-extern "C" void c_do_irq(struct X64_REGS *regs, uint64_t irq, uint64_t error_code)
-{
-    IrqDesc *desc = &irq_table[irq - 35];
-
-    if (desc && desc->handler)
-    {
-        desc->handler(regs, desc->arg, error_code);
-    }
-    else
-    {
-        write_serial_string("Unhandled IRQ: ");
-        write_serial_hex(irq);
-        write_serial_string("\n");
-    }
-
-    send_eoi();
-}
-
-void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code), uint64_t arg)
-{
-    IrqDesc *desc = &irq_table[irq - 35];
-
-    desc->name = (char *)malloc(strlen(name) + 1);
-    strcpy(desc->name, name);
-
-    desc->handler = handler;
-    desc->arg = arg;
-
-    ioapic_add((UINT8)irq, (UINT32)(irq - 32));
-    ioapic_enable((UINT8)irq);
-}
-
-void unregister_irq(uint64_t irq)
-{
-    IrqDesc *desc = &irq_table[irq - 35];
-
-    free(desc->name);
-
-    desc->handler = nullptr;
-    desc->arg = 0;
 }

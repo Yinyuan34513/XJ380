@@ -6,14 +6,12 @@
 extern "C"
 {
 #endif
-#include "../../../efi.h"
+#include <efi/efi.h>
 #ifdef __cplusplus
 }
 #endif
 
-#include "../../../asm.h"
-#include "../../stdint.h"
-#include "../longm.h"
+#include <stdint.h>
 
 // CPUID命令
 #define CPUID_ECX_x2APIC 1 << 21
@@ -71,11 +69,6 @@ struct APIC_INFO
 #define LAPIC_REG_SPURIOUS 0xf0
 #define LAPIC_REG_TIMER_DIV 0x3e0
 
-#include "hpet.h"
-
-void lapic_write(UINT32 reg, UINT64 value);
-UINT32 lapic_read(UINT32 reg);
-
 typedef struct
 {
     struct ACPISDTHeader h;
@@ -123,61 +116,6 @@ typedef struct madt_hander MadtHeader;
 typedef struct madt_local_apic MadtLocalApic;
 typedef struct madt_x2_localapic MadtLocalX2apic;
 typedef struct madt_io_apic MadtIOApic;
-
-extern UINT64 lapic_id();
-
-// About register irq
-
-#define SAVE_ALL             \
-    "cld;			\n\t"            \
-    "pushq	%rax;		\n\t"      \
-    "pushq	%rax;		\n\t"      \
-    "movq	%es,	%rax;	\n\t"   \
-    "pushq	%rax;		\n\t"      \
-    "movq	%ds,	%rax;	\n\t"   \
-    "pushq	%rax;		\n\t"      \
-    "xorq	%rax,	%rax;	\n\t"  \
-    "pushq	%rbp;		\n\t"      \
-    "pushq	%rdi;		\n\t"      \
-    "pushq	%rsi;		\n\t"      \
-    "pushq	%rdx;		\n\t"      \
-    "pushq	%rcx;		\n\t"      \
-    "pushq	%rbx;		\n\t"      \
-    "pushq	%r8;		\n\t"       \
-    "pushq	%r9;		\n\t"       \
-    "pushq	%r10;		\n\t"      \
-    "pushq	%r11;		\n\t"      \
-    "pushq	%r12;		\n\t"      \
-    "pushq	%r13;		\n\t"      \
-    "pushq	%r14;		\n\t"      \
-    "pushq	%r15;		\n\t"      \
-    "movq	$0x10,	%rdx;	\n\t" \
-    "movq	%rdx,	%ds;	\n\t"   \
-    "movq	%rdx,	%es;	\n\t"
-
-#define IRQ_NAME2(nr) nr##_interrupt(void)
-#define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
-
-#define BUILD_IRQ(nr)                                                                                  \
-    extern "C" void IRQ_NAME(nr);                                                                      \
-    __asm__(".section .text\n\t" SYMBOL_NAME_STR(IRQ) #nr "_interrupt:		\n\t"                          \
-                                                          "pushq	$0x00				\n\t" SAVE_ALL \
-                                                          "movq	%rsp,	%rdi			\n\t"                     \
-                                                          "leaq	ret_from_intr(%rip),	%rax	\n\t"        \
-                                                          "pushq	%rax				\n\t"                         \
-                                                          "movq	$" #nr ",	%rsi			\n\t"                 \
-                                                          "jmp	c_do_irq	\n\t");
-
-typedef struct
-{
-    char *name;
-    void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code);
-    uint64_t arg;
-    uint64_t flags;
-} IrqDesc;
-
-void register_irq(const char *name, uint64_t irq, void (*handler)(struct X64_REGS *regs, uint64_t arg, uint64_t error_code), uint64_t arg);
-void unregister_irq(uint64_t irq);
 
 #pragma pack()
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../include.h"
+#include <stdint.h>
 
 static inline uint64_t rdmsr(UINT32 msr)
 {

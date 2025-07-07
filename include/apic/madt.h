@@ -6,7 +6,7 @@
 extern "C"
 {
 #endif
-#include "../efi/efi.h"
+#include <efi/efi.h>
 #ifdef __cplusplus
 }
 #endif

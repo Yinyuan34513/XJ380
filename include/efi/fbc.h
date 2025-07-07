@@ -3,7 +3,7 @@
 #ifndef FBC_HPP_
 #define FBC_HPP_
 
-#include "../stdint.h"
+#include <stdint.h>
 
 enum PixelFormat
 {

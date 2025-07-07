@@ -1,6 +1,6 @@
-#include "../../include/include.h"
+#include <proto.h>
 
-spinlock_t serial_lock;
+// spinlock_t serial_lock;
 
 #if BUILD_VERSION == DEBUG_VERSION
 int serial_x = 0;
@@ -12,7 +12,7 @@ int serial_x_max = 0;
 
 int init_serial()
 {
-	spin_init(&serial_lock);
+	// spin_init(&serial_lock);
 
 	outb(PORT + 1, 0x00); // Disable all interrupts
 	outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
@@ -34,12 +34,12 @@ int init_serial()
 	// If serial is not faulty set it in normal operation mode
 	// (not-loopback with IRQs enabled and OUT#1 and OUT#2 bits enabled)
 	outb(PORT + 4, 0x0F);
-#if BUILD_VERSION == DEBUG_VERSION
-	WriteString(*fbc_addr, serial_x, serial_y, "XJ380 Operating System - Debug Mode (Serial Outputer)", {0xFF, 0xFF, 0xFF});
-	serial_y += 16;
-	WriteString(*fbc_addr, serial_x, serial_y, "Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.", {0xFF, 0xFF, 0xFF});
-	serial_y += 16;
-#endif
+// #if BUILD_VERSION == DEBUG_VERSION
+// 	WriteString(*fbc_addr, serial_x, serial_y, "XJ380 Operating System - Debug Mode (Serial Outputer)", {0xFF, 0xFF, 0xFF});
+// 	serial_y += 16;
+// 	WriteString(*fbc_addr, serial_x, serial_y, "Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.", {0xFF, 0xFF, 0xFF});
+// 	serial_y += 16;
+// #endif
 	return 0;
 }
 
@@ -58,31 +58,31 @@ void write_serial(char a)
 
 void write_serial_string(const char *str)
 {
-	spin_lock(&serial_lock);
+	// spin_lock(&serial_lock);
 	while (*str)
 	{
-#if BUILD_VERSION == DEBUG_VERSION
-		if (*str == '\n') {
-			serial_x = 0;
-			serial_y += 16;
-		} else {
-			rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
-			WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
-			serial_x += 8;
-		}
+// #if BUILD_VERSION == DEBUG_VERSION
+// 		if (*str == '\n') {
+// 			serial_x = 0;
+// 			serial_y += 16;
+// 		} else {
+// 			rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
+// 			WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
+// 			serial_x += 8;
+// 		}
 
-		if (serial_y >= fbc_addr->vertical_resolution) {
-			rect(*fbc_addr, 0, 32, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
-			serial_x_max = 0;
-			serial_y = 32;
-		}
-		if (serial_x > serial_x_max) {
-			serial_x_max = serial_x;
-		}
-#endif
+// 		if (serial_y >= fbc_addr->vertical_resolution) {
+// 			rect(*fbc_addr, 0, 32, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
+// 			serial_x_max = 0;
+// 			serial_y = 32;
+// 		}
+// 		if (serial_x > serial_x_max) {
+// 			serial_x_max = serial_x;
+// 		}
+// #endif
 		write_serial(*str++);
 	}
-	spin_unlock(&serial_lock);
+	// spin_unlock(&serial_lock);
 }
 
 void write_serial_dec(unsigned long long dec)
