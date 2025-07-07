@@ -52,5 +52,6 @@ void init_8259A();
 void disable_8259A();
 
 // kernel/intr/apic.cpp
+void init_apic(UINT64 MADT0);
 
 #endif

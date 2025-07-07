@@ -29,14 +29,26 @@ UINT8 check_apic()
     return 0;
 }
 
-static inline void mmio_write32(UINT32 *addr, UINT32 data)
+static inline void mmio_write32(UINT32 addr, UINT32 data)
 {
-    *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr) = data;
+    asm volatile (
+        "movl %1, (%0)"
+        :
+        : "r" (addr), "ir" (data)
+        : "memory"
+    );
 }
 
-static inline UINT32 mmio_read32(void *addr)
+static inline UINT32 mmio_read32(UINT32 addr)
 {
-    return *(volatile UINT32 *)convert_physical_to_virtual((uint64_t)addr);
+    uint32_t ret;
+    asm volatile (
+        "movl (%1), %0"
+        : "=r" (ret)
+        : "r"  (addr)
+        : "memory"
+    );
+    return ret;
 }
 
 void lapic_write(UINT32 reg, UINT64 value)
@@ -46,7 +58,7 @@ void lapic_write(UINT32 reg, UINT64 value)
         wrmsr(0x800 + (reg >> 4), value);
         return;
     }
-    mmio_write32((UINT32 *)((UINT64)ApicInfo.LocalApicAddr + reg), value);
+    mmio_write32((UINT32)((UINT64)ApicInfo.LocalApicAddr + reg), value);
 }
 
 UINT32 lapic_read(UINT32 reg)
@@ -55,7 +67,7 @@ UINT32 lapic_read(UINT32 reg)
     {
         return rdmsr(0x800 + (reg >> 4));
     }
-    return mmio_read32((UINT32 *)((UINT64)ApicInfo.LocalApicAddr + reg));
+    return mmio_read32((UINT32)((UINT64)ApicInfo.LocalApicAddr + reg));
 }
 
 UINT64 lapic_id()
@@ -69,14 +81,14 @@ UINT64 lapic_id()
 
 static void ioapic_write(UINT32 reg, UINT32 value)
 {
-    mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr), reg);
-    mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr + 0x10), value);
+    mmio_write32((UINT32)((UINT64)ApicInfo.ioApicAddr), reg);
+    mmio_write32((UINT32)((UINT64)ApicInfo.ioApicAddr + 0x10), value);
 }
 
 static uint32_t ioapic_read(UINT32 reg)
 {
-    mmio_write32((UINT32 *)((UINT64)ApicInfo.ioApicAddr), reg);
-    return mmio_read32((UINT32 *)((UINT64)ApicInfo.ioApicAddr + 0x10));
+    mmio_write32((UINT32)((UINT64)ApicInfo.ioApicAddr), reg);
+    return mmio_read32((UINT32)((UINT64)ApicInfo.ioApicAddr + 0x10));
 }
 
 void ioapic_disable(UINT8 vector)
@@ -88,22 +100,27 @@ void ioapic_disable(UINT8 vector)
     ioapic_write(index + 1, (uint32_t)(value >> 32));
 }
 
-void ioapic_enable(UINT8 vector)
+uint32_t ioapic_gsi_count() 
 {
-    uint64_t index = 0x10 + ((vector - 32) * 2);
-    uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
-    value &= (~0x10000UL);
-    ioapic_write(index, (uint32_t)(value & 0xFFFFFFFF));
-    ioapic_write(index + 1, (uint32_t)(value >> 32));
+    return ((ioapic_read(1) & 0xff0000) >> 16) + 1;
 }
 
-void ioapic_add(UINT8 vector, UINT32 irq)
+void ioapic_mask_all() 
 {
-    UINT32 ioredtbl = (UINT32)(0x10 + (uint32_t)(irq * 2));
-    UINT64 redirect = (UINT64)vector;
-    redirect |= lapic_id() << 56;
-    ioapic_write(ioredtbl, (UINT32)redirect);
-    ioapic_write(ioredtbl + 1, (UINT32)(redirect >> 32));
+    uint32_t gsi_count = ioapic_gsi_count();
+    for (uint32_t j = 0; j < gsi_count; j++) {
+        uint64_t ioredtbl = j * 2 + 16;
+        switch ((ioapic_read(ioredtbl) >> 8) & 0b111) {
+            case 0b000: // Fixed
+            case 0b001: // Lowest Priority
+                break;
+            default:
+                continue;
+        }
+
+        ioapic_write(ioredtbl, (1 << 16)); // mask
+        ioapic_write(ioredtbl + 1, 0);
+    }
 }
 
 /**
@@ -126,11 +143,11 @@ void init_apic(UINT64 MADT0)
     switch (check_apic())
     {
     case 2:
-        write_serial_string("You PC support x2APIC.\n");
+        write_serial_string("Your PC support x2APIC.\n");
         ApicInfo.x2Apic = true;
         break;
     case 1:
-        write_serial_string("You PC support xAPIC.\n");
+        write_serial_string("Your PC support xAPIC.\n");
         ApicInfo.x2Apic = false;
         break;
     default:
