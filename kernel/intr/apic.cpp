@@ -151,7 +151,7 @@ void init_apic(UINT64 MADT0)
         ApicInfo.x2Apic = false;
         break;
     default:
-        // wsod_apic_not_found();
+        while(1);
         break; // 虽然这里理论上永远都不会执行...
     }
 

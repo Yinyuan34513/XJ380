@@ -1,0 +1,18 @@
+#ifndef _INCLUDE_GDT_H_
+#define _INCLUDE_GDT_H_
+
+#include "../../stdint.h"
+
+#define GDT_TYPE_ZERO 0
+#define GDT_TYPE_KERNEL_CS 1
+#define GDT_TYPE_KERNEL_DS 2
+#define GDT_TYPE_USER_DS 3
+#define GDT_TYPE_USER_CS 4
+#define GDT_TYPE_TSS 6
+
+#define SELECTOR_KERNEL_CS (GDT_TYPE_KERNEL_CS << 3)
+#define SELECTOR_KERNEL_DS (GDT_TYPE_KERNEL_DS << 3)
+#define SELECTOR_USER_CS ((GDT_TYPE_USER_CS << 3) | RING3)
+#define SELECTOR_USER_DS ((GDT_TYPE_USER_DS << 3) | RING3)
+
+#endif
