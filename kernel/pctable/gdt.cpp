@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <pctable/gdt.h>
+#include <mm/memory.h>
 #include <proto.h>
 
 /* 全局描述符表定义 */

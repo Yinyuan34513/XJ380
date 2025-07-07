@@ -15,6 +15,8 @@
 #define SELECTOR_USER_CS ((GDT_TYPE_USER_CS << 3) | RING3)
 #define SELECTOR_USER_DS ((GDT_TYPE_USER_DS << 3) | RING3)
 
+#include <smp/smp.h>
+
 // 全局描述符表长度
 #define GDT_LENGTH GDT_TYPE_TSS + MAX_CPU_NUM * 2 + 1
 
