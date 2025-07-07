@@ -118,22 +118,22 @@ typedef struct
 
 enum EFI_MEMORY_TYPE
 {
-  EfiReservedMemoryType,      // 0 不要动为好
+  EfiReservedMemoryType,      // 0 不要动
   EfiLoaderCode,              // 1 不要动
   EfiLoaderData,              // 2 不要动
-  EfiBootServicesCode,        // 3 永远怀念
-  EfiBootServicesData,        // 4 永远怀念
+  EfiBootServicesCode,        // 3 可以动
+  EfiBootServicesData,        // 4 可以动
   EfiRuntimeServicesCode,     // 5 不要动
   EfiRuntimeServicesData,     // 6 不要动
   EfiConventionalMemory,      // 7 可以动
-  EfiUnusableMemory,          // 8 动不了
+  EfiUnusableMemory,          // 8 不要动
   EfiACPIReclaimMemory,       // 9 不要动
   EfiACPIMemoryNVS,           // A 不要动
   EfiMemoryMappedIO,          // B 不要动
   EfiMemoryMappedIOPortSpace, // C 不要动
-  EfiPalCode,                 // D 应该可以动
-  EfiPersistentMemory,        // E 应该可以动
-  EfiMaxMemoryType            // F 应该可以动
+  EfiPalCode,                 // D 不知道
+  EfiPersistentMemory,        // E 不知道
+  EfiMaxMemoryType            // F 不知道
 };
 
 typedef enum
