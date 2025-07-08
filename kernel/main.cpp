@@ -26,6 +26,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
           smp_tpl[i] = BootConfig->smp_trapl[i];
      smp_trampoline_rs = BootConfig->smp_trampoline_rs;
 
+     XSK_SMP_INFO xsi;
+     init_smp(BootConfig->MADT, &xsi);
+
      enable_intr();
 
      while (true)

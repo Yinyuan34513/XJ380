@@ -93,4 +93,15 @@ void init_idt();
 // kernel/pctable/gdt.cpp
 void init_gdt();
 
+#include <smp/smp.h>
+
+/*
+ *
+ *  kernel/smp/
+ * 
+ */
+
+// kernel/smp/smp.cpp
+void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi);
+
 #endif

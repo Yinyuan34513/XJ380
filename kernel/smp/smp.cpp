@@ -41,6 +41,7 @@ struct trampoline_passed_info {
 
 bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_INFO *cpuinf)
 {
+    write_serial_string("Starting AP...\n");
     // 准备跳板
     if (smp_trampoline_size > smp_trampoline_rs)
         write_serial_string("[Error][SMP] Trampoline Size is Too Small."); return false;
@@ -111,6 +112,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
 
 void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
 {
+    write_serial_string("Initializing SMP...\n");
     GDT_PTR gdtr = gdt_ptr;
 
     uint8_t bsp_lapic_id;
@@ -128,6 +130,7 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
 
     xsi->cpu_count = 0;
 
+    write_serial_string("Searching CPUs...\n");
     size_t max_cpus = 0;
     MADT *madt = (MADT *)MADT0;
     ApicInfo.LocalApicAddr = (UINT64)madt->local_apic_address;
@@ -164,6 +167,7 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
     
     mtrr_save();
 
+    write_serial_string("Start Up APs...\n");
     // 尝试启动所有AP
     ApicInfo.LocalApicAddr = (UINT64)madt->local_apic_address;
     current = 0;
