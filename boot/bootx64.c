@@ -4,6 +4,7 @@
 #include <efi/efi.h>
 #include <efi/fbc.h>
 #include <acpi/acpi.h>
+#include <cpu/msr.h>
 #include <elf.h>
 #include "./bootlib.c"
 #define NULL 0
@@ -168,6 +169,7 @@ void efi_init(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 	BS->OpenProtocol(LIP->DeviceHandle, &sfsp_guid, (void **)&SFSP, ImageHandle, NULL,
 					EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL); // 获取SFSP
 }
+
 EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap)
 {
 	EFI_STATUS GetMemoryMapStatus = EFI_SUCCESS;
@@ -306,6 +308,11 @@ void MapVirtToPhys(uint64_t virt, uint64_t size)
 	}
 }
 
+void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx)
+{
+	__asm__ volatile("cpuid \n\t" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "0"(mop), "2"(sop) : "memory");
+}
+
 typedef void (*__attribute__((sysv_abi))
               Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *);
 
@@ -320,6 +327,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
 	CreateAndMapNewPageTable();
 	write_serial_string("New Page Table Created Success.\n");
+
+  	ST->ConOut->ClearScreen(ST->ConOut);
 
 	EFI_STATUS status;
 	EFI_PHYSICAL_ADDRESS entry_addr;
@@ -503,6 +512,28 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	BootConfig->MemoryMap.DescriptorVersion = 0;
 
 	GetMMP(&BootConfig->MemoryMap);
+
+	BootConfig->saved_mtrrs = NULL;
+	uint32_t eax, ebx, ecx, edx;
+    asm_cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    if (!!(edx & (1 << 12))) 
+	{
+		uint64_t ia32_mtrrcap = rdmsr(0xfe);
+		uint8_t var_reg_count = ia32_mtrrcap & 0xff;
+		if (BootConfig->saved_mtrrs == NULL) {
+			BootConfig->saved_mtrrs = malloc((
+				(var_reg_count * 2) /* variable MTRRs, 2 MSRs each */
+			+ 11                  /* 11 fixed MTRRs */
+			+ 1                   /* 1 default type MTRR */
+			) * sizeof(uint64_t));
+		}
+	}
+
+	for (int i = 0; i < 256; i++)
+		BootConfig->temp_stack[i] = malloc(8192);
+	for (int i = 0; i < 256; i++)
+		BootConfig->smp_trapl[i] = malloc(4096);
+	BootConfig->smp_trampoline_rs = 1048576;
 
 	EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 

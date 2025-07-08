@@ -40,5 +40,6 @@ typedef struct
 } __attribute__((__aligned__(16))) EfiMemoryDesc;
 
 #define PAGE_SIZE ((size_t)4096UL)
+#define TOP_LEVEL 4   // 页表层数，给SMP初始化AP用的，动了会不会炸我也不清楚
 
 #endif

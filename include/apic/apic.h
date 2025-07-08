@@ -39,7 +39,10 @@ extern "C"
 // 0x100 ~ 0x2e0 懒得一个个打了，反正也用不着，要用了再说
 #define LAPIC_LVT_CMCI_OFFEST 0x2f0
 #define LAPIC_ICR_OFFEST 0x300
-// 懒得打了
+#define LAPIC_REG_ICR0     0x300
+#define LAPIC_REG_ICR1     0x310
+#define LAPIC_REG_EOI      0x0b0
+
 #define LAPIC_LVT_TIMER_OFFEST 0x320
 #define LAPIC_LVT_THERMAL_OFFEST 0x330
 #define LAPIC_LVT_PERFORM_OFFEST 0x340
@@ -62,12 +65,11 @@ struct APIC_INFO
 #define MADT_APIC_IO 0x01
 #define MADT_X2APIC_LOCAL 0x09
 
-#define LAPIC_REG_ID 32
+#define LAPIC_REG_ID 0x020
 #define LAPIC_REG_TIMER_CURCNT 0x390
 #define LAPIC_REG_TIMER_INITCNT 0x380
 #define LAPIC_REG_TIMER 0x320
 #define LAPIC_REG_SPURIOUS 0xf0
-#define LAPIC_REG_TIMER_DIV 0x3e0
 
 #include <acpi/acpi.h>
 

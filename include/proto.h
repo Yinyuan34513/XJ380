@@ -59,6 +59,11 @@ void io_mfence();
 // kernel/cpu/cpuid.cpp
 void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx);
 void get_cpu_name(char *c);
+bool mtrr_supported();
+
+// kernel/cpu/mtrr.cpp
+void mtrr_save();
+void mtrr_restore();
 
 /*
  *
@@ -71,6 +76,9 @@ void init_8259A();
 void disable_8259A();
 
 // kernel/intr/apic.cpp
+void lapic_write(UINT32 reg, UINT64 value);
+UINT32 lapic_read(UINT32 reg);
+void ioapic_mask_all();
 void init_apic(UINT64 MADT0);
 
 /*

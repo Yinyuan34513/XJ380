@@ -3,4 +3,19 @@
 
 #define MAX_CPU_NUM 256
 
+#include <stdint.h>
+
+struct PROCESSOR_INFO
+{
+    uint64_t processor_id;
+    uint64_t lapic_id;
+};
+
+struct XSK_SMP_INFO
+{
+    size_t cpu_count;
+    uint32_t bsp_lapic_id;
+    struct PROCESSOR_INFO pcr_inf[MAX_CPU_NUM];
+};
+
 #endif
