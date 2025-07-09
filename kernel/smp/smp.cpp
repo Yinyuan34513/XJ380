@@ -13,8 +13,11 @@ extern void *smp_tpl[MAX_CPU_NUM];
 extern uint32_t smp_trampoline_rs;
 
 typedef char symbol[];
-extern symbol smp_trampoline_start;
-extern size_t smp_trampoline_size;
+
+extern uint8_t _APU_boot_start;
+extern uint8_t _APU_boot_end;
+
+#define APU_BASE_ADDR 0x20000
 
 #define smp_lock_read(var) ({ \
     typeof(*var) locked_read__ret = 0; \
@@ -27,38 +30,27 @@ extern size_t smp_trampoline_size;
     locked_read__ret; \
 })
 
-struct trampoline_passed_info {
-    uint8_t  smp_tpl_booted_flag;
-    uint8_t  smp_tpl_target_mode;
-    uint32_t smp_tpl_pagemap;
-    uint32_t smp_tpl_info_struct;
-    GDT_PTR smp_tpl_gdt;
-    uint64_t smp_tpl_hhdm;
-    uint64_t smp_tpl_bsp_apic_addr_msr;
-    uint64_t smp_tpl_mtrr_restore;
-    uint64_t smp_tpl_temp_stack;
-} __attribute__((packed));
+extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
+{
+    while (true) 
+    {
+        asm volatile ("hlt");
+    }
+}
 
 bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_INFO *cpuinf)
 {
-    write_serial_string("Starting AP...\n");
+    write_serial_string("Initializing CPU ");
+    write_serial_dec(lapic_id);
+    write_serial_string(".\n");
+
     // 准备跳板
-    if (smp_trampoline_size > smp_trampoline_rs) {
+    if ((UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start > smp_trampoline_rs) {
         write_serial_string("[Error][SMP] Trampoline Size is Too Small."); return false;
     }
 
-    static void *trampoline = smp_tpl[cs_number];
-    if (trampoline == NULL) {
-        xmemcpy(trampoline, smp_trampoline_start, smp_trampoline_size);
-    }
-
-    static void *tmp_stack = temp_stack[cs_number];
-
-    static struct trampoline_passed_info *passed_info = NULL;
-    if (passed_info == NULL) {
-        passed_info = (trampoline_passed_info *)(((uint64_t)trampoline + smp_trampoline_size)
-                                                   - sizeof(struct trampoline_passed_info));
-    }
+    static void *trampoline = (void *)(APU_BASE_ADDR);
+    xmemcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start);
 
     uint32_t eax, ebx, ecx, edx;
     bool nx = true;
@@ -68,17 +60,20 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
         nx = false;
     }
 
-    passed_info->smp_tpl_info_struct = (uint64_t)(cpuinf);
-    passed_info->smp_tpl_booted_flag = 0;
-    passed_info->smp_tpl_pagemap     = 4;
-    passed_info->smp_tpl_target_mode = ((uint32_t)(1) << 1)
-                                     | ((uint32_t)(nx << 3))
-                                     | ((uint32_t)(1 << 4));
-    passed_info->smp_tpl_gdt = *gdtr;
-    passed_info->smp_tpl_hhdm = 0xffff800000000000;
-    passed_info->smp_tpl_bsp_apic_addr_msr = rdmsr(0x1b);
-    passed_info->smp_tpl_mtrr_restore = (uint64_t)(mtrr_restore);
-    passed_info->smp_tpl_temp_stack = (uint64_t)(tmp_stack);
+    uint64_t cr3;
+    __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
+    uint64_t *page_table = (uint64_t *)(APU_BASE_ADDR + 8 + 0xFFFF800000000000);
+    uint64_t *ap_entry = page_table + 1;
+    uint64_t *rsp = ap_entry + 1;
+    uint64_t *cpu_id = rsp + 1;
+    uint64_t *tr = cpu_id + 1;
+    uint64_t *ready = tr + 1;
+
+    *page_table = cr3;
+    *ap_entry = (uint64_t)apu_entry;
+
+    *rsp = (uint64_t)(temp_stack[cs_number]);
+    *cpu_id = cs_number;
 
     asm volatile ("" ::: "memory");
 
@@ -102,10 +97,13 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     }
 
     for (int i = 0; i < 100; i++) {
-        if (smp_lock_read(&passed_info->smp_tpl_booted_flag) == 1) {
+        if (*ready == 1) {
+            write_serial_string("CPU ");
+            write_serial_dec(lapic_id);
+            write_serial_string(" Initialize Success.\n");
             return true;
         }
-        delay_ms(100);
+        delay_ms(1000);
     }
 
     return false;
