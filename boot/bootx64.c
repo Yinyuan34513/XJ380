@@ -530,9 +530,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	}
 
 	for (int i = 0; i < 256; i++)
-		BootConfig->temp_stack[i] = malloc(8192);
+		BootConfig->temp_stack[i] = malloc(8192) + 0xFFFF800000000000;
 	for (int i = 0; i < 256; i++)
-		BootConfig->smp_trapl[i] = malloc(4096);
+		BootConfig->smp_trapl[i] = malloc(4096) + 0xFFFF800000000000;
 	BootConfig->smp_trampoline_rs = 1048576;
 
 	EFI_STATUS ExitBSStatus = EFI_SUCCESS;
