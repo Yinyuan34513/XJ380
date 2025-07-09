@@ -3,7 +3,6 @@
 #include <apic/apic.h>
 #include <apic/madt.h>
 #include <cpu/msr.h>
-#include <cpu/delay.h>
 #include <proto.h>
 #include <stdint.h>
 
