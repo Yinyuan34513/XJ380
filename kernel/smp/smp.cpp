@@ -95,10 +95,10 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     // Send the Startup IPI
     if (ApicInfo.x2Apic) {
         lapic_write(LAPIC_REG_ICR0, ((uint64_t)lapic_id << 32) |
-                                     ((size_t)trampoline / 4096) | 0x4600);
+                                     ((size_t)trampoline >> 12) | 0x4600);
     } else {
         lapic_write(LAPIC_REG_ICR1, lapic_id << 24);
-        lapic_write(LAPIC_REG_ICR0, ((size_t)trampoline / 4096) | 0x4600);
+        lapic_write(LAPIC_REG_ICR0, ((size_t)trampoline >> 12) | 0x4600);
     }
 
     for (int i = 0; i < 100; i++) {
