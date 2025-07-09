@@ -91,7 +91,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
         lapic_write(LAPIC_REG_ICR0, 0x4500);
     }
 
-    delay(10000000);
+    delay_ms(100);
 
     // Send the Startup IPI
     if (ApicInfo.x2Apic) {
@@ -106,7 +106,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
         if (smp_lock_read(&passed_info->smp_tpl_booted_flag) == 1) {
             return true;
         }
-        delay(10000000);
+        delay_ms(100);
     }
 
     return false;

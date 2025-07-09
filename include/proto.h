@@ -65,6 +65,15 @@ bool mtrr_supported();
 void mtrr_save();
 void mtrr_restore();
 
+// kernel/cpu/delay.cpp
+// 读取TSC
+static inline uint64_t rdtsc();
+void delay(uint32_t count);
+uint64_t get_cpu_freq_mhz();
+void delay_us(uint64_t us);
+void delay_ms(uint64_t ms);
+void delay_s(uint64_t s);
+
 /*
  *
  *  kernel/intr/
