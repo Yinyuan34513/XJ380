@@ -3,6 +3,7 @@
 #include <apic/apic.h>
 #include <apic/madt.h>
 #include <cpu/msr.h>
+#include <cpu/delay.h>
 #include <proto.h>
 #include <stdint.h>
 
@@ -43,8 +44,9 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
 {
     write_serial_string("Starting AP...\n");
     // 准备跳板
-    if (smp_trampoline_size > smp_trampoline_rs)
+    if (smp_trampoline_size > smp_trampoline_rs) {
         write_serial_string("[Error][SMP] Trampoline Size is Too Small."); return false;
+    }
 
     static void *trampoline = smp_tpl[cs_number];
     if (trampoline == NULL) {
@@ -89,7 +91,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
         lapic_write(LAPIC_REG_ICR0, 0x4500);
     }
 
-    for (int i = 0; i < 10000000; i++); // 延时
+    delay(10000000);
 
     // Send the Startup IPI
     if (ApicInfo.x2Apic) {
@@ -104,7 +106,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
         if (smp_lock_read(&passed_info->smp_tpl_booted_flag) == 1) {
             return true;
         }
-        for (int i = 0; i < 10000000; i++); // 延时
+        delay(10000000);
     }
 
     return false;
@@ -133,7 +135,6 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
     write_serial_string("Searching CPUs...\n");
     size_t max_cpus = 0;
     MADT *madt = (MADT *)MADT0;
-    ApicInfo.LocalApicAddr = (UINT64)madt->local_apic_address;
     UINT64 current = 0;
     for (;;)
     {
@@ -169,7 +170,6 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
 
     write_serial_string("Start Up APs...\n");
     // 尝试启动所有AP
-    ApicInfo.LocalApicAddr = (UINT64)madt->local_apic_address;
     current = 0;
     for (;;)
     {
@@ -183,8 +183,10 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             madt_local_apic *lapic = (madt_local_apic *)((UINT64)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
-            if (!((lapic->flags & 1) ^ ((lapic->flags >> 1) & 1)))
+            if (!((lapic->flags & 1) ^ ((lapic->flags >> 1) & 1))) {
+                current += (UINT64)header->length;
                 continue;
+            }
             
             PROCESSOR_INFO *cpuinf = &xsi->pcr_inf[xsi->cpu_count];
             cpuinf->processor_id = lapic->ACPI_Processor_UID;
@@ -193,11 +195,13 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             // 如果是BSP就跑路
             if (lapic->local_apic_id == bsp_lapic_id) {
                 (xsi->cpu_count)++;
+                current += (UINT64)header->length;
                 continue;
             }
 
             if (!start_ap(xsi->cpu_count, lapic->local_apic_id, &gdtr, cpuinf)) {
-                write_serial_string("[Warning][SMP] Failed to Bring Up AP.");
+                write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
+                current += (UINT64)header->length;
                 continue;
             }
 
@@ -208,8 +212,10 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             madt_x2_localapic *x2lapic = (madt_x2_localapic *)((UINT64)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
-            if (!((x2lapic->flags & 1) ^ ((x2lapic->flags >> 1) & 1)))
+            if (!((x2lapic->flags & 1) ^ ((x2lapic->flags >> 1) & 1))) {
+                current += (UINT64)header->length;
                 continue;
+            }
             
             PROCESSOR_INFO *cpuinf = &xsi->pcr_inf[xsi->cpu_count];
             cpuinf->processor_id = x2lapic->acpi_processor_uid;
@@ -218,11 +224,13 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             // 如果是BSP就跑路
             if (x2lapic->x2apic_id == bsp_lapic_id) {
                 (xsi->cpu_count)++;
+                current += (UINT64)header->length;
                 continue;
             }
 
             if (!start_ap(xsi->cpu_count, x2lapic->x2apic_id, &gdtr, cpuinf)) {
-                write_serial_string("[Warning][SMP] Failed to Bring Up AP.");
+                write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
+                current += (UINT64)header->length;
                 continue;
             }
 
