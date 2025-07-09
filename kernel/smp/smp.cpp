@@ -9,7 +9,6 @@
 extern GDT_PTR gdt_ptr;
 extern APIC_INFO ApicInfo;
 extern void *temp_stack[MAX_CPU_NUM];
-extern void *smp_tpl[MAX_CPU_NUM];
 extern uint32_t smp_trampoline_rs;
 
 typedef char symbol[];
@@ -45,10 +44,6 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     write_serial_string(".\n");
 
     // 准备跳板
-    if ((UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start > smp_trampoline_rs) {
-        write_serial_string("[Error][SMP] Trampoline Size is Too Small."); return false;
-    }
-
     static void *trampoline = (void *)(APU_BASE_ADDR);
     xmemcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start);
 

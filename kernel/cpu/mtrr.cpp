@@ -14,6 +14,7 @@ void mtrr_save()
 
     uint8_t var_reg_count = ia32_mtrrcap & 0xff;
 
+    // 此处应有malloc，没有也没关系炸不了
     /* save variable range MTRRs */
     for (uint8_t i = 0; i < var_reg_count * 2; i += 2) {
         saved_mtrrs[i] = rdmsr(0x200 + i);
