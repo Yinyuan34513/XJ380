@@ -18,3 +18,4 @@ UINT64 get_memory_size(MEMORY_MAP map)
 
     return total_pages * PAGE_SIZE;
 }
+

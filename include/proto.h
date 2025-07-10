@@ -110,9 +110,6 @@ void init_gdt();
  * 
  */
 
-// kernel/memory/mmap.cpp
-UINT64 get_memory_size(MEMORY_MAP map);
-
 #include <smp/smp.h>
 
 /*
