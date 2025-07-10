@@ -270,4 +270,3 @@ ENTRY(undefined_interrupt)
     leaq default_isr(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
-.section .note.GNU-stack,"",@progbits
