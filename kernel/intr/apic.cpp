@@ -181,5 +181,7 @@ void init_apic(UINT64 MADT0)
         current += (UINT64)header->length;
     }
 
+    ioapic_mask_all();
+
     write_serial_string("APIC Initialize Success.\n");
 }

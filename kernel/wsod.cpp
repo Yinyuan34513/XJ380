@@ -4,6 +4,8 @@
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
+    // TODO: WSOD
+
     disable_intr();
     while (1)
     {
@@ -13,6 +15,8 @@ void do_wsod(const char *err_code, struct X64_REGS *regs)
 
 void no_regs_wsod(const char *err_code)
 {
+    // TODO: WSOD
+
     disable_intr();
     while (1)
     {

@@ -28,6 +28,9 @@ typedef float float32_t;
 typedef double float64_t;
 
 // 自定义类型
+
+typedef unsigned long long int uintptr_t;
+
 // 其他的在efi.h里
 // 浮点型
 typedef float32_t f32;

@@ -1,0 +1,53 @@
+
+XJ380 Operating System - Serial Log
+Copyright(C) XINGJI Interacitve Software 2017-2025 All rights reserved.
+OS Version: BuildVersion
+EFI Initialize Success.
+New Page Table Created Success.
+Root Dir Open Success.
+XSK2.1 Kernel Read Success.
+Vedio Initialize Success.
+ACPI Table Found Success.
+ACPI Version: 2
+XSDT Address: 0xFBF0064
+SDT Entry 0:
+SDT Address: 0xFBF0088
+SRATê
+
+SDT Entry 1:
+SDT Address: 0xFBF0090
+FACPÙ
+
+SDT Entry 2:
+SDT Address: 0xFBF0098
+APICP
+MADT Found Success.
+
+SDT Entry 3:
+SDT Address: 0xFBF00A0
+MCFG<
+MCFG Found Success.
+
+SDT Entry 4:
+SDT Address: 0xFBF00A8
+HPET8
+HPET Found Success.
+
+SDT Entry 5:
+SDT Address: 0xFBF00B0
+WAET(
+
+SDT Entry 6:
+SDT Address: 0xFBF00B8
+WSMT(
+
+Initializing IDT...
+IDT Initialize Success.
+GDT Initialize Success.
+Initializing APIC...
+Mask 8259A Success.
+Your PC support x2APIC.
+APIC Initialize Success.
+Initializing SMP...
+Searching CPUs...
+Start Up APs...

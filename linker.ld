@@ -1,5 +1,5 @@
 OUTPUT_FORMAT("elf64-x86-64")  
-ENTRY(_start)  
+ENTRY(KernelMain)  
   
 SECTIONS  
 {  
@@ -40,4 +40,7 @@ SECTIONS
         *(COMMON)  
         __bss_end__ = .;  
     }  
+    /* 定义 _end 符号（位于所有段之后） */
+    . = ALIGN(4K);                  /* 4KB 对齐 */
+    _end = .;                       /* 内核映像结束地址 */ 
 }

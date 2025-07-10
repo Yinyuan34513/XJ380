@@ -25,3 +25,10 @@ void get_cpu_name(char *c)
 	asm_cpuid(0x80000004, 0, &v[8], &v[9], &v[10], &v[11]);
 	c[47] = '\0';
 }
+
+bool mtrr_supported() 
+{
+    uint32_t eax, ebx, ecx, edx;
+    asm_cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    return !!(edx & (1 << 12));
+}

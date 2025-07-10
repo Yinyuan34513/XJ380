@@ -3,6 +3,7 @@
 #define _BOOT_H_
 #include <efi/efi.h>
 #include <mm/memory.h>
+#include <smp/smp.h>
 
 typedef struct
 {
@@ -11,6 +12,10 @@ typedef struct
     UINT64 MADT;
     UINT64 HPET;
     UINT64 MCFG;
+
+    // SMP用的，因为懒得写内存管理，属于是另辟蹊径了……
+    UINT64 *saved_mtrrs;
+    void   *temp_stack[MAX_CPU_NUM];
 } BOOT_CONFIG;
 
 #endif

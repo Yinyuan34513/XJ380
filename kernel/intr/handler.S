@@ -1,3 +1,5 @@
+#include "handler.h"
+
 .code64
 
 R15 =   0x00
