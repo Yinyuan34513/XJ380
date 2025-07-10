@@ -10,7 +10,7 @@
 #define UEFI_MEMORY 11
 #define MMIO_MEMORY 12
 #pragma pack(1)
-#include <stdint.h>
+#include "../efi/efi.h"
 
 typedef struct __packed
 {
