@@ -161,3 +161,5 @@ _APU_boot_tmp_Stack_end:
 
 .global _APU_boot_end
 _APU_boot_end:
+
+.section .note.GNU-stack,"",@progbits

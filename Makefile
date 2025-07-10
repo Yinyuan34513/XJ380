@@ -22,7 +22,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 2048 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device nec-usb-xhci,id=xhci -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 2048 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=xj380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device nec-usb-xhci,id=xhci -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -69,33 +69,33 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc -I ./include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o")
+	@$(LD) -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o")
 
 .PHONY: clean
 clean:
-	@rm -rf $(BUILD_DIR) ./XJ380.img
+	@rm -rf $(BUILD_DIR) ./xj380.img
 
 vdisk: all
-	@rm -rf XJ380.img
+	@rm -rf xj380.img
 
-	@dd if=/dev/zero of=XJ380.img bs=128M count=1
-	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
+	@dd if=/dev/zero of=xj380.img bs=128M count=1
+	@sgdisk xj380.img -n 1:2048 -t 1:ef00
 
-	@mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
+	@mkfs.vfat -F 32 --offset 2048 -S 512 xj380.img $$((258048*512/1024))
 
-	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
-	@mkdir -p $(BUILD_DIR)/XJ380/system
-	@mkdir -p $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
-	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
+	@mkdir -p $(BUILD_DIR)/xj380/EFI/BOOT
+	@mkdir -p $(BUILD_DIR)/xj380/system
+	@mkdir -p $(BUILD_DIR)/xj380/apps
+	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/xj380/EFI/BOOT
+	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/xj380/system
 
-	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
+	@mcopy -s -i xj380.img@@$$((2048*512)) $(BUILD_DIR)/xj380/* ::
 
-	@rm -rf $(BUILD_DIR)/XJ380
+	@rm -rf $(BUILD_DIR)/xj380
 
 vmdk: vdisk
-	@rm -rf XJ380.vmdk
-	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
+	@rm -rf xj380.vmdk
+	@qemu-img convert -O vmdk xj380.img xj380.vmdk
 
 run: vdisk
 	@$(QEMU_CMD)
