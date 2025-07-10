@@ -26,6 +26,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
      enable_intr();
 
+     write_serial_hex(get_memory_size(BootConfig->MemoryMap));
+
      while (true)
      {
           __asm__ __volatile__("pause");
