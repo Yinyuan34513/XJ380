@@ -30,7 +30,7 @@ typedef INT64 i64;
 // 字符
 typedef char CHAR8;
 
-typedef unsigned int size_t;
+typedef unsigned long int size_t;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
