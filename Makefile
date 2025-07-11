@@ -67,7 +67,7 @@ $(BUILD_DIR)/%.o: %.cpp
 
 all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
-	@x86_64-w64-mingw32-gcc -I ./include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
+	@x86_64-w64-mingw32-gcc -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c
 
 	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o")
 

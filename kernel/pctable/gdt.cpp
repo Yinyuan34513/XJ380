@@ -11,11 +11,11 @@ GDT_ENTRY gdt_entries[GDT_LENGTH] __attribute__((__aligned__(PAGE_SIZE)));
 /* GDTR */
 GDT_PTR gdt_ptr;
 
-void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign);
+void gdt_set_gate(int64_t num, uint64_t base, uint64_t limit, uint8_t access, uint8_t sign);
 
 void init_gdt() {
     gdt_ptr.limit = sizeof(GDT_ENTRY) * GDT_LENGTH - 1;
-	gdt_ptr.base = (UINT64)&gdt_entries;
+	gdt_ptr.base = (uint64_t)&gdt_entries;
 
     // 采用 Intel 平坦模型
 	// 0xAF = 10101111
@@ -47,7 +47,7 @@ void init_gdt() {
 
 // 热知识：64位下，基地址和限长填了也没用
 // 冷知识：那我要是是TSS呢？
-void gdt_set_gate(INT64 num, UINT64 base, UINT64 limit, UINT8 access, UINT8 sign)
+void gdt_set_gate(int64_t num, uint64_t base, uint64_t limit, uint8_t access, uint8_t sign)
 {
 	gdt_entries[num].base_low = (base & 0xFFFF);
 	gdt_entries[num].base_mid = (base >> 16) & 0xFF;

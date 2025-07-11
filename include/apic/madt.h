@@ -13,73 +13,73 @@ extern "C"
 
 typedef struct
 {
-    UINT32 LocalApicAddr; // Local APIC 地址
-    UINT32 PicSign;       // 1=安装了8259A
+    uint32_t LocalApicAddr; // Local APIC 地址
+    uint32_t PicSign;       // 1=安装了8259A
 } __attribute__((packed)) MADT_FLAG;
 
 typedef struct
 {
-    UINT8 EntryType;
-    UINT8 length;
+    uint8_t EntryType;
+    uint8_t length;
 } __attribute__((packed)) MADT_ENTRY_FLAG;
 
 // EntryType = 0
 typedef struct
 {
-    UINT8 AcpiProcessorID;
-    UINT8 ApicID;
-    UINT32 Flags; // bit 0 = Processor Enabled, bit 1 = Online Capable 我也不知道啥意思
+    uint8_t AcpiProcessorID;
+    uint8_t ApicID;
+    uint32_t Flags; // bit 0 = Processor Enabled, bit 1 = Online Capable 我也不知道啥意思
 } __attribute__((packed)) MADT_LOCAL_APIC_FLAG;
 
 // EntryType = 1
 typedef struct
 {
-    UINT8 IOApicID;
-    UINT8 reserved;
-    UINT32 IOApicAddr;
-    UINT32 GlobalSysIntrBase;
+    uint8_t IOApicID;
+    uint8_t reserved;
+    uint32_t IOApicAddr;
+    uint32_t GlobalSysIntrBase;
 } __attribute__((packed)) MADT_IO_APIC_FLAG;
 
 // EntryType = 2
 typedef struct
 {
-    UINT8 BusScr;
-    UINT8 IrqScr;
-    UINT32 GlobalSysIntr;
-    UINT16 Flags;
+    uint8_t BusScr;
+    uint8_t IrqScr;
+    uint32_t GlobalSysIntr;
+    uint16_t Flags;
 } __attribute__((packed)) MADT_IO_APIC_InterScrOverride;
 
 // EntryType = 3
 typedef struct
 {
-    UINT8 NMIScr;
-    UINT8 reserved;
-    UINT16 Flags;
-    UINT32 GlobalSysIntr;
+    uint8_t NMIScr;
+    uint8_t reserved;
+    uint16_t Flags;
+    uint32_t GlobalSysIntr;
 } __attribute__((packed)) MADT_IO_APIC_NMIScr;
 
 // EntryType = 4
 typedef struct
 {
-    UINT8 AcpiProcessorID;
-    UINT16 Flags;
-    UINT8 LINT; // LINT#（0或1）
+    uint8_t AcpiProcessorID;
+    uint16_t Flags;
+    uint8_t LINT; // LINT#（0或1）
 } __attribute__((packed)) MADT_LOCAL_APIC_NMI;
 
 // EntryType = 5
 typedef struct
 {
-    UINT16 reserved;
-    UINT64 LocalApicAddr;
+    uint16_t reserved;
+    uint64_t LocalApicAddr;
 } __attribute__((packed)) MADT_LOCAL_APIC_AddrOverride;
 
 // EntryType = 9
 typedef struct
 {
-    UINT16 reserved;
-    UINT32 LocalApicID;
-    UINT32 Flags; // bit 0 = Processor Enabled, bit 1 = Online Capable 我也不知道啥意思
-    UINT32 AcpiFlags;
+    uint16_t reserved;
+    uint32_t LocalApicID;
+    uint32_t Flags; // bit 0 = Processor Enabled, bit 1 = Online Capable 我也不知道啥意思
+    uint32_t AcpiFlags;
 } __attribute__((packed)) MADT_LOCAL_x2APIC;
 
 #pragma pack()

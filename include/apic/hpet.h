@@ -6,53 +6,53 @@
 
 struct generic_address
 {
-    UINT8 address_space;
-    UINT8 bit_width;
-    UINT8 bit_offset;
-    UINT8 access_size;
-    UINT64 address;
+    uint8_t address_space;
+    uint8_t bit_width;
+    uint8_t bit_offset;
+    uint8_t access_size;
+    uint64_t address;
 } __attribute__((packed));
 
 struct ACPISDTHeader
 {
     char Signature[4];
-    UINT32 Length;
-    UINT8 Revision;
-    UINT8 Checksum;
+    uint32_t Length;
+    uint8_t Revision;
+    uint8_t Checksum;
     char OEMID[6];
     char OEMTableID[8];
-    UINT32 OEMRevision;
-    UINT32 CreatorID;
-    UINT32 CreatorRevision;
+    uint32_t OEMRevision;
+    uint32_t CreatorID;
+    uint32_t CreatorRevision;
 };
 
 struct hpet
 {
     struct ACPISDTHeader h;
-    UINT32 event_block_id;
+    uint32_t event_block_id;
     struct generic_address base_address;
-    UINT16 clock_tick_unit;
-    UINT8 page_oem_flags;
+    uint16_t clock_tick_unit;
+    uint8_t page_oem_flags;
 } __attribute__((packed));
 
 typedef struct
 {
-    UINT64 configurationAndCapability;
-    UINT64 comparatorValue;
-    UINT64 fsbInterruptRoute;
-    UINT64 unused;
+    uint64_t configurationAndCapability;
+    uint64_t comparatorValue;
+    uint64_t fsbInterruptRoute;
+    uint64_t unused;
 } __attribute__((packed)) HpetTimer;
 
 typedef struct
 {
-    UINT64 generalCapabilities;
-    UINT64 reserved0;
-    UINT64 generalConfiguration;
-    UINT64 reserved1;
-    UINT64 generalIntrruptStatus;
-    UINT8 reserved3[0xc8];
-    UINT64 mainCounterValue;
-    UINT64 reserved4;
+    uint64_t generalCapabilities;
+    uint64_t reserved0;
+    uint64_t generalConfiguration;
+    uint64_t reserved1;
+    uint64_t generalIntrruptStatus;
+    uint8_t reserved3[0xc8];
+    uint64_t mainCounterValue;
+    uint64_t reserved4;
     HpetTimer timers[];
 } __attribute__((packed)) volatile HpetInfo;
 

@@ -57,8 +57,8 @@ extern "C"
 struct APIC_INFO
 {
     bool x2Apic;
-    UINT64 LocalApicAddr;
-    UINT64 ioApicAddr;
+    uint64_t LocalApicAddr;
+    uint64_t ioApicAddr;
 };
 
 #define MADT_APIC_LOCAL 0x00

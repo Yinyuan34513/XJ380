@@ -3,20 +3,20 @@
 #include <apic/hpet.h>
 
 HpetInfo *info;
-static UINT32 hpetPeriod = 0;
+static uint32_t hpetPeriod = 0;
 
-UINT64 nanoTime()
+uint64_t nanoTime()
 {
     if (info == (void *)0)
         return 0;
-    UINT64 mcv = info->mainCounterValue;
+    uint64_t mcv = info->mainCounterValue;
     return mcv * hpetPeriod;
 }
 
-void init_hpet(UINT64 hpet_ptr)
+void init_hpet(uint64_t hpet_ptr)
 {
     info = (HpetInfo *)(((Hpet *)hpet_ptr)->base_address.address + 0xFFFF800000000000);
-    UINT32 counterClockPeriod = info->generalCapabilities >> 32;
+    uint32_t counterClockPeriod = info->generalCapabilities >> 32;
     hpetPeriod = counterClockPeriod / 1000000;
     info->generalConfiguration |= 1;
     write_serial_string("Setup acpi hpet table (nano_time: ");

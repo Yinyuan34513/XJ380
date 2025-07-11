@@ -31,12 +31,12 @@ void no_regs_wsod(const char *err_code)
  */
 
 // 预期外的中断
-void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code)
+void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("UNEXPECT_INTRRUPT", regs);
 }
 
-void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
+void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code)
 {
     __asm__ __volatile__(
         "movq %%cr0, %%rax\n\t"
@@ -45,36 +45,36 @@ void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code)
         "movq %%rax, %%cr0\n\t":::"rax");
 }
 
-void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code)
+void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("DIVIDE_ERROR", regs);
 }
 
-void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code)
+void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("UNDEFINED_OPCODE", regs);
 }
 
 // 不可屏蔽中断
-void wsod_nmi(struct X64_REGS *regs, UINT64 error_code)
+void wsod_nmi(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("NMI", regs);
 }
 
 // 双重错误
-void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code)
+void wsod_double_fault(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("DOUBLE_FAULT", regs);
 }
 
 // 内核错误
-void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code)
+void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("SYSTEM_KERNEL_ERROR", regs);
 }
 
 // 一般保护性异常
-void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code)
+void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
 {
     if (error_code & 0x01)
         write_serial_string(
@@ -96,7 +96,7 @@ void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code)
 }
 
 // 页错误
-void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code)
+void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code)
 {
     if (!(error_code & 0x01))
         write_serial_string("Page Not-Present,\t");
@@ -129,12 +129,12 @@ void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code)
 }
 
 // DEBUG
-void wsod_debug(struct X64_REGS *regs, UINT64 error_code)
+void wsod_debug(struct X64_REGS *regs, uint64_t error_code)
 {
     do_wsod("DEBUG_BREAKPOINT", regs);
 }
 
-void default_isr(struct X64_REGS *regs, UINT64 error_code)
+void default_isr(struct X64_REGS *regs, uint64_t error_code)
 {
     // 啥也没有。
 }

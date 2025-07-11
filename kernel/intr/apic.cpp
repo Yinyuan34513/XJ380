@@ -12,9 +12,9 @@ APIC_INFO ApicInfo;
  * @return 0=NotSupport 1=APIC 2=x2APIC
  *
  */
-UINT8 check_apic()
+uint8_t check_apic()
 {
-    UINT32 cpuid_eax, cpuid_ebx, cpuid_ecx, cpuid_edx;
+    uint32_t cpuid_eax, cpuid_ebx, cpuid_ecx, cpuid_edx;
     asm_cpuid(1, 0, &cpuid_eax, &cpuid_ebx, &cpuid_ecx, &cpuid_edx);
     if (cpuid_ecx & CPUID_ECX_x2APIC)
     {
@@ -29,7 +29,7 @@ UINT8 check_apic()
     return 0;
 }
 
-static inline void mmio_write32(UINT32 addr, UINT32 data)
+static inline void mmio_write32(uint32_t addr, uint32_t data)
 {
     asm volatile (
         "movl %1, (%0)"
@@ -39,7 +39,7 @@ static inline void mmio_write32(UINT32 addr, UINT32 data)
     );
 }
 
-static inline UINT32 mmio_read32(UINT32 addr)
+static inline uint32_t mmio_read32(uint32_t addr)
 {
     uint32_t ret;
     asm volatile (
@@ -51,26 +51,26 @@ static inline UINT32 mmio_read32(UINT32 addr)
     return ret;
 }
 
-void lapic_write(UINT32 reg, UINT64 value)
+void lapic_write(uint32_t reg, uint64_t value)
 {
     if (ApicInfo.x2Apic)
     {
         wrmsr(0x800 + (reg >> 4), value);
         return;
     }
-    mmio_write32((UINT32)((UINT64)ApicInfo.LocalApicAddr + reg), value);
+    mmio_write32((uint32_t)((uint64_t)ApicInfo.LocalApicAddr + reg), value);
 }
 
-UINT32 lapic_read(UINT32 reg)
+uint32_t lapic_read(uint32_t reg)
 {
     if (ApicInfo.x2Apic)
     {
         return rdmsr(0x800 + (reg >> 4));
     }
-    return mmio_read32((UINT32)((UINT64)ApicInfo.LocalApicAddr + reg));
+    return mmio_read32((uint32_t)((uint64_t)ApicInfo.LocalApicAddr + reg));
 }
 
-UINT64 lapic_id()
+uint64_t lapic_id()
 {
     if (ApicInfo.x2Apic)
     {
@@ -79,19 +79,19 @@ UINT64 lapic_id()
     return (lapic_read(LAPIC_REG_ID) >> 24);
 }
 
-static void ioapic_write(UINT32 reg, UINT32 value)
+static void ioapic_write(uint32_t reg, uint32_t value)
 {
-    mmio_write32((UINT32)((UINT64)ApicInfo.ioApicAddr), reg);
-    mmio_write32((UINT32)((UINT64)ApicInfo.ioApicAddr + 0x10), value);
+    mmio_write32((uint32_t)((uint64_t)ApicInfo.ioApicAddr), reg);
+    mmio_write32((uint32_t)((uint64_t)ApicInfo.ioApicAddr + 0x10), value);
 }
 
-static uint32_t ioapic_read(UINT32 reg)
+static uint32_t ioapic_read(uint32_t reg)
 {
-    mmio_write32((UINT32)((UINT64)ApicInfo.ioApicAddr), reg);
-    return mmio_read32((UINT32)((UINT64)ApicInfo.ioApicAddr + 0x10));
+    mmio_write32((uint32_t)((uint64_t)ApicInfo.ioApicAddr), reg);
+    return mmio_read32((uint32_t)((uint64_t)ApicInfo.ioApicAddr + 0x10));
 }
 
-void ioapic_disable(UINT8 vector)
+void ioapic_disable(uint8_t vector)
 {
     uint64_t index = 0x10 + ((vector - 32) * 2);
     uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
@@ -130,7 +130,7 @@ void ioapic_mask_all()
  * @param MADT MADT表地址
  *
  */
-void init_apic(UINT64 MADT0)
+void init_apic(uint64_t MADT0)
 {
     write_serial_string("Initializing APIC...\n");
     __asm__ volatile("cli" ::: "memory");
@@ -155,7 +155,7 @@ void init_apic(UINT64 MADT0)
         break; // 虽然这里理论上永远都不会执行...
     }
 
-    UINT64 ia32_apic_base = rdmsr(0x1b);
+    uint64_t ia32_apic_base = rdmsr(0x1b);
     ia32_apic_base |= 1 << 11;
     if (ApicInfo.x2Apic)
     {
@@ -164,21 +164,21 @@ void init_apic(UINT64 MADT0)
     wrmsr(0x1b, ia32_apic_base);
 
     MADT *madt = (MADT *)MADT0;
-    ApicInfo.LocalApicAddr = (UINT64)madt->local_apic_address;
-    UINT64 current = 0;
+    ApicInfo.LocalApicAddr = (uint64_t)madt->local_apic_address;
+    uint64_t current = 0;
     for (;;)
     {
-        if (current + ((UINT32)sizeof(MADT) - 1) >= madt->h.Length)
+        if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length)
         {
             break;
         }
-        MadtHeader *header = (MadtHeader *)((UINT64)(&madt->entries) + current);
+        MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
         if (header->entry_type == MADT_APIC_IO)
         {
-            MadtIOApic *ioapic = (MadtIOApic *)((UINT64)(&madt->entries) + current);
-            ApicInfo.ioApicAddr = (UINT64)ioapic->address;
+            MadtIOApic *ioapic = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
+            ApicInfo.ioApicAddr = (uint64_t)ioapic->address;
         }
-        current += (UINT64)header->length;
+        current += (uint64_t)header->length;
     }
 
     ioapic_mask_all();
@@ -191,7 +191,7 @@ void send_eoi()
     lapic_write(0xb0, 0);
 }
 
-extern "C" void c_timer_handler(void *regs_ptr, UINT64 error_code) 
+extern "C" void c_timer_handler(void *regs_ptr, uint64_t error_code) 
 {
     send_eoi();
 }

@@ -1,10 +1,10 @@
 // 版权所有©XINGJI Studios 2017-2025 保留所有权利。
 // XJ380UEFI引导程序（\EFI\BOOT\BOOTX64.efi）
-#include <efi/boot.h>
-#include <efi/efi.h>
-#include <efi/fbc.h>
-#include <acpi/acpi.h>
-#include <cpu/msr.h>
+#include <boot.h>
+#include <efi.h>
+#include <fbc.h>
+#include <acpi.h>
+#include <msr.h>
 #include <elf.h>
 #include "./bootlib.c"
 #define NULL 0
@@ -239,68 +239,68 @@ UINTN CompareGUID(EFI_GUID *src, EFI_GUID *obj)
 
 void CreateAndMapNewPageTable()
 {
-	uint64_t new_page_table_addr;
+	UINT64 new_page_table_addr;
 	BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &new_page_table_addr);
 
-	uint64_t old_page_table_addr;
+	UINT64 old_page_table_addr;
 	__asm__ __volatile__("mov %%cr3, %0"
 						: "=r"(old_page_table_addr));
 
 	xmemcpy((void *)new_page_table_addr, (void *)old_page_table_addr, PAGE_SIZE);
 
-	uint64_t *pml4 = (uint64_t *)new_page_table_addr;
-	uint64_t *pdp = (uint64_t *)(pml4[0] & ~0xFFF);
-	pml4[0] = (uint64_t)pdp | 0x7;
-	pml4[256] = (uint64_t)pdp | 0x3;
+	UINT64 *pml4 = (UINT64 *)new_page_table_addr;
+	UINT64 *pdp = (UINT64 *)(pml4[0] & ~0xFFF);
+	pml4[0] = (UINT64)pdp | 0x7;
+	pml4[256] = (UINT64)pdp | 0x3;
 
 	__asm__ __volatile__("mov %0, %%cr3"
 						:
 						: "r"(new_page_table_addr));
 }
 
-void MapVirtToPhys(uint64_t virt, uint64_t size)
+void MapVirtToPhys(UINT64 virt, UINT64 size)
 {
-	uint64_t page_table_addr;
+	UINT64 page_table_addr;
 	__asm__ __volatile__("mov %%cr3, %0"
 							: "=r"(page_table_addr));
 
 #define KERNEL_PERM 0x03
 
-	for (uint64_t addr = virt; addr < virt + size + PAGE_SIZE - 1; addr += PAGE_SIZE)
+	for (UINT64 addr = virt; addr < virt + size + PAGE_SIZE - 1; addr += PAGE_SIZE)
 	{
 		// Map vaddr to paddr
-		uint64_t *pml4 = (uint64_t *)page_table_addr;
-		uint64_t pml4_id = (addr >> 39) & 0x1FF;
+		UINT64 *pml4 = (UINT64 *)page_table_addr;
+		UINT64 pml4_id = (addr >> 39) & 0x1FF;
 		if (pml4[pml4_id] == 0)
 		{
-			uint64_t pml4_addr;
+			UINT64 pml4_addr;
 			BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pml4_addr);
 			xmemset((void *)pml4_addr, 0, PAGE_SIZE);
 			pml4[pml4_id] = pml4_addr | KERNEL_PERM;
 		}
-		uint64_t *pdpt = (uint64_t *)(pml4[pml4_id] & ~(0xFFF));
-		uint64_t pdpt_id = (addr >> 30) & 0x1FF;
+		UINT64 *pdpt = (UINT64 *)(pml4[pml4_id] & ~(0xFFF));
+		UINT64 pdpt_id = (addr >> 30) & 0x1FF;
 		if (pdpt[pdpt_id] == 0)
 		{
-			uint64_t pdpt_addr;
+			UINT64 pdpt_addr;
 			BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pdpt_addr);
 			xmemset((void *)pdpt_addr, 0, PAGE_SIZE);
 			pdpt[pdpt_id] = pdpt_addr | KERNEL_PERM;
 		}
-		uint64_t *pd = (uint64_t *)(pdpt[pdpt_id] & ~(0xFFF));
-		uint64_t pd_id = (addr >> 21) & 0x1FF;
+		UINT64 *pd = (UINT64 *)(pdpt[pdpt_id] & ~(0xFFF));
+		UINT64 pd_id = (addr >> 21) & 0x1FF;
 		if (pd[pd_id] == 0)
 		{
-			uint64_t pd_addr;
+			UINT64 pd_addr;
 			BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &pd_addr);
 			xmemset((void *)pd_addr, 0, PAGE_SIZE);
 			pd[pd_id] = pd_addr | KERNEL_PERM;
 		}
-		uint64_t *pt = (uint64_t *)(pd[pd_id] & ~(0xFFF));
-		uint64_t pt_id = (addr >> 12) & 0x1FF;
+		UINT64 *pt = (UINT64 *)(pd[pd_id] & ~(0xFFF));
+		UINT64 pt_id = (addr >> 12) & 0x1FF;
 		if (pt[pt_id] == 0)
 		{
-			uint64_t paddr;
+			UINT64 paddr;
 			BS->AllocatePages(AllocateAnyPages, EfiLoaderData, 1, &paddr);
 			xmemset((void *)paddr, 0, PAGE_SIZE);
 			pt[pt_id] = paddr | KERNEL_PERM;
@@ -514,18 +514,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	GetMMP(&BootConfig->MemoryMap);
 
 	BootConfig->saved_mtrrs = NULL;
-	uint32_t eax, ebx, ecx, edx;
+	UINT32 eax, ebx, ecx, edx;
     asm_cpuid(1, 0, &eax, &ebx, &ecx, &edx);
     if (!!(edx & (1 << 12))) 
 	{
-		uint64_t ia32_mtrrcap = rdmsr(0xfe);
-		uint8_t var_reg_count = ia32_mtrrcap & 0xff;
+		UINT64 ia32_mtrrcap = rdmsr(0xfe);
+		UINT8 var_reg_count = ia32_mtrrcap & 0xff;
 		if (BootConfig->saved_mtrrs == NULL) {
 			BootConfig->saved_mtrrs = malloc((
 				(var_reg_count * 2) /* variable MTRRs, 2 MSRs each */
 			+ 11                  /* 11 fixed MTRRs */
 			+ 1                   /* 1 default type MTRR */
-			) * sizeof(uint64_t));
+			) * sizeof(UINT64));
 		}
 	}
 

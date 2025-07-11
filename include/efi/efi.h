@@ -2,33 +2,10 @@
 // XJ380UEFI引导头文件
 #ifndef _EFI_H_
 #define _EFI_H_
-// efi规范定义，不要动
-// 无符号整型
-typedef __UINT8_TYPE__ UINT8;
-typedef __UINT16_TYPE__ UINT16;
-typedef __UINT32_TYPE__ UINT32;
-typedef __UINT64_TYPE__ UINT64;
-// 有符号整型
-typedef __INT8_TYPE__ INT8;
-typedef __INT16_TYPE__ INT16;
-typedef __INT32_TYPE__ INT32;
-typedef __INT64_TYPE__ INT64;
-// 布尔类型
-typedef char BOOLEAN;
 
-// 自定义类型
-// 无符号整型
-typedef UINT8 u8;
-typedef UINT16 u16;
-typedef UINT32 u32;
-typedef UINT64 u64;
-// 有符号整型
-typedef INT8 i8;
-typedef INT16 i16;
-typedef INT32 i32;
-typedef INT64 i64;
-// 字符
-typedef char CHAR8;
+#include <stdint.h>
+
+typedef uint8_t BOOLEAN;
 
 #define PT_LOAD 1 // PT_LOAD值不变
 
@@ -39,16 +16,16 @@ enum EFI_ALLOCATE_TYPE
   AllocateAddress,
   MaxAllocateType
 };
-typedef UINT64 UINTN; // 我们在64位下
-typedef UINTN EFI_STATUS;
+typedef uint64_t uint64_t; // 我们在64位下
+typedef uint64_t EFI_STATUS;
 typedef void VOID;
-typedef UINT16 CHAR16;
+typedef uint16_t CHAR16;
 
-typedef UINTN EFI_PHYSICAL_ADDRESS;
-typedef UINTN EFI_VIRTUAL_ADDRESS;
+typedef uint64_t EFI_PHYSICAL_ADDRESS;
+typedef uint64_t EFI_VIRTUAL_ADDRESS;
 
-typedef VOID *EFI_HANDLE;
-typedef VOID *EFI_EVENT;
+typedef void *EFI_HANDLE;
+typedef void *EFI_EVENT;
 
 #define EFI_ERROR_MASK 0x8000000000000000
 #define EFIERR(a) (EFI_ERROR_MASK | a)
@@ -97,16 +74,16 @@ typedef VOID *EFI_EVENT;
 #define max(a, b) ((a) < (b) ? (b) : (a))
 struct EFI_INPUT_KEY
 {
-  UINT16 ScanCode;
+  uint16_t ScanCode;
   CHAR16 UnicodeChar;
 };
 
 typedef struct
 {
-  UINT32 Data1;
-  UINT16 Data2;
-  UINT16 Data3;
-  UINT8 Data4[8];
+  uint32_t Data1;
+  uint16_t Data2;
+  uint16_t Data3;
+  uint8_t Data4[8];
 } EFI_GUID;
 
 #define EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 0x00000001
@@ -148,24 +125,24 @@ typedef enum
 
 typedef struct
 {
-  UINT32 Type;
+  uint32_t Type;
   EFI_PHYSICAL_ADDRESS PhysicalStart;
   EFI_VIRTUAL_ADDRESS VirtualStart;
-  UINT64 NumberOfPages;
-  UINT64 Attribute;
+  uint64_t NumberOfPages;
+  uint64_t Attribute;
 } __attribute__((__aligned__(16))) EFI_MEMORY_DESCRIPTOR;
 
-static inline void xmemset(void *dst_, UINT8 value, UINTN size)
+static inline void xmemset(void *dst_, uint8_t value, uint64_t size)
 {
-  UINT8 *dst = (UINT8 *)dst_;
+  uint8_t *dst = (uint8_t *)dst_;
   while (size-- > 0)
     *dst++ = value;
 }
 
-static inline void *xmemcpy(void *dst_, const void *src_, UINTN size)
+static inline void *xmemcpy(void *dst_, const void *src_, uint64_t size)
 {
-  UINT8 *dst = (UINT8 *)dst_;
-  const UINT8 *src = (UINT8 *)src_;
+  uint8_t *dst = (uint8_t *)dst_;
+  const uint8_t *src = (uint8_t *)src_;
   while (size-- > 0)
     *dst++ = *src++;
   return (void *)src_;
@@ -173,30 +150,30 @@ static inline void *xmemcpy(void *dst_, const void *src_, UINTN size)
 
 typedef struct
 {
-  UINT16 Year;  // 1900 – 9999
-  UINT8 Month;  // 1 – 12
-  UINT8 Day;    // 1 – 31
-  UINT8 Hour;   // 0 – 23
-  UINT8 Minute; // 0 – 59
-  UINT8 Second; // 0 – 59
-  UINT8 Pad1;
-  UINT32 Nanosecond; // 0 – 999,999,999
-  INT16 TimeZone;    // -1440 to 1440 or 2047
-  UINT8 Daylight;
-  UINT8 Pad2;
+  uint16_t Year;  // 1900 – 9999
+  uint8_t Month;  // 1 – 12
+  uint8_t Day;    // 1 – 31
+  uint8_t Hour;   // 0 – 23
+  uint8_t Minute; // 0 – 59
+  uint8_t Second; // 0 – 59
+  uint8_t Pad1;
+  uint32_t Nanosecond; // 0 – 999,999,999
+  int16_t TimeZone;    // -1440 to 1440 or 2047
+  uint8_t Daylight;
+  uint8_t Pad2;
 } EFI_TIME;
 
 typedef struct
 {
-  UINT32 Resolution;
-  UINT32 Accuracy;
+  uint32_t Resolution;
+  uint32_t Accuracy;
   BOOLEAN SetsToZero;
 } EFI_TIME_CAPABILITIES;
 
 typedef struct
 {
   EFI_GUID VendorGuid;
-  VOID *VendorTable;
+  void *VendorTable;
 } EFI_CONFIGURATION_TABLE;
 
 struct EFI_BOOT_SERVICES
@@ -204,77 +181,77 @@ struct EFI_BOOT_SERVICES
   char _buf1[24];
 
   // Task Priority Services
-  UINTN _buf2[2];
+  uint64_t _buf2[2];
 
   // Memory Services
   EFIAPI
   EFI_STATUS(*AllocatePages)
-  (enum EFI_ALLOCATE_TYPE Type, enum EFI_MEMORY_TYPE MemoryType, UINTN Pages,
+  (enum EFI_ALLOCATE_TYPE Type, enum EFI_MEMORY_TYPE MemoryType, uint64_t Pages,
    EFI_PHYSICAL_ADDRESS *Memory);
-  EFIAPI EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS Memory, UINTN Pages);
-  EFIAPI EFI_STATUS (*GetMemoryMap)(UINTN *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap,
-                                    UINTN *MapKey, UINTN *DescriptorSize, UINT32 *DescriptorVersion);
-  EFIAPI EFI_STATUS (*AllocatePool)(enum EFI_MEMORY_TYPE PoolType, UINTN Size, VOID **Buffer);
-  EFIAPI EFI_STATUS (*FreePool)(VOID *Buffer);
+  EFIAPI EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS Memory, uint64_t Pages);
+  EFIAPI EFI_STATUS (*GetMemoryMap)(uint64_t *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap,
+                                    uint64_t *MapKey, uint64_t *DescriptorSize, uint32_t *DescriptorVersion);
+  EFIAPI EFI_STATUS (*AllocatePool)(enum EFI_MEMORY_TYPE PoolType, uint64_t Size, void **Buffer);
+  EFIAPI EFI_STATUS (*FreePool)(void *Buffer);
 
   // Event & Timer Services
-  UINTN _buf4[2];
+  uint64_t _buf4[2];
   EFIAPI
-  EFI_STATUS (*WaitForEvent)(UINTN NumberOfEvents, EFI_EVENT *Event, UINTN *Index);
-  UINTN _buf4_2[3];
+  EFI_STATUS (*WaitForEvent)(uint64_t NumberOfEvents, EFI_EVENT *Event, uint64_t *Index);
+  uint64_t _buf4_2[3];
 
   // Protocol Handler Services
-  UINTN _buf5[9];
+  uint64_t _buf5[9];
 
   // Image Services
-  UINTN _buf6[5];
+  uint64_t _buf6[5];
 
   // Miscellaneous Services
-  UINTN _buf7[2];
-  EFIAPI EFI_STATUS (*SetWatchdogTimer)(UINTN Timeout, UINT64 WatchdogCode, UINTN DataSize,
+  uint64_t _buf7[2];
+  EFIAPI EFI_STATUS (*SetWatchdogTimer)(uint64_t Timeout, uint64_t WatchdogCode, uint64_t DataSize,
                                         CHAR16 *WatchdogData);
 
   // DriverSupport Services
-  UINTN _buf8[2];
+  uint64_t _buf8[2];
 
   // Open and Close Protocol Services
   EFIAPI
   EFI_STATUS(*OpenProtocol)
-  (EFI_HANDLE Handle, EFI_GUID *Protocol, VOID **Interface, EFI_HANDLE AgentHandle,
-   EFI_HANDLE ControllerHandle, UINT32 Attributes);
-  UINTN _buf9[2];
+  (EFI_HANDLE Handle, EFI_GUID *Protocol, void **Interface, EFI_HANDLE AgentHandle,
+   EFI_HANDLE ControllerHandle, uint32_t Attributes);
+  uint64_t _buf9[2];
 
   // Library Services
-  UINTN _buf10[2];
+  uint64_t _buf10[2];
   EFIAPI
-  EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, VOID *Registration, VOID **Interface);
-  UINTN _buf10_2[2];
+  EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, void *Registration, void **Interface);
+  uint64_t _buf10_2[2];
 
   // 32-bit CRC Services
-  UINTN _buf11;
+  uint64_t _buf11;
 
   // Miscellaneous Services
-  UINTN _buf12[1];
-  EFIAPI EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
-  UINTN _buf13[1];
+  uint64_t _buf12[1];
+  EFIAPI EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, uint64_t MapKey);
+  uint64_t _buf13[1];
 };
 
 struct EFI_RUNTIME_SERVICES
 {
   char _buf1[24];
   // Variable Services
-  UINTN _buf2[4];
+  uint64_t _buf2[4];
 
   // Time Services
   EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
-  UINTN _buf3[2];
+  uint64_t _buf3[2];
 
   // Virtual Memory Services
-  UINTN _buf4[2];
+  uint64_t _buf4[2];
 
-  EFIAPI VOID (*ResetSystem)(EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus,
-                             UINTN DataSize, VOID *ResetData);
-  UINTN _buf5[3];
+  EFIAPI void (*ResetSystem)(EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus,
+                             uint64_t DataSize, void *ResetData);
+  uint64_t _buf5[3];
 };
 
 struct EFI_SYSTEM_TABLE
@@ -282,24 +259,24 @@ struct EFI_SYSTEM_TABLE
   char _buf1[44];
   struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL
   {
-    UINTN Reset;
+    uint64_t Reset;
     EFIAPI EFI_STATUS (*ReadKeyStroke)(struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL *This,
                                        struct EFI_INPUT_KEY *Key);
     EFI_EVENT WaitForKey;
   } *ConIn;
-  UINTN _buf2;
+  uint64_t _buf2;
   struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
   {
-    UINTN _buf;
+    uint64_t _buf;
     EFIAPI
     EFI_STATUS (*OutputString)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, CHAR16 *String);
-    UINTN _buf2[4];
+    uint64_t _buf2[4];
     EFIAPI EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
   } *ConOut;
-  UINTN _buf3[2];
+  uint64_t _buf3[2];
   struct EFI_RUNTIME_SERVICES *RuntimeServices; // 此有bug
   struct EFI_BOOT_SERVICES *BootServices;
-  UINTN NumberOfTableEntries;
+  uint64_t NumberOfTableEntries;
   EFI_CONFIGURATION_TABLE *ConfigurationTable;
 };
 struct EFI_SIMPLE_POINTER_STATE; // 用之前声明
@@ -343,21 +320,21 @@ struct EFI_BATTERY_CHARGING_COMPLETION_TOKEN
 
 struct EFI_BATTERY_CHARGING_PROTOCOL
 {
-  EFIAPI EFI_STATUS (*GetBatteryStatus)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, UINT32 *StateOfCharge,
-                                        UINT32 *RatedCapacity, INT32 *ChargeCurrent);
-  EFIAPI EFI_STATUS (*ChargeBattery)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, UINT32 MaximumCurrent,
-                                     UINT32 TargetStateOfCharge, struct EFI_BATTERY_CHARGING_COMPLETION_TOKEN *CompletionToken);
-  UINT32 Revision;
-  EFIAPI EFI_STATUS (*Get_Battery_Information)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, UINT32 *StateOfCharge,
-                                               INT32 *CurrentIntoBattery, UINT32 *BatteryTerminalVoltage,
-                                               INT32 *BatteryTemperature, UINT32 *USBCableVoltage, UINT32 *USBCableCurrent);
+  EFIAPI EFI_STATUS (*GetBatteryStatus)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, uint32_t *StateOfCharge,
+                                        uint32_t *RatedCapacity, int32_t *ChargeCurrent);
+  EFIAPI EFI_STATUS (*ChargeBattery)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, uint32_t MaximumCurrent,
+                                     uint32_t TargetStateOfCharge, struct EFI_BATTERY_CHARGING_COMPLETION_TOKEN *CompletionToken);
+  uint32_t Revision;
+  EFIAPI EFI_STATUS (*Get_Battery_Information)(struct EFI_BATTERY_CHARGING_PROTOCOL *This, uint32_t *StateOfCharge,
+                                               int32_t *CurrentIntoBattery, uint32_t *BatteryTerminalVoltage,
+                                               int32_t *BatteryTemperature, uint32_t *USBCableVoltage, uint32_t *USBCableCurrent);
 };
 
 struct EFI_SIMPLE_POINTER_STATE
 {
-  INT32 RelativeMovementX; /* X轴方向的相对移动量 */
-  INT32 RelativeMovementY; /* Y轴方向的相对移动量 */
-  INT32 RelativeMovementZ; /* Z轴方向的相对移动量 */
+  int32_t RelativeMovementX; /* X轴方向的相对移动量 */
+  int32_t RelativeMovementY; /* Y轴方向的相对移动量 */
+  int32_t RelativeMovementZ; /* Z轴方向的相对移动量 */
   BOOLEAN LeftButton;      /* 左键状态，按下为1，松开为0 */
   BOOLEAN RightButton;     /* 右键状态，同上 */
 };
@@ -381,22 +358,22 @@ typedef enum
 
 typedef struct
 {
-  UINT32 Version;
-  UINT32 HorizontalResolution;
-  UINT32 VerticalResolution;
+  uint32_t Version;
+  uint32_t HorizontalResolution;
+  uint32_t VerticalResolution;
   EFI_GRAPHICS_PIXEL_FORMAT PixelFormat;
-  UINT32 PixelInformation[4];
-  UINT32 PixelsPerScanLine;
+  uint32_t PixelInformation[4];
+  uint32_t PixelsPerScanLine;
 } EFI_GRAPHICS_OUTPUT_MODE_INFORMATION;
 
 typedef struct
 {
-  UINT32 MaxMode;
-  UINT32 Mode;
+  uint32_t MaxMode;
+  uint32_t Mode;
   EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
-  UINTN SizeOfInfo;
-  UINTN FrameBufferBase;
-  UINTN FrameBufferSize;
+  uint64_t SizeOfInfo;
+  uint64_t FrameBufferBase;
+  uint64_t FrameBufferSize;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE;
 
 typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL
@@ -405,7 +382,7 @@ typedef struct EFI_GRAPHICS_OUTPUT_PROTOCOL
 
   EFIAPI EFI_STATUS (*SetMode)(struct EFI_GRAPHICS_OUTPUT_PROTOCOL *This, unsigned int ModeNumber);
 
-  UINTN pad;
+  uint64_t pad;
 
   EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE *Mode;
 } EFI_GRAPHICS_OUTPUT_PROTOCOL;
@@ -447,20 +424,20 @@ struct EFI_SIMPLE_TEXT_INPUT_EX_PROTOCOL
 
 struct EFI_LOADED_IMAGE_PROTOCOL
 {
-  UINT32 Revision;
+  uint32_t Revision;
   EFI_HANDLE ParentHandle;
   struct EFI_SYSTEM_TABLE *SystemTable;
 
   EFI_HANDLE DeviceHandle;
-  VOID *
+  void *
       FilePath; // EFI_DEVICE_PATH_PROTOCOL我们并不会用到，除非我哪天脑子一闪想要把执行EFI的内容加进来，如果真加到时候就改
-  VOID *Reserved;
+  void *Reserved;
 
-  UINT32 LoadOptionsSize;
-  VOID *LoadOptions;
+  uint32_t LoadOptionsSize;
+  void *LoadOptions;
 
-  VOID *ImageBase;
-  UINT64 ImageSize;
+  void *ImageBase;
+  uint64_t ImageSize;
   enum EFI_MEMORY_TYPE ImageCodeType;
   enum EFI_MEMORY_TYPE ImageDataType; // 这个enum后面确实会用到，但此处先不加
   EFIAPI EFI_STATUS (*Unload)(EFI_HANDLE ImageHandle);
@@ -478,24 +455,24 @@ struct EFI_FILE_INFO
 
 struct EFI_FILE_PROTOCOL
 {
-  UINTN Revision;
+  uint64_t Revision;
   EFIAPI
   EFI_STATUS(*Open)
   (struct EFI_FILE_PROTOCOL *This, struct EFI_FILE_PROTOCOL **NewHandle, CHAR16 *FileName,
-   UINT64 OpenMode, UINT64 Attributes);
+   uint64_t OpenMode, uint64_t Attributes);
   EFIAPI EFI_STATUS (*Close)(struct EFI_FILE_PROTOCOL *This);
-  UINTN _buf2;
+  uint64_t _buf2;
   EFIAPI
-  EFI_STATUS (*Read)(struct EFI_FILE_PROTOCOL *This, UINTN *BufferSize, VOID *Buffer);
+  EFI_STATUS (*Read)(struct EFI_FILE_PROTOCOL *This, uint64_t *BufferSize, void *Buffer);
   EFIAPI
-  EFI_STATUS (*Write)(struct EFI_FILE_PROTOCOL *This, UINTN *BufferSize, VOID *Buffer);
-  UINTN _buf3[4];
+  EFI_STATUS (*Write)(struct EFI_FILE_PROTOCOL *This, uint64_t *BufferSize, void *Buffer);
+  uint64_t _buf3[4];
   EFIAPI EFI_STATUS (*Flush)(struct EFI_FILE_PROTOCOL *This);
 }; // EFI_FILE_PROTOCOL
 
 struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL
 {
-  UINT64 Revision;
+  uint64_t Revision;
   EFIAPI EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This,
                                   struct EFI_FILE_PROTOCOL **Root);
 }; // SFSP

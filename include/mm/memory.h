@@ -10,33 +10,33 @@
 #define UEFI_MEMORY 11
 #define MMIO_MEMORY 12
 #pragma pack(1)
-#include "../efi/efi.h"
+#include <efi/efi.h>
 
 typedef struct __packed
 {
-  UINTN MapSize;
-  VOID *Buffer;
-  UINTN MapKey;
-  UINTN DescriptorSize;
-  UINT32 DescriptorVersion;
+  uint64_t MapSize;
+  void *Buffer;
+  uint64_t MapKey;
+  uint64_t DescriptorSize;
+  uint32_t DescriptorVersion;
 } MEMORY_MAP;
 
 typedef struct
 {
-  UINT32 Type;
-  UINT64 PhysicalStart;
-  UINT64 PageSize;
+  uint32_t Type;
+  uint64_t PhysicalStart;
+  uint64_t PageSize;
 } OS_MEMORY_DESCRIPTOR;
 
 #pragma pack()
 
 typedef struct
 {
-    UINT32 Type;
+    uint32_t Type;
     EFI_PHYSICAL_ADDRESS PhysicalStart;
     EFI_VIRTUAL_ADDRESS VirtualStart;
-    UINT64 NumberOfPages;
-    UINT64 Attribute;
+    uint64_t NumberOfPages;
+    uint64_t Attribute;
 } __attribute__((__aligned__(16))) EfiMemoryDesc;
 
 #define PAGE_SIZE ((size_t)4096UL)

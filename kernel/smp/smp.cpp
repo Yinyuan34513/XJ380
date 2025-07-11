@@ -45,7 +45,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
 
     // 准备跳板
     static void *trampoline = (void *)(APU_BASE_ADDR);
-    xmemcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (UINTN)&_APU_boot_end - (UINTN)&_APU_boot_start);
+    xmemcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (uint64_t)&_APU_boot_end - (uint64_t)&_APU_boot_start);
 
     uint32_t eax, ebx, ecx, edx;
     bool nx = true;
@@ -104,7 +104,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     return false;
 }
 
-void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
+void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi)
 {
     write_serial_string("Initializing SMP...\n");
     GDT_PTR gdtr = gdt_ptr;
@@ -127,17 +127,17 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
     write_serial_string("Searching CPUs...\n");
     size_t max_cpus = 0;
     MADT *madt = (MADT *)MADT0;
-    UINT64 current = 0;
+    uint64_t current = 0;
     for (;;)
     {
-        if (current + ((UINT32)sizeof(MADT) - 1) >= madt->h.Length)
+        if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length)
         {
             break;
         }
-        MadtHeader *header = (MadtHeader *)((UINT64)(&madt->entries) + current);
+        MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
         if (header->entry_type == MADT_APIC_LOCAL)
         {
-            madt_local_apic *lapic = (madt_local_apic *)((UINT64)(&madt->entries) + current);
+            madt_local_apic *lapic = (madt_local_apic *)((uint64_t)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
             if ((lapic->flags & 1) ^ ((lapic->flags >> 1) & 1))
@@ -148,12 +148,12 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             if (!ApicInfo.x2Apic)
                 continue;
             
-            madt_x2_localapic *x2lapic = (madt_x2_localapic *)((UINT64)(&madt->entries) + current);
+            madt_x2_localapic *x2lapic = (madt_x2_localapic *)((uint64_t)(&madt->entries) + current);
 
             if ((x2lapic->flags & 1) ^ ((x2lapic->flags >> 1) & 1))
                 max_cpus++;
         }
-        current += (UINT64)header->length;
+        current += (uint64_t)header->length;
     }
 
     xsi->cpu_count = 0;
@@ -165,18 +165,18 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
     current = 0;
     for (;;)
     {
-        if (current + ((UINT32)sizeof(MADT) - 1) >= madt->h.Length)
+        if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length)
         {
             break;
         }
-        MadtHeader *header = (MadtHeader *)((UINT64)(&madt->entries) + current);
+        MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
         if (header->entry_type == MADT_APIC_LOCAL)
         {
-            madt_local_apic *lapic = (madt_local_apic *)((UINT64)(&madt->entries) + current);
+            madt_local_apic *lapic = (madt_local_apic *)((uint64_t)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
             if (!((lapic->flags & 1) ^ ((lapic->flags >> 1) & 1))) {
-                current += (UINT64)header->length;
+                current += (uint64_t)header->length;
                 continue;
             }
             
@@ -187,13 +187,13 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             // 如果是BSP就跑路
             if (lapic->local_apic_id == bsp_lapic_id) {
                 (xsi->cpu_count)++;
-                current += (UINT64)header->length;
+                current += (uint64_t)header->length;
                 continue;
             }
 
             if (!start_ap(xsi->cpu_count, lapic->local_apic_id, &gdtr, cpuinf)) {
                 write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
-                current += (UINT64)header->length;
+                current += (uint64_t)header->length;
                 continue;
             }
 
@@ -201,11 +201,11 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
         }
         else if (header->entry_type == MADT_X2APIC_LOCAL)
         {
-            madt_x2_localapic *x2lapic = (madt_x2_localapic *)((UINT64)(&madt->entries) + current);
+            madt_x2_localapic *x2lapic = (madt_x2_localapic *)((uint64_t)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
             if (!((x2lapic->flags & 1) ^ ((x2lapic->flags >> 1) & 1))) {
-                current += (UINT64)header->length;
+                current += (uint64_t)header->length;
                 continue;
             }
             
@@ -216,18 +216,18 @@ void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi)
             // 如果是BSP就跑路
             if (x2lapic->x2apic_id == bsp_lapic_id) {
                 (xsi->cpu_count)++;
-                current += (UINT64)header->length;
+                current += (uint64_t)header->length;
                 continue;
             }
 
             if (!start_ap(xsi->cpu_count, x2lapic->x2apic_id, &gdtr, cpuinf)) {
                 write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
-                current += (UINT64)header->length;
+                current += (uint64_t)header->length;
                 continue;
             }
 
             (xsi->cpu_count)++;
         }
-        current += (UINT64)header->length;
+        current += (uint64_t)header->length;
     }
 }

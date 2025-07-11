@@ -23,17 +23,17 @@ void write_serial_hex(unsigned long long hex);
  */
 
 // kernel/wsod.cpp
-extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void c_device_not_avaliable(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_divide_error(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_undefined_opcode(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_debug(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_nmi(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_double_fault(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_general_protection(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void wsod_page_fault(struct X64_REGS *regs, UINT64 error_code);
-extern "C" void default_isr(struct X64_REGS *regs, UINT64 error_code);
+extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_debug(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_nmi(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_double_fault(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code);
+extern "C" void default_isr(struct X64_REGS *regs, uint64_t error_code);
 
 /*
  *
@@ -42,22 +42,22 @@ extern "C" void default_isr(struct X64_REGS *regs, UINT64 error_code);
  */
 
 // kernel/cpu/common.cpp
-void outb(UINT16 port, UINT8 value);
-UINT8 inb(UINT16 port);
-void outw(UINT16 port, UINT16 value);
-UINT16 inw(UINT16 port);
-void outl(UINT16 port, UINT32 value);
-UINT32 inl(UINT16 port);
-void insw(UINT16 port, VOID *buf, unsigned long n);
-void outsw(UINT16 port, const VOID *buf, unsigned long n);
-void insl(UINT32 port, VOID *addr, int cnt);
-void outsl(UINT32 port, const VOID *addr, int cnt);
+void outb(uint16_t port, uint8_t value);
+uint8_t inb(uint16_t port);
+void outw(uint16_t port, uint16_t value);
+uint16_t inw(uint16_t port);
+void outl(uint16_t port, uint32_t value);
+uint32_t inl(uint16_t port);
+void insw(uint16_t port, void *buf, unsigned long n);
+void outsw(uint16_t port, const void *buf, unsigned long n);
+void insl(uint32_t port, void *addr, int cnt);
+void outsl(uint32_t port, const void *addr, int cnt);
 void enable_intr();
 void disable_intr();
 void io_mfence();
 
 // kernel/cpu/cpuid.cpp
-void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx);
+void asm_cpuid(uint32_t mop, uint32_t sop, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 void get_cpu_name(char *c);
 bool mtrr_supported();
 
@@ -85,13 +85,13 @@ void init_8259A();
 void disable_8259A();
 
 // kernel/intr/apic.cpp
-void lapic_write(UINT32 reg, UINT64 value);
-UINT32 lapic_read(UINT32 reg);
+void lapic_write(uint32_t reg, uint64_t value);
+uint32_t lapic_read(uint32_t reg);
 void ioapic_mask_all();
-void init_apic(UINT64 MADT0);
+void init_apic(uint64_t MADT0);
 
 // kernel/intr/hpet.cpp
-void init_hpet(UINT64 hpet_ptr);
+void init_hpet(uint64_t hpet_ptr);
 
 /*
  *
@@ -122,6 +122,6 @@ void init_gdt();
  */
 
 // kernel/smp/smp.cpp
-void init_smp(UINT64 MADT0, XSK_SMP_INFO *xsi);
+void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi);
 
 #endif

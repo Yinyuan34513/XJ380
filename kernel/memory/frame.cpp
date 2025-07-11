@@ -75,7 +75,7 @@ void init_frame(MEMORY_MAP map)
 
     write_serial_string("Available memory: ");
     write_serial_dec((origin_frames / 256));
-    write_serial_string("MiB\n");
+    write_serial_string(" MiB\n");
 }
 
 void free_frame(uint64_t addr)

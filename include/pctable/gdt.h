@@ -23,19 +23,19 @@
 // GDT 段描述符结构体 (64位模式)
 struct GDT_ENTRY
 {
-	UINT16 limit;  // 段界限 [0:15]
-	UINT16 base_low;   // 基地址 [0:15]
-	UINT8 base_mid; // 基地址 [16:23]
-	UINT8 access;	   // P(1) | DPL(2) | S(1) | Type(4)
-	UINT8 granularity; // G(1) | D/B(1) | L(1) | AVL(1) | Limit[16:19](4)
-	UINT8 base_hi;   // 基地址 [24:31]
+	uint16_t limit;  // 段界限 [0:15]
+	uint16_t base_low;   // 基地址 [0:15]
+	uint8_t base_mid; // 基地址 [16:23]
+	uint8_t access;	   // P(1) | DPL(2) | S(1) | Type(4)
+	uint8_t granularity; // G(1) | D/B(1) | L(1) | AVL(1) | Limit[16:19](4)
+	uint8_t base_hi;   // 基地址 [24:31]
 } __attribute__((packed));
 
 // GDTR
 typedef struct
 {
-	UINT16 limit; // 全局描述符表限长
-	UINT64 base;  // 全局描述符表 32 位基地址
+	uint16_t limit; // 全局描述符表限长
+	uint64_t base;  // 全局描述符表 32 位基地址
 } __attribute__((packed)) GDT_PTR;
 
 extern GDT_PTR gdt_ptr;
