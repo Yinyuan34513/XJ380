@@ -1,8 +1,8 @@
-#include "krlibc.h"
+#include <krlibc.h>
 
 int memcmp(const void *a_, const void *b_, size_t size) {
-    const char *a = a_;
-    const char *b = b_;
+    const char *a = (const char *)(a_);
+    const char *b = (const char *)(b_);
     while (size-- > 0) {
         if (*a != *b) return *a > *b ? 1 : -1;
         a++, b++;
@@ -11,8 +11,8 @@ int memcmp(const void *a_, const void *b_, size_t size) {
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {
-    char       *d = (char *)dest;
-    const char *s = (const char *)src;
+    char       *d = (char *)(dest);
+    const char *s = (const char *)(src);
 
     void *ret = dest;
 
@@ -49,8 +49,8 @@ void *memcpy(void *dest, const void *src, size_t n) {
 }
 
 void *memset(void *dst, int val, size_t size) {
-    unsigned char *d = dst;
-    unsigned char  v = (unsigned char)val;
+    unsigned char *d = (unsigned char *)(dst);
+    unsigned char  v = (unsigned char)(val);
 
     while (size && ((size_t)d & 7)) {
         *d++ = v;
