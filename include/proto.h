@@ -90,6 +90,9 @@ UINT32 lapic_read(UINT32 reg);
 void ioapic_mask_all();
 void init_apic(UINT64 MADT0);
 
+// kernel/intr/hpet.cpp
+void init_hpet(UINT64 hpet_ptr);
+
 /*
  *
  *  kernel/pctable/

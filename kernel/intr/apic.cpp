@@ -185,3 +185,13 @@ void init_apic(UINT64 MADT0)
 
     write_serial_string("APIC Initialize Success.\n");
 }
+
+void send_eoi()
+{
+    lapic_write(0xb0, 0);
+}
+
+extern "C" void c_timer_handler(void *regs_ptr, UINT64 error_code) 
+{
+    send_eoi();
+}

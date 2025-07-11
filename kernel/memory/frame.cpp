@@ -1,6 +1,6 @@
-#include "proto.h"
-#include "mm/frame.h"
-#include "mm/memory.h"
+#include <proto.h>
+#include <mm/frame.h>
+#include <mm/memory.h>
 
 FrameAllocator frame_allocator;
 uint64_t memory_size = 0;

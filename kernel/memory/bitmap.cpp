@@ -1,11 +1,11 @@
-#include "mm/bitmap.h"
-#include "krlibc.h"
+#include <mm/bitmap.h>
+#include <stdint.h>
 
 void bitmap_init(Bitmap *bitmap, uint8_t *buffer, size_t size)
 {
     bitmap->buffer = buffer;
     bitmap->length = size * 8;
-    memset(buffer, 0, size);
+    xmemset(buffer, 0, size);       // 编译器没有链接这堆库，可能会报错；故请在开头加上“x”使用咱们自己实现的，thanks
 }
 
 bool bitmap_get(const Bitmap *bitmap, size_t index)

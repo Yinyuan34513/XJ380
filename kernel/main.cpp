@@ -16,6 +16,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     disable_intr();
     init_idt();
     init_gdt();
+    init_hpet(BootConfig->HPET);
     init_apic(BootConfig->MADT);
     init_frame(BootConfig->MemoryMap);
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
