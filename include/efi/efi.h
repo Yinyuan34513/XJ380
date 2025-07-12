@@ -132,22 +132,6 @@ typedef struct
   uint64_t Attribute;
 } __attribute__((__aligned__(16))) EFI_MEMORY_DESCRIPTOR;
 
-static inline void xmemset(void *dst_, uint8_t value, uint64_t size)
-{
-  uint8_t *dst = (uint8_t *)dst_;
-  while (size-- > 0)
-    *dst++ = value;
-}
-
-static inline void *xmemcpy(void *dst_, const void *src_, uint64_t size)
-{
-  uint8_t *dst = (uint8_t *)dst_;
-  const uint8_t *src = (uint8_t *)src_;
-  while (size-- > 0)
-    *dst++ = *src++;
-  return (void *)src_;
-}
-
 typedef struct
 {
   uint16_t Year;  // 1900 – 9999

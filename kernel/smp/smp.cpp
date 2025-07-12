@@ -5,6 +5,7 @@
 #include <cpu/msr.h>
 #include <proto.h>
 #include <stdint.h>
+#include <krlibc.h>
 
 extern GDT_PTR gdt_ptr;
 extern APIC_INFO ApicInfo;
@@ -45,7 +46,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
 
     // 准备跳板
     static void *trampoline = (void *)(APU_BASE_ADDR);
-    xmemcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (uint64_t)&_APU_boot_end - (uint64_t)&_APU_boot_start);
+    memcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (uint64_t)&_APU_boot_end - (uint64_t)&_APU_boot_start);
 
     uint32_t eax, ebx, ecx, edx;
     bool nx = true;
