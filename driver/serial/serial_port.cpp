@@ -1,6 +1,7 @@
 #include <proto.h>
+#include <cpu/lock.h>
 
-// spinlock_t serial_lock;
+spin_t serial_lock;
 
 #if BUILD_VERSION == DEBUG_VERSION
 int serial_x = 0;
@@ -12,7 +13,7 @@ int serial_x_max = 0;
 
 int init_serial()
 {
-	// spin_init(&serial_lock);
+	serial_lock = SPIN_INIT;
 
 	outb(PORT + 1, 0x00); // Disable all interrupts
 	outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
@@ -58,7 +59,7 @@ void write_serial(char a)
 
 void write_serial_string(const char *str)
 {
-	// spin_lock(&serial_lock);
+	spin_lock(serial_lock);
 	while (*str)
 	{
 // #if BUILD_VERSION == DEBUG_VERSION
@@ -82,7 +83,7 @@ void write_serial_string(const char *str)
 // #endif
 		write_serial(*str++);
 	}
-	// spin_unlock(&serial_lock);
+	spin_unlock(serial_lock);
 }
 
 void write_serial_dec(unsigned long long dec)

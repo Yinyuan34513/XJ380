@@ -105,21 +105,66 @@ void init_idt();
 // kernel/pctable/gdt.cpp
 void init_gdt();
 
-#include <mm/memory.h>
-
 /*
  *
  *  kernel/memory/
  * 
  */
 
-#include <smp/smp.h>
+#include <mm/bitmap.h>
+#include <mm/memory.h>
+#include <mm/page.h>
+
+// kernel/memory/bitmap.cpp
+void bitmap_init(Bitmap *bitmap, uint8_t *buffer, size_t size);
+bool bitmap_get(const Bitmap *bitmap, size_t index);
+void bitmap_set(Bitmap *bitmap, size_t index, bool value);
+void bitmap_set_range(Bitmap *bitmap, size_t start, size_t end, bool value);
+size_t bitmap_find_range(const Bitmap *bitmap, size_t length, bool value);
+
+// kernel/memory/frame.cpp
+void     init_frame(MEMORY_MAP map);
+void     free_frame(uint64_t addr);
+uint64_t alloc_frames(size_t count);
+
+// kernel/memory/hhdm.cpp
+void init_hhdm();
+uint64_t get_physical_memory_offset();
+void *phys_to_virt(uint64_t phys_addr);
+void *virt_to_phys(uint64_t virt_addr);
+void *driver_phys_to_virt(uint64_t phys_addr);
+void *driver_virt_to_phys(uint64_t virt_addr);
+uint64_t page_virt_to_phys(uint64_t va);
+
+// kernel/memory/page.cpp
+void handle_page_fault(struct X64_REGS *frame, uint64_t error_code);
+void page_table_clear(page_table_t *table);
+bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *out_flags);
+bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_t new_flags);
+page_table_t *page_table_create(page_table_entry_t *entry);
+page_directory_t *get_kernel_pagedir();
+static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy,
+                                               bool kernel_space);
+static void free_page_table_recursive(page_table_t *table, int level);
+void unmap_page(page_directory_t *directory, uint64_t vaddr);
+void unmap_page_range(page_directory_t *directory, uint64_t vaddr, uint64_t size);
+void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags);
+uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags);
+void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64_t length,
+                              uint64_t flags);
+void page_map_range_to(page_directory_t *directory, uint64_t frame, uint64_t length,
+                       uint64_t flags);
+void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t length,
+                    uint64_t flags);
+void page_setup();
 
 /*
  *
  *  kernel/smp/
  * 
  */
+
+#include <smp/smp.h>
 
 // kernel/smp/smp.cpp
 void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi);

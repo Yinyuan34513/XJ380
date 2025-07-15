@@ -98,6 +98,8 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
 // 页错误
 void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code)
 {
+    disable_intr();
+
     if (!(error_code & 0x01))
         write_serial_string("Page Not-Present,\t");
 
@@ -119,11 +121,7 @@ void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code)
 
     write_serial_string("\n");
 
-    uint64_t cr2;
-    __asm__("mov %%cr2, %0" : "=r"(cr2));
-    write_serial_string("cr2 = ");
-    write_serial_hex(cr2);
-    write_serial_string("\n");
+    handle_page_fault(regs, error_code);
 
     do_wsod("PAGE_FAULT", regs);
 }
