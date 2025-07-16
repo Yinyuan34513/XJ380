@@ -1,0 +1,8 @@
+#pragma once
+
+#define ALIGNED_BASE 0x1000
+
+#include <mm/alloc/alloc.h>
+
+uint64_t get_all_memusage();
+void     init_heap();

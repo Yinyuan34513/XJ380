@@ -167,5 +167,5 @@ page_directory_t *get_current_directory();
  * 将引导器提供的页表置换成 CP_Kernel 自己构建的页表
  * 为解决引导器页表占用内存未被标记容易被覆写问题
  */
-void switch_cp_kernel_page_directory();
+void switch_xsk_page_directory();
 void page_setup();

@@ -1,7 +1,7 @@
 #ifndef _ACPI_H_
 #define _ACPI_H_
 
-#pragma pack(1)
+#pragma pack(push, 1)
 #ifdef __cplusplus
 extern "C"
 {
@@ -51,6 +51,6 @@ struct ACPISDTHeader
     uint32_t CreatorRevision;
 };
 
-#pragma pack()
+#pragma pack(pop)
 
 #endif

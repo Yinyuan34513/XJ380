@@ -23,17 +23,23 @@ void write_serial_hex(unsigned long long hex);
  */
 
 // kernel/wsod.cpp
-extern "C" void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_debug(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_nmi(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_double_fault(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code);
-extern "C" void default_isr(struct X64_REGS *regs, uint64_t error_code);
+#ifdef __cplusplus
+extern "C" {
+#endif
+void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code);
+void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code);
+void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code);
+void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code);
+void wsod_debug(struct X64_REGS *regs, uint64_t error_code);
+void wsod_nmi(struct X64_REGS *regs, uint64_t error_code);
+void wsod_double_fault(struct X64_REGS *regs, uint64_t error_code);
+void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code);
+void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code);
+void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code);
+void default_isr(struct X64_REGS *regs, uint64_t error_code);
+#ifdef __cplusplus
+}
+#endif
 
 /*
  *
@@ -110,6 +116,10 @@ void init_gdt();
  *  kernel/memory/
  * 
  */
+
+// kernel/memory/heap/heap.cpp
+#include <mm/alloc/alloc.h>
+void init_heap();
 
 #include <mm/bitmap.h>
 #include <mm/memory.h>

@@ -1,7 +1,7 @@
 #ifndef _APIC_H_
 #define _APIC_H_
 
-#pragma pack(1)
+#pragma pack(push, 1)
 #ifdef __cplusplus
 extern "C"
 {
@@ -121,6 +121,6 @@ typedef struct madt_local_apic MadtLocalApic;
 typedef struct madt_x2_localapic MadtLocalX2apic;
 typedef struct madt_io_apic MadtIOApic;
 
-#pragma pack()
+#pragma pack(pop)
 
 #endif

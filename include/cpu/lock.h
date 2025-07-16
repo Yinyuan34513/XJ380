@@ -1,17 +1,8 @@
 #pragma once
 
-// 我操你妈C++，不给_Atomic是什么意思？？？是因为把你妈骨灰盒打包进C++标准里了所以没地方了？
-// 不兼容C还敢叫C++，操你妈
-// FUCK YOU C++, YOU SON OF BITCH, WHERE IS MY _Atomic ??? YOU MOTHER FUCKER
-#ifdef __cplusplus
-#define CPP_IS_A_SON_OF_BITCH
-typedef volatile bool spin_t;
-#else
-#define bool _Bool
-#define true 1
-#define false 0
+#include <stdint.h>
+
 typedef _Atomic volatile bool spin_t;
-#endif
 
 #define SPIN_INIT false
 
