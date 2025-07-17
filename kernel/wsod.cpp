@@ -93,6 +93,10 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
             write_serial_string("Refers to a descriptor in the current GDT;\n");
     }
 
+    write_serial_string("Error Code:");
+    write_serial_hex(error_code);
+    write_serial_string("\n");
+
     do_wsod("GENERAL_PROTECTION", regs);
 }
 

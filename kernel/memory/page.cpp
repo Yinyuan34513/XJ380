@@ -335,10 +335,6 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 //     open_interrupt;
 // }
 
-void switch_cr3(page_table_t *physical_table) {
-    __asm__ volatile("mov %0, %%cr3" : : "r"(physical_table));
-}
-
 void switch_page_directory(page_directory_t *dir) {
     // if (cpu->ready) {
     //     cpu->directory = dir;
@@ -351,7 +347,7 @@ void switch_page_directory(page_directory_t *dir) {
     write_serial_string("\nVirtAddr:");
     write_serial_hex((uint64_t)(phys_to_virt((uint64_t)(physical_table))));
     write_serial_string("\n");
-    switch_cr3(physical_table);
+    __asm__ volatile("mov %0, %%cr3" : : "r"(physical_table));
 }
 
 uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags) {
