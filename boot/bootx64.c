@@ -7,6 +7,7 @@
 #include <msr.h>
 #include <elf.h>
 #include "./bootlib.c"
+#include "../kernel/build_settings.h"
 #define NULL 0
 struct EFI_SYSTEM_TABLE *ST;                  // 系统表
 struct EFI_BOOT_SERVICES *BS;                 // 启动信息
@@ -530,7 +531,20 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	}
 
 	for (int i = 0; i < 256; i++)
-		BootConfig->temp_stack[i] = malloc(8192) + 0xFFFF800000000000;
+		BootConfig->temp_stack[i] = malloc(STACK_SIZE) + 0xFFFF800000000000;
+
+	UINT64 new_stack, obp;
+	__asm__ volatile("mov %%rbp, %0" : "=r"(obp) : : "memory", "rax");
+	BS->AllocatePages(AllocateAnyPages, EfiLoaderData, STACK_SIZE, &new_stack);
+	MapVirtToPhys(new_stack, STACK_SIZE);
+	xmemcpy((void *)new_stack, (void *)obp, 8192);
+	write_serial_string("Changing BSP Stack.\nPhysAddr: ");
+	write_serial_string(Hex2Char(new_stack));
+	write_serial_string("\n");
+	__asm__ volatile("mov %0, %%rax\n\t" 
+					 "mov %%rax, %%rbp\n\t"
+					 "mov %%rax, %%rsp"
+					  : : "r"(new_stack + 0xFFFF800000000000) : "memory", "rax");
 
 	EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 
