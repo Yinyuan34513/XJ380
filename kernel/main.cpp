@@ -18,8 +18,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_gdt();
     init_hpet(BootConfig->HPET);
     init_apic(BootConfig->MADT);
+    init_hhdm();
     init_frame(BootConfig->MemoryMap);
     page_setup();
+    init_heap();
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *) (BootConfig->saved_mtrrs);
     for (int i = 0; i < MAX_CPU_NUM; ++i)

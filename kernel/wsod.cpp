@@ -86,11 +86,16 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
     else
         write_serial_string("Refers to a descriptor in the GDT or the current LDT;\n");
 
-    if ((error_code & 0x02) == 0)
+    if ((error_code & 0x02) == 0) {
         if (error_code & 0x04)
             write_serial_string("Refers to a segment or gate descriptor in the LDT;\n");
         else
             write_serial_string("Refers to a descriptor in the current GDT;\n");
+    }
+
+    write_serial_string("Error Code:");
+    write_serial_hex(error_code);
+    write_serial_string("\n");
 
     do_wsod("GENERAL_PROTECTION", regs);
 }

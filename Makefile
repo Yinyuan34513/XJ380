@@ -32,8 +32,8 @@ ASM_FILES := $(shell find ./kernel ./driver -name "*.S")
 C_FILES := $(shell find ./kernel ./driver -name "*.c")
 CPP_FILES := $(shell find ./kernel ./driver -name "*.cpp")
 
-export CC = $(COMPILER_PREFIX)gcc
-export CPP = $(COMPILER_PREFIX)g++
+export CC = $(COMPILER_PREFIX)clang
+export CPP = $(COMPILER_PREFIX)clang++
 export NASM = $(COMPILER_PREFIX)nasm
 export LD = $(COMPILER_PREFIX)ld
 export NM = $(COMPILER_PREFIX)nm

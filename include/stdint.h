@@ -26,6 +26,13 @@ typedef float64_t f64;
 
 #define NULL 0
 
+#ifndef __cplusplus
+#   define bool _Bool
+#   define true 1
+#   define false 0
+#endif
+
 typedef unsigned long int size_t; // compatible to ELF toolchain
+typedef int ssize_t;
 
 #endif
