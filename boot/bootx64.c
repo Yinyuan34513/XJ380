@@ -314,8 +314,10 @@ void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UI
 	__asm__ volatile("cpuid \n\t" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "0"(mop), "2"(sop) : "memory");
 }
 
+char new_stack[STACK_SIZE];	// 你不配当主播！滚吧！* 哭 *
+
 typedef void (*__attribute__((sysv_abi))
-              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *, UINT64);
+              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
@@ -536,9 +538,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	for (int i = 0; i < 256; i++)
 		BootConfig->temp_stack[i] = malloc(STACK_SIZE) + 0xFFFF800000000000;
 
-	UINT64 new_stack;
-	BS->AllocatePages(AllocateAnyPages, EfiLoaderData, STACK_SIZE, &new_stack);
-	new_stack += 0xFFFF800000000000;
+	__asm__ volatile("mfence" ::: "memory");
+	__asm__ volatile("mov %0, %%rsp \n\t" : : "r"(new_stack + STACK_SIZE) : "memory");
+	__asm__ volatile("mfence" ::: "memory");
 
 	EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 
@@ -556,7 +558,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	}
 
 	Kernel kernel = (Kernel)entry_addr;
-	kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig, new_stack + STACK_SIZE); // 进入内核
+	kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig); // 滚进去！
 
 	// 此处=kernel.elf
 
