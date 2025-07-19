@@ -416,7 +416,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	write_serial_string("Vedio Initialize Success.\n");
 
 	BOOT_CONFIG *BootConfig;
-	BootConfig = malloc(sizeof(BOOT_CONFIG));
+	BootConfig = malloc(sizeof(BOOT_CONFIG)) + 0xFFFF800000000000;
 	xmemset(BootConfig, 0, sizeof(BOOT_CONFIG));
 
 	// 获取RSDP
