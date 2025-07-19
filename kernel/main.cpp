@@ -37,8 +37,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_hex(phys);
     write_serial_string("\n");
 
-    // *fbc.frame_buffer = 0xff;
-
     while (true)
     {
         __asm__ __volatile__("pause");
