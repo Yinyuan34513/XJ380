@@ -11,24 +11,24 @@ BOOT_CONFIG *BC;
 uint64_t *saved_mtrrs;
 void *temp_stack[MAX_CPU_NUM];
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG *BootConfig)
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     disable_intr();
     init_idt();
     init_gdt();
-    init_hpet(BootConfig->HPET);
-    init_apic(BootConfig->MADT);
+    init_hpet(BootConfig.HPET);
+    init_apic(BootConfig.MADT);
     init_hhdm();
-    init_frame(BootConfig->MemoryMap);
+    init_frame(BootConfig.MemoryMap);
     page_setup();
     init_heap();
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
-    saved_mtrrs = (uint64_t *) (BootConfig->saved_mtrrs);
+    saved_mtrrs = (uint64_t *) (BootConfig.saved_mtrrs);
     for (int i = 0; i < MAX_CPU_NUM; ++i)
-        temp_stack[i] = BootConfig->temp_stack[i];
+        temp_stack[i] = BootConfig.temp_stack[i];
 
     XSK_SMP_INFO xsi;
-    init_smp(BootConfig->MADT, &xsi);
+    init_smp(BootConfig.MADT, &xsi);
 
     enable_intr();
 
@@ -36,6 +36,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("Alloc memory: ");
     write_serial_hex(phys);
     write_serial_string("\n");
+
+    // *fbc.frame_buffer = 0xff;
 
     while (true)
     {

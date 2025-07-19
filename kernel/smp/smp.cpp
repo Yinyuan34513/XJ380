@@ -6,6 +6,7 @@
 #include <proto.h>
 #include <stdint.h>
 #include <krlibc.h>
+#include "../build_settings.h"
 
 extern GDT_PTR gdt_ptr;
 extern APIC_INFO ApicInfo;
@@ -68,7 +69,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     *page_table = cr3;
     *ap_entry = (uint64_t)apu_entry;
 
-    *rsp = (uint64_t)(temp_stack[cs_number]);
+    *rsp = (uint64_t)((uint64_t)(temp_stack[cs_number]) + STACK_SIZE);
     *cpu_id = cs_number;
 
     asm volatile ("" ::: "memory");

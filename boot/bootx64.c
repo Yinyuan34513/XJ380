@@ -315,7 +315,7 @@ void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UI
 }
 
 typedef void (*__attribute__((sysv_abi))
-              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *);
+              Kernel)(const struct FrameBufferConfig *, struct EFI_SYSTEM_TABLE *, BOOT_CONFIG *, UINT64);
 
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable)
 {
@@ -388,8 +388,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	SwitchToResolution(1440, 900); // 切换分辨率
 
 	struct FrameBufferConfig config = {
-		(UINT8 *)(GOP->Mode->FrameBufferBase + 0xFFFF800000000000), GOP->Mode->Info->PixelsPerScanLine,
+		(UINT8 *)(GOP->Mode->FrameBufferBase + 0xffff800000000000), GOP->Mode->Info->PixelsPerScanLine,
 		GOP->Mode->Info->HorizontalResolution, GOP->Mode->Info->VerticalResolution, kRGBR};
+	write_serial_string("Frame Buffer Phys Addr: ");
+	write_serial_string(Hex2Char((UINT64)(config.frame_buffer)));
+	write_serial_string("\n");
 
 	switch (GOP->Mode->Info->PixelFormat)
 	{
@@ -533,18 +536,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	for (int i = 0; i < 256; i++)
 		BootConfig->temp_stack[i] = malloc(STACK_SIZE) + 0xFFFF800000000000;
 
-	UINT64 new_stack, obp;
-	__asm__ volatile("mov %%rbp, %0" : "=r"(obp) : : "memory", "rax");
+	UINT64 new_stack;
 	BS->AllocatePages(AllocateAnyPages, EfiLoaderData, STACK_SIZE, &new_stack);
-	MapVirtToPhys(new_stack, STACK_SIZE);
-	xmemcpy((void *)new_stack, (void *)obp, 8192);
-	write_serial_string("Changing BSP Stack.\nPhysAddr: ");
-	write_serial_string(Hex2Char(new_stack));
-	write_serial_string("\n");
-	__asm__ volatile("mov %0, %%rax\n\t" 
-					 "mov %%rax, %%rbp\n\t"
-					 "mov %%rax, %%rsp"
-					  : : "r"(new_stack + 0xFFFF800000000000) : "memory", "rax");
+	new_stack += 0xFFFF800000000000;
 
 	EFI_STATUS ExitBSStatus = EFI_SUCCESS;
 
@@ -562,7 +556,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 	}
 
 	Kernel kernel = (Kernel)entry_addr;
-	kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig); // 滚进去！
+	kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig, new_stack + STACK_SIZE); // 进入内核
 
 	// 此处=kernel.elf
 

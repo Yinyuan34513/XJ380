@@ -1,5 +1,5 @@
 OUTPUT_FORMAT("elf64-x86-64")  
-ENTRY(KernelMain)  
+ENTRY(_start)  
   
 SECTIONS  
 {  
