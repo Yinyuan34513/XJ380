@@ -1,6 +1,8 @@
 #ifndef _PROTO_H_
 #define _PROTO_H_
 
+#define KERNEL_STACK_SIZE 32768 // 任务内核栈地址
+
 #include <stdint.h>
 
 /*
@@ -95,6 +97,7 @@ void lapic_write(uint32_t reg, uint64_t value);
 uint32_t lapic_read(uint32_t reg);
 void ioapic_mask_all();
 void init_apic(uint64_t MADT0);
+uint64_t lapic_id();
 
 // kernel/intr/hpet.cpp
 void init_hpet(uint64_t hpet_ptr);
@@ -177,6 +180,6 @@ void page_setup();
 #include <smp/smp.h>
 
 // kernel/smp/smp.cpp
-void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi);
+void init_smp(uint64_t MADT0);
 
 #endif

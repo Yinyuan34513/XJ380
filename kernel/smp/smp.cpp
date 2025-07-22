@@ -7,6 +7,10 @@
 #include <stdint.h>
 #include <krlibc.h>
 #include "../build_settings.h"
+#include "cpu/lock.h"
+#include "pctable/idt.h"
+
+XSK_SMP_INFO *xsi;
 
 extern GDT_PTR gdt_ptr;
 extern APIC_INFO ApicInfo;
@@ -17,6 +21,8 @@ typedef char symbol[];
 
 extern uint8_t _APU_boot_start;
 extern uint8_t _APU_boot_end;
+
+extern IDTR_TYPE idt_ptr;
 
 #define APU_BASE_ADDR 0x20000
 
@@ -31,8 +37,31 @@ extern uint8_t _APU_boot_end;
     locked_read__ret; \
 })
 
+spin_t apu_lock = SPIN_INIT;
+
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
+    spin_lock(apu_lock);
+
+    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
+    PROCESSOR_INFO *info = NULL;
+    for (size_t i = 0; i < MAX_CPU_NUM; i++) {
+        PROCESSOR_INFO *inter_info = &xsi->pcr_inf[i];
+        if(inter_info->lapic_id == lapic_id()){
+            info = inter_info;
+            break;
+        }
+    }
+    if(info == NULL){
+        write_serial_string("APU Entry Failed: CPU not found.\n");
+        while (true)
+        {
+            asm volatile ("hlt");
+        }
+    }
+
+    spin_unlock(apu_lock);
     while (true) 
     {
         asm volatile ("hlt");
@@ -106,8 +135,9 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     return false;
 }
 
-void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi)
+void init_smp(uint64_t MADT0)
 {
+    xsi = (XSK_SMP_INFO*)malloc(sizeof(XSK_SMP_INFO));
     write_serial_string("Initializing SMP...\n");
     GDT_PTR gdtr = gdt_ptr;
 
@@ -185,6 +215,7 @@ void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi)
             PROCESSOR_INFO *cpuinf = &xsi->pcr_inf[xsi->cpu_count];
             cpuinf->processor_id = lapic->ACPI_Processor_UID;
             cpuinf->lapic_id = lapic->local_apic_id;
+            cpuinf->scheduler_queue = queue_init();
 
             // 如果是BSP就跑路
             if (lapic->local_apic_id == bsp_lapic_id) {
@@ -214,6 +245,7 @@ void init_smp(uint64_t MADT0, XSK_SMP_INFO *xsi)
             PROCESSOR_INFO *cpuinf = &xsi->pcr_inf[xsi->cpu_count];
             cpuinf->processor_id = x2lapic->acpi_processor_uid;
             cpuinf->lapic_id = x2lapic->x2apic_id;
+            cpuinf->scheduler_queue = queue_init();
 
             // 如果是BSP就跑路
             if (x2lapic->x2apic_id == bsp_lapic_id) {

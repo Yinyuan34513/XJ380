@@ -3,6 +3,7 @@
 #include <efi/fbc.h>
 #include <proto.h>
 #include "mm/frame.h"
+#include "task/pcb.h"
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -27,8 +28,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     for (int i = 0; i < MAX_CPU_NUM; ++i)
         temp_stack[i] = BootConfig.temp_stack[i];
 
-    XSK_SMP_INFO xsi;
-    init_smp(BootConfig.MADT, &xsi);
+    init_smp(BootConfig.MADT);
 
     enable_intr();
 
@@ -36,6 +36,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("Alloc memory: ");
     write_serial_hex(phys);
     write_serial_string("\n");
+
+    process_setup();
 
     while (true)
     {
