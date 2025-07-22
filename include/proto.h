@@ -96,10 +96,12 @@ void disable_8259A();
 void lapic_write(uint32_t reg, uint64_t value);
 uint32_t lapic_read(uint32_t reg);
 void ioapic_mask_all();
+void init_lApic();
 void init_apic(uint64_t MADT0);
 uint64_t lapic_id();
 
 // kernel/intr/hpet.cpp
+uint64_t nanoTime();
 void init_hpet(uint64_t hpet_ptr);
 
 /*

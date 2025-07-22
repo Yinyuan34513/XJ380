@@ -41,19 +41,47 @@ spin_t apu_lock = SPIN_INIT;
 
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
+    disable_intr();
     spin_lock(apu_lock);
 
+    __asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
+	__asm__ volatile(
+		"movq %%rax, %%ds \n\t"
+		"movq %%rax, %%es \n\t"
+		"movq %%rax, %%fs \n\t"
+		"movq %%rax, %%gs \n\t"
+		"movq %%rax, %%ss \n\t"
+		"pushq %[SELECTOR_CODE64] \n\t"
+		"leaq .apu_next(%%RIP),%%rax \n\t"
+		"pushq %%rax \n\t"
+		"lretq \n\r"
+		".apu_next: \n\t"
+		:
+		: [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
+		  [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
+		:);
+
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
+    uint64_t ia32_apic_base = rdmsr(0x1b);
+    ia32_apic_base |= 1 << 11;
+    if (ApicInfo.x2Apic)
+    {
+        ia32_apic_base |= 1 << 10;
+    }
+    wrmsr(0x1b, ia32_apic_base);
+
+    init_lApic();
 
     PROCESSOR_INFO *info = NULL;
     for (size_t i = 0; i < MAX_CPU_NUM; i++) {
         PROCESSOR_INFO *inter_info = &xsi->pcr_inf[i];
-        if(inter_info->lapic_id == lapic_id()){
+        if (inter_info->lapic_id == lapic_id()) {
             info = inter_info;
             break;
         }
     }
-    if(info == NULL){
+    if (info == NULL) {
         write_serial_string("APU Entry Failed: CPU not found.\n");
         while (true)
         {
@@ -62,6 +90,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     }
 
     spin_unlock(apu_lock);
+    enable_intr();
+
     while (true) 
     {
         asm volatile ("hlt");

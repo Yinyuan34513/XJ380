@@ -123,6 +123,55 @@ void ioapic_mask_all()
     }
 }
 
+void ioapic_add(uint8_t vector, uint32_t irq)
+{
+    uint32_t ioredtbl = (uint32_t)(0x10 + (uint32_t)(irq * 2));
+    uint64_t redirect = (uint64_t)vector;
+    redirect |= lapic_id() << 56;
+    ioapic_write(ioredtbl, (uint32_t)redirect);
+    ioapic_write(ioredtbl + 1, (uint32_t)(redirect >> 32));
+}
+
+void init_IOApic()
+{
+    write_serial_string("Initializing IOAPIC...\n");
+
+    ioapic_add((uint8_t)32, 0);
+    // ioapic_add((uint8_t)33, 1);      // 分别为鼠标和键盘，先不开
+    // ioapic_add((uint8_t)34, 12);
+
+    write_serial_string("Setup I/O apic.\n");
+
+    write_serial_string("IOAPIC Address: ");
+    write_serial_hex(ApicInfo.ioApicAddr);
+    write_serial_string("\n");
+    write_serial_string("IOAPIC Initialize Success.\n");
+}
+
+/**
+ *
+ * @brief 初始化(Local) x2APIC
+ *
+ * @param MADT MADT表地址
+ *
+ */
+void init_lApic()
+{
+    lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
+    lapic_write(LAPIC_REG_SPURIOUS, 0xff | 1 << 8);
+    lapic_write(LAPIC_REG_TIMER_DIV, 11);
+    lapic_write(LAPIC_REG_TIMER_INITCNT, 0);
+    uint64_t b = nanoTime();
+    lapic_write(LAPIC_REG_TIMER_INITCNT, ~((uint32_t)0));
+    for (;;)
+        if (nanoTime() - b >= 1000000)
+            break;
+    uint64_t lapic_timer = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
+    uint64_t calibrated_timer_initial = (uint64_t)((uint64_t)(lapic_timer * 1000) / 250);
+    lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
+    lapic_write(LAPIC_REG_TIMER_INITCNT, calibrated_timer_initial);
+}
+
 /**
  *
  * @brief 初始化Local APIC
@@ -180,6 +229,8 @@ void init_apic(uint64_t MADT0)
         }
         current += (uint64_t)header->length;
     }
+
+    init_lApic();
 
     ioapic_mask_all();
 

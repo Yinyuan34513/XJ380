@@ -70,6 +70,7 @@ struct APIC_INFO
 #define LAPIC_REG_TIMER_INITCNT 0x380
 #define LAPIC_REG_TIMER 0x320
 #define LAPIC_REG_SPURIOUS 0xf0
+#define LAPIC_REG_TIMER_DIV 0x3e0
 
 #include <acpi/acpi.h>
 

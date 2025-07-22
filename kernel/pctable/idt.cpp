@@ -43,6 +43,8 @@ void init_idt()
     init_idt_desc(19, X86_64_INTR_GATE, SIMD_exception, RING0);
     init_idt_desc(20, X86_64_INTR_GATE, virtualization_exception, RING0);
 
+    init_idt_desc(32, X86_64_INTR_GATE, undefined_interrupt, RING0);        // timer
+
     for (int i = 35; i < 35 + 34; i++)
     {
         init_idt_desc(i, X86_64_INTR_GATE, undefined_interrupt, RING0);
