@@ -539,7 +539,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 		BootConfig->temp_stack[i] = malloc(STACK_SIZE) + 0xFFFF800000000000;
 
 	__asm__ volatile("mfence" ::: "memory");
-	__asm__ volatile("mov %0, %%rsp \n\t" : : "r"(new_stack + STACK_SIZE) : "memory");
+	__asm__ volatile("mov %0, %%rsp \n\t" : : "r"(new_stack + STACK_SIZE + 0xFFFF800000000000) : "memory");
 	__asm__ volatile("mfence" ::: "memory");
 
 	EFI_STATUS ExitBSStatus = EFI_SUCCESS;
