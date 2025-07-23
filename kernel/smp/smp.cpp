@@ -39,6 +39,15 @@ extern IDTR_TYPE idt_ptr;
 
 spin_t apu_lock = SPIN_INIT;
 
+#define ltr(n)                             \
+	do                                     \
+	{                                      \
+		__asm__ __volatile__("ltr	%%ax"    \
+							 :             \
+							 : "a"(n << 3) \
+							 : "memory");  \
+	} while (0)
+
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
     disable_intr();
@@ -108,14 +117,6 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     static void *trampoline = (void *)(APU_BASE_ADDR);
     memcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (uint64_t)&_APU_boot_end - (uint64_t)&_APU_boot_start);
 
-    uint32_t eax, ebx, ecx, edx;
-    bool nx = true;
-    // 看看你的NX
-    asm_cpuid(0x80000001, 0, &eax, &ebx, &ecx, &edx);
-    if (!(edx & (1 << 20))) {
-        nx = false;
-    }
-
     uint64_t cr3;
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
     uint64_t *page_table = (uint64_t *)(APU_BASE_ADDR + 8 + 0xFFFF800000000000);
@@ -167,7 +168,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
 
 void init_smp(uint64_t MADT0)
 {
-    xsi = (XSK_SMP_INFO*)malloc(sizeof(XSK_SMP_INFO));
+    xsi = (XSK_SMP_INFO *)malloc(sizeof(XSK_SMP_INFO));
     write_serial_string("Initializing SMP...\n");
     GDT_PTR gdtr = gdt_ptr;
 
