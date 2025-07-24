@@ -116,6 +116,11 @@ void handle_page_fault(struct X64_REGS *frame, uint64_t error_code) {
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+
+    while (1)
+    {
+        __asm__ __volatile__("hlt");
+    }
 }
 
 void page_table_clear(page_table_t *table) {

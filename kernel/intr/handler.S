@@ -218,7 +218,7 @@ ENTRY(page_fault)
     // === 页故障 #PF ==
     // 有错误码
     pushq %rax
-    leaq wsod_page_fault(%rip), %rax
+    leaq handle_page_fault(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
 

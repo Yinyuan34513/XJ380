@@ -152,7 +152,13 @@ void *driver_virt_to_phys(uint64_t virt_addr);
 uint64_t page_virt_to_phys(uint64_t va);
 
 // kernel/memory/page.cpp
+#ifdef __cplusplus
+extern "C" {
+#endif
 void handle_page_fault(struct X64_REGS *frame, uint64_t error_code);
+#ifdef __cplusplus
+}
+#endif
 void page_table_clear(page_table_t *table);
 bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *out_flags);
 bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_t new_flags);
