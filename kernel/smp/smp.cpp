@@ -48,39 +48,18 @@ spin_t apu_lock = SPIN_INIT;
 							 : "memory");  \
 	} while (0)
 
+__attribute__((naked)) void _setcs_helper() {
+    __asm__ volatile("pop %%rax\n\t"
+                     "push %%rbx\n\t"
+                     "push %%rax\n\t"
+                     "lretq\n\t" ::
+            : "memory");
+}
+
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
     disable_intr();
     spin_lock(apu_lock);
-
-    __asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
-	__asm__ volatile(
-		"movq %%rax, %%ds \n\t"
-		"movq %%rax, %%es \n\t"
-		"movq %%rax, %%fs \n\t"
-		"movq %%rax, %%gs \n\t"
-		"movq %%rax, %%ss \n\t"
-		"pushq %[SELECTOR_CODE64] \n\t"
-		"leaq .apu_next(%%RIP),%%rax \n\t"
-		"pushq %%rax \n\t"
-		"lretq \n\r"
-		".apu_next: \n\t"
-		:
-		: [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
-		  [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
-		:);
-
-    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
-
-    uint64_t ia32_apic_base = rdmsr(0x1b);
-    ia32_apic_base |= 1 << 11;
-    if (ApicInfo.x2Apic)
-    {
-        ia32_apic_base |= 1 << 10;
-    }
-    wrmsr(0x1b, ia32_apic_base);
-
-    init_lApic();
 
     PROCESSOR_INFO *info = NULL;
     for (size_t i = 0; i < MAX_CPU_NUM; i++) {
@@ -98,6 +77,56 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
         }
     }
 
+    info->gdt_entries_t[0] = 0x0000000000000000U;
+    info->gdt_entries_t[1] = 0x00a09a0000000000U;
+    info->gdt_entries_t[2] = 0x00c0920000000000U;
+    info->gdt_entries_t[3] = 0x00c0f20000000000U;
+    info->gdt_entries_t[4] = 0x00a0fa0000000000U;
+    info->gdt_pointer = ((struct gdt_register){
+            .size = ((uint16_t)((uint32_t)sizeof(gdt_entries_tT) - 1U)),
+            .ptr  = &info->gdt_entries_t,
+    });
+
+    __asm__ volatile("lgdt %[ptr]\n\t"
+                     "call *%%rax\n\t"
+                     "mov %[dseg], %%ds\n\t"
+                     "mov %[dseg], %%fs\n\t"
+                     "mov %[dseg], %%gs\n\t"
+                     "mov %[dseg], %%es\n\t"
+                     "mov %[dseg], %%ss\n\t"
+            :
+            : [ptr] "m"(info->gdt_pointer), [dseg] "rm"((uint16_t)0x10U),
+            "a"(&_setcs_helper), "b"((uint16_t)0x8U)
+    : "memory");
+
+    __asm__ volatile("lidt %0" : : "m"(idt_ptr));
+
+
+    uint64_t address     = (uint64_t)&(info->tss0);
+    uint64_t low_base    = (((address & 0xffffffU)) << 16U);
+    uint64_t mid_base    = (((((address >> 24U)) & 0xffU)) << 56U);
+    uint64_t high_base   = (address >> 32U);
+    uint64_t access_byte = (((uint64_t)(0x89U)) << 40U);
+    uint64_t limit       = ((uint64_t)(uint32_t)(sizeof(tss_t) - 1U));
+
+    info->gdt_entries_t[5] = (((low_base | mid_base) | limit) | access_byte);
+    info->gdt_entries_t[6] = high_base;
+
+    info->tss0.ist[0] = ((uint64_t)&(info->tss_stack)) + sizeof(tss_stack_t);
+
+    __asm__ volatile("ltr %[offset]\n\t" : : [offset] "rm"(0x28U) : "memory");
+
+    uint64_t ia32_apic_base = rdmsr(0x1b);
+    ia32_apic_base |= 1 << 11;
+    if (ApicInfo.x2Apic)
+    {
+        ia32_apic_base |= 1 << 10;
+    }
+    wrmsr(0x1b, ia32_apic_base);
+
+    init_lApic();
+
+
     spin_unlock(apu_lock);
     enable_intr();
 
@@ -107,7 +136,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     }
 }
 
-bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_INFO *cpuinf)
+bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
 {
     write_serial_string("Initializing CPU ");
     write_serial_dec(lapic_id);
@@ -166,11 +195,36 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, GDT_PTR *gdtr, PROCESSOR_IN
     return false;
 }
 
+void set_kernel_stack(uint64_t rsp)
+{
+    if(lapic_id() == xsi->bsp_lapic_id){
+        extern tss_t tss0;
+        tss0.rsp[0] = rsp;
+        return;
+    }
+    PROCESSOR_INFO *info = NULL;
+    for (size_t i = 0; i < MAX_CPU_NUM; i++) {
+        PROCESSOR_INFO *inter_info = &xsi->pcr_inf[i];
+        if (inter_info->lapic_id == lapic_id()) {
+            info = inter_info;
+            break;
+        }
+    }
+    if (info == NULL)
+    {
+        write_serial_string("Set Kernel Stack Failed: CPU not found.\n");
+        while (true)
+        {
+            asm volatile ("hlt");
+        }
+    }
+    info->tss0.rsp[0] = rsp;
+}
+
 void init_smp(uint64_t MADT0)
 {
     xsi = (XSK_SMP_INFO *)malloc(sizeof(XSK_SMP_INFO));
     write_serial_string("Initializing SMP...\n");
-    GDT_PTR gdtr = gdt_ptr;
 
     uint8_t bsp_lapic_id;
     uint32_t bsp_x2apic_id;
@@ -255,7 +309,7 @@ void init_smp(uint64_t MADT0)
                 continue;
             }
 
-            if (!start_ap(xsi->cpu_count, lapic->local_apic_id, &gdtr, cpuinf)) {
+            if (!start_ap(xsi->cpu_count, lapic->local_apic_id, cpuinf)) {
                 write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
                 current += (uint64_t)header->length;
                 continue;
@@ -285,7 +339,7 @@ void init_smp(uint64_t MADT0)
                 continue;
             }
 
-            if (!start_ap(xsi->cpu_count, x2lapic->x2apic_id, &gdtr, cpuinf)) {
+            if (!start_ap(xsi->cpu_count, x2lapic->x2apic_id, cpuinf)) {
                 write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
                 current += (uint64_t)header->length;
                 continue;
