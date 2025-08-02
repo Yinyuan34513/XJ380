@@ -77,3 +77,11 @@ char *strcpy(char *dest, const char *src) {
     *dest = 0;
     return dest;
 }
+
+size_t strlen(const char *str) {
+    const char *s = str;
+    while (*s) {
+        s++;
+    }
+    return s - str;
+}

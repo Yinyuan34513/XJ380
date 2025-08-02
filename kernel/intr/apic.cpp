@@ -241,8 +241,3 @@ void send_eoi()
 {
     lapic_write(0xb0, 0);
 }
-
-extern "C" void c_timer_handler(void *regs_ptr, uint64_t error_code) 
-{
-    send_eoi();
-}

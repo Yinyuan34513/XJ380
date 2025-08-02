@@ -12,6 +12,12 @@ BOOT_CONFIG *BC;
 uint64_t *saved_mtrrs;
 void *temp_stack[MAX_CPU_NUM];
 
+void test_task(){
+    while (true){
+        write_serial_string("Hello from test_task!\n");
+    }
+}
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     disable_intr();
@@ -38,6 +44,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("\n");
 
     process_setup();
+
+    // create_kernel_thread((void*)test_task, NULL, "test_task", NULL);
+
+    open_interrupt;
+    enable_scheduler();
 
     while (true)
     {

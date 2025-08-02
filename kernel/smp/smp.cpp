@@ -9,6 +9,7 @@
 #include "../build_settings.h"
 #include "cpu/lock.h"
 #include "pctable/idt.h"
+#include "cpu/regio.h"
 
 XSK_SMP_INFO *xsi;
 
@@ -16,6 +17,7 @@ extern GDT_PTR gdt_ptr;
 extern APIC_INFO ApicInfo;
 extern void *temp_stack[MAX_CPU_NUM];
 extern uint32_t smp_trampoline_rs;
+extern size_t now_tid;
 
 typedef char symbol[];
 
@@ -40,24 +42,23 @@ extern IDTR_TYPE idt_ptr;
 spin_t apu_lock = SPIN_INIT;
 
 #define ltr(n)                             \
-	do                                     \
-	{                                      \
-		__asm__ __volatile__("ltr	%%ax"    \
-							 :             \
-							 : "a"(n << 3) \
-							 : "memory");  \
-	} while (0)
+    do                                     \
+    {                                      \
+        __asm__ __volatile__("ltr	%%ax"    \
+                             :             \
+                             : "a"(n << 3) \
+                             : "memory");  \
+    } while (0)
 
 __attribute__((naked)) void _setcs_helper() {
     __asm__ volatile("pop %%rax\n\t"
                      "push %%rbx\n\t"
                      "push %%rax\n\t"
-                     "lretq\n\t" ::
+                     "lretq\n\t"::
             : "memory");
 }
 
-extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
-{
+extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr) {
     disable_intr();
     spin_lock(apu_lock);
 
@@ -71,8 +72,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     }
     if (info == NULL) {
         write_serial_string("APU Entry Failed: CPU not found.\n");
-        while (true)
-        {
+        while (true) {
             asm volatile ("hlt");
         }
     }
@@ -82,7 +82,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     info->gdt_entries_t[2] = 0x00c0920000000000U;
     info->gdt_entries_t[3] = 0x00c0f20000000000U;
     info->gdt_entries_t[4] = 0x00a0fa0000000000U;
-    info->gdt_pointer = ((struct gdt_register){
+    info->gdt_pointer = ((struct gdt_register) {
             .size = ((uint16_t)((uint32_t)sizeof(gdt_entries_tT) - 1U)),
             .ptr  = &info->gdt_entries_t,
     });
@@ -95,60 +95,72 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
                      "mov %[dseg], %%es\n\t"
                      "mov %[dseg], %%ss\n\t"
             :
-            : [ptr] "m"(info->gdt_pointer), [dseg] "rm"((uint16_t)0x10U),
-            "a"(&_setcs_helper), "b"((uint16_t)0x8U)
+            : [ptr] "m"(info->gdt_pointer), [dseg] "rm"((uint16_t) 0x10U),
+            "a"(&_setcs_helper), "b"((uint16_t) 0x8U)
     : "memory");
 
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 
-
-    uint64_t address     = (uint64_t)&(info->tss0);
-    uint64_t low_base    = (((address & 0xffffffU)) << 16U);
-    uint64_t mid_base    = (((((address >> 24U)) & 0xffU)) << 56U);
-    uint64_t high_base   = (address >> 32U);
+    uint64_t address = (uint64_t) & (info->tss0);
+    uint64_t low_base = (((address & 0xffffffU)) << 16U);
+    uint64_t mid_base = (((((address >> 24U)) & 0xffU)) << 56U);
+    uint64_t high_base = (address >> 32U);
     uint64_t access_byte = (((uint64_t)(0x89U)) << 40U);
-    uint64_t limit       = ((uint64_t)(uint32_t)(sizeof(tss_t) - 1U));
+    uint64_t limit = ((uint64_t)(uint32_t)(sizeof(tss_t) - 1U));
 
     info->gdt_entries_t[5] = (((low_base | mid_base) | limit) | access_byte);
     info->gdt_entries_t[6] = high_base;
 
-    info->tss0.ist[0] = ((uint64_t)&(info->tss_stack)) + sizeof(tss_stack_t);
+    info->tss0.ist[0] = ((uint64_t) & (info->tss_stack)) + sizeof(tss_stack_t);
 
     __asm__ volatile("ltr %[offset]\n\t" : : [offset] "rm"(0x28U) : "memory");
 
     uint64_t ia32_apic_base = rdmsr(0x1b);
     ia32_apic_base |= 1 << 11;
-    if (ApicInfo.x2Apic)
-    {
+    if (ApicInfo.x2Apic) {
         ia32_apic_base |= 1 << 10;
     }
     wrmsr(0x1b, ia32_apic_base);
 
     init_lApic();
 
+    set_kernel_stack(get_rsp());
+    tcb_t apu_idle = (tcb_t) malloc(STACK_SIZE);
+    apu_idle->task_level = TASK_IDLE_LEVEL;
+    apu_idle->tid = now_tid++;
+    set_kernel_stack(get_rsp());
+    apu_idle->kernel_stack = apu_idle->context0.rsp = get_rsp();
+    apu_idle->context0.rflags = get_rflags() | 0x200;
+    apu_idle->cpu_id = lapic_id();
+    apu_idle->status = RUNNING;
+    strcpy(apu_idle->name, "XSK_IDLE");
+    apu_idle->parent_group = kernel_group;
+
+    info->current_task = apu_idle;
+    apu_idle->queue_index = queue_enqueue(info->scheduler_queue, apu_idle);
+
 
     spin_unlock(apu_lock);
     enable_intr();
 
-    while (true) 
-    {
+    while (true) {
         asm volatile ("hlt");
     }
 }
 
-bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
-{
+bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf) {
     write_serial_string("Initializing CPU ");
     write_serial_dec(lapic_id);
     write_serial_string(".\n");
 
     // 准备跳板
-    static void *trampoline = (void *)(APU_BASE_ADDR);
-    memcpy((void *)(APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start, (uint64_t)&_APU_boot_end - (uint64_t)&_APU_boot_start);
+    static void *trampoline = (void *) (APU_BASE_ADDR);
+    memcpy((void *) (APU_BASE_ADDR + 0xFFFF800000000000), &_APU_boot_start,
+           (uint64_t) & _APU_boot_end - (uint64_t) & _APU_boot_start);
 
     uint64_t cr3;
     __asm__ __volatile__("mov %%cr3, %0" : "=r"(cr3));
-    uint64_t *page_table = (uint64_t *)(APU_BASE_ADDR + 8 + 0xFFFF800000000000);
+    uint64_t *page_table = (uint64_t * )(APU_BASE_ADDR + 8 + 0xFFFF800000000000);
     uint64_t *ap_entry = page_table + 1;
     uint64_t *rsp = ap_entry + 1;
     uint64_t *cpu_id = rsp + 1;
@@ -156,16 +168,16 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
     uint64_t *ready = tr + 1;
 
     *page_table = cr3;
-    *ap_entry = (uint64_t)apu_entry;
+    *ap_entry = (uint64_t) apu_entry;
 
     *rsp = (uint64_t)((uint64_t)(temp_stack[cs_number]) + STACK_SIZE);
     *cpu_id = cs_number;
 
-    asm volatile ("" ::: "memory");
+    asm volatile ("":: : "memory");
 
     // Send the INIT IPI
     if (ApicInfo.x2Apic) {
-        lapic_write(LAPIC_REG_ICR0, ((uint64_t)lapic_id << 32) | 0x4500);
+        lapic_write(LAPIC_REG_ICR0, ((uint64_t) lapic_id << 32) | 0x4500);
     } else {
         lapic_write(LAPIC_REG_ICR1, lapic_id << 24);
         lapic_write(LAPIC_REG_ICR0, 0x4500);
@@ -175,11 +187,11 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
 
     // Send the Startup IPI
     if (ApicInfo.x2Apic) {
-        lapic_write(LAPIC_REG_ICR0, ((uint64_t)lapic_id << 32) |
-                                     ((size_t)trampoline >> 12) | 0x4600);
+        lapic_write(LAPIC_REG_ICR0, ((uint64_t) lapic_id << 32) |
+                                    ((size_t) trampoline >> 12) | 0x4600);
     } else {
         lapic_write(LAPIC_REG_ICR1, lapic_id << 24);
-        lapic_write(LAPIC_REG_ICR0, ((size_t)trampoline >> 12) | 0x4600);
+        lapic_write(LAPIC_REG_ICR0, ((size_t) trampoline >> 12) | 0x4600);
     }
 
     for (int i = 0; i < 100; i++) {
@@ -195,9 +207,20 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
     return false;
 }
 
-void set_kernel_stack(uint64_t rsp)
-{
-    if(lapic_id() == xsi->bsp_lapic_id){
+PROCESSOR_INFO *get_current_cpu() {
+    PROCESSOR_INFO *info = NULL;
+    for (size_t i = 0; i < MAX_CPU_NUM; i++) {
+        PROCESSOR_INFO *inter_info = &xsi->pcr_inf[i];
+        if (inter_info->lapic_id == lapic_id()) {
+            info = inter_info;
+            break;
+        }
+    }
+    return info;
+}
+
+void set_kernel_stack(uint64_t rsp) {
+    if (lapic_id() == xsi->bsp_lapic_id) {
         extern tss_t tss0;
         tss0.rsp[0] = rsp;
         return;
@@ -210,20 +233,17 @@ void set_kernel_stack(uint64_t rsp)
             break;
         }
     }
-    if (info == NULL)
-    {
+    if (info == NULL) {
         write_serial_string("Set Kernel Stack Failed: CPU not found.\n");
-        while (true)
-        {
+        while (true) {
             asm volatile ("hlt");
         }
     }
     info->tss0.rsp[0] = rsp;
 }
 
-void init_smp(uint64_t MADT0)
-{
-    xsi = (XSK_SMP_INFO *)malloc(sizeof(XSK_SMP_INFO));
+void init_smp(uint64_t MADT0) {
+    xsi = (XSK_SMP_INFO *) malloc(sizeof(XSK_SMP_INFO));
     write_serial_string("Initializing SMP...\n");
 
     uint8_t bsp_lapic_id;
@@ -243,60 +263,54 @@ void init_smp(uint64_t MADT0)
 
     write_serial_string("Searching CPUs...\n");
     size_t max_cpus = 0;
-    MADT *madt = (MADT *)MADT0;
+    MADT *madt = (MADT *) MADT0;
     uint64_t current = 0;
-    for (;;)
-    {
+    for (;;) {
         if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length)
         {
             break;
         }
-        MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
-        if (header->entry_type == MADT_APIC_LOCAL)
-        {
-            madt_local_apic *lapic = (madt_local_apic *)((uint64_t)(&madt->entries) + current);
+        MadtHeader *header = (MadtHeader * )((uint64_t)(&madt->entries) + current);
+        if (header->entry_type == MADT_APIC_LOCAL) {
+            madt_local_apic *lapic = (madt_local_apic * )((uint64_t)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
             if ((lapic->flags & 1) ^ ((lapic->flags >> 1) & 1))
                 max_cpus++;
-        }
-        else if (header->entry_type == MADT_X2APIC_LOCAL)
-        {
+        } else if (header->entry_type == MADT_X2APIC_LOCAL) {
             if (!ApicInfo.x2Apic)
                 continue;
-            
-            madt_x2_localapic *x2lapic = (madt_x2_localapic *)((uint64_t)(&madt->entries) + current);
+
+            madt_x2_localapic *x2lapic = (madt_x2_localapic * )((uint64_t)(&madt->entries) + current);
 
             if ((x2lapic->flags & 1) ^ ((x2lapic->flags >> 1) & 1))
                 max_cpus++;
         }
-        current += (uint64_t)header->length;
+        current += (uint64_t) header->length;
     }
 
     xsi->cpu_count = 0;
-    
+
     mtrr_save();
 
     write_serial_string("Start Up APs...\n");
     // 尝试启动所有AP
     current = 0;
-    for (;;)
-    {
+    for (;;) {
         if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length)
         {
             break;
         }
-        MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
-        if (header->entry_type == MADT_APIC_LOCAL)
-        {
-            madt_local_apic *lapic = (madt_local_apic *)((uint64_t)(&madt->entries) + current);
+        MadtHeader *header = (MadtHeader * )((uint64_t)(&madt->entries) + current);
+        if (header->entry_type == MADT_APIC_LOCAL) {
+            madt_local_apic *lapic = (madt_local_apic * )((uint64_t)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
             if (!((lapic->flags & 1) ^ ((lapic->flags >> 1) & 1))) {
-                current += (uint64_t)header->length;
+                current += (uint64_t) header->length;
                 continue;
             }
-            
+
             PROCESSOR_INFO *cpuinf = &xsi->pcr_inf[xsi->cpu_count];
             cpuinf->processor_id = lapic->ACPI_Processor_UID;
             cpuinf->lapic_id = lapic->local_apic_id;
@@ -305,28 +319,26 @@ void init_smp(uint64_t MADT0)
             // 如果是BSP就跑路
             if (lapic->local_apic_id == bsp_lapic_id) {
                 (xsi->cpu_count)++;
-                current += (uint64_t)header->length;
+                current += (uint64_t) header->length;
                 continue;
             }
 
             if (!start_ap(xsi->cpu_count, lapic->local_apic_id, cpuinf)) {
                 write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
-                current += (uint64_t)header->length;
+                current += (uint64_t) header->length;
                 continue;
             }
 
             (xsi->cpu_count)++;
-        }
-        else if (header->entry_type == MADT_X2APIC_LOCAL)
-        {
-            madt_x2_localapic *x2lapic = (madt_x2_localapic *)((uint64_t)(&madt->entries) + current);
+        } else if (header->entry_type == MADT_X2APIC_LOCAL) {
+            madt_x2_localapic *x2lapic = (madt_x2_localapic * )((uint64_t)(&madt->entries) + current);
 
             // 让我看看你发育正不正常呀
             if (!((x2lapic->flags & 1) ^ ((x2lapic->flags >> 1) & 1))) {
-                current += (uint64_t)header->length;
+                current += (uint64_t) header->length;
                 continue;
             }
-            
+
             PROCESSOR_INFO *cpuinf = &xsi->pcr_inf[xsi->cpu_count];
             cpuinf->processor_id = x2lapic->acpi_processor_uid;
             cpuinf->lapic_id = x2lapic->x2apic_id;
@@ -335,18 +347,18 @@ void init_smp(uint64_t MADT0)
             // 如果是BSP就跑路
             if (x2lapic->x2apic_id == bsp_lapic_id) {
                 (xsi->cpu_count)++;
-                current += (uint64_t)header->length;
+                current += (uint64_t) header->length;
                 continue;
             }
 
             if (!start_ap(xsi->cpu_count, x2lapic->x2apic_id, cpuinf)) {
                 write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
-                current += (uint64_t)header->length;
+                current += (uint64_t) header->length;
                 continue;
             }
 
             (xsi->cpu_count)++;
         }
-        current += (uint64_t)header->length;
+        current += (uint64_t) header->length;
     }
 }

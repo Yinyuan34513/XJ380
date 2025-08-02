@@ -5,6 +5,9 @@
 
 #include <stdint.h>
 
+#define close_interrupt __asm__ volatile("cli" ::: "memory")
+#define open_interrupt  __asm__ volatile("sti" ::: "memory")
+
 /*
  *
  *  driver/serial/
@@ -189,5 +192,9 @@ void page_setup();
 
 // kernel/smp/smp.cpp
 void init_smp(uint64_t MADT0);
+void set_kernel_stack(uint64_t rsp);
+
+void send_eoi();
+PROCESSOR_INFO *get_current_cpu();
 
 #endif
