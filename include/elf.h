@@ -3,6 +3,7 @@
 
 #define PT_LOAD 1 // PT_LOAD值不变
 #include <efi/efi.h>
+#include <krlibc.h>
 
 typedef struct
 {
@@ -58,9 +59,9 @@ void CopyLoadSegments(Elf64_Ehdr *ehdr)
             continue; // 只关心LOAD段
 
         uint64_t segm_in_file = (uint64_t)ehdr + phdr[i].p_offset;                    // 段在文件中的位置
-        xmemcpy((void *)phdr[i].p_vaddr, (void *)segm_in_file, phdr[i].p_filesz); // 将文件中大小的部分copy过去
+        memcpy((void *)phdr[i].p_vaddr, (void *)segm_in_file, phdr[i].p_filesz); // 将文件中大小的部分copy过去
         uint64_t remain_bytes = phdr[i].p_memsz - phdr[i].p_filesz;                  // 两者之差
-        xmemset((void *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes);   // 赋值为0
+        memset((void *)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, remain_bytes);   // 赋值为0
     }
 }
 #endif

@@ -158,6 +158,8 @@ tcb_t select_next_task() {
     return next;
 }
 
+extern pcb_t kernel_group;
+
 extern "C" registers_t *timer_handle(registers_t *reg) {
     send_eoi();
     if(!is_scheduler) {
@@ -170,7 +172,6 @@ extern "C" registers_t *timer_handle(registers_t *reg) {
     write_fsbase((uint64_t) get_current_task()); // 下面要用内核态的fs，换上
 
     // 任务寻父处理
-    extern pcb_t kernel_group;
     if (best->parent_group->parent_task == NULL ||
         best->parent_group->parent_task->status == DEATH ||
         best->parent_group->parent_task->status == OUT) {

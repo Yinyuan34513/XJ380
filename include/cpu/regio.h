@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include <stdint.h>
 
 static inline uint64_t get_cr0() {
     uint64_t cr0;
