@@ -163,7 +163,7 @@ uint64_t page_virt_to_phys(uint64_t va);
 void init_smp(uint64_t MADT0);
 void set_kernel_stack(uint64_t rsp);
 
-void            send_eoi();
-PROCESSOR_INFO *get_current_cpu();
+void                   send_eoi();
+struct PROCESSOR_INFO *get_current_cpu();
 
 #endif

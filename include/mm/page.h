@@ -58,7 +58,13 @@ page_directory_t *get_kernel_pagedir();
  * @param frame 帧指针
  * @param error_code 错误码
  */
-extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code);
+#ifdef __cplusplus
+extern "C" {
+#endif
+void handle_page_fault(struct X64_REGS *frame, uint64_t error_code);
+#ifdef __cplusplus
+}
+#endif
 
 /**
  * 清空页表

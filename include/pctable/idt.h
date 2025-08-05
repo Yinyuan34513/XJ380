@@ -5,38 +5,45 @@
 #define X86_64_INTR_GATE 0x8E
 #define X86_64_TRAP_GATE 0x8F
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 // 除法错误
-extern "C" void divide_error();
+void divide_error();
 // 调试
-extern "C" void debug();
+void debug();
 // 不可屏蔽中断
-extern "C" void nmi();
+void nmi();
 //
-extern "C" void int3();
+void int3();
 // 溢出
-extern "C" void overflow();
+void overflow();
 // 边界问题
-extern "C" void bounds();
+void bounds();
 // 未定义的操作数
-extern "C" void undefined_opcode();
+void undefined_opcode();
 // 设备不可用
-extern "C" void dev_not_avaliable();
-extern "C" void double_fault();
-extern "C" void coprocessor_segment_overrun();
-extern "C" void invalid_TSS();
-extern "C" void segment_not_exists();
-extern "C" void stack_segment_fault();
-extern "C" void general_protection();
+void dev_not_avaliable();
+void double_fault();
+void coprocessor_segment_overrun();
+void invalid_TSS();
+void segment_not_exists();
+void stack_segment_fault();
+void general_protection();
 // 缺页异常
-extern "C" void page_fault();
-extern "C" void x87_FPU_error();
-extern "C" void alignment_check();
-extern "C" void machine_check();
-extern "C" void SIMD_exception();
-extern "C" void virtualization_exception();
+void page_fault();
+void x87_FPU_error();
+void alignment_check();
+void machine_check();
+void SIMD_exception();
+void virtualization_exception();
 
 // 默认处理程序
-extern "C" void undefined_interrupt();
+void undefined_interrupt();
+
+#ifdef __cplusplus
+}
+#endif
 
 // 中断入口
 typedef void (*int_func)();

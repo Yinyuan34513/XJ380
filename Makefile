@@ -74,6 +74,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	@echo "Formatting $<"
 	@clang-format -i $<
 
+# 暂时不 Check ASM 文件
 %.tidy: %.c
 %.tidy: %.h
 	@echo "Checking C $<"
