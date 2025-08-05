@@ -31,23 +31,13 @@ uint8_t check_apic()
 
 static inline void mmio_write32(uint32_t addr, uint32_t data)
 {
-    asm volatile (
-        "movl %1, (%0)"
-        :
-        : "r" (addr), "ir" (data)
-        : "memory"
-    );
+    asm volatile("movl %1, (%0)" : : "r"(addr), "ir"(data) : "memory");
 }
 
 static inline uint32_t mmio_read32(uint32_t addr)
 {
     uint32_t ret;
-    asm volatile (
-        "movl (%1), %0"
-        : "=r" (ret)
-        : "r"  (addr)
-        : "memory"
-    );
+    asm volatile("movl (%1), %0" : "=r"(ret) : "r"(addr) : "memory");
     return ret;
 }
 
@@ -63,19 +53,13 @@ void lapic_write(uint32_t reg, uint64_t value)
 
 uint32_t lapic_read(uint32_t reg)
 {
-    if (ApicInfo.x2Apic)
-    {
-        return rdmsr(0x800 + (reg >> 4));
-    }
+    if (ApicInfo.x2Apic) { return rdmsr(0x800 + (reg >> 4)); }
     return mmio_read32((uint32_t)((uint64_t)ApicInfo.LocalApicAddr + reg));
 }
 
 uint64_t lapic_id()
 {
-    if (ApicInfo.x2Apic)
-    {
-        return lapic_read(LAPIC_REG_ID);
-    }
+    if (ApicInfo.x2Apic) { return lapic_read(LAPIC_REG_ID); }
     return (lapic_read(LAPIC_REG_ID) >> 24);
 }
 
@@ -93,29 +77,30 @@ static uint32_t ioapic_read(uint32_t reg)
 
 void ioapic_disable(uint8_t vector)
 {
-    uint64_t index = 0x10 + ((vector - 32) * 2);
-    uint64_t value = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
-    value |= (0x10000UL);
+    uint64_t index  = 0x10 + ((vector - 32) * 2);
+    uint64_t value  = (uint64_t)ioapic_read(index + 1) << 32 | (uint64_t)ioapic_read(index);
+    value          |= (0x10000UL);
     ioapic_write(index, (uint32_t)(value & 0xFFFFFFFF));
     ioapic_write(index + 1, (uint32_t)(value >> 32));
 }
 
-uint32_t ioapic_gsi_count() 
+uint32_t ioapic_gsi_count()
 {
     return ((ioapic_read(1) & 0xff0000) >> 16) + 1;
 }
 
-void ioapic_mask_all() 
+void ioapic_mask_all()
 {
     uint32_t gsi_count = ioapic_gsi_count();
-    for (uint32_t j = 0; j < gsi_count; j++) {
+    for (uint32_t j = 0; j < gsi_count; j++)
+    {
         uint64_t ioredtbl = j * 2 + 16;
-        switch ((ioapic_read(ioredtbl) >> 8) & 0b111) {
-            case 0b000: // Fixed
-            case 0b001: // Lowest Priority
-                break;
-            default:
-                continue;
+        switch ((ioapic_read(ioredtbl) >> 8) & 0b111)
+        {
+        case 0b000: // Fixed
+        case 0b001: // Lowest Priority
+            break;
+        default: continue;
         }
 
         ioapic_write(ioredtbl, (1 << 16)); // mask
@@ -151,31 +136,26 @@ void init_apic(uint64_t MADT0)
         ApicInfo.x2Apic = false;
         break;
     default:
-        while(1);
+        while (1)
+            ;
         break; // 虽然这里理论上永远都不会执行...
     }
 
-    uint64_t ia32_apic_base = rdmsr(0x1b);
-    ia32_apic_base |= 1 << 11;
-    if (ApicInfo.x2Apic)
-    {
-        ia32_apic_base |= 1 << 10;
-    }
+    uint64_t ia32_apic_base  = rdmsr(0x1b);
+    ia32_apic_base          |= 1 << 11;
+    if (ApicInfo.x2Apic) { ia32_apic_base |= 1 << 10; }
     wrmsr(0x1b, ia32_apic_base);
 
-    MADT *madt = (MADT *)MADT0;
+    MADT *madt             = (MADT *)MADT0;
     ApicInfo.LocalApicAddr = (uint64_t)madt->local_apic_address;
-    uint64_t current = 0;
+    uint64_t current       = 0;
     for (;;)
     {
-        if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length)
-        {
-            break;
-        }
+        if (current + ((uint32_t)sizeof(MADT) - 1) >= madt->h.Length) { break; }
         MadtHeader *header = (MadtHeader *)((uint64_t)(&madt->entries) + current);
         if (header->entry_type == MADT_APIC_IO)
         {
-            MadtIOApic *ioapic = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
+            MadtIOApic *ioapic  = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
             ApicInfo.ioApicAddr = (uint64_t)ioapic->address;
         }
         current += (uint64_t)header->length;
@@ -191,7 +171,7 @@ void send_eoi()
     lapic_write(0xb0, 0);
 }
 
-extern "C" void c_timer_handler(void *regs_ptr, uint64_t error_code) 
+extern "C" void c_timer_handler(void *regs_ptr, uint64_t error_code)
 {
     send_eoi();
 }

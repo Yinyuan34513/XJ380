@@ -1,9 +1,9 @@
-#if defined (__x86_64__) || defined (__i386__)
+#if defined(__x86_64__) || defined(__i386__)
 
-#include <stdint.h>
-#include <pctable/gdt.h>
-#include <mm/memory.h>
-#include <proto.h>
+#    include <mm/memory.h>
+#    include <pctable/gdt.h>
+#    include <proto.h>
+#    include <stdint.h>
 
 /* 全局描述符表定义 */
 GDT_ENTRY gdt_entries[GDT_LENGTH] __attribute__((__aligned__(PAGE_SIZE)));
@@ -13,51 +13,50 @@ GDT_PTR gdt_ptr;
 
 void gdt_set_gate(int64_t num, uint64_t base, uint64_t limit, uint8_t access, uint8_t sign);
 
-void init_gdt() {
+void init_gdt()
+{
     gdt_ptr.limit = sizeof(GDT_ENTRY) * GDT_LENGTH - 1;
-	gdt_ptr.base = (uint64_t)&gdt_entries;
+    gdt_ptr.base  = (uint64_t)&gdt_entries;
 
     // 采用 Intel 平坦模型
-	// 0xAF = 10101111
-	gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);													  // 按照 Intel 文档要求，第一个描述符必须全 0
-	gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFF, 0x9A, 0xAF);									  // 代码段 0x9A = 10011010
-	gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFF, 0x92, 0xAF);									  // 数据段 0x92 = 10010010
-	gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFF, 0xFA, 0xAF);										  // 用户模式代码段 0xFA = 11111010
-	gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFF, 0xF2, 0xAF);										  // 用户模式数据段 0xF2 = 11110010
+    // 0xAF = 10101111
+    gdt_set_gate(GDT_TYPE_ZERO, 0, 0, 0, 0);                  // 按照 Intel 文档要求，第一个描述符必须全 0
+    gdt_set_gate(GDT_TYPE_KERNEL_CS, 0, 0xFFFFF, 0x9A, 0xAF); // 代码段 0x9A = 10011010
+    gdt_set_gate(GDT_TYPE_KERNEL_DS, 0, 0xFFFFF, 0x92, 0xAF); // 数据段 0x92 = 10010010
+    gdt_set_gate(GDT_TYPE_USER_CS, 0, 0xFFFFF, 0xFA, 0xAF);   // 用户模式代码段 0xFA = 11111010
+    gdt_set_gate(GDT_TYPE_USER_DS, 0, 0xFFFFF, 0xF2, 0xAF);   // 用户模式数据段 0xF2 = 11110010
 
     __asm__ volatile("lgdt %0" : : "m"(gdt_ptr));
-	__asm__ volatile(
-		"movq %%rax, %%ds \n\t"
-		"movq %%rax, %%es \n\t"
-		"movq %%rax, %%fs \n\t"
-		"movq %%rax, %%gs \n\t"
-		"movq %%rax, %%ss \n\t"
-		"pushq %[SELECTOR_CODE64] \n\t"
-		"leaq .next(%%RIP),%%rax \n\t"
-		"pushq %%rax \n\t"
-		"lretq \n\r"
-		".next: \n\t"
-		:
-		: [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS),
-		  [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
-		:);
+    __asm__ volatile("movq %%rax, %%ds \n\t"
+                     "movq %%rax, %%es \n\t"
+                     "movq %%rax, %%fs \n\t"
+                     "movq %%rax, %%gs \n\t"
+                     "movq %%rax, %%ss \n\t"
+                     "pushq %[SELECTOR_CODE64] \n\t"
+                     "leaq .next(%%RIP),%%rax \n\t"
+                     "pushq %%rax \n\t"
+                     "lretq \n\r"
+                     ".next: \n\t"
+                     :
+                     : [SELECTOR_CODE64] "i"(SELECTOR_KERNEL_CS), [SELECTOR_DATA64] "a"(SELECTOR_KERNEL_DS)
+                     :);
 
-	write_serial_string("GDT Initialize Success.\n");
+    write_serial_string("GDT Initialize Success.\n");
 }
 
 // 热知识：64位下，基地址和限长填了也没用
 // 冷知识：那我要是是TSS呢？
 void gdt_set_gate(int64_t num, uint64_t base, uint64_t limit, uint8_t access, uint8_t sign)
 {
-	gdt_entries[num].base_low = (base & 0xFFFF);
-	gdt_entries[num].base_mid = (base >> 16) & 0xFF;
-	gdt_entries[num].base_hi = (base >> 24) & 0xFF;
+    gdt_entries[num].base_low = (base & 0xFFFF);
+    gdt_entries[num].base_mid = (base >> 16) & 0xFF;
+    gdt_entries[num].base_hi  = (base >> 24) & 0xFF;
 
-	gdt_entries[num].limit = (limit & 0xFFFF);
-	gdt_entries[num].granularity = (limit >> 16) & 0x0F;
+    gdt_entries[num].limit       = (limit & 0xFFFF);
+    gdt_entries[num].granularity = (limit >> 16) & 0x0F;
 
-	gdt_entries[num].granularity |= sign & 0xF0;
-	gdt_entries[num].access = access;
+    gdt_entries[num].granularity |= sign & 0xF0;
+    gdt_entries[num].access       = access;
 }
 
 #endif

@@ -29,9 +29,9 @@ uint64_t get_cpu_freq_mhz()
 void delay_us(uint64_t us)
 {
     static uint64_t freq_mhz = get_cpu_freq_mhz();
-    uint64_t ticks = us * freq_mhz; // 需要等待的CPU周期数
-    uint64_t start = rdtsc();
-    uint64_t end = start + ticks;
+    uint64_t        ticks    = us * freq_mhz; // 需要等待的CPU周期数
+    uint64_t        start    = rdtsc();
+    uint64_t        end      = start + ticks;
 
     // 处理计数器溢出的情况
     if (end < start)
