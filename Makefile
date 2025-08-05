@@ -1,7 +1,7 @@
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions
-C_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -I./include -I./boot/include
-CPP_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include -I./boot/include
+C_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -I./include
+CPP_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -I./include
 BOOT_C_FLAGS = -g3 -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
@@ -80,7 +80,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	@echo "Checking C $<"
 	@clang-tidy $< -- $(C_FLAGS)
 %.tidy: %.h
-	@echo "Checking C $<"
+	@echo "Checking Header $<"
 	@clang-tidy $< -- $(C_FLAGS)
 
 %.tidy: %.cpp
@@ -122,9 +122,10 @@ vdisk: all
 	@rm -rf XJ380.img
 
 	@dd if=/dev/zero of=XJ380.img bs=128M count=1
-	@sgdisk XJ380.img -n 1:2048 -t 1:ef00
+# You must execute the following command with sudo privileges, that's not good...
+	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
