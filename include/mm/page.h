@@ -22,20 +22,24 @@
 
 #include <stdint.h>
 
-typedef struct page_table_entry {
+typedef struct page_table_entry
+{
     uint64_t value;
 } __attribute__((packed)) page_table_entry_t;
 
-typedef struct {
+typedef struct
+{
     page_table_entry_t entries[512];
 } __attribute__((packed)) page_table_t;
 
-typedef struct page_directory {
+typedef struct page_directory
+{
     page_table_t *table;
 } page_directory_t;
 
 // 懒分配
-typedef struct mm_virtual_page {
+typedef struct mm_virtual_page
+{
     uint64_t start;
     uint64_t count;
     uint64_t flags;
@@ -48,6 +52,19 @@ typedef struct mm_virtual_page {
  * @return 页表指针
  */
 page_directory_t *get_kernel_pagedir();
+
+/**
+ * 页错误处理
+ * @param frame 帧指针
+ * @param error_code 错误码
+ */
+extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code);
+
+/**
+ * 清空页表
+ * @param table 页表
+ */
+void page_table_clear(page_table_t *table);
 
 /**
  * 映射一页地址到指定物理地址
@@ -65,8 +82,7 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
  * @param length 长度
  * @param flags 页表项标志位
  */
-void page_map_range_to(page_directory_t *directory, uint64_t frame, uint64_t length,
-                       uint64_t flags);
+void page_map_range_to(page_directory_t *directory, uint64_t frame, uint64_t length, uint64_t flags);
 
 /**
  * 映射一组物理地址并指定物理地址基址
@@ -76,8 +92,7 @@ void page_map_range_to(page_directory_t *directory, uint64_t frame, uint64_t len
  * @param length 长度
  * @param flags 页表项标志位
  */
-void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t length,
-                    uint64_t flags);
+void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t length, uint64_t flags);
 
 /**
  * 将指定虚拟地址随机映射到物理地址上(物理地址由页框分配器决定)
@@ -86,8 +101,7 @@ void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, 
  * @param length 长度
  * @param flags 页表项标志位
  */
-void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64_t length,
-                              uint64_t flags);
+void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64_t length, uint64_t flags);
 
 /**
  * 克隆指定页表

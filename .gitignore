@@ -19,3 +19,6 @@ out/draw.o
 *.o
 *.xz
 *.zip
+
+# will generate by Makefile
+.clangd

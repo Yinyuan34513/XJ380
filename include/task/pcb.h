@@ -4,11 +4,12 @@
 #define TASK_IDLE_LEVEL        1 // IDLE (崩溃后与普通内核任务相同行为)
 #define TASK_APPLICATION_LEVEL 2 // 应用程序
 
-#include "stdint.h"
-#include "mm/page.h"
 #include "lock_queue.h"
+#include "mm/page.h"
+#include "stdint.h"
 
-typedef struct registers {
+typedef struct registers
+{
     uint64_t ds;
     uint64_t es;
     uint64_t rax;
@@ -37,19 +38,21 @@ typedef struct registers {
 } registers_t;
 
 typedef struct process_control_block *pcb_t;
-typedef struct thread_control_block *tcb_t;
+typedef struct thread_control_block  *tcb_t;
 
-typedef enum {
-    CREATE = 0, // 创建中
+typedef enum
+{
+    CREATE  = 0, // 创建中
     RUNNING = 1, // 运行中
-    WAIT = 2, // 线程阻塞
-    DEATH = 3, // 死亡(无法被调度, 线程状态为等待处死)
-    START = 4, // 准备调度
-    FUTEX = 5, // 被挂起(无法被调度, 线程状态为等待唤醒)
-    OUT = 6, // 已被处死(无法被调度)
+    WAIT    = 2, // 线程阻塞
+    DEATH   = 3, // 死亡(无法被调度, 线程状态为等待处死)
+    START   = 4, // 准备调度
+    FUTEX   = 5, // 被挂起(无法被调度, 线程状态为等待唤醒)
+    OUT     = 6, // 已被处死(无法被调度)
 } TaskStatus;
 
-typedef struct {
+typedef struct
+{
     uint64_t r15;
     uint64_t r14;
     uint64_t r13;
@@ -71,28 +74,30 @@ typedef struct {
     uint64_t ss, cs, ds, es;
 } TaskContext;
 
-struct process_control_block {
-    size_t pid;                 // 进程ID
-    uint64_t ppid;              // 父进程ID
-    char name[32];              // 进程名称
-    page_directory_t *pagedir;  // 页表目录
-    pcb_t parent_task;          // 父进程
-    lock_queue *thread_queue;   // 线程队列
-    size_t queue_index;         // 进程队列索引
-    TaskStatus status;          // 进程状态
+struct process_control_block
+{
+    size_t            pid;          // 进程ID
+    uint64_t          ppid;         // 父进程ID
+    char              name[32];     // 进程名称
+    page_directory_t *pagedir;      // 页表目录
+    pcb_t             parent_task;  // 父进程
+    lock_queue       *thread_queue; // 线程队列
+    size_t            queue_index;  // 进程队列索引
+    TaskStatus        status;       // 进程状态
 };
 
-struct thread_control_block {
-    pcb_t parent_group;    // 父进程
-    int task_level;        // 进程等级
-    size_t tid;            // 线程ID
-    char name[32];         // 线程名称
-    TaskStatus status;      // 线程状态
-    size_t cpu_id;          // 运行的CPU ID
-    TaskContext context0;   // 线程上下文
-    uint64_t kernel_stack; // 内核栈地址
-    size_t queue_index;    // 调度队列索引
-    size_t group_index;    // 进程队列索引
+struct thread_control_block
+{
+    pcb_t       parent_group; // 父进程
+    int         task_level;   // 进程等级
+    size_t      tid;          // 线程ID
+    char        name[32];     // 线程名称
+    TaskStatus  status;       // 线程状态
+    size_t      cpu_id;       // 运行的CPU ID
+    TaskContext context0;     // 线程上下文
+    uint64_t    kernel_stack; // 内核栈地址
+    size_t      queue_index;  // 调度队列索引
+    size_t      group_index;  // 进程队列索引
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
@@ -101,8 +106,8 @@ struct thread_control_block {
 extern pcb_t kernel_group;
 
 size_t add_task(tcb_t task);
-void enable_scheduler();
-void disable_scheduler();
-tcb_t get_current_task();
-int create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
-void process_setup();
+void   enable_scheduler();
+void   disable_scheduler();
+tcb_t  get_current_task();
+int    create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
+void   process_setup();

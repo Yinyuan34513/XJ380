@@ -1,15 +1,17 @@
 #pragma once
 
-#include "stdint.h"
 #include "cpu/lock.h"
+#include "stdint.h"
 
-typedef struct LockNode {
+typedef struct LockNode
+{
     void            *data;
     struct LockNode *next;
     size_t           index;
 } lock_node;
 
-typedef struct {
+typedef struct
+{
     lock_node *head;
     lock_node *tail;
     spin_t     lock;

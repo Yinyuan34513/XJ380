@@ -1,11 +1,11 @@
-#include <pctable/idt.h>
-#include <pctable/gdt.h>
-#include <mm/memory.h>
 #include <cpu/longm.h>
+#include <mm/memory.h>
+#include <pctable/gdt.h>
+#include <pctable/idt.h>
 #include <proto.h>
 
 IDT_GATE_TYPE idt_gate[IDT_SIZE] __attribute__((__aligned__(PAGE_SIZE)));
-IDTR_TYPE idt_ptr;
+IDTR_TYPE     idt_ptr;
 
 extern void save_registers();
 
@@ -19,10 +19,10 @@ void init_idt()
     write_serial_string("Initializing IDT...\n");
     // 初始化IDTR寄存器和门描述符
     uint16_t *p_idt_limit = (uint16_t *)(&idt_ptr.size);
-    uint64_t *p_idt_base = (uint64_t *)(&idt_ptr.base);
+    uint64_t *p_idt_base  = (uint64_t *)(&idt_ptr.base);
 
     *p_idt_limit = IDT_SIZE * sizeof(IDT_GATE_TYPE) - 1;
-    *p_idt_base = (uint64_t)(&idt_gate);
+    *p_idt_base  = (uint64_t)(&idt_gate);
 
     init_idt_desc(0, X86_64_INTR_GATE, divide_error, RING0);
     init_idt_desc(1, X86_64_INTR_GATE, debug, RING0);
@@ -45,7 +45,7 @@ void init_idt()
     init_idt_desc(19, X86_64_INTR_GATE, SIMD_exception, RING0);
     init_idt_desc(20, X86_64_INTR_GATE, virtualization_exception, RING0);
 
-    init_idt_desc(32, X86_64_INTR_GATE, save_registers, RING0);        // timer
+    init_idt_desc(32, X86_64_INTR_GATE, save_registers, RING0); // timer
 
     for (int i = 35; i < 35 + 34; i++)
     {
@@ -68,13 +68,13 @@ void init_idt()
 void init_idt_desc(uint8_t number, uint8_t gate_type, int_func function, uint8_t privilege)
 {
     IDT_GATE_TYPE *p_gate = &idt_gate[number];
-    uint64_t f_base = (uint64_t)function;
+    uint64_t       f_base = (uint64_t)function;
 
-    p_gate->offset_1 = f_base & 0xFFFF;
-    p_gate->selector = SELECTOR_KERNEL_CS;
-    p_gate->ist = 0; // 不使用IST
+    p_gate->offset_1        = f_base & 0xFFFF;
+    p_gate->selector        = SELECTOR_KERNEL_CS;
+    p_gate->ist             = 0; // 不使用IST
     p_gate->type_attributes = gate_type | (privilege << 5);
-    p_gate->offset_2 = (f_base >> 16) & 0xFFFF;
-    p_gate->offset_3 = (f_base >> 32) & 0xFFFFFFFF;
-    p_gate->zero = 0;
+    p_gate->offset_2        = (f_base >> 16) & 0xFFFF;
+    p_gate->offset_3        = (f_base >> 32) & 0xFFFFFFFF;
+    p_gate->zero            = 0;
 }

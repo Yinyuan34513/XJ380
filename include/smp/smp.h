@@ -3,16 +3,18 @@
 
 #define MAX_CPU_NUM 256
 
-#include <stdint.h>
 #include "lock_queue.h"
 #include "task/pcb.h"
+#include <stdint.h>
 
-struct gdt_register {
+struct gdt_register
+{
     uint16_t size;
-    void *ptr;
+    void    *ptr;
 } __attribute__((packed));
 
-struct tss {
+struct tss
+{
     uint32_t unused0;
     uint64_t rsp[3];
     uint64_t unused1;
@@ -23,25 +25,27 @@ struct tss {
 } __attribute__((packed));
 
 typedef struct tss tss_t;
-typedef uint64_t gdt_entries_tT[7];
-typedef uint8_t tss_stack_t[1024];
+typedef uint64_t   gdt_entries_tT[7];
+typedef uint8_t    tss_stack_t[1024];
 
-struct PROCESSOR_INFO {
-    uint64_t processor_id;
-    uint64_t lapic_id;           // 字面意思。
-    uint64_t gdt_entries_t[7];   // GDT条目
+struct PROCESSOR_INFO
+{
+    uint64_t            processor_id;
+    uint64_t            lapic_id;         // 字面意思。
+    uint64_t            gdt_entries_t[7]; // GDT条目
     struct gdt_register gdt_pointer;
-    tss_t tss0;
-    tss_stack_t tss_stack;
-    tcb_t current_task; // 当前核心运行的任务
-    lock_queue *scheduler_queue; // 该核心的调度队列
-    lock_node *iter_node; // 该核心当前调度迭代的节点
+    tss_t               tss0;
+    tss_stack_t         tss_stack;
+    tcb_t               current_task;    // 当前核心运行的任务
+    lock_queue         *scheduler_queue; // 该核心的调度队列
+    lock_node          *iter_node;       // 该核心当前调度迭代的节点
 };
 
-struct XSK_SMP_INFO {
-    size_t cpu_count;           // CPU 核心总数
-    uint32_t bsp_lapic_id;      // BSP 的lapic id
-    struct PROCESSOR_INFO pcr_inf[MAX_CPU_NUM];     // 各个核心的数据
+struct XSK_SMP_INFO
+{
+    size_t                cpu_count;            // CPU 核心总数
+    uint32_t              bsp_lapic_id;         // BSP 的lapic id
+    struct PROCESSOR_INFO pcr_inf[MAX_CPU_NUM]; // 各个核心的数据
 };
 
 void _setcs_helper();

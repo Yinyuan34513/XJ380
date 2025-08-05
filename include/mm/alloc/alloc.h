@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stdint.h>
-#include <krlibc.h>
 #include "../memory.h"
+#include <krlibc.h>
+#include <stdint.h>
 
 // 内存分配时大小和返回指针的对齐 (按照两倍字长)
 #define MALLOC_PADDING(size) (((size) + 2 * sizeof(size_t) - 1) & ~(2 * sizeof(size_t) - 1))
@@ -158,7 +158,8 @@ typedef freelist_t freelists_t[FREELIST_NUM];
  *\brief 指定元素大小的内存池
  *
  */
-typedef struct sized_mpool {
+typedef struct sized_mpool
+{
     void  *ptr;      // 指向内存区的指针
     size_t size;     // 内存区总大小
     size_t bsize;    // 每个元素的大小
@@ -218,7 +219,8 @@ typedef large_blk_t large_blks_t[LARGEBLKLIST_NUM];
  *\brief 内存池
  *
  */
-typedef struct mpool {
+typedef struct mpool
+{
     void       *ptr;          // 指向内存区的指针
     size_t      size;         // 内存区总大小
     size_t      alloced_size; // 已分配的内存大小
@@ -324,7 +326,8 @@ void *mpool_aligned_realloc(mpool_t pool, void *ptr, size_t newsize, size_t alig
  *
  */
 typedef struct mman_pool *mman_pool_t;
-struct mman_pool {
+struct mman_pool
+{
     void       *ptr;          // 指向内存区的指针
     size_t      alloced_size; // 已分配的内存大小
     mman_pool_t next;         // 下一个内存池
@@ -334,7 +337,8 @@ struct mman_pool {
  *\brief 内存管理器
  *
  */
-typedef struct mman {
+typedef struct mman
+{
     struct mman_pool main;         // 主分配区 (后接子分配区)
     size_t           size;         // 内存区总大小
     size_t           alloced_size; // 已分配的内存大小

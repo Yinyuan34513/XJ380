@@ -1,25 +1,30 @@
+#include "krlibc.h"
+#include "mm/frame.h"
+#include "task/pcb.h"
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
 #include <proto.h>
-#include "mm/frame.h"
-#include "task/pcb.h"
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
-EFI_SYSTEM_TABLE *ST;
-BOOT_CONFIG *BC;
-uint64_t *saved_mtrrs;
-void *temp_stack[MAX_CPU_NUM];
+EFI_SYSTEM_TABLE        *ST;
+BOOT_CONFIG             *BC;
+uint64_t                *saved_mtrrs;
+void                    *temp_stack[MAX_CPU_NUM];
 
-void test_task(){
-    while (true){
+void test_task()
+{
+    while (true)
+    {
         write_serial_string("Hello from test_task!\n");
     }
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
+    (void)fbc;         // 暂时不用
+    (void)SystemTable; // 暂时不用
     disable_intr();
     init_idt();
     init_gdt();
@@ -30,7 +35,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     page_setup();
     init_heap();
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
-    saved_mtrrs = (uint64_t *) (BootConfig.saved_mtrrs);
+    saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);
     for (int i = 0; i < MAX_CPU_NUM; ++i)
         temp_stack[i] = BootConfig.temp_stack[i];
 

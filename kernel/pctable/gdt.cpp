@@ -1,17 +1,19 @@
-#if defined (__x86_64__) || defined (__i386__)
+#if defined(__x86_64__) || defined(__i386__)
 
-#include <stdint.h>
-#include <pctable/gdt.h>
-#include <mm/memory.h>
-#include <proto.h>
-#include "smp/smp.h"
+#    include "smp/smp.h"
+#    include <mm/memory.h>
+#    include <pctable/gdt.h>
+#    include <proto.h>
+#    include <stdint.h>
 
-uint64_t gdt_entries[7]; __attribute__((__aligned__(PAGE_SIZE)));
+uint64_t gdt_entries[7];
+__attribute__((__aligned__(PAGE_SIZE)));
 struct gdt_register gdt_pointer;
-tss_t tss0;
-tss_stack_t tss_stack;
+tss_t               tss0;
+tss_stack_t         tss_stack;
 
-void tss_setup() {
+void tss_setup()
+{
     uint64_t address     = ((uint64_t)(&tss0));
     uint64_t low_base    = (((address & 0xffffffU)) << 16U);
     uint64_t mid_base    = (((((address >> 24U)) & 0xffU)) << 56U);
@@ -26,7 +28,8 @@ void tss_setup() {
     __asm__ volatile("ltr %[offset];" : : [offset] "rm"(0x28U) : "memory");
 }
 
-void init_gdt() {
+void init_gdt()
+{
     gdt_entries[0] = 0x0000000000000000U;
     gdt_entries[1] = 0x00a09a0000000000U;
     gdt_entries[2] = 0x00c0920000000000U;
@@ -46,12 +49,10 @@ void init_gdt() {
                      "mov %[dseg], %%es\n\t"
                      "mov %[dseg], %%ss\n\t"
                      :
-                     : [ptr] "m"(gdt_pointer), [dseg] "rm"((uint16_t)0x10U), "a"(&_setcs_helper),
-                       "b"((uint16_t)0x8U)
+                     : [ptr] "m"(gdt_pointer), [dseg] "rm"((uint16_t)0x10U), "a"(&_setcs_helper), "b"((uint16_t)0x8U)
                      : "memory");
     tss_setup();
     write_serial_string("GDT Initialize Success.\n");
 }
-
 
 #endif
