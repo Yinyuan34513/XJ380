@@ -1,4 +1,7 @@
 ---
+If:
+  PathExclude: "boot/.*"
+
 CompileFlags:
   Add:
     - "-g3"

@@ -38,8 +38,8 @@ typedef float64_t f64;
 #    define false 0
 #endif
 
-typedef unsigned long long size_t; // compatible to ELF toolchain
-typedef int                ssize_t;
+typedef __SIZE_TYPE__ size_t; // compatible to ELF toolchain
+typedef int           ssize_t;
 
 typedef union ptr_cast
 {
