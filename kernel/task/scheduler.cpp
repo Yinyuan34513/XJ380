@@ -193,11 +193,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         if (best->context0.rip != 0)
         {
             change_proccess(reg, get_current_cpu()->current_task, best);
-            write_serial_string("best.name=");
-            write_serial_string(best->name);
-            write_serial_string(", RIP=");
-            write_serial_hex(best->context0.rip);
-            write_serial_string("\n");
+            write_serial_fmt("best.name=%s, RIP=0x%016llx\n", best->name, best->context0.rip);
             get_current_cpu()->current_task = best;
         }
         enable_scheduler();

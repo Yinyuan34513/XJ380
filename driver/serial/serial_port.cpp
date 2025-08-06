@@ -18,7 +18,7 @@ int serial_x_max = 0;
 int init_serial()
 {
     serial_lock = SPIN_INIT;
-    fmt_lock = SPIN_INIT;
+    fmt_lock    = SPIN_INIT;
 
     outb(PORT + 1, 0x00); // Disable all interrupts
     outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
@@ -598,6 +598,7 @@ void write_serial_fmt(const char *fmt, ...)
     spin_lock(fmt_lock);
     formatter_t formatter;
     char        fmt_buff[2048] = {};
+    formatter.buf              = fmt_buff;
     formatter.state            = FMT_START;
     formatter.fmt              = &fmt;
     formatter.buf_size         = 2048;
@@ -621,6 +622,7 @@ void write_serial_fmt_heapless(const char *fmt, ...)
     spin_lock(fmt_lock);
     formatter_t formatter;
     char        fmt_buff[2048] = {};
+    formatter.buf              = fmt_buff;
     formatter.state            = FMT_START;
     formatter.fmt              = &fmt;
     formatter.buf_size         = 2048;
