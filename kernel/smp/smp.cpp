@@ -118,15 +118,14 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     init_lApic();
 
-    set_kernel_stack(get_rsp());
-    tcb_t apu_idle       = (tcb_t)malloc(STACK_SIZE);
-    apu_idle->task_level = TASK_IDLE_LEVEL;
-    apu_idle->tid        = now_tid++;
-    set_kernel_stack(get_rsp());
+    tcb_t apu_idle         = (tcb_t)malloc(STACK_SIZE);
+    apu_idle->task_level   = TASK_IDLE_LEVEL;
+    apu_idle->tid          = now_tid++;
     apu_idle->kernel_stack = apu_idle->context0.rsp = get_rsp();
-    apu_idle->context0.rflags                       = get_rflags() | 0x200;
-    apu_idle->cpu_id                                = lapic_id();
-    apu_idle->status                                = RUNNING;
+    set_kernel_stack(apu_idle->kernel_stack);
+    apu_idle->context0.rflags = get_rflags() | 0x200;
+    apu_idle->cpu_id          = lapic_id();
+    apu_idle->status          = RUNNING;
     strcpy(apu_idle->name, "XSK_IDLE");
     apu_idle->parent_group = kernel_group;
 

@@ -1,9 +1,9 @@
-#include "task/pcb.h"
 #include "cpu/regio.h"
 #include "krlibc.h"
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.h"
+#include "task/pcb.h"
 
 static size_t now_pid         = 0;
 size_t        now_tid         = 0;
@@ -27,7 +27,7 @@ int create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
-    memset(new_task, 0, sizeof(struct thread_control_block));
+    memset(new_task, 0, KERNEL_STACK_SIZE);
 
     if (pcb == NULL)
     {

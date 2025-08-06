@@ -18,6 +18,7 @@ int serial_x_max = 0;
 int init_serial()
 {
     serial_lock = SPIN_INIT;
+    fmt_lock = SPIN_INIT;
 
     outb(PORT + 1, 0x00); // Disable all interrupts
     outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)

@@ -175,7 +175,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     tcb_t current = get_current_task();
     tcb_t best    = select_next_task();
     if (best == current) return reg;
-    write_fsbase((uint64_t)get_current_task()); // 下面要用内核态的fs，换上
+    write_fsbase((uint64_t)current); // 下面要用内核态的fs，换上
 
     // 任务寻父处理
     if (best->parent_group->parent_task == NULL || best->parent_group->parent_task->status == DEATH ||
@@ -190,13 +190,20 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         disable_scheduler();
         if (current->status == RUNNING) { current->status = START; }
         if (best->status == START || best->status == CREATE) { best->status = RUNNING; }
-
-        change_proccess(reg, get_current_cpu()->current_task, best);
-        get_current_cpu()->current_task = best;
+        if (best->context0.rip != 0)
+        {
+            change_proccess(reg, get_current_cpu()->current_task, best);
+            write_serial_string("best.name=");
+            write_serial_string(best->name);
+            write_serial_string(", RIP=");
+            write_serial_hex(best->context0.rip);
+            write_serial_string("\n");
+            get_current_cpu()->current_task = best;
+        }
         enable_scheduler();
     }
     else
-        write_fsbase(get_current_task()->fs_base); // 同样，没切任务，换回来
+        write_fsbase(current->fs_base); // 同样，没切任务，换回来
 
     return reg;
 }
