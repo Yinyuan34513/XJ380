@@ -391,11 +391,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         puts(L"XJ380 does not boot properly. Please visit "
              L"https://xingjisoft.top/os/xj380/error. Error code: "
              L"UNSUPPORTED_PIXEL_FORMAT");
-        write_serial_string("Vedio Initialize Failed. Stop.\n");
+        write_serial_string("Video Initialize Failed. Stop.\n");
         while (1)
             ;
     }
-    write_serial_string("Vedio Initialize Success.\n");
+    write_serial_string("Video Initialize Success.\n");
 
     BOOT_CONFIG *BootConfig;
     BootConfig = malloc(sizeof(BOOT_CONFIG)) + 0xFFFF800000000000;

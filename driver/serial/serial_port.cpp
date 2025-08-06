@@ -1,7 +1,11 @@
+#include "krlibc.h" // For memset
+#include "mm/alloc/alloc.h"
+#include "stdarg.h"
 #include <cpu/lock.h>
 #include <proto.h>
 
 spin_t serial_lock;
+spin_t fmt_lock; // For write_serial_fmt
 
 #if BUILD_VERSION == DEBUG_VERSION
 int serial_x     = 0;
@@ -165,4 +169,467 @@ void write_serial_hex(unsigned long long hex)
     *p = '\0'; // 结束符
 
     write_serial_string(buf);
+}
+
+typedef enum
+{
+    FMT_START = 0,
+    FMT_PROCESSING,
+    FMT_OVERFLOW_FMTARG,
+    FMT_OVERFLOW_FMTSTR,
+    FMT_FINISHED,
+} fmt_state;
+
+typedef enum
+{
+    HEAPLESS = 0, // Unsafe, because it uses static buffer (and may overflow)
+    HEAP,
+} fmt_type;
+
+struct fmt_arg
+{
+    size_t size;       // Size of the arg string
+    char  *arg_str;    // Pointer to the formatted arg string
+    char  *last_write; // Pointer to the last written character of arg_str
+};
+
+typedef struct fmt_arg fmt_arg_t;
+
+struct formatter
+{
+    const char **fmt;
+    char        *write_ptr;
+    char        *buf;
+    size_t       buf_size;
+    va_list      args;
+    fmt_state    state;
+    fmt_arg_t    fmt_arg;
+    fmt_type     type;
+};
+
+typedef struct formatter formatter_t;
+
+#define HEAPLESS_FMT_ARG_LIMIT 2048                   // Maximum size of fmt_arg_t
+static char fmt_arg_buf[HEAPLESS_FMT_ARG_LIMIT] = {}; // Static buffer for fmt_arg_t
+
+typedef enum num_size
+{
+    HALF_2 = 0, // char
+    HALF_1 = 1, // short
+    INT    = 2, // int
+    LONG_1 = 3, // long
+    LONG_2 = 4, // long long
+    SIZE_T = 5, // size_t
+} num_size_t;
+
+/**
+ * Notice: May use heap memory
+ */
+static void read_fmtarg(formatter_t *fmter) // NOLINT
+{
+    fmt_arg_t  *fmt_arg = &fmter->fmt_arg;
+    const char *fmt_ptr = *fmter->fmt;
+    char       *str     = 0; // for `%s`
+    char       *arg_str = 0;
+    char       *arg_ptr = 0;
+    size_t      str_len = 0; // length of the string
+    size_t      arg_len = 0; // length of the argument will be written
+
+    num_formatter_t num_fmter = {};
+    num_fmt_type    num_flag  = {};
+    int64_t         size_cnt  = INT;
+
+    if (*fmt_ptr != '%')
+    {
+        // Unexpected character
+        *fmter->fmt = fmt_ptr;
+        return;
+    }
+
+    while (true)
+    {
+        ++fmt_ptr; // Skip '%' or any flags
+        switch (*fmt_ptr)
+        {
+        case '-': num_flag.left = true; break;
+        case '+': num_flag.plus = true; break;
+        case ' ': num_flag.space = true; break;
+        case '#': num_flag.special = true; break;
+        case '0': num_flag.zeropad = true; break;
+        default: break;
+        }
+
+        /* Calc num_fmter.size */
+        if (IS_DIGIT(*fmt_ptr)) { num_fmter.size = skip_atoi(&fmt_ptr); }
+        else if (*fmt_ptr == '*')
+        {
+            /* by the following argument */
+            ++fmt_ptr; // Skip '*'
+            num_fmter.size = (size_t)va_arg(fmter->args, int);
+        }
+
+        /* Calc num_fmter.precision */
+        if (*fmt_ptr == '.')
+        {
+            ++fmt_ptr; // Skip '.'
+            if (IS_DIGIT(*fmt_ptr)) { num_fmter.precision = skip_atoi(&fmt_ptr); }
+            else if (*fmt_ptr == '*')
+            {
+                /* by the following argument */
+                ++fmt_ptr; // Skip '*'
+                num_fmter.precision = (size_t)va_arg(fmter->args, int);
+            }
+        }
+
+        /* Calc size_cnt */
+        switch (*fmt_ptr)
+        {
+        case 'h':
+            size_cnt--;
+            if (size_cnt < HALF_2) size_cnt = HALF_2; // hh
+            continue;
+        case 'L':       // += 2
+            size_cnt++; // fallthrough
+        case 'l':
+            size_cnt++;
+            if (size_cnt > LONG_2) size_cnt = LONG_2; // ll
+            continue;
+        case 'z':
+            size_cnt = SIZE_T; // z
+            continue;
+        default: break;
+        }
+
+        /* Read argument */
+        switch (*fmt_ptr)
+        {
+        case 'c': num_fmter.num = va_arg(fmter->args, int); break;
+        case 's': str = va_arg(fmter->args, char *); break;
+        case 'd':
+        case 'i':
+            // NOLINTBEGIN
+            switch (size_cnt)
+            {
+            case HALF_2: num_fmter.num = (size_t)(char)va_arg(fmter->args, int); break;
+            case HALF_1: num_fmter.num = (size_t)(short)va_arg(fmter->args, int); break;
+            case INT: num_fmter.num = (size_t)(int)va_arg(fmter->args, int); break;
+            case LONG_1: num_fmter.num = (size_t)(long)va_arg(fmter->args, long); break;
+            case LONG_2: num_fmter.num = (size_t)(long long)va_arg(fmter->args, long long); break;
+            case SIZE_T: // fallthrough
+            default: num_fmter.num = va_arg(fmter->args, size_t); break;
+            }
+            // NOLINTEND
+            break;
+        case 'o':
+        case 'x':
+        case 'X':
+        case 'b':
+        case 'u':
+            switch (size_cnt)
+            {
+            case HALF_2: num_fmter.num = (size_t)(unsigned char)va_arg(fmter->args, int); break;
+            case HALF_1: num_fmter.num = (size_t)(unsigned short)va_arg(fmter->args, int); break;
+            case INT: num_fmter.num = (size_t)(unsigned int)va_arg(fmter->args, int); break;
+            case LONG_1: num_fmter.num = (size_t)(unsigned long)va_arg(fmter->args, long); break;
+            case LONG_2: num_fmter.num = (size_t)(unsigned long long)va_arg(fmter->args, long long); break;
+            case SIZE_T: // fallthrough
+            default: num_fmter.num = va_arg(fmter->args, size_t); break;
+            }
+            break;
+        case 'p': num_fmter.num = (size_t)va_arg(fmter->args, void *); break;
+        default: // may no data
+            break;
+        }
+
+        /* Calc the size of argument and set num_flag */
+        switch (*fmt_ptr)
+        {
+        case 'c':
+            arg_len = 1;
+            if (num_fmter.size > arg_len) num_fmter.size = arg_len;
+            break;
+        case 's':
+            static char null_str[] = "(null)";
+            if (str == 0) str = null_str;
+            arg_len = str_len = strlen(str);
+            if (num_fmter.size > arg_len) arg_len = num_fmter.size;
+            break;
+        case 'o':
+            num_fmter.base = 8;
+            arg_len        = number_length(num_fmter, num_flag);
+            break;
+        case 'p':
+            num_flag.small   = true;
+            num_flag.special = true;
+            num_flag.zeropad = true;
+            if (num_fmter.size < 16) num_fmter.size = 16;
+            num_fmter.base = 16;
+            arg_len        = number_length(num_fmter, num_flag);
+            break;
+        case 'x': num_flag.small = true; // fallthrough
+        case 'X':
+            num_fmter.base = 16;
+            arg_len        = number_length(num_fmter, num_flag);
+            break;
+        case 'd':
+        case 'i': num_flag.sign = true;
+        case 'u':
+            num_fmter.base = 10;
+            arg_len        = number_length(num_fmter, num_flag);
+            break;
+        case 'b':
+            num_fmter.base = 2;
+            arg_len        = number_length(num_fmter, num_flag);
+            break;
+        case 'n': va_arg(fmter->args, void *); break;
+        case '%': arg_len = 1; break;
+        default:
+            // Unexpected
+            --fmt_ptr;
+            fmter->fmt_arg.arg_str = 0; // Caller will skip this argument
+            return;
+        }
+        if (arg_len < 1) arg_len = 1;
+        if (num_fmter.size < arg_len) num_fmter.size = arg_len;
+
+        /* Alloc space */
+        switch (fmter->type)
+        {
+        case HEAP: fmter->fmt_arg.arg_str = (char *)malloc(arg_len + 1); break;
+        case HEAPLESS:
+            if (arg_len > HEAPLESS_FMT_ARG_LIMIT)
+            {
+                fmter->fmt_arg.arg_str = 0; // Caller will skip this argument
+                return;
+            }
+            fmter->fmt_arg.arg_str = fmt_arg_buf;
+        }
+
+        /* Init arg space */
+        arg_str                   = fmter->fmt_arg.arg_str;
+        arg_str[arg_len]          = '\0';
+        arg_ptr                   = arg_str;
+        fmter->fmt_arg.size       = arg_len;
+        fmter->fmt_arg.last_write = fmter->fmt_arg.arg_str;
+
+        /* Write to arg space */
+        switch (*fmt_ptr)
+        {
+        case 'c':
+            // Right align
+            if (!(num_flag.left))
+            {
+                while (arg_ptr < arg_str + num_fmter.size - 1)
+                {
+                    *arg_ptr = ' ';
+                    ++arg_ptr;
+                }
+            }
+            // Write char
+            *arg_ptr = (char)num_fmter.num;
+            // Left align
+            if (num_flag.left)
+            {
+                while (arg_ptr < arg_str + num_fmter.size - 1)
+                {
+                    *arg_ptr = ' ';
+                    ++arg_ptr;
+                }
+            }
+            break;
+        case 's':
+            // Right align
+            if (!(num_flag.left))
+            {
+                while (arg_ptr < arg_str + num_fmter.size - str_len)
+                {
+                    *arg_ptr = ' ';
+                    ++arg_ptr;
+                }
+                str_len = num_fmter.size;
+            }
+            // Write string
+            while (arg_ptr < arg_str + str_len)
+            {
+                *arg_ptr = *str;
+                ++arg_ptr;
+                ++str;
+            }
+            // Left align
+            if (num_flag.left)
+            {
+                while (arg_ptr < arg_str + arg_len)
+                {
+                    *arg_ptr = ' ';
+                    arg_ptr++;
+                }
+            }
+            break;
+        case 'o': // fallthrough
+        case 'p': // fallthrough
+        case 'x': // fallthrough
+        case 'X': // fallthrough
+        case 'd': // fallthrough
+        case 'i': // fallthrough
+        case 'u': // fallthrough
+        case 'b': number(arg_str, num_fmter, num_flag); break;
+        case '%': *arg_ptr = '%'; break;
+        default: break;
+        }
+        break;
+    }
+    // Update fmter->fmt
+    *fmter->fmt = fmt_ptr;
+}
+
+/**
+ * Notice: May use heap memory
+ */
+
+static void write_fmt_arg(formatter_t *fmter)
+{
+    char       *write_ptr = fmter->write_ptr;
+    const char *fmt_ptr   = *fmter->fmt;
+    fmt_arg_t   fmt_arg   = fmter->fmt_arg;
+    /* Write buffer of fmt_arg to buffer */
+    while (fmt_arg.last_write < fmt_arg.size + fmt_arg.arg_str)
+    {
+        *write_ptr = *fmt_arg.last_write;
+        write_ptr++;
+        fmt_arg.last_write++;
+        if (write_ptr >= fmter->buf + fmter->buf_size - 1) // 1 for '\0'
+        {
+            *write_ptr = '\0';
+            write_ptr++;
+            fmter->write_ptr = write_ptr;
+            fmter->state     = FMT_OVERFLOW_FMTARG;
+            fmter->fmt_arg   = fmt_arg; // Save fmt_arg for next call
+            return;
+        }
+    }
+    /* Write finished */
+    if (fmter->type == HEAP)
+    {
+        free(fmt_arg.arg_str); // Free heap memory
+    }
+    fmt_arg.arg_str    = 0;
+    fmt_arg.last_write = 0;
+    fmt_arg.size       = 0;
+    // update fmt_arg in formatter
+    fmter->fmt_arg   = fmt_arg;
+    fmter->state     = FMT_PROCESSING;
+    fmter->write_ptr = write_ptr;
+}
+
+/**
+ * Notice: May use heap memory
+ */
+static void vsprintfmtr(formatter_t *fmter)
+{
+    char *write_ptr     = fmter->buf;
+    fmter->write_ptr    = write_ptr;
+    const char *fmt_ptr = *fmter->fmt;
+    fmt_arg_t   fmt_arg = fmter->fmt_arg;
+    switch (fmter->state)
+    {
+    case FMT_START: fmter->state = FMT_PROCESSING; // fallthrough
+    case FMT_PROCESSING:                           // fallthrough
+    case FMT_OVERFLOW_FMTSTR: break;
+    case FMT_OVERFLOW_FMTARG:
+        fmter->write_ptr = write_ptr;
+        write_fmt_arg(fmter); // May update fmter->write_ptr
+        if (fmter->state == FMT_OVERFLOW_FMTARG)
+        {
+            return; // Overflow, wait for next call
+        }
+        break;
+    case FMT_FINISHED: return; // Do nothing
+    }
+    write_ptr          = fmter->write_ptr;
+    fmt_arg.size       = 0;
+    fmt_arg.arg_str    = 0;
+    fmt_arg.last_write = 0;
+    while (*fmt_ptr != '\0')
+    {
+        if (write_ptr >= fmter->buf + fmter->buf_size - 1)
+        {
+            *write_ptr   = '\0';
+            *fmter->fmt  = fmt_ptr;             // Update
+            fmter->state = FMT_OVERFLOW_FMTSTR; // Overflow, wait for next call
+            return;
+        }
+        if (*fmt_ptr != '%' && write_ptr < fmter->buf + fmter->buf_size - 1)
+        {
+            *write_ptr = *fmt_ptr;
+            write_ptr++;
+            fmt_ptr++;
+            continue;
+        }
+        // *fmt_ptr == '%'
+        // Update fmter->fmt
+        *fmter->fmt = fmt_ptr; // Update fmt_ptr to next position
+        read_fmtarg(fmter);
+        if (fmter->fmt_arg.arg_str == 0)
+        {
+            // Skip
+            continue;
+        }
+        ++(*fmter->fmt);
+        fmt_ptr          = *fmter->fmt;
+        fmter->write_ptr = write_ptr;
+        write_fmt_arg(fmter); // May update fmter->buf
+        write_ptr = fmter->write_ptr;
+        if (fmter->state == FMT_OVERFLOW_FMTARG)
+        {
+            return; // Overflow, wait for next call
+        }
+    }
+    // Finish
+    fmter->state = FMT_FINISHED;
+    *write_ptr   = '\0';
+}
+
+/**
+ * Notice: Must use heap memory
+ */
+void write_serial_fmt(const char *fmt, ...)
+{
+    spin_lock(fmt_lock);
+    formatter_t formatter;
+    char        fmt_buff[2048] = {};
+    formatter.state            = FMT_START;
+    formatter.fmt              = &fmt;
+    formatter.buf_size         = 2048;
+    formatter.type             = HEAP;
+    va_start(formatter.args, fmt);
+    while (formatter.state != FMT_FINISHED)
+    {
+        vsprintfmtr(&formatter);
+        write_serial_string(formatter.buf);
+    }
+    va_end(formatter.args);
+    spin_unlock(fmt_lock);
+}
+
+/**
+ * Heapless
+ */
+
+void write_serial_fmt_heapless(const char *fmt, ...)
+{
+    spin_lock(fmt_lock);
+    formatter_t formatter;
+    char        fmt_buff[2048] = {};
+    formatter.state            = FMT_START;
+    formatter.fmt              = &fmt;
+    formatter.buf_size         = 2048;
+    formatter.type             = HEAPLESS;
+    va_start(formatter.args, fmt);
+    while (formatter.state != FMT_FINISHED)
+    {
+        vsprintfmtr(&formatter);
+        write_serial_string(formatter.buf);
+    }
+    va_end(formatter.args);
+    spin_unlock(fmt_lock);
 }
