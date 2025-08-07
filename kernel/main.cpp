@@ -15,17 +15,21 @@ void                    *temp_stack[MAX_CPU_NUM];
 
 void test_task()
 {
+    uint64_t time = nanoTime();
     while (true)
     {
-        write_serial_string("Hello from test_task!\n");
+        time = nanoTime();
+        write_serial_fmt("Hello from `test_task` in %d\n", time);
     }
 }
 
 void test_task1()
 {
+    uint64_t time = nanoTime();
     while (true)
     {
-        write_serial_string("Hello from test_task1!\n");
+        time = nanoTime();
+        write_serial_fmt("Hello from `test_task1` in %d\n", time);
     }
 }
 

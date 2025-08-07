@@ -610,7 +610,13 @@ void write_serial_fmt(const char *fmt, ...)
     while (formatter.state != FMT_FINISHED)
     {
         vsprintfmtr(&formatter);
-        write_serial_string(formatter.buf);
+        {
+            const char *str = formatter.buf;
+            while (*str)
+            {
+                write_serial(*str++);
+            }
+        }
     }
     va_end(formatter.args);
     spin_unlock(fmt_lock);
@@ -636,7 +642,13 @@ void write_serial_fmt_heapless(const char *fmt, ...)
     while (formatter.state != FMT_FINISHED)
     {
         vsprintfmtr(&formatter);
-        write_serial_string(formatter.buf);
+        {
+            const char *str = formatter.buf;
+            while (*str)
+            {
+                write_serial(*str++);
+            }
+        }
     }
     va_end(formatter.args);
     spin_unlock(fmt_lock);
