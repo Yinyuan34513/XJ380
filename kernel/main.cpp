@@ -21,6 +21,14 @@ void test_task()
     }
 }
 
+void test_task1()
+{
+    while (true)
+    {
+        write_serial_string("Hello from test_task1!\n");
+    }
+}
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     (void)fbc;         // 暂时不用
@@ -50,8 +58,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    char test_task_name[] = "test_task";
+    char test_task_name[]  = "test_task";
+    char test_task1_name[] = "test_task1";
     create_kernel_thread((void *)test_task, NULL, test_task_name, NULL);
+    create_kernel_thread((void *)test_task1, NULL, test_task1_name, NULL);
 
     open_interrupt;
     enable_scheduler();

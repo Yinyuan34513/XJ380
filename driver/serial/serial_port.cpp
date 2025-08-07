@@ -64,6 +64,7 @@ void write_serial(char a)
 
 void write_serial_string(const char *str)
 {
+    close_interrupt; // Avoid deadlock
     spin_lock(serial_lock);
     while (*str)
     {
@@ -89,6 +90,7 @@ void write_serial_string(const char *str)
         write_serial(*str++);
     }
     spin_unlock(serial_lock);
+    open_interrupt;
 }
 
 void write_serial_dec(unsigned long long dec)
@@ -595,6 +597,7 @@ static void vsprintfmtr(formatter_t *fmter)
  */
 void write_serial_fmt(const char *fmt, ...)
 {
+    close_interrupt; // Avoid deadlock
     spin_lock(fmt_lock);
     formatter_t formatter;
     char        fmt_buff[2048] = {};
@@ -611,6 +614,7 @@ void write_serial_fmt(const char *fmt, ...)
     }
     va_end(formatter.args);
     spin_unlock(fmt_lock);
+    open_interrupt;
 }
 
 /**
@@ -619,6 +623,7 @@ void write_serial_fmt(const char *fmt, ...)
 
 void write_serial_fmt_heapless(const char *fmt, ...)
 {
+    close_interrupt; // Avoid deadlock
     spin_lock(fmt_lock);
     formatter_t formatter;
     char        fmt_buff[2048] = {};
@@ -635,4 +640,5 @@ void write_serial_fmt_heapless(const char *fmt, ...)
     }
     va_end(formatter.args);
     spin_unlock(fmt_lock);
+    open_interrupt;
 }

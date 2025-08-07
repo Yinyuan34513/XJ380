@@ -1,9 +1,9 @@
+#include "task/pcb.h"
 #include "cpu/regio.h"
 #include "krlibc.h"
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.h"
-#include "task/pcb.h"
 
 static size_t now_pid         = 0;
 size_t        now_tid         = 0;
