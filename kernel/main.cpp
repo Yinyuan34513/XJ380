@@ -12,6 +12,7 @@ EFI_SYSTEM_TABLE        *ST;
 BOOT_CONFIG             *BC;
 uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
+bool                     no_interrupt = false; // 为true时代表严禁开启中断
 
 void test_task()
 {
@@ -37,6 +38,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 {
     (void)fbc;         // 暂时不用
     (void)SystemTable; // 暂时不用
+    no_interrupt = true;
     disable_intr();
     init_idt();
     init_gdt();
@@ -54,6 +56,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_smp(BootConfig.MADT);
 
     enable_intr();
+    no_interrupt = false;
 
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");

@@ -62,6 +62,8 @@ void write_serial(char a)
     outb(PORT, a);
 }
 
+extern bool no_interrupt;
+
 void write_serial_string(const char *str)
 {
     close_interrupt; // Avoid deadlock
@@ -90,7 +92,8 @@ void write_serial_string(const char *str)
         write_serial(*str++);
     }
     spin_unlock(serial_lock);
-    open_interrupt;
+    if (!no_interrupt)
+        open_interrupt;
 }
 
 void write_serial_dec(unsigned long long dec)
