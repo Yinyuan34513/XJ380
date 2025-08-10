@@ -5,6 +5,7 @@
 #include "mm/page.h"
 #include "proto.h"
 
+#define PUSH_STACK(stack, value) *(--stack) = value
 static size_t now_pid         = 0;
 size_t        now_tid         = 0;
 lock_queue   *pcb_group_queue = NULL;
@@ -22,11 +23,12 @@ _Noreturn void process_exit()
         __asm__ volatile("hlt");
 }
 
-int create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
+size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
+
     memset(new_task, 0, KERNEL_STACK_SIZE);
 
     if (pcb == NULL)
@@ -45,14 +47,18 @@ int create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->task_level = TASK_KERNEL_LEVEL;
     new_task->cpu_id     = get_current_cpu()->processor_id;
     memcpy(new_task->name, name, strlen(name) + 1);
-    uint64_t *stack_top       = (uint64_t *)((uint64_t)new_task + KERNEL_STACK_SIZE);
-    *(--stack_top)            = (uint64_t)args;
-    *(--stack_top)            = (uint64_t)process_exit;
-    *(--stack_top)            = (uint64_t)_start;
+
+    ptr_cast_t cast;
+    cast.ptr             = new_task;
+    cast.val            += KERNEL_STACK_SIZE;
+    uint64_t *stack_top  = (uint64_t *)(cast.ptr);
+    PUSH_STACK(stack_top, (uint64_t)args);
+    PUSH_STACK(stack_top, (uint64_t)process_exit);
+    PUSH_STACK(stack_top, (uint64_t)_start);
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)_start;
-    new_task->context0.rsp    = (uint64_t)new_task + KERNEL_STACK_SIZE - sizeof(uint64_t) * 3; // 设置上下文
-    new_task->kernel_stack    = (new_task->context0.rsp &= ~(uint64_t)0xF);                    // 栈16字节对齐
+    new_task->context0.rsp    = (uint64_t)stack_top;                        // 设置上下文
+    new_task->kernel_stack    = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
     new_task->context0.cs     = 0x8;
     new_task->context0.ss     = 0x10;
     new_task->context0.es     = 0x10;
@@ -89,9 +95,5 @@ void process_setup()
     set_kernel_stack(get_rsp());
     idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
 
-    write_serial_string("Setup process <");
-    write_serial_string(kernel_pcb->name);
-    write_serial_string("> PID:");
-    write_serial_dec(kernel_pcb->pid);
-    write_serial_string("\n");
+    write_serial_fmt("Setup process <%s> PID:%zu\n", kernel_pcb->name, kernel_pcb->pid);
 }

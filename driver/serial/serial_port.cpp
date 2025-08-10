@@ -92,8 +92,7 @@ void write_serial_string(const char *str)
         write_serial(*str++);
     }
     spin_unlock(serial_lock);
-    if (!no_interrupt)
-        open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }
 
 void write_serial_dec(unsigned long long dec)

@@ -20,7 +20,7 @@ void test_task()
     while (true)
     {
         time = nanoTime();
-        write_serial_fmt("Hello from `test_task` in %d\n", time);
+        write_serial_fmt("Hello from `test_task` in %llu\n", time);
     }
 }
 
@@ -30,7 +30,7 @@ void test_task1()
     while (true)
     {
         time = nanoTime();
-        write_serial_fmt("Hello from `test_task1` in %d\n", time);
+        write_serial_fmt("Hello from `test_task1` in %llu\n", time);
     }
 }
 
