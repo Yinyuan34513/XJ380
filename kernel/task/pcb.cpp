@@ -11,7 +11,7 @@ size_t        now_tid         = 0;
 lock_queue   *pcb_group_queue = NULL;
 pcb_t         kernel_group    = NULL;
 
-_Noreturn void process_exit()
+[[noreturn]] void process_exit()
 {
     uint64_t rax = 0;
     __asm__("movq %%rax,%0" ::"r"(rax) :);
