@@ -88,16 +88,19 @@ struct process_control_block
 
 struct thread_control_block
 {
-    pcb_t       parent_group; // 父进程
-    int         task_level;   // 进程等级
-    size_t      tid;          // 线程ID
-    char        name[32];     // 线程名称
-    TaskStatus  status;       // 线程状态
-    size_t      cpu_id;       // 运行的CPU ID
-    TaskContext context0;     // 线程上下文
-    uint64_t    kernel_stack; // 内核栈地址
-    size_t      queue_index;  // 调度队列索引
-    size_t      group_index;  // 进程队列索引
+    pcb_t       parent_group;   // 父进程
+    int         task_level;     // 进程等级
+    size_t      tid;            // 线程ID
+    char        name[32];       // 线程名称
+    TaskStatus  status;         // 线程状态
+    size_t      cpu_id;         // 运行的CPU ID
+    TaskContext context0;       // 线程上下文
+    uint64_t    kernel_stack;   // 内核栈地址
+    size_t      queue_index;    // 调度队列索引
+    size_t      group_index;    // 进程队列索引
+    uint64_t    main;           // 线程入口地址
+    uint64_t    user_stack;     // 用户栈
+    uint64_t    user_stack_top; // 用户栈顶部地址
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
