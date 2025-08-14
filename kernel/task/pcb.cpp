@@ -100,7 +100,8 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb){
+size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb) 
+{
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);

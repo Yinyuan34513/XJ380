@@ -113,4 +113,5 @@ void   enable_scheduler();
 void   disable_scheduler();
 tcb_t  get_current_task();
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
+size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
 void   process_setup();

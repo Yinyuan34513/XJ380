@@ -69,6 +69,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     char test_task1_name[] = "test_task1";
     create_kernel_thread((void *)test_task, NULL, test_task_name, NULL);
     create_kernel_thread((void *)test_task1, NULL, test_task1_name, NULL);
+    
 
     open_interrupt;
     enable_scheduler();
