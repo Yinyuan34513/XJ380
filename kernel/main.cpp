@@ -34,6 +34,14 @@ void test_task1()
     }
 }
 
+void test_task2()
+{
+    while (true)
+    {
+        write_serial_fmt("Hello from user mode!\n");
+    }
+}
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     (void)fbc;         // 暂时不用
@@ -67,9 +75,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     char test_task_name[]  = "test_task";
     char test_task1_name[] = "test_task1";
+    char test_task2_name[] = "test_task2";
     create_kernel_thread((void *)test_task, NULL, test_task_name, NULL);
     create_kernel_thread((void *)test_task1, NULL, test_task1_name, NULL);
-    
+    create_user_thread((void *)test_task2, NULL, test_task2_name, NULL);
 
     open_interrupt;
     enable_scheduler();
