@@ -133,7 +133,7 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     PUSH_STACK(stack_top, (uint64_t)process_exit);
     PUSH_STACK(stack_top, (uint64_t)switch_to_user_mode);
     new_task->context0.rflags = 0x202;
-    new_task->context0.rip    = (uint64_t)_start;
+    new_task->context0.rip    = (uint64_t)switch_to_user_mode;
     new_task->context0.rsp    = (uint64_t)stack_top;                        // 设置上下文
     new_task->kernel_stack    = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
     new_task->context0.cs     = 0x8;

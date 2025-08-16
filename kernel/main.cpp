@@ -38,7 +38,7 @@ void test_task2()
 {
     while (true)
     {
-        write_serial_fmt("Hello from user mode!\n");
+        __asm__ volatile ("hlt");
     }
 }
 
