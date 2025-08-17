@@ -16,7 +16,6 @@ enum EFI_ALLOCATE_TYPE
     AllocateAddress,
     MaxAllocateType
 };
-typedef uint64_t uint64_t; // 我们在64位下
 typedef uint64_t EFI_STATUS;
 typedef void     VOID;
 typedef uint16_t CHAR16;
