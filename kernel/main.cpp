@@ -1,9 +1,10 @@
-#include "krlibc.h"
-#include "mm/frame.h"
-#include "task/pcb.h"
+#include <krlibc.h>
+#include <mm/frame.h>
+#include <task/pcb.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
+#include <pci/pci.h>
 #include <proto.h>
 
 #define NULL 0
@@ -56,15 +57,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_frame(BootConfig.MemoryMap);
     page_setup();
     init_heap();
+
+    pci_setup(BootConfig.MCFG);
+    pci_init();
+
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);
     for (int i = 0; i < MAX_CPU_NUM; ++i)
         temp_stack[i] = BootConfig.temp_stack[i];
 
     init_smp(BootConfig.MADT);
-
-    enable_intr();
-    no_interrupt = false;
 
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");
@@ -73,14 +75,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    char test_task_name[]  = "test_task";
-    char test_task1_name[] = "test_task1";
-    char test_task2_name[] = "test_task2";
-    create_kernel_thread((void *)test_task, NULL, test_task_name, NULL);
-    create_kernel_thread((void *)test_task1, NULL, test_task1_name, NULL);
-    create_user_thread((void *)test_task2, NULL, test_task2_name, NULL);
+    create_kernel_thread((void *)test_task, NULL, "test_task", NULL);
+    create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
+
+    pcb_t ugp = create_process_group("User Group", NULL, NULL);
+    create_user_thread((void *)test_task2, NULL, "test_task2", ugp);
 
     open_interrupt;
+    no_interrupt = false;
     enable_scheduler();
 
     while (true)
