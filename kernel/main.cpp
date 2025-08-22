@@ -75,12 +75,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    char test_task_name[]  = "test_task";
-    char test_task1_name[] = "test_task1";
-    char test_task2_name[] = "test_task2";
-    create_kernel_thread((void *)test_task, NULL, test_task_name, NULL);
-    create_kernel_thread((void *)test_task1, NULL, test_task1_name, NULL);
-    create_user_thread((void *)test_task2, NULL, test_task2_name, NULL);
+    create_kernel_thread((void *)test_task, NULL, "test_task", NULL);
+    create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
+
+    pcb_t ugp = create_process_group("User Group", NULL, NULL);
+    create_user_thread((void *)test_task2, NULL, "test_task2", ugp);
 
     open_interrupt;
     no_interrupt = false;

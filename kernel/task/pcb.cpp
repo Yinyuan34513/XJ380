@@ -129,7 +129,7 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     cast.ptr             = new_task;
     cast.val            += KERNEL_STACK_SIZE;
     uint64_t *stack_top  = (uint64_t *)(cast.ptr);
-    PUSH_STACK(stack_top, (uint64_t)args);
+    PUSH_STACK(stack_top, (uint64_t)_start);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
     PUSH_STACK(stack_top, (uint64_t)switch_to_user_mode);
     new_task->context0.rflags = 0x202;
@@ -154,7 +154,8 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-size_t create_process_group(const char* name,pcb_t parent,page_directory_t *directory){
+pcb_t create_process_group(const char* name, pcb_t parent, page_directory_t *directory) 
+{
     pcb_t pcb = (pcb_t)malloc(sizeof(struct process_control_block));
     pcb->pid = now_pid++;
     pcb->parent_task = parent == NULL ? kernel_group : parent;
@@ -164,7 +165,7 @@ size_t create_process_group(const char* name,pcb_t parent,page_directory_t *dire
     pcb->thread_queue = queue_init();
     pcb->ppid = 0;
     pcb->pagedir = directory ? directory : get_kernel_pagedir();
-    return pcb->pid;
+    return pcb;
 }
 
 void process_setup()

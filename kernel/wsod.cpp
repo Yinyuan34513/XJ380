@@ -76,6 +76,8 @@ void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code)
 // 一般保护性异常
 void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
 {
+    disable_scheduler();
+
     if (error_code & 0x01)
         write_serial_string(
             "The exception occurred during delivery of an event external to the program,such as an interrupt "

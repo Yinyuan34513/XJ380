@@ -114,4 +114,5 @@ void   disable_scheduler();
 tcb_t  get_current_task();
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
 size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
+pcb_t create_process_group(const char* name, pcb_t parent, page_directory_t *directory);
 void   process_setup();
