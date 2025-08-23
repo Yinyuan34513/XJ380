@@ -6,6 +6,7 @@
 #include <efi/fbc.h>
 #include <pci/pci.h>
 #include <proto.h>
+#include <ahci/ahci.h>
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -60,6 +61,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pci_setup(BootConfig.MCFG);
     pci_init();
+    ahci_init();
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);

@@ -553,6 +553,28 @@ pci_device_t *pci_find_class(uint32_t class_code) {
     return NULL;
 }
 
+void pci_find_class(pci_device_t **result, uint32_t *n, uint32_t class_code)
+{
+    int idx = 0;
+    for (uint32_t i = 0; i < device_number; i++)
+    {
+        if (pci_devices[i]->class_code == class_code)
+        {
+            result[idx] = pci_devices[i];
+            idx++;
+            continue;
+        }
+        if (class_code == (pci_devices[i]->class_code & 0xFFFF00))
+        {
+            result[idx] = pci_devices[i];
+            idx++;
+            continue;
+        }
+    }
+    *n = idx;
+}
+
+
 void pci_setup(uint64_t mcfg0) {
     mcfg = (MCFG *)mcfg0;
 }

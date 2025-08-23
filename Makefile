@@ -1,10 +1,10 @@
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387 -mno-mmx -mno-sse -mno-sse2
-C_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -mno-mmx -mno-sse -mno-sse2 -I./include
-CPP_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -mno-mmx -mno-sse -mno-sse2 -I./include
+C_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -mno-mmx -mno-sse -mno-sse2 -I./include 
+CPP_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -mno-mmx -mno-sse -mno-sse2 -I./include 
 BOOT_C_FLAGS = -g3 -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= 1
+DEBUG ?= 0
 SMP ?= 4
 SUDO ?= 0
 KVM ?= 0

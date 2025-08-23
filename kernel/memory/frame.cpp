@@ -99,3 +99,21 @@ uint64_t alloc_frames(size_t count)
 
     return frame_index * 4096;
 }
+spin_t frame_op_lock=SPIN_INIT;
+void free_frames(uint64_t addr, uint64_t size)
+{
+    spin_lock(frame_op_lock);
+
+    if (addr == 0)
+    {
+        spin_unlock(frame_op_lock);
+        return;
+    }
+
+    size_t frame_index = addr / PAGE_SIZE;
+
+    bitmap_set_range(&frame_allocator.bitmap, frame_index, frame_index + size, true);
+    frame_allocator.usable_frames += size;
+
+    spin_unlock(frame_op_lock);
+}

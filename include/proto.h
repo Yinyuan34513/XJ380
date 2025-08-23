@@ -23,7 +23,7 @@ void write_serial_dec(unsigned long long dec);
 void write_serial_hex(unsigned long long hex);
 void write_serial_fmt(const char *fmt, ...);
 void write_serial_fmt_heapless(const char *fmt, ...);
-
+void sprintf(char*str,const char *fmt, ...);
 /*
  *
  *  kernel/
@@ -141,6 +141,7 @@ void init_heap();
 void     init_frame(MEMORY_MAP map);
 void     free_frame(uint64_t addr);
 uint64_t alloc_frames(size_t count);
+void free_frames(uint64_t addr, uint64_t size);
 
 // kernel/memory/hhdm.cpp
 void     init_hhdm();

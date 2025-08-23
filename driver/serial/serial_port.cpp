@@ -625,6 +625,30 @@ void write_serial_fmt(const char *fmt, ...)
     open_interrupt;
 }
 
+void sprintf(char*str,const char *fmt, ...)
+{
+        close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+    formatter_t formatter;
+    char        fmt_buff[2048] = {};
+    formatter.buf              = fmt_buff;
+    formatter.state            = FMT_START;
+    formatter.fmt              = &fmt;
+    formatter.buf_size         = 2048;
+    formatter.type             = HEAP;
+    va_start(formatter.args, fmt);
+    while (formatter.state != FMT_FINISHED)
+    {
+        vsprintfmtr(&formatter);
+        {
+            const char *str = formatter.buf;
+        }
+    }
+    va_end(formatter.args);
+    spin_unlock(fmt_lock);
+    open_interrupt;
+}
+
 /**
  * Heapless
  */

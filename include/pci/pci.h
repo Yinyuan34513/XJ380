@@ -77,6 +77,8 @@ pci_device_t *pci_find_vid_did(uint16_t vendor_id, uint16_t device_id);
 
 pci_device_t *pci_find_class(uint32_t class_code);
 
+void pci_find_class(pci_device_t **result, uint32_t *n, uint32_t class_code);
+
 uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type);
 
 uint32_t pci_read_command(pci_device_t *device, uint8_t offset);

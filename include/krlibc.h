@@ -5,12 +5,101 @@
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
 #endif
+#define waitif(cond)                                                                               \
+    ((void)({                                                                                      \
+        while (cond) {}                                                                            \
+    }))
+static inline void empty() {};
+#define ABS(x)    ((x) > 0 ? (x) : -(x))
+#define MAX(x, y) ((x > y) ? (x) : (y))
+#define MIN(x, y) ((x < y) ? (x) : (y))
+#define streq(s1, s2)                                                                              \
+    ({                                                                                             \
+        const char *_s1 = (s1), *_s2 = (s2);                                                       \
+        (_s1 && _s2) ? strcmp(_s1, _s2) == 0 : _s1 == _s2;                                         \
+    })
+#undef CHAR_BIT
+#define CHAR_BIT __CHAR_BIT__
 
+#ifndef MB_LEN_MAX
+#    define MB_LEN_MAX 1
+#endif
+
+#undef SCHAR_MAX
+#define SCHAR_MAX __SCHAR_MAX__
+#undef SCHAR_MIN
+#define SCHAR_MIN (-SCHAR_MAX - 1)
+
+#undef UCHAR_MAX
+#if __SCHAR_MAX__ == __INT_MAX__
+#    define UCHAR_MAX (SCHAR_MAX * 2U + 1U)
+#else
+#    define UCHAR_MAX (SCHAR_MAX * 2 + 1)
+#endif
+
+#ifdef __CHAR_UNSIGNED__
+#    undef CHAR_MAX
+#    define CHAR_MAX UCHAR_MAX
+#    undef CHAR_MIN
+#    if __SCHAR_MAX__ == __INT_MAX__
+#        define CHAR_MIN 0U
+#    else
+#        define CHAR_MIN 0
+#    endif
+#else
+#    undef CHAR_MAX
+#    define CHAR_MAX SCHAR_MAX
+#    undef CHAR_MIN
+#    define CHAR_MIN SCHAR_MIN
+#endif
+
+#undef SHRT_MAX
+#define SHRT_MAX __SHRT_MAX__
+#undef SHRT_MIN
+#define SHRT_MIN (-SHRT_MAX - 1)
+
+#undef USHRT_MAX
+#if __SHRT_MAX__ == __INT_MAX__
+#    define USHRT_MAX (SHRT_MAX * 2U + 1U)
+#else
+#    define USHRT_MAX (SHRT_MAX * 2 + 1)
+#endif
+
+#undef INT_MAX
+#define INT_MAX __INT_MAX__
+#undef INT_MIN
+#define INT_MIN (-INT_MAX - 1)
+
+#undef UINT_MAX
+#define UINT_MAX (INT_MAX * 2U + 1U)
+
+#undef LONG_MAX
+#define LONG_MAX __LONG_MAX__
+#undef LONG_MIN
+#define LONG_MIN (-LONG_MAX - 1L)
+
+#undef ULONG_MAX
+#define ULONG_MAX (LONG_MAX * 2UL + 1UL)
 int    memcmp(const void *a_, const void *b_, size_t size);
 void  *memcpy(void *dest, const void *src, size_t n);
 void  *memset(void *dst, int val, size_t size);
 char  *strcpy(char *dest, const char *src);
 size_t strlen(const char *str);
+char *strcat(char *dest, const char *src);
+char *strchrnul(const char *s, int c);
+int strncmp(const char *s1, const char *s2, size_t n);
+char *strchr(const char *s, int c);
+int strcmp(const char *s1, const char *s2) ;
+char *strcpy(char *dest, const char *src);
+int isspace(int c);
+char *strtok(char *str, const char *delim) ;
+int64_t strtol(const char *str, char **endptr, int base);
+char *strdup(const char *str) ;
+char *pathacat(char *p1, char *p2);
+int fls(unsigned int x) ;
+int isdigit(int c);
+char *strrchr(const char *s, int c) ;
+char *strncpy(char *dest, const char *src, size_t n) ;
 
 typedef struct num_fmt_type
 {
