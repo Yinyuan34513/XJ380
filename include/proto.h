@@ -23,7 +23,7 @@ void write_serial_dec(unsigned long long dec);
 void write_serial_hex(unsigned long long hex);
 void write_serial_fmt(const char *fmt, ...);
 void write_serial_fmt_heapless(const char *fmt, ...);
-void sprintf(char*str,const char *fmt, ...);
+int sprintf(char *buf, const char *fmt, ...);
 /*
  *
  *  kernel/

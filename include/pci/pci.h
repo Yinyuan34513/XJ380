@@ -42,7 +42,7 @@ typedef struct {
     void (*write)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5,
                   uint32_t value);
 } pci_device_op_t;
-
+#define EXPORT_BYTE(target, first) ((first) ? ((target) & ~0xFF00) : (((target) & ~0x00FF) >> 8))
 typedef struct {
     const char *name;
     uint32_t    class_code;
@@ -50,6 +50,7 @@ typedef struct {
 
     uint16_t             vendor_id;
     uint16_t             device_id;
+    uint8_t              revision_id;
     uint16_t             segment;
     uint8_t              bus;
     uint8_t              slot;

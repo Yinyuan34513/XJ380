@@ -7,6 +7,12 @@
 #include <pci/pci.h>
 #include <proto.h>
 #include <ahci/ahci.h>
+#include <fs/partition.h>
+#include <fs/vfs/sys.h>
+#include <fs/vfs/vfs.h>
+#include <fs/fatfs/fatfs.h>
+#include <fs/fs_syscall.h>
+#include <fs/vfs/dev.h>
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -62,6 +68,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_init();
+    vfs_init();
+    dev_init();
+    partition_init();
+    sysfs_init();
+    fs_syscall_init();
+    fatfs_init();
+
+    mount_root();
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);
@@ -82,6 +96,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pcb_t ugp = create_process_group("User Group", NULL, NULL);
     create_user_thread((void *)test_task2, NULL, "test_task2", ugp);
+
 
     open_interrupt;
     no_interrupt = false;

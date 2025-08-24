@@ -625,28 +625,264 @@ void write_serial_fmt(const char *fmt, ...)
     open_interrupt;
 }
 
-void sprintf(char*str,const char *fmt, ...)
+// 更完整的vsprintf实现
+int vsprintf(char *buf, const char *fmt, va_list args)
 {
-        close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
-    formatter_t formatter;
-    char        fmt_buff[2048] = {};
-    formatter.buf              = fmt_buff;
-    formatter.state            = FMT_START;
-    formatter.fmt              = &fmt;
-    formatter.buf_size         = 2048;
-    formatter.type             = HEAP;
-    va_start(formatter.args, fmt);
-    while (formatter.state != FMT_FINISHED)
+    char       *str = buf;
+    const char *s;
+    int         i;
+    unsigned    u;
+
+    for (; *fmt; fmt++)
     {
-        vsprintfmtr(&formatter);
+        if (*fmt != '%')
         {
-            const char *str = formatter.buf;
+            *str++ = *fmt;
+            continue;
+        }
+
+        fmt++; // 跳过 '%'
+
+        // 处理格式标志
+        num_fmt_type flags = {0};
+        while (*fmt == '-' || *fmt == '+' || *fmt == ' ' || *fmt == '#' || *fmt == '0')
+        {
+            switch (*fmt)
+            {
+            case '-': flags.left = true; break;
+            case '+': flags.plus = true; break;
+            case ' ': flags.space = true; break;
+            case '#': flags.special = true; break;
+            case '0': flags.zeropad = true; break;
+            }
+            fmt++;
+        }
+
+        // 处理字段宽度
+        int field_width = 0;
+        if (*fmt >= '0' && *fmt <= '9') { field_width = skip_atoi(&fmt); }
+        else if (*fmt == '*')
+        {
+            field_width = va_arg(args, int);
+            fmt++;
+        }
+
+        // 处理精度
+        int precision = -1;
+        if (*fmt == '.')
+        {
+            fmt++;
+            if (*fmt >= '0' && *fmt <= '9') { precision = skip_atoi(&fmt); }
+            else if (*fmt == '*')
+            {
+                precision = va_arg(args, int);
+                fmt++;
+            }
+        }
+
+        // 处理长度修饰符
+        int is_long = 0;
+        if (*fmt == 'l')
+        {
+            is_long = 1;
+            fmt++;
+        }
+        else if (*fmt == 'L')
+        {
+            is_long = 2;
+            fmt++;
+        }
+
+        // 处理转换说明符
+        switch (*fmt)
+        {
+        case 'c': *str++ = (char)va_arg(args, int); break;
+
+        case 's': {
+            s = va_arg(args, char *);
+            if (!s) s = "(null)";
+
+            // 计算字符串长度
+            size_t len = strlen(s);
+            if (precision >= 0 && len > (size_t)precision) { len = precision; }
+
+            // 处理字段宽度（右对齐）
+            if (!flags.left && field_width > len)
+            {
+                while (field_width-- > len)
+                {
+                    *str++ = ' ';
+                }
+            }
+
+            // 复制字符串
+            for (size_t i = 0; i < len; i++)
+            {
+                *str++ = *s++;
+            }
+
+            // 处理字段宽度（左对齐）
+            if (flags.left && field_width > len)
+            {
+                while (field_width-- > len)
+                {
+                    *str++ = ' ';
+                }
+            }
+            break;
+        }
+
+        case 'd':
+        case 'i': {
+            // 获取有符号整数
+            if (is_long == 1) { i = va_arg(args, long); }
+            else if (is_long == 2) { i = va_arg(args, long long); }
+            else { i = va_arg(args, int); }
+
+            // 处理符号
+            if (i < 0)
+            {
+                *str++ = '-';
+                i      = -i;
+            }
+            else if (flags.plus) { *str++ = '+'; }
+            else if (flags.space) { *str++ = ' '; }
+
+            // 转换数字
+            char  num_buf[32];
+            char *num_ptr = num_buf;
+
+            // 特殊情况：数字0
+            if (i == 0) { *num_ptr++ = '0'; }
+            else
+            {
+                // 将数字转换为字符串（逆序）
+                while (i > 0)
+                {
+                    *num_ptr++  = '0' + (i % 10);
+                    i          /= 10;
+                }
+            }
+
+            // 计算数字长度
+            int num_len = num_ptr - num_buf;
+
+            // 处理精度
+            int zeros_to_add = 0;
+            if (precision > num_len) { zeros_to_add = precision - num_len; }
+
+            // 处理字段宽度（右对齐，带前导零）
+            if (!flags.left && flags.zeropad && field_width > num_len + zeros_to_add)
+            {
+                while (field_width-- > num_len + zeros_to_add)
+                {
+                    *str++ = '0';
+                }
+            }
+
+            // 添加前导零
+            while (zeros_to_add-- > 0)
+            {
+                *str++ = '0';
+            }
+
+            // 写入数字（逆序反转）
+            while (num_ptr > num_buf)
+            {
+                *str++ = *(--num_ptr);
+            }
+
+            // 处理字段宽度（左对齐）
+            if (flags.left && field_width > num_len + zeros_to_add)
+            {
+                while (field_width-- > num_len + zeros_to_add)
+                {
+                    *str++ = ' ';
+                }
+            }
+            break;
+        }
+
+        case 'u': {
+            // 获取无符号整数
+            if (is_long == 1) { u = va_arg(args, unsigned long); }
+            else if (is_long == 2) { u = va_arg(args, unsigned long long); }
+            else { u = va_arg(args, unsigned int); }
+
+            // 转换数字
+            char  unum_buf[32];
+            char *unum_ptr = unum_buf;
+
+            // 特殊情况：数字0
+            if (u == 0) { *unum_ptr++ = '0'; }
+            else
+            {
+                // 将数字转换为字符串（逆序）
+                while (u > 0)
+                {
+                    *unum_ptr++  = '0' + (u % 10);
+                    u           /= 10;
+                }
+            }
+
+            // 计算数字长度
+            int unum_len = unum_ptr - unum_buf;
+
+            // 处理精度
+            int uzeros_to_add = 0;
+            if (precision > unum_len) { uzeros_to_add = precision - unum_len; }
+
+            // 处理字段宽度（右对齐，带前导零）
+            if (!flags.left && flags.zeropad && field_width > unum_len + uzeros_to_add)
+            {
+                while (field_width-- > unum_len + uzeros_to_add)
+                {
+                    *str++ = '0';
+                }
+            }
+
+            // 添加前导零
+            while (uzeros_to_add-- > 0)
+            {
+                *str++ = '0';
+            }
+
+            // 写入数字（逆序反转）
+            while (unum_ptr > unum_buf)
+            {
+                *str++ = *(--unum_ptr);
+            }
+
+            // 处理字段宽度（左对齐）
+            if (flags.left && field_width > unum_len + uzeros_to_add)
+            {
+                while (field_width-- > unum_len + uzeros_to_add)
+                {
+                    *str++ = ' ';
+                }
+            }
+            break;
+        }
+
+        case '%': *str++ = '%'; break;
+
+        default:
+            *str++ = '%';
+            *str++ = *fmt;
+            break;
         }
     }
-    va_end(formatter.args);
-    spin_unlock(fmt_lock);
-    open_interrupt;
+
+    *str = '\0';
+    return str - buf;
+}
+int sprintf(char *buf, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int result = vsprintf(buf, fmt, args);
+    va_end(args);
+    return result;
 }
 
 /**

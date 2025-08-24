@@ -77,7 +77,6 @@ static inline void empty() {};
 #define LONG_MAX __LONG_MAX__
 #undef LONG_MIN
 #define LONG_MIN (-LONG_MAX - 1L)
-
 #undef ULONG_MAX
 #define ULONG_MAX (LONG_MAX * 2UL + 1UL)
 int    memcmp(const void *a_, const void *b_, size_t size);
@@ -100,6 +99,7 @@ int fls(unsigned int x) ;
 int isdigit(int c);
 char *strrchr(const char *s, int c) ;
 char *strncpy(char *dest, const char *src, size_t n) ;
+char *strstr(const char *str1, const char *str2);
 
 typedef struct num_fmt_type
 {

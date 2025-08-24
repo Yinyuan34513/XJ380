@@ -294,6 +294,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     uint16_t device_id = *(uint16_t *)(id_mmio_addr + 2);
 
     uint64_t field_mmio_addr  = get_mmio_address(pci_address, 0x08);
+    uint8_t  device_revision = EXPORT_BYTE(*(uint8_t *)field_mmio_addr, true);
     uint8_t  device_class     = *((uint8_t *)field_mmio_addr + 3);
     uint8_t  device_subclass  = *((uint8_t *)field_mmio_addr + 2);
     uint8_t  device_interface = *((uint8_t *)field_mmio_addr + 1);
@@ -310,6 +311,8 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     pci_device->bus     = bus;
     pci_device->slot    = device;
     pci_device->func    = function;
+    
+    pci_device->revision_id = device_revision;
 
     switch (header_type) {
     // Endpoint

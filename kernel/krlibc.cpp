@@ -1,5 +1,5 @@
-#include <krlibc.h>
 #include "proto.h"
+#include <krlibc.h>
 
 int memcmp(const void *a_, const void *b_, size_t size)
 {
@@ -125,8 +125,8 @@ int atoi(const char *pstr)
     return ret_integer;
 }
 
-
-char *strcat(char *dest, const char *src) {
+char *strcat(char *dest, const char *src)
+{
     char *ret = dest;
     while (*dest)
         dest++;
@@ -135,16 +135,20 @@ char *strcat(char *dest, const char *src) {
     return ret;
 }
 
-char *strchrnul(const char *s, int c) {
-    while (*s) {
+char *strchrnul(const char *s, int c)
+{
+    while (*s)
+    {
         if ((*s++) == c) break;
     }
     return (char *)s;
 }
 
-int strncmp(const char *s1, const char *s2, size_t n) {
+int strncmp(const char *s1, const char *s2, size_t n)
+{
     const unsigned char *p1 = (const unsigned char *)s1, *p2 = (const unsigned char *)s2;
-    while (n-- > 0) {
+    while (n-- > 0)
+    {
         if (*p1 != *p2) return *p1 - *p2;
         if (*p1 == '\0') return 0;
         p1++, p2++;
@@ -152,95 +156,120 @@ int strncmp(const char *s1, const char *s2, size_t n) {
     return 0;
 }
 
-char *strchr(const char *s, int c) {
-    while (*s) {
+char *strchr(const char *s, int c)
+{
+    while (*s)
+    {
         if (*s == (char)c) { return (char *)s; }
         s++;
     }
     return (*s == (char)c) ? (char *)s : NULL;
 }
 
+char *strstr(const char *str1, const char *str2)
+{
+    const char *s1, *s2, *p = str1;
+    while (*p != '\0')
+    {
+        s1 = p;
+        s2 = str2;
+        while (*s1 != '\0' && *s2 != '\0' && *s1 == *s2)
+        {
+            s1++;
+            s2++;
+        }
+        if (*s2 == '\0') { return (char *)p; }
+        p++;
+    }
+    return NULL;
+}
 
-int strcmp(const char *s1, const char *s2) {
+int strcmp(const char *s1, const char *s2)
+{
     char is_equal = 1;
 
-    for (; (*s1 != '\0') && (*s2 != '\0'); s1++, s2++) {
-        if (*s1 != *s2) {
+    for (; (*s1 != '\0') && (*s2 != '\0'); s1++, s2++)
+    {
+        if (*s1 != *s2)
+        {
             is_equal = 0;
             break;
         }
     }
 
-    if (is_equal) {
-        if (*s1 != '\0') {
-            return 1;
-        } else if (*s2 != '\0') {
-            return -1;
-        } else {
-            return 0;
-        }
-    } else {
-        return (int)(*s1 - *s2);
+    if (is_equal)
+    {
+        if (*s1 != '\0') { return 1; }
+        else if (*s2 != '\0') { return -1; }
+        else { return 0; }
     }
+    else { return (int)(*s1 - *s2); }
 }
 
-int isspace(int c) {
+int isspace(int c)
+{
     return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
 }
 
-char *strtok(char *str, const char *delim) {
+char *strtok(char *str, const char *delim)
+{
     static char *last = NULL;
-    if (str) {
-        last = str;
-    } else if (!last) {
-        return NULL;
-    }
+    if (str) { last = str; }
+    else if (!last) { return NULL; }
 
     char *start = last;
-    while (*start && strchr(delim, *start)) {
+    while (*start && strchr(delim, *start))
+    {
         start++;
     }
 
-    if (*start == '\0') {
+    if (*start == '\0')
+    {
         last = NULL;
         return NULL;
     }
 
     char *end = start;
-    while (*end && !strchr(delim, *end)) {
+    while (*end && !strchr(delim, *end))
+    {
         end++;
     }
 
-    if (*end) {
+    if (*end)
+    {
         *end = '\0';
         last = end + 1;
-    } else {
-        last = NULL;
     }
+    else { last = NULL; }
 
     return start;
 }
 
-int64_t strtol(const char *str, char **endptr, int base) {
+int64_t strtol(const char *str, char **endptr, int base)
+{
     const char *s;
     uint64_t    acc;
     char        c;
     uint64_t    cutoff;
     uint64_t    neg, any, cutlim;
     s = str;
-    do {
+    do
+    {
         c = *s++;
     } while (isspace((unsigned char)c));
-    if (c == '-') {
+    if (c == '-')
+    {
         neg = 1;
         c   = *s++;
-    } else {
+    }
+    else
+    {
         neg = 0;
         if (c == '+') c = *s++;
     }
     if ((base == 0 || base == 16) && c == '0' && (*s == 'x' || *s == 'X') &&
-        ((s[1] >= '0' && s[1] <= '9') || (s[1] >= 'A' && s[1] <= 'F') ||
-         (s[1] >= 'a' && s[1] <= 'f'))) {
+        ((s[1] >= '0' && s[1] <= '9') || (s[1] >= 'A' && s[1] <= 'F') || (s[1] >= 'a' && s[1] <= 'f')))
+    {
         c     = s[1];
         s    += 2;
         base  = 16;
@@ -252,7 +281,8 @@ int64_t strtol(const char *str, char **endptr, int base) {
     cutoff  = neg ? (unsigned long)-(LONG_MIN + LONG_MAX) + LONG_MAX : LONG_MAX;
     cutlim  = cutoff % base;
     cutoff /= base;
-    for (;; c = *s++) {
+    for (;; c = *s++)
+    {
         if (c >= '0' && c <= '9')
             c -= '0';
         else if (c >= 'A' && c <= 'Z')
@@ -264,23 +294,27 @@ int64_t strtol(const char *str, char **endptr, int base) {
         if (c >= base) break;
         if (any < 0 || acc > cutoff || (acc == cutoff && ((uint64_t)c) > cutlim))
             any = -1;
-        else {
+        else
+        {
             any  = 1;
             acc *= base;
             acc += c;
         }
     }
-    if (any < 0) {
-        acc = neg ? LONG_MIN : LONG_MAX;
-    } else if (!any) {
-    noconv: {}
-    } else if (neg)
+    if (any < 0) { acc = neg ? LONG_MIN : LONG_MAX; }
+    else if (!any)
+    {
+    noconv: {
+    }
+    }
+    else if (neg)
         acc = -acc;
     if (endptr != NULL) *endptr = (char *)(any ? s - 1 : str);
     return (acc);
 }
 
-char *strdup(const char *str) {
+char *strdup(const char *str)
+{
     if (str == NULL) return NULL;
 
     char *strat = (char *)str;
@@ -294,42 +328,47 @@ char *strdup(const char *str) {
     return ret - (len + 1);
 }
 
-char *strncpy(char *dest, const char *src, size_t n) {
+char *strncpy(char *dest, const char *src, size_t n)
+{
     size_t i;
-    for (i = 0; i < n && src[i] != '\0'; i++) {
+    for (i = 0; i < n && src[i] != '\0'; i++)
+    {
         dest[i] = src[i];
     }
-    for (; i < n; i++) {
+    for (; i < n; i++)
+    {
         dest[i] = '\0';
     }
     return dest;
 }
 
-char *strrchr(const char *s, int c) {
+char *strrchr(const char *s, int c)
+{
     char *last = NULL;
-    while (*s) {
+    while (*s)
+    {
         if (*s == (char)c) { last = (char *)s; }
         s++;
     }
     return (c == '\0') ? (char *)s : last;
 }
 
-int isdigit(int c) {
+int isdigit(int c)
+{
     return (c >= '0' && c <= '9');
 }
 
-int fls(unsigned int x) {
+int fls(unsigned int x)
+{
     if (x == 0) return 0;
     return 32 - __builtin_clz(x);
 }
 
-char *pathacat(char *p1, char *p2) {
+char *pathacat(char *p1, char *p2)
+{
     char *p = (char *)malloc(strlen(p1) + strlen(p2) + 2);
-    if (p1[strlen(p1) - 1] == '/') {
-        sprintf(p, "%s%s", p1, p2);
-    } else {
-        sprintf(p, "%s/%s", p1, p2);
-    }
+    if (p1[strlen(p1) - 1] == '/') { sprintf(p, "%s%s", p1, p2); }
+    else { sprintf(p, "%s/%s", p1, p2); }
     return p;
 }
 /**

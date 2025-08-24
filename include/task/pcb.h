@@ -8,6 +8,7 @@
 #include "mm/page.h"
 #include "stdint.h"
 
+
 typedef struct registers
 {
     uint64_t ds;
@@ -85,7 +86,8 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 };
-
+struct vfs_node;
+typedef struct vfs_node *vfs_node_t;
 struct thread_control_block
 {
     pcb_t       parent_group;   // 父进程
@@ -101,6 +103,8 @@ struct thread_control_block
     uint64_t    main;           // 线程入口地址
     uint64_t    user_stack;     // 用户栈
     uint64_t    user_stack_top; // 用户栈顶部地址
+    vfs_node_t cwd;
+    vfs_node_t fds[256];
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
