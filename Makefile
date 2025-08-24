@@ -1,8 +1,8 @@
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
-ASM_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387 -mno-mmx -mno-sse -mno-sse2
-C_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -mno-mmx -mno-sse -mno-sse2 -I./include 
-CPP_FLAGS = -O0 -g3 -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=c++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -mno-mmx -mno-sse -mno-sse2 -Wpedantic -I./include 
-BOOT_C_FLAGS = -g3 -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
+ASM_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
+C_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include 
+CPP_FLAGS = -O0 -g -mno-red-zone -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include
+BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 0
 SMP ?= 4
@@ -28,10 +28,10 @@ QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -no-reboot -d cpu_reset -M q35 -bios O
 COMPILER_PREFIX ?= 
 
 # FILES
-NASM_FILES := $(shell find ./kernel ./driver -name "*.asm")
-ASM_FILES := $(shell find ./kernel ./driver -name "*.S")
-C_FILES := $(shell find ./kernel ./driver -name "*.c")
-CPP_FILES := $(shell find ./kernel ./driver -name "*.cpp")
+NASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.asm")
+ASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.S")
+C_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.c")
+CPP_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.cpp")
 HEADER_FILES := $(shell find ./include -name "*.h" -o -name "*.hpp")
 
 export CC = $(COMPILER_PREFIX)clang
@@ -63,12 +63,12 @@ $(BUILD_DIR)/%.o: %.S
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(@D)
-	@$(CC) -fno-pic -fno-pie -mcmodel=kernel $(C_FLAGS) -c $< -o $@
+	@$(CC) -fno-pic -fno-pie -mcmodel=large $(C_FLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
 $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
-	@$(CPP) -fno-pic -fno-pie -mcmodel=kernel  $(CPP_FLAGS) -c $< -o $@
+	@$(CPP) -fno-pic -fno-pie -mcmodel=large  $(CPP_FLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 %.fmt: %
@@ -100,7 +100,9 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c boot/bootlib.c
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o")
+	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
+
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
 
 .PHONY: clean format check gen.clangd
 clean:
@@ -133,6 +135,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
 	@cp -a ./1.txt $(BUILD_DIR)/XJ380/
+	@cp -a ./font/ttf/XJ380.ttf $(BUILD_DIR)/XJ380/
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

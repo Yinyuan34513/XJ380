@@ -4,6 +4,7 @@
 #include "graphics/xj380_logo_rect_72x64px.hpp"
 #include "graphics/xingji_logo_16px.hpp"
 #include <global_color.h>
+#include <ttf.h>
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id)

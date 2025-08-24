@@ -36,7 +36,7 @@ class RGBRWriter : public PixelWriter
 public:
     using PixelWriter::PixelWriter; // 继承构造函数
 
-    void Write(int x, int y, const PixelColor &c) override
+    virtual void Write(int x, int y, const PixelColor &c) override
     {
         auto p = PixelAt(x, y);
         p[0] = c.r;
@@ -50,7 +50,7 @@ class BGRRWriter : public PixelWriter
 public:
     using PixelWriter::PixelWriter; // 继承构造函数
 
-    void Write(int x, int y, const PixelColor &c) override
+    virtual void Write(int x, int y, const PixelColor &c) override
     {
         auto p = PixelAt(x, y);
         p[0] = c.b;

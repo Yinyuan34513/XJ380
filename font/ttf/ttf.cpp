@@ -1,5 +1,5 @@
 #define STB_TRUETYPE_IMPLEMENTATION
-#include <math.h>
+#include <math.hpp>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
 #include "./stb_ttf.h"
@@ -218,7 +218,7 @@ void init_ttf()
 	if (!v)
 	{
 		write_serial_string("Cannot find XJ380F.ttf\n");
-		wsod_cannot_load_ttf();
+		// wsod_cannot_load_ttf();
 		return;
 	}
 	ttf_buffer = (char *)malloc(v->size);
@@ -232,7 +232,7 @@ void init_ttf()
 		if (!v)
 		{
 			write_serial_string("Cannot find XJ380F.ttf\n");
-			wsod_cannot_load_ttf();
+			// wsod_cannot_load_ttf();
 			return;
 		}
 		ttf_buffer = (char *)malloc(v->size);
@@ -240,7 +240,7 @@ void init_ttf()
 		if (*(uint64_t *)ttf_buffer == 0)
 		{
 			write_serial_string("Cannot read XJ380F.ttf\n");
-			wsod_cannot_load_ttf();
+			// wsod_cannot_load_ttf();
 			return;
 		}
 	}

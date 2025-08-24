@@ -33,8 +33,6 @@ static inline char *pathtok(char **sp)
     *e = '\0';
     return s;
 }
-
-#define max(x, y) ((x > y) ? (x) : (y))
 // * 所有时间请使用 GMT 时间 *
 
 // 读写时请 padding 到 PAGE_SIZE 的整数倍

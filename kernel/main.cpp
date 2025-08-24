@@ -19,6 +19,8 @@
 #include <rtc.h>
 #include <font.h>
 #include <ttf.h>
+SHEET_INFO *sht_img;
+XWM_INFO *xwmii;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -40,6 +42,8 @@ void desktop_flusher()
     UINT16 mouse_sheet_id = 1145;
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
+
+    sht_img = &shtinf;
 
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
@@ -111,6 +115,13 @@ void desktop_flusher()
 
     print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
 
+    XWM_INFO xwmi;
+    WINDOWLS *test_win;
+    WINDOWLS *test_win2;
+    init_xwm(&xwmi);
+    xwmii = &xwmi;
+    create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
+    create_window(&xwmi, &shtinf, &test_win2, "窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
     

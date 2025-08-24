@@ -10,6 +10,8 @@
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <stdint.h>
+extern SHEET_INFO *sht_img;
+extern XWM_INFO *xwmii;
 
 #define close_interrupt __asm__ volatile("cli" ::: "memory")
 #define open_interrupt  __asm__ volatile("sti" ::: "memory")
@@ -64,6 +66,7 @@ auto operator new(size_t size, void *ptr) -> void *;
 auto operator new[](size_t size, void *ptr) -> void *;
 auto operator delete(void *ptr, size_t size) -> void;
 auto operator delete[](void *ptr, size_t size) -> void;
+auto operator delete(void *ptr) -> void;
 void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor &c);
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
 

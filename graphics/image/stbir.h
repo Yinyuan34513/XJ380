@@ -384,7 +384,7 @@ STBIRDEF int stbir_resize_subpixel(const void *input_pixels , int input_w , int 
 
 #include <proto.hpp>
 #include <krlibc.h>
-#include <math.h>
+#include <math.hpp>
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #ifdef STB_IMAGE_RESIZE_IMPLEMENTATION

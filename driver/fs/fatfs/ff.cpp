@@ -8162,7 +8162,7 @@ int f_puts(const TCHAR *str, /* Pointer to the string to be output */
 /* Put a Formatted String to the File (with sub-functions)               */
 /*-----------------------------------------------------------------------*/
 #if FF_PRINT_FLOAT && FF_INTDEF == 2
-#include <math.h>
+#include <math.hpp>
 
 static int ilog10(double n) /* Calculate log10(n) in integer output */
 {

@@ -4,7 +4,10 @@
  *      Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.
  *
  */
-#include "../../include/include.h"
+#include<proto.hpp>
+#include <graphics/window/window.h>
+#include <ttf.h>
+#include <global_color.h>
 #include "./wbuttons.h"
 
 #define WINDOW_ALPHA_VALUE  0xaa
@@ -34,7 +37,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     WindowIsCreating = true;
 
     WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
-    xmemset(new_window, 0, sizeof(WINDOWLS));
+    memset(new_window, 0, sizeof(WINDOWLS));
 
     WINDOWLS *front_p = xwmi->start;
     if (front_p == NULL)
@@ -198,7 +201,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
             else
                 xwmi->start = front_p->next;
             delete_sheet(sht, &(windowls->w_sheet));
-            xmemset(windowls, 0, sizeof(SHEET));
+            memset(windowls, 0, sizeof(SHEET));
             free((void *)(windowls));
             // xwmi->win_num--;
             refresh_part_sheet(sht_img, bx, by, ex, ey);

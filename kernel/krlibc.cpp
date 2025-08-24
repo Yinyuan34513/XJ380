@@ -1,4 +1,10 @@
 #include "proto.hpp"
+#include <mm/bitmap.h>
+#include <mm/frame.h>
+#include <mm/heap.h>
+#include <mm/hhdm.h>
+#include <mm/memory.h>
+#include <mm/page.h>
 #include <krlibc.h>
 
 int memcmp(const void *a_, const void *b_, size_t size)
