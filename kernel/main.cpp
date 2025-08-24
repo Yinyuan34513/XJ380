@@ -15,6 +15,10 @@
 #include <fs/vfs/dev.h>
 #include <graphics/sheet.h>
 #include <graphics/GOP.hpp>
+#include <global_color.h>
+#include <rtc.h>
+#include <font.h>
+#include <ttf.h>
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -23,35 +27,116 @@ BOOT_CONFIG             *BC;
 uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
-
-void test_task()
+extern spin_t fb_print_lock;
+void desktop_flusher()
 {
-    uint64_t time = nanoTime();
-    while (true)
+    // init_ttf(*fbc_addr);
+
+    write_serial_string("desktop flusher is running\n");
+
+
+    UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
+    UINT16 dock_sheet_id = 1145;
+    UINT16 mouse_sheet_id = 1145;
+    SHEET_INFO shtinf;
+    init_sheet(*fbc_addr, &shtinf);
+
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
+    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
+
+    init_ttf();
+    init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
+
+    write_serial_string("desktop initialized.\n");
+
+    int fontx = 8;
+    int fonty = 50;
+    // DEBUG
+#if BUILD_EDITION == DEBUG_VERSION
+    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40, "X:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24, "Y:", WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 40, shtinf.scrx, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 24, shtinf.scry, WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
+    // PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
+    PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BC->MemoryMap.MapKey, WHITE);
+    // 别问为什么这么多-40，问就是因为改起来太麻烦
+    PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
+
+    draw_rect(&shtinf, &desktop_sheet_id, 480 - 472, 300, 500 - 473, 319, WHITE);
+    draw_rect(&shtinf, &desktop_sheet_id, 500 - 472, 300, 520 - 473, 319, BLACK);
+    draw_rect(&shtinf, &desktop_sheet_id, 520 - 472, 300, 540 - 473, 319, XINGJI_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 540 - 472, 300, 560 - 473, 319, XINGJI_YELLOW);
+    draw_rect(&shtinf, &desktop_sheet_id, 560 - 472, 300, 580 - 473, 319, WIN_BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 580 - 472, 300, 600 - 473, 319, GRAY);
+    draw_rect(&shtinf, &desktop_sheet_id, 600 - 472, 300, 620 - 473, 319, BGRAY);
+    draw_rect(&shtinf, &desktop_sheet_id, 620 - 472, 300, 640 - 473, 319, PURPLE);
+    draw_rect(&shtinf, &desktop_sheet_id, 640 - 472, 300, 660 - 473, 319, PINK);
+    draw_rect(&shtinf, &desktop_sheet_id, 660 - 472, 300, 680 - 473, 319, RED);
+    draw_rect(&shtinf, &desktop_sheet_id, 680 - 472, 300, 700 - 473, 319, CHINA_RED);
+    draw_rect(&shtinf, &desktop_sheet_id, 700 - 472, 300, 720 - 473, 319, GOLD);
+    draw_rect(&shtinf, &desktop_sheet_id, 720 - 472, 300, 740 - 473, 319, GREEN);
+    draw_rect(&shtinf, &desktop_sheet_id, 740 - 472, 300, 760 - 473, 319, LIGHT_GREEN);
+    draw_rect(&shtinf, &desktop_sheet_id, 760 - 472, 300, 780 - 473, 319, BLUE);
+    draw_rect(&shtinf, &desktop_sheet_id, 780 - 472, 300, 800 - 473, 319, SKY_BLUE);
+
+    PrintString(&shtinf, &desktop_sheet_id, 8, 332, "MemoryMapTypeSheet", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 348, "0x0: Free", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 364, "0xB: EFI Code & Data", WHITE);
+
+    PrintString(&shtinf, &desktop_sheet_id, 8, 400, "SheetManagerTest", WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (UINT64)desktop_sheet_id, WHITE);
+    // PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
+
+    PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (UINT64)shtinf.sheet_num, WHITE);
+
+    PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
+    // PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
+
+    // CPU型号
+    char CPU_Model[48];
+    get_cpu_name(CPU_Model);
+    PrintString(&shtinf, &desktop_sheet_id, 8, 528, "CPU Model:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, 96, 528, CPU_Model, WHITE);
+    write_serial_string("CPU Model: ");
+    write_serial_string(CPU_Model);
+    write_serial_string("\n");
+
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479, fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
+#endif
+    // wsod_debug();
+
+    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
+
+
+    // delete_window(&xwmi, &shtinf, test_win);
+    
+    refresh_sheet(&shtinf); // 刷新
+    // delete_sheet(&shtinf, &dock_sheet_id);
+
+    UINT8 k_input;
+    int tby;
+    int tbx;
+
+    // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((UINT64)(ST->RuntimeServices));
+    // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)RuntimeServices->GetTime);
+    int scdx = fbc_addr->horizontal_resolution * 0.8125;
+    tm time;
+
+    while (1)
     {
-        time = nanoTime();
-        write_serial_fmt("Hello from `test_task` in %llu\n", time);
+        time_read(&time);
+        draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
+        //12 小时制
+        PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.tm_hour + 8) % 24, BLACK);
+        PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
+        PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.tm_min, BLACK);
+        refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
     }
 }
-
-void test_task1()
-{
-    uint64_t time = nanoTime();
-    while (true)
-    {
-        time = nanoTime();
-        write_serial_fmt("Hello from `test_task1` in %llu\n", time);
-    }
-}
-
-void test_task2()
-{
-    while (true)
-    {
-        __asm__ volatile ("hlt");
-    }
-}
-
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     (void)fbc;         // 暂时不用
@@ -79,8 +164,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     mount_root();
 
-    keyboard_init();
-    mouse_init();
 
     vfs_node_t f;
     f=vfs_open("/1.txt");
@@ -102,11 +185,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    create_kernel_thread((void *)test_task, NULL, "test_task", NULL);
-    create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
+    create_kernel_thread((void *)desktop_flusher, NULL, "desktop_flusher", NULL);
+    // create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
 
     pcb_t ugp = create_process_group("User Group", NULL, NULL);
-    create_user_thread((void *)test_task2, NULL, "test_task2", ugp);
+    // create_user_thread((void *)test_task2, NULL, "test_task2", ugp);
 
 
     open_interrupt;

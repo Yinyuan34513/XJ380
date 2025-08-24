@@ -3,6 +3,8 @@
 
 #include <proto.hpp>
 #include <efi/fbc.h>
+#include <graphics/window/window.h>
+#include <graphics/GOP.hpp>
 enum SystemSheetType
 {
     FixedSheetType,

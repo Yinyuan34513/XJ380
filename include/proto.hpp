@@ -4,10 +4,12 @@
 #define KERNEL_STACK_SIZE 32768  // 任务内核栈地址
 #define BIG_USER_STACK    999424 // 用户栈大小，要对齐到页
 
-#include <stdint.h>
+#include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
 #include <graphics/window/window.h>
-#include <graphics/GOP.hpp>
+#include <ps2/keyboard.h>
+#include <ps2/mouse.h>
+#include <stdint.h>
 
 #define close_interrupt __asm__ volatile("cli" ::: "memory")
 #define open_interrupt  __asm__ volatile("sti" ::: "memory")
@@ -16,8 +18,46 @@
  *   graphics
  */
 
+/*
+ *
+ *  driver/serial/
+ * 
+ */
 
- extern const FrameBufferConfig *fbc_addr;
+// driver/serial/serial_port.cpp
+int  init_serial();
+void write_serial(char a);
+void write_serial_string(const char *str);
+void write_serial_dec(unsigned long long dec);
+void write_serial_hex(unsigned long long hex);
+void write_serial_fmt(const char *fmt, ...);
+void write_serial_fmt_heapless(const char *fmt, ...);
+int  sprintf(char *buf, const char *fmt, ...);
+/*
+ *
+ *  kernel/
+ * 
+ */
+
+// kernel/wsod.cpp
+#ifdef __cplusplus
+extern "C" {
+#endif
+void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code);
+void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code);
+void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code);
+void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code);
+void wsod_debug(struct X64_REGS *regs, uint64_t error_code);
+void wsod_nmi(struct X64_REGS *regs, uint64_t error_code);
+void wsod_double_fault(struct X64_REGS *regs, uint64_t error_code);
+void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code);
+void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code);
+void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code);
+void default_isr(struct X64_REGS *regs, uint64_t error_code);
+
+#ifdef __cplusplus
+}
+#endif
 
 // graphics/draw.cpp
 auto operator new(size_t size, void *ptr) -> void *;
@@ -40,107 +80,45 @@ void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi);
 
 // graphics/sheet.cpp
-void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
-void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id);
-UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
-UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
+void    init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
+void    create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index,
+                     UINT16 *sheet_id);
+UINT32  getBX(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32  getBY(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32  getXsize(SHEET_INFO *sht, UINT16 *sheet_id);
+UINT32  getYsize(SHEET_INFO *sht, UINT16 *sheet_id);
 UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y);
 UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y);
-SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
-void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
-void refresh_sheet(SHEET_INFO *sht);
-void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
-UINT32 get_hor();
-UINT32 get_ver();
+SHEET  *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void    setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void    setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num);
+void    lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void    delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id);
+void    refresh_sheet(SHEET_INFO *sht);
+void    refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
+UINT32  get_hor();
+UINT32  get_ver();
 
 // graphics/window/windowm.cpp
 void init_xwm(XWM_INFO *xwmi);
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, UINT32 width, UINT32 height);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
-void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title,int x,int y,int size,SHEET_BUFFER color);
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
+               SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
-WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
-/*
- *   font
- */
+WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 
-// font/ttf/ttf.cpp
-void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc, unsigned x, unsigned y, int size);
-void init_ttf();
+// lib/utflib.c
+typedef int32_t Rune;
+#define UTFmax    6            /* maximum bytes per rune */
+#define Runeerror ((Rune) - 1) /* decoding error in utf */
+int    charntorune(Rune *, const char *, size_t);
+int    chartorune(Rune *, const char *);
+size_t utflen(const char *);
+size_t utfnlen(const char *, size_t);
 
-// font/font.cpp
-void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c);
-void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec, const PixelColor &c);
-void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, const PixelColor &c);
-void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c);
-void PrintFont(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char ch, const SHEET_BUFFER &color);
-void PrintString(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color);
-void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color);
-void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color);
-
-
-// driver/ps2/keyboard.cpp
-extern struct keyboard_buf kb_fifo;
-extern UINT8 keyboard_code[256];
-extern UINT8 keyboard_code1[256];
-void keyboard_init();
-UINT8 get_keyboard_input();
-
-// driver/ps2/mouse.cpp
-void mouse_init();
-UINT8 get_Mouse_output();
-bool mousedecode(UINT8 data);
-int get_mouse_x();
-int get_mouse_y();
-void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
-void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
-
-/*
- *
- *  driver/serial/
- * 
- */
-
-// driver/serial/serial_port.cpp
-int  init_serial();
-void write_serial(char a);
-void write_serial_string(const char *str);
-void write_serial_dec(unsigned long long dec);
-void write_serial_hex(unsigned long long hex);
-void write_serial_fmt(const char *fmt, ...);
-void write_serial_fmt_heapless(const char *fmt, ...);
-int sprintf(char *buf, const char *fmt, ...);
-/*
- *
- *  kernel/
- * 
- */
-
-// kernel/wsod.cpp
-#ifdef __cplusplus
-extern "C" {
-#endif
-void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code);
-void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code);
-void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code);
-void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code);
-void wsod_debug(struct X64_REGS *regs, uint64_t error_code);
-void wsod_nmi(struct X64_REGS *regs, uint64_t error_code);
-void wsod_double_fault(struct X64_REGS *regs, uint64_t error_code);
-void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code);
-void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code);
-void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code);
-void default_isr(struct X64_REGS *regs, uint64_t error_code);
-#ifdef __cplusplus
-}
-#endif
-
+extern const unsigned char utftab[64];
 /*
  *
  *  kernel/cpu/
@@ -233,7 +211,7 @@ void init_heap();
 void     init_frame(MEMORY_MAP map);
 void     free_frame(uint64_t addr);
 uint64_t alloc_frames(size_t count);
-void free_frames(uint64_t addr, uint64_t size);
+void     free_frames(uint64_t addr, uint64_t size);
 
 // kernel/memory/hhdm.cpp
 void     init_hhdm();
@@ -261,5 +239,14 @@ void set_kernel_stack(uint64_t rsp);
 
 void                   send_eoi();
 struct PROCESSOR_INFO *get_current_cpu();
+
+extern const FrameBufferConfig *fbc_addr;
+
+/*
+ *   font
+ */
+
+
+
 
 #endif
