@@ -1,5 +1,5 @@
 #include "cpu/fsgsbase.h"
-#include "proto.h"
+#include "proto.hpp"
 
 uint64_t (*read_fsbase)()            = read_fsbase_msr;
 void (*write_fsbase)(uint64_t value) = write_fsbase_msr;

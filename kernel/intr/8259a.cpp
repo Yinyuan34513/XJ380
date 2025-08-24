@@ -1,4 +1,4 @@
-#include <proto.h>
+#include <proto.hpp>
 
 #define INT_M_CTL       0x20
 #define INT_M_CTLMASK   0x21

@@ -2,7 +2,7 @@
 #include "mm/alloc/alloc.h"
 #include "stdarg.h"
 #include <cpu/lock.h>
-#include <proto.h>
+#include <proto.hpp>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt

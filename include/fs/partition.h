@@ -1,6 +1,6 @@
 #pragma once
 
-#include "proto.h"
+#include "proto.hpp"
 #include <fs/vfs/vfs.h>
 
 #define MAX_PARTITIONS_NUM 128

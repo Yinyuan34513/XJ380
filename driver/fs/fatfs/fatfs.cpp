@@ -1,7 +1,7 @@
 // This code is released under the MIT License
 
 #include "fs/fatfs/ff.h"
-#include "proto.h"
+#include "proto.hpp"
 #include "errno.h"
 
 static FATFS volume[10];

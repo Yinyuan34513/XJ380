@@ -1,6 +1,6 @@
 #include "fs/vfs/dev.h"
 #include <fs/fs_syscall.h>
-#include "proto.h"
+#include "proto.hpp"
 #include <task/pcb.h>
 #include <errno.h>
 #include "rtc.h"

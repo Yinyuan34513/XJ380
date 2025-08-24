@@ -5,7 +5,7 @@
 #include <efi/efi.h>
 #include <efi/fbc.h>
 #include <pci/pci.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <ahci/ahci.h>
 #include <fs/partition.h>
 #include <fs/vfs/sys.h>
@@ -13,6 +13,8 @@
 #include <fs/fatfs/fatfs.h>
 #include <fs/fs_syscall.h>
 #include <fs/vfs/dev.h>
+#include <graphics/sheet.h>
+#include <graphics/GOP.hpp>
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -76,6 +78,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     fatfs_init();
 
     mount_root();
+
+    keyboard_init();
+    mouse_init();
+
+    vfs_node_t f;
+    f=vfs_open("/1.txt");
+    char buf[1024];
+    if(vfs_read(f,buf,0,f->size)==-1)write_serial_fmt("read failed\n");
+    write_serial_fmt("read file: %s\n",buf);
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);

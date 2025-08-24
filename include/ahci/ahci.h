@@ -1,6 +1,6 @@
 #pragma once
 
-#include <proto.h>
+#include <proto.hpp>
 #include "hba.h"
 #include "scsi.h"
 

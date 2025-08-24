@@ -1,5 +1,5 @@
 #pragma once
-#include <proto.h>
+#include <proto.hpp>
 
 #pragma GCC system_header
 

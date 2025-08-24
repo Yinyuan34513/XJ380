@@ -19,7 +19,7 @@
 #define DAY    (24 * HOUR)
 #define YEAR   (365 * DAY)
 
-#include "proto.h"
+#include "proto.hpp"
 
 typedef struct timer {
     uint64_t old_time;

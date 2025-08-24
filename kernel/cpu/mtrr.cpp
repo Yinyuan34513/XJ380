@@ -1,5 +1,5 @@
 #include <cpu/msr.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 extern uint64_t *saved_mtrrs;

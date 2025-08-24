@@ -1,7 +1,7 @@
 #include <cpu/regio.h>
 #include <mm/hhdm.h>
 #include <mm/page.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 // 驱动恒等映射空间偏移，既然是请XIAOYI写的那就跟CPOS统一吧省的炸了，我也不知道为什么是这个数

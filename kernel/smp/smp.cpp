@@ -3,7 +3,7 @@
 #include "cpu/regio.h"
 #include "pctable/gdt.h"
 #include "pctable/idt.h"
-#include "proto.h"
+#include "proto.hpp"
 #include <apic/apic.h>
 #include <apic/madt.h>
 #include <cpu/msr.h>

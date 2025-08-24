@@ -1,6 +1,6 @@
 #pragma once
 
-#include <proto.h>
+#include <proto.hpp>
 #include <krlibc.h>
 
 #define MAX_BLKDEV_NUM 8

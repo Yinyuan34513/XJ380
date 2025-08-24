@@ -3,7 +3,7 @@
 #include <cpu/regio.h>
 #include <krlibc.h>
 #include <mm/page.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 spin_t page_lock;

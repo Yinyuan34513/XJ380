@@ -3,7 +3,7 @@
 #include "krlibc.h"
 #include "mm/heap.h"
 #include "mm/page.h"
-#include "proto.h"
+#include "proto.hpp"
 
 #define SA_RPL3 3
 

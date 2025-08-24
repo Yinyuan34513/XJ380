@@ -1,4 +1,4 @@
-#include "proto.h"
+#include "proto.hpp"
 #include <krlibc.h>
 
 int memcmp(const void *a_, const void *b_, size_t size)

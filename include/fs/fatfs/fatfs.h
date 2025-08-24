@@ -1,3 +1,3 @@
 #pragma once
-#include "proto.h"
+#include "proto.hpp"
 void fatfs_init();

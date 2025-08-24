@@ -1,5 +1,5 @@
 #include <cpu/longm.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)

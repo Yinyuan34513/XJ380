@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <ahci/block.h>
 
 typedef uint16_t u16;

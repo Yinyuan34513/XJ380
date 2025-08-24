@@ -1,5 +1,5 @@
 #include <fs/vfs/sys.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <pci/pci.h>
 #include <errno.h>
 static vfs_node_t sysfs_root = NULL;

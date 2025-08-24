@@ -3,7 +3,7 @@
 #    include "smp/smp.h"
 #    include <mm/memory.h>
 #    include <pctable/gdt.h>
-#    include <proto.h>
+#    include <proto.hpp>
 #    include <stdint.h>
 
 uint64_t gdt_entries[7];

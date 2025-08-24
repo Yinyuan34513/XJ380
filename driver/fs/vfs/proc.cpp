@@ -1,5 +1,5 @@
 #include <fs/vfs/proc.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <task/pcb.h>
 #include <errno.h>
 

@@ -1,7 +1,7 @@
 #include <cpu/lock.h>
 #include <krlibc.h>
 #include <mm/alloc/area.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 #define KERNEL_HEAP_START 0xffff900000000000 // 内核堆起始地址

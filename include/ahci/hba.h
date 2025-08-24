@@ -1,6 +1,6 @@
 #pragma once
 
-#include <proto.h>
+#include <proto.hpp>
 
 typedef uint32_t hba_reg_t;
 

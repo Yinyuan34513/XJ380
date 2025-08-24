@@ -2,7 +2,7 @@
 #include "fs/fs_syscall.h"
 #include "task/pcb.h"
 #include "errno.h"
-#include "proto.h"
+#include "proto.hpp"
 
 vfs_node_t rootdir = NULL;
 

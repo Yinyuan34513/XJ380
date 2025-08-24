@@ -1,5 +1,5 @@
 #include <apic/hpet.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 HpetInfo       *info;

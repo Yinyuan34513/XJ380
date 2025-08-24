@@ -6,7 +6,7 @@
 #include <mm/memory.h>
 #include <mm/page.h>
 #include <krlibc.h>
-#include <proto.h>
+#include <proto.hpp>
 
 blkdev_t blk_devs[MAX_BLKDEV_NUM];
 uint64_t blk_devnum = 0;

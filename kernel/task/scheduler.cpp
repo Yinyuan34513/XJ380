@@ -1,6 +1,6 @@
 #include "cpu/fsgsbase.h"
 #include "lock_queue.h"
-#include "proto.h"
+#include "proto.hpp"
 #include "smp/smp.h"
 #include "task/pcb.h"
 

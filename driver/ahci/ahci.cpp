@@ -4,7 +4,7 @@
 #include "ahci/sata.h"
 #include "ahci/scsi.h"
 #include "ahci/hba.h"
-#include <proto.h>
+#include <proto.hpp>
 
 void *op_buffer;
 

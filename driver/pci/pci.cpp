@@ -4,7 +4,7 @@
 #include "mm/heap.h"
 #include "mm/hhdm.h"
 #include "krlibc.h"
-#include "proto.h"
+#include "proto.hpp"
 
 struct {
     uint32_t classcode;
