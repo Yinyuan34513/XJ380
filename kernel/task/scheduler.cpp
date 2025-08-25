@@ -1,4 +1,5 @@
 #include "cpu/fsgsbase.h"
+#include "cpu/fpu.h"
 #include "lock_queue.h"
 #include "proto.hpp"
 #include "smp/smp.h"
@@ -83,8 +84,8 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
     __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(target->fs));
     write_fsbase(target->fs_base);
 
-    //    save_fpu_context(&current_task0->fpu_context);
-    //    restore_fpu_context(&target->fpu_context);
+       save_fpu_context(&current_task0->fpu_context);
+       restore_fpu_context(&target->fpu_context);
 
     current_task0->context0.r15    = reg->r15;
     current_task0->context0.r14    = reg->r14;

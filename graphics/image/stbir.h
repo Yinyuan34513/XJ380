@@ -189,7 +189,7 @@ typedef unsigned char  stbir_uint8;
 typedef unsigned short stbir_uint16;
 typedef unsigned int   stbir_uint32;
 #else
-#include "../../include/global/stdint.h"
+#include <stdint.h>
 typedef uint8_t  stbir_uint8;
 typedef uint16_t stbir_uint16;
 typedef uint32_t stbir_uint32;
@@ -637,7 +637,7 @@ static float stbir__srgb_to_linear(float f)
     if (f <= 0.04045f)
         return f / 12.92f;
     else
-        return (float)pow((f + 0.055f) / 1.055f, 2.4f);
+        return (float)pow((f + 0.055f) / 1.055f, (int)(2.4f));
 }
 
 static float stbir__linear_to_srgb(float f)

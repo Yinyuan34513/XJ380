@@ -7,6 +7,7 @@
 #include "lock_queue.h"
 #include "mm/page.h"
 #include "stdint.h"
+#include "cpu/fpu.h"
 
 
 typedef struct registers
@@ -97,6 +98,7 @@ struct thread_control_block
     TaskStatus  status;         // 线程状态
     size_t      cpu_id;         // 运行的CPU ID
     TaskContext context0;       // 线程上下文
+    fpu_context_t fpu_context;  // 浮点寄存器上下文
     uint64_t    kernel_stack;   // 内核栈地址
     size_t      queue_index;    // 调度队列索引
     size_t      group_index;    // 进程队列索引

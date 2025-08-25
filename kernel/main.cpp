@@ -43,7 +43,6 @@ void init_cpu()
 void desktop_flusher()
 {
     disable_intr();
-    // init_ttf(*fbc_addr);
 
     write_serial_string("desktop flusher is running\n");
 
@@ -124,15 +123,15 @@ void desktop_flusher()
 #endif
     // wsod_debug();
 
-    print_box_ttf(&shtinf, &desktop_sheet_id, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
+    print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
 
     XWM_INFO xwmi;
     WINDOWLS *test_win;
     WINDOWLS *test_win2;
     init_xwm(&xwmi);
     xwmii = &xwmi;
-    create_window(&xwmi, &shtinf, &test_win, "114514", 320, 180);
-    create_window(&xwmi, &shtinf, &test_win2, "窗口", 800, 600);
+    create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
+    create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
     
@@ -208,7 +207,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    create_kernel_thread((void *)desktop_flusher, NULL, "desktop_flusher", NULL);
+    create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
     // create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
 
     pcb_t ugp = create_process_group("User Group", NULL, NULL);
