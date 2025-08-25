@@ -215,6 +215,7 @@ uint8_t get_keyboard_input();
 
 // driver/ps2/mouse.cpp
 void mouse_init();
+void process_mouse_info();
 uint8_t get_Mouse_output();
 bool mousedecode(uint8_t data);
 int get_mouse_x();

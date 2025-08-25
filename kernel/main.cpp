@@ -25,6 +25,8 @@ SHEET_INFO *sht_img;
 XWM_INFO *xwmii;
 uint16_t * msid;
 
+extern mouse_dec ms_dec;
+
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE        *ST;
@@ -156,17 +158,21 @@ void desktop_flusher()
     {
         enable_intr();
 
-        tbx = getBX(&shtinf, &mouse_sheet_id);
-        tby = getBY(&shtinf, &mouse_sheet_id);
-        int mouse_x = get_mouse_x();
-        int mouse_y = get_mouse_y();
-        move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
-        refresh_part_sheet(&shtinf, tbx, tby,
-                           tbx + getXsize(&shtinf, &mouse_sheet_id),
-                           tby + getYsize(&shtinf, &mouse_sheet_id));
-        refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
-                           getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
-                           getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
+        if (ms_dec.need_flush)
+        {
+            tbx = getBX(&shtinf, &mouse_sheet_id);
+            tby = getBY(&shtinf, &mouse_sheet_id);
+            int mouse_x = get_mouse_x();
+            int mouse_y = get_mouse_y();
+            move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
+            refresh_part_sheet(&shtinf, tbx, tby,
+                            tbx + getXsize(&shtinf, &mouse_sheet_id),
+                            tby + getYsize(&shtinf, &mouse_sheet_id));
+            refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
+                            getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
+                            getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
+            process_mouse_info();
+        }
 
         k_input = get_keyboard_input();
         if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS && k_input != KEY_BACKSPACE)

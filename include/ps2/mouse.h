@@ -14,6 +14,7 @@ typedef struct
 	bool center;
 	bool right;
 	bool win_move_lock;
+	bool need_flush;
 	int win_x_offset;
 	int win_y_offset;
 	uint16_t *sheet_id;
