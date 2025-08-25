@@ -270,3 +270,17 @@ ENTRY(undefined_interrupt)
     leaq default_isr(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
+
+ENTRY(keyboard_handler)
+    pushq $0
+    pushq %rax
+    leaq c_keyboard_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code
+
+ENTRY(mouse_handler)
+    pushq $0
+    pushq %rax
+    leaq c_mouse_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code

@@ -4,7 +4,6 @@
 
 #include <proto.hpp>
 #include <graphics/sheet.h>
-#include <graphics/GOP.hpp>
 
 typedef struct
 {

@@ -10,6 +10,7 @@
 #include <graphics/window/window.h>
 extern SHEET_INFO *sht_img;
 extern XWM_INFO *xwmii;
+extern UINT16 * msid;
 
 #define close_interrupt __asm__ volatile("cli" ::: "memory")
 #define open_interrupt  __asm__ volatile("sti" ::: "memory")
@@ -205,5 +206,19 @@ extern const FrameBufferConfig *fbc_addr;
 
 
 
+// driver/ps2/keyboard.cpp
+extern struct keyboard_buf kb_fifo;
+extern UINT8 keyboard_code[256];
+extern UINT8 keyboard_code1[256];
+void keyboard_init();
+UINT8 get_keyboard_input();
 
+// driver/ps2/mouse.cpp
+void mouse_init();
+UINT8 get_Mouse_output();
+bool mousedecode(UINT8 data);
+int get_mouse_x();
+int get_mouse_y();
+void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id);
+void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py);
 #endif

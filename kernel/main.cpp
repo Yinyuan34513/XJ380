@@ -19,8 +19,11 @@
 #include <rtc.h>
 #include <font.h>
 #include <ttf.h>
+#include <ps2/keyboard.h>
+#include <ps2/mouse.h>
 SHEET_INFO *sht_img;
 XWM_INFO *xwmii;
+UINT16 * msid;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -54,6 +57,7 @@ void desktop_flusher()
     init_sheet(*fbc_addr, &shtinf);
 
     sht_img = &shtinf;
+    msid = &mouse_sheet_id;
 
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
@@ -125,6 +129,7 @@ void desktop_flusher()
 
     print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
 
+    draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO xwmi;
     WINDOWLS *test_win;
     WINDOWLS *test_win2;
@@ -149,6 +154,25 @@ void desktop_flusher()
 
     while (1)
     {
+        enable_intr();
+
+        k_input = get_keyboard_input();
+        if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
+        {
+            PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
+            refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
+            fontx += 8;
+        }
+        else if (k_input == KEY_ENTER)
+        {
+            fontx = 8;
+            fonty += 16;
+        }
+        if (fontx > 304)
+        {
+            fontx = 8;
+            fonty += 16;
+        }
         time_read(&time);
         draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
         //12 小时制
@@ -186,12 +210,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     mount_root();
 
+    keyboard_init();
+    mouse_init();
 
     vfs_node_t f;
     f=vfs_open("/1.txt");
     char buf[1024];
     if(vfs_read(f,buf,0,f->size)==-1)write_serial_fmt("read failed\n");
-    write_serial_fmt("read file: %s\n",buf);
+    else write_serial_fmt("read file: %s\n",buf);
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);
