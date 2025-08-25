@@ -46,7 +46,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     write_serial_string("Sheet Manager Initialize Success.\n");
 }
 
-void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UINT32 type, INT16 index, UINT16 *sheet_id)
+void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index, uint16_t *sheet_id)
 {
     while (true)
     {
@@ -220,7 +220,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
     SheetIsCreating = false;
 }
 
-UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id)
+uint32_t getBX(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -231,7 +231,7 @@ UINT32 getBX(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id)
+uint32_t getBY(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -242,7 +242,7 @@ UINT32 getBY(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id)
+uint32_t getXsize(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -253,7 +253,7 @@ UINT32 getXsize(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id)
+uint32_t getYsize(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -264,7 +264,7 @@ UINT32 getYsize(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y)
+uint16_t *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -287,7 +287,7 @@ UINT16 *found_sheet(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
-UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y)
+uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -310,7 +310,7 @@ UINT16 *found_sheetmb(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
-UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
+uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -333,7 +333,7 @@ UINT16 *found_sheet_movable(SHEET_INFO *sht, UINT32 x, UINT32 y)
     }
 }
 
-SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
+SHEET *get_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -344,7 +344,7 @@ SHEET *get_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
+void setBX(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -359,7 +359,7 @@ void setBX(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
     }
 }
 
-void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
+void setBY(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -374,7 +374,7 @@ void setBY(SHEET_INFO *sht, UINT16 *sheet_id, UINT32 num)
     }
 }
 
-void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
+void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     while (true)
     {
@@ -411,7 +411,7 @@ void delete_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
     SheetIsCreating = false;
 }
 
-void lift_sheet(SHEET_INFO *sht, UINT16 *sheet_id)
+void lift_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -458,7 +458,7 @@ void refresh_sheet(SHEET_INFO *sht)
         write_serial_dec(front_p->index);
         write_serial_string("\n");
         SHEET_BUFFER *SheetBuffer  = (SHEET_BUFFER *)(front_p->buffer);
-        UINT32        BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
+        uint32_t        BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
         for (int y = 0; y < front_p->height; y++)
         {
             for (int x = 0; x < front_p->width; x++)
@@ -559,7 +559,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
             int dlo_y = (front_p->by + front_p->height) - bey2; // 同上
             if (dlo_x < 0 || dlo_x > front_p->width) { dlo_x = 0; }
             if (dlo_y < 0 || dlo_y > front_p->height) { dlo_y = 0; }
-            UINT32 BufferOffest = sht->scrx * (front_p->by + offest_y) + front_p->bx + offest_x; // 起始位置
+            uint32_t BufferOffest = sht->scrx * (front_p->by + offest_y) + front_p->bx + offest_x; // 起始位置
             for (int y = offest_y; y < front_p->height - dlo_y; y++)
             {
                 for (int x = offest_x; x < front_p->width - dlo_x; x++)
@@ -625,12 +625,12 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
     SheetIsRefreshing = false;
 }
 
-UINT32 get_hor()
+uint32_t get_hor()
 {
     return fbc_addr->horizontal_resolution;
 }
 
-UINT32 get_ver()
+uint32_t get_ver()
 {
     return fbc_addr->vertical_resolution;
 }

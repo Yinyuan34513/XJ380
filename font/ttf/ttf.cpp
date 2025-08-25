@@ -135,7 +135,7 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
 	return bitmap;
 }
 
-void put_bitmap(SHEET_INFO *sht, UINT16 *sheet_id, unsigned char *bitmap,
+void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap,
 				unsigned x, unsigned y,
 				unsigned width, unsigned heigh,
 				unsigned bitmap_xsize, SHEET_BUFFER fc)
@@ -166,7 +166,7 @@ void put_bitmap(SHEET_INFO *sht, UINT16 *sheet_id, unsigned char *bitmap,
 	}
 }
 
-void print_box_ttf(SHEET_INFO *sht, UINT16 *sheet_id, char *buf, SHEET_BUFFER fc,
+void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
 				   /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
 	Rune *r = (Rune *)malloc((utflen(buf) + 1) * sizeof(Rune));

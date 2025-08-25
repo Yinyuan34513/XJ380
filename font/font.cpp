@@ -5,12 +5,12 @@ auto operator new(size_t size, void *ptr) -> void *;
 auto operator new[](size_t size, void *ptr) -> void *;
 auto operator delete(void *ptr, size_t size) -> void;
 auto operator delete[](void *ptr, size_t size) -> void;
-extern const UINT8 _binary___font_hankaku_bin_start;
-extern const UINT8 _binary___font_hankaku_bin_end;
-extern const UINT8 _binary___font_hankaku_bin_size; // 将三个常量声明
+extern const uint8_t _binary___font_hankaku_bin_start;
+extern const uint8_t _binary___font_hankaku_bin_end;
+extern const uint8_t _binary___font_hankaku_bin_size; // 将三个常量声明
 typedef size_t uintptr_t;
 
-const UINT8 *GetFont(char c)
+const uint8_t *GetFont(char c)
 {
     auto index = 16 * static_cast<unsigned int>(c); // 每一个字符要对应16个char作为字体
     if (index >= reinterpret_cast<uintptr_t>(&_binary___font_hankaku_bin_size))
@@ -33,7 +33,7 @@ void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const Pixel
         break;
     }
 
-    const UINT8 *font = GetFont(ch); // 获取字体
+    const uint8_t *font = GetFont(ch); // 获取字体
     if (font == nullptr)
         return; // 不存在字体，直接退出
     for (int dy = 0; dy < 16; dy++)
@@ -133,9 +133,9 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 }
 
 // 下面是图层专属
-void PrintFont(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char ch, const SHEET_BUFFER &color)
+void PrintFont(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, char ch, const SHEET_BUFFER &color)
 {
-    const UINT8 *font = GetFont(ch); // 获取字体
+    const uint8_t *font = GetFont(ch); // 获取字体
     if (font == nullptr)
         return; // 不存在字体，直接退出
     for (int dy = 0; dy < 16; dy++)
@@ -150,7 +150,7 @@ void PrintFont(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, char ch, const S
     }
 }
 
-void PrintString(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color)
+void PrintString(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color)
 {
     spin_lock(fb_print_lock);
     for (int i = 0; s[i]; i++)
@@ -160,7 +160,7 @@ void PrintString(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const char *s,
     spin_unlock(fb_print_lock);
 }
 
-void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)
+void PrintHex(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)
 {
     // 输出16进制
     char buf[32];
@@ -195,7 +195,7 @@ void PrintHex(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long lon
     PrintString(sht, sheet_id, x, y, buf, color); // 打印
 }
 
-void PrintDec(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color)
+void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color)
 {
     char str[255];
     int radix = 10;

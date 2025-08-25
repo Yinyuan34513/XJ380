@@ -122,7 +122,7 @@ void init_IOApic()
     write_serial_string("Initializing IOAPIC...\n");
 
     ioapic_add((uint8_t)32, 0);
-    ioapic_add((uint8_t)33, 1);      // 分别为鼠标和键盘，先不开
+    ioapic_add((uint8_t)33, 1);
     ioapic_add((uint8_t)34, 12);
 
     write_serial_string("Setup I/O apic.\n");

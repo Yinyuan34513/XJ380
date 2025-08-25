@@ -7,7 +7,7 @@
 #include <ttf.h>
 
 // 初始化桌面
-void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id)
+void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
 {
     int scrx = sht->scrx;
     int scry = sht->scry;
@@ -17,7 +17,7 @@ void init_desktop(SHEET_INFO *sht, UINT16 *sheet_id, UINT16 *dock_sheet_id)
     init_shortcut_dock(sht, dock_sheet_id);
 }
 
-void init_dock(SHEET_INFO *sht, UINT16 *sheet_id)
+void init_dock(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     int scrx = sht->scrx;
     int scry = sht->scry;
@@ -36,7 +36,7 @@ void init_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     draw_logo(sht, sheet_id, 24, scry - 24 - 63);
 }
 
-void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
+void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     int x1 = sht->scrx * 0.1875;
     int y1 = 0;
@@ -58,7 +58,7 @@ void init_shortcut_dock(SHEET_INFO *sht, UINT16 *sheet_id)
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8 + 64 + 8, 4, "About", BLACK);
 }
 
-void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi)
+void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
 {
     for (int y = 0; y < 63; y++)
     {
@@ -80,7 +80,7 @@ void draw_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi)
     }
 }
 
-void draw_studio_logo(SHEET_INFO *sht, UINT16 *sheet_id, int xi, int yi)
+void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
 {
     for (int y = 0; y < 16; y++)
     {

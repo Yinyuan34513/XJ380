@@ -23,7 +23,7 @@
 #include <ps2/mouse.h>
 SHEET_INFO *sht_img;
 XWM_INFO *xwmii;
-UINT16 * msid;
+uint16_t * msid;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -50,9 +50,9 @@ void desktop_flusher()
     write_serial_string("desktop flusher is running\n");
 
 
-    UINT16 desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
-    UINT16 dock_sheet_id = 1145;
-    UINT16 mouse_sheet_id = 1145;
+    uint16_t desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
+    uint16_t dock_sheet_id = 1145;
+    uint16_t mouse_sheet_id = 1145;
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
 
@@ -105,14 +105,14 @@ void desktop_flusher()
     PrintString(&shtinf, &desktop_sheet_id, 8, 364, "0xB: EFI Code & Data", WHITE);
 
     PrintString(&shtinf, &desktop_sheet_id, 8, 400, "SheetManagerTest", WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (UINT64)desktop_sheet_id, WHITE);
-    // PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (UINT64)*shtinf.sheet[0].number, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 8, 416, (uint64_t)desktop_sheet_id, WHITE);
+    // PrintDec(&shtinf, &desktop_sheet_id, 164, 416, (uint64_t)*shtinf.sheet[0].number, WHITE);
 
-    PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (UINT64)shtinf.temp_buffer, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (UINT64)shtinf.sheet_num, WHITE);
+    PrintHex(&shtinf, &desktop_sheet_id, 8, 432, (uint64_t)shtinf.temp_buffer, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, 164, 432, (uint64_t)shtinf.sheet_num, WHITE);
 
     PrintHex(&shtinf, &desktop_sheet_id, 8, 448, 0xFEDCBA9876543210, WHITE);
-    // PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (UINT64)shtinf.sheet[255].buffer, WHITE);
+    // PrintHex(&shtinf, &desktop_sheet_id, 164, 448, (uint64_t)shtinf.sheet[255].buffer, WHITE);
 
     // CPU型号
     char CPU_Model[48];
@@ -143,18 +143,30 @@ void desktop_flusher()
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
 
-    UINT8 k_input;
+    uint8_t k_input;
     int tby;
     int tbx;
 
-    // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((UINT64)(ST->RuntimeServices));
-    // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((UINT64)RuntimeServices->GetTime);
+    // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));
+    // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 0.8125;
     tm time;
 
     while (1)
     {
         enable_intr();
+
+        tbx = getBX(&shtinf, &mouse_sheet_id);
+        tby = getBY(&shtinf, &mouse_sheet_id);
+        int mouse_x = get_mouse_x();
+        int mouse_y = get_mouse_y();
+        move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
+        refresh_part_sheet(&shtinf, tbx, tby,
+                           tbx + getXsize(&shtinf, &mouse_sheet_id),
+                           tby + getYsize(&shtinf, &mouse_sheet_id));
+        refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
+                           getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
+                           getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
 
         k_input = get_keyboard_input();
         if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS && k_input != KEY_BACKSPACE)

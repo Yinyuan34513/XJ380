@@ -1,6 +1,6 @@
 #include <proto.hpp>
 #include <graphics/sheet.h>
-void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUFFER &color)
+void draw_point(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUFFER &color)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -23,7 +23,7 @@ void draw_point(SHEET_INFO *sht, UINT16 *sheet_id, int x, int y, const SHEET_BUF
     SheetBuffer->a = color.a;
 }
 
-void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
+void draw_rect(SHEET_INFO *sht, uint16_t *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
 {
 	SHEET *front_p = sht->start;
     while (true)
@@ -51,7 +51,7 @@ void draw_rect(SHEET_INFO *sht, UINT16 *sheet_id, int x1, int y1, int x2, int y2
     }
 }
 
-void draw_line(SHEET_INFO *sht, UINT16 *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
+void draw_line(SHEET_INFO *sht, uint16_t *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
 {
 	SHEET *front_p = sht->start;
     while (true)

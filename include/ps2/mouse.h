@@ -16,7 +16,7 @@ typedef struct
 	bool win_move_lock;
 	int win_x_offset;
 	int win_y_offset;
-	UINT16 *sheet_id;
+	uint16_t *sheet_id;
 	SHEET *sht_now;
 } mouse_dec;
 

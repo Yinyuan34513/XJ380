@@ -5,7 +5,7 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "./stbir.h"
 
-void PrintPic_PNG(SHEET_INFO *sht, UINT16 *sheet_id, int buffer, int x, int y, int ow, int oh, char *path) {
+void PrintPic_PNG(SHEET_INFO *sht, uint16_t *sheet_id, int buffer, int x, int y, int ow, int oh, char *path) {
     int w, h, bpp;
     stbi_uc *b = stbi_load(path, &w, &h, &bpp, 4);
     if (!b) {

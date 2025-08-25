@@ -53,14 +53,14 @@ enum special_key_code
 
 struct keyboard_buf
 {
-	UINT8 *p_head;
-	UINT8 *p_tail;
-	INT32 count;
+	uint8_t *p_head;
+	uint8_t *p_tail;
+	int count;
 	bool ctrl;
 	bool shift;
 	bool alt;
 	bool caps;
-	UINT8 buf[KB_BUF_SIZE];
+	uint8_t buf[KB_BUF_SIZE];
 };
 
 

@@ -6,30 +6,30 @@
 
 typedef struct WINDOWLS *WINDOWLSP;
 typedef void (*MsgPrcor)(
-	UINT64 Type, 
-	UINT64 hData, 
-	UINT64 lData
+	uint64_t Type, 
+	uint64_t hData, 
+	uint64_t lData
 );  // 别问为什么放在这儿 不放这儿会爆炸
 
 struct WINDOWLS
 {
-    UINT16    w_sheet;
-    UINT8     title_length;
+    uint16_t    w_sheet;
+    uint8_t     title_length;
     CHAR8    *title;
-    UINT16    number;
-    UINT32    width;
-    UINT32    height;
+    uint16_t    number;
+    uint32_t    width;
+    uint32_t    height;
     MsgPrcor  WinMPf;
     WINDOWLSP next;
 };
 
 typedef struct
 {
-    UINT16    win_num;
+    uint16_t    win_num;
     WINDOWLS *start;
 } XWM_INFO;
 void init_xwm(XWM_INFO *xwmi);
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, UINT32 width, UINT32 height);
+void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color);

@@ -16,37 +16,40 @@ bool        win_c_bt_isl = false;
 bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
-extern "C" registers_t* c_mouse_handler(registers_t *reg)
+extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
-    UINT8 data = inb(PORT_KB_DATA);
+    uint8_t data = inb(PORT_KB_DATA);
 
     if (mousedecode(data))
     {
         mouse_x += ms_dec.x;
         mouse_y += ms_dec.y;
-        if (mouse_x < 0) mouse_x = 0;
-        if (mouse_y < 0) mouse_y = 0;
-        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
-        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
+        if (mouse_x < 0)
+            mouse_x = 0;
+        if (mouse_y < 0)
+            mouse_y = 0;
+        if (mouse_x > get_hor() - 1)
+            mouse_x = get_hor() - 1;
+        if (mouse_y > get_ver() - 1)
+            mouse_y = get_ver() - 1;
 
-        ms_dec.left   = false;
+        ms_dec.left = false;
         ms_dec.center = false;
-        ms_dec.right  = false;
+        ms_dec.right = false;
 
-        if (ms_dec.sht_now != NULL && mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
-            mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width && mouse_y >= ms_dec.sht_now->by &&
-            mouse_y <= ms_dec.sht_now->by + 17)
-        {
-            if (!win_c_bt_isl)
-            {
+        
+        if (ms_dec.sht_now != NULL &&
+            mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
+            mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width &&
+            mouse_y >= ms_dec.sht_now->by && mouse_y <= ms_dec.sht_now->by + 17) {
+            if (!win_c_bt_isl) {
                 for (int y = 0; y < 17; y++)
                 {
                     for (int x = 0; x < 32; x++)
                     {
                         if (wbutton_close[y][x] == '.')
                         {
-                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y,
-                                       {0xed, 0x1c, 0x24, 0xff});
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0xed, 0x1c, 0x24, 0xff});
                         }
                         else if (wbutton_close[y][x] == 'a')
                         {
@@ -59,20 +62,17 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
                     }
                 }
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 33, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + 17);
+                                                ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + 17);
                 win_c_bt_isl = true;
             }
-        }
-        else if (win_c_bt_isl)
-        {
+        } else if (win_c_bt_isl) {
             for (int y = 0; y < 17; y++)
             {
                 for (int x = 0; x < 32; x++)
                 {
                     if (wbutton_close[y][x] == '.')
                     {
-                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y,
-                                   {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
                     }
                     else if (wbutton_close[y][x] == 'a')
                     {
@@ -80,22 +80,20 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
                     }
                     else if (wbutton_close[y][x] == '@')
                     {
-                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y,
-                                   {0, 0, 0, WINDOW_ALPHA_VALUE});
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 32, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
                     }
                 }
             }
             refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by,
-                               ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + 17);
+                                            ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + 17);
             win_c_bt_isl = false;
-        }
-
-        if (ms_dec.sht_now != NULL && mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 63 &&
-            mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 && mouse_y >= ms_dec.sht_now->by &&
-            mouse_y <= ms_dec.sht_now->by + 17)
-        {
-            if (!win_m_bt_isl)
-            {
+        } 
+        
+        if (ms_dec.sht_now != NULL &&
+                    mouse_x >= ms_dec.sht_now->bx + ms_dec.sht_now->width - 63 &&
+                    mouse_x <= ms_dec.sht_now->bx + ms_dec.sht_now->width - 32 &&
+                    mouse_y >= ms_dec.sht_now->by && mouse_y <= ms_dec.sht_now->by + 17) {
+            if (!win_m_bt_isl) {
                 for (int y = 0; y < 17; y++)
                 {
                     for (int x = 0; x < 32; x++)
@@ -106,38 +104,33 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
                         }
                         else if (wbutton_little[y][x] == '.')
                         {
-                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y,
-                                       {0x00, 0xa2, 0xe8, 0xff});
+                            draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0x00, 0xa2, 0xe8, 0xff});
                         }
                     }
                 }
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 63, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by + 17);
+                                                ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by + 17);
                 win_m_bt_isl = true;
             }
-        }
-        else if (win_m_bt_isl)
-        {
+        } else if (win_m_bt_isl) {
             for (int y = 0; y < 17; y++)
             {
                 for (int x = 0; x < 32; x++)
                 {
                     if (wbutton_little[y][x] == '@')
                     {
-                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y,
-                                   {0, 0, 0, WINDOW_ALPHA_VALUE});
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
                     }
                     else if (wbutton_little[y][x] == '.')
                     {
-                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y,
-                                   {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
+                        draw_point(sht_img, ms_dec.sheet_id, x + ms_dec.sht_now->width - 63, y, {0x00, 0xa2, 0xe8, WINDOW_ALPHA_VALUE});
                     }
                 }
             }
             refresh_part_sheet(sht_img, ms_dec.sht_now->bx + ms_dec.sht_now->width - 63, ms_dec.sht_now->by,
-                               ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by + 17);
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width - 32, ms_dec.sht_now->by + 17);
             win_m_bt_isl = false;
-        }
+        } 
 
         if (ms_dec.btn & 0x01)
         {
@@ -156,11 +149,11 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
                 {
                     // 点在了窗口上
                     ms_dec.win_move_lock = true;
-                    ms_dec.sht_now       = get_sheet(sht_img, ms_dec.sheet_id);
+                    ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
                     lift_sheet(sht_img, ms_dec.sheet_id);
                     refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->by + ms_dec.sht_now->height);
                     ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
                     ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
                 }
@@ -176,8 +169,8 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
                     ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
                     lift_sheet(sht_img, ms_dec.sheet_id);
                     refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->by + ms_dec.sht_now->height);
                 }
             }
             else if (ms_dec.win_move_lock)
@@ -188,9 +181,10 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
                 ms_dec.sht_now->bx = mouse_x - ms_dec.win_x_offset;
                 ms_dec.sht_now->by = mouse_y - ms_dec.win_y_offset;
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
-                refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                        ms_dec.sht_now->by + ms_dec.sht_now->height);
+                refresh_part_sheet(sht_img, his_x, his_y,
+                                   his_x + ms_dec.sht_now->width,
                                    his_y + ms_dec.sht_now->height);
             }
         }
@@ -199,19 +193,15 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
             // 左键松开
             ms_dec.win_move_lock = false;
         }
-        if (ms_dec.btn & 0x02) { ms_dec.right = true; }
-        if (ms_dec.btn & 0x04) { ms_dec.center = true; }
+        if (ms_dec.btn & 0x02)
+        {
+            ms_dec.right = true;
+        }
+        if (ms_dec.btn & 0x04)
+        {
+            ms_dec.center = true;
+        }
     }
-    int tby;
-    int tbx;
-    tbx         = getBX(sht_img, msid);
-    tby         = getBY(sht_img, msid);
-    move_mouse(sht_img, msid, mouse_x, mouse_y);
-    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, msid),
-                       tby + getYsize(sht_img, msid));
-    refresh_part_sheet(sht_img, getBX(sht_img, msid), getBY(sht_img, msid),
-                       getBX(sht_img, msid) + getXsize(sht_img, msid),
-                       getBY(sht_img, msid) + getYsize(sht_img, msid));
     // write_serial_string("mouse X:");
     // write_serial_dec(mouse_x);
     // write_serial_string("\n");
@@ -219,10 +209,9 @@ extern "C" registers_t* c_mouse_handler(registers_t *reg)
     // write_serial_dec(mouse_y);
     // write_serial_string("\n");
     send_eoi();
-    return reg;
 }
 
-bool mousedecode(UINT8 data)
+bool mousedecode(uint8_t data)
 {
     if (ms_dec.phase == 0)
     {
@@ -297,7 +286,7 @@ void mouse_init()
     ms_dec.sht_now       = NULL;
 }
 
-void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id)
+void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id)
 {
     for (int y = 0; y < 21; y++)
     {
@@ -310,7 +299,7 @@ void draw_mouse(SHEET_INFO *sht, UINT16 *sheet_id)
     }
 }
 
-void move_mouse(SHEET_INFO *sht, UINT16 *sheet_id, int px, int py)
+void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py)
 {
     setBX(sht, sheet_id, px);
     setBY(sht, sheet_id, py);
