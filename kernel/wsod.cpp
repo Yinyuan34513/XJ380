@@ -1,6 +1,6 @@
-#include <stdint.h>
-#include <proto.h>
 #include <cpu/longm.h>
+#include <proto.hpp>
+#include <stdint.h>
 
 void do_wsod(const char *err_code, struct X64_REGS *regs)
 {
@@ -38,11 +38,11 @@ void wsod_unexpect_intrrupt(struct X64_REGS *regs, uint64_t error_code)
 
 void c_device_not_avaliable(struct X64_REGS *regs, uint64_t error_code)
 {
-    __asm__ __volatile__(
-        "movq %%cr0, %%rax\n\t"
-        "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
-        "or $0x2, %%ax\n\t"        // set coprocessor monitoring  CR0.MP
-        "movq %%rax, %%cr0\n\t":::"rax");
+    __asm__ __volatile__("movq %%cr0, %%rax\n\t"
+                         "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+                         "or $0x2, %%ax\n\t"      // set coprocessor monitoring  CR0.MP
+                         "movq %%rax, %%cr0\n\t" ::
+                             : "rax");
 }
 
 void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code)
@@ -76,6 +76,8 @@ void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code)
 // 一般保护性异常
 void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
 {
+    disable_scheduler();
+
     if (error_code & 0x01)
         write_serial_string(
             "The exception occurred during delivery of an event external to the program,such as an interrupt "
@@ -86,7 +88,8 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
     else
         write_serial_string("Refers to a descriptor in the GDT or the current LDT;\n");
 
-    if ((error_code & 0x02) == 0) {
+    if ((error_code & 0x02) == 0)
+    {
         if (error_code & 0x04)
             write_serial_string("Refers to a segment or gate descriptor in the LDT;\n");
         else
@@ -97,6 +100,10 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
     write_serial_hex(error_code);
     write_serial_string("\n");
 
+    write_serial_string("Adrress:");
+    write_serial_hex(regs->rip);
+    write_serial_string("\n");
+
     do_wsod("GENERAL_PROTECTION", regs);
 }
 
@@ -105,8 +112,7 @@ void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code)
 {
     disable_intr();
 
-    if (!(error_code & 0x01))
-        write_serial_string("Page Not-Present,\t");
+    if (!(error_code & 0x01)) write_serial_string("Page Not-Present,\t");
 
     if (error_code & 0x02)
         write_serial_string("Write Cause Fault,\t");
@@ -118,11 +124,9 @@ void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code)
     else
         write_serial_string("Fault in supervisor(0,1,2)\t");
 
-    if (error_code & 0x08)
-        write_serial_string(",Reserved Bit Cause Fault\t");
+    if (error_code & 0x08) write_serial_string(",Reserved Bit Cause Fault\t");
 
-    if (error_code & 0x10)
-        write_serial_string(",Instruction fetch Cause Fault");
+    if (error_code & 0x10) write_serial_string(",Instruction fetch Cause Fault");
 
     write_serial_string("\n");
 

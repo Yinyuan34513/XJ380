@@ -218,7 +218,7 @@ ENTRY(page_fault)
     // === 页故障 #PF ==
     // 有错误码
     pushq %rax
-    leaq wsod_page_fault(%rip), %rax
+    leaq handle_page_fault(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
 
@@ -263,18 +263,24 @@ ENTRY(virtualization_exception)
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
     jmp Err_Code
 
-// 32 timer
-ENTRY(timer_handler)
-    pushq $0
-    pushq %rax
-    leaq c_timer_handler(%rip), %rax    // 获取中断服务程序的地址
-    xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
-    jmp Err_Code
-
 // other
 ENTRY(undefined_interrupt)
     pushq $0
     pushq %rax
     leaq default_isr(%rip), %rax    // 获取中断服务程序的地址
     xchgq %rax, (%rsp)  // 把FUNC的地址换入栈中
+    jmp Err_Code
+
+ENTRY(keyboard_handler)
+    pushq $0
+    pushq %rax
+    leaq c_keyboard_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code
+
+ENTRY(mouse_handler)
+    pushq $0
+    pushq %rax
+    leaq c_mouse_handler(%rip), %rax
+    xchgq %rax, (%rsp)
     jmp Err_Code

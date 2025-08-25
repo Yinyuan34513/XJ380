@@ -3,7 +3,7 @@
 #include <cpu/regio.h>
 #include <krlibc.h>
 #include <mm/page.h>
-#include <proto.h>
+#include <proto.hpp>
 #include <stdint.h>
 
 spin_t page_lock;
@@ -13,11 +13,13 @@ page_directory_t *current_directory = NULL;
 
 uint64_t double_fault_page = 0;
 
-static bool is_huge_page(page_table_entry_t *entry) {
+static bool is_huge_page(page_table_entry_t *entry)
+{
     return (((uint64_t)entry->value) & PTE_HUGE) != 0;
 }
 
-void handle_page_fault(struct X64_REGS *frame, uint64_t error_code) {
+extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
+{
     disable_intr();
     // disable_scheduler();         // 长大后在学习吧！
     uint64_t faulting_address;
@@ -116,15 +118,23 @@ void handle_page_fault(struct X64_REGS *frame, uint64_t error_code) {
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+
+    while (1)
+    {
+        __asm__ __volatile__("hlt");
+    }
 }
 
-void page_table_clear(page_table_t *table) {
-    for (int i = 0; i < 512; i++) {
+void page_table_clear(page_table_t *table)
+{
+    for (int i = 0; i < 512; i++)
+    {
         table->entries[i].value = 0;
     }
 }
 
-bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *out_flags) {
+bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *out_flags)
+{
     uint64_t l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t l3_index = (((addr >> 30)) & 0x1FF);
     uint64_t l2_index = (((addr >> 21)) & 0x1FF);
@@ -133,21 +143,24 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
     page_table_t *pml4 = directory->table;
 
     if (!(pml4->entries[l4_index].value & PTE_PRESENT)) return false;
-    if (pml4->entries[l4_index].value & PTE_HUGE) {
+    if (pml4->entries[l4_index].value & PTE_HUGE)
+    {
         *out_flags = pml4->entries[l4_index].value & 0xFFF;
         return true;
     }
 
     page_table_t *pdpt = (page_table_t *)(pml4->entries[l4_index].value & PAGE_MASK);
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
-    if (pdpt->entries[l3_index].value & PTE_HUGE) {
+    if (pdpt->entries[l3_index].value & PTE_HUGE)
+    {
         *out_flags = pdpt->entries[l3_index].value & 0xFFF;
         return true;
     }
 
     page_table_t *pd = (page_table_t *)(pdpt->entries[l3_index].value & PAGE_MASK);
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
-    if (pd->entries[l2_index].value & PTE_HUGE) {
+    if (pd->entries[l2_index].value & PTE_HUGE)
+    {
         *out_flags = pd->entries[l2_index].value & 0xFFF;
         return true;
     }
@@ -159,7 +172,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
     return true;
 }
 
-bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_t new_flags) {
+bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_t new_flags)
+{
     page_table_t *pml4     = directory->table;
     uint64_t      l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t      l3_index = (((addr >> 30)) & 0x1FF);
@@ -167,7 +181,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     uint64_t      l1_index = (((addr >> 12)) & 0x1FF);
 
     if (!(pml4->entries[l4_index].value & PTE_PRESENT)) return false;
-    if (pml4->entries[l4_index].value & PTE_HUGE) {
+    if (pml4->entries[l4_index].value & PTE_HUGE)
+    {
         uint64_t phys                 = pml4->entries[l4_index].value & PAGE_MASK;
         pml4->entries[l4_index].value = phys | (new_flags & 0xFFF);
         return true;
@@ -175,7 +190,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
 
     page_table_t *pdpt = (page_table_t *)(pml4->entries[l4_index].value & PAGE_MASK);
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
-    if (pdpt->entries[l3_index].value & PTE_HUGE) {
+    if (pdpt->entries[l3_index].value & PTE_HUGE)
+    {
         uint64_t phys                 = pdpt->entries[l3_index].value & PAGE_MASK;
         pdpt->entries[l3_index].value = phys | (new_flags & 0xFFF);
         return true;
@@ -183,7 +199,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
 
     page_table_t *pd = (page_table_t *)(pdpt->entries[l3_index].value & PAGE_MASK);
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
-    if (pd->entries[l2_index].value & PTE_HUGE) {
+    if (pd->entries[l2_index].value & PTE_HUGE)
+    {
         uint64_t phys               = pd->entries[l2_index].value & PAGE_MASK;
         pd->entries[l2_index].value = phys | (new_flags & 0xFFF);
         return true;
@@ -199,8 +216,10 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     return true;
 }
 
-page_table_t *page_table_create(page_table_entry_t *entry) {
-    if (entry->value == (uint64_t)NULL) {
+page_table_t *page_table_create(page_table_entry_t *entry)
+{
+    if (entry->value == (uint64_t)NULL)
+    {
         uint64_t frame      = alloc_frames(1);
         entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | PTE_USER;
         page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x00007ffffffff000);
@@ -211,7 +230,8 @@ page_table_t *page_table_create(page_table_entry_t *entry) {
     return table;
 }
 
-page_directory_t *get_kernel_pagedir() {
+page_directory_t *get_kernel_pagedir()
+{
     return &kernel_page_dir;
 }
 
@@ -219,10 +239,11 @@ page_directory_t *get_kernel_pagedir() {
 //     return cpu->ready ? cpu->directory : current_directory;
 // }
 
-static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy,
-                                               bool kernel_space) {
+static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
+{
     if (source_table == NULL) return NULL;
-    if (level == 0) {
+    if (level == 0)
+    {
         if (kernel_space) { return source_table; }
 
         uint64_t      frame          = alloc_frames(1);
@@ -233,8 +254,10 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 
     uint64_t      phy_frame = alloc_frames(1);
     page_table_t *new_table = (page_table_t *)(phys_to_virt(phy_frame));
-    for (uint64_t i = 0; i < (all_copy ? 512 : (level == 4 ? 256 : 512)); i++) {
-        if (source_table->entries[i].value & PTE_HUGE) {
+    for (uint64_t i = 0; i < (all_copy ? 512 : (level == 4 ? 256 : 512)); i++)
+    {
+        if (source_table->entries[i].value & PTE_HUGE)
+        {
             // 指向一块4M的页
             new_table->entries[i].value = source_table->entries[i].value;
             continue;
@@ -243,73 +266,80 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
         // 指向一个4K的页表
         page_table_t *source_page_table_next =
             (page_table_t *)phys_to_virt(source_table->entries[i].value & 0x00007ffffffff000);
-        page_table_t *new_page_table = copy_page_table_recursive(
-            source_page_table_next, level - 1, all_copy, level != 4 ? kernel_space : i >= 256);
-        new_table->entries[i].value = (uint64_t)virt_to_phys((uint64_t)new_page_table) |
-                                      (source_table->entries[i].value & 0xFFFF000000000FFF);
+        page_table_t *new_page_table = copy_page_table_recursive(source_page_table_next, level - 1, all_copy,
+                                                                 level != 4 ? kernel_space : i >= 256);
+        new_table->entries[i].value =
+            (uint64_t)virt_to_phys((uint64_t)new_page_table) | (source_table->entries[i].value & 0xFFFF000000000FFF);
     }
     return new_table;
 }
 
-static void free_page_table_recursive(page_table_t *table, int level) {
+static void free_page_table_recursive(page_table_t *table, int level)
+{
     if (table == NULL) return;
-    if (level == 0) {
+    if (level == 0)
+    {
         free_frame((uint64_t)virt_to_phys((uint64_t)table));
         return;
     }
 
-    for (int i = 0; i < (level == 4 ? 256 : 512); i++) {
-        page_table_t *page_table_next =
-            (page_table_t *)(phys_to_virt(table->entries[i].value & 0x00007ffffffff000));
+    for (int i = 0; i < (level == 4 ? 256 : 512); i++)
+    {
+        page_table_t *page_table_next = (page_table_t *)(phys_to_virt(table->entries[i].value & 0x00007ffffffff000));
         free_page_table_recursive(page_table_next, level - 1);
     }
     free_frame((uint64_t)virt_to_phys((uint64_t)table));
 }
 
-page_directory_t *clone_page_directory(page_directory_t *dir, bool all_copy) {
+page_directory_t *clone_page_directory(page_directory_t *dir, bool all_copy)
+{
     spin_lock(page_lock);
     page_directory_t *new_directory = (page_directory_t *)(malloc(sizeof(page_directory_t)));
     if (new_directory == NULL) return NULL;
     new_directory->table = copy_page_table_recursive(dir->table, 4, all_copy, false);
-    if (!all_copy)
-        memcpy((uint64_t *)new_directory->table + 256, (uint64_t *)dir->table + 256, PAGE_SIZE / 2);
+    if (!all_copy) memcpy((uint64_t *)new_directory->table + 256, (uint64_t *)dir->table + 256, PAGE_SIZE / 2);
     spin_unlock(page_lock);
     return new_directory;
 }
 
-void free_page_directory(page_directory_t *dir) {
+void free_page_directory(page_directory_t *dir)
+{
     spin_lock(page_lock);
     free_page_table_recursive(dir->table, 4);
     free(dir);
     spin_unlock(page_lock);
 }
 
-void unmap_page(page_directory_t *directory, uint64_t vaddr) {
+void unmap_page(page_directory_t *directory, uint64_t vaddr)
+{
     uint64_t l4_index = (((vaddr >> 39)) & 0x1FF);
     uint64_t l3_index = (((vaddr >> 30)) & 0x1FF);
     uint64_t l2_index = (((vaddr >> 21)) & 0x1FF);
     uint64_t l1_index = (((vaddr >> 12)) & 0x1FF);
 
     page_table_t *l4_table = directory->table;
-    page_table_t *l3_table = (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value &
-                                                           0x00007ffffffff000));
-    page_table_t *l2_table = (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value &
-                                                           0x00007ffffffff000));
-    page_table_t *l1_table = (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value &
-                                                           0x00007ffffffff000));
+    page_table_t *l3_table =
+        (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value & 0x00007ffffffff000));
+    page_table_t *l2_table =
+        (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value & 0x00007ffffffff000));
+    page_table_t *l1_table =
+        (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x00007ffffffff000));
 
     free_frame(l1_table->entries[l1_index].value & 0x00007ffffffff000);
     l1_table->entries[l1_index].value = 0;
     flush_tlb(vaddr);
 }
 
-void unmap_page_range(page_directory_t *directory, uint64_t vaddr, uint64_t size) {
-    for (uint64_t va = vaddr; va < vaddr + size; va += PAGE_SIZE) {
+void unmap_page_range(page_directory_t *directory, uint64_t vaddr, uint64_t size)
+{
+    for (uint64_t va = vaddr; va < vaddr + size; va += PAGE_SIZE)
+    {
         unmap_page(directory, va);
     }
 }
 
-void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags) {
+void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags)
+{
     uint64_t l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t l3_index = (((addr >> 30)) & 0x1FF);
     uint64_t l2_index = (((addr >> 21)) & 0x1FF);
@@ -335,7 +365,8 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 //     open_interrupt;
 // }
 
-void switch_page_directory(page_directory_t *dir) {
+void switch_page_directory(page_directory_t *dir)
+{
     // if (cpu->ready) {
     //     cpu->directory = dir;
     // } else {
@@ -350,42 +381,48 @@ void switch_page_directory(page_directory_t *dir) {
     __asm__ volatile("mov %0, %%cr3" : : "r"(physical_table));
 }
 
-uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags) {
+uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags)
+{
     if (length == 0) return -1;
     size_t   p    = length / PAGE_SIZE;
     uint64_t addr = alloc_frames(p == 0 ? 1 : p);
-    for (uint64_t i = 0; i < length; i += 0x1000) {
+    for (uint64_t i = 0; i < length; i += 0x1000)
+    {
         uint64_t var = (uint64_t)addr + i;
         page_map_to(directory, var, var, flags);
     }
     return addr;
 }
 
-void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64_t length,
-                              uint64_t flags) {
-    for (uint64_t i = 0; i < length; i += 0x1000) {
+void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64_t length, uint64_t flags)
+{
+    for (uint64_t i = 0; i < length; i += 0x1000)
+    {
         uint64_t var = (uint64_t)addr + i;
         page_map_to(directory, var, alloc_frames(1), flags);
     }
 }
 
-void page_map_range_to(page_directory_t *directory, uint64_t frame, uint64_t length,
-                       uint64_t flags) {
-    for (uint64_t i = 0; i < length; i += 0x1000) {
+void page_map_range_to(page_directory_t *directory, uint64_t frame, uint64_t length, uint64_t flags)
+{
+    for (uint64_t i = 0; i < length; i += 0x1000)
+    {
         uint64_t var = (uint64_t)phys_to_virt(frame + i);
         page_map_to(directory, var, frame + i, flags);
     }
 }
 
-void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t length,
-                    uint64_t flags) {
-    for (uint64_t i = 0; i < length; i += 0x1000) {
+void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t length, uint64_t flags)
+{
+    for (uint64_t i = 0; i < length; i += 0x1000)
+    {
         uint64_t var = (uint64_t)addr + i;
         page_map_to(directory, var, frame + i, flags);
     }
 }
 
-void switch_xsk_page_directory() {
+void switch_xsk_page_directory()
+{
     page_directory_t *new_directory = clone_page_directory(&kernel_page_dir, true);
     kernel_page_dir.table           = new_directory->table;
     free(new_directory);
@@ -394,7 +431,8 @@ void switch_xsk_page_directory() {
     current_directory = &kernel_page_dir;
 }
 
-void page_setup() {
+void page_setup()
+{
     page_table_t *kernel_page_table = (page_table_t *)phys_to_virt(get_cr3());
     kernel_page_dir                 = (page_directory_t){.table = kernel_page_table};
     double_fault_page               = get_cr3();

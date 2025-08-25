@@ -1,43 +1,50 @@
-#include <stdint.h>
 #include <cpu/regio.h>
-#include <mm/page.h>
 #include <mm/hhdm.h>
-#include <proto.h>
+#include <mm/page.h>
+#include <proto.hpp>
+#include <stdint.h>
 
 // 驱动恒等映射空间偏移，既然是请XIAOYI写的那就跟CPOS统一吧省的炸了，我也不知道为什么是这个数
-#define DRIVER_AREA_MEM       0xffffb00000000000
+#define DRIVER_AREA_MEM 0xffffb00000000000
 
 uint64_t physical_memory_offset = 0;
 
-void init_hhdm() {
-    physical_memory_offset = 0xffff800000000000;    // 嗯，先这样吧，只要你不去改引导就没问题。
+void init_hhdm()
+{
+    physical_memory_offset = 0xffff800000000000; // 嗯，先这样吧，只要你不去改引导就没问题。
 }
 
-uint64_t get_physical_memory_offset() {
+uint64_t get_physical_memory_offset()
+{
     return physical_memory_offset;
 }
 
-void *phys_to_virt(uint64_t phys_addr) {
+void *phys_to_virt(uint64_t phys_addr)
+{
     if (phys_addr == 0) return NULL;
     return (void *)(phys_addr + physical_memory_offset);
 }
 
-void *virt_to_phys(uint64_t virt_addr) {
+void *virt_to_phys(uint64_t virt_addr)
+{
     if (virt_addr == 0) return NULL;
     return (void *)(virt_addr - physical_memory_offset);
 }
 
-void *driver_phys_to_virt(uint64_t phys_addr) {
+void *driver_phys_to_virt(uint64_t phys_addr)
+{
     if (phys_addr == 0) return NULL;
     return (void *)(phys_addr + DRIVER_AREA_MEM);
 }
 
-void *driver_virt_to_phys(uint64_t virt_addr) {
+void *driver_virt_to_phys(uint64_t virt_addr)
+{
     if (virt_addr == 0) return NULL;
     return (void *)(virt_addr - DRIVER_AREA_MEM);
 }
 
-uint64_t page_virt_to_phys(uint64_t va) {
+uint64_t page_virt_to_phys(uint64_t va)
+{
     uint64_t  pml4_phys = get_cr3();
     uint64_t *pml4      = (uint64_t *)phys_to_virt(pml4_phys);
 

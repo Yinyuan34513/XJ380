@@ -1,5 +1,5 @@
-#include <mm/bitmap.h>
 #include <krlibc.h>
+#include <mm/bitmap.h>
 
 void bitmap_init(Bitmap *bitmap, uint8_t *buffer, size_t size)
 {
@@ -19,13 +19,8 @@ void bitmap_set(Bitmap *bitmap, size_t index, bool value)
 {
     size_t word_index = index / 8;
     size_t bit_index  = index % 8;
-    if (value)
-    {
-        bitmap->buffer[word_index] |= ((size_t)1 << bit_index);
-    } else
-    {
-        bitmap->buffer[word_index] &= ~((size_t)1 << bit_index);
-    }
+    if (value) { bitmap->buffer[word_index] |= ((size_t)1 << bit_index); }
+    else { bitmap->buffer[word_index] &= ~((size_t)1 << bit_index); }
 }
 
 void bitmap_set_range(Bitmap *bitmap, size_t start, size_t end, bool value)
@@ -59,23 +54,24 @@ void bitmap_set_range(Bitmap *bitmap, size_t start, size_t end, bool value)
 
 size_t bitmap_find_range(const Bitmap *bitmap, size_t length, bool value)
 {
-    size_t  count = 0, start_index = 0;
-    uint8_t byte_match = value ? (uint8_t)-1 : 0;
+    size_t  count       = 0;
+    size_t  start_index = 0;
+    uint8_t byte_match  = value ? (uint8_t)-1 : 0;
 
     for (size_t byte_idx = 0; byte_idx < bitmap->length / 8; byte_idx++)
     {
         size_t byte = bitmap->buffer[byte_idx];
 
-        if (byte == !byte_match)
-        {
-            count = 0;
-        } else if (byte == byte_match)
+        if (byte == !byte_match) { count = 0; }
+        else if (byte == byte_match)
         {
             if (length < 8) { return byte_idx * 8; }
             if (count == 0) { start_index = byte_idx * 8; }
             count += 8;
             if (count >= length) { return start_index; }
-        } else {
+        }
+        else
+        {
             for (size_t bit = 0; bit < 8; bit++)
             {
                 bool bit_value = (byte >> bit) & 1;
@@ -84,10 +80,8 @@ size_t bitmap_find_range(const Bitmap *bitmap, size_t length, bool value)
                     if (count == 0) { start_index = byte_idx * 8 + bit; }
                     count++;
                     if (count == length) { return start_index; }
-                } else
-                {
-                    count = 0;
                 }
+                else { count = 0; }
             }
         }
     }
