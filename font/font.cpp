@@ -20,16 +20,14 @@ const UINT8 *GetFont(char c)
 
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c)
 {
-    static char pixel_writer_buf[sizeof(RGBRWriter) > sizeof(BGRRWriter) ? sizeof(RGBRWriter) : sizeof(BGRRWriter)];
-    static PixelWriter *pixel_writer = nullptr;
-
+    bool USERGB=true;
     switch (fbc.pixel_format)
     {
     case PixelFormat::kRGBR:
-        pixel_writer = new (pixel_writer_buf) RGBRWriter(fbc); // 使用 placement new
+        USERGB=true;
         break;
     case PixelFormat::kBGRR:
-        pixel_writer = new (pixel_writer_buf) BGRRWriter(fbc);
+        USERGB=false;
         break;
     default:
         break;
@@ -44,7 +42,10 @@ void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const Pixel
         { // 第几列
             if ((font[dy] << dx) & 0x80u)
             {                                           // 判断第dx位是否为1
-                pixel_writer->Write(x + dx, y + dy, c); // 在x和y的基础上，偏移dx,dy绘制像素
+                if(USERGB)
+                    WriteRGBR(x + dx, y + dy, c,fbc); // 在x和y的基础上，偏移dx,dy绘制像素
+                else
+                    WriteBGRR(x + dx, y + dy, c,fbc); // 在x和y的基础上，偏移dx,dy绘制像素
             }
         }
     }

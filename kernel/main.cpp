@@ -32,6 +32,7 @@ bool                     no_interrupt = false; // 为true时代表严禁开启�
 extern spin_t fb_print_lock;
 void desktop_flusher()
 {
+    disable_intr();
     // init_ttf(*fbc_addr);
 
     write_serial_string("desktop flusher is running\n");
