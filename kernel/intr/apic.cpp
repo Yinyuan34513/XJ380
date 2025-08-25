@@ -210,8 +210,9 @@ void init_apic(uint64_t MADT0)
     }
 
     init_lApic();
+    init_IOApic();
 
-    ioapic_mask_all();
+    // ioapic_mask_all();   // 我是傻逼
 
     write_serial_string("APIC Initialize Success.\n");
 }
