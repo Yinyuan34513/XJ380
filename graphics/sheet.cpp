@@ -216,9 +216,7 @@ void create_sheet(SHEET_INFO *sht, UINT32 bx, UINT32 by, UINT32 x, UINT32 y, UIN
             sht->sht_numed++;
         }
     }
-    write_serial_string("Sheet Create Success. SheetID: ");
-    write_serial_dec(*sheet_id);
-    write_serial_string("\n");
+    // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *sheet_id);
     SheetIsCreating = false;
 }
 

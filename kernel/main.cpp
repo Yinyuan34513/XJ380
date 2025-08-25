@@ -30,6 +30,16 @@ uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t fb_print_lock;
+void init_cpu()
+{
+  __asm__ __volatile__("movq %%cr0, %%rax\n\t"
+                       "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+                       "or $0x2, %%ax\n\t"       // set coprocessor monitoring  CR0.MP
+                       "movq %%rax, %%cr0\n\t"
+                       "movq %%cr4, %%rax\n\t"
+                       "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
+                       "movq %%rax, %%cr4\n\t":::"rax");
+}
 void desktop_flusher()
 {
     disable_intr();
@@ -151,10 +161,11 @@ void desktop_flusher()
 }
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
-    (void)fbc;         // 暂时不用
+    fbc_addr = &fbc;
     (void)SystemTable; // 暂时不用
     no_interrupt = true;
     disable_intr();
+    init_cpu();
     init_idt();
     init_gdt();
     init_hpet(BootConfig.HPET);
