@@ -37,21 +37,21 @@ static int dummy()
 }
 
 static struct vfs_callback callbacks =
-    {
-        .open = (vfs_open_t)dummy,
-        .close = (vfs_close_t)dummy,
-        .read = procfs_read,
-        .write = (vfs_write_t)dummy,
-        .mkdir = (vfs_mk_t)dummy,
-        .mkfile = (vfs_mk_t)dummy,
-        .del = (vfs_del_t)dummy,
-        .rename = (vfs_rename_t)dummy,
-        .stat = (vfs_stat_t)dummy,
-        .ioctl = (vfs_ioctl_t)dummy,
-        .poll = (vfs_poll_t)dummy,
-        .mount = (vfs_mount_t)dummy,
-        .unmount = (vfs_unmount_t)dummy,
-        .dup = (vfs_dup_t)dummy,
+{
+    .mount = (vfs_mount_t)dummy,
+    .unmount = (vfs_unmount_t)dummy,
+    .open = (vfs_open_t)dummy,
+    .close = (vfs_close_t)dummy,
+    .read = procfs_read,
+    .write = (vfs_write_t)dummy,
+    .mkdir = (vfs_mk_t)dummy,
+    .mkfile = (vfs_mk_t)dummy,
+    .del = (vfs_del_t)dummy,
+    .rename = (vfs_rename_t)dummy,
+    .stat = (vfs_stat_t)dummy,
+    .ioctl = (vfs_ioctl_t)dummy,
+    .poll = (vfs_poll_t)dummy,
+    .dup = (vfs_dup_t)dummy,
 };
 
 void proc_init()
