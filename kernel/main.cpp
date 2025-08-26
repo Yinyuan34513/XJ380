@@ -21,6 +21,7 @@
 #include <ttf.h>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
+#include <syscall/syscall.h>
 SHEET_INFO *sht_img;
 XWM_INFO *xwmii;
 uint16_t * msid;
@@ -252,6 +253,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("Alloc memory: ");
     write_serial_hex(phys);
     write_serial_string("\n");
+
+    init_syscall();
 
     process_setup();
 

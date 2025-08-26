@@ -8,6 +8,7 @@
 #include <apic/madt.h>
 #include <cpu/msr.h>
 #include <krlibc.h>
+#include <syscall/syscall.h>
 
 XSK_SMP_INFO *xsi;
 
@@ -117,6 +118,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     wrmsr(0x1b, ia32_apic_base);
 
     init_lApic();
+
+    init_syscall();
 
     tcb_t apu_idle         = (tcb_t)malloc(STACK_SIZE);
     apu_idle->task_level   = TASK_IDLE_LEVEL;
