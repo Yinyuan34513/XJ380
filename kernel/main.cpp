@@ -37,6 +37,7 @@ uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t fb_print_lock;
+
 void init_cpu()
 {
   __asm__ __volatile__("movq %%cr0, %%rax\n\t"
@@ -47,6 +48,7 @@ void init_cpu()
                        "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
                        "movq %%rax, %%cr4\n\t":::"rax");
 }
+
 void desktop_flusher()
 {
     disable_intr();
@@ -205,6 +207,7 @@ void desktop_flusher()
         refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
     }
 }
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -262,7 +265,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
 
     pcb_t ugp = create_process_group("User Group", NULL, NULL);
-    // create_user_thread((void *)test_task2, NULL, "test_task2", ugp);
+    // create_user_thread((void *)test_task2, NULL, (char *)"test_task2", ugp);
 
 
     open_interrupt;
