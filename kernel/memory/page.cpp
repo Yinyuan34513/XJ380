@@ -235,9 +235,14 @@ page_directory_t *get_kernel_pagedir()
     return &kernel_page_dir;
 }
 
-// page_directory_t *get_current_directory() {
-//     return cpu->ready ? cpu->directory : current_directory;
-// }
+extern volatile bool is_scheduler;
+
+page_directory_t gdc_temp_pdt;
+
+page_directory_t *get_current_directory() {
+    gdc_temp_pdt.table = (page_table_t *)phys_to_virt(get_cr3());
+    return &gdc_temp_pdt;
+}
 
 static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
 {
