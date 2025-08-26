@@ -13,11 +13,6 @@ typedef uint64_t u64;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint8_t   u8;
-typedef void VOID;
-typedef unsigned char      UINT8;
-typedef unsigned short     UINT16;
-typedef unsigned int       UINT32;
-typedef unsigned long long UINT64;
 #ifdef __UINTPTR_TYPE__
 typedef __UINTPTR_TYPE__ uintptr_t;
 #endif

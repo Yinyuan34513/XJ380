@@ -26,6 +26,7 @@ XWM_INFO *xwmii;
 uint16_t * msid;
 
 extern mouse_dec ms_dec;
+extern bool winRD_lock;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -137,6 +138,9 @@ void desktop_flusher()
     WINDOWLS *test_win2;
     init_xwm(&xwmi);
     xwmii = &xwmi;
+    
+    winRD_lock = true;
+
     create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
     create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 

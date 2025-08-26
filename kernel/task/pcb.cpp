@@ -168,6 +168,11 @@ pcb_t create_process_group(const char* name, pcb_t parent, page_directory_t *dir
     return pcb;
 }
 
+extern "C" uint64_t switch_to_kernel_stack()
+{
+    return get_current_task()->kernel_stack;
+}
+
 void process_setup()
 {
     pcb_group_queue     = queue_init();

@@ -139,19 +139,19 @@
 
 
 // Proto (XAPI Edition)
-int do_xapi_CreateWindow(UINT64 handle, UINT64 xwin);
-int do_xapi_SetWindowTitle(UINT64 handle, UINT64 str);
-int do_xapi_CloseWindow(UINT64 handle);
-int do_xapi_SetIcon(UINT64 handle, UINT64 path);
-int do_xapi_DrawPoint(UINT64 handle, UINT32 x, UINT32 y, UINT32 color);
-int do_xapi_DrawLine(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
-int do_xapi_DrawRect_fill(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
-int do_xapi_DrawRect(UINT64 handle, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 color);
-// int do_xapi_DrawCircle_fill(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
-// int do_xapi_DrawCircle(UINT64 handle, UINT32 x, UINT32 y, UINT32 radius, UINT32 color);
-int do_xapi_DrawText(UINT64 handle, UINT32 x, UINT32 y, UINT64 str, UINT32 size, UINT32 color);
-int do_xapi_RefreshWindow(UINT64 handle);
-int do_xapi_SetMsgProc(UINT64 handle, UINT64 func);
+int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
+int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);
+int do_xapi_CloseWindow(uint64_t handle);
+int do_xapi_SetIcon(uint64_t handle, uint64_t path);
+int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color);
+int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color);
+int do_xapi_DrawRect_fill(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color);
+int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color);
+// int do_xapi_DrawCircle_fill(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color);
+// int do_xapi_DrawCircle(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color);
+int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
+int do_xapi_RefreshWindow(uint64_t handle);
+int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
 
 
 
@@ -163,12 +163,12 @@ int do_xapi_SetMsgProc(UINT64 handle, UINT64 func);
 // int sys_open(const char *pathname, int flags, int mode);
 // int sys_close(uint32_t fd);
 // int sys_fstat(uint32_t fd, struct stat *stat);
-int sys_execve(struct X64_REGS *regs);
-int sys_exit(int status);
-int sys_fork(struct X64_REGS *regs);
-int sys_vfork(struct X64_REGS *regs);
-uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
-uint64_t sys_brk(uint64_t addr);
+// int sys_execve(struct X64_REGS *regs);
+// int sys_exit(int status);
+// int sys_fork(struct X64_REGS *regs);
+// int sys_vfork(struct X64_REGS *regs);
+// uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
+// uint64_t sys_brk(uint64_t addr);
 
 #define PROT_NONE 0x0
 #define PROT_READ 0x1
@@ -178,9 +178,9 @@ uint64_t sys_brk(uint64_t addr);
 #define MAP_SHARED 0x1
 #define MAP_PRIVATE 0x2
 #define MAP_FIXED 0x10
-uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
+// uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
 
-uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
+// uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
 
 void init_syscall();
 

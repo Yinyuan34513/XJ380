@@ -1,6 +1,6 @@
 #pragma once
 
-#include<proto.hpp>
+#include <proto.hpp>
 
 struct WINDOW_HANDLE {
     WINDOWLS* WindowNodePtr;
@@ -8,8 +8,8 @@ struct WINDOW_HANDLE {
 
 struct XWINDOW
 {
-    UINT32 	width;
-    UINT32 	height;
+    uint32_t 	width;
+    uint32_t 	height;
     char   *title;
-    UINT8 	sets;
+    uint8_t 	sets;
 };

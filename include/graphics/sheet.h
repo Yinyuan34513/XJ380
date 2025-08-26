@@ -15,7 +15,7 @@ typedef struct SHEET *SHEETP;
 struct SHEET
 {
     SHEETP front;
-    VOID *buffer;
+    void *buffer;
     int bx, by;
     uint32_t width, height;
     uint32_t type;
@@ -27,7 +27,7 @@ struct SHEET
 typedef struct
 {
     SHEET *start;
-    VOID *temp_buffer;
+    void *temp_buffer;
     uint32_t scrx, scry;
     uint16_t sheet_num; // 图层数量 - 1
     uint16_t sht_numed; // 图层数量 - 1，用于编号

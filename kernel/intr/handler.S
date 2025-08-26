@@ -284,3 +284,83 @@ ENTRY(mouse_handler)
     leaq c_mouse_handler(%rip), %rax
     xchgq %rax, (%rsp)
     jmp Err_Code
+
+ENTRY(syscall_handler)
+    cli
+    cld
+
+    // “压入” reserved 1~6
+    subq    $0x38, %rsp
+
+    pushq	%rax
+
+	movq	%es,	%rax
+	pushq	%rax
+	movq	%ds,	%rax
+	pushq	%rax
+
+	pushq	%rbp
+	pushq	%rdi
+	pushq	%rsi
+	pushq	%rdx
+	pushq	%rcx
+	pushq	%rbx
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+    movq    %rsp,   %rsi
+
+    callq switch_to_kernel_stack
+    subq $0xc0,  %rax   
+    movq    %rax, %rsp
+
+    movq    %rsp,   %rdi
+    movq    $0xc0, %rdx 
+    callq memcpy
+
+    movq    %rsp, %rdi
+    callq c_syscall_handler
+
+    movq    %rax,   %rdi
+    movq    %rsp,   %rsi
+    movq    $0xc0, %rdx 
+    callq memcpy
+
+    movq    %rdi,   %rsp
+
+ENTRY(ret_from_syscall)
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbx
+    popq %rcx
+    popq %rdx
+    popq %rsi
+    popq %rdi
+    popq %rbp
+
+    popq %rax
+    movq %rax, %ds
+
+    popq %rax
+    movq %rax, %es
+
+    popq %rax
+
+    // 弹出 reserved 1~6
+    addq $0x38, %rsp
+
+    sti
+
+    sysretq

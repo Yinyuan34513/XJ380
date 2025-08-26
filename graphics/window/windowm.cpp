@@ -4,7 +4,7 @@
  *      Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.
  *
  */
-#include<proto.hpp>
+#include <proto.hpp>
 #include <graphics/window/window.h>
 #include <ttf.h>
 #include <global_color.h>
