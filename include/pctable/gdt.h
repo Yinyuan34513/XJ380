@@ -2,6 +2,7 @@
 #define _INCLUDE_GDT_H_
 
 #include <stdint.h>
+#include <cpu/longm.h>
 
 #define GDT_TYPE_ZERO      0
 #define GDT_TYPE_KERNEL_CS 1
