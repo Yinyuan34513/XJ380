@@ -239,7 +239,8 @@ extern volatile bool is_scheduler;
 
 page_directory_t gdc_temp_pdt;
 
-page_directory_t *get_current_directory() {
+page_directory_t *get_current_directory()
+{
     gdc_temp_pdt.table = (page_table_t *)phys_to_virt(get_cr3());
     return &gdc_temp_pdt;
 }

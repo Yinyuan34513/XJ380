@@ -29,11 +29,12 @@ pcb_t         kernel_group    = NULL;
         __asm__ volatile("hlt");
 }
 
-void switch_to_user_mode() {
+void switch_to_user_mode()
+{
     close_interrupt;
-    uint64_t rsp = (uint64_t)get_current_task()->user_stack_top;
+    uint64_t rsp                        = (uint64_t)get_current_task()->user_stack_top;
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
-    uint64_t func = get_current_task()->main;
+    uint64_t func                       = get_current_task()->main;
 
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
@@ -43,11 +44,10 @@ void switch_to_user_mode() {
                      "pushq %3\n" // CS
                      "pushq %4\n" // RIP
                      "iretq\n"
-            :
-            : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp),
-              "r"(get_current_task()->context0.rflags), "r"((uint64_t)0x23),
-              "r"(func), "r"((uint64_t)0x1b)
-            : "memory");
+                     :
+                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp), "r"(get_current_task()->context0.rflags),
+                       "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b)
+                     : "memory");
 }
 
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
@@ -84,8 +84,8 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     PUSH_STACK(stack_top, (uint64_t)_start);
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)_start;
-    new_task->context0.rsp    = (uint64_t)stack_top & ~(uint64_t)0xF;                        // 设置上下文
-    new_task->kernel_stack    = (new_task->context0.rsp -= 8); // 栈16字节对齐
+    new_task->context0.rsp    = (uint64_t)stack_top & ~(uint64_t)0xF; // 设置上下文
+    new_task->kernel_stack    = (new_task->context0.rsp -= 8);        // 栈16字节对齐
     new_task->context0.cs     = 0x8;
     new_task->context0.ss     = 0x10;
     new_task->context0.es     = 0x10;
@@ -100,7 +100,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb) 
+size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
     close_interrupt;
     disable_scheduler();
@@ -143,8 +143,7 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->status          = CREATE;
     new_task->main            = (uint64_t)_start;
 
-    new_task->user_stack =
-            page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
 
     new_task->fs_base = (uint64_t)new_task;
@@ -154,17 +153,17 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-pcb_t create_process_group(const char* name, pcb_t parent, page_directory_t *directory) 
+pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory)
 {
-    pcb_t pcb = (pcb_t)malloc(sizeof(struct process_control_block));
-    pcb->pid = now_pid++;
+    pcb_t pcb        = (pcb_t)malloc(sizeof(struct process_control_block));
+    pcb->pid         = now_pid++;
     pcb->parent_task = parent == NULL ? kernel_group : parent;
-    pcb->status = START;
+    pcb->status      = START;
     pcb->queue_index = queue_enqueue(pcb_group_queue, pcb);
-    strcpy(pcb->name,name);
+    strcpy(pcb->name, name);
     pcb->thread_queue = queue_init();
-    pcb->ppid = 0;
-    pcb->pagedir = directory ? directory : get_kernel_pagedir();
+    pcb->ppid         = 0;
+    pcb->pagedir      = directory ? directory : get_kernel_pagedir();
     return pcb;
 }
 

@@ -25,10 +25,7 @@ int ahci_try_send(struct hba_port *port, int slot)
             sata_read_error(port);
             retries++;
         }
-        else
-        {
-            break;
-        }
+        else { break; }
     }
 
     hba_clear_reg(port->regs[HBA_RPxIS]);
@@ -42,11 +39,11 @@ int ahci_try_send(struct hba_port *port, int slot)
 #define ATA_STS_BSY (1 << 7) // Busy
 
 // ATA 错误寄存器 (ERR) 位定义
-#define ATA_ERR_AMNF (1 << 0)  // Address Mark Not Found
+#define ATA_ERR_AMNF  (1 << 0) // Address Mark Not Found
 #define ATA_ERR_TKZNF (1 << 1) // Track Zero Not Found
-#define ATA_ERR_ABRT (1 << 2)  // Command Aborted
-#define ATA_ERR_IDNF (1 << 4)  // ID Not Found (LBA out of range)
-#define ATA_ERR_UNC (1 << 6)   // Uncorrectable Data Error
+#define ATA_ERR_ABRT  (1 << 2) // Command Aborted
+#define ATA_ERR_IDNF  (1 << 4) // ID Not Found (LBA out of range)
+#define ATA_ERR_UNC   (1 << 6) // Uncorrectable Data Error
 
 // AHCI 命令寄存器 (PxCMD) 位定义
 #define AHCI_CMD_FR (1 << 14) // FIS Receive Running
@@ -66,18 +63,14 @@ void ahci_post(struct hba_port *port, struct hba_cmd_state *state, int slot)
 
     hba_clear_reg(port->regs[HBA_RPxIS]);
 
-    port->cmdctx.issued[slot] = state;
-    port->cmdctx.tracked_ci |= bitmask;
-    port->regs[HBA_RPxCI] |= bitmask;
+    port->cmdctx.issued[slot]  = state;
+    port->cmdctx.tracked_ci   |= bitmask;
+    port->regs[HBA_RPxCI]     |= bitmask;
 
     while (1)
     {
-        if ((port->regs[HBA_RPxCI] & (1 << slot)) == 0)
-            break;
-        if (port->regs[HBA_RPxIS] & HBA_PxINTR_TFE)
-        {
-            goto err;
-        }
+        if ((port->regs[HBA_RPxCI] & (1 << slot)) == 0) break;
+        if (port->regs[HBA_RPxIS] & HBA_PxINTR_TFE) { goto err; }
     }
 
     if (port->regs[HBA_RPxIS] & HBA_PxINTR_TFE)

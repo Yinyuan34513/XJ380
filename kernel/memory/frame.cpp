@@ -99,8 +99,8 @@ uint64_t alloc_frames(size_t count)
 
     return frame_index * 4096;
 }
-spin_t frame_op_lock=SPIN_INIT;
-void free_frames(uint64_t addr, uint64_t size)
+spin_t frame_op_lock = SPIN_INIT;
+void   free_frames(uint64_t addr, uint64_t size)
 {
     spin_lock(frame_op_lock);
 

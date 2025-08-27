@@ -1,23 +1,17 @@
-#include <pci/pci.h>
-#include <ahci/block.h>
 #include "ahci/ahci.h"
+#include "ahci/hba.h"
 #include "ahci/sata.h"
 #include "ahci/scsi.h"
-#include "ahci/hba.h"
+#include <ahci/block.h>
+#include <pci/pci.h>
 #include <proto.hpp>
 
 void *op_buffer;
 
 void achi_register_ops(struct hba_port *port)
 {
-    if (!(port->device->flags & HBA_DEV_FATAPI))
-    {
-        port->device->ops.submit = sata_submit;
-    }
-    else
-    {
-        port->device->ops.submit = scsi_submit;
-    }
+    if (!(port->device->flags & HBA_DEV_FATAPI)) { port->device->ops.submit = sata_submit; }
+    else { port->device->ops.submit = scsi_submit; }
 }
 
 static uint32_t cdb_size[] = {SCSI_CDB12, SCSI_CDB16, 0, 0};
@@ -28,44 +22,40 @@ void ahci_parsestr(char *str, uint16_t *reg_start, int size_word)
     for (int i = 0; i < size_word; i++, j += 2)
     {
         uint16_t reg = *(reg_start + i);
-        str[j] = (char)(reg >> 8);
-        str[j + 1] = (char)(reg & 0xff);
+        str[j]       = (char)(reg >> 8);
+        str[j + 1]   = (char)(reg & 0xff);
     }
     str[j - 1] = '\0';
 }
 
-#define IDDEV_OFFMAXLBA 60
-#define IDDEV_OFFMAXLBA_EXT 230
-#define IDDEV_OFFLSECSIZE 117
-#define IDDEV_OFFWWN 108
-#define IDDEV_OFFSERIALNUM 10
-#define IDDEV_OFFMODELNUM 27
-#define IDDEV_OFFADDSUPPORT 69
-#define IDDEV_OFFA48SUPPORT 83
-#define IDDEV_OFFALIGN 209
-#define IDDEV_OFFLPP 106
+#define IDDEV_OFFMAXLBA       60
+#define IDDEV_OFFMAXLBA_EXT   230
+#define IDDEV_OFFLSECSIZE     117
+#define IDDEV_OFFWWN          108
+#define IDDEV_OFFSERIALNUM    10
+#define IDDEV_OFFMODELNUM     27
+#define IDDEV_OFFADDSUPPORT   69
+#define IDDEV_OFFA48SUPPORT   83
+#define IDDEV_OFFALIGN        209
+#define IDDEV_OFFLPP          106
 #define IDDEV_OFFCAPABILITIES 49
 
 void ahci_parse_dev_info(struct hba_device *dev_info, uint16_t *data)
 {
-    dev_info->max_lba = *((uint32_t *)(data + IDDEV_OFFMAXLBA));
-    dev_info->block_size = *((uint32_t *)(data + IDDEV_OFFLSECSIZE));
-    dev_info->cbd_size = cdb_size[(*data & 0x3)];
-    dev_info->wwn = *(uint64_t *)(data + IDDEV_OFFWWN);
-    dev_info->block_per_sec = 1 << (*(data + IDDEV_OFFLPP) & 0xf);
+    dev_info->max_lba          = *((uint32_t *)(data + IDDEV_OFFMAXLBA));
+    dev_info->block_size       = *((uint32_t *)(data + IDDEV_OFFLSECSIZE));
+    dev_info->cbd_size         = cdb_size[(*data & 0x3)];
+    dev_info->wwn              = *(uint64_t *)(data + IDDEV_OFFWWN);
+    dev_info->block_per_sec    = 1 << (*(data + IDDEV_OFFLPP) & 0xf);
     dev_info->alignment_offset = *(data + IDDEV_OFFALIGN) & 0x3fff;
-    dev_info->capabilities = *((uint32_t *)(data + IDDEV_OFFCAPABILITIES));
+    dev_info->capabilities     = *((uint32_t *)(data + IDDEV_OFFCAPABILITIES));
 
-    if (!dev_info->block_size)
-    {
-        dev_info->block_size = 512;
-    }
+    if (!dev_info->block_size) { dev_info->block_size = 512; }
 
-    if ((*(data + IDDEV_OFFADDSUPPORT) & 0x8) &&
-        (*(data + IDDEV_OFFA48SUPPORT) & 0x400))
+    if ((*(data + IDDEV_OFFADDSUPPORT) & 0x8) && (*(data + IDDEV_OFFA48SUPPORT) & 0x400))
     {
-        dev_info->max_lba = *((uint64_t *)(data + IDDEV_OFFMAXLBA_EXT));
-        dev_info->flags |= HBA_DEV_FEXTLBA;
+        dev_info->max_lba  = *((uint64_t *)(data + IDDEV_OFFMAXLBA_EXT));
+        dev_info->flags   |= HBA_DEV_FEXTLBA;
     }
 
     ahci_parsestr(dev_info->serial_num, data + IDDEV_OFFSERIALNUM, 10);
@@ -74,34 +64,31 @@ void ahci_parse_dev_info(struct hba_device *dev_info, uint16_t *data)
 
 int __get_free_slot(struct hba_port *port)
 {
-    hba_reg_t pxsact = port->regs[HBA_RPxSACT];
-    hba_reg_t pxci = port->regs[HBA_RPxCI];
+    hba_reg_t pxsact   = port->regs[HBA_RPxSACT];
+    hba_reg_t pxci     = port->regs[HBA_RPxCI];
     hba_reg_t free_bmp = pxsact | pxci;
-    uint32_t i = 0;
+    uint32_t  i        = 0;
     for (; i <= port->hba->cmd_slots && (free_bmp & 0x1); i++, free_bmp >>= 1)
         ;
     return i | -(i > port->hba->cmd_slots);
 }
 
-int hba_prepare_cmd(struct hba_port *port,
-                    struct hba_cmdt **cmdt,
-                    struct hba_cmdh **cmdh)
+int hba_prepare_cmd(struct hba_port *port, struct hba_cmdt **cmdt, struct hba_cmdh **cmdh)
 {
     int slot = __get_free_slot(port);
 
     // 构建命令头（Command Header）和命令表（Command Table）
-    struct hba_cmdh *cmd_header = (struct hba_cmdh*)phys_to_virt((uint64_t)&port->cmdlst[slot]);
+    struct hba_cmdh *cmd_header = (struct hba_cmdh *)phys_to_virt((uint64_t)&port->cmdlst[slot]);
     memset(cmd_header, 0, sizeof(struct hba_cmdh));
-    uint64_t phys = alloc_frames(1);
+    uint64_t         phys      = alloc_frames(1);
     struct hba_cmdt *cmd_table = (struct hba_cmdt *)phys_to_virt(phys);
 
     memset(cmd_header, 0, sizeof(struct hba_cmdh));
 
     // 将命令表挂到命令头上
-    cmd_header->cmd_table_base = (uint32_t)(phys & 0xFFFFFFFF);
+    cmd_header->cmd_table_base       = (uint32_t)(phys & 0xFFFFFFFF);
     cmd_header->cmd_table_base_upper = (uint32_t)(phys >> 32);
-    cmd_header->options =
-        HBA_CMDH_FIS_LEN(sizeof(struct sata_reg_fis)) | HBA_CMDH_CLR_BUSY;
+    cmd_header->options              = HBA_CMDH_FIS_LEN(sizeof(struct sata_reg_fis)) | HBA_CMDH_CLR_BUSY;
 
     *cmdh = cmd_header;
     *cmdt = cmd_table;
@@ -114,11 +101,8 @@ void __hba_reset_port(hba_reg_t *port_reg)
     // 根据：SATA-AHCI spec section 10.4.2 描述的端口重置流程
     port_reg[HBA_RPxCMD] &= ~HBA_PxCMD_ST;
     port_reg[HBA_RPxCMD] &= ~HBA_PxCMD_FRE;
-    int cnt = wait_until_expire(!(port_reg[HBA_RPxCMD] & HBA_PxCMD_CR), 500000);
-    if (cnt)
-    {
-        return;
-    }
+    int cnt               = wait_until_expire(!(port_reg[HBA_RPxCMD] & HBA_PxCMD_CR), 500000);
+    if (cnt) { return; }
 
     port_reg[HBA_RPxSCTL] = (port_reg[HBA_RPxSCTL] & ~0xf) | 1;
     wait_until_expire(true, 100000); // 等待至少一毫秒，差不多就行了
@@ -140,28 +124,25 @@ int hba_bind_sbuf(struct hba_cmdh *cmdh, struct hba_cmdt *cmdt, void *buf, uint3
         return -1;
     }
 
-    cmdh->prdt_len = 1;
-    cmdt->entries[0].data_base = buf_phys;
+    cmdh->prdt_len                   = 1;
+    cmdt->entries[0].data_base       = buf_phys;
     cmdt->entries[0].data_base_upper = (buf_phys >> 32);
-    cmdt->entries[0].byte_count = len - 1;
+    cmdt->entries[0].byte_count      = len - 1;
 
     return 0;
 }
 
-void sata_create_fis(struct sata_reg_fis *cmd_fis,
-                     uint8_t command,
-                     uint64_t lba,
-                     uint16_t sector_count)
+void sata_create_fis(struct sata_reg_fis *cmd_fis, uint8_t command, uint64_t lba, uint16_t sector_count)
 {
     memset(cmd_fis, 0, sizeof(struct sata_reg_fis));
 
-    cmd_fis->head.type = SATA_REG_FIS_H2D;
-    cmd_fis->head.options = SATA_REG_FIS_COMMAND;
+    cmd_fis->head.type       = SATA_REG_FIS_H2D;
+    cmd_fis->head.options    = SATA_REG_FIS_COMMAND;
     cmd_fis->head.status_cmd = command;
-    cmd_fis->dev = 0;
+    cmd_fis->dev             = 0;
 
-    cmd_fis->lba0 = SATA_LBA_COMPONENT(lba, 0);
-    cmd_fis->lba8 = SATA_LBA_COMPONENT(lba, 8);
+    cmd_fis->lba0  = SATA_LBA_COMPONENT(lba, 0);
+    cmd_fis->lba8  = SATA_LBA_COMPONENT(lba, 8);
     cmd_fis->lba16 = SATA_LBA_COMPONENT(lba, 16);
     cmd_fis->lba24 = SATA_LBA_COMPONENT(lba, 24);
 
@@ -177,15 +158,15 @@ int ahci_init_device(struct hba_port *port)
     struct hba_cmdh *cmd_header;
 
     uint16_t *data_in = (uint16_t *)alloc_frames(1);
-    uint16_t *data = (uint16_t*)phys_to_virt((uint64_t)data_in);
+    uint16_t *data    = (uint16_t *)phys_to_virt((uint64_t)data_in);
 
     int slot = hba_prepare_cmd(port, &cmd_table, &cmd_header);
     hba_bind_sbuf(cmd_header, cmd_table, data, 512);
 
-    port->device = (hba_device*)malloc(sizeof(struct hba_device));
+    port->device = (hba_device *)malloc(sizeof(struct hba_device));
     memset(port->device, 0, sizeof(struct hba_device));
     port->device->port = port;
-    port->device->hba = port->hba;
+    port->device->hba  = port->hba;
 
     struct sata_reg_fis *cmd_fis = (struct sata_reg_fis *)(&cmd_table->command_fis);
 
@@ -202,17 +183,11 @@ int ahci_init_device(struct hba_port *port)
         sata_create_fis(cmd_fis, ATA_IDENTIFY_PAKCET_DEVICE, 0, 0);
     }
 
-    if (!ahci_try_send(port, slot))
-    {
-        goto fail;
-    }
+    if (!ahci_try_send(port, slot)) { goto fail; }
 
     ahci_parse_dev_info(port->device, data);
 
-    if (!(port->device->flags & HBA_DEV_FATAPI))
-    {
-        goto done;
-    }
+    if (!(port->device->flags & HBA_DEV_FATAPI)) { goto done; }
 
     // If the device is SATAPI device
 
@@ -232,13 +207,10 @@ int ahci_init_device(struct hba_port *port)
         cdb16->misc1 = 0x10; // service action
     }
 
-    cmd_header->transferred_size = 0;
-    cmd_header->options |= HBA_CMDH_ATAPI;
+    cmd_header->transferred_size  = 0;
+    cmd_header->options          |= HBA_CMDH_ATAPI;
 
-    if (!ahci_try_send(port, slot))
-    {
-        goto fail;
-    }
+    if (!ahci_try_send(port, slot)) { goto fail; }
 
     scsi_parse_capacity(port->device, (uint32_t *)data);
 
@@ -259,7 +231,7 @@ fail:
 uint64_t ahci_read(void *data, uint64_t lba, void *buffer, uint64_t size)
 {
     struct hba_device *dev = (struct hba_device *)data;
-    struct blkio_req req = {.buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = 0};
+    struct blkio_req   req = {.buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = 0};
     dev->ops.submit(dev, &req);
     return size;
 }
@@ -267,7 +239,7 @@ uint64_t ahci_read(void *data, uint64_t lba, void *buffer, uint64_t size)
 uint64_t ahci_write(void *data, uint64_t lba, void *buffer, uint64_t size)
 {
     struct hba_device *dev = (struct hba_device *)data;
-    struct blkio_req req = {.buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = BLKIO_WRITE};
+    struct blkio_req   req = {.buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = BLKIO_WRITE};
     dev->ops.submit(dev, &req);
     return size;
 }
@@ -277,7 +249,7 @@ uint64_t ahci_write(void *data, uint64_t lba, void *buffer, uint64_t size)
 
 struct ahci_driver *ahci_driver_init(pci_bar_base_address *bar5)
 {
-    struct ahci_driver *ahci_drv = (ahci_driver*)malloc(sizeof(struct ahci_driver));
+    struct ahci_driver *ahci_drv = (ahci_driver *)malloc(sizeof(struct ahci_driver));
     memset(ahci_drv, 0, sizeof(struct ahci_driver));
     struct ahci_hba *hba = &ahci_drv->hba;
 
@@ -296,22 +268,21 @@ struct ahci_driver *ahci_driver_init(pci_bar_base_address *bar5)
     hba->base[HBA_RGHC] |= HBA_RGHC_ACHI_ENABLE;
     hba->base[HBA_RGHC] &= ~HBA_RGHC_INTR_ENABLE;
 
-    hba_reg_t cap = hba->base[HBA_RCAP];
+    hba_reg_t cap  = hba->base[HBA_RCAP];
     hba_reg_t pmap = hba->base[HBA_RPI];
 
     hba->ports_num = (cap & 0x1f) + 1;  // CAP.PI
     hba->cmd_slots = (cap >> 8) & 0x1f; // CAP.NCS
-    hba->version = hba->base[HBA_RVER];
+    hba->version   = hba->base[HBA_RVER];
     hba->ports_bmp = pmap;
 
     uint64_t clb_pa = 0, fis_pa = 0;
 
     for (uint64_t i = 0, fisp = 0, clbp = 0; i < 32; i++, pmap >>= 1, fisp = (fisp + 1) % 16, clbp = (clbp + 1) % 4)
     {
-        if (!(pmap & 0x1))
-            continue;
+        if (!(pmap & 0x1)) continue;
 
-        struct hba_port *port = (hba_port*)malloc(sizeof(struct hba_port));
+        struct hba_port *port = (hba_port *)malloc(sizeof(struct hba_port));
         memset(port, 0, sizeof(struct hba_port));
 
         hba_reg_t *port_regs = (hba_reg_t *)(&hba->base[HBA_RPBASE + i * HBA_RPSIZE]);
@@ -329,18 +300,18 @@ struct ahci_driver *ahci_driver_init(pci_bar_base_address *bar5)
             memset((void *)phys_to_virt(fis_pa), 0, 0x1000);
         }
 
-        uint64_t addr = clb_pa + clbp * HBA_CLB_SIZE;
-        port_regs[HBA_RPxCLB] = (uint32_t)(addr & 0xFFFFFFFF);
+        uint64_t addr             = clb_pa + clbp * HBA_CLB_SIZE;
+        port_regs[HBA_RPxCLB]     = (uint32_t)(addr & 0xFFFFFFFF);
         port_regs[HBA_RPxCLB + 1] = (uint32_t)(addr >> 32);
-        addr = fis_pa + fisp * HBA_FIS_SIZE;
-        port_regs[HBA_RPxFB] = (uint32_t)(addr & 0xFFFFFFFF);
-        port_regs[HBA_RPxFB + 1] = (uint32_t)(addr >> 32);
+        addr                      = fis_pa + fisp * HBA_FIS_SIZE;
+        port_regs[HBA_RPxFB]      = (uint32_t)(addr & 0xFFFFFFFF);
+        port_regs[HBA_RPxFB + 1]  = (uint32_t)(addr >> 32);
 
-        port->regs = port_regs;
-        port->ssts = port_regs[HBA_RPxSSTS];
+        port->regs   = port_regs;
+        port->ssts   = port_regs[HBA_RPxSSTS];
         port->cmdlst = (struct hba_cmdh *)(clb_pa + clbp * HBA_CLB_SIZE);
-        port->fis = (void *)(fis_pa + fisp * HBA_FIS_SIZE);
-        port->hba = hba;
+        port->fis    = (void *)(fis_pa + fisp * HBA_FIS_SIZE);
+        port->hba    = hba;
 
         port_regs[HBA_RPxCI] = 0;
 
@@ -366,13 +337,10 @@ struct ahci_driver *ahci_driver_init(pci_bar_base_address *bar5)
 
         struct hba_device *hbadev = port->device;
 
-        regist_blkdev((char *)"ahci", hbadev, hbadev->block_size, hbadev->max_lba * hbadev->block_size, ahci_read, ahci_write);
+        regist_blkdev((char *)"ahci", hbadev, hbadev->block_size, hbadev->max_lba * hbadev->block_size, ahci_read,
+                      ahci_write);
 
-        write_serial_fmt("sata%d: %s, blk_size=%d, blk=0..%d\n",
-               i,
-               hbadev->model,
-               hbadev->block_size,
-               hbadev->max_lba);
+        write_serial_fmt("sata%d: %s, blk_size=%d, blk=0..%d\n", i, hbadev->model, hbadev->block_size, hbadev->max_lba);
     }
 
     return ahci_drv;
@@ -385,9 +353,9 @@ struct ahci_driver *drv;
 uint64_t ahci_init()
 {
     pci_device_t *devs[MAX_AHCI_DEV_NUM];
-    uint32_t ahci_dev_num;
+    uint32_t      ahci_dev_num;
 
-    pci_find_class(devs,&ahci_dev_num, 0x010601);
+    pci_find_class(devs, &ahci_dev_num, 0x010601);
     if (ahci_dev_num == 0)
     {
         write_serial_fmt("No AHCI controller found\n");

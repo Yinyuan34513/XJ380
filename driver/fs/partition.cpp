@@ -1,11 +1,11 @@
-#include "fs/vfs/vfs.h"
-#include "fs/vfs/dev.h"
 #include "fs/partition.h"
 #include "ahci/block.h"
+#include "fs/vfs/dev.h"
+#include "fs/vfs/vfs.h"
 
-partition_t partitions[MAX_PARTITIONS_NUM];
+partition_t     partitions[MAX_PARTITIONS_NUM];
 struct GPT_DPTE dpte[MAX_PARTITIONS_NUM];
-uint64_t partition_num;
+uint64_t        partition_num;
 
 ssize_t partition_read(void *data, uint64_t offset, void *buf, uint64_t len)
 {
@@ -30,9 +30,10 @@ void partition_init()
 
         struct GPT_DPT *buffer = (struct GPT_DPT *)malloc(sizeof(struct GPT_DPT));
         blkdev_read(i, 512, buffer, sizeof(struct GPT_DPT));
-        uint64_t num_partitions;
+        uint64_t         num_partitions;
         struct GPT_DPTE *dptes;
-        if (memcmp(buffer->signature, GPT_HEADER_SIGNATURE, 8) || buffer->num_partition_entries == 0 || buffer->partition_entry_lba == 0)
+        if (memcmp(buffer->signature, GPT_HEADER_SIGNATURE, 8) || buffer->num_partition_entries == 0 ||
+            buffer->partition_entry_lba == 0)
         {
             free(buffer);
             goto probe_mbr;
@@ -45,10 +46,10 @@ void partition_init()
 
         for (uint32_t j = 0; j < num_partitions; j++)
         {
-            part->blkdev_id = i;
+            part->blkdev_id    = i;
             part->starting_lba = dptes[j].starting_lba;
-            part->ending_lba = dptes[j].ending_lba;
-            part->type = part->GPT;
+            part->ending_lba   = dptes[j].ending_lba;
+            part->type         = part->GPT;
             partition_num++;
         }
 
@@ -63,10 +64,10 @@ void partition_init()
         blkdev_read(i, 0x8001, iso9660_detect, 5);
         if (!memcmp(iso9660_detect, "CD001", 5))
         {
-            part->blkdev_id = i;
+            part->blkdev_id    = i;
             part->starting_lba = 0;
-            part->ending_lba = 0;
-            part->type = part->RAW;
+            part->ending_lba   = 0;
+            part->type         = part->RAW;
             partition_num++;
 
             free(iso9660_detect);
@@ -79,23 +80,22 @@ void partition_init()
 
         if (boot_sector->bs_trail_sig != 0xAA55)
         {
-            part->blkdev_id = i;
+            part->blkdev_id    = i;
             part->starting_lba = 0;
-            part->ending_lba = 0;
-            part->type = part->RAW;
+            part->ending_lba   = 0;
+            part->type         = part->RAW;
             partition_num++;
             continue;
         }
 
         for (int j = 0; j < MBR_MAX_PARTITION_NUM; j++)
         {
-            if (boot_sector->dpte[j].start_lba == 0 || boot_sector->dpte[j].sectors_limit == 0)
-                continue;
+            if (boot_sector->dpte[j].start_lba == 0 || boot_sector->dpte[j].sectors_limit == 0) continue;
 
-            part->blkdev_id = i;
+            part->blkdev_id    = i;
             part->starting_lba = boot_sector->dpte[j].start_lba;
-            part->ending_lba = boot_sector->dpte[j].sectors_limit;
-            part->type = part->MBR;
+            part->ending_lba   = boot_sector->dpte[j].sectors_limit;
+            part->type         = part->MBR;
             partition_num++;
         }
 
@@ -107,7 +107,7 @@ void partition_init()
     {
         char name[MAX_DEV_NAME_LEN];
         sprintf(name, "part%d", i);
-        write_serial_fmt("%s\n",name);
+        write_serial_fmt("%s\n", name);
         regist_dev(name, partition_read, partition_write, NULL, NULL, &partitions[i]);
     }
 }
@@ -118,7 +118,7 @@ void mount_root()
 
     for (uint64_t i = 0; i < partition_num; i++)
     {
-        char buf[1024]={};
+        char buf[1024] = {};
         sprintf(buf, "/dev/part%d", i);
         write_serial_string(buf);
         write_serial_string("\n");

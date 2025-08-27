@@ -30,20 +30,22 @@
 #include "acpi/acpi.h"
 #include "stdint.h"
 
-typedef struct {
+typedef struct
+{
     uint64_t address;
     uint64_t size;
     bool     mmio;
 } pci_bar_base_address;
 
-typedef struct {
+typedef struct
+{
     uint32_t (*read)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5);
 
-    void (*write)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5,
-                  uint32_t value);
+    void (*write)(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t value);
 } pci_device_op_t;
 #define EXPORT_BYTE(target, first) ((first) ? ((target) & ~0xFF00) : (((target) & ~0x00FF) >> 8))
-typedef struct {
+typedef struct
+{
     const char *name;
     uint32_t    class_code;
     uint8_t     header_type;

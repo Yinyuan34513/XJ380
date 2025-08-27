@@ -3,12 +3,14 @@
 #include "acpi/acpi.h"
 #include "stdint.h"
 
-typedef struct {
+typedef struct
+{
     struct ACPISDTHeader Header;
     uint64_t             Reserved;
 } __attribute__((packed)) MCFG;
 
-typedef struct {
+typedef struct
+{
     uint64_t base_address;
     uint16_t pci_segment_group;
     uint8_t  start_bus;

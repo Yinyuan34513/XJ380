@@ -5,18 +5,18 @@
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
 #endif
-#define waitif(cond)                                                                               \
-    ((void)({                                                                                      \
-        while (cond) {}                                                                            \
+#define waitif(cond)                                                                                                   \
+    ((void)({                                                                                                          \
+        while (cond) {}                                                                                                \
     }))
 static inline void empty() {};
 #define ABS(x)    ((x) > 0 ? (x) : -(x))
 #define MAX(x, y) ((x > y) ? (x) : (y))
 #define MIN(x, y) ((x < y) ? (x) : (y))
-#define streq(s1, s2)                                                                              \
-    ({                                                                                             \
-        const char *_s1 = (s1), *_s2 = (s2);                                                       \
-        (_s1 && _s2) ? strcmp(_s1, _s2) == 0 : _s1 == _s2;                                         \
+#define streq(s1, s2)                                                                                                  \
+    ({                                                                                                                 \
+        const char *_s1 = (s1), *_s2 = (s2);                                                                           \
+        (_s1 && _s2) ? strcmp(_s1, _s2) == 0 : _s1 == _s2;                                                             \
     })
 #undef CHAR_BIT
 #define CHAR_BIT __CHAR_BIT__
@@ -79,27 +79,27 @@ static inline void empty() {};
 #define LONG_MIN (-LONG_MAX - 1L)
 #undef ULONG_MAX
 #define ULONG_MAX (LONG_MAX * 2UL + 1UL)
-int    memcmp(const void *a_, const void *b_, size_t size);
-void  *memcpy(void *dest, const void *src, size_t n);
-void  *memset(void *dst, int val, size_t size);
-char  *strcpy(char *dest, const char *src);
-size_t strlen(const char *str);
-char *strcat(char *dest, const char *src);
-char *strchrnul(const char *s, int c);
-int strncmp(const char *s1, const char *s2, size_t n);
-char *strchr(const char *s, int c);
-int strcmp(const char *s1, const char *s2) ;
-char *strcpy(char *dest, const char *src);
-int isspace(int c);
-char *strtok(char *str, const char *delim) ;
+int     memcmp(const void *a_, const void *b_, size_t size);
+void   *memcpy(void *dest, const void *src, size_t n);
+void   *memset(void *dst, int val, size_t size);
+char   *strcpy(char *dest, const char *src);
+size_t  strlen(const char *str);
+char   *strcat(char *dest, const char *src);
+char   *strchrnul(const char *s, int c);
+int     strncmp(const char *s1, const char *s2, size_t n);
+char   *strchr(const char *s, int c);
+int     strcmp(const char *s1, const char *s2);
+char   *strcpy(char *dest, const char *src);
+int     isspace(int c);
+char   *strtok(char *str, const char *delim);
 int64_t strtol(const char *str, char **endptr, int base);
-char *strdup(const char *str) ;
-char *pathacat(char *p1, char *p2);
-int fls(unsigned int x) ;
-int isdigit(int c);
-char *strrchr(const char *s, int c) ;
-char *strncpy(char *dest, const char *src, size_t n) ;
-char *strstr(const char *str1, const char *str2);
+char   *strdup(const char *str);
+char   *pathacat(char *p1, char *p2);
+int     fls(unsigned int x);
+int     isdigit(int c);
+char   *strrchr(const char *s, int c);
+char   *strncpy(char *dest, const char *src, size_t n);
+char   *strstr(const char *str1, const char *str2);
 
 typedef struct num_fmt_type
 {
@@ -120,6 +120,32 @@ typedef struct num_formatter
     size_t precision; // 精度（整数情况下约等于补0）
 } num_formatter_t;
 
+/* Placeholder ... */
+typedef struct Writer Writer;
+
+/**
+ * A handle of writing a char
+ * `uint8_t` is a bool, if != 0 means write success, if == 0 means write failure
+ */
+typedef uint8_t (*WriteHandler)(Writer *writer, char ch);
+
+/**
+ * A interface of writing a char (May extended in the future)
+ */
+typedef struct Writer
+{
+    void        *data; // Any data
+    WriteHandler handler;
+} Writer;
+
+/**
+ * Write a number to a writer
+ * @param writer Writer
+ * @param fmter Number formatter
+ * @param type Number format type
+ */
+size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type);
+
 /**
  * 把字符串数字转成整数
  * @param pstr 字符串
@@ -133,22 +159,6 @@ int atoi(const char *pstr);
  * @return 整数
  */
 int skip_atoi(const char **s);
-
-/**
- * 把整数转成字符串数字
- * @param str 字符串
- * @param fmter 整数格式化器
- * @param type 
- */
-char *number(char *str, num_formatter_t fmter, num_fmt_type type);
-
-/**
- * 计算函数 number() 返回的字符串数字的大小（用于提前分配好足够的空间）
- * @param fmter 整数格式化器
- * @param type 格式化类型
- * @return 数字格式化后的大小
- */
-uint64_t number_length(num_formatter_t fmter, num_fmt_type type);
 
 static inline bool are_interrupts_enabled()
 {

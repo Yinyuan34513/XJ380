@@ -1,14 +1,14 @@
-#include <proto.hpp>
 #include <font.h>
-spin_t fb_print_lock;
-auto operator new(size_t size, void *ptr) -> void *;
-auto operator new[](size_t size, void *ptr) -> void *;
-auto operator delete(void *ptr, size_t size) -> void;
-auto operator delete[](void *ptr, size_t size) -> void;
+#include <proto.hpp>
+spin_t               fb_print_lock;
+auto                 operator new(size_t size, void *ptr) -> void *;
+auto                 operator new[](size_t size, void *ptr) -> void *;
+auto                 operator delete(void *ptr, size_t size) -> void;
+auto                 operator delete[](void *ptr, size_t size) -> void;
 extern const uint8_t _binary___font_hankaku_bin_start;
 extern const uint8_t _binary___font_hankaku_bin_end;
 extern const uint8_t _binary___font_hankaku_bin_size; // 将三个常量声明
-typedef size_t uintptr_t;
+typedef size_t       uintptr_t;
 
 const uint8_t *GetFont(char c)
 {
@@ -20,32 +20,26 @@ const uint8_t *GetFont(char c)
 
 void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const PixelColor &c)
 {
-    bool USERGB=true;
+    bool USERGB = true;
     switch (fbc.pixel_format)
     {
-    case PixelFormat::kRGBR:
-        USERGB=true;
-        break;
-    case PixelFormat::kBGRR:
-        USERGB=false;
-        break;
-    default:
-        break;
+    case PixelFormat::kRGBR: USERGB = true; break;
+    case PixelFormat::kBGRR: USERGB = false; break;
+    default: break;
     }
 
     const uint8_t *font = GetFont(ch); // 获取字体
-    if (font == nullptr)
-        return; // 不存在字体，直接退出
+    if (font == nullptr) return;       // 不存在字体，直接退出
     for (int dy = 0; dy < 16; dy++)
     { // 第几行
         for (int dx = 0; dx < 16; dx++)
         { // 第几列
             if ((font[dy] << dx) & 0x80u)
-            {                                           // 判断第dx位是否为1
-                if(USERGB)
-                    WriteRGBR(x + dx, y + dy, c,fbc); // 在x和y的基础上，偏移dx,dy绘制像素
+            { // 判断第dx位是否为1
+                if (USERGB)
+                    WriteRGBR(x + dx, y + dy, c, fbc); // 在x和y的基础上，偏移dx,dy绘制像素
                 else
-                    WriteBGRR(x + dx, y + dy, c,fbc); // 在x和y的基础上，偏移dx,dy绘制像素
+                    WriteBGRR(x + dx, y + dy, c, fbc); // 在x和y的基础上，偏移dx,dy绘制像素
             }
         }
     }
@@ -53,17 +47,18 @@ void WriteAscii(const FrameBufferConfig &fbc, int x, int y, char ch, const Pixel
 
 void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec, const PixelColor &c)
 {
-    char str[255];
-    int radix = 10;
-    char index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
-    unsigned unum;                                         // 存放要转换的整数的绝对值,转换的整数可能是负数
-    int i = 0, j, k;                                       // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
+    char     str[255];
+    int      radix   = 10;
+    char     index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
+    unsigned unum;                                             // 存放要转换的整数的绝对值,转换的整数可能是负数
+    int      i = 0, j,
+        k; // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
 
     // 获取要转换的整数的绝对值
     if (radix == 10 && dec < 0) // 要转换成十进制数并且是负数
     {
-        unum = (unsigned)-dec; // 将num的绝对值赋给unum
-        str[i++] = '-';        // 在字符串最前面设置为'-'号，并且索引加1
+        unum     = (unsigned)-dec; // 将num的绝对值赋给unum
+        str[i++] = '-';            // 在字符串最前面设置为'-'号，并且索引加1
     }
     else
         unum = (unsigned)dec; // 若是num为正，直接赋值给unum
@@ -71,8 +66,8 @@ void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec
     // 转换部分，注意转换后是逆序的
     do
     {
-        str[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
-        unum /= radix;                            // unum去掉最后一位
+        str[i++]  = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
+        unum     /= radix;                         // unum去掉最后一位
 
     } while (unum); // 直至unum为0退出循环
 
@@ -87,9 +82,9 @@ void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec
     char temp;                         // 临时变量，交换两个值时用到
     for (j = k; j <= (i - 1) / 2; j++) // 头尾一一对称交换，i其实就是字符串的长度，索引最大值比长度少1
     {
-        temp = str[j];               // 头部赋值给临时变量
-        str[j] = str[i - 1 + k - j]; // 尾部赋值给头部
-        str[i - 1 + k - j] = temp;   // 将临时变量的值(其实就是之前的头部值)赋给尾部
+        temp               = str[j];             // 头部赋值给临时变量
+        str[j]             = str[i - 1 + k - j]; // 尾部赋值给头部
+        str[i - 1 + k - j] = temp;               // 将临时变量的值(其实就是之前的头部值)赋给尾部
     }
     WriteString(fbc, x, y, str, c);
 }
@@ -105,10 +100,10 @@ void WriteString(const FrameBufferConfig &fbc, int x, int y, const char *s, cons
 void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex, const PixelColor &c)
 {
     // 输出16进制
-    char buf[32];
+    char  buf[32];
     char *p = buf;
-    char ch;
-    int i, flag = 0;
+    char  ch;
+    int   i, flag = 0;
 
     *p++ = '0';
     *p++ = 'x'; // 先存一个0x
@@ -118,9 +113,9 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
     else
     {
         for (i = 60; i >= 0; i -= 4)
-        {                          // 每次4位
-            ch = (hex >> i) & 0xF; // 0~9, A~F
-            ch += '0';             // 0~9 => '0'~'9'
+        {                           // 每次4位
+            ch  = (hex >> i) & 0xF; // 0~9, A~F
+            ch += '0';              // 0~9 => '0'~'9'
             if (ch > '9')
             {
                 ch += 7; // 'A' - '9' = 7
@@ -136,8 +131,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 void PrintFont(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, char ch, const SHEET_BUFFER &color)
 {
     const uint8_t *font = GetFont(ch); // 获取字体
-    if (font == nullptr)
-        return; // 不存在字体，直接退出
+    if (font == nullptr) return;       // 不存在字体，直接退出
     for (int dy = 0; dy < 16; dy++)
     { // 第几行
         for (int dx = 0; dx < 16; dx++)
@@ -154,8 +148,9 @@ void PrintString(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const char *
 {
     spin_lock(fb_print_lock);
     for (int i = 0; s[i]; i++)
-    {                                                        // 遍历字符串每一个字符，看看是不是空字符
-        PrintFont(sht, sheet_id, x + 8 * i, y, s[i], color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
+    { // 遍历字符串每一个字符，看看是不是空字符
+        PrintFont(sht, sheet_id, x + 8 * i, y, s[i],
+                  color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
     }
     spin_unlock(fb_print_lock);
 }
@@ -163,10 +158,10 @@ void PrintString(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const char *
 void PrintHex(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)
 {
     // 输出16进制
-    char buf[32];
+    char  buf[32];
     char *p = buf;
-    char ch;
-    int i, flag = 0;
+    char  ch;
+    int   i, flag = 0;
 
     *p++ = '0';
     *p++ = 'x'; // 先存一个0x
@@ -180,9 +175,9 @@ void PrintHex(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
             ch = (hex >> i) & 0xF; // 0~9, A~F
             // 28（冗余）
             if (flag || ch > 0)
-            {              // 跳过前导0
-                flag = 1;  // 没有前导0就把flag设为1，这样后面再有0也不会忽略
-                ch += '0'; // 0~9 => '0'~'9'
+            {                // 跳过前导0
+                flag  = 1;   // 没有前导0就把flag设为1，这样后面再有0也不会忽略
+                ch   += '0'; // 0~9 => '0'~'9'
                 if (ch > '9')
                 {
                     ch += 7; // 'A' - '9' = 7
@@ -197,17 +192,18 @@ void PrintHex(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
 
 void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color)
 {
-    char str[255];
-    int radix = 10;
-    char index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
-    unsigned unum;                                         // 存放要转换的整数的绝对值,转换的整数可能是负数
-    int i = 0, j, k;                                       // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
+    char     str[255];
+    int      radix   = 10;
+    char     index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
+    unsigned unum;                                             // 存放要转换的整数的绝对值,转换的整数可能是负数
+    int      i = 0, j,
+        k; // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
 
     // 获取要转换的整数的绝对值
     if (radix == 10 && dec < 0) // 要转换成十进制数并且是负数
     {
-        unum = (unsigned)-dec; // 将num的绝对值赋给unum
-        str[i++] = '-';        // 在字符串最前面设置为'-'号，并且索引加1
+        unum     = (unsigned)-dec; // 将num的绝对值赋给unum
+        str[i++] = '-';            // 在字符串最前面设置为'-'号，并且索引加1
     }
     else
         unum = (unsigned)dec; // 若是num为正，直接赋值给unum
@@ -215,8 +211,8 @@ void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
     // 转换部分，注意转换后是逆序的
     do
     {
-        str[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
-        unum /= radix;                            // unum去掉最后一位
+        str[i++]  = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
+        unum     /= radix;                         // unum去掉最后一位
 
     } while (unum); // 直至unum为0退出循环
 
@@ -231,9 +227,9 @@ void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
     char temp;                         // 临时变量，交换两个值时用到
     for (j = k; j <= (i - 1) / 2; j++) // 头尾一一对称交换，i其实就是字符串的长度，索引最大值比长度少1
     {
-        temp = str[j];               // 头部赋值给临时变量
-        str[j] = str[i - 1 + k - j]; // 尾部赋值给头部
-        str[i - 1 + k - j] = temp;   // 将临时变量的值(其实就是之前的头部值)赋给尾部
+        temp               = str[j];             // 头部赋值给临时变量
+        str[j]             = str[i - 1 + k - j]; // 尾部赋值给头部
+        str[i - 1 + k - j] = temp;               // 将临时变量的值(其实就是之前的头部值)赋给尾部
     }
     PrintString(sht, sheet_id, x, y, str, color);
 }

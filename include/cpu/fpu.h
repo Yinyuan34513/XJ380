@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 
-typedef struct {
+typedef struct
+{
     uint8_t fxsave_area[512] __attribute__((aligned(16)));
 } fpu_context_t;
 

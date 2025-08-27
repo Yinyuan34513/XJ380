@@ -4,33 +4,27 @@
 
 static inline char toupper(char ch)
 {
-    if (ch >= 'a' && ch <= 'z')
-        ch -= 0x20;
+    if (ch >= 'a' && ch <= 'z') ch -= 0x20;
     return ch;
 }
 
 static inline char tolower(char ch)
 {
-    if (ch >= 'A' && ch <= 'Z')
-        ch += 0x20;
+    if (ch >= 'A' && ch <= 'Z') ch += 0x20;
     return ch;
 }
 
 #define ALL_IMPLEMENTATION
 #include "./list.h"
 
-
 // 从字符串中提取路径
 static inline char *pathtok(char **sp)
 {
     char *s = *sp, *e = *sp;
-    if (*s == '\0')
-        return NULL;
-    for (; *e != '\0' && *e != '/'; e++)
-    {
-    }
+    if (*s == '\0') return NULL;
+    for (; *e != '\0' && *e != '/'; e++) {}
     *sp = e + (*e != '\0' ? 1 : 0);
-    *e = '\0';
+    *e  = '\0';
     return s;
 }
 // * 所有时间请使用 GMT 时间 *
@@ -40,17 +34,17 @@ static inline char *pathtok(char **sp)
 
 enum
 {
-    file_none = 0x0001UL,     // 普通文件
-    file_dir = 0x0002UL,      // 文件夹
-    file_symlink = 0x0004UL,  // 符号链接
-    file_block = 0x0008UL,    // 块设备，如硬盘
-    file_stream = 0x0010UL,   // 流式设备，如终端
-    file_fbdev = 0x0020UL,    // 帧缓冲设备
+    file_none     = 0x0001UL, // 普通文件
+    file_dir      = 0x0002UL, // 文件夹
+    file_symlink  = 0x0004UL, // 符号链接
+    file_block    = 0x0008UL, // 块设备，如硬盘
+    file_stream   = 0x0010UL, // 流式设备，如终端
+    file_fbdev    = 0x0020UL, // 帧缓冲设备
     file_keyboard = 0x0040UL, // 键盘设备
-    file_mouse = 0x0080UL,    // 鼠标设备
-    file_pipe = 0x0100UL,     // 管道设备
-    file_socket = 0x0200UL,   // 套接字设备
-    file_epoll = 0x0400UL,    // epoll 设备
+    file_mouse    = 0x0080UL, // 鼠标设备
+    file_pipe     = 0x0100UL, // 管道设备
+    file_socket   = 0x0200UL, // 套接字设备
+    file_epoll    = 0x0400UL, // epoll 设备
 };
 
 typedef struct vfs_node *vfs_node_t;
@@ -129,20 +123,20 @@ typedef vfs_node_t (*vfs_dup_t)(vfs_node_t node);
 
 typedef struct vfs_callback
 {
-    vfs_mount_t mount;
+    vfs_mount_t   mount;
     vfs_unmount_t unmount;
-    vfs_open_t open;
-    vfs_close_t close;
-    vfs_read_t read;
-    vfs_write_t write;
-    vfs_mk_t mkdir;
-    vfs_mk_t mkfile;
-    vfs_del_t del;
-    vfs_rename_t rename;
-    vfs_stat_t stat;
-    vfs_ioctl_t ioctl;
-    vfs_poll_t poll;
-    vfs_dup_t dup;
+    vfs_open_t    open;
+    vfs_close_t   close;
+    vfs_read_t    read;
+    vfs_write_t   write;
+    vfs_mk_t      mkdir;
+    vfs_mk_t      mkfile;
+    vfs_del_t     del;
+    vfs_rename_t  rename;
+    vfs_stat_t    stat;
+    vfs_ioctl_t   ioctl;
+    vfs_poll_t    poll;
+    vfs_dup_t     dup;
 } *vfs_callback_t;
 
 typedef struct flock
@@ -154,34 +148,34 @@ typedef struct flock
 
 struct vfs_node
 {
-    vfs_node_t parent;   // 父目录
-    char *name;          // 名称
-    char *linkname;      // 符号链接名称
-    uint64_t inode;      // 节点号
-    uint64_t realsize;   // 项目真实占用的空间 (可选)
-    uint64_t size;       // 文件大小或若是文件夹则填0
-    uint64_t blksz;      // 块大小
-    uint64_t offset;     // 偏移
-    uint64_t createtime; // 创建时间
-    uint64_t readtime;   // 最后读取时间
-    uint64_t writetime;  // 最后写入时间
-    uint32_t owner;      // 所有者
-    uint32_t group;      // 所有组
-    uint32_t type;       // 类型
-    uint32_t fsid;       // 文件系统的 id
-    void *handle;        // 操作文件的句柄
-    flock_t lock;        // 锁
-    list_t child;        // 子目录和子文件
-    vfs_node_t root;     // 根目录
-    uint16_t mode;       // 模式
-    uint64_t flags;      // 标志位
+    vfs_node_t parent;     // 父目录
+    char      *name;       // 名称
+    char      *linkname;   // 符号链接名称
+    uint64_t   inode;      // 节点号
+    uint64_t   realsize;   // 项目真实占用的空间 (可选)
+    uint64_t   size;       // 文件大小或若是文件夹则填0
+    uint64_t   blksz;      // 块大小
+    uint64_t   offset;     // 偏移
+    uint64_t   createtime; // 创建时间
+    uint64_t   readtime;   // 最后读取时间
+    uint64_t   writetime;  // 最后写入时间
+    uint32_t   owner;      // 所有者
+    uint32_t   group;      // 所有组
+    uint32_t   type;       // 类型
+    uint32_t   fsid;       // 文件系统的 id
+    void      *handle;     // 操作文件的句柄
+    flock_t    lock;       // 锁
+    list_t     child;      // 子目录和子文件
+    vfs_node_t root;       // 根目录
+    uint16_t   mode;       // 模式
+    uint64_t   flags;      // 标志位
 };
 
 extern vfs_node_t rootdir; // vfs 根目录
 
 vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name);
-void vfs_free(vfs_node_t vfs);
-void vfs_free_child(vfs_node_t vfs);
+void       vfs_free(vfs_node_t vfs);
+void       vfs_free_child(vfs_node_t vfs);
 // 一定要记得手动设置一下child的type
 vfs_node_t vfs_child_append(vfs_node_t parent, const char *name, void *handle);
 
@@ -196,8 +190,8 @@ bool vfs_init();
  */
 int vfs_regist(const char *name, vfs_callback_t callback);
 
-#define PATH_MAX 4096    // 路径最大长度
-#define FILENAME_MAX 256 // 文件名最大长度
+#define PATH_MAX     4096 // 路径最大长度
+#define FILENAME_MAX 256  // 文件名最大长度
 
 vfs_node_t vfs_open_at(vfs_node_t start, const char *_path, bool nosymlink);
 

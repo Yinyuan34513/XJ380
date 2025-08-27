@@ -46,7 +46,8 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     write_serial_string("Sheet Manager Initialize Success.\n");
 }
 
-void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index, uint16_t *sheet_id)
+void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
+                  uint16_t *sheet_id)
 {
     while (true)
     {
@@ -458,7 +459,7 @@ void refresh_sheet(SHEET_INFO *sht)
         write_serial_dec(front_p->index);
         write_serial_string("\n");
         SHEET_BUFFER *SheetBuffer  = (SHEET_BUFFER *)(front_p->buffer);
-        uint32_t        BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
+        uint32_t      BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
         for (int y = 0; y < front_p->height; y++)
         {
             for (int x = 0; x < front_p->width; x++)

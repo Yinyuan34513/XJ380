@@ -1,13 +1,13 @@
 #include "fs/vfs/dev.h"
-#include <fs/fs_syscall.h>
 #include "proto.hpp"
-#include <task/pcb.h>
-#include <errno.h>
 #include "rtc.h"
+#include <errno.h>
+#include <fs/fs_syscall.h>
+#include <task/pcb.h>
 
 #define FLANTERM_IN_FLANTERM
 
-int devfs_id = 0;
+int        devfs_id   = 0;
 vfs_node_t devfs_root = NULL;
 vfs_node_t input_root = NULL;
 
@@ -21,10 +21,7 @@ static int dummy()
 ssize_t devfs_read(void *file, void *addr, size_t offset, size_t size)
 {
     devfs_handle_t handle = (devfs_handle_t)file;
-    if (handle->read)
-    {
-        return handle->read(handle->data, offset, addr, size);
-    }
+    if (handle->read) { return handle->read(handle->data, offset, addr, size); }
 
     return 0;
 }
@@ -32,10 +29,7 @@ ssize_t devfs_read(void *file, void *addr, size_t offset, size_t size)
 ssize_t devfs_write(void *file, const void *addr, size_t offset, size_t size)
 {
     devfs_handle_t handle = (devfs_handle_t)file;
-    if (handle->write)
-    {
-        return handle->write(handle->data, offset, addr, size);
-    }
+    if (handle->write) { return handle->write(handle->data, offset, addr, size); }
 
     return 0;
 }
@@ -44,20 +38,17 @@ void devfs_open(void *parent, const char *name, vfs_node_t node)
 {
     (void)parent;
 
-    if (node->type & file_dir)
-    {
-        return;
-    }
+    if (node->type & file_dir) { return; }
 
     for (uint64_t i = 0; i < MAX_DEV_NUM; i++)
     {
         if (devfs_handles[i] != NULL && !strncmp(devfs_handles[i]->name, name, MAX_DEV_NAME_LEN))
         {
             devfs_handle_t handle = devfs_handles[i];
-            node->handle = handle;
+            node->handle          = handle;
             if (!strncmp(handle->name, "event", 5))
             {
-                dev_input_event_t *event = (dev_input_event_t*)handle->data;
+                dev_input_event_t *event = (dev_input_event_t *)handle->data;
                 event->timesOpened++;
             }
             break;
@@ -70,20 +61,16 @@ bool devfs_close(void *current)
     devfs_handle_t handle = (devfs_handle_t)current;
     if (!strncmp(handle->name, "event", 5))
     {
-        dev_input_event_t *event = (dev_input_event_t*)handle->data;
+        dev_input_event_t *event = (dev_input_event_t *)handle->data;
         event->timesOpened--;
-        if (event->timesOpened)
-            return false;
+        if (event->timesOpened) return false;
     }
     return true;
 }
 
 int devfs_ioctl(devfs_handle_t handle, ssize_t cmd, ssize_t arg)
 {
-    if (handle->ioctl)
-    {
-        return handle->ioctl(handle->data, cmd, arg);
-    }
+    if (handle->ioctl) { return handle->ioctl(handle->data, cmd, arg); }
 
     return 0;
 }
@@ -91,7 +78,7 @@ int devfs_ioctl(devfs_handle_t handle, ssize_t cmd, ssize_t arg)
 int devfs_mkdir(void *parent, const char *name, vfs_node_t node)
 {
     vfs_node_t child = vfs_child_append(node, name, NULL);
-    child->type = file_dir;
+    child->type      = file_dir;
 
     return 0;
 }
@@ -103,24 +90,19 @@ int devfs_mkfile(void *parent, const char *name, vfs_node_t node)
 
 int devfs_poll(devfs_handle_t handle, size_t event)
 {
-    if (handle->poll)
-    {
-        return handle->poll(handle->data, event);
-    }
+    if (handle->poll) { return handle->poll(handle->data, event); }
 
     return 0;
 }
 
 vfs_node_t devfs_dup(vfs_node_t node)
 {
-    if (!node || !node->handle)
-        return NULL;
+    if (!node || !node->handle) return NULL;
 
     devfs_handle_t handle = (devfs_handle_t)node->handle;
 
     vfs_node_t new_node = vfs_node_alloc(node->parent, node->name);
-    if (!new_node)
-        return NULL;
+    if (!new_node) return NULL;
 
     memcpy(new_node, node, sizeof(struct vfs_node));
 
@@ -136,7 +118,7 @@ vfs_node_t devfs_dup(vfs_node_t node)
 
     if (!strncmp(new_handle->name, "event", 5))
     {
-        dev_input_event_t *event = (dev_input_event_t*)new_handle->data;
+        dev_input_event_t *event = (dev_input_event_t *)new_handle->data;
         event->timesOpened++;
     }
 
@@ -144,20 +126,20 @@ vfs_node_t devfs_dup(vfs_node_t node)
 }
 
 static struct vfs_callback callbacks = {
-    .mount = (vfs_mount_t)dummy,
+    .mount   = (vfs_mount_t)dummy,
     .unmount = (vfs_unmount_t)dummy,
-    .open = devfs_open,
-    .close = devfs_close,
-    .read = devfs_read,
-    .write = devfs_write,
-    .mkdir = (vfs_mk_t)devfs_mkdir,
-    .mkfile = (vfs_mk_t)devfs_mkfile,
-    .del = (vfs_del_t)dummy,
-    .rename = (vfs_rename_t)dummy,
-    .stat = (vfs_stat_t)dummy,
-    .ioctl = (vfs_ioctl_t)devfs_ioctl,
-    .poll = (vfs_poll_t)devfs_poll,
-    .dup = (vfs_dup_t)devfs_dup,
+    .open    = devfs_open,
+    .close   = devfs_close,
+    .read    = devfs_read,
+    .write   = devfs_write,
+    .mkdir   = (vfs_mk_t)devfs_mkdir,
+    .mkfile  = (vfs_mk_t)devfs_mkfile,
+    .del     = (vfs_del_t)dummy,
+    .rename  = (vfs_rename_t)dummy,
+    .stat    = (vfs_stat_t)dummy,
+    .ioctl   = (vfs_ioctl_t)devfs_ioctl,
+    .poll    = (vfs_poll_t)devfs_poll,
+    .dup     = (vfs_dup_t)devfs_dup,
 };
 
 // ssize_t inputdev_event_read(void *data, uint64_t offset, void *buf, uint64_t len)
@@ -171,7 +153,7 @@ static struct vfs_callback callbacks = {
 
 ssize_t inputdev_event_write(void *data, uint64_t offset, const void *buf, uint64_t len)
 {
-    dev_input_event_t *event = (dev_input_event_t*)data;
+    dev_input_event_t *event = (dev_input_event_t *)data;
 
     // todo
 
@@ -180,11 +162,11 @@ ssize_t inputdev_event_write(void *data, uint64_t offset, const void *buf, uint6
 
 ssize_t inputdev_ioctl(void *data, ssize_t request, ssize_t arg)
 {
-    dev_input_event_t *event = (dev_input_event_t*)data;
-    size_t type = _IOC_TYPE(request);
-    size_t dir = _IOC_DIR(request);
-    size_t number = _IOC_NR(request);
-    size_t size = _IOC_SIZE(request);
+    dev_input_event_t *event  = (dev_input_event_t *)data;
+    size_t             type   = _IOC_TYPE(request);
+    size_t             dir    = _IOC_DIR(request);
+    size_t             number = _IOC_NR(request);
+    size_t             size   = _IOC_SIZE(request);
 
     (void)type;
     (void)dir;
@@ -208,24 +190,22 @@ ssize_t inputdev_ioctl(void *data, ssize_t request, ssize_t arg)
     switch (number)
     {
     case 0x01: // EVIOCGVERSION idk, stolen from vmware
-        {
-            *((int *)arg) = 0x10001;
-        ret = 0;
+    {
+        *((int *)arg) = 0x10001;
+        ret           = 0;
         break;
-        }
+    }
     case 0x02: // EVIOCGID
         memcpy((void *)arg, &event->inputid, sizeof(struct input_id));
         ret = 0;
         break;
-    case 0x06:
-    { // EVIOCGNAME(len)
+    case 0x06: { // EVIOCGNAME(len)
         int toCopy = MIN(size, (size_t)strlen(event->devname) + 1);
         memcpy((void *)arg, event->devname, toCopy);
         ret = toCopy;
         break;
     }
-    case 0x07:
-    { // EVIOCGPHYS(len)
+    case 0x07: { // EVIOCGPHYS(len)
         int toCopy = MIN(size, (size_t)strlen(event->physloc) + 1);
         memcpy((void *)arg, event->physloc, toCopy);
         ret = toCopy;
@@ -238,18 +218,15 @@ ssize_t inputdev_ioctl(void *data, ssize_t request, ssize_t arg)
             memcpy((void *)arg, event->uniq, toCopy);
             ret = toCopy;
         }
-        else
-        {
-            ret = -ENODATA;
-        }
+        else { ret = -ENODATA; }
         break;
     case 0x09: // EVIOCGPROP()
-        {
-            int toCopy = MIN(sizeof(size_t), size);
+    {
+        int toCopy = MIN(sizeof(size_t), size);
         memcpy((void *)arg, &event->properties, toCopy);
         ret = size;
         break;
-        }
+    }
     case 0x18: // EVIOCGKEY()
         ret = event->event_bit(data, request, (void *)arg);
         break;
@@ -277,11 +254,9 @@ ssize_t inputdev_ioctl(void *data, ssize_t request, ssize_t arg)
 //     return 0;
 // }
 
-vfs_node_t regist_dev(const char *name,
-                      ssize_t (*read)(void *data, uint64_t offset, void *buf, uint64_t len),
+vfs_node_t regist_dev(const char *name, ssize_t (*read)(void *data, uint64_t offset, void *buf, uint64_t len),
                       ssize_t (*write)(void *data, uint64_t offset, const void *buf, uint64_t len),
-                      ssize_t (*ioctl)(void *data, ssize_t cmd, ssize_t arg),
-                      ssize_t (*poll)(void *data, size_t event),
+                      ssize_t (*ioctl)(void *data, ssize_t cmd, ssize_t arg), ssize_t (*poll)(void *data, size_t event),
                       void *data)
 {
     const char *new_name = name;
@@ -290,16 +265,16 @@ vfs_node_t regist_dev(const char *name,
 
     if (strstr(name, "/") != NULL)
     {
-        new_name = strstr(name, "/") + 1;
+        new_name          = strstr(name, "/") + 1;
         uint64_t path_len = new_name - name;
-        char new_path[32];
+        char     new_path[32];
         strcpy(new_path, "/dev/");
         strncpy(new_path + 5, name, path_len);
         dev = vfs_open((const char *)new_path);
         if (!dev)
         {
             vfs_mkdir((const char *)new_path);
-            dev = vfs_open((const char *)new_path);
+            dev       = vfs_open((const char *)new_path);
             dev->mode = 0644;
         }
     }
@@ -310,13 +285,13 @@ vfs_node_t regist_dev(const char *name,
         {
             devfs_handles[i] = (devfs_handle_t)malloc(sizeof(struct devfs_handle));
             strncpy(devfs_handles[i]->name, new_name, MAX_DEV_NAME_LEN);
-            devfs_handles[i]->read = read;
+            devfs_handles[i]->read  = read;
             devfs_handles[i]->write = write;
             devfs_handles[i]->ioctl = ioctl;
-            devfs_handles[i]->poll = poll;
-            devfs_handles[i]->data = data;
-            vfs_node_t child = vfs_child_append(dev, devfs_handles[i]->name, NULL);
-            child->type = file_block;
+            devfs_handles[i]->poll  = poll;
+            devfs_handles[i]->data  = data;
+            vfs_node_t child        = vfs_child_append(dev, devfs_handles[i]->name, NULL);
+            child->type             = file_block;
             if (!strncmp(devfs_handles[i]->name, "std", 3) || !strncmp(devfs_handles[i]->name, "tty", 3))
                 child->type = file_stream;
             else if (!strncmp(devfs_handles[i]->name, "fb", 2))
@@ -335,7 +310,6 @@ vfs_node_t regist_dev(const char *name,
     return NULL;
 }
 
-
 ssize_t stdout_write(void *data, uint64_t offset, const void *buf, uint64_t len)
 {
     (void)data;
@@ -351,20 +325,16 @@ ssize_t stdout_write(void *data, uint64_t offset, const void *buf, uint64_t len)
 
 extern struct flanterm_context *ft_ctx;
 
-
 bool ioSwitch = false;
 
 ssize_t stdio_poll(void *data, size_t events)
 {
     ssize_t revents = 0;
-    if (events & EPOLLIN && ioSwitch)
-        revents |= EPOLLIN;
-    if (events & EPOLLOUT)
-        revents |= EPOLLOUT;
+    if (events & EPOLLIN && ioSwitch) revents |= EPOLLIN;
+    if (events & EPOLLOUT) revents |= EPOLLOUT;
     ioSwitch = !ioSwitch;
     return revents;
 }
-
 
 uint64_t next = 0;
 
@@ -400,7 +370,7 @@ static uint32_t simple_rand()
     tm time;
     time_read(&time);
     uint32_t seed = mktime();
-    seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+    seed          = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
     return seed;
 }
 
@@ -422,8 +392,7 @@ ssize_t urandom_dev_ioctl(void *data, ssize_t cmd, ssize_t arg)
 {
     switch (cmd)
     {
-    default:
-        return -ENOTTY;
+    default: return -ENOTTY;
     }
 }
 
@@ -431,7 +400,7 @@ void dev_init()
 {
     devfs_id = vfs_regist("devfs", &callbacks);
 
-    devfs_root = vfs_node_alloc(rootdir, "dev");
+    devfs_root       = vfs_node_alloc(rootdir, "dev");
     devfs_root->type = file_dir;
     devfs_root->fsid = devfs_id;
     devfs_root->mode = 0644;

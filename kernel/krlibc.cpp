@@ -1,11 +1,12 @@
 #include "proto.hpp"
+#include "stdint.h"
+#include <krlibc.h>
 #include <mm/bitmap.h>
 #include <mm/frame.h>
 #include <mm/heap.h>
 #include <mm/hhdm.h>
 #include <mm/memory.h>
 #include <mm/page.h>
-#include <krlibc.h>
 
 int memcmp(const void *a_, const void *b_, size_t size)
 {
@@ -391,21 +392,23 @@ int skip_atoi(const char **s)
 }
 
 /**
- * 把整数转成字符串数字
+ * 把整数转成字符串数字，并输出到`Writer`
  * @param str 字符串
  * @param fmter 整数格式化器
  * @param type 
  */
-char *number(char *str, num_formatter_t fmter, num_fmt_type type) // NOLINT
+size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type) // NOLINT
 {
-    char        c = 0;
-    char        tmp[65];
-    int         sign      = 0;
-    const char *digits    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    int         i         = 0; // index for tmp
-    int64_t     size      = (int64_t)fmter.size;
-    int64_t     precision = (int64_t)fmter.precision;
-    size_t      base      = fmter.base;
+    char         c = 0;
+    char         tmp[65];
+    int          sign      = 0;
+    const char  *digits    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    int          i         = 0; // index for tmp
+    int64_t      size      = (int64_t)fmter.size;
+    int64_t      precision = (int64_t)fmter.precision;
+    size_t       base      = fmter.base;
+    WriteHandler write     = writer->handler;
+    size_t       result    = 0;
 
     if (type.small) digits = "0123456789abcdefghijklmnopqrstuvwxyz";
     if (type.left) type.zeropad = false; // if left adjust, zero padding is not allowed
@@ -450,20 +453,20 @@ char *number(char *str, num_formatter_t fmter, num_fmt_type type) // NOLINT
     {
         /* Fill in the space */
         while (size-- > 0)
-            *str++ = ' ';
+            write(writer, ' '), result++;
     }
 
     /* Write the sign */
-    if (sign) *str++ = (char)sign;
+    if (sign) write(writer, (char)sign), result++;
 
     /* Write the prefix */
     if (type.special)
     {
-        if (base == 8) { *str++ = '0'; }
+        if (base == 8) { write(writer, '0'), result++; }
         else if (base == 16)
         {
-            *str++ = '0';
-            *str++ = digits[33]; // 33 is 'x' or 'X'
+            write(writer, '0'), result++;
+            write(writer, digits[33]), result++; // 33 is 'x' or 'X'
         }
     }
 
@@ -471,64 +474,19 @@ char *number(char *str, num_formatter_t fmter, num_fmt_type type) // NOLINT
     {
         /* Write the padding */
         while (size-- > 0)
-            *str++ = c;
+            write(writer, c), result++;
     }
 
     /* Write the zero padding */
     while (i < precision--)
-        *str++ = '0';
-
+        write(writer, '0'), result++;
     /* Write the number */
     while (i-- > 0)
-        *str++ = tmp[i];
+        write(writer, tmp[i]), result++;
 
     /* LEFT adjust */
     while (size-- > 0)
-        *str++ = ' ';
-    return str;
+        write(writer, ' '), result++;
+
+    return result;
 }
-
-/**
- * 计算函数 number() 返回的字符串数字的大小（用于提前分配好足够的空间）
- * @param fmter 整数格式化器
- * @param type 格式化类型
- * @return 数字格式化后的大小
- */
-uint64_t number_length(num_formatter_t fmter, num_fmt_type type)
-{
-    char     sign          = 0; // 是否有符号
-    size_t   number_digits = 0;
-    uint64_t res           = 0;
-    size_t   base          = fmter.base;
-    size_t   size          = fmter.size;
-    size_t   precision     = fmter.precision;
-    if ((type.sign && (int64_t)fmter.num < 0))
-    {
-        fmter.num = -(int64_t)fmter.num;
-        sign      = 1;
-    }
-    if (type.plus || type.space) sign = 1;
-    if (fmter.num == 0) { number_digits = 1; }
-    else
-    {
-        while (fmter.num != 0)
-        {
-            number_digits++;
-            fmter.num = (uint64_t)fmter.num / (uint64_t)fmter.base;
-        }
-    }
-    if (type.special)
-    {
-        if (base == 16) { res += 2; }
-        else if (base == 8) { res += 1; }
-    }
-    if (precision > size) size = precision;
-
-    if (number_digits + sign < size)
-    {
-        res += size;
-        return res;
-    }
-    res += number_digits + sign;
-    return res;
-};
