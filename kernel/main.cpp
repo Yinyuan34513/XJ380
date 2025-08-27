@@ -38,6 +38,11 @@ void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t fb_print_lock;
 
+void test_task()
+{
+    for (int i = 0; 1 == 1; i++); // 防优化
+}
+
 void init_cpu()
 {
   __asm__ __volatile__("movq %%cr0, %%rax\n\t"
@@ -262,10 +267,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     process_setup();
 
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
-    // create_kernel_thread((void *)test_task1, NULL, "test_task1", NULL);
 
     pcb_t ugp = create_process_group("User Group", NULL, NULL);
-    // create_user_thread((void *)test_task2, NULL, (char *)"test_task2", ugp);
+    uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
+    memcpy((void *)utsk, (void *)test_task, 114);
+    create_user_thread((void *)test_task, NULL, (char *)"test_task2", ugp);
 
 
     open_interrupt;

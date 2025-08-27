@@ -378,11 +378,11 @@ void switch_page_directory(page_directory_t *dir)
     current_directory = dir;
     // }
     page_table_t *physical_table = (page_table_t *)(virt_to_phys((uint64_t)((page_table_t *)((uint64_t)dir->table))));
-    write_serial_string("Switch Page Directory:\nPhysAddr:");
-    write_serial_hex((uint64_t)(physical_table));
-    write_serial_string("\nVirtAddr:");
-    write_serial_hex((uint64_t)(phys_to_virt((uint64_t)(physical_table))));
-    write_serial_string("\n");
+    // write_serial_string("Switch Page Directory:\nPhysAddr:");
+    // write_serial_hex((uint64_t)(physical_table));
+    // write_serial_string("\nVirtAddr:");
+    // write_serial_hex((uint64_t)(phys_to_virt((uint64_t)(physical_table))));
+    // write_serial_string("\n");
     __asm__ volatile("mov %0, %%cr3" : : "r"(physical_table));
 }
 
