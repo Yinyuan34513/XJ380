@@ -1,33 +1,34 @@
-#include <krlibc.h>
-#include <mm/frame.h>
-#include <task/pcb.h>
+#include <ahci/ahci.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
-#include <pci/pci.h>
-#include <proto.hpp>
-#include <ahci/ahci.h>
-#include <fs/partition.h>
-#include <fs/vfs/sys.h>
-#include <fs/vfs/vfs.h>
+#include <font.h>
 #include <fs/fatfs/fatfs.h>
 #include <fs/fs_syscall.h>
+#include <fs/partition.h>
 #include <fs/vfs/dev.h>
-#include <graphics/sheet.h>
-#include <graphics/GOP.hpp>
+#include <fs/vfs/sys.h>
+#include <fs/vfs/vfs.h>
 #include <global_color.h>
-#include <rtc.h>
-#include <font.h>
-#include <ttf.h>
+#include <graphics/GOP.hpp>
+#include <graphics/sheet.h>
+#include <krlibc.h>
+#include <mm/frame.h>
+#include <pci/pci.h>
+#include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
+#include <rtc.h>
 #include <syscall/syscall.h>
+#include <task/pcb.h>
+#include <ttf.h>
+
 SHEET_INFO *sht_img;
-XWM_INFO *xwmii;
-uint16_t * msid;
+XWM_INFO   *xwmii;
+uint16_t   *msid;
 
 extern mouse_dec ms_dec;
-extern bool winRD_lock;
+extern bool      winRD_lock;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -36,7 +37,7 @@ BOOT_CONFIG             *BC;
 uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
-extern spin_t fb_print_lock;
+extern spin_t            fb_print_lock;
 
 void test_task()
 {
@@ -45,13 +46,14 @@ void test_task()
 
 void init_cpu()
 {
-  __asm__ __volatile__("movq %%cr0, %%rax\n\t"
-                       "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
-                       "or $0x2, %%ax\n\t"       // set coprocessor monitoring  CR0.MP
-                       "movq %%rax, %%cr0\n\t"
-                       "movq %%cr4, %%rax\n\t"
-                       "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
-                       "movq %%rax, %%cr4\n\t":::"rax");
+    __asm__ __volatile__("movq %%cr0, %%rax\n\t"
+                         "and $0xFFF3, %%ax	\n\t" // clear coprocessor emulation CR0.EM and CR0.TS
+                         "or $0x2, %%ax\n\t"      // set coprocessor monitoring  CR0.MP
+                         "movq %%rax, %%cr0\n\t"
+                         "movq %%cr4, %%rax\n\t"
+                         "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
+                         "movq %%rax, %%cr4\n\t" ::
+                             : "rax");
 }
 
 void desktop_flusher()
@@ -60,19 +62,21 @@ void desktop_flusher()
 
     write_serial_string("desktop flusher is running\n");
 
-
-    uint16_t desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
-    uint16_t dock_sheet_id = 1145;
-    uint16_t mouse_sheet_id = 1145;
+    uint16_t   desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
+    uint16_t   dock_sheet_id    = 1145;
+    uint16_t   mouse_sheet_id   = 1145;
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
 
     sht_img = &shtinf;
-    msid = &mouse_sheet_id;
+    msid    = &mouse_sheet_id;
 
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0, &desktop_sheet_id);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254, &dock_sheet_id);
-    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255, &mouse_sheet_id);
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
+                 &desktop_sheet_id);
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254,
+                 &dock_sheet_id);
+    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255,
+                 &mouse_sheet_id);
 
     init_ttf();
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
@@ -83,10 +87,14 @@ void desktop_flusher()
     int fonty = 50;
     // DEBUG
 #if BUILD_EDITION == DEBUG_VERSION
-    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40, "X:", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24, "Y:", WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 40, shtinf.scrx, WHITE);
-    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 24, shtinf.scry, WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40,
+                "X:", WHITE);
+    PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24,
+                "Y:", WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 40,
+             shtinf.scrx, WHITE);
+    PrintDec(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 48, fbc_addr->vertical_resolution - 24,
+             shtinf.scry, WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
     // PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
@@ -134,37 +142,39 @@ void desktop_flusher()
     write_serial_string(CPU_Model);
     write_serial_string("\n");
 
-    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479, fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
+    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479,
+              fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
 #endif
     // wsod_debug();
 
-    print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64, 16);
+    print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64,
+                  16);
 
     draw_mouse(&shtinf, &mouse_sheet_id);
-    XWM_INFO xwmi;
+    XWM_INFO  xwmi;
     WINDOWLS *test_win;
     WINDOWLS *test_win2;
     init_xwm(&xwmi);
     xwmii = &xwmi;
-    
+
     winRD_lock = true;
 
     create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
     create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
-    
+
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
 
     uint8_t k_input;
-    int tby;
-    int tbx;
+    int     tby;
+    int     tbx;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 0.8125;
-    tm time;
+    tm  time;
 
     while (1)
     {
@@ -172,22 +182,22 @@ void desktop_flusher()
 
         if (ms_dec.need_flush)
         {
-            tbx = getBX(&shtinf, &mouse_sheet_id);
-            tby = getBY(&shtinf, &mouse_sheet_id);
+            tbx         = getBX(&shtinf, &mouse_sheet_id);
+            tby         = getBY(&shtinf, &mouse_sheet_id);
             int mouse_x = get_mouse_x();
             int mouse_y = get_mouse_y();
             move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
-            refresh_part_sheet(&shtinf, tbx, tby,
-                            tbx + getXsize(&shtinf, &mouse_sheet_id),
-                            tby + getYsize(&shtinf, &mouse_sheet_id));
+            refresh_part_sheet(&shtinf, tbx, tby, tbx + getXsize(&shtinf, &mouse_sheet_id),
+                               tby + getYsize(&shtinf, &mouse_sheet_id));
             refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
-                            getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
-                            getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
+                               getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
+                               getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
             process_mouse_info();
         }
 
         k_input = get_keyboard_input();
-        if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
+        if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
+            k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
         {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
@@ -195,12 +205,12 @@ void desktop_flusher()
         }
         else if (k_input == KEY_ENTER)
         {
-            fontx = 8;
+            fontx  = 8;
             fonty += 16;
         }
         if (fontx > 304)
         {
-            fontx = 8;
+            fontx  = 8;
             fonty += 16;
         }
         time_read(&time);
@@ -229,6 +239,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     page_setup();
     init_heap();
 
+    serial_wprintf("Output by Serial Writer!!\n");
+
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_init();
@@ -245,10 +257,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     mouse_init();
 
     vfs_node_t f;
-    f=vfs_open("/1.txt");
+    f = vfs_open("/1.txt");
     char buf[1024];
-    if(vfs_read(f,buf,0,f->size)==-1)write_serial_fmt("read failed\n");
-    else write_serial_fmt("read file: %s\n",buf);
+    if (vfs_read(f, buf, 0, f->size) == -1)
+        write_serial_fmt("read failed\n");
+    else
+        write_serial_fmt("read file: %s\n", buf);
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);
@@ -272,7 +286,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     memcpy((void *)utsk, (void *)test_task, 114);
     create_user_thread((void *)test_task, NULL, (char *)"test_task2", ugp);
-
 
     open_interrupt;
     no_interrupt = false;

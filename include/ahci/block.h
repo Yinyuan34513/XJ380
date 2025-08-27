@@ -1,14 +1,14 @@
 #pragma once
 
-#include <proto.hpp>
 #include <krlibc.h>
+#include <proto.hpp>
 
 #define MAX_BLKDEV_NUM 8
 
 typedef struct blkdev
 {
-    char *name;
-    void *ptr;
+    char    *name;
+    void    *ptr;
     uint64_t block_size;
     uint64_t size;
     uint64_t (*read)(void *data, uint64_t lba, void *buffer, uint64_t size);
@@ -26,7 +26,9 @@ static inline void free_frames_bytes(void *ptr, uint64_t bytes)
 extern blkdev_t blk_devs[MAX_BLKDEV_NUM];
 extern uint64_t blk_devnum;
 
-void regist_blkdev(char *name, void *ptr, uint64_t block_size, uint64_t size, uint64_t (*read)(void *data, uint64_t lba, void *buffer, uint64_t size), uint64_t (*write)(void *data, uint64_t lba, void *buffer, uint64_t size));
+void regist_blkdev(char *name, void *ptr, uint64_t block_size, uint64_t size,
+                   uint64_t (*read)(void *data, uint64_t lba, void *buffer, uint64_t size),
+                   uint64_t (*write)(void *data, uint64_t lba, void *buffer, uint64_t size));
 
 enum
 {

@@ -1,16 +1,17 @@
 #ifndef _PROTO_H_
 #define _PROTO_H_
 
+#include "fs/vfs/list.h"
 #define KERNEL_STACK_SIZE 32768  // 任务内核栈地址
 #define BIG_USER_STACK    999424 // 用户栈大小，要对齐到页
 
+#include "./graphics/window/window.h"
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <stdint.h>
-#include <graphics/window/window.h>
 extern SHEET_INFO *sht_img;
-extern XWM_INFO *xwmii;
-extern uint16_t * msid;
+extern XWM_INFO   *xwmii;
+extern uint16_t   *msid;
 
 #define close_interrupt __asm__ volatile("cli" ::: "memory")
 #define open_interrupt  __asm__ volatile("sti" ::: "memory")
@@ -33,6 +34,7 @@ void write_serial_dec(unsigned long long dec);
 void write_serial_hex(unsigned long long hex);
 void write_serial_fmt(const char *fmt, ...);
 void write_serial_fmt_heapless(const char *fmt, ...);
+void serial_wprintf(const char *fmt, ...);
 int  sprintf(char *buf, const char *fmt, ...);
 /*
  *
@@ -60,10 +62,7 @@ void default_isr(struct X64_REGS *regs, uint64_t error_code);
 }
 #endif
 
-
-
 // graphics/sheet.cpp
-
 
 // graphics/window/windowm.cpp
 
@@ -204,22 +203,20 @@ extern const FrameBufferConfig *fbc_addr;
  *   font
  */
 
-
-
 // driver/ps2/keyboard.cpp
 extern struct keyboard_buf kb_fifo;
-extern uint8_t keyboard_code[256];
-extern uint8_t keyboard_code1[256];
-void keyboard_init();
-uint8_t get_keyboard_input();
+extern uint8_t             keyboard_code[256];
+extern uint8_t             keyboard_code1[256];
+void                       keyboard_init();
+uint8_t                    get_keyboard_input();
 
 // driver/ps2/mouse.cpp
-void mouse_init();
-void process_mouse_info();
+void    mouse_init();
+void    process_mouse_info();
 uint8_t get_Mouse_output();
-bool mousedecode(uint8_t data);
-int get_mouse_x();
-int get_mouse_y();
-void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
-void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
+bool    mousedecode(uint8_t data);
+int     get_mouse_x();
+int     get_mouse_y();
+void    draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
+void    move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
 #endif

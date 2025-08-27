@@ -21,7 +21,8 @@
 
 #include "proto.hpp"
 
-typedef struct timer {
+typedef struct timer
+{
     uint64_t old_time;
 } timer_t;
 
@@ -53,4 +54,4 @@ char    *get_date_time();
 int64_t  mktime();
 timer_t *alloc_timer();
 uint64_t get_time(timer_t *timer1);
-void time_read(tm *time);
+void     time_read(tm *time);

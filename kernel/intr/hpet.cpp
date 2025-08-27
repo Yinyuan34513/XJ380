@@ -11,15 +11,20 @@ uint64_t nanoTime()
     uint64_t mcv = info->mainCounterValue;
     return mcv * hpetPeriod;
 }
-void nsleep(uint64_t nano) {
+void nsleep(uint64_t nano)
+{
     uint64_t targetTime = nanoTime();
     uint64_t after      = 0;
-    while(1) {
+    while (1)
+    {
         uint64_t n = nanoTime();
-        if (n < targetTime) {
+        if (n < targetTime)
+        {
             after      += 0xffffffff - targetTime + n;
             targetTime  = n;
-        } else {
+        }
+        else
+        {
             after      += n - targetTime;
             targetTime  = n;
         }

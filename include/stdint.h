@@ -9,10 +9,10 @@ typedef unsigned char      uint8_t;
 typedef unsigned short     uint16_t;
 typedef unsigned int       uint32_t;
 typedef unsigned long long uint64_t;
-typedef uint64_t u64;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint8_t   u8;
+typedef uint64_t           u64;
+typedef uint16_t           u16;
+typedef uint32_t           u32;
+typedef uint8_t            u8;
 #ifdef __UINTPTR_TYPE__
 typedef __UINTPTR_TYPE__ uintptr_t;
 #endif
@@ -21,7 +21,7 @@ typedef char      int8_t;
 typedef short     int16_t;
 typedef int       int32_t;
 typedef long long int64_t;
-typedef char CHAR8;
+typedef char      CHAR8;
 #ifdef __INTPTR_TYPE__
 typedef __INTPTR_TYPE__ intptr_t;
 #endif

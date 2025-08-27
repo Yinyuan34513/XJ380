@@ -4,11 +4,11 @@
  *      Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.
  *
  */
-#include <proto.hpp>
-#include <graphics/window/window.h>
-#include <ttf.h>
-#include <global_color.h>
 #include "./wbuttons.h"
+#include <global_color.h>
+#include <graphics/window/window.h>
+#include <proto.hpp>
+#include <ttf.h>
 
 #define WINDOW_ALPHA_VALUE  0xaa
 #define WINDOW_COLOR_R      0x00
@@ -17,17 +17,16 @@
 #define WINDOW_COLOR        {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE}
 #define WINDOW_LIGHT_OFFEST 0x0f
 // #define WINDOW_LIGHT_COLOR  {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, (uint8_t)(WINDOW_ALPHA_VALUE + WINDOW_LIGHT_OFFEST)}
-#define WINDOW_LIGHT_COLOR  {(uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST),      \
-                                (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),   \
-                                (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST),   \
-                                WINDOW_ALPHA_VALUE}
+#define WINDOW_LIGHT_COLOR                                                                                             \
+    {(uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST), (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),                 \
+     (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST), WINDOW_ALPHA_VALUE}
 
 bool WindowIsCreating = false;
 
 void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
-    xwmi->start = NULL;
+    xwmi->start   = NULL;
     xwmi->win_num = 0;
     write_serial_string("XWM Initializing Success.\n");
 }
@@ -73,10 +72,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     {
         for (int x = 0; x < 9; x++)
         {
-            if (wbutton_c[y][x] == 'a')
-            {
-                draw_point(sht, &(new_window->w_sheet), x, y, {0, 0, 0, 0});
-            }
+            if (wbutton_c[y][x] == 'a') { draw_point(sht, &(new_window->w_sheet), x, y, {0, 0, 0, 0}); }
             else if (wbutton_c[y][x] == '.')
             {
                 // do nothing
@@ -122,10 +118,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     {
         for (int x = 0; x < 4; x++)
         {
-            if (wbutton_cdl[y][x] == 'a')
-            {
-                draw_point(sht, &(new_window->w_sheet), x, y + height + 23, {0, 0, 0, 0});
-            }
+            if (wbutton_cdl[y][x] == 'a') { draw_point(sht, &(new_window->w_sheet), x, y + height + 23, {0, 0, 0, 0}); }
         }
     }
 
@@ -155,23 +148,24 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
                        getBY(sht, &(windowls->w_sheet)) + 22);
 }
 
-void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size, SHEET_BUFFER color)
+void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
+               SHEET_BUFFER color)
 {
     print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
 }
 
-void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
-    while (true) {
-        if (!WindowIsCreating) {
-            break;
-        }
+void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
+{
+    while (true)
+    {
+        if (!WindowIsCreating) { break; }
     }
 
-    WindowIsCreating = true;
+    WindowIsCreating  = true;
     WINDOWLS *front_p = xwmi->start;
     WINDOWLS *front_p2;
     SHEET    *front_p3 = sht->start;
-    int bx, by, ex, ey;
+    int       bx, by, ex, ey;
 
     while (true)
     {
@@ -213,29 +207,22 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls) {
             return;
         }
         front_p2 = front_p;
-        front_p = front_p->next;
+        front_p  = front_p->next;
     }
 
     WindowIsCreating = false;
 }
 
-WINDOWLS* sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet) {
-    if (csheet == NULL) {
-        return NULL;
-    }
+WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
+{
+    if (csheet == NULL) { return NULL; }
 
     WINDOWLS *front_p = xwmi->start;
     while (true)
     {
         SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
-        if (sheet->index == csheet->index)
-        {
-            return front_p;
-        }
-        else if (front_p->next == NULL)
-        {
-            return NULL;
-        }
+        if (sheet->index == csheet->index) { return front_p; }
+        else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }

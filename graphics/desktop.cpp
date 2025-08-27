@@ -1,9 +1,9 @@
-#include <proto.hpp>
+#include "graphics/xingji_logo_16px.hpp"
+#include "graphics/xj380_logo_rect_72x64px.hpp"
+#include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
-#include "graphics/xj380_logo_rect_72x64px.hpp"
-#include "graphics/xingji_logo_16px.hpp"
-#include <global_color.h>
+#include <proto.hpp>
 #include <ttf.h>
 
 // 初始化桌面
@@ -68,14 +68,8 @@ void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
             {
                 // pass
             }
-            else if (xj380_logo_rect_72x64px[y][x] == '#')
-            {
-                draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE);
-            }
-            else if (xj380_logo_rect_72x64px[y][x] == '@')
-            {
-                draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW);
-            }
+            else if (xj380_logo_rect_72x64px[y][x] == '#') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE); }
+            else if (xj380_logo_rect_72x64px[y][x] == '@') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW); }
         }
     }
 }
@@ -90,14 +84,8 @@ void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
             {
                 // pass
             }
-            else if (xingji_logo_16px[y][x] == '@')
-            {
-                draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE);
-            }
-            else if (xingji_logo_16px[y][x] == '#')
-            {
-                draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW);
-            }
+            else if (xingji_logo_16px[y][x] == '@') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE); }
+            else if (xingji_logo_16px[y][x] == '#') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW); }
         }
     }
 }
