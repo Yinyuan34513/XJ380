@@ -41,7 +41,8 @@ extern spin_t            fb_print_lock;
 
 void test_task()
 {
-    for (int i = 0; 1 == 1; i++); // 防优化
+    for (int i = 0; 1 == 1; i++)
+        ; // 防优化
 }
 
 void init_cpu()
@@ -282,7 +283,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
-    pcb_t ugp = create_process_group("User Group", NULL, NULL);
+    pcb_t    ugp  = create_process_group("User Group", NULL, NULL);
     uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     memcpy((void *)utsk, (void *)test_task, 114);
     create_user_thread((void *)test_task, NULL, (char *)"test_task2", ugp);
