@@ -30,6 +30,8 @@ uint16_t   *msid;
 extern mouse_dec ms_dec;
 extern bool      winRD_lock;
 
+pcb_t ugp;
+
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE        *ST;
@@ -41,8 +43,27 @@ extern spin_t            fb_print_lock;
 
 void test_task()
 {
-    for (int i = 0; 1 == 1; i++)
-        ; // 防优化
+    uint64_t ret;
+    uint64_t syscall_number = 1145;
+    uint64_t arg1;
+    uint64_t arg2;
+    uint64_t arg3;
+    uint64_t arg4;
+    uint64_t arg5;
+    uint64_t arg6;
+    __asm__ __volatile__(
+        "movq %2, %%rdi\n\t"
+        "movq %3, %%rsi\n\t"
+        "movq %4, %%rdx\n\t"
+        "movq %5, %%r10\n\t"
+        "movq %6, %%r8\n\t"
+        "movq %7, %%r9\n\t"
+        "syscall\n\t"
+        : "=a"(ret)
+        : "a"(syscall_number), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5), "r"(arg6)
+        : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
+
+    while (1);
 }
 
 void init_cpu()
@@ -216,7 +237,7 @@ void desktop_flusher()
         }
         time_read(&time);
         draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
-        //12 小时制
+        // 12 小时制
         PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.tm_hour + 8) % 24, BLACK);
         PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
         PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.tm_min, BLACK);
@@ -281,12 +302,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
+    ugp  = create_process_group("User Group", NULL, NULL);
+
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
-    pcb_t    ugp  = create_process_group("User Group", NULL, NULL);
     uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     memcpy((void *)utsk, (void *)test_task, 114);
-    create_user_thread((void *)test_task, NULL, (char *)"test_task2", ugp);
+    create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
 
     open_interrupt;
     no_interrupt = false;
