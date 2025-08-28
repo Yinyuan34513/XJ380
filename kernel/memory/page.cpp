@@ -216,17 +216,18 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     return true;
 }
 
-page_table_t *page_table_create(page_table_entry_t *entry)
+page_table_t *page_table_create(page_table_entry_t *entry, bool user)
 {
     if (entry->value == (uint64_t)NULL)
     {
         uint64_t frame      = alloc_frames(1);
-        entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | PTE_USER;
+        entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | (user ? PTE_USER : 0);
         page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x00007ffffffff000);
         page_table_clear(table);
         return table;
     }
-    page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x00007ffffffff000);
+    entry->value        |= (user ? PTE_USER : 0);
+    page_table_t *table  = (page_table_t *)phys_to_virt(entry->value & 0x00007ffffffff000);
     return table;
 }
 
@@ -352,9 +353,9 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
     uint64_t l1_index = (((addr >> 12)) & 0x1FF);
 
     page_table_t *l4_table = directory->table;
-    page_table_t *l3_table = page_table_create(&(l4_table->entries[l4_index]));
-    page_table_t *l2_table = page_table_create(&(l3_table->entries[l3_index]));
-    page_table_t *l1_table = page_table_create(&(l2_table->entries[l2_index]));
+    page_table_t *l3_table = page_table_create(&(l4_table->entries[l4_index]), !!(flags & PTE_USER));
+    page_table_t *l2_table = page_table_create(&(l3_table->entries[l3_index]), !!(flags & PTE_USER));
+    page_table_t *l1_table = page_table_create(&(l2_table->entries[l2_index]), !!(flags & PTE_USER));
 
     l1_table->entries[l1_index].value = (frame & 0x00007ffffffff000) | flags;
 
@@ -379,11 +380,11 @@ void switch_page_directory(page_directory_t *dir)
     current_directory = dir;
     // }
     page_table_t *physical_table = (page_table_t *)(virt_to_phys((uint64_t)((page_table_t *)((uint64_t)dir->table))));
-    write_serial_string("Switch Page Directory:\nPhysAddr:");
-    write_serial_hex((uint64_t)(physical_table));
-    write_serial_string("\nVirtAddr:");
-    write_serial_hex((uint64_t)(phys_to_virt((uint64_t)(physical_table))));
-    write_serial_string("\n");
+    // write_serial_string("Switch Page Directory:\nPhysAddr:");
+    // write_serial_hex((uint64_t)(physical_table));
+    // write_serial_string("\nVirtAddr:");
+    // write_serial_hex((uint64_t)(phys_to_virt((uint64_t)(physical_table))));
+    // write_serial_string("\n");
     __asm__ volatile("mov %0, %%cr3" : : "r"(physical_table));
 }
 

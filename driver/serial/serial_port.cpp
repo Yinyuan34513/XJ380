@@ -186,6 +186,7 @@ typedef enum num_size
     SIZE_T = 5, // size_t
 } num_size_t;
 
+
 size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // `fmt_ptr` is a pointer to `fmt`
 {
     char        *str           = 0; // for `%s`
