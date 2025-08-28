@@ -176,13 +176,6 @@ void write_serial_hex(unsigned long long hex)
     write_serial_string(buf);
 }
 
-typedef struct ArgsFmter
-{
-    const char **fmt_ptr;       // a pointer to `fmt`
-    va_list      args;          // for `va_arg`
-    size_t      *write_counter; // for `%n`
-} ArgsFmter;
-
 typedef enum num_size
 {
     HALF_2 = 0, // char
@@ -193,22 +186,21 @@ typedef enum num_size
     SIZE_T = 5, // size_t
 } num_size_t;
 
-void wfmt_arg(Writer *writer, ArgsFmter *fmter) //NOLINT // `fmt_ptr` is a pointer to `fmt`
+
+size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // `fmt_ptr` is a pointer to `fmt`
 {
     char        *str           = 0; // for `%s`
     size_t       write_counter = 0;
     size_t       str_len       = 0; // for align `%s`
+    size_t       result        = 0; // Same as write_counter?
     WriteHandler write         = writer->handler;
-    const char **fmt_ptr       = fmter->fmt_ptr;
-    va_list      args;
-    va_copy(args, fmter->args);
 
     num_formatter_t num_fmter = {};
     num_fmt_type    num_flag  = {};
     int64_t         size_cnt  = INT;
 
     // Error args
-    if (!writer || !write || !fmt_ptr || !(*fmt_ptr) || **fmt_ptr != '%') { return; }
+    if (!writer || !write || !fmt_ptr || !(*fmt_ptr) || **fmt_ptr != '%') { return 0; }
 
     while (true)
     {
@@ -331,14 +323,11 @@ void wfmt_arg(Writer *writer, ArgsFmter *fmter) //NOLINT // `fmt_ptr` is a point
         case 'i': num_flag.sign = true;
         case 'u': num_fmter.base = 10; break;
         case 'b': num_fmter.base = 2; break;
-        case 'n':
-            *(fmter->write_counter)      += write_counter;
-            *(int *)va_arg(args, void *)  = (int)*fmter->write_counter;
-            break;
+        case 'n': va_arg(args, void *); break;
         case '%': break;
         default:
             // Unexpected
-            return;
+            return 0;
         }
 
         /* Write to arg space */
@@ -407,9 +396,8 @@ void wfmt_arg(Writer *writer, ArgsFmter *fmter) //NOLINT // `fmt_ptr` is a point
         }
         break;
     }
-    *(fmter->write_counter) += write_counter;
-    va_copy(fmter->args, args);
-    // Unnecessary to update `fmt_ptr`
+    result = write_counter;
+    return result;
 }
 
 /**
@@ -420,11 +408,6 @@ size_t vwprintf(Writer *writer, const char *fmt, va_list args)
     const char  *fmt_ptr = fmt;
     WriteHandler write   = writer->handler;
     size_t       result  = 0;
-    ArgsFmter    fmter   = {
-             .fmt_ptr       = &fmt_ptr,
-             .write_counter = &result,
-    };
-    va_copy(fmter.args, args);
     // TODO
     while (*fmt_ptr != '\0')
     {
@@ -436,7 +419,7 @@ size_t vwprintf(Writer *writer, const char *fmt, va_list args)
             continue;
         }
         // *fmt_ptr == '%'
-        wfmt_arg(writer, &fmter);
+        result += wfmt_arg(writer, &fmt_ptr, args);
         fmt_ptr++;
     }
     return result;
