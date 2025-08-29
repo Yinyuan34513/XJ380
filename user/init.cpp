@@ -1,17 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include "./xapi/include/x3api.h"
 
 int main(int argc, char *argv[], char *envp[])
 {
-    printf("init process is running!!!\n");
+    write(1, (char *)"init process is running!!!\n", 0);
 
     // uint64_t pid = vfork();
     // if (pid == 0)
     // {
     //     write(1, "child process is running!!!\n", 0);
     // execve("/usr/shell.elf", NULL, NULL);
-    execve("/cp537.elf", NULL, NULL);
+    execve((char *)"/cp537.elf", NULL, NULL);
     // }
     // else
     // {

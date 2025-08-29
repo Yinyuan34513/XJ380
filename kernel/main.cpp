@@ -310,7 +310,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     memcpy((void *)utsk, (void *)test_task, 114);
     create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
     
-    create_user_thread_from_file("/shell.elf",ugp);
+    create_user_thread_from_file((char *)"/shell.elf", ugp);
 
     open_interrupt;
     no_interrupt = false;

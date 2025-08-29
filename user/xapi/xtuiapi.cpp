@@ -49,10 +49,12 @@ UINT64 xcr_char2int(WSTR str) {
     for (int i = 1; i < len; i++, p--, w *= 10) {
         num += (*p - '0') * w;
     }
+	return num;
 }
 
+char str1[255];
 WSTR xcr_int2char(UINT64 dec) {
-    char str[255];
+    
 	int radix = 10;
 	char index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
 	unsigned unum;										   // 存放要转换的整数的绝对值,转换的整数可能是负数
@@ -62,7 +64,7 @@ WSTR xcr_int2char(UINT64 dec) {
 	if (radix == 10 && dec < 0) // 要转换成十进制数并且是负数
 	{
 		unum = (unsigned)-dec; // 将num的绝对值赋给unum
-		str[i++] = '-';		   // 在字符串最前面设置为'-'号，并且索引加1
+		str1[i++] = '-';		   // 在字符串最前面设置为'-'号，并且索引加1
 	}
 	else
 		unum = (unsigned)dec; // 若是num为正，直接赋值给unum
@@ -70,15 +72,15 @@ WSTR xcr_int2char(UINT64 dec) {
 	// 转换部分，注意转换后是逆序的
 	do
 	{
-		str[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
+		str1[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
 		unum /= radix;							  // unum去掉最后一位
 
 	} while (unum); // 直至unum为0退出循环
 
-	str[i] = '\0'; // 在字符串最后添加'\0'字符，c语言字符串以'\0'结束。
+	str1[i] = '\0'; // 在字符串最后添加'\0'字符，c语言字符串以'\0'结束。
 
 	// 将顺序调整过来
-	if (str[0] == '-')
+	if (str1[0] == '-')
 		k = 1; // 如果是负数，符号不用调整，从符号后面开始调整
 	else
 		k = 0; // 不是负数，全部都要调整
@@ -86,18 +88,18 @@ WSTR xcr_int2char(UINT64 dec) {
 	char temp;						   // 临时变量，交换两个值时用到
 	for (j = k; j <= (i - 1) / 2; j++) // 头尾一一对称交换，i其实就是字符串的长度，索引最大值比长度少1
 	{
-		temp = str[j];				 // 头部赋值给临时变量
-		str[j] = str[i - 1 + k - j]; // 尾部赋值给头部
-		str[i - 1 + k - j] = temp;	 // 将临时变量的值(其实就是之前的头部值)赋给尾部
+		temp = str1[j];				 // 头部赋值给临时变量
+		str1[j] = str1[i - 1 + k - j]; // 尾部赋值给头部
+		str1[i - 1 + k - j] = temp;	 // 将临时变量的值(其实就是之前的头部值)赋给尾部
 	}
 
-	return str;
+	return str1;
 } 
 
+char buf1[32];
 WSTR xcr_hex2char(UINT64 hex) {
 	// 输出16进制
-	char buf[32];
-	char *p = buf;
+	char *p = buf1;
 	char ch;
 	int i, flag = 0;
 
@@ -126,7 +128,7 @@ WSTR xcr_hex2char(UINT64 hex) {
 	}
 	*p = '\0'; // 结束符
 
-	return buf;
+	return buf1;
 }
 
 UINT32 xapi_toRGB(UINT8 r, UINT8 g, UINT8 b) {
@@ -135,9 +137,9 @@ UINT32 xapi_toRGB(UINT8 r, UINT8 g, UINT8 b) {
 
 // 3-4
 UINT64  xapi_fork() {
-	enter_syscall(XAPI_FORK, 0, 0, 0, 0, 0, 0);
+	return enter_syscall(XAPI_FORK, 0, 0, 0, 0, 0, 0);
 }
 
 UINT64  xapi_execve(WSTR filename, WSTR argv[], WSTR envp[]) {
-	enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
+	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }

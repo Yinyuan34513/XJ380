@@ -45,23 +45,23 @@ int main(int argc, char *argv[], char *envp[])
     XWINDOW window;
     window.width = 400;
     window.height = 160;
-    window.title = "CP537 Demo";
+    window.title = (char *)"CP537 Demo";
     // window.sets = NORMAL;
     HDLE handle;
     xapi_CreateWindow(&handle, &window);
     // 以下颜色用的都是ARGB，不知道用不用调
-    xapi_DrawText(handle, 10, 27, "山地奥斯卡537 2023/8/14 20:35:14", 10, 0x45459eff);
+    xapi_DrawText(handle, 10, 27, (char *)"山地奥斯卡537 2023/8/14 20:35:14", 10, 0x45459eff);
     xapi_DrawRect(handle, 26, 48, 382, 106, 0xc6c6c6ff, true);
-    xapi_DrawText(handle, 34, 47, "Hmtc 2023/8/14 20:34:37", 10, 0x000000ff);
-    xapi_DrawText(handle, 34, 65, "@山地奥斯卡537 另外，不是", 10, 0x000000ff);
-    xapi_DrawText(handle, 34, 83, "utf-8吗？", 10, 0x000000ff);
+    xapi_DrawText(handle, 34, 47, (char *)"Hmtc 2023/8/14 20:34:37", 10, 0x000000ff);
+    xapi_DrawText(handle, 34, 65, (char *)"@山地奥斯卡537 另外，不是", 10, 0x000000ff);
+    xapi_DrawText(handle, 34, 83, (char *)"utf-8吗？", 10, 0x000000ff);
     xapi_DrawRect(handle, 26, 107, 76, 126, 0x92bbffff, true); // @Hmtc长度5*8=40，此处沿用旧设定，如果不对需要改
-    xapi_DrawText(handle, 28, 106, "@Hmtc", 10, 0x000000ff);
-    xapi_DrawText(handle, 80, 106, "老兄，中文不支持UTF-8，因为中文是双字符", 10, 0x000000ff);
+    xapi_DrawText(handle, 28, 106, (char *)"@Hmtc", 10, 0x000000ff);
+    xapi_DrawText(handle, 80, 106, (char *)"老兄，中文不支持UTF-8，因为中文是双字符", 10, 0x000000ff);
     draw_uparrow(handle, 365, 75);
     xapi_RefreshWindow(handle);
     // xapi_CloseWindow(handle);
-    execve("/shell.elf", NULL, NULL);
+    execve((char *)"/shell.elf", NULL, NULL);
     return 0;
 }
 
