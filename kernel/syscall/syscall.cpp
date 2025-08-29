@@ -61,6 +61,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     regs->ss     = SELECTOR_USER_DS;
 
     uint64_t syscall_number = regs->rax;
+    write_serial_fmt("syscall_number: %llu\n",syscall_number);
 
     switch (syscall_number)
     {
