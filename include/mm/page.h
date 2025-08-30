@@ -7,6 +7,9 @@
 #define PTE_HUGE       (0x1 << 7)
 #define PTE_NO_EXECUTE (((uint64_t)0x1) << 63)
 
+#define ARCH_PT_IS_TABLE(x) (((x) & (PTE_PRESENT | PTE_WRITEABLE)) == (PTE_PRESENT | PTE_WRITEABLE))
+#define ARCH_PT_IS_LARGE(x) (((x) & (PTE_PRESENT | PTE_HUGE)) == (PTE_PRESENT | PTE_HUGE))
+
 #define MAP_ANONYMOUS 32
 #define MAP_FIXED     16
 
@@ -189,3 +192,5 @@ page_directory_t *get_current_directory();
  */
 void switch_xsk_page_directory();
 void page_setup();
+
+uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address);

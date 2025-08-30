@@ -205,6 +205,13 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     return reg;
 }
 
+void scheduler_yield()
+{
+    if (!is_scheduler)
+        return;
+    __asm__ volatile("int %0" ::"i"(32));
+}
+
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;

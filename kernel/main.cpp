@@ -22,6 +22,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <nvme/nvme.h>
 
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
@@ -51,19 +52,19 @@ void test_task()
     uint64_t arg4;
     uint64_t arg5;
     uint64_t arg6;
-    __asm__ __volatile__(
-        "movq %2, %%rdi\n\t"
-        "movq %3, %%rsi\n\t"
-        "movq %4, %%rdx\n\t"
-        "movq %5, %%r10\n\t"
-        "movq %6, %%r8\n\t"
-        "movq %7, %%r9\n\t"
-        "syscall\n\t"
-        : "=a"(ret)
-        : "a"(syscall_number), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5), "r"(arg6)
-        : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
+    __asm__ __volatile__("movq %2, %%rdi\n\t"
+                         "movq %3, %%rsi\n\t"
+                         "movq %4, %%rdx\n\t"
+                         "movq %5, %%r10\n\t"
+                         "movq %6, %%r8\n\t"
+                         "movq %7, %%r9\n\t"
+                         "syscall\n\t"
+                         : "=a"(ret)
+                         : "a"(syscall_number), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5), "r"(arg6)
+                         : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
 
-    while (1);
+    while (1)
+        ;
 }
 
 void init_cpu()
@@ -266,6 +267,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_init();
+    nvme_init();
     vfs_init();
     dev_init();
     partition_init();
@@ -302,13 +304,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    ugp  = create_process_group("User Group", NULL, NULL);
+    ugp = create_process_group("User Group", NULL, NULL);
 
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
-    uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
-    memcpy((void *)utsk, (void *)test_task, 114);
-    create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
+    // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
+    // memcpy((void *)utsk, (void *)test_task, 114);
+    // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
+    
+    create_user_thread_from_file((char *)"/shell.elf", ugp);
 
     open_interrupt;
     no_interrupt = false;

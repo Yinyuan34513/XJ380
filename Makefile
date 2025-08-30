@@ -23,7 +23,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -no-reboot -d cpu_reset -M q35 -bios OVMF.fd -m 2048 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device nec-usb-xhci,id=xhci -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -no-reboot -d cpu_reset -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device nec-usb-xhci,id=xhci -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -104,9 +104,12 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 
 	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
 
+	@$(MAKE) -C user build_xapi
+	@$(MAKE) -C user
 .PHONY: clean format check gen.clangd
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img
+	@$(MAKE) -C user clean
 
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
@@ -135,11 +138,15 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
 	@cp -a ./1.txt $(BUILD_DIR)/XJ380/
+	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/
+	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/
+	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
 	@rm -rf $(BUILD_DIR)/XJ380
+	
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk

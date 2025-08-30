@@ -219,4 +219,5 @@ int     get_mouse_x();
 int     get_mouse_y();
 void    draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
 void    move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
+void create_user_thread_from_file(char *path, pcb_t pcb);
 #endif

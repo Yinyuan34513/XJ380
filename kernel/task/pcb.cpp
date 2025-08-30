@@ -17,6 +17,8 @@ size_t        now_tid         = 0;
 lock_queue   *pcb_group_queue = NULL;
 pcb_t         kernel_group    = NULL;
 
+extern bool no_interrupt;
+
 [[noreturn]] void process_exit()
 {
     uint64_t rax = 0;
@@ -95,8 +97,11 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);
-    enable_scheduler();
-    open_interrupt;
+    if (!no_interrupt)
+    {
+        enable_scheduler();
+        open_interrupt;
+    }
     return new_task->tid;
 }
 
@@ -148,8 +153,11 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);
-    enable_scheduler();
-    open_interrupt;
+    if (!no_interrupt)
+    {
+        enable_scheduler();
+        open_interrupt;
+    }
     return new_task->tid;
 }
 

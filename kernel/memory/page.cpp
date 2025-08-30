@@ -428,6 +428,72 @@ void page_map_range(page_directory_t *directory, uint64_t addr, uint64_t frame, 
     }
 }
 
+uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
+{
+    // 计算各级页表索引
+    uint64_t pml4_index = (virtual_address >> 39) & ENTRY_MASK;
+    uint64_t pdp_index = (virtual_address >> 30) & ENTRY_MASK;
+    uint64_t pd_index = (virtual_address >> 21) & ENTRY_MASK;
+    uint64_t pt_index = (virtual_address >> 12) & ENTRY_MASK;
+    
+    // 获取PML4表
+    page_table_t *pml4_table = page_dir->table;
+    page_table_entry_t pml4_entry = pml4_table->entries[pml4_index];
+    
+    // 检查PML4条目是否存在
+    if (!(pml4_entry.value & PTE_PRESENT)) {
+        return 0;
+    }
+    
+    // 如果PML4条目指向的是1GB大页
+    if (ARCH_PT_IS_LARGE(pml4_entry.value)) {
+        uint64_t base_addr = pml4_entry.value & ~((1UL << 30) - 1);
+        return base_addr + (virtual_address & ((1UL << 30) - 1));
+    }
+    
+    // 获取PDPT表
+    page_table_t *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PAGE_MASK);
+    page_table_entry_t pdpt_entry = pdpt_table->entries[pdp_index];
+    
+    // 检查PDPT条目是否存在
+    if (!(pdpt_entry.value & PTE_PRESENT)) {
+        return 0;
+    }
+    
+    // 如果PDPT条目指向的是1GB大页
+    if (ARCH_PT_IS_LARGE(pdpt_entry.value)) {
+        uint64_t base_addr = pdpt_entry.value & ~((1UL << 30) - 1);
+        return base_addr + (virtual_address & ((1UL << 30) - 1));
+    }
+    
+    // 获取PD表
+    page_table_t *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PAGE_MASK);
+    page_table_entry_t pd_entry = pd_table->entries[pd_index];
+    
+    // 检查PD条目是否存在
+    if (!(pd_entry.value & PTE_PRESENT)) {
+        return 0;
+    }
+    
+    // 如果PD条目指向的是2MB大页
+    if (ARCH_PT_IS_LARGE(pd_entry.value)) {
+        uint64_t base_addr = pd_entry.value & ~((1UL << 21) - 1);
+        return base_addr + (virtual_address & ((1UL << 21) - 1));
+    }
+    
+    // 获取PT表
+    page_table_t *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PAGE_MASK);
+    page_table_entry_t pt_entry = pt_table->entries[pt_index];
+    
+    // 检查PT条目是否存在
+    if (!(pt_entry.value & PTE_PRESENT)) {
+        return 0;
+    }
+    
+    // 返回4KB页的物理地址
+    return (pt_entry.value & PAGE_MASK) + (virtual_address & ~PAGE_MASK);
+}
+
 void switch_xsk_page_directory()
 {
     page_directory_t *new_directory = clone_page_directory(&kernel_page_dir, true);
