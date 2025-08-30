@@ -22,6 +22,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <nvme/nvme.h>
 
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
@@ -266,6 +267,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_init();
+    nvme_init();
     vfs_init();
     dev_init();
     partition_init();
@@ -306,9 +308,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
-    uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
-    memcpy((void *)utsk, (void *)test_task, 114);
-    create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
+    // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
+    // memcpy((void *)utsk, (void *)test_task, 114);
+    // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
     
     create_user_thread_from_file((char *)"/shell.elf", ugp);
 

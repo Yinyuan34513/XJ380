@@ -31,14 +31,15 @@ void get_thread_name_from_filepath(char *path, char *name)
     char *q = name;
     while (*p != '\0')
         p++;
-    while (*p != '\\' || *p != '/' || *p != '|')
+    while (*p != '\\' && *p != '/' && *p != '|')
         p--;
     p++;
-    while (*p != '\0')
+    while (*p != '\0' && *p != '.')
     {
         *q = *p;
         p++; q++;
     }
+    *q = '\0';
 }
 
 uint64_t parse_elf_file(char *path)
@@ -89,8 +90,11 @@ uint64_t parse_elf_file(char *path)
 
 void create_user_thread_from_file(char *path, pcb_t pcb)
 {
-    char *thread_name;
+    char thread_name[50];
     void *entry = (void *)parse_elf_file(path);
+    if (entry == NULL)
+        return;
     get_thread_name_from_filepath(path, thread_name);
+    write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
     create_user_thread(entry, NULL, thread_name, pcb);
 }
