@@ -95,11 +95,12 @@ void create_user_process_from_file(char *path, pcb_t pcb)
     if (entry == NULL)
         return;
 
+    get_thread_name_from_filepath(path, process_name);
+    
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
-    pcb_t group = create_process_group(process_name, NULL, NULL);
+    pcb_t group = create_process_group(process_name, NULL, new_directory);
 
-    get_thread_name_from_filepath(path, process_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
     create_user_thread(entry, NULL, process_name, pcb == NULL ? group : pcb);
 }
