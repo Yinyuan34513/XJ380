@@ -17,6 +17,9 @@ extern void     *temp_stack[MAX_CPU_NUM];
 extern uint32_t  smp_trampoline_rs;
 extern size_t    now_tid;
 
+extern bool      smp_scheduler_lock;
+int              scheduler_is_ready;
+
 typedef char symbol[];
 
 extern uint8_t _APU_boot_start;
@@ -121,6 +124,12 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     init_syscall();
 
+    while (true) 
+    {
+        if (!smp_scheduler_lock)
+            break;
+    }
+
     tcb_t apu_idle         = (tcb_t)malloc(STACK_SIZE);
     apu_idle->task_level   = TASK_IDLE_LEVEL;
     apu_idle->tid          = now_tid++;
@@ -137,6 +146,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     spin_unlock(apu_lock);
     enable_intr();
+
+    scheduler_is_ready++;
 
     while (true)
     {

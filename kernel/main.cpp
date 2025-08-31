@@ -28,8 +28,10 @@ SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
 uint16_t   *msid;
 
-extern mouse_dec ms_dec;
-extern bool      winRD_lock;
+extern mouse_dec        ms_dec;
+extern bool             winRD_lock;
+extern int              scheduler_is_ready;
+extern XSK_SMP_INFO    *xsi;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -301,6 +303,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
 
     process_setup();
+
+    while (true)
+    {
+        if (scheduler_is_ready == xsi->cpu_count)
+            break;
+    }
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL);
 
