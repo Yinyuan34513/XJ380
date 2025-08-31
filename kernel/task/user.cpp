@@ -42,7 +42,7 @@ void get_thread_name_from_filepath(char *path, char *name)
     *q = '\0';
 }
 
-uint64_t parse_elf_file(char *path)
+uint64_t parse_elf_file(char *path, pcb_t group)
 {
     Elf64_Ehdr ehdr;
     Elf64_Phdr *phdrs = nullptr;
@@ -54,8 +54,15 @@ uint64_t parse_elf_file(char *path)
     file = vfs_open(path);
     uint64_t file_size = file->size;
 
+    if (group == NULL)
+    {
+        write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
+        write_serial_fmt("Reason:   ? Where is your parent group?\n");
+        return NULL;
+    }
+
     // 读取整个文件
-    buf = (uint8_t *)page_alloc_random(get_current_directory(), file_size, PTE_PRESENT | PTE_USER);
+    buf = (uint8_t *)malloc(file_size);
     if (!buf)
     {
         write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
@@ -84,22 +91,98 @@ uint64_t parse_elf_file(char *path)
         return NULL;
     }
 
+    uint64_t entry = ehdr.e_entry;
+
+    elf_mapping_space *mapping_space = (elf_mapping_space *)malloc(sizeof(elf_mapping_space));
+    CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start, (uint64_t *)&mapping_space->load_end);
+
+    uint64_t load_phys_start = alloc_frames((mapping_space->load_end - mapping_space->load_start) / PAGE_SIZE);
+    page_map_range( group->pagedir, mapping_space->load_start, load_phys_start, 
+                    mapping_space->load_end - mapping_space->load_start, 
+                    PTE_PRESENT | PTE_WRITEABLE | PTE_USER );
+
+    if (load_phys_start != 0)
+    {
+        mapping_space->load_phys_start = load_phys_start;
+    }
+
+    memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
+
+    // 获取程序头表
+    phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
+
+    // 呃，目前看起来好像没什么用？
+    uint64_t start_code, end_code;
+    uint64_t start_data, end_data;
+    uint64_t start_rodata, end_rodata;
+    uint64_t start_brk, end_brk;
+    uint64_t start_stack;
+
+    // 遍历并加载程序段
+    for (int i = 0; i < ehdr.e_phnum; i++)
+    {
+        if (phdrs[i].p_type != PT_LOAD)
+        {
+            continue;
+        }
+
+        // 对齐到页大小
+        uint64_t v_addr = phdrs[i].p_vaddr & ~(PAGE_SIZE - 1);
+        uint64_t v_size = (phdrs[i].p_memsz + (phdrs[i].p_vaddr & (PAGE_SIZE - 1)) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+        // 更新内存映射信息
+        if (phdrs[i].p_flags & 0x1)
+        { // 可执行
+            start_code = min(start_code, v_addr);
+            end_code   = max(end_code, v_addr + v_size);
+        }
+        else if (phdrs[i].p_flags & 0x2)
+        { // 可写
+            start_data = min(start_data, v_addr);
+            end_data   = max(end_data, v_addr + v_size);
+        }
+        else
+        {
+            start_rodata = min(start_rodata, v_addr);
+            end_rodata   = max(end_rodata, v_addr + v_size);
+        }
+
+        // 复制段内容
+        uint64_t segm_in_file = (uint64_t)buf + phdrs[i].p_offset;
+
+        memcpy( (void *)phdrs[i].p_vaddr,
+                (void *)segm_in_file,
+                phdrs[i].p_filesz );
+
+        // 清零未初始化数据
+        if (phdrs[i].p_memsz > phdrs[i].p_filesz)
+        {
+            memset((void *)(phdrs[i].p_vaddr + phdrs[i].p_filesz),
+                    0,
+                    phdrs[i].p_memsz - phdrs[i].p_filesz);
+        }
+    }
+
+    free(buf);
+
     // 设置程序入口点
-    return ehdr.e_entry;
+    return entry;
 }
 
 void create_user_process_from_file(char *path, pcb_t pcb)
 {
     char process_name[50];
-    void *entry = (void *)parse_elf_file(path);
+    void *entry;
     if (entry == NULL)
         return;
 
     get_thread_name_from_filepath(path, process_name);
-    
+
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
     pcb_t group = create_process_group(process_name, NULL, new_directory);
+
+    entry = (void *)parse_elf_file(path, group);
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
     create_user_thread(entry, NULL, process_name, pcb == NULL ? group : pcb);
@@ -108,7 +191,7 @@ void create_user_process_from_file(char *path, pcb_t pcb)
 void create_user_thread_from_file(char *path, pcb_t pcb)
 {
     char thread_name[50];
-    void *entry = (void *)parse_elf_file(path);
+    void *entry = (void *)parse_elf_file(path, pcb);
     if (entry == NULL)
         return;
     get_thread_name_from_filepath(path, thread_name);

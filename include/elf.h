@@ -36,6 +36,13 @@ typedef struct
     uint16_t e_shstrndx;  /* Section header string table index */
 } Elf64_Ehdr;
 
+struct elf_mapping_space
+{
+    uint64_t load_start;
+    uint64_t load_end;
+    uint64_t load_phys_start;
+};
+
 void CalcLoadAddressRange(Elf64_Ehdr *ehdr, uint64_t *first, uint64_t *last)
 {
     Elf64_Phdr *phdr = (Elf64_Phdr *)((uint64_t)ehdr + ehdr->e_phoff); // 第一个 program header 地址
