@@ -31,8 +31,6 @@ uint16_t   *msid;
 extern mouse_dec ms_dec;
 extern bool      winRD_lock;
 
-pcb_t ugp;
-
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE        *ST;
@@ -304,7 +302,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     process_setup();
 
-    ugp = create_process_group("User Group", NULL, NULL);
+    pcb_t ugp = create_process_group("Test User Group", NULL, NULL);
 
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
