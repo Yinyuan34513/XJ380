@@ -50,9 +50,12 @@ struct XSK_SMP_INFO
 
 void _setcs_helper();
 
+<<<<<<< HEAD
 uint64_t get_cpu_num();
 PROCESSOR_INFO *get_cpu(uint64_t id);
 uint64_t get_bsp();
 uint64_t get_bsp();
 
+=======
+>>>>>>> 6635f6b544a6037d5bf41bc6f07e31d0a84cb4e5
 #endif
