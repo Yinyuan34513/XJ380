@@ -17,8 +17,10 @@ extern void     *temp_stack[MAX_CPU_NUM];
 extern uint32_t  smp_trampoline_rs;
 extern size_t    now_tid;
 
+extern pcb_t     kernel_group;
+
 extern bool      smp_scheduler_lock;
-int              scheduler_is_ready;
+int              scheduler_is_ready = 0;
 
 typedef char symbol[];
 

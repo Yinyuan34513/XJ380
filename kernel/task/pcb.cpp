@@ -180,7 +180,7 @@ extern "C" uint64_t switch_to_kernel_stack()
     return get_current_task()->kernel_stack;
 }
 
-bool smp_scheduler_lock = false;
+bool smp_scheduler_lock = true;
 extern int scheduler_is_ready;
 
 void process_setup()
@@ -206,7 +206,7 @@ void process_setup()
     set_kernel_stack(get_rsp());
     idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
 
-    smp_scheduler_lock = true;
+    smp_scheduler_lock = false;
     scheduler_is_ready++;
 
     write_serial_fmt("Setup process <%s> PID:%zu\n", kernel_pcb->name, kernel_pcb->pid);
