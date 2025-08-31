@@ -88,7 +88,6 @@ uint64_t parse_elf_file(char *path)
     return ehdr.e_entry;
 }
 
-<<<<<<< HEAD
 void create_user_process_from_file(char *path, pcb_t pcb)
 {
     char process_name[50];
@@ -105,18 +104,12 @@ void create_user_process_from_file(char *path, pcb_t pcb)
     create_user_thread(entry, NULL, process_name, pcb == NULL ? group : pcb);
 }
 
-=======
->>>>>>> 6635f6b544a6037d5bf41bc6f07e31d0a84cb4e5
 void create_user_thread_from_file(char *path, pcb_t pcb)
 {
     char thread_name[50];
     void *entry = (void *)parse_elf_file(path);
     if (entry == NULL)
         return;
-<<<<<<< HEAD
-
-=======
->>>>>>> 6635f6b544a6037d5bf41bc6f07e31d0a84cb4e5
     get_thread_name_from_filepath(path, thread_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
     create_user_thread(entry, NULL, thread_name, pcb);

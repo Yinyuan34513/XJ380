@@ -223,7 +223,6 @@ PROCESSOR_INFO *get_current_cpu()
     return info;
 }
 
-<<<<<<< HEAD
 uint64_t get_cpu_num()
 {
     return xsi->cpu_count;
@@ -240,8 +239,6 @@ PROCESSOR_INFO *get_cpu(uint64_t id)
     return cpu;
 }
 
-=======
->>>>>>> 6635f6b544a6037d5bf41bc6f07e31d0a84cb4e5
 void set_kernel_stack(uint64_t rsp)
 {
     if (lapic_id() == xsi->bsp_lapic_id)
