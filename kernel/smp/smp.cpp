@@ -223,19 +223,6 @@ PROCESSOR_INFO *get_current_cpu()
     return info;
 }
 
-uint64_t get_cpu_num()
-{
-    return xsi->cpu_count;
-}
-uint64_t get_bsp()
-{
-    return xsi->bsp_lapic_id;
-}
-PROCESSOR_INFO *get_cpu(uint64_t id)
-{
-    PROCESSOR_INFO *cpu = &xsi->pcr_inf[id];
-    return cpu;
-}
 void set_kernel_stack(uint64_t rsp)
 {
     if (lapic_id() == xsi->bsp_lapic_id)
