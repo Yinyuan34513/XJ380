@@ -55,6 +55,8 @@ __attribute__((naked)) void _setcs_helper()
                          : "memory");
 }
 
+void init_cpu();
+
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
     disable_intr();
@@ -78,6 +80,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
             asm volatile("hlt");
         }
     }
+
+    init_cpu();
 
     info->gdt_entries_t[0] = 0x0000000000000000U;
     info->gdt_entries_t[1] = 0x00a09a0000000000U;
