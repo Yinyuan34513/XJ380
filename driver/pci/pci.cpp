@@ -608,7 +608,7 @@ void pci_find_class(pci_device_t **result, uint32_t *n, uint32_t class_code)
 
 void pci_setup(uint64_t mcfg0)
 {
-    mcfg = (MCFG *)mcfg0;
+    mcfg = (MCFG *)(mcfg0 + 0xffff800000000000);
 }
 
 void pci_init()

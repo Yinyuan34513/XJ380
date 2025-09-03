@@ -56,7 +56,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
     close_interrupt;
     disable_scheduler();
-    tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
+    tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
 
@@ -109,7 +109,7 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
     close_interrupt;
     disable_scheduler();
-    tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
+    tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
 
@@ -180,7 +180,7 @@ extern "C" uint64_t switch_to_kernel_stack()
     return get_current_task()->kernel_stack;
 }
 
-bool smp_scheduler_lock = true;
+bool       smp_scheduler_lock = true;
 extern int scheduler_is_ready;
 
 void process_setup()
@@ -190,12 +190,13 @@ void process_setup()
     kernel_pcb->pid     = now_pid++;
     kernel_pcb->pagedir = get_kernel_pagedir();
     strcpy(kernel_pcb->name, "XSK System");
-    kernel_pcb->parent_task = kernel_pcb;
-    kernel_pcb->status      = RUNNING;
-    kernel_pcb->queue_index = queue_enqueue(pcb_group_queue, kernel_pcb);
-    kernel_group            = kernel_pcb;
+    kernel_pcb->parent_task  = kernel_pcb;
+    kernel_pcb->status       = RUNNING;
+    kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
+    kernel_pcb->thread_queue = queue_init();
+    kernel_group             = kernel_pcb;
 
-    tcb_t idle_thread         = (tcb_t)malloc(KERNEL_STACK_SIZE);
+    tcb_t idle_thread         = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_pcb;
     idle_thread->kernel_stack = get_rsp();
@@ -205,6 +206,8 @@ void process_setup()
     idle_thread->context0.rsp = get_rsp();
     set_kernel_stack(get_rsp());
     idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
+
+    get_current_cpu()->current_task = idle_thread;
 
     smp_scheduler_lock = false;
     scheduler_is_ready++;

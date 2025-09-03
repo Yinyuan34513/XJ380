@@ -1,8 +1,9 @@
-#include <stdint.h>
 #include <ahci/ahci.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
+#include <elf.h>
+#include <errno.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
 #include <fs/fs_syscall.h>
@@ -20,10 +21,9 @@
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <rtc.h>
+#include <stdint.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
-#include <elf.h>
-#include <errno.h>
 
 void get_thread_name_from_filepath(char *path, char *name)
 {
@@ -37,21 +37,22 @@ void get_thread_name_from_filepath(char *path, char *name)
     while (*p != '\0' && *p != '.')
     {
         *q = *p;
-        p++; q++;
+        p++;
+        q++;
     }
     *q = '\0';
 }
 
 uint64_t parse_elf_file(char *path, pcb_t group)
 {
-    Elf64_Ehdr ehdr;
-    Elf64_Phdr *phdrs = nullptr;
-    uint64_t pos = 0;
-    int retval = 0;
-    uint8_t *buf = nullptr;
+    Elf64_Ehdr  ehdr;
+    Elf64_Phdr *phdrs  = nullptr;
+    uint64_t    pos    = 0;
+    int         retval = 0;
+    uint8_t    *buf    = nullptr;
 
     vfs_node_t file;
-    file = vfs_open(path);
+    file               = vfs_open(path);
     uint64_t file_size = file->size;
 
     if (group == NULL)
@@ -62,7 +63,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     }
 
     // 读取整个文件
-    buf = (uint8_t *)malloc(file_size);
+    buf = (uint8_t *)phys_to_virt(alloc_frames((file_size + PAGE_SIZE - 1) / PAGE_SIZE));
     if (!buf)
     {
         write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
@@ -82,10 +83,10 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     ehdr = *(Elf64_Ehdr *)buf;
 
     // 验证ELF/EPF魔数 (0x7F,'E','L','F') (0x24, 'E', 'P', 'F')
-    if ((*(uint32_t *)ehdr.e_ident != 0x464C457F)       // ELF
-         && (*(uint32_t *)ehdr.e_ident != 0x46504524))  // EPF
+    if ((*(uint32_t *)ehdr.e_ident != 0x464C457F)     // ELF
+        && (*(uint32_t *)ehdr.e_ident != 0x46504524)) // EPF
     {
-        free(buf);
+        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
         write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Bad Format.\n");
         return NULL;
@@ -94,17 +95,14 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     uint64_t entry = ehdr.e_entry;
 
     elf_mapping_space *mapping_space = (elf_mapping_space *)malloc(sizeof(elf_mapping_space));
-    CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start, (uint64_t *)&mapping_space->load_end);
+    CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
+                         (uint64_t *)&mapping_space->load_end);
 
-    uint64_t load_phys_start = alloc_frames((mapping_space->load_end - mapping_space->load_start) / PAGE_SIZE);
-    page_map_range( group->pagedir, mapping_space->load_start, load_phys_start, 
-                    mapping_space->load_end - mapping_space->load_start, 
-                    PTE_PRESENT | PTE_WRITEABLE | PTE_USER );
+    page_map_range_to_random(group->pagedir, mapping_space->load_start,
+                             mapping_space->load_end - mapping_space->load_start,
+                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
 
-    if (load_phys_start != 0)
-    {
-        mapping_space->load_phys_start = load_phys_start;
-    }
+    switch_page_directory(group->pagedir);
 
     memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
 
@@ -121,10 +119,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     // 遍历并加载程序段
     for (int i = 0; i < ehdr.e_phnum; i++)
     {
-        if (phdrs[i].p_type != PT_LOAD)
-        {
-            continue;
-        }
+        if (phdrs[i].p_type != PT_LOAD) { continue; }
 
         // 对齐到页大小
         uint64_t v_addr = phdrs[i].p_vaddr & ~(PAGE_SIZE - 1);
@@ -150,20 +145,16 @@ uint64_t parse_elf_file(char *path, pcb_t group)
         // 复制段内容
         uint64_t segm_in_file = (uint64_t)buf + phdrs[i].p_offset;
 
-        memcpy( (void *)phdrs[i].p_vaddr,
-                (void *)segm_in_file,
-                phdrs[i].p_filesz );
+        memcpy((void *)phdrs[i].p_vaddr, (void *)segm_in_file, phdrs[i].p_filesz);
 
         // 清零未初始化数据
         if (phdrs[i].p_memsz > phdrs[i].p_filesz)
         {
-            memset((void *)(phdrs[i].p_vaddr + phdrs[i].p_filesz),
-                    0,
-                    phdrs[i].p_memsz - phdrs[i].p_filesz);
+            memset((void *)(phdrs[i].p_vaddr + phdrs[i].p_filesz), 0, phdrs[i].p_memsz - phdrs[i].p_filesz);
         }
     }
 
-    free(buf);
+    free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
     // 设置程序入口点
     return entry;
@@ -171,16 +162,15 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
 void create_user_process_from_file(char *path, pcb_t pcb)
 {
-    char process_name[50];
+    char  process_name[50];
     void *entry;
-    if (entry == NULL)
-        return;
+    if (entry == NULL) return;
 
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
-    pcb_t group = create_process_group(process_name, NULL, new_directory);
+    pcb_t             group         = create_process_group(process_name, NULL, new_directory);
 
     entry = (void *)parse_elf_file(path, group);
 
@@ -190,10 +180,9 @@ void create_user_process_from_file(char *path, pcb_t pcb)
 
 void create_user_thread_from_file(char *path, pcb_t pcb)
 {
-    char thread_name[50];
+    char  thread_name[50];
     void *entry = (void *)parse_elf_file(path, pcb);
-    if (entry == NULL)
-        return;
+    if (entry == NULL) return;
     get_thread_name_from_filepath(path, thread_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
     create_user_thread(entry, NULL, thread_name, pcb);

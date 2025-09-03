@@ -1,4 +1,5 @@
 #include <ahci/ahci.h>
+#include <cpu/regio.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
@@ -14,6 +15,7 @@
 #include <graphics/sheet.h>
 #include <krlibc.h>
 #include <mm/frame.h>
+#include <nvme/nvme.h>
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <ps2/keyboard.h>
@@ -22,16 +24,15 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
-#include <nvme/nvme.h>
 
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
 uint16_t   *msid;
 
-extern mouse_dec        ms_dec;
-extern bool             winRD_lock;
-extern int              scheduler_is_ready;
-extern XSK_SMP_INFO    *xsi;
+extern mouse_dec     ms_dec;
+extern bool          winRD_lock;
+extern int           scheduler_is_ready;
+extern XSK_SMP_INFO *xsi;
 
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
@@ -82,6 +83,7 @@ void init_cpu()
 void desktop_flusher()
 {
     disable_intr();
+    disable_scheduler();
 
     write_serial_string("desktop flusher is running\n");
 
@@ -120,8 +122,8 @@ void desktop_flusher()
              shtinf.scry, WHITE);
     PrintString(&shtinf, &desktop_sheet_id, 8, 34, "KeyboardInputOut", WHITE);
     // PrintString(&shtinf, &desktop_sheet_id, 332, 34, "PointerInputOut", WHITE);
-    PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
-    PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BC->MemoryMap.MapKey, WHITE);
+    // PrintString(&shtinf, &desktop_sheet_id, 8, 480, "MapKey:", WHITE);
+    // PrintHex(&shtinf, &desktop_sheet_id, 8, 496, BC->MemoryMap.MapKey, WHITE);
     // 别问为什么这么多-40，问就是因为改起来太麻烦
     PrintString(&shtinf, &desktop_sheet_id, 8, 284, "PrintTestColor", WHITE);
 
@@ -179,6 +181,8 @@ void desktop_flusher()
     WINDOWLS *test_win2;
     init_xwm(&xwmi);
     xwmii = &xwmi;
+
+    enable_scheduler();
 
     winRD_lock = true;
 
@@ -275,6 +279,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     fs_syscall_init();
     fatfs_init();
 
+    // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
+    saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
+    for (int i = 0; i < MAX_CPU_NUM; ++i)
+        temp_stack[i] = BootConfig.temp_stack[i];
+
+    init_smp(BootConfig.MADT);
+
+    memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
+
     mount_root();
 
     keyboard_init();
@@ -288,13 +301,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     else
         write_serial_fmt("read file: %s\n", buf);
 
-    // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
-    saved_mtrrs = (uint64_t *)(BootConfig.saved_mtrrs);
-    for (int i = 0; i < MAX_CPU_NUM; ++i)
-        temp_stack[i] = BootConfig.temp_stack[i];
-
-    init_smp(BootConfig.MADT);
-
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");
     write_serial_hex(phys);
@@ -306,8 +312,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (true)
     {
-        if (scheduler_is_ready == xsi->cpu_count)
-            break;
+        if (scheduler_is_ready == xsi->cpu_count) break;
     }
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL);
@@ -317,7 +322,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
-    
+
     create_user_process_from_file((char *)"/shell.elf", NULL);
 
     open_interrupt;

@@ -40,7 +40,6 @@ struct elf_mapping_space
 {
     uint64_t load_start;
     uint64_t load_end;
-    uint64_t load_phys_start;
 };
 
 void CalcLoadAddressRange(Elf64_Ehdr *ehdr, uint64_t *first, uint64_t *last)

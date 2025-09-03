@@ -17,10 +17,10 @@ extern void     *temp_stack[MAX_CPU_NUM];
 extern uint32_t  smp_trampoline_rs;
 extern size_t    now_tid;
 
-extern pcb_t     kernel_group;
+extern pcb_t kernel_group;
 
-extern bool      smp_scheduler_lock;
-int              scheduler_is_ready = 0;
+extern bool smp_scheduler_lock;
+int         scheduler_is_ready = 0;
 
 typedef char symbol[];
 
@@ -29,7 +29,7 @@ extern uint8_t _APU_boot_end;
 
 extern IDTR_TYPE idt_ptr;
 
-#define APU_BASE_ADDR 0x20000
+#define APU_BASE_ADDR 0x10000
 
 #define smp_lock_read(var)                                                                                             \
     ({                                                                                                                 \
@@ -130,13 +130,12 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     init_syscall();
 
-    while (true) 
+    while (true)
     {
-        if (!smp_scheduler_lock)
-            break;
+        if (!smp_scheduler_lock) break;
     }
 
-    tcb_t apu_idle         = (tcb_t)malloc(STACK_SIZE);
+    tcb_t apu_idle         = (tcb_t)phys_to_virt(alloc_frames(STACK_SIZE / PAGE_SIZE));
     apu_idle->task_level   = TASK_IDLE_LEVEL;
     apu_idle->tid          = now_tid++;
     apu_idle->kernel_stack = apu_idle->context0.rsp = get_rsp();
@@ -149,6 +148,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     info->current_task    = apu_idle;
     apu_idle->queue_index = queue_enqueue(info->scheduler_queue, apu_idle);
+
+    get_current_cpu()->current_task = apu_idle;
 
     spin_unlock(apu_lock);
     enable_intr();
@@ -310,7 +311,7 @@ void init_smp(uint64_t MADT0)
 
     write_serial_string("Searching CPUs...\n");
     size_t   max_cpus = 0;
-    MADT    *madt     = (MADT *)MADT0;
+    MADT    *madt     = (MADT *)(MADT0 + 0xffff800000000000);
     uint64_t current  = 0;
     for (;;)
     {

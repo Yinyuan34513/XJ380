@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #define KERNEL_HEAP_START 0xffff900000000000 // 内核堆起始地址
-#define KERNEL_HEAP_SIZE  0x6400000          // 内核堆大小 100MB
+#define KERNEL_HEAP_SIZE  64 * 1024 * 1024   // 内核堆大小 100MB
 
 static struct mpool pool;
 static spin_t       lock = SPIN_INIT;

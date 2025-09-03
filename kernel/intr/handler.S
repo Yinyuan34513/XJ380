@@ -289,50 +289,52 @@ ENTRY(syscall_handler)
     cli
     cld
 
-    // “压入” reserved 1~6
-    subq    $0x38, %rsp
+    subq $0x38, %rsp
 
-    pushq	%rax
+    pushq %rax
 
-	movq	%es,	%rax
-	pushq	%rax
-	movq	%ds,	%rax
-	pushq	%rax
+    movq %es, %rax
+    pushq %rax
+    movq %ds, %rax
+    pushq %rax
 
-	pushq	%rbp
-	pushq	%rdi
-	pushq	%rsi
-	pushq	%rdx
-	pushq	%rcx
-	pushq	%rbx
-	pushq	%r8
-	pushq	%r9
-	pushq	%r10
-	pushq	%r11
-	pushq	%r12
-	pushq	%r13
-	pushq	%r14
-	pushq	%r15
+    pushq %rbp
+    pushq %rdi
+    pushq %rsi
+    pushq %rdx
+    pushq %rcx
+    pushq %rbx
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
 
-    movq    %rsp,   %rsi
+    movq %rsp, %r15
 
-    callq switch_to_kernel_stack
-    subq $0xc0,  %rax   
-    movq    %rax, %rsp
+    call switch_to_kernel_stack
+    subq $0xc0, %rax
+    movq %rax, %rsp
+    movq %rax, %rbp
 
-    movq    %rsp,   %rdi
-    movq    $0xc0, %rdx 
-    callq memcpy
+    movq %rsp, %rdi
+    movq %r15, %rsi
+    movq $0xc0, %rdx
+    call memcpy
 
-    movq    %rsp, %rdi
-    callq c_syscall_handler
+    movq %rsp, %rdi
+    movq %r15, %rsi
+    call c_syscall_handler
 
-    movq    %rax,   %rdi
-    movq    %rsp,   %rsi
-    movq    $0xc0, %rdx 
-    callq memcpy
+    movq %rax, %rdi
+    movq %rsp, %rsi
+    movq $0xc0, %rdx
+    call memcpy
 
-    movq    %rdi,   %rsp
+    movq %rax, %rsp
 
 ENTRY(ret_from_syscall)
     popq %r15
@@ -352,15 +354,11 @@ ENTRY(ret_from_syscall)
 
     popq %rax
     movq %rax, %ds
-
     popq %rax
     movq %rax, %es
 
     popq %rax
 
-    // 弹出 reserved 1~6
     addq $0x38, %rsp
-
-    sti
 
     sysretq

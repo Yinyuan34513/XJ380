@@ -29,12 +29,12 @@ uint8_t check_apic()
     return 0;
 }
 
-static inline void mmio_write32(uint32_t addr, uint32_t data)
+static inline void mmio_write32(uint64_t addr, uint32_t data)
 {
     asm volatile("movl %1, (%0)" : : "r"(addr), "ir"(data) : "memory");
 }
 
-static inline uint32_t mmio_read32(uint32_t addr)
+static inline uint32_t mmio_read32(uint64_t addr)
 {
     uint32_t ret;
     asm volatile("movl (%1), %0" : "=r"(ret) : "r"(addr) : "memory");
@@ -48,13 +48,13 @@ void lapic_write(uint32_t reg, uint64_t value)
         wrmsr(0x800 + (reg >> 4), value);
         return;
     }
-    mmio_write32((uint32_t)((uint64_t)ApicInfo.LocalApicAddr + reg), value);
+    mmio_write32((uint64_t)ApicInfo.LocalApicAddr + reg, (uint32_t)value);
 }
 
 uint32_t lapic_read(uint32_t reg)
 {
     if (ApicInfo.x2Apic) { return rdmsr(0x800 + (reg >> 4)); }
-    return mmio_read32((uint32_t)((uint64_t)ApicInfo.LocalApicAddr + reg));
+    return mmio_read32((uint64_t)ApicInfo.LocalApicAddr + reg);
 }
 
 uint64_t lapic_id()
@@ -195,7 +195,7 @@ void init_apic(uint64_t MADT0)
     wrmsr(0x1b, ia32_apic_base);
 
     MADT *madt             = (MADT *)MADT0;
-    ApicInfo.LocalApicAddr = (uint64_t)madt->local_apic_address;
+    ApicInfo.LocalApicAddr = (uint64_t)madt->local_apic_address + 0xffff800000000000;
     uint64_t current       = 0;
     for (;;)
     {
@@ -204,7 +204,7 @@ void init_apic(uint64_t MADT0)
         if (header->entry_type == MADT_APIC_IO)
         {
             MadtIOApic *ioapic  = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
-            ApicInfo.ioApicAddr = (uint64_t)ioapic->address;
+            ApicInfo.ioApicAddr = (uint64_t)ioapic->address + 0xffff800000000000;
         }
         current += (uint64_t)header->length;
     }

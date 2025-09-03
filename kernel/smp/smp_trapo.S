@@ -156,7 +156,7 @@ _APU_Code64_vector:
 
 .balign 4
 _APU_boot_tmp_Stack_start:
-	.org	0x400
+	.org	0x1000
 _APU_boot_tmp_Stack_end:
 
 .global _APU_boot_end

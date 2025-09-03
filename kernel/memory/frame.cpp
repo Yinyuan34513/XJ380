@@ -34,8 +34,9 @@ void init_frame(MEMORY_MAP map)
 
     for (uint64_t i = 0; i < (map.MapSize / map.DescriptorSize); i++)
     {
-        if (EfiMemory->Type == EfiConventionalMemory || EfiMemory->Type == EfiBootServicesCode ||
-            EfiMemory->Type == EfiBootServicesData)
+        if (EfiMemory->PhysicalStart >= 0x100000 &&
+            (EfiMemory->Type == EfiConventionalMemory || EfiMemory->Type == EfiBootServicesCode ||
+             EfiMemory->Type == EfiBootServicesData))
         {
             if (EfiMemory->NumberOfPages * 4096ul > bitmap_size)
             {
@@ -54,8 +55,9 @@ void init_frame(MEMORY_MAP map)
     size_t origin_frames = 0;
     for (uint64_t i = 0; i < (map.MapSize / map.DescriptorSize); i++)
     {
-        if (EfiMemory->Type == EfiConventionalMemory || EfiMemory->Type == EfiBootServicesCode ||
-            EfiMemory->Type == EfiBootServicesData)
+        if (EfiMemory->PhysicalStart >= 0x100000 &&
+            (EfiMemory->Type == EfiConventionalMemory || EfiMemory->Type == EfiBootServicesCode ||
+             EfiMemory->Type == EfiBootServicesData))
         {
             size_t start_frame  = EfiMemory->PhysicalStart / 4096;
             size_t frame_count  = EfiMemory->NumberOfPages;
