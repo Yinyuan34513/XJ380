@@ -67,9 +67,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         // case SYS_READ:
         //     regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
         //     break;
-        // case SYS_WRITE:
-        //     regs->rax = (uint64_t)sys_write(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
-        //     break;
+        case SYS_WRITE:
+            regs->rax = (uint64_t)sys_write(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
+            break;
         // case SYS_OPEN:
         //     regs->rax = (uint64_t)sys_open((const char *)regs->rdi, regs->rsi, regs->rdx);
         //     break;
@@ -98,15 +98,15 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     regs->rax = sys_writev(fd, iovec, count);
         //     break;
         // }
-        // case SYS_FORK:
-        //     regs->rax = (uint64_t)sys_fork(regs);
-        //     break;
-        // case SYS_VFORK:
-        //     regs->rax = (uint64_t)sys_vfork(regs);
-        //     break;
-        // case SYS_EXECVE:
-        //     regs->rax = (uint64_t)sys_execve(regs);
-        //     break;
+        case SYS_FORK:
+            regs->rax = (uint64_t)process_fork(regs,false,0);
+            break;
+        case SYS_VFORK:
+            regs->rax = (uint64_t)process_fork(regs,true,0);
+            break;
+        case SYS_EXECVE:
+            regs->rax = (uint64_t)process_execve((char*)regs->rdi, (char**)regs->rsi, (char**)regs->rdx);
+            break;
         // case SYS_EXIT:
         //     regs->rax = (uint64_t)sys_exit(regs->rdi);
         //     break;

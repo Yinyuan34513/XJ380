@@ -364,15 +364,15 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
     flush_tlb(addr);
 }
 
-// void switch_process_page_directory(page_directory_t *dir) {
-//     disable_scheduler();
-//     close_interrupt;
-//     pcb_t pcb     = get_current_task()->parent_group;
-//     pcb->page_dir = dir;
-//     switch_page_directory(dir);
-//     enable_scheduler();
-//     open_interrupt;
-// }
+void switch_process_page_directory(page_directory_t *dir) {
+    disable_scheduler();
+    close_interrupt;
+    pcb_t pcb     = get_current_task()->parent_group;
+    pcb->pagedir = dir;
+    switch_page_directory(dir);
+    enable_scheduler();
+    open_interrupt;
+}
 
 void switch_page_directory(page_directory_t *dir)
 {

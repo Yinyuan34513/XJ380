@@ -85,7 +85,18 @@ struct process_control_block
     lock_queue       *thread_queue; // 线程队列
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
+    char             *cwd;          // 工作目录路径
+    char            **envp;         // 环境变量指针
+    size_t            envc;         // 环境变量数量
+    bool              vfork;        // 是否是 vfork 创建的进程
+    size_t            child_index;  // 子进程队列索引
+    lock_queue       *child_pcb;    // 子进程列表
+    char             *cmdline;
+    int               task_level; // 进程等级
 };
+#define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
+uint64_t parse_elf_file(char *path, pcb_t group);
+uint64_t process_execve(char *path, char **argv, char **envp);
 struct vfs_node;
 typedef struct vfs_node *vfs_node_t;
 struct thread_control_block
@@ -124,5 +135,6 @@ void   disable_scheduler();
 tcb_t  get_current_task();
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
 size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
-pcb_t  create_process_group(const char *name, pcb_t parent, page_directory_t *directory);
+pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory,char *cmdline);
+uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void   process_setup();

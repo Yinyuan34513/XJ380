@@ -160,6 +160,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     return entry;
 }
 
+
 void create_user_process_from_file(char *path, pcb_t pcb)
 {
     char  process_name[50];
@@ -170,7 +171,7 @@ void create_user_process_from_file(char *path, pcb_t pcb)
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
-    pcb_t             group         = create_process_group(process_name, NULL, new_directory);
+    pcb_t             group         = create_process_group(process_name, NULL, new_directory,"");
 
     entry = (void *)parse_elf_file(path, group);
 
