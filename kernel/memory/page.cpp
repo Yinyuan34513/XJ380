@@ -11,6 +11,8 @@ spin_t page_lock;
 page_directory_t  kernel_page_dir;
 page_directory_t *current_directory = NULL;
 
+extern bool no_interrupt;
+
 uint64_t double_fault_page = 0;
 
 static bool is_huge_page(page_table_entry_t *entry)
@@ -370,8 +372,11 @@ void switch_process_page_directory(page_directory_t *dir) {
     pcb_t pcb     = get_current_task()->parent_group;
     pcb->pagedir = dir;
     switch_page_directory(dir);
-    enable_scheduler();
-    open_interrupt;
+    if (!no_interrupt) 
+    {
+        enable_scheduler();
+        open_interrupt;
+    }
 }
 
 void switch_page_directory(page_directory_t *dir)

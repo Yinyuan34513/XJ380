@@ -8,6 +8,7 @@
 volatile bool        is_scheduler = false;
 extern lock_queue   *pcb_group_queue;
 extern XSK_SMP_INFO *xsi;
+extern bool          no_interrupt;
 
 void enable_scheduler()
 {

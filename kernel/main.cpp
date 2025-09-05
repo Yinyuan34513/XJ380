@@ -82,6 +82,7 @@ void init_cpu()
 
 void desktop_flusher()
 {
+    no_interrupt = true;
     disable_intr();
     disable_scheduler();
 
@@ -182,6 +183,7 @@ void desktop_flusher()
     init_xwm(&xwmi);
     xwmii = &xwmi;
 
+    no_interrupt = false;
     enable_scheduler();
 
     winRD_lock = true;

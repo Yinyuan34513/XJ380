@@ -152,8 +152,17 @@ char **copy_envp(char **envp)
     return new_envp;
 }
 
+extern bool no_interrupt;
+extern bool is_scheduler;
+
 uint64_t process_execve(char *path, char **argv, char **envp)
 {
+    while (true)
+    {
+        if (!is_scheduler)
+            break;
+    }
+
     write_serial_fmt("path in execve %s\n", path);
     char      *norm_path = vfs_cwd_path_build(path);
     vfs_node_t node      = vfs_open(norm_path);
@@ -229,14 +238,23 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->user_stack_top = stack + BIG_USER_STACK;
     get_current_task()->main           = e_entry;
 
-    enable_scheduler();
-    open_interrupt;
+    if (!no_interrupt) 
+    {
+        enable_scheduler();
+        open_interrupt;
+    }
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }
 
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 {
+    while (true)
+    {
+        if (!is_scheduler)
+            break;
+    }
+    
     close_interrupt;
     disable_scheduler();
 
@@ -309,8 +327,11 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->tid          = now_tid++;
 
     add_task(new_task);
-    enable_scheduler();
-    open_interrupt;
+    if (!no_interrupt) 
+    {
+        enable_scheduler();
+        open_interrupt;
+    }
 
     if (!is_vfork) return new_pcb->pid;
 
