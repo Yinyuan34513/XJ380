@@ -61,7 +61,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_DrawText(handle, 80, 106, (char *)"老兄，中文不支持UTF-8，因为中文是双字符", 10, 0x000000ff);
     draw_uparrow(handle, 365, 75);
     xapi_RefreshWindow(handle);
-    // xapi_CloseWindow(handle);s
+    // xapi_CloseWindow(handle);
     execve((char *)"/shell.elf", NULL, NULL);
     return 0;
 }

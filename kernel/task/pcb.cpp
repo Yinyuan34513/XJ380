@@ -54,6 +54,7 @@ void switch_to_user_mode()
                        "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b)
                      : "memory");
 }
+
 char *normalize_path(const char *path)
 {
     if (!path) return NULL;
@@ -103,6 +104,7 @@ char *normalize_path(const char *path)
     free(dup);
     return result;
 }
+
 char *vfs_cwd_path_build(char *src)
 {
     char *s = src;
@@ -113,6 +115,7 @@ char *vfs_cwd_path_build(char *src)
     free(path);
     return normalized_path;
 }
+
 size_t envp_length(char **envp)
 {
     size_t count = 0;
@@ -148,6 +151,7 @@ char **copy_envp(char **envp)
     new_envp[count] = NULL;
     return new_envp;
 }
+
 uint64_t process_execve(char *path, char **argv, char **envp)
 {
     write_serial_fmt("path in execve %s\n", path);
@@ -230,6 +234,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }
+
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 {
     close_interrupt;
