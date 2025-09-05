@@ -315,7 +315,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
 
-    pcb_t ugp = create_process_group("Test User Group", NULL, NULL,"");
+    pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
