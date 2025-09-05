@@ -194,7 +194,7 @@ void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER 
 void init_ttf()
 {
     write_serial_string("Initializing TTF...\n");
-    delay_s(10);
+    // delay_s(10);
 
     vfs_node_t v = vfs_open("/XJ380F.ttf");
     if (!v)
