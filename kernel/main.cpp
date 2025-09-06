@@ -249,13 +249,13 @@ void desktop_flusher()
         // PrintFmt(&shtinf, &dock_sheet_id, scdx - 44, 4, BLACK, "%02u:%02u", (time.tm_hour + 8) % 24, time.tm_min);
         if (old_time.tm_min != time.tm_min || old_time.tm_hour != time.tm_hour)
         {
-            draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
+            draw_rect(&shtinf, &dock_sheet_id, scdx - 40, 0, scdx - 3, 23, DOCK_COL);
             // 12 小时制
-            print_fmt_box_ttf(&shtinf, &dock_sheet_id, BLACK, scdx - 44, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
+            print_fmt_box_ttf(&shtinf, &dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
                               time.tm_min);
             old_time = time;
         }
-        refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
+        refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24);
     }
 }
 

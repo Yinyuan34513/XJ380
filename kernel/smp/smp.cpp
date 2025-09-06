@@ -62,6 +62,13 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     disable_intr();
     spin_lock(apu_lock);
 
+    uint64_t ia32_apic_base  = rdmsr(0x1b);
+    ia32_apic_base          |= 1 << 11;
+    if (ApicInfo.x2Apic) { ia32_apic_base |= 1 << 10; }
+    wrmsr(0x1b, ia32_apic_base);
+
+    lapic_id();
+
     PROCESSOR_INFO *info = NULL;
     for (size_t i = 0; i < MAX_CPU_NUM; i++)
     {
@@ -120,11 +127,6 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     info->tss0.ist[0] = ((uint64_t)&(info->tss_stack)) + sizeof(tss_stack_t);
 
     __asm__ volatile("ltr %[offset]\n\t" : : [offset] "rm"(0x28U) : "memory");
-
-    uint64_t ia32_apic_base  = rdmsr(0x1b);
-    ia32_apic_base          |= 1 << 11;
-    if (ApicInfo.x2Apic) { ia32_apic_base |= 1 << 10; }
-    wrmsr(0x1b, ia32_apic_base);
 
     init_lApic();
 
