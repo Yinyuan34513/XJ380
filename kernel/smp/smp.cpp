@@ -220,7 +220,10 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
             write_serial_string(" Initialize Success.\n");
             return true;
         }
-        delay_ms(1000);
+        for(int i=0;i<100;i++)
+        {
+            cpu_relax();
+        }
     }
 
     return false;

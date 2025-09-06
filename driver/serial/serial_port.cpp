@@ -3,6 +3,7 @@
 #include "stdarg.h"
 #include <cpu/lock.h>
 #include <proto.hpp>
+#include <font.h>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
@@ -70,25 +71,25 @@ void write_serial_string(const char *str)
     spin_lock(serial_lock);
     while (*str)
     {
-        // #if BUILD_VERSION == DEBUG_VERSION
-        // 		if (*str == '\n') {
-        // 			serial_x = 0;
-        // 			serial_y += 16;
-        // 		} else {
-        // 			rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
-        // 			WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
-        // 			serial_x += 8;
-        // 		}
+        #if BUILD_VERSION == DEBUG_VERSION
+        		if (*str == '\n') {
+        			serial_x = 0;
+        			serial_y += 16;
+        		} else {
+        			rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
+        			WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
+        			serial_x += 8;
+        		}
 
-        // 		if (serial_y >= fbc_addr->vertical_resolution) {
-        // 			rect(*fbc_addr, 0, 32, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
-        // 			serial_x_max = 0;
-        // 			serial_y = 32;
-        // 		}
-        // 		if (serial_x > serial_x_max) {
-        // 			serial_x_max = serial_x;
-        // 		}
-        // #endif
+        		if (serial_y >= fbc_addr->vertical_resolution) {
+        			rect(*fbc_addr, 0, 32, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
+        			serial_x_max = 0;
+        			serial_y = 32;
+        		}
+        		if (serial_x > serial_x_max) {
+        			serial_x_max = serial_x;
+        		}
+        #endif
         write_serial(*str++);
     }
     spin_unlock(serial_lock);
