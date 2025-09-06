@@ -6,8 +6,8 @@ BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno
 
 DEBUG ?= 1
 SMP ?= 4
-SUDO ?= 0
-KVM ?= 0
+SUDO ?= 1
+KVM ?= 1
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S

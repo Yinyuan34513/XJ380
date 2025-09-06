@@ -67,8 +67,6 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     if (ApicInfo.x2Apic) { ia32_apic_base |= 1 << 10; }
     wrmsr(0x1b, ia32_apic_base);
 
-    lapic_id();
-
     PROCESSOR_INFO *info = NULL;
     for (size_t i = 0; i < MAX_CPU_NUM; i++)
     {
