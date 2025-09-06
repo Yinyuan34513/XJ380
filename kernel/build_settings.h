@@ -40,7 +40,7 @@
 #define BUILD_EDITION DEBUG_VERSION
 
 #define OS_VERSION "BuildVersion"
-#define KN_VERSION "XSK 2.0.0"
+#define KN_VERSION "XSK 2.1.0"
 #define OS_EDITION "XINGJI Confidentiality"
 
 #define STACK_SIZE 32768UL
