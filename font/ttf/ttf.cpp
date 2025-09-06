@@ -164,30 +164,7 @@ void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap, unsi
 void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
                    /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
-    Rune *r        = (Rune *)malloc((utflen(buf) + 1) * sizeof(Rune));
-    r[utflen(buf)] = 0;
-    int i          = 0;
-    while (*buf != '\0')
-    {
-        buf += chartorune(&(r[i++]), buf);
-    }
-
-    // 查找图层
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id) { break; }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
-    }
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-
-    unsigned       width, heigh;
-    unsigned char *bitmap = TTF_Print(r, &width, &heigh, size);
-    put_bitmap(sht, sheet_id, bitmap, x, y, width, heigh, 1920, fc);
-    refresh_part_sheet(sht, x, y, x + width, y + heigh);
-    free(bitmap);
-    free(r);
+    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, "%s", buf);
 }
 
 #define TTF_BUF_SIZE 128
@@ -204,10 +181,12 @@ typedef struct FbTTFWriterData
     int          size;
 
     // 缓冲区设计
-    char   *buf;      // 缓冲区指针
-    size_t  idx;      // 当前写入位置
-    size_t  buf_size; // 缓冲区总大小
-    uint8_t flush;    // 刷新标志
+    Rune   *rune_buf;      // Rune缓冲区指针
+    size_t  rune_buf_size; // Rune缓冲区总大小
+    char   *buf;           // 缓冲区指针
+    size_t  idx;           // 当前写入位置
+    size_t  buf_size;      // 缓冲区总大小
+    uint8_t flush;         // 刷新标志
 } FbTTFWriterData;
 
 // 辅助函数：计算UTF-8字符的字节数
@@ -229,10 +208,18 @@ static void flush_ttf_buffer(FbTTFWriterData *data)
     data->buf[data->idx] = '\0';
 
     // 转换UTF-8字符串到Rune数组
-    Rune *r              = (Rune *)malloc((utflen(data->buf) + 1) * sizeof(Rune));
-    r[utflen(data->buf)] = 0;
-    int   i              = 0;
-    char *p              = data->buf;
+    size_t  utf_len   = utflen(data->buf);
+    Rune   *r         = NULL;
+    uint8_t free_rune = 0;
+    if (utf_len > data->rune_buf_size)
+    {
+        r         = (Rune *)malloc((utf_len + 1) * sizeof(Rune));
+        free_rune = 1;
+    }
+    else { r = data->rune_buf; }
+    r[utf_len] = 0;
+    int   i    = 0;
+    char *p    = data->buf;
     while (*p != '\0')
     {
         p += chartorune(&r[i++], p);
@@ -262,7 +249,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data)
     data->x += (int)width;
 
     free(bitmap);
-    free(r);
+    if (free_rune) { free(r); }
     data->idx = 0; // 重置缓冲区
 }
 
@@ -290,20 +277,28 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
                        ...)
 {
+    char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
+    // char buf[TTF_BUF_SIZE];
+    buf[0]         = '\0';
+    Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
+    // Rune rune_buf[TTF_BUF_SIZE];
+
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
-        .sht      = sht,
-        .sheet_id = sheet_id,
-        .color    = fc,
-        .start_x  = x,
-        .start_y  = y,
-        .x        = x,
-        .y        = y,
-        .size     = size,
-        .buf      = (char *)malloc(TTF_BUF_SIZE),
-        .idx      = 0,
-        .buf_size = TTF_BUF_SIZE,
-        .flush    = 0,
+        .sht           = sht,
+        .sheet_id      = sheet_id,
+        .color         = fc,
+        .start_x       = x,
+        .start_y       = y,
+        .x             = x,
+        .y             = y,
+        .size          = size,
+        .rune_buf      = rune_buf,
+        .rune_buf_size = TTF_BUF_SIZE,
+        .buf           = buf,
+        .idx           = 0,
+        .buf_size      = TTF_BUF_SIZE,
+        .flush         = 0,
     };
 
     Writer fb_ttf_writer = {.data = &fb_ttf_writer_data, .handler = fb_ttf_writer_handler};
@@ -316,7 +311,8 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     // 刷新剩余内容
     flush_ttf_buffer(&fb_ttf_writer_data);
 
-    free(fb_ttf_writer_data.buf);
+    free(buf);
+    free(rune_buf);
 }
 
 // void draw_text(SHEET_INFO *sht, WINDOWLS* wls, char *buf, SHEET_BUFFER fc,

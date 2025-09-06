@@ -208,24 +208,35 @@ extern "C" registers_t *timer_handle(registers_t *reg)
 
 void scheduler_yield()
 {
-    if (!is_scheduler)
-        return;
+    if (!is_scheduler) return;
     __asm__ volatile("int %0" ::"i"(32));
+}
+
+void debug_sched_queue(lock_queue *q)
+{
+    if (q == NULL) return;
+    spin_lock(q->lock);
+    lock_node *current = q->head;
+    while (current != NULL)
+    {
+        write_serial_fmt("-> %s", ((tcb_t)current->data)->name);
+        current = current->next;
+    }
+    write_serial_string("\n");
+    spin_unlock(q->lock);
 }
 
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
-    PROCESSOR_INFO *cpu0  = get_cpu(get_bsp());
+    PROCESSOR_INFO *cpu0 = get_cpu(get_bsp());
     for (int i = 0; i < get_cpu_num(); i++)
     {
         PROCESSOR_INFO *cpui = get_cpu(i);
-        if(cpui->scheduler_queue->size < cpu0->scheduler_queue->size)
-        {
-            cpu0 = cpui;
-        }
+        if (cpui->scheduler_queue->size < cpu0->scheduler_queue->size) { cpu0 = cpui; }
     }
     new_task->cpu_id      = cpu0->processor_id;
     new_task->queue_index = queue_enqueue(cpu0->scheduler_queue, new_task);
+    debug_sched_queue(cpu0->scheduler_queue);
     return new_task->queue_index;
 }

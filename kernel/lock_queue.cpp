@@ -1,5 +1,4 @@
 #include "lock_queue.h"
-#include "krlibc.h"
 #include "mm/heap.h"
 
 lock_queue *queue_init()
