@@ -92,9 +92,9 @@ typedef struct TimerWidgetsData
 
 TimerWidgetsData *tw_data = NULL;
 
-void timer_widgets()
+void components_flusher()
 {
-    write_serial_string("timer widgets is running\n");
+    write_serial_string("components flusher is running\n");
     while (true)
     {
         if (tw_data != NULL)
@@ -109,12 +109,16 @@ void timer_widgets()
             if (old_time.tm_min != time.tm_min || old_time.tm_hour != time.tm_hour)
             {
                 old_time = time;
-                draw_rect(shtinf, dock_sheet_id, scdx - 48, 0, scdx - 3, 24, DOCK_COL);
+                draw_rect(shtinf, dock_sheet_id, scdx - 40, 0, scdx - 3, 24, DOCK_COL);
                 // 12 小时制
-                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 48, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
+                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
                                   time.tm_min);
             }
-            refresh_part_sheet(shtinf, scdx - 48, 0, scdx, 24); // 刷新时间
+            refresh_part_sheet(shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
+        }
+        if (ms_dec.need_flush)
+        {
+            process_mouse_info();
         }
     }
 }
@@ -356,7 +360,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
-    create_kernel_thread((void *)timer_widgets, NULL, (char *)"timer_widgets", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
