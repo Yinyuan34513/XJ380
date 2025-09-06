@@ -88,6 +88,7 @@ typedef struct TimerWidgetsData
     tm          old_time;
     int         scdx;
     uint8_t     flushing;
+    uint8_t     need_flush;
 } TimerWidgetsData;
 
 TimerWidgetsData *tw_data = NULL;
@@ -99,22 +100,25 @@ void timer_widgets()
     {
         if (tw_data != NULL)
         {
-            time_read(&tw_data->time);
-            tm          time          = tw_data->time;
-            tm          old_time      = tw_data->old_time;
+            tm         *time          = &tw_data->time;
+            tm         *old_time      = &tw_data->old_time;
             SHEET_INFO *shtinf        = tw_data->sht;
             uint16_t   *dock_sheet_id = tw_data->sheet_id;
             int         scdx          = tw_data->scdx;
+            time_read(time);
 
-            if (old_time.tm_min != time.tm_min || old_time.tm_hour != time.tm_hour)
+            if ((old_time->tm_min != time->tm_min || old_time->tm_hour != time->tm_hour) && !tw_data->need_flush &&
+                !tw_data->flushing)
             {
-                old_time = time;
-                draw_rect(shtinf, dock_sheet_id, scdx - 48, 0, scdx - 3, 24, DOCK_COL);
+                tw_data->flushing = true;
+                *old_time         = *time;
+                draw_rect(shtinf, dock_sheet_id, scdx - 48, 0, scdx - 3, 23, DOCK_COL);
                 // 12 小时制
-                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 48, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
-                                  time.tm_min);
+                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 48, 1, 10, "%02u:%02u", (time->tm_hour + 8) % 24,
+                                  time->tm_min);
+                tw_data->flushing   = false;
+                tw_data->need_flush = true;
             }
-            refresh_part_sheet(shtinf, scdx - 48, 0, scdx, 24); // 刷新时间
         }
     }
 }
@@ -252,7 +256,12 @@ void desktop_flusher()
     tw_data->scdx     = scdx;
     while (1)
     {
-
+        // if (tw_data->flushing) { continue; } // Sync, but bad performance
+        if (tw_data->need_flush)
+        {
+            tw_data->need_flush = false;
+            refresh_part_sheet(&shtinf, scdx - 48, 0, scdx, 24); // 刷新时间
+        }
         if (ms_dec.need_flush)
         {
             tbx         = getBX(&shtinf, &mouse_sheet_id);
