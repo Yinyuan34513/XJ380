@@ -129,12 +129,12 @@ struct thread_control_block
 
 extern pcb_t kernel_group;
 
-size_t add_task(tcb_t task);
-void   enable_scheduler();
-void   disable_scheduler();
-tcb_t  get_current_task();
-size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
-size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
-pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory,char *cmdline);
+size_t   add_task(tcb_t task);
+void     enable_scheduler();
+void     disable_scheduler();
+tcb_t    get_current_task();
+size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
+size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
+pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
-void   process_setup();
+void     process_setup();

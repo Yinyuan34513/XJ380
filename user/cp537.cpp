@@ -9,22 +9,11 @@ char buf[400 * 160];
 #define e
 
 int uparrow[16] = {
-    s v v v v v v v v v v v v v v v v e,
-    s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e,
-    s v v v v v v v v v v v v v v v v e,
-    s v v v v v v v v _ v v v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v _ _ _ _ _ _ _ _ _ v v v e,
-    s v v v _ _ _ _ _ _ _ _ _ _ _ v v e,
-    s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v _ _ _ _ _ v v v v v e,
-    s v v v v v v v v v v v v v v v v e
-};
+    s v v v v v v v v v v v v v v v v e, s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e, s v v v v v v v v v v v v v v v v e,
+    s v v v v v v v v _ v v v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e, s v v v v _ _ _ _ _ _ _ _ _ v v v e,
+    s v v v _ _ _ _ _ _ _ _ _ _ _ v v e, s v _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ e, s v v v v v v _ _ _ _ _ v v v v v e,
+    s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e,
+    s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v _ _ _ _ _ v v v v v e, s v v v v v v v v v v v v v v v v e};
 
 #undef s
 #undef v
@@ -33,8 +22,10 @@ int uparrow[16] = {
 
 void draw_uparrow(HDLE handle, int x, int y)
 {
-    for (int j = 15; j >= 0; j--) {
-        for (int i = 0; i < 16; i++) {
+    for (int j = 15; j >= 0; j--)
+    {
+        for (int i = 0; i < 16; i++)
+        {
             if ((uparrow[i] >> j) & 1) xapi_DrawPoint(handle, x + j, y + i, 0x000000ff);
         }
     }
@@ -42,11 +33,14 @@ void draw_uparrow(HDLE handle, int x, int y)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    write(1,"cp357\n",0);
+    (void)argc;
+    (void)argv;
+    (void)envp;
+    write(1, (char *)"cp357\n", 0);
     XWINDOW window;
-    window.width = 400;
+    window.width  = 400;
     window.height = 160;
-    window.title = (char *)"CP537 Demo";
+    window.title  = (char *)"CP537 Demo";
     // window.sets = NORMAL;
     HDLE handle;
     xapi_CreateWindow(&handle, &window);

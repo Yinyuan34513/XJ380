@@ -80,6 +80,45 @@ void init_cpu()
                              : "rax");
 }
 
+typedef struct TimerWidgetsData
+{
+    SHEET_INFO *sht;
+    uint16_t   *sheet_id;
+    tm          time;
+    tm          old_time;
+    int         scdx;
+    uint8_t     flushing;
+} TimerWidgetsData;
+
+TimerWidgetsData *tw_data = NULL;
+
+void timer_widgets()
+{
+    write_serial_string("timer widgets is running\n");
+    while (true)
+    {
+        if (tw_data != NULL)
+        {
+            time_read(&tw_data->time);
+            tm          time          = tw_data->time;
+            tm          old_time      = tw_data->old_time;
+            SHEET_INFO *shtinf        = tw_data->sht;
+            uint16_t   *dock_sheet_id = tw_data->sheet_id;
+            int         scdx          = tw_data->scdx;
+
+            if (old_time.tm_min != time.tm_min || old_time.tm_hour != time.tm_hour)
+            {
+                old_time = time;
+                draw_rect(shtinf, dock_sheet_id, scdx - 48, 0, scdx - 3, 24, DOCK_COL);
+                // 12 小时制
+                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 48, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
+                                  time.tm_min);
+            }
+            refresh_part_sheet(shtinf, scdx - 48, 0, scdx, 24); // 刷新时间
+        }
+    }
+}
+
 void desktop_flusher()
 {
     no_interrupt = true;
@@ -175,7 +214,8 @@ void desktop_flusher()
 
     // print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64,
     //               16);
-    print_fmt_box_ttf(&shtinf, &desktop_sheet_id, WHITE, 64, 64, 16, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！");
+    print_fmt_box_ttf(&shtinf, &desktop_sheet_id, WHITE, 64, 64, 16,
+                      "MAKE \nXJ380 \nGREAT \nAGAIN! \n实现XJ380的伟大复兴！");
 
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO  xwmi;
@@ -185,6 +225,7 @@ void desktop_flusher()
     xwmii = &xwmi;
 
     no_interrupt = false;
+    enable_intr();
     enable_scheduler();
 
     winRD_lock = true;
@@ -203,13 +244,14 @@ void desktop_flusher()
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
-    int scdx = fbc_addr->horizontal_resolution * 0.8125;
-    tm  time;
-    tm  old_time;
+    int scdx = fbc_addr->horizontal_resolution * 13 / 16;
 
+    tw_data           = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    tw_data->sht      = &shtinf;
+    tw_data->sheet_id = &dock_sheet_id;
+    tw_data->scdx     = scdx;
     while (1)
     {
-        enable_intr();
 
         if (ms_dec.need_flush)
         {
@@ -244,18 +286,6 @@ void desktop_flusher()
             fontx  = 8;
             fonty += 16;
         }
-        time_read(&time);
-        // 12 小时制
-        // PrintFmt(&shtinf, &dock_sheet_id, scdx - 44, 4, BLACK, "%02u:%02u", (time.tm_hour + 8) % 24, time.tm_min);
-        if (old_time.tm_min != time.tm_min || old_time.tm_hour != time.tm_hour)
-        {
-            draw_rect(&shtinf, &dock_sheet_id, scdx - 40, 0, scdx - 3, 23, DOCK_COL);
-            // 12 小时制
-            print_fmt_box_ttf(&shtinf, &dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
-                              time.tm_min);
-            old_time = time;
-        }
-        refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24);
     }
 }
 
@@ -326,17 +356,18 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
+    create_kernel_thread((void *)timer_widgets, NULL, (char *)"timer_widgets", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
 
-    create_user_process_from_file((char *)"/init.elf", NULL);
+    // create_user_process_from_file((char *)"/init.elf", NULL);
 
+    enable_scheduler();
     open_interrupt;
     no_interrupt = false;
-    enable_scheduler();
 
     while (true)
     {

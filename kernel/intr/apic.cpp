@@ -142,12 +142,11 @@ void init_IOApic()
  */
 void init_lApic()
 {
-    lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
     lapic_write(LAPIC_REG_SPURIOUS, 0xff | 1 << 8);
+    lapic_write(LAPIC_REG_TIMER, 32); // 32为 ioapic 时钟中断向量
     lapic_write(LAPIC_REG_TIMER_DIV, 11);
-    lapic_write(LAPIC_REG_TIMER_INITCNT, 0);
-    uint64_t b = nanoTime();
     lapic_write(LAPIC_REG_TIMER_INITCNT, ~((uint32_t)0));
+    uint64_t b = nanoTime();
     for (;;)
         if (nanoTime() - b >= 1000000) break;
     uint64_t lapic_timer              = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
