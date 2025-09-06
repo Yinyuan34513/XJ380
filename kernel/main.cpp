@@ -173,8 +173,9 @@ void desktop_flusher()
 #endif
     // wsod_debug();
 
-    print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64,
-                  16);
+    // print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64,
+    //               16);
+    print_fmt_box_ttf(&shtinf, &desktop_sheet_id, WHITE, 64, 64, 16, "MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！");
 
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO  xwmi;
@@ -204,6 +205,7 @@ void desktop_flusher()
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 0.8125;
     tm  time;
+    tm  old_time;
 
     while (1)
     {
@@ -243,11 +245,16 @@ void desktop_flusher()
             fonty += 16;
         }
         time_read(&time);
-        draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
         // 12 小时制
-        PrintDec(&shtinf, &dock_sheet_id, scdx - 44, 4, (time.tm_hour + 8) % 24, BLACK);
-        PrintString(&shtinf, &dock_sheet_id, scdx - 28, 4, ":", BLACK);
-        PrintDec(&shtinf, &dock_sheet_id, scdx - 20, 4, time.tm_min, BLACK);
+        // PrintFmt(&shtinf, &dock_sheet_id, scdx - 44, 4, BLACK, "%02u:%02u", (time.tm_hour + 8) % 24, time.tm_min);
+        if (old_time.tm_min != time.tm_min || old_time.tm_hour != time.tm_hour)
+        {
+            draw_rect(&shtinf, &dock_sheet_id, scdx - 44, 0, scdx - 3, 23, DOCK_COL);
+            // 12 小时制
+            print_fmt_box_ttf(&shtinf, &dock_sheet_id, BLACK, scdx - 44, 1, 10, "%02u:%02u", (time.tm_hour + 8) % 24,
+                              time.tm_min);
+            old_time = time;
+        }
         refresh_part_sheet(&shtinf, scdx - 44, 0, scdx, 24);
     }
 }

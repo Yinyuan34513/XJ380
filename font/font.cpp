@@ -1,3 +1,5 @@
+#include "krlibc.h"
+#include "stdarg.h"
 #include <font.h>
 #include <proto.hpp>
 spin_t               fb_print_lock;
@@ -142,6 +144,77 @@ void PrintFont(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, char ch, const
             }
         }
     }
+}
+
+typedef struct FbFontWriterData
+{
+    SHEET_INFO  *sht;
+    uint16_t    *sheet_id;
+    SHEET_BUFFER color;
+    int          x;
+    int          y;
+    char        *buf; // Keep '\0' at the end
+    size_t       idx;
+    size_t       buf_size;
+    uint8_t      flush; // 是否需要刷新
+} FbFontWriterData;
+
+uint8_t FbFontWriter(Writer *writer, char ch)
+{
+    FbFontWriterData *data = (FbFontWriterData *)writer->data;
+    if (data->idx >= data->buf_size - 1) { data->flush = 1; } // Mark to flush, -1 for '\0'
+    if (data->flush)
+    {
+        char *s = data->buf;
+        while (*s)
+        {
+            PrintFont(data->sht, data->sheet_id, data->x, data->y, *s,
+                      data->color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
+            data->x += 8;
+            s++;
+        }
+        data->idx    = 0;
+        data->buf[0] = 0;
+        data->flush  = 0; // Reset flush
+    }
+    data->buf[data->idx] = ch;
+    ++data->idx;
+    data->buf[data->idx] = 0; // Keep '\0'
+    return 1;
+}
+
+void PrintFmt(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUFFER &color, const char *fmt, ...)
+{
+    spin_lock(fb_print_lock);
+    va_list args;
+    va_start(args, fmt);
+    char buf[256];
+    buf[0] = '\0';
+
+    FbFontWriterData fb_font_writer_data = {
+        .sht      = sht,
+        .sheet_id = sheet_id,
+        .color    = color,
+        .x        = x,
+        .y        = y,
+        .buf      = buf,
+        .idx      = 0,
+        .buf_size = sizeof(buf),
+        .flush    = 0,
+    };
+    // 我们将通过一个 Writer 来实现
+    Writer fb_font_writer = {
+        .data    = &fb_font_writer_data,
+        .handler = FbFontWriter,
+    };
+
+    vwprintf(&fb_font_writer, fmt, args);
+
+    fb_font_writer_data.flush = 1;       // Flush remaining
+    FbFontWriter(&fb_font_writer, '\0'); // Trigger flush
+
+    va_end(args);
+    spin_unlock(fb_print_lock);
 }
 
 void PrintString(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color)

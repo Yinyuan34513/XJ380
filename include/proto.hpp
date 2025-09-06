@@ -8,6 +8,7 @@
 #include "./graphics/window/window.h"
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
+#include <stdarg.h>
 #include <stdint.h>
 extern SHEET_INFO *sht_img;
 extern XWM_INFO   *xwmii;
@@ -27,15 +28,16 @@ extern uint16_t   *msid;
  */
 
 // driver/serial/serial_port.cpp
-int  init_serial();
-void write_serial(char a);
-void write_serial_string(const char *str);
-void write_serial_dec(unsigned long long dec);
-void write_serial_hex(unsigned long long hex);
-void write_serial_fmt(const char *fmt, ...);
-void write_serial_fmt_heapless(const char *fmt, ...);
-void serial_wprintf(const char *fmt, ...);
-int  sprintf(char *buf, const char *fmt, ...);
+int    init_serial();
+void   write_serial(char a);
+void   write_serial_string(const char *str);
+void   write_serial_dec(unsigned long long dec);
+void   write_serial_hex(unsigned long long hex);
+void   write_serial_fmt(const char *fmt, ...);
+void   write_serial_fmt_heapless(const char *fmt, ...);
+void   serial_wprintf(const char *fmt, ...);
+size_t vwprintf(Writer *writer, const char *fmt, va_list args);
+int    sprintf(char *buf, const char *fmt, ...);
 /*
  *
  *  kernel/
