@@ -79,6 +79,10 @@
 // XJ380API XAPI Edition
 #define XAPI_OFFEST 380
 
+// 一些隐藏的API，不对外开放，严禁泄露！
+#define SXAH_SYSCALL_RETURN         3801
+#define SXAH_CREATE_KERNEL_TERMINAL 3802
+
 // P3.1
 #define XAPI_OUTPUT    381
 #define XAPI_INPUTW    382
