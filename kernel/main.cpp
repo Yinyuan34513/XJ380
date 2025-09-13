@@ -123,6 +123,7 @@ void components_flusher()
         if (ms_dec.need_flush)
         {
             process_mouse_info();
+            ms_dec.need_flush = false;
         }
     }
 }
@@ -278,6 +279,7 @@ void desktop_flusher()
             refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
                                getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
                                getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
+            ms_dec.need_flush = false;
         }
 
         k_input = get_keyboard_input();
@@ -299,6 +301,12 @@ void desktop_flusher()
             fonty += 16;
         }
     }
+}
+
+void tst()
+{
+    write_serial_fmt("Stack Test\n");
+    while (1);
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
@@ -368,6 +376,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
+    create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
