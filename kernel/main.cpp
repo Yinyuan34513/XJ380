@@ -305,7 +305,7 @@ void desktop_flusher()
 void tst()
 {
     write_serial_fmt("Stack Test\n");
-    while (1);
+    // while (1);
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)

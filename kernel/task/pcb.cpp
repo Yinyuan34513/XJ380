@@ -397,7 +397,6 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     uint64_t *stack_top  = (uint64_t *)(cast.ptr);
     PUSH_STACK(stack_top, (uint64_t)args);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
-    // PUSH_STACK(stack_top, (uint64_t)_start);                       // ？这块为啥要这样，不知道，先给注释掉
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)_start;
     new_task->context0.rsp    = (uint64_t)stack_top & ~(uint64_t)0xF; // 设置上下文
@@ -450,7 +449,6 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     uint64_t *stack_top  = (uint64_t *)(cast.ptr);
     PUSH_STACK(stack_top, (uint64_t)_start);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
-    // PUSH_STACK(stack_top, (uint64_t)switch_to_user_mode);                // ？这块为啥要这样，不知道，先给注释掉
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)switch_to_user_mode;
     new_task->context0.rsp    = (uint64_t)stack_top;                        // 设置上下文
