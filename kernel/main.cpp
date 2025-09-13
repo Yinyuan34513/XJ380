@@ -123,7 +123,6 @@ void components_flusher()
         if (ms_dec.need_flush)
         {
             process_mouse_info();
-            ms_dec.need_flush = false;
         }
     }
 }
