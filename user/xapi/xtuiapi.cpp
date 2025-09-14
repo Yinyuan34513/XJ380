@@ -136,10 +136,10 @@ UINT32 xapi_toRGB(UINT8 r, UINT8 g, UINT8 b) {
 }
 
 // 3-4
-UINT64  xapi_fork() {
+UINT64  xapi_Fork() {
 	return enter_syscall(XAPI_FORK, 0, 0, 0, 0, 0, 0);
 }
 
-UINT64  xapi_execve(WSTR filename, WSTR argv[], WSTR envp[]) {
+UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }

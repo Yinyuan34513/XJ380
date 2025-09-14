@@ -42,5 +42,5 @@ WSTR 	xcr_hex2char(UINT64  hex);
 UINT32 	xapi_toRGB(UINT8 r, UINT8 g, UINT8 b);
 
 // 3-4
-UINT64  xapi_fork();
-UINT64  xapi_execve(WSTR filename, WSTR argv[], WSTR envp[]);
+UINT64  xapi_Fork();
+UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);

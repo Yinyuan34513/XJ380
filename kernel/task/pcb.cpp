@@ -159,7 +159,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 {
     while (true)
     {
-        if (!is_scheduler)
+        if (is_scheduler)
             break;
     }
 
@@ -251,7 +251,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 {
     while (true)
     {
-        if (!is_scheduler)
+        if (is_scheduler)
             break;
     }
     
@@ -395,8 +395,6 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     cast.ptr             = new_task;
     cast.val            += KERNEL_STACK_SIZE;
     uint64_t *stack_top  = (uint64_t *)(cast.ptr);
-    PUSH_STACK(stack_top, (uint64_t)args);
-    PUSH_STACK(stack_top, (uint64_t)process_exit);
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)_start;
     new_task->context0.rsp    = (uint64_t)stack_top & ~(uint64_t)0xF; // 设置上下文
@@ -407,6 +405,12 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.ds     = 0x10;
     new_task->status          = CREATE;
     new_task->main            = (uint64_t)_start;
+
+    stack_top = (uint64_t *)new_task->kernel_stack;
+    PUSH_STACK(stack_top, (uint64_t)args);
+    PUSH_STACK(stack_top, (uint64_t)process_exit);
+    new_task->context0.rsp    = (uint64_t)stack_top;
+    new_task->kernel_stack    = (new_task->context0.rsp);
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);
@@ -447,8 +451,6 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     cast.ptr             = new_task;
     cast.val            += KERNEL_STACK_SIZE;
     uint64_t *stack_top  = (uint64_t *)(cast.ptr);
-    PUSH_STACK(stack_top, (uint64_t)_start);
-    PUSH_STACK(stack_top, (uint64_t)process_exit);
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)switch_to_user_mode;
     new_task->context0.rsp    = (uint64_t)stack_top;                        // 设置上下文
@@ -459,6 +461,12 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.ds     = 0x10;
     new_task->status          = CREATE;
     new_task->main            = (uint64_t)_start;
+
+    stack_top = (uint64_t *)new_task->kernel_stack;
+    PUSH_STACK(stack_top, (uint64_t)_start);
+    PUSH_STACK(stack_top, (uint64_t)switch_to_user_mode);
+    new_task->context0.rsp    = (uint64_t)stack_top;
+    new_task->kernel_stack    = (new_task->context0.rsp);
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;

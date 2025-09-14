@@ -84,51 +84,62 @@
 #define XAPI_OFFEST 380
 
 // P3.1
-#define XAPI_OUTPUT 381
-#define XAPI_INPUTW 382
-#define XAPI_INPUT 383
-#define XAPI_ENDLINE 384
+#define XAPI_OUTPUT    381
+#define XAPI_INPUTW    382
+#define XAPI_INPUT     383
+#define XAPI_ENDLINE   384
 #define XAPI_PRINTLINE 385
+#define XAPI_PRINTF    386
 
 // P3.2
-#define XAPI_OPEN_FILE 386
-#define XAPI_CLOSE_FILE 387
+#define XAPI_OPEN_FILE  387
+#define XAPI_CLOSE_FILE 388
 
-// P3.3（预留）
-#define XAPI_FORK 388
-#define XAPI_EXECVE 389
+// P3.4
+#define XAPI_FORK   389
+#define XAPI_EXECVE 390
+
+// P3.5
+#define XAPI_GET_VERSION    391
 
 // P4.1
-#define XAPI_CREATE_WINDOW 390
-#define XAPI_SET_WINDOW_TITLE 391
-#define XAPI_CLOSE_WINDOW 392
-#define XAPI_SET_ICON 393
+#define XAPI_CREATE_WINDOW    392
+#define XAPI_SET_WINDOW_TITLE 393
+#define XAPI_CLOSE_WINDOW     394
+#define XAPI_SET_ICON         395
 
 // P4.2
-#define XAPI_DRAW_POINT 394
-#define XAPI_DRAW_LINE 395
-#define XAPI_DRAW_RECT 396
-#define XAPI_DRAW_RECT_FILL 397
-#define XAPI_DRAW_CIRCLE 398
-#define XAPI_DRAW_CIRCLE_FILL 399
-#define XAPI_DRAW_TEXT 400
+#define XAPI_DRAW_POINT       396
+#define XAPI_DRAW_LINE        397
+#define XAPI_DRAW_RECT        398
+#define XAPI_DRAW_RECT_FILL   399
+#define XAPI_DRAW_CIRCLE      400
+#define XAPI_DRAW_CIRCLE_FILL 401
+#define XAPI_DRAW_TEXT        402
 
 // P4.3
-#define XAPI_DRAW_BMP 401
-#define XAPI_DRAW_PNG 402
+#define XAPI_DRAW_BMP 403
+#define XAPI_DRAW_PNG 404
 
 // P4.4
-#define XAPI_SET_MSH_PROCOR 403
+#define XAPI_SET_MSH_PROCOR 405
+
+#define MSG_CHAR    0
+#define MSG_MOVE    1
+#define MSG_LBUTTON 2
+#define MSG_RBUTTON 3
+#define MSG_MBUTTON 4
+#define MSG_ROLLER  5
+#define MSG_CRL     6
 
 // P4.5
-#define XAPI_READBUFFER 404
-#define XAPI_WRITEBUFFER 405
-#define XAPI_WRITEBUFFERA 406
-
+#define XAPI_READBUFFER   406
+#define XAPI_WRITEBUFFER  407
+#define XAPI_WRITEBUFFERA 408
 #define XAPI_REFRESH_WINDOW 409
 
 // P4.6
-#define XAPI_BUTTON 407
-#define XAPI_BUTTON_STYLE 408
+#define XAPI_BUTTON       410
+#define XAPI_BUTTON_STYLE 411
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

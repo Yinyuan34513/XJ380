@@ -82,9 +82,9 @@ void write_serial_string(const char *str)
         		}
 
         		if (serial_y >= fbc_addr->vertical_resolution) {
-        			rect(*fbc_addr, 0, 32, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
+        			rect(*fbc_addr, 0, 0, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
         			serial_x_max = 0;
-        			serial_y = 32;
+        			serial_y = 0;
         		}
         		if (serial_x > serial_x_max) {
         			serial_x_max = serial_x;
