@@ -11,3 +11,11 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2)
 {
 
 }
+
+void signal_revert()
+{
+    __asm__ __volatile__("syscall"
+                         : 
+                         : "a"(SXAH_SYSCALL_RETURN)
+                         : "rcx", "r11", "memory");
+}
