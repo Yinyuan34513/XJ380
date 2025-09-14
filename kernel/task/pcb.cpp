@@ -411,6 +411,11 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     PUSH_STACK(stack_top, (uint64_t)process_exit);
     new_task->context0.rsp    = (uint64_t)stack_top;
     new_task->kernel_stack    = (new_task->context0.rsp);
+    new_task->signal_handler_stack = (uint64_t)phys_to_virt(
+        alloc_frames(KERNEL_STACK_SIZE)
+    );
+    new_task->in_signal_handler = false;
+    memset(&new_task->signal_frame, 0, sizeof(SignalFrame));
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);
@@ -470,6 +475,13 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+    new_task->signal_handler_stack = page_alloc_random(
+        pcb->pagedir, 
+        KERNEL_STACK_SIZE, 
+        PTE_PRESENT | PTE_WRITEABLE | PTE_USER
+    );
+    new_task->in_signal_handler = false;
+    memset(&new_task->signal_frame, 0, sizeof(SignalFrame));
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);

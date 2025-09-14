@@ -2,17 +2,21 @@
 #include "./xapi/include/xposix.h"
 
 HDLE handle;
-// void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
-// {
-//     WSTR str;
-//     str[0] = lData;
-//     switch (Type)
-//     {
-//         case MSG_CHAR:
-//             xapi_DrawText(handle, 100, 100, str, 11, 0x000000ff);
-//             break;
-//     }
-// }
+void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
+{
+    char tmp[2];
+    tmp[0]=Type+'0';
+    tmp[1]='\0';
+    write(1,tmp,0);
+    WSTR str;
+    str[0] = lData;
+    switch (Type)
+    {
+        case MSG_CHAR:
+            xapi_DrawText(handle, 100, 100, str, 11, 0x000000ff);
+            break;
+    }
+}
 
 int main(int argc, char *argv[], char *envp[])
 {
@@ -30,7 +34,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_DrawLine(handle, 0, 0, 12, 12, 0x000000ff);
     xapi_DrawRect(handle, 0, 0, 12, 12, 0x000000ff, true);
     xapi_DrawText(handle, 20, 20, (char *)"文本Text", 11, 0x000000aa);
-    // SetMsgPrcor(handle, shell_MessagePrcor);
+    SetMsgPrcor(handle, shell_MessagePrcor);
 
     while (1)
         __asm__ __volatile__("pause");

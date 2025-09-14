@@ -1,4 +1,5 @@
 #include <proto.hpp>
+#include <syscall/syscall.h>
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
@@ -57,18 +58,14 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_head = kb_fifo.buf; }
     *kb_fifo.p_head = x;
 
-    // WINDOWLS *Window_now = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-    // MsgPrcor  WinMPf     = Window_now->WinMPf;
+    WINDOWLS *Window_now = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
 
-    // if ((uint64_t)(WinMPf) != NULL && Window_now != NULL)
-    // {
-    //     uint8_t temp = keyboard_code[*kb_fifo.p_tail];
-    //     if (kb_fifo.shift == 1 || kb_fifo.caps == 1) { temp = keyboard_code1[*kb_fifo.p_tail]; }
-    //     write_serial_string("WMPF Address: ");
-    //     write_serial_hex((uint64_t)(WinMPf));
-    //     write_serial_string("\n");
-    //     // WinMPf(MSG_CHAR, 0, temp);
-    // }
+    if (Window_now != NULL &&(uint64_t)(Window_now->WinMPf) != NULL)
+    {
+        uint8_t temp = keyboard_code[*kb_fifo.p_tail];
+        if (kb_fifo.shift == 1 || kb_fifo.caps == 1) { temp = keyboard_code1[*kb_fifo.p_tail]; }
+        do_signal(0,NULL,temp,Window_now->WinMPf);
+    }
 
     kb_fifo.count++;
     kb_fifo.p_head++;

@@ -64,49 +64,43 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     switch (syscall_number)
     {
-        // case SYS_READ:
-        //     regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
-        //     break;
-        case SYS_WRITE:
-            regs->rax = (uint64_t)sys_write(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
-            break;
-        // case SYS_OPEN:
-        //     regs->rax = (uint64_t)sys_open((const char *)regs->rdi, regs->rsi, regs->rdx);
-        //     break;
-        // case SYS_CLOSE:
-        //     regs->rax = (uint64_t)sys_close(regs->rdi);
-        //     break;
-        // case SYS_FSTAT:
-        //     regs->rax = (uint64_t)sys_fstat((uint32_t)regs->rdi, (struct stat *)regs->rsi);
-        //     break;
-        // case SYS_IOCTL:
-        //     regs->rax = 0;
-        //     break;
-        // case SYS_READV:
-        // {
-        //     int fd = regs->rdi;
-        //     struct iovec *iovec = (struct iovec *)regs->rsi;
-        //     size_t count = regs->rdx;
-        //     regs->rax = sys_readv(fd, iovec, count);
-        //     break;
-        // }
-        // case SYS_WRITEV:
-        // {
-        //     int fd = regs->rdi;
-        //     struct iovec *iovec = (struct iovec *)regs->rsi;
-        //     size_t count = regs->rdx;
-        //     regs->rax = sys_writev(fd, iovec, count);
-        //     break;
-        // }
-        case SYS_FORK:
-            regs->rax = (uint64_t)process_fork(regs,false,0);
-            break;
-        case SYS_VFORK:
-            regs->rax = (uint64_t)process_fork(regs,true,0);
-            break;
-        case SYS_EXECVE:
-            regs->rax = (uint64_t)process_execve((char*)regs->rdi, (char**)regs->rsi, (char**)regs->rdx);
-            break;
+    // case SYS_READ:
+    //     regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
+    //     break;
+    case SYS_WRITE: regs->rax = (uint64_t)sys_write(regs->rdi, (uint8_t *)regs->rsi, regs->rdx); break;
+    // case SYS_OPEN:
+    //     regs->rax = (uint64_t)sys_open((const char *)regs->rdi, regs->rsi, regs->rdx);
+    //     break;
+    // case SYS_CLOSE:
+    //     regs->rax = (uint64_t)sys_close(regs->rdi);
+    //     break;
+    // case SYS_FSTAT:
+    //     regs->rax = (uint64_t)sys_fstat((uint32_t)regs->rdi, (struct stat *)regs->rsi);
+    //     break;
+    // case SYS_IOCTL:
+    //     regs->rax = 0;
+    //     break;
+    // case SYS_READV:
+    // {
+    //     int fd = regs->rdi;
+    //     struct iovec *iovec = (struct iovec *)regs->rsi;
+    //     size_t count = regs->rdx;
+    //     regs->rax = sys_readv(fd, iovec, count);
+    //     break;
+    // }
+    // case SYS_WRITEV:
+    // {
+    //     int fd = regs->rdi;
+    //     struct iovec *iovec = (struct iovec *)regs->rsi;
+    //     size_t count = regs->rdx;
+    //     regs->rax = sys_writev(fd, iovec, count);
+    //     break;
+    // }
+    case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
+    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
+    case SYS_EXECVE:
+        regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
+        break;
         // case SYS_EXIT:
         //     regs->rax = (uint64_t)sys_exit(regs->rdi);
         //     break;
@@ -156,11 +150,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_PRINTLINE: break;
     case XAPI_OPEN_FILE: break;
     case XAPI_CLOSE_FILE: break;
-    case XAPI_FORK:
-        regs->rax = (uint64_t)process_fork(regs,false,0);
-        break;
+    case XAPI_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case XAPI_EXECVE:
-        regs->rax = (uint64_t)process_execve((char*)regs->rdi, (char**)regs->rsi, (char**)regs->rdx);
+        regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
         break;
     case XAPI_CREATE_WINDOW: regs->rax = (uint64_t)do_xapi_CreateWindow(regs->rdi, regs->rsi); break;
     case XAPI_SET_WINDOW_TITLE: regs->rax = (uint64_t)do_xapi_SetWindowTitle(regs->rdi, regs->rsi); break;
@@ -194,6 +186,15 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_REFRESH_WINDOW: regs->rax = (uint64_t)do_xapi_RefreshWindow(regs->rdi); break;
     case XAPI_BUTTON: break;
     case XAPI_BUTTON_STYLE: break;
+    case SXAH_SYSCALL_RETURN: {
+        tcb_t current = get_current_task();
+
+        // 恢复上下文
+        current->context0          = current->signal_frame;
+        current->in_signal_handler = false;
+        regs->rax                  = 0;
+        break;
+    }
 
     default:
         regs->rax = (uint64_t)-ENOSYS;
