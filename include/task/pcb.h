@@ -8,6 +8,7 @@
 #include "lock_queue.h"
 #include "mm/page.h"
 #include "stdint.h"
+#include "user/user.h"
 
 typedef struct registers
 {
@@ -75,19 +76,46 @@ typedef struct
     uint64_t ss, cs, ds, es;
 } TaskContext;
 
+typedef struct
+{
+    uint64_t r15;
+    uint64_t r14;
+    uint64_t r13;
+    uint64_t r12;
+    uint64_t r11;
+    uint64_t r10;
+    uint64_t r9;
+    uint64_t r8;
+    uint64_t rbx;
+    uint64_t rbp;
+    uint64_t rip;
+    uint64_t rsp;
+    uint64_t rflags;
+    uint64_t rax;
+    uint64_t rcx;
+    uint64_t rdx;
+    uint64_t rdi;
+    uint64_t rsi;
+    uint64_t ss, cs, ds, es;
+} SignalFrame;
+
 struct process_control_block
 {
     size_t            pid;          // 进程ID
     uint64_t          ppid;         // 父进程ID
+
     char              name[32];     // 进程名称
     page_directory_t *pagedir;      // 页表目录
     pcb_t             parent_task;  // 父进程
     lock_queue       *thread_queue; // 线程队列
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
+
     char             *cwd;          // 工作目录路径
     char            **envp;         // 环境变量指针
     size_t            envc;         // 环境变量数量
+    UserInfo          user_info;    // 用户信息
+
     bool              vfork;        // 是否是 vfork 创建的进程
     size_t            child_index;  // 子进程队列索引
     lock_queue       *child_pcb;    // 子进程列表
@@ -103,12 +131,16 @@ struct thread_control_block
 {
     pcb_t         parent_group;   // 父进程
     int           task_level;     // 进程等级
+
     size_t        tid;            // 线程ID
     char          name[32];       // 线程名称
     TaskStatus    status;         // 线程状态
     size_t        cpu_id;         // 运行的CPU ID
     TaskContext   context0;       // 线程上下文
     fpu_context_t fpu_context;    // 浮点寄存器上下文
+
+    SignalFrame   signal_frame;   // 信号帧
+
     uint64_t      kernel_stack;   // 内核栈地址
     size_t        queue_index;    // 调度队列索引
     size_t        group_index;    // 进程队列索引
