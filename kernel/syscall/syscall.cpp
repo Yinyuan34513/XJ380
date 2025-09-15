@@ -186,15 +186,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_REFRESH_WINDOW: regs->rax = (uint64_t)do_xapi_RefreshWindow(regs->rdi); break;
     case XAPI_BUTTON: break;
     case XAPI_BUTTON_STYLE: break;
-    case SXAH_SYSCALL_RETURN: {
-        tcb_t current = get_current_task();
-
-        // 恢复上下文
-        current->context0          = current->signal_frame;
-        current->in_signal_handler = false;
-        regs->rax                  = 0;
-        break;
-    }
+    case SXAH_SYSCALL_RETURN: break;
 
     default:
         regs->rax = (uint64_t)-ENOSYS;

@@ -31,3 +31,8 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
     }
 }
 
+void signal_end()
+{
+    
+}
+

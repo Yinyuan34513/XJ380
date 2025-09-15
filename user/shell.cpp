@@ -8,8 +8,8 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     tmp[0] = Type + '0';
     tmp[1] = '\0';
     write(1, tmp, 0);
-    WSTR str;
-    str[0] = lData;
+    WSTR str = nullptr;
+    str = (WSTR)lData;
     switch (Type)
     {
         case MSG_CHAR:
