@@ -76,29 +76,6 @@ typedef struct
     uint64_t ss, cs, ds, es;
 } TaskContext;
 
-// typedef struct
-// {
-//     uint64_t r15;
-//     uint64_t r14;
-//     uint64_t r13;
-//     uint64_t r12;
-//     uint64_t r11;
-//     uint64_t r10;
-//     uint64_t r9;
-//     uint64_t r8;
-//     uint64_t rbx;
-//     uint64_t rbp;
-//     uint64_t rip;
-//     uint64_t rsp;
-//     uint64_t rflags;
-//     uint64_t rax;
-//     uint64_t rcx;
-//     uint64_t rdx;
-//     uint64_t rdi;
-//     uint64_t rsi;
-//     uint64_t ss, cs, ds, es;
-// } SignalFrame;
-
 struct process_control_block
 {
     size_t   pid;  // 进程ID
@@ -127,7 +104,6 @@ uint64_t parse_elf_file(char *path, pcb_t group);
 uint64_t process_execve(char *path, char **argv, char **envp);
 struct vfs_node;
 typedef struct vfs_node *vfs_node_t;
-typedef TaskContext SignalFrame;
 struct thread_control_block
 {
     pcb_t parent_group; // 父进程
@@ -139,10 +115,6 @@ struct thread_control_block
     size_t        cpu_id;      // 运行的CPU ID
     TaskContext   context0;    // 线程上下文
     fpu_context_t fpu_context; // 浮点寄存器上下文
-
-    SignalFrame signal_frame;         // 信号帧
-    uint64_t    signal_handler_stack; // 信号处理栈
-    bool        in_signal_handler;    // 是否在信号处理中
 
     uint64_t   kernel_stack;   // 内核栈地址
     size_t     queue_index;    // 调度队列索引
