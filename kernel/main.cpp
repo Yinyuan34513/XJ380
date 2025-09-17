@@ -375,7 +375,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
-    // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
+    create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 

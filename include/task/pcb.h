@@ -146,3 +146,4 @@ pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();
 void switch_to_user_mode();
+void recycle_process(pcb_t pcb);

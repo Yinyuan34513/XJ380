@@ -21,7 +21,79 @@ lock_queue   *pcb_group_queue = NULL;
 pcb_t         kernel_group    = NULL;
 
 extern bool no_interrupt;
+// pcb.cpp
+#include "task/scheduler.h"
 
+void thread_exit(int exit_code) {
+    close_interrupt;
+    disable_scheduler();
+    
+    tcb_t current = get_current_task();
+    pcb_t group = current->parent_group;
+    
+    // 设置线程状态为死亡
+    current->status = DEATH;
+    
+    // 从调度队列中移除
+    PROCESSOR_INFO* cpu = get_current_cpu();
+    queue_remove_at(cpu->scheduler_queue, current->queue_index);
+    
+    // 从进程线程队列中移除
+    queue_remove_at(group->thread_queue, current->group_index);
+    
+    // 如果这是进程的最后一个线程，标记进程为僵尸状态
+    if (group->thread_queue->size == 0) {
+        group->status = DEATH;
+        // // 如果是vfork创建的进程，需要特殊处理
+        // if (group->vfork) {
+        //     // 添加vfork的特殊处理逻辑
+        // }
+    }
+    
+    // 如果进程没有线程了，安排回收
+    if (group->thread_queue->size == 0 && group->status == DEATH) {
+        recycle_process(group);
+    }
+    
+    if (!no_interrupt) {
+        enable_scheduler();
+        open_interrupt;
+    }
+    switch_page_directory(get_kernel_pagedir());
+
+}
+
+void recycle_process(pcb_t pcb) {
+    // 不要回收内核进程
+    if (pcb == kernel_group) return;
+    
+    // 释放进程资源
+    if (pcb->pagedir != get_kernel_pagedir()) {
+        free_page_directory(pcb->pagedir);
+    }
+    
+    if (pcb->cwd) free(pcb->cwd);
+    if (pcb->cmdline) free(pcb->cmdline);
+    
+    // 释放环境变量
+    if (pcb->envp) {
+        for (size_t i = 0; i < pcb->envc; i++) {
+            free(pcb->envp[i]);
+        }
+        free(pcb->envp);
+    }
+    
+    // 从进程队列中移除
+    queue_remove_at(pcb_group_queue, pcb->queue_index);
+    
+    // 从父进程的子进程队列中移除
+    if (pcb->parent_task && pcb->parent_task->child_pcb) {
+        queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
+    }
+    
+    // 释放进程本身
+    free(pcb);
+}
 [[noreturn]] void process_exit()
 {
     uint64_t rax = 0;
@@ -29,6 +101,7 @@ extern bool no_interrupt;
     write_serial_string("Kernel thread exit, Code: ");
     write_serial_dec(rax);
     write_serial_string("\n");
+    thread_exit(rax);
     //    kill_thread(get_current_task());
     while (true)
         __asm__ volatile("hlt");
