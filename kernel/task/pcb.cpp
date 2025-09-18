@@ -62,7 +62,68 @@ void thread_exit(int exit_code) {
     switch_page_directory(get_kernel_pagedir());
 
 }
+pcb_t found_pcb(int pid) {
+    pcb_t ret = NULL;
+    spin_lock(pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, node) {
+        pcb_t pcb = (pcb_t)node->data;
+        if (pcb->pid == pid) {
+            ret = pcb;
+            break;
+        }
+    }
+    spin_unlock(pcb_group_queue->lock);
+    return ret;
+}
 
+tcb_t found_thread(pcb_t pcb, int tid) {
+    if (pcb == NULL) return NULL;
+    queue_foreach(pcb->thread_queue, node) {
+        tcb_t thread = (tcb_t)node->data;
+        if (thread->tid == tid) { return thread; }
+    }
+    return NULL;
+}
+
+void kill_thread(int tid) {
+    close_interrupt;
+    disable_scheduler();
+    
+    tcb_t current = found_thread(kernel_group,tid);
+    pcb_t group = current->parent_group;
+    write_serial_fmt("kill thread %s\n",current->name);
+    
+    // 设置线程状态为死亡
+    current->status = DEATH;
+    
+    // 从调度队列中移除
+    PROCESSOR_INFO* cpu = get_current_cpu();
+    queue_remove_at(cpu->scheduler_queue, current->queue_index);
+    
+    // 从进程线程队列中移除
+    queue_remove_at(group->thread_queue, current->group_index);
+    
+    // 如果这是进程的最后一个线程，标记进程为僵尸状态
+    if (group->thread_queue->size == 0) {
+        group->status = DEATH;
+        // // 如果是vfork创建的进程，需要特殊处理
+        // if (group->vfork) {
+        //     // 添加vfork的特殊处理逻辑
+        // }
+    }
+    
+    // 如果进程没有线程了，安排回收
+    if (group->thread_queue->size == 0 && group->status == DEATH) {
+        recycle_process(group);
+    }
+    
+    if (!no_interrupt) {
+        enable_scheduler();
+        open_interrupt;
+    }
+    switch_page_directory(get_kernel_pagedir());
+
+}
 void recycle_process(pcb_t pcb) {
     // 不要回收内核进程
     if (pcb == kernel_group) return;

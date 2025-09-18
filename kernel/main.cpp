@@ -33,7 +33,7 @@ extern mouse_dec     ms_dec;
 extern bool          winRD_lock;
 extern int           scheduler_is_ready;
 extern XSK_SMP_INFO *xsi;
-
+size_t tid;
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE        *ST;
@@ -258,6 +258,7 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
+    kill_thread(tid);
     while (1)
     {
         // if (tw_data->flushing) { continue; } // Sync, but bad performance
@@ -376,7 +377,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
     create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    tid = create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
