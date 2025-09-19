@@ -61,9 +61,10 @@ void thread_exit(int exit_code)
         open_interrupt;
     }
     switch_page_directory(get_current_directory());
+
 }
-pcb_t found_pcb(int pid)
-{
+
+pcb_t found_pcb(int pid) {
     pcb_t ret = NULL;
     spin_lock(pcb_group_queue->lock);
     queue_foreach(pcb_group_queue, node)
@@ -128,9 +129,10 @@ void kill_thread(int tid)
         open_interrupt;
     }
     switch_page_directory(get_current_directory());
+
 }
-void recycle_process(pcb_t pcb)
-{
+
+void recycle_process(pcb_t pcb) {
     // 不要回收内核进程
     if (pcb == kernel_group) return;
 
@@ -162,6 +164,7 @@ void recycle_process(pcb_t pcb)
     // 释放进程本身
     free(pcb);
 }
+
 [[noreturn]] void process_exit()
 {
     uint64_t rax = 0;
