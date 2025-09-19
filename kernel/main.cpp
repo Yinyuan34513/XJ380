@@ -258,7 +258,7 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
-    kill_thread(tid);
+
     while (1)
     {
         // if (tw_data->flushing) { continue; } // Sync, but bad performance
@@ -352,13 +352,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     keyboard_init();
     mouse_init();
 
-    vfs_node_t f;
-    f = vfs_open("/1.txt");
-    char buf[1024];
-    if (vfs_read(f, buf, 0, f->size) == -1)
-        write_serial_fmt("read failed\n");
-    else
-        write_serial_fmt("read file: %s\n", buf);
 
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");

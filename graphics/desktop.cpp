@@ -12,7 +12,8 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     int scrx = sht->scrx;
     int scry = sht->scry;
     // #136dff
-    draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
+    // draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
+    PrintPicture(sht, sheet_id, 0, 0,scrx, scry, "/BackGround.png");
     init_dock(sht, dock_sheet_id);
     init_shortcut_dock(sht, dock_sheet_id);
 }

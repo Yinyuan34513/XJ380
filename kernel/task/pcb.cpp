@@ -59,7 +59,7 @@ void thread_exit(int exit_code) {
         enable_scheduler();
         open_interrupt;
     }
-    switch_page_directory(get_kernel_pagedir());
+    switch_page_directory(get_current_directory());
 
 }
 pcb_t found_pcb(int pid) {
@@ -121,7 +121,7 @@ void kill_thread(int tid) {
         enable_scheduler();
         open_interrupt;
     }
-    switch_page_directory(get_kernel_pagedir());
+    switch_page_directory(get_current_directory());
 
 }
 void recycle_process(pcb_t pcb) {
