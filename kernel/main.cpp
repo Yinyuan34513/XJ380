@@ -258,7 +258,7 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
-    kill_thread(tid);
+
     while (1)
     {
         // if (tw_data->flushing) { continue; } // Sync, but bad performance
