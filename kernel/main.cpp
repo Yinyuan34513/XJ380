@@ -33,7 +33,7 @@ extern mouse_dec     ms_dec;
 extern bool          winRD_lock;
 extern int           scheduler_is_ready;
 extern XSK_SMP_INFO *xsi;
-size_t tid;
+size_t               tid;
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE        *ST;
@@ -120,10 +120,7 @@ void components_flusher()
                 tw_data->need_flush = true;
             }
         }
-        if (ms_dec.need_flush)
-        {
-            process_mouse_info();
-        }
+        if (ms_dec.need_flush) { process_mouse_info(); }
     }
 }
 
@@ -351,7 +348,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     keyboard_init();
     mouse_init();
-
 
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");

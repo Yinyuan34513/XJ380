@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-#define MAX_WAIT_INDEX         1000000                  // 阻塞最大循环数
+#define MAX_WAIT_INDEX 1000000 // 阻塞最大循环数
 
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
@@ -169,19 +169,22 @@ static inline bool are_interrupts_enabled()
                      : "=r"(rflags));
     return (rflags & (1 << 9)) != 0;
 }
-static inline char *LeadingWhitespace(char *beg, char *end) {
-    while (end > beg && *--end <= 0x20) {
+static inline char *LeadingWhitespace(char *beg, char *end)
+{
+    while (end > beg && *--end <= 0x20)
+    {
         *end = 0;
     }
-    while (beg < end && *beg <= 0x20) {
+    while (beg < end && *beg <= 0x20)
+    {
         beg++;
     }
     return beg;
 }
 static inline void *memmove(void *dest, const void *src, size_t n)
 {
-    uint8_t *pdest = (uint8_t *)dest;
-    const uint8_t *psrc = (const uint8_t *)src;
+    uint8_t       *pdest = (uint8_t *)dest;
+    const uint8_t *psrc  = (const uint8_t *)src;
 
     if (src > dest)
     {

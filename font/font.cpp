@@ -52,7 +52,7 @@ void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec
     char     str[255];
     int      radix   = 10;
     char     index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
-    unsigned unum;                                             // 存放要转换的整数的绝对值,转换的整数可能是负数
+    unsigned unum; // 存放要转换的整数的绝对值,转换的整数可能是负数
     int      i = 0, j,
         k; // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
 
@@ -68,8 +68,8 @@ void WriteDec(const FrameBufferConfig &fbc, int x, int y, unsigned long long dec
     // 转换部分，注意转换后是逆序的
     do
     {
-        str[i++]  = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
-        unum     /= radix;                         // unum去掉最后一位
+        str[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
+        unum /= radix;                            // unum去掉最后一位
 
     } while (unum); // 直至unum为0退出循环
 
@@ -268,7 +268,7 @@ void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
     char     str[255];
     int      radix   = 10;
     char     index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
-    unsigned unum;                                             // 存放要转换的整数的绝对值,转换的整数可能是负数
+    unsigned unum; // 存放要转换的整数的绝对值,转换的整数可能是负数
     int      i = 0, j,
         k; // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
 
@@ -284,8 +284,8 @@ void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
     // 转换部分，注意转换后是逆序的
     do
     {
-        str[i++]  = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
-        unum     /= radix;                         // unum去掉最后一位
+        str[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
+        unum /= radix;                            // unum去掉最后一位
 
     } while (unum); // 直至unum为0退出循环
 

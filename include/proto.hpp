@@ -231,7 +231,7 @@ void    move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
 // kernel/task/user.cpp
 void create_user_thread_from_file(char *path, pcb_t pcb);
 void create_user_process_from_file(char *path, pcb_t pcb);
-void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char* path);
-void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char* path);
-void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char* path);
+void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
+void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
+void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 #endif

@@ -4,9 +4,9 @@
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.hpp"
+#include <cpu/longm.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
-#include <cpu/longm.h>
 
 #define SA_RPL3 3
 
@@ -24,50 +24,53 @@ extern bool no_interrupt;
 // pcb.cpp
 #include "task/scheduler.h"
 
-void thread_exit(int exit_code) {
+void thread_exit(int exit_code)
+{
     close_interrupt;
     disable_scheduler();
-    
+
     tcb_t current = get_current_task();
-    pcb_t group = current->parent_group;
-    
+    pcb_t group   = current->parent_group;
+
     // 设置线程状态为死亡
     current->status = DEATH;
-    
+
     // 从调度队列中移除
-    PROCESSOR_INFO* cpu = get_current_cpu();
+    PROCESSOR_INFO *cpu = get_current_cpu();
     queue_remove_at(cpu->scheduler_queue, current->queue_index);
-    
+
     // 从进程线程队列中移除
     queue_remove_at(group->thread_queue, current->group_index);
-    
+
     // 如果这是进程的最后一个线程，标记进程为僵尸状态
-    if (group->thread_queue->size == 0) {
+    if (group->thread_queue->size == 0)
+    {
         group->status = DEATH;
         // // 如果是vfork创建的进程，需要特殊处理
         // if (group->vfork) {
         //     // 添加vfork的特殊处理逻辑
         // }
     }
-    
+
     // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) {
-        recycle_process(group);
-    }
-    
-    if (!no_interrupt) {
+    if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
+
+    if (!no_interrupt)
+    {
         enable_scheduler();
         open_interrupt;
     }
     switch_page_directory(get_current_directory());
-
 }
-pcb_t found_pcb(int pid) {
+pcb_t found_pcb(int pid)
+{
     pcb_t ret = NULL;
     spin_lock(pcb_group_queue->lock);
-    queue_foreach(pcb_group_queue, node) {
+    queue_foreach(pcb_group_queue, node)
+    {
         pcb_t pcb = (pcb_t)node->data;
-        if (pcb->pid == pid) {
+        if (pcb->pid == pid)
+        {
             ret = pcb;
             break;
         }
@@ -76,82 +79,86 @@ pcb_t found_pcb(int pid) {
     return ret;
 }
 
-tcb_t found_thread(pcb_t pcb, int tid) {
+tcb_t found_thread(pcb_t pcb, int tid)
+{
     if (pcb == NULL) return NULL;
-    queue_foreach(pcb->thread_queue, node) {
+    queue_foreach(pcb->thread_queue, node)
+    {
         tcb_t thread = (tcb_t)node->data;
         if (thread->tid == tid) { return thread; }
     }
     return NULL;
 }
 
-void kill_thread(int tid) {
+void kill_thread(int tid)
+{
     close_interrupt;
     disable_scheduler();
-    
-    tcb_t current = found_thread(kernel_group,tid);
-    pcb_t group = current->parent_group;
-    write_serial_fmt("kill thread %s\n",current->name);
-    
+
+    tcb_t current = found_thread(kernel_group, tid);
+    pcb_t group   = current->parent_group;
+    write_serial_fmt("kill thread %s\n", current->name);
+
     // 设置线程状态为死亡
     current->status = DEATH;
-    
+
     // 从调度队列中移除
-    PROCESSOR_INFO* cpu = get_current_cpu();
+    PROCESSOR_INFO *cpu = get_current_cpu();
     queue_remove_at(cpu->scheduler_queue, current->queue_index);
-    
+
     // 从进程线程队列中移除
     queue_remove_at(group->thread_queue, current->group_index);
-    
+
     // 如果这是进程的最后一个线程，标记进程为僵尸状态
-    if (group->thread_queue->size == 0) {
+    if (group->thread_queue->size == 0)
+    {
         group->status = DEATH;
         // // 如果是vfork创建的进程，需要特殊处理
         // if (group->vfork) {
         //     // 添加vfork的特殊处理逻辑
         // }
     }
-    
+
     // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) {
-        recycle_process(group);
-    }
-    
-    if (!no_interrupt) {
+    if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
+
+    if (!no_interrupt)
+    {
         enable_scheduler();
         open_interrupt;
     }
     switch_page_directory(get_current_directory());
-
 }
-void recycle_process(pcb_t pcb) {
+void recycle_process(pcb_t pcb)
+{
     // 不要回收内核进程
     if (pcb == kernel_group) return;
-    
+
     // 释放进程资源
-    if (pcb->pagedir != get_kernel_pagedir()) {
-        free_page_directory(pcb->pagedir);
-    }
-    
+    if (pcb->pagedir != get_kernel_pagedir()) { free_page_directory(pcb->pagedir); }
+
     if (pcb->cwd) free(pcb->cwd);
     if (pcb->cmdline) free(pcb->cmdline);
-    
+
     // 释放环境变量
-    if (pcb->envp) {
-        for (size_t i = 0; i < pcb->envc; i++) {
+    if (pcb->envp)
+    {
+        for (size_t i = 0; i < pcb->envc; i++)
+        {
             free(pcb->envp[i]);
         }
         free(pcb->envp);
     }
-    
+
     // 从进程队列中移除
     queue_remove_at(pcb_group_queue, pcb->queue_index);
-    
+
     // 从父进程的子进程队列中移除
-    if (pcb->parent_task && pcb->parent_task->child_pcb) {
+    if (pcb->parent_task && pcb->parent_task->child_pcb)
+    {
         queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
     }
-    
+
     // 释放进程本身
     free(pcb);
 }
@@ -293,8 +300,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 {
     while (true)
     {
-        if (is_scheduler)
-            break;
+        if (is_scheduler) break;
     }
 
     write_serial_fmt("path in execve %s\n", path);
@@ -372,23 +378,22 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->user_stack_top = stack + BIG_USER_STACK;
     get_current_task()->main           = e_entry;
 
-    if (!no_interrupt) 
+    if (!no_interrupt)
     {
         enable_scheduler();
         open_interrupt;
     }
     switch_to_user_mode();
-    return (uint64_t)-(EAGAIN);
+    return (uint64_t) - (EAGAIN);
 }
 
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 {
     while (true)
     {
-        if (is_scheduler)
-            break;
+        if (is_scheduler) break;
     }
-    
+
     close_interrupt;
     disable_scheduler();
 
@@ -398,7 +403,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     memset(new_pcb, 0, sizeof(struct process_control_block));
     new_pcb->pid = now_pid++;
     strcpy(new_pcb->name, current_pcb->name);
-    write_serial_fmt("fork name: %s\n",new_pcb->name);
+    write_serial_fmt("fork name: %s\n", new_pcb->name);
     new_pcb->task_level = TASK_APPLICATION_LEVEL;
     new_pcb->status     = START;
 
@@ -417,7 +422,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     tcb_t parent_task = get_current_task();
 
     tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
-    if (new_task == NULL) return (uint64_t)-(ENOMEM);
+    if (new_task == NULL) return (uint64_t) - (ENOMEM);
     memset(new_task, 0, sizeof(struct thread_control_block));
     new_task->task_level     = TASK_APPLICATION_LEVEL;
     new_task->cpu_id         = get_current_cpu()->processor_id;
@@ -461,7 +466,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->tid          = now_tid++;
 
     add_task(new_task);
-    if (!no_interrupt) 
+    if (!no_interrupt)
     {
         enable_scheduler();
         open_interrupt;
@@ -526,25 +531,25 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     memcpy(new_task->name, name, strlen(name) + 1);
 
     ptr_cast_t cast;
-    cast.ptr             = new_task;
-    cast.val            += KERNEL_STACK_SIZE;
-    uint64_t *stack_top  = (uint64_t *)(cast.ptr);
-    new_task->context0.rflags = 0x202;
-    new_task->context0.rip    = (uint64_t)_start;
-    new_task->context0.rsp    = (uint64_t)stack_top & ~(uint64_t)0xF; // 设置上下文
-    new_task->kernel_stack    = (new_task->context0.rsp -= 8);        // 栈16字节对齐
-    new_task->context0.cs     = 0x8;
-    new_task->context0.ss     = 0x10;
-    new_task->context0.es     = 0x10;
-    new_task->context0.ds     = 0x10;
-    new_task->status          = CREATE;
-    new_task->main            = (uint64_t)_start;
+    cast.ptr                   = new_task;
+    cast.val                  += KERNEL_STACK_SIZE;
+    uint64_t *stack_top        = (uint64_t *)(cast.ptr);
+    new_task->context0.rflags  = 0x202;
+    new_task->context0.rip     = (uint64_t)_start;
+    new_task->context0.rsp     = (uint64_t)stack_top & ~(uint64_t)0xF; // 设置上下文
+    new_task->kernel_stack     = (new_task->context0.rsp -= 8);        // 栈16字节对齐
+    new_task->context0.cs      = 0x8;
+    new_task->context0.ss      = 0x10;
+    new_task->context0.es      = 0x10;
+    new_task->context0.ds      = 0x10;
+    new_task->status           = CREATE;
+    new_task->main             = (uint64_t)_start;
 
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, (uint64_t)args);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
-    new_task->context0.rsp    = (uint64_t)stack_top;
-    new_task->kernel_stack    = (new_task->context0.rsp);
+    new_task->context0.rsp = (uint64_t)stack_top;
+    new_task->kernel_stack = (new_task->context0.rsp);
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);
@@ -582,25 +587,25 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     memcpy(new_task->name, name, strlen(name) + 1);
 
     ptr_cast_t cast;
-    cast.ptr             = new_task;
-    cast.val            += KERNEL_STACK_SIZE;
-    uint64_t *stack_top  = (uint64_t *)(cast.ptr);
-    new_task->context0.rflags = 0x202;
-    new_task->context0.rip    = (uint64_t)switch_to_user_mode;
-    new_task->context0.rsp    = (uint64_t)stack_top;                        // 设置上下文
-    new_task->kernel_stack    = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
-    new_task->context0.cs     = 0x8;
-    new_task->context0.ss     = 0x10;
-    new_task->context0.es     = 0x10;
-    new_task->context0.ds     = 0x10;
-    new_task->status          = CREATE;
-    new_task->main            = (uint64_t)_start;
+    cast.ptr                   = new_task;
+    cast.val                  += KERNEL_STACK_SIZE;
+    uint64_t *stack_top        = (uint64_t *)(cast.ptr);
+    new_task->context0.rflags  = 0x202;
+    new_task->context0.rip     = (uint64_t)switch_to_user_mode;
+    new_task->context0.rsp     = (uint64_t)stack_top;                        // 设置上下文
+    new_task->kernel_stack     = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
+    new_task->context0.cs      = 0x8;
+    new_task->context0.ss      = 0x10;
+    new_task->context0.es      = 0x10;
+    new_task->context0.ds      = 0x10;
+    new_task->status           = CREATE;
+    new_task->main             = (uint64_t)_start;
 
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, (uint64_t)_start);
     PUSH_STACK(stack_top, (uint64_t)switch_to_user_mode);
-    new_task->context0.rsp    = (uint64_t)stack_top;
-    new_task->kernel_stack    = (new_task->context0.rsp);
+    new_task->context0.rsp = (uint64_t)stack_top;
+    new_task->kernel_stack = (new_task->context0.rsp);
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
@@ -615,7 +620,7 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory,char *cmdline)
+pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline)
 {
     pcb_t pcb        = (pcb_t)malloc(sizeof(struct process_control_block));
     pcb->pid         = now_pid++;
@@ -623,15 +628,15 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->status      = START;
     pcb->queue_index = queue_enqueue(pcb_group_queue, pcb);
     strcpy(pcb->name, name);
-    pcb->thread_queue  = queue_init();
-    pcb->ppid          = 0;
-    pcb->pagedir       = directory ? directory : get_kernel_pagedir();
-    pcb->cwd           = (char *)malloc(1024);
-    pcb->child_pcb = queue_init();
-    pcb->vfork     = false;
-    pcb->envp      = NULL;
-    pcb->envc      = 0;
-    pcb->cmdline     = (char*)malloc(strlen(cmdline));
+    pcb->thread_queue = queue_init();
+    pcb->ppid         = 0;
+    pcb->pagedir      = directory ? directory : get_kernel_pagedir();
+    pcb->cwd          = (char *)malloc(1024);
+    pcb->child_pcb    = queue_init();
+    pcb->vfork        = false;
+    pcb->envp         = NULL;
+    pcb->envc         = 0;
+    pcb->cmdline      = (char *)malloc(strlen(cmdline));
     memset(pcb->cwd, 0, 1024);
     strcpy(pcb->cwd, pcb->parent_task->cwd);
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
@@ -663,8 +668,8 @@ void process_setup()
     kernel_pcb->cwd[0]      = '/';
     kernel_pcb->child_pcb   = queue_init();
     kernel_pcb->child_index = 0;
-    
-    kernel_group             = kernel_pcb;
+
+    kernel_group = kernel_pcb;
 
     tcb_t idle_thread         = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
     idle_thread->tid          = now_tid++;

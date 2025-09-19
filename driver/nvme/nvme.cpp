@@ -3,12 +3,12 @@
 #include <proto.hpp>
 
 NVME_NAMESPACE *namespaces[MAX_NVME_DEV_NUM];
-uint64_t nvme_device_num = 0;
+uint64_t        nvme_device_num = 0;
 
 void nvme_init()
 {
     pci_device_t *devs[MAX_NVME_DEV_NUM];
-    uint32_t num;
+    uint32_t      num;
 
     pci_find_class(devs, &num, 0x010802);
 

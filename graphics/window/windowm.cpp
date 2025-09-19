@@ -10,16 +10,21 @@
 #include <proto.hpp>
 #include <ttf.h>
 
-#define WINDOW_ALPHA_VALUE  0xaa
-#define WINDOW_COLOR_R      0x00
-#define WINDOW_COLOR_G      0xa2
-#define WINDOW_COLOR_B      0xe8
-#define WINDOW_COLOR        {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE}
+#define WINDOW_ALPHA_VALUE 0xaa
+#define WINDOW_COLOR_R     0x00
+#define WINDOW_COLOR_G     0xa2
+#define WINDOW_COLOR_B     0xe8
+#define WINDOW_COLOR                                                                                                   \
+    {                                                                                                                  \
+        WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE                                             \
+    }
 #define WINDOW_LIGHT_OFFEST 0x0f
 // #define WINDOW_LIGHT_COLOR  {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, (uint8_t)(WINDOW_ALPHA_VALUE + WINDOW_LIGHT_OFFEST)}
 #define WINDOW_LIGHT_COLOR                                                                                             \
-    {(uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST), (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),                 \
-     (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST), WINDOW_ALPHA_VALUE}
+    {                                                                                                                  \
+        (uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST), (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),              \
+            (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST), WINDOW_ALPHA_VALUE                                        \
+    }
 
 bool WindowIsCreating = false;
 

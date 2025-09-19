@@ -140,9 +140,9 @@ uint64_t sys_read(uint64_t fd, void *buf, uint64_t len)
 
 uint64_t sys_write(uint64_t fd, const void *buf, uint64_t len)
 {
-    if(fd==1)
+    if (fd == 1)
     {
-        write_serial_fmt((char*)buf);
+        write_serial_fmt((char *)buf);
         return 0;
     }
     if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }

@@ -65,7 +65,7 @@ typedef struct
 {
     uint16_t offset_1; // 地址偏移量的第0~15位，BaseAddress + Offset = 函数地址
     uint16_t selector; // 指向GDT的一个代码段
-    uint8_t  ist;      // Interrupt Stack Table的偏移量，存储在Task State Segment中。全部为零则不使用IST。
+    uint8_t  ist; // Interrupt Stack Table的偏移量，存储在Task State Segment中。全部为零则不使用IST。
     uint8_t
         type_attributes; // 门类型，DPL和Present位。详见https://wiki.osdev.org/Interrupt_Descriptor_Table#Structure_on_x86-64。
     uint16_t offset_2; // 地址偏移量的第16~31位

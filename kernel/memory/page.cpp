@@ -366,13 +366,14 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
     flush_tlb(addr);
 }
 
-void switch_process_page_directory(page_directory_t *dir) {
+void switch_process_page_directory(page_directory_t *dir)
+{
     disable_scheduler();
     close_interrupt;
-    pcb_t pcb     = get_current_task()->parent_group;
+    pcb_t pcb    = get_current_task()->parent_group;
     pcb->pagedir = dir;
     switch_page_directory(dir);
-    if (!no_interrupt) 
+    if (!no_interrupt)
     {
         enable_scheduler();
         open_interrupt;
