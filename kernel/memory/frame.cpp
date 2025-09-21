@@ -1,6 +1,9 @@
+#include <mm/buddy.h>
 #include <mm/frame.h>
 #include <mm/memory.h>
 #include <proto.hpp>
+
+// #define ENABLE_BUDDY 1
 
 FrameAllocator frame_allocator;
 uint64_t       memory_size = 0;
@@ -25,7 +28,9 @@ uint64_t get_memory_size(MEMORY_MAP map)
 
 void init_frame(MEMORY_MAP map)
 {
-
+#ifdef ENABLE_BUDDY
+    init_frame_buddy(map);
+#else
     memory_size = get_memory_size(map);
 
     size_t         bitmap_size    = (memory_size / 4096 + 7) / 8;
@@ -78,33 +83,47 @@ void init_frame(MEMORY_MAP map)
     write_serial_string("Available memory: ");
     write_serial_dec((origin_frames / 256));
     write_serial_string(" MiB\n");
+#endif
 }
 
 void free_frame(uint64_t addr)
 {
+#ifdef ENABLE_BUDDY
+    buddy_free_pages(addr, 1);
+#else
     if (addr == 0) return;
     size_t frame_index = addr / 4096;
     if (frame_index == 0) return;
     Bitmap *bitmap = &frame_allocator.bitmap;
     bitmap_set(bitmap, frame_index, true);
+#endif
     frame_allocator.usable_frames++;
 }
 
 uint64_t alloc_frames(size_t count)
 {
+#ifdef ENABLE_BUDDY
+    frame_allocator.usable_frames -= count;
+    return buddy_alloc_pages(count);
+#else
     Bitmap *bitmap      = &frame_allocator.bitmap;
     size_t  frame_index = bitmap_find_range(bitmap, count, true);
 
     if (frame_index == (size_t)-1) return 0;
     bitmap_set_range(bitmap, frame_index, frame_index + count, false);
+
     frame_allocator.usable_frames -= count;
 
     return frame_index * 4096;
+#endif
 }
 spin_t frame_op_lock = SPIN_INIT;
 void   free_frames(uint64_t addr, uint64_t size)
 {
     spin_lock(frame_op_lock);
+#ifdef ENABLE_BUDDY
+    buddy_free_pages(addr, size);
+#else
 
     if (addr == 0)
     {
@@ -115,6 +134,7 @@ void   free_frames(uint64_t addr, uint64_t size)
     size_t frame_index = addr / PAGE_SIZE;
 
     bitmap_set_range(&frame_allocator.bitmap, frame_index, frame_index + size, true);
+#endif
     frame_allocator.usable_frames += size;
 
     spin_unlock(frame_op_lock);

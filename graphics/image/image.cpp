@@ -88,7 +88,7 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
         return;
     }
     uint8_t      *b1 = (uint8_t *)(malloc(ow * oh * 4));
-    // stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
+    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
     SHEET *front_p = sht->start;

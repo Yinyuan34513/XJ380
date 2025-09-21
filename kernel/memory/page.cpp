@@ -223,13 +223,14 @@ page_table_t *page_table_create(page_table_entry_t *entry, bool user)
     if (entry->value == (uint64_t)NULL)
     {
         uint64_t frame      = alloc_frames(1);
+        // write_serial_fmt("oiiaoiia 0x%x\n",(uint64_t)frame);
         entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | (user ? PTE_USER : 0);
-        page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x00007ffffffff000);
+        page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x000fffffffff000);
         page_table_clear(table);
         return table;
     }
     entry->value        |= (user ? PTE_USER : 0);
-    page_table_t *table  = (page_table_t *)phys_to_virt(entry->value & 0x00007ffffffff000);
+    page_table_t *table  = (page_table_t *)phys_to_virt(entry->value & 0x000fffffffff000);
     return table;
 }
 
@@ -274,7 +275,7 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 
         // 指向一个4K的页表
         page_table_t *source_page_table_next =
-            (page_table_t *)phys_to_virt(source_table->entries[i].value & 0x00007ffffffff000);
+            (page_table_t *)phys_to_virt(source_table->entries[i].value & 0x000fffffffff000);
         page_table_t *new_page_table = copy_page_table_recursive(source_page_table_next, level - 1, all_copy,
                                                                  level != 4 ? kernel_space : i >= 256);
         new_table->entries[i].value =
@@ -294,7 +295,7 @@ static void free_page_table_recursive(page_table_t *table, int level)
 
     for (int i = 0; i < (level == 4 ? 256 : 512); i++)
     {
-        page_table_t *page_table_next = (page_table_t *)(phys_to_virt(table->entries[i].value & 0x00007ffffffff000));
+        page_table_t *page_table_next = (page_table_t *)(phys_to_virt(table->entries[i].value & 0x000fffffffff000));
         free_page_table_recursive(page_table_next, level - 1);
     }
     free_frame((uint64_t)virt_to_phys((uint64_t)table));
@@ -328,13 +329,13 @@ void unmap_page(page_directory_t *directory, uint64_t vaddr)
 
     page_table_t *l4_table = directory->table;
     page_table_t *l3_table =
-        (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value & 0x00007ffffffff000));
+        (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value & 0x000fffffffff000));
     page_table_t *l2_table =
-        (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value & 0x00007ffffffff000));
+        (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value & 0x000fffffffff000));
     page_table_t *l1_table =
-        (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x00007ffffffff000));
+        (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x000fffffffff000));
 
-    free_frame(l1_table->entries[l1_index].value & 0x00007ffffffff000);
+    free_frame(l1_table->entries[l1_index].value & 0x000fffffffff000);
     l1_table->entries[l1_index].value = 0;
     flush_tlb(vaddr);
 }
@@ -361,7 +362,7 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 
     if (!frame) { serial_wprintf("WARNING: Invalid frame addr: 0\n"); }
 
-    l1_table->entries[l1_index].value = (frame & 0x00007ffffffff000) | flags;
+    l1_table->entries[l1_index].value = (frame & 0x000fffffffff000) | flags;
 
     flush_tlb(addr);
 }
