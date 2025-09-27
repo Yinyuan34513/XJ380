@@ -4,7 +4,7 @@ C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-buil
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= 0
+DEBUG ?= 1
 SMP ?= 4
 SUDO ?= 1
 KVM ?= 1
@@ -142,7 +142,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/
-	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/
+	@cp -a ./BackGround.jpeg $(BUILD_DIR)/XJ380/
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

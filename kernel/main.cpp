@@ -328,12 +328,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     ahci_init();
     nvme_init();
-    vfs_init();
-    dev_init();
-    partition_init();
-    sysfs_init();
-    fs_syscall_init();
-    fatfs_init();
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
@@ -343,8 +337,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_smp(BootConfig.MADT);
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
-
-    mount_root();
 
     keyboard_init();
     mouse_init();
@@ -362,6 +354,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     {
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
+
+    get_current_task()->cwd = NULL;
+    vfs_init();
+    dev_init();
+    partition_init();
+    sysfs_init();
+    fs_syscall_init();
+    fatfs_init();
+
+    mount_root();
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 

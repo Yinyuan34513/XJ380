@@ -383,6 +383,12 @@ void switch_process_page_directory(page_directory_t *dir)
 
 void switch_page_directory(page_directory_t *dir)
 {
+    if (dir == NULL)
+    {
+        write_serial_fmt("[Break] Page Directory is NULL.\n");
+        disable_intr(); disable_scheduler();
+        while (true);
+    }
     // if (cpu->ready) {
     //     cpu->directory = dir;
     // } else {

@@ -16,10 +16,10 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     // #136dff
     // draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
     int           w, h, bpp;
-    stbi_uc      *b = stbi_load("/BackGround.png", &w, &h, &bpp, 4);
-    // uint8_t      *b1 = (uint8_t *)(malloc(scrx * scry * 4));
-    // stbir_resize_uint8(b, w, h, 0, b1, scrx, scry, 0, 4);
-    SHEET_BUFFER *buff = (SHEET_BUFFER *)b;
+    stbi_uc      *b = stbi_load("/BackGround.jpeg", &w, &h, &bpp, 4);
+    uint8_t      *b1 = (uint8_t *)(malloc(scrx * scry * 4));
+    stbir_resize_uint8(b, w, h, 0, b1, scrx, scry, 0, 4);
+    SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
     SHEET *front_p = sht->start;
     while (true)

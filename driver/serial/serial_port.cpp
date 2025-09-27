@@ -465,7 +465,7 @@ void serial_wprintf(const char *fmt, ...)
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }
 
 /**
@@ -486,7 +486,7 @@ void write_serial_fmt(const char *fmt, ...)
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }
 
 typedef struct UnsafeBufWriterData
@@ -539,5 +539,5 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }
