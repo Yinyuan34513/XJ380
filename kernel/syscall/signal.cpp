@@ -27,7 +27,7 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
     {
         // 准备信号处理栈
         create_signal_thread((void *)WinMpf, msg_type, data1, data2, 
-                             XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS + sg_rvt_offest, 
+                             XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS + XPSR_OFFEST, 
                              current->parent_group);
     }
     // 空的就不用管了
@@ -41,10 +41,12 @@ void signal_end()
 
 void init_signal()
 {
-    sg_rvt_offest = (uint64_t)signal_revert - ((uint64_t)signal_revert & ~(uint64_t)0xFFF);
-    page_map_range(get_current_directory(), 
-                   XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS, (uint64_t)virt_to_phys((uint64_t)signal_revert & ~(uint64_t)0xFFF), 0x2000, 
-                   PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    page_map_range_to_random(get_current_directory(), 
+                             XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS, 1, 
+                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+                             
+    memcpy((void *)(XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS + XPSR_OFFEST), 
+           (void *)signal_revert, 0xff);   // 我也不知道这个会有多大，就这样吧先
 
     write_serial_fmt("XJ380 Signal(Message) Initialize Success.\n");
 }
