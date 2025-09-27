@@ -98,6 +98,7 @@ struct process_control_block
     lock_queue *child_pcb;   // 子进程列表
     char       *cmdline;
     int         task_level; // 进程等级
+    bool        sigprci;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);

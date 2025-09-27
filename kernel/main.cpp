@@ -235,8 +235,8 @@ void desktop_flusher()
 
     winRD_lock = true;
 
-    create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
-    create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
+    // create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
+    // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
 
@@ -285,7 +285,7 @@ void desktop_flusher()
             WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
             if (a != NULL)
             {
-                do_signal(0, 1, 1, a->WinMPf, a->w_task);
+                do_signal(0, NULL, k_input, a->WinMPf, a->w_task);
             }
         }
         if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
@@ -376,7 +376,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
-    create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
+    // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     tid = create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
@@ -384,7 +384,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
 
-    create_user_process_from_file((char *)"/init.elf", NULL);
+    create_user_process_from_file((char *)"/shell.elf", NULL);
 
     enable_scheduler();
     open_interrupt;

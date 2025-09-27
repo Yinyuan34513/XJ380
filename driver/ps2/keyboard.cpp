@@ -82,4 +82,5 @@ void keyboard_init()
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_read();
     outb(PORT_KB_DATA, KB_INIT_MODE);
+    delay_s(3);
 }
