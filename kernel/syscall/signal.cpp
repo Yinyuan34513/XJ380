@@ -40,10 +40,10 @@ void signal_end()
 
 void init_signal()
 {
-    // sg_rvt_offest = (uint64_t)signal_revert - ((uint64_t)signal_revert & ~(uint64_t)0xFFF);
-    // page_map_range(get_current_directory(), 
-    //                XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS, ((uint64_t)signal_revert & ~(uint64_t)0xFFF), 0x2000, 
-    //                PTE_PRESENT | PTE_WRITEABLE | PTE_USER); // 反正最小4MB，那就干脆写1好了
+    sg_rvt_offest = (uint64_t)signal_revert - ((uint64_t)signal_revert & ~(uint64_t)0xFFF);
+    page_map_range(get_current_directory(), 
+                   XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS, ((uint64_t)signal_revert & ~(uint64_t)0xFFF), 0x2000, 
+                   PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
 
     write_serial_fmt("XJ380 Signal(Message) Initialize Success.\n");
 }
