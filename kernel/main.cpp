@@ -347,6 +347,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("\n");
 
     init_syscall();
+    init_signal();
 
     process_setup();
 

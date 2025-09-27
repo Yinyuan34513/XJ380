@@ -360,7 +360,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->cmdline  = strdup(cmdline);
     }
 
-    strncpy(process->name, norm_path, 50);
+    get_thread_name_from_filepath(norm_path, process->name);
 
     if (envp != NULL)
     {
