@@ -149,3 +149,7 @@ void     switch_to_user_mode();
 void     recycle_process(pcb_t pcb);
 void     thread_exit(int exit_code);
 void     kill_thread(int tid);
+
+size_t create_signal_thread(void *_start, 
+                            uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func, 
+                            pcb_t pcb);

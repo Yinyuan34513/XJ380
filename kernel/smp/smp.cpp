@@ -158,8 +158,10 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     while (true)
     {
-        asm volatile("hlt");
+        asm volatile("pause");
     }
+
+    asm volatile("hlt");    // 你来这干什么？？？
 }
 
 bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)

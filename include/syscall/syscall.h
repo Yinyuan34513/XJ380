@@ -1,6 +1,8 @@
 #pragma once
 #include <proto.hpp>
 
+#define XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS 0xf717f000
+
 // XJ380API POSIX Edition
 #define SYS_READ     0
 #define SYS_WRITE    1
@@ -188,3 +190,6 @@ void init_syscall();
 
 // Proto (XAPI Edition)
 void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf);
+void init_signal();
+void signal_revert();
+void signal_end();

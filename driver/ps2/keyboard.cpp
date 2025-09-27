@@ -3,26 +3,20 @@
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
-uint8_t             keyboard_code[256] = {
-    0,      KEY_ESC, '1',       '2',           '3',        '4',    '5',       '6',      '7',    '8',       '9',
-    '0',    '-',     '=',       KEY_BACKSPACE, KEY_TAB,    'q',    'w',       'e',      'r',    't',       'y',
-    'u',    'i',     'o',       'p',           '[',        ']',    KEY_ENTER, KEY_CTRL, 'a',    's',       'd',
-    'f',    'g',     'h',       'j',           'k',        'l',    ';',       '\'',     '`',    KEY_SHIFT, '\\',
-    'z',    'x',     'c',       'v',           'b',        'n',    'm',       ',',      '.',    '/',       KEY_SHIFT,
-    '*',    KEY_ALT, KEY_SPACE, KEY_CAPS,      KEY_F1,     KEY_F2, KEY_F3,    KEY_F4,   KEY_F5, KEY_F6,    KEY_F7,
-    KEY_F8, KEY_F9,  KEY_F10,   KEY_NUML,      KEY_SCROLL, '7',    '8',       '9',      '-',    '4',       '5',
-    '6',    '+',     '1',       '2',           '3',        '0',    '.',       0,        0,      0,         KEY_F11,
-    KEY_F12};       // +0x80 = 释放状态
-uint8_t keyboard_code1[256] = { // 按下Shift
-    0,      KEY_ESC, '!',       '@',           '#',        '$',    '%',       '^',      '&',    '*',       '(',
-    ')',    '_',     '+',       KEY_BACKSPACE, KEY_TAB,    'Q',    'W',       'E',      'R',    'T',       'Y',
-    'U',    'I',     'O',       'P',           '{',        '}',    KEY_ENTER, KEY_CTRL, 'A',    'S',       'D',
-    'F',    'G',     'H',       'J',           'K',        'L',    ':',       '\"',     '~',    KEY_SHIFT, '|',
-    'Z',    'X',     'C',       'V',           'B',        'N',    'M',       '<',      '>',    '?',       KEY_SHIFT,
-    '*',    KEY_ALT, KEY_SPACE, KEY_CAPS,      KEY_F1,     KEY_F2, KEY_F3,    KEY_F4,   KEY_F5, KEY_F6,    KEY_F7,
-    KEY_F8, KEY_F9,  KEY_F10,   KEY_NUML,      KEY_SCROLL, '7',    '8',       '9',      '-',    '4',       '5',
-    '6',    '+',     '1',       '2',           '3',        '0',    '.',       0,        0,      0,         KEY_F11,
-    KEY_F12};
+uint8_t keyboard_code[256] = {
+    0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', KEY_BACKSPACE,
+    KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', KEY_ENTER,
+    KEY_CTRL, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
+    KEY_SHIFT, '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', KEY_SHIFT,
+    '*', KEY_ALT, KEY_SPACE, KEY_CAPS, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10,
+    KEY_NUML, KEY_SCROLL, '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.', 0, 0, 0, KEY_F11, KEY_F12}; // +0x80 = 释放状态
+uint8_t keyboard_code1[256] = {                                                                                          // 按下Shift
+    0, KEY_ESC, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', KEY_BACKSPACE,
+    KEY_TAB, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', KEY_ENTER,
+    KEY_CTRL, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '\"', '~',
+    KEY_SHIFT, '|', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', KEY_SHIFT,
+    '*', KEY_ALT, KEY_SPACE, KEY_CAPS, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10,
+    KEY_NUML, KEY_SCROLL, '7', '8', '9', '-', '4', '5', '6', '+', '1', '2', '3', '0', '.', 0, 0, 0, KEY_F11, KEY_F12};
 
 extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 {
@@ -59,13 +53,6 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     *kb_fifo.p_head = x;
 
     WINDOWLS *Window_now = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-
-    if (Window_now != NULL && (uint64_t)(Window_now->WinMPf) != NULL)
-    {
-        uint8_t temp = keyboard_code[*kb_fifo.p_tail];
-        if (kb_fifo.shift == 1 || kb_fifo.caps == 1) { temp = keyboard_code1[*kb_fifo.p_tail]; }
-        do_signal(0, NULL, temp, Window_now->WinMPf);
-    }
 
     kb_fifo.count++;
     kb_fifo.p_head++;
