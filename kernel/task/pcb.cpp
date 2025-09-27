@@ -20,6 +20,8 @@ size_t        now_tid         = 0;
 lock_queue   *pcb_group_queue = NULL;
 pcb_t         kernel_group    = NULL;
 
+extern UserInfo *current_user;
+
 extern bool no_interrupt;
 // pcb.cpp
 #include "task/scheduler.h"
@@ -98,7 +100,7 @@ void kill_thread(int tid, pcb_t parent_group)
 
     tcb_t current = found_thread(parent_group, tid);
     pcb_t group   = current->parent_group;
-    write_serial_fmt("kill thread %s\n", current->name);
+    // write_serial_fmt("kill thread %s\n", current->name);
 
     // 设置线程状态为死亡
     current->status = DEATH;
@@ -580,6 +582,9 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
 
+    new_task->user_info             = current_user;
+    new_task->user_info->user_type  = XUT_Root;
+
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, (uint64_t)args);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
@@ -635,6 +640,8 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.ds      = 0x10;
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
+
+    new_task->user_info             = current_user;
 
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, (uint64_t)_start);

@@ -147,3 +147,16 @@ UINT64  xapi_Fork() {
 UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }
+
+// 3-5
+void	xapi_GetSystemVersion(WSTR version) {
+	enter_syscall(XAPI_GET_VERSION, (uint64_t)version, 0, 0, 0, 0, 0);
+}
+
+UINT64	xapi_GetTime() {
+	return enter_syscall(XAPI_GET_TIME, 0, 0, 0, 0, 0, 0);
+}
+
+void	xapi_GetCurrentUser(UserInfo user_info) {
+	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)&user_info, 0, 0, 0, 0, 0);
+}

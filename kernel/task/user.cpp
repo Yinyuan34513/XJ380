@@ -25,6 +25,13 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 
+UserInfo *current_user = NULL;
+
+void init_user()
+{
+    current_user = (UserInfo *)malloc(sizeof(UserInfo));
+}
+
 void get_thread_name_from_filepath(char *path, char *name)
 {
     char *p = path;

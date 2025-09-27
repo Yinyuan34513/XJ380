@@ -1,6 +1,6 @@
 all: init.elf shell.elf cp537.elf
 
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc
+export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include
 
 build_xapi:
 	make -C xapi
@@ -16,7 +16,7 @@ init.elf: init.cpp
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-shell.elf: shell.cpp
+shell.elf: ./shell/shell.cpp ./shell/gh_sign.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt

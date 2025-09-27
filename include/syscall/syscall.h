@@ -86,6 +86,12 @@
 #define SXAH_SYSCALL_RETURN         3801
 #define SXAH_CREATE_KERNEL_TERMINAL 3802
 
+// define
+typedef struct {
+    char            name[64];   // 用户名
+    UserType        user_type;  // 用户等级
+} xapi_type_UserInfo;
+
 // P3.1
 #define XAPI_OUTPUT    381
 #define XAPI_INPUTW    382
@@ -103,7 +109,9 @@
 #define XAPI_EXECVE 390
 
 // P3.5
-#define XAPI_GET_VERSION 391
+#define XAPI_GET_VERSION        391
+#define XAPI_GET_TIME           412
+#define XAPI_GET_CURRENT_USER   413
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -145,6 +153,8 @@
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
+// 当前最大号：413
+
 // Proto (XAPI Edition)
 int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
 int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);
@@ -159,6 +169,25 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
 int do_xapi_RefreshWindow(uint64_t handle);
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
+void do_xapi_GetSystemVersion(uint64_t str);
+uint64_t do_xapi_GetTime();
+void do_xapi_GetCurrentUser(uint64_t dst);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // // Proto (POSIX Edition)
 // int sys_read(uint32_t fd, uint8_t *buf, size_t count);

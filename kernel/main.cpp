@@ -43,6 +43,8 @@ void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
+extern UserInfo *current_user;
+
 void test_task()
 {
     uint64_t ret;
@@ -346,9 +348,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
-    keyboard_init();
-    mouse_init();
-
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");
     write_serial_hex(phys);
@@ -373,6 +372,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     fatfs_init();
 
     mount_root();
+
+    keyboard_init();
+    mouse_init();
+
+    init_user();
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 

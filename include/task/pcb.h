@@ -91,7 +91,6 @@ struct process_control_block
     char    *cwd;       // 工作目录路径
     char   **envp;      // 环境变量指针
     size_t   envc;      // 环境变量数量
-    UserInfo user_info; // 用户信息
 
     bool        vfork;       // 是否是 vfork 创建的进程
     size_t      child_index; // 子进程队列索引
@@ -130,6 +129,8 @@ struct thread_control_block
     uint64_t   brk_end;
     uint64_t   load_start;
     uint64_t   load_end;
+    
+    UserInfo  *user_info; // 用户信息
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
