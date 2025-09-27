@@ -18,9 +18,9 @@ void signal_revert()
     __asm__ __volatile__("syscall" : : "a"(SXAH_SYSCALL_RETURN) : "rcx", "r11", "memory");
 }
 
-void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf)
+void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask)
 {
-    tcb_t current = get_current_task();
+    tcb_t current = ftask;
 
     // 检查是否有注册的信号处理函数
     if (WinMpf != NULL)
@@ -35,7 +35,7 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 
 void signal_end() 
 {
-    kill_thread(get_current_task()->tid);   // 他紫砂了
+    kill_thread(get_current_task()->tid, get_current_task()->parent_group); // 他紫砂了
     while (true);
 }
 

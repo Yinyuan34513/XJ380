@@ -2,6 +2,7 @@
 #define _WINDOW_H_
 
 #include <graphics/sheet.h>
+#include <task/pcb.h>
 
 typedef struct WINDOWLS *WINDOWLSP;
 typedef void (*MsgPrcor)(uint64_t Type, uint64_t hData,
@@ -16,6 +17,7 @@ typedef struct WINDOWLS
     uint32_t  width;
     uint32_t  height;
     MsgPrcor  WinMPf;
+    tcb_t     w_task;
     WINDOWLSP next;
 } WINDOWLS;
 

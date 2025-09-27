@@ -68,6 +68,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     xwmi->win_num++;
     new_window->WinMPf = NULL;
 
+    new_window->w_task = get_current_task();
+
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, WINDOW_COLOR);
 
@@ -225,8 +227,7 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
     WINDOWLS *front_p = xwmi->start;
     while (true)
     {
-        SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
-        if (sheet->index == csheet->index) { return front_p; }
+        if (front_p->w_sheet == csheet->index) { return front_p; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }

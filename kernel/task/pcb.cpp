@@ -91,12 +91,12 @@ tcb_t found_thread(pcb_t pcb, int tid)
     return NULL;
 }
 
-void kill_thread(int tid)
+void kill_thread(int tid, pcb_t parent_group)
 {
     close_interrupt;
     disable_scheduler();
 
-    tcb_t current = found_thread(kernel_group, tid);
+    tcb_t current = found_thread(parent_group, tid);
     pcb_t group   = current->parent_group;
     write_serial_fmt("kill thread %s\n", current->name);
 
@@ -130,6 +130,11 @@ void kill_thread(int tid)
     }
     switch_page_directory(get_current_directory());
 
+}
+
+void kill_thread(int tid)
+{
+    kill_thread(tid, kernel_group);
 }
 
 void recycle_process(pcb_t pcb) {

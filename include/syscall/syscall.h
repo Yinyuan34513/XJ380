@@ -190,7 +190,7 @@ int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
 void init_syscall();
 
 // Proto (XAPI Edition)
-void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf);
+void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
 void init_signal();
 void signal_revert();
 void signal_end();

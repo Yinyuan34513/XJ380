@@ -280,6 +280,14 @@ void desktop_flusher()
         }
 
         k_input = get_keyboard_input();
+        if (k_input != NULL)
+        {
+            WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+            if (a != NULL)
+            {
+                do_signal(0, 1, 1, a->WinMPf, a->w_task);
+            }
+        }
         if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
             k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
         {
