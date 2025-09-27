@@ -10,16 +10,21 @@
 #include <proto.hpp>
 #include <ttf.h>
 
-#define WINDOW_ALPHA_VALUE  0xaa
-#define WINDOW_COLOR_R      0x00
-#define WINDOW_COLOR_G      0xa2
-#define WINDOW_COLOR_B      0xe8
-#define WINDOW_COLOR        {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE}
+#define WINDOW_ALPHA_VALUE 0xaa
+#define WINDOW_COLOR_R     0x00
+#define WINDOW_COLOR_G     0xa2
+#define WINDOW_COLOR_B     0xe8
+#define WINDOW_COLOR                                                                                                   \
+    {                                                                                                                  \
+        WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE                                             \
+    }
 #define WINDOW_LIGHT_OFFEST 0x0f
 // #define WINDOW_LIGHT_COLOR  {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, (uint8_t)(WINDOW_ALPHA_VALUE + WINDOW_LIGHT_OFFEST)}
 #define WINDOW_LIGHT_COLOR                                                                                             \
-    {(uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST), (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),                 \
-     (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST), WINDOW_ALPHA_VALUE}
+    {                                                                                                                  \
+        (uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST), (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),              \
+            (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST), WINDOW_ALPHA_VALUE                                        \
+    }
 
 bool WindowIsCreating = false;
 
@@ -62,6 +67,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     *windowls = new_window;
     xwmi->win_num++;
     new_window->WinMPf = NULL;
+
+    new_window->w_task = get_current_task();
 
     create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, WINDOW_COLOR);
@@ -220,8 +227,7 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
     WINDOWLS *front_p = xwmi->start;
     while (true)
     {
-        SHEET *sheet = get_sheet(sht, &(front_p->w_sheet));
-        if (sheet->index == csheet->index) { return front_p; }
+        if (front_p->w_sheet == csheet->index) { return front_p; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }

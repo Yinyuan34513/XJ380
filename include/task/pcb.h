@@ -145,7 +145,14 @@ size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();
-void switch_to_user_mode();
-void recycle_process(pcb_t pcb);
-void thread_exit(int exit_code);
-void kill_thread(int tid) ;
+void     switch_to_user_mode();
+void     recycle_process(pcb_t pcb);
+void     thread_exit(int exit_code);
+void kill_thread(int tid, pcb_t parent_group);
+void     kill_thread(int tid);
+
+void get_thread_name_from_filepath(char *path, char *name);
+
+size_t create_signal_thread(void *_start, 
+                            uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func, 
+                            pcb_t pcb);

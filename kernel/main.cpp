@@ -33,7 +33,7 @@ extern mouse_dec     ms_dec;
 extern bool          winRD_lock;
 extern int           scheduler_is_ready;
 extern XSK_SMP_INFO *xsi;
-size_t tid;
+size_t               tid;
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
 EFI_SYSTEM_TABLE        *ST;
@@ -120,10 +120,7 @@ void components_flusher()
                 tw_data->need_flush = true;
             }
         }
-        if (ms_dec.need_flush)
-        {
-            process_mouse_info();
-        }
+        if (ms_dec.need_flush) { process_mouse_info(); }
     }
 }
 
@@ -283,6 +280,14 @@ void desktop_flusher()
         }
 
         k_input = get_keyboard_input();
+        if (k_input != NULL)
+        {
+            WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+            if (a != NULL)
+            {
+                do_signal(0, 1, 1, a->WinMPf, a->w_task);
+            }
+        }
         if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
             k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
         {
@@ -306,7 +311,7 @@ void desktop_flusher()
 void tst()
 {
     write_serial_fmt("Stack Test\n");
-    // while (1);
+    while (1);
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
@@ -331,12 +336,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     ahci_init();
     nvme_init();
-    vfs_init();
-    dev_init();
-    partition_init();
-    sysfs_init();
-    fs_syscall_init();
-    fatfs_init();
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
@@ -347,18 +346,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
-    mount_root();
-
     keyboard_init();
     mouse_init();
-
-    vfs_node_t f;
-    f = vfs_open("/1.txt");
-    char buf[1024];
-    if (vfs_read(f, buf, 0, f->size) == -1)
-        write_serial_fmt("read failed\n");
-    else
-        write_serial_fmt("read file: %s\n", buf);
 
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");
@@ -366,6 +355,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("\n");
 
     init_syscall();
+    init_signal();
 
     process_setup();
 
@@ -373,6 +363,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     {
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
+
+    get_current_task()->cwd = NULL;
+    vfs_init();
+    dev_init();
+    partition_init();
+    sysfs_init();
+    fs_syscall_init();
+    fatfs_init();
+
+    mount_root();
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 

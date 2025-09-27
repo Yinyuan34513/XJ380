@@ -142,6 +142,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/
+	@cp -a ./BackGround.jpeg $(BUILD_DIR)/XJ380/
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

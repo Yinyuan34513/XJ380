@@ -19,6 +19,7 @@ out/draw.o
 *.o
 *.xz
 *.zip
+2.txt
 
 # will generate by Makefile
 .clangd

@@ -2,8 +2,8 @@
 #include "mm/alloc/alloc.h"
 #include "stdarg.h"
 #include <cpu/lock.h>
-#include <proto.hpp>
 #include <font.h>
+#include <proto.hpp>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
@@ -71,25 +71,27 @@ void write_serial_string(const char *str)
     spin_lock(serial_lock);
     while (*str)
     {
-        #if BUILD_VERSION == DEBUG_VERSION
-        		if (*str == '\n') {
-        			serial_x = 0;
-        			serial_y += 16;
-        		} else {
-        			rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
-        			WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
-        			serial_x += 8;
-        		}
+#if BUILD_VERSION == DEBUG_VERSION
+        if (*str == '\n')
+        {
+            serial_x  = 0;
+            serial_y += 16;
+        }
+        else
+        {
+            rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
+            WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
+            serial_x += 8;
+        }
 
-        		if (serial_y >= fbc_addr->vertical_resolution) {
-        			rect(*fbc_addr, 0, 0, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
-        			serial_x_max = 0;
-        			serial_y = 0;
-        		}
-        		if (serial_x > serial_x_max) {
-        			serial_x_max = serial_x;
-        		}
-        #endif
+        if (serial_y >= fbc_addr->vertical_resolution)
+        {
+            rect(*fbc_addr, 0, 0, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
+            serial_x_max = 0;
+            serial_y     = 0;
+        }
+        if (serial_x > serial_x_max) { serial_x_max = serial_x; }
+#endif
         write_serial(*str++);
     }
     spin_unlock(serial_lock);
@@ -101,7 +103,7 @@ void write_serial_dec(unsigned long long dec)
     char     str[255];
     int      radix   = 10;
     char     index[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; // 索引表
-    unsigned unum;                                             // 存放要转换的整数的绝对值,转换的整数可能是负数
+    unsigned unum; // 存放要转换的整数的绝对值,转换的整数可能是负数
     int      i = 0, j,
         k; // i用来指示设置字符串相应位，转换之后i其实就是字符串的长度；转换后顺序是逆序的，有正负的情况，k用来指示调整顺序的开始位置;j用来指示调整顺序时的交换。
 
@@ -117,8 +119,8 @@ void write_serial_dec(unsigned long long dec)
     // 转换部分，注意转换后是逆序的
     do
     {
-        str[i++]  = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
-        unum     /= radix;                         // unum去掉最后一位
+        str[i++] = index[unum % (unsigned)radix]; // 取unum的最后一位，并设置为str对应位，指示索引加1
+        unum /= radix;                            // unum去掉最后一位
 
     } while (unum); // 直至unum为0退出循环
 
@@ -186,7 +188,6 @@ typedef enum num_size
     LONG_2 = 4, // long long
     SIZE_T = 5, // size_t
 } num_size_t;
-
 
 size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // `fmt_ptr` is a pointer to `fmt`
 {
@@ -464,7 +465,7 @@ void serial_wprintf(const char *fmt, ...)
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }
 
 /**
@@ -485,7 +486,7 @@ void write_serial_fmt(const char *fmt, ...)
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }
 
 typedef struct UnsafeBufWriterData
@@ -538,5 +539,5 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    open_interrupt;
+    if (!no_interrupt) open_interrupt;
 }

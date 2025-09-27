@@ -160,7 +160,6 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     return entry;
 }
 
-
 void create_user_process_from_file(char *path, pcb_t pcb)
 {
     char  process_name[50];

@@ -174,7 +174,7 @@ void *mman_aligned_alloc(mman_t man, size_t size, size_t align)
 {
     if (align & (align - 1)) return NULL;                         // 不是 2 的幂次方
     if (align < 2 * sizeof(size_t)) return mman_alloc(man, size); // 对齐小于 2 倍指针大小
-    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size);        // 保证最小分配 2 个字长且对齐到 2 倍字长
+    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size); // 保证最小分配 2 个字长且对齐到 2 倍字长
 
     if (size >= ALLOC_LARGE_BLK_SIZE || align >= ALLOC_LARGE_BLK_SIZE)
     {

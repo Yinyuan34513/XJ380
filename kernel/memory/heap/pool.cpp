@@ -124,7 +124,7 @@ void *mpool_aligned_alloc(mpool_t pool, size_t size, size_t align)
 {
     if (align & (align - 1)) return NULL;                           // 不是 2 的幂次方
     if (align < 2 * sizeof(size_t)) return mpool_alloc(pool, size); // 对齐小于 2 倍指针大小
-    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size);          // 保证最小分配 2 个字长且对齐到 2 倍字长
+    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size); // 保证最小分配 2 个字长且对齐到 2 倍字长
 
     // 优先从空闲链表中分配
     void *ptr =

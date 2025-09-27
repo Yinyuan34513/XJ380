@@ -1,6 +1,9 @@
 #pragma once
 #include <proto.hpp>
 
+#define XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS 0xf717f000
+#define XPSR_OFFEST                         0x927
+
 // XJ380API POSIX Edition
 #define SYS_READ     0
 #define SYS_WRITE    1
@@ -100,7 +103,7 @@
 #define XAPI_EXECVE 390
 
 // P3.5
-#define XAPI_GET_VERSION    391
+#define XAPI_GET_VERSION 391
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -133,9 +136,9 @@
 #define MSG_CRL     6
 
 // P4.5
-#define XAPI_READBUFFER   406
-#define XAPI_WRITEBUFFER  407
-#define XAPI_WRITEBUFFERA 408
+#define XAPI_READBUFFER     406
+#define XAPI_WRITEBUFFER    407
+#define XAPI_WRITEBUFFERA   408
 #define XAPI_REFRESH_WINDOW 409
 
 // P4.6
@@ -187,4 +190,7 @@ int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
 void init_syscall();
 
 // Proto (XAPI Edition)
-void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2,MsgPrcor WinMpf);
+void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
+void init_signal();
+void signal_revert();
+void signal_end();
