@@ -164,7 +164,14 @@ void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap, unsi
 void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
                    /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
-    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, "%s", buf);
+    uint32_t temp_i_width;
+    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, &temp_i_width, "%s", buf);
+}
+
+void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
+                   /*unsigned bc, */ unsigned x, unsigned y, int size, uint32_t *i_width)
+{
+    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
 #define TTF_BUF_SIZE 128
@@ -200,7 +207,7 @@ static int utf8_char_len(unsigned char c)
 }
 
 // 刷新缓冲区内容到屏幕
-static void flush_ttf_buffer(FbTTFWriterData *data)
+static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
 {
     if (data->idx == 0) return;
 
@@ -245,6 +252,8 @@ static void flush_ttf_buffer(FbTTFWriterData *data)
     put_bitmap(data->sht, data->sheet_id, bitmap, data->x, data->y, width, height, 1920, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
+    *i_width = width;
+
     // 更新光标位置
     data->x += (int)width;
 
@@ -253,12 +262,14 @@ static void flush_ttf_buffer(FbTTFWriterData *data)
     data->idx = 0; // 重置缓冲区
 }
 
+uint32_t *input_width; // 玛德沙比format，只能写成这样了
+
 uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 {
     FbTTFWriterData *fbttf = (FbTTFWriterData *)writer->data;
 
     // 处理缓冲区溢出
-    if (fbttf->idx + utf8_char_len(ch) > fbttf->buf_size - 1) { flush_ttf_buffer(fbttf); }
+    if (fbttf->idx + utf8_char_len(ch) > fbttf->buf_size - 1) { flush_ttf_buffer(fbttf, input_width); }
 
     // 将字符添加到缓冲区
     fbttf->buf[fbttf->idx++] = ch;
@@ -266,7 +277,7 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
     // 如果是换行符，立即刷新
     if (ch == '\n')
     {
-        flush_ttf_buffer(fbttf);
+        flush_ttf_buffer(fbttf, input_width);
         fbttf->y += fbttf->size + 4;
         fbttf->x  = fbttf->start_x;
     }
@@ -277,6 +288,8 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
                        ...)
 {
+    uint32_t temp_i_width;
+    input_width = &temp_i_width;
     char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
     // char buf[TTF_BUF_SIZE];
     buf[0]         = '\0';
@@ -309,7 +322,49 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     va_end(args);
 
     // 刷新剩余内容
-    flush_ttf_buffer(&fb_ttf_writer_data);
+    flush_ttf_buffer(&fb_ttf_writer_data, &temp_i_width);
+
+    free(buf);
+    free(rune_buf);
+}
+
+void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width, const char *fmt,
+                       ...)
+{
+    input_width = i_width;
+    char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
+    // char buf[TTF_BUF_SIZE];
+    buf[0]         = '\0';
+    Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
+    // Rune rune_buf[TTF_BUF_SIZE];
+
+    // 初始化写入器数据
+    FbTTFWriterData fb_ttf_writer_data = {
+        .sht           = sht,
+        .sheet_id      = sheet_id,
+        .color         = fc,
+        .start_x       = x,
+        .start_y       = y,
+        .x             = x,
+        .y             = y,
+        .size          = size,
+        .rune_buf      = rune_buf,
+        .rune_buf_size = TTF_BUF_SIZE,
+        .buf           = buf,
+        .idx           = 0,
+        .buf_size      = TTF_BUF_SIZE,
+        .flush         = 0,
+    };
+
+    Writer fb_ttf_writer = {.data = &fb_ttf_writer_data, .handler = fb_ttf_writer_handler};
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&fb_ttf_writer, fmt, args);
+    va_end(args);
+
+    // 刷新剩余内容
+    flush_ttf_buffer(&fb_ttf_writer_data, i_width);
 
     free(buf);
     free(rune_buf);

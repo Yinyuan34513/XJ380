@@ -116,6 +116,16 @@ void  xapi_DrawText(
 	UINT32  color
 );
 
+void  xapi_DrawTextl(
+	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
+	WSTR 	str,
+	UINT32	size,
+	UINT32  color,
+	UINT32 *width
+);
+
 // 4-3
 void  xapi_DrawBMP (
 	HDLE  	handle,

@@ -127,6 +127,7 @@ typedef struct {
 #define XAPI_DRAW_CIRCLE      400
 #define XAPI_DRAW_CIRCLE_FILL 401
 #define XAPI_DRAW_TEXT        402
+#define XAPI_DRAW_TEXT_L      414
 
 // P4.3
 #define XAPI_DRAW_BMP 403
@@ -153,7 +154,7 @@ typedef struct {
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
-// 当前最大号：413
+// 当前最大号：414
 
 // Proto (XAPI Edition)
 int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
@@ -167,6 +168,7 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 // int do_xapi_DrawCircle_fill(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color);
 // int do_xapi_DrawCircle(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color);
 int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
+int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t size, uint32_t color, uint64_t i_width);
 int do_xapi_RefreshWindow(uint64_t handle);
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
 void do_xapi_GetSystemVersion(uint64_t str);
