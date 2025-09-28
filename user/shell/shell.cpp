@@ -23,13 +23,9 @@ int main(int argc, char *argv[], char *envp[])
     
     // 初始绘制
     xapi_DrawRect(handle, 0, 0, 480, 270, 0xFFFFFFFF, true);
+    paint_arrow_sign(0, 0);
     xapi_RefreshWindow(handle);
 
     while (1)
         __asm__ __volatile__("pause");
-}
-
-void paint_arrow_sign()
-{
-    // 
 }
