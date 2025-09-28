@@ -24,12 +24,16 @@
 #include <stdint.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
+#include <user/user.h>
 
 UserInfo *current_user = NULL;
 
 void init_user()
 {
     current_user = (UserInfo *)malloc(sizeof(UserInfo));
+    // 这里先偷个懒，之后再改
+    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish"));
+    current_user->user_type = XUT_Root;
 }
 
 void get_thread_name_from_filepath(char *path, char *name)

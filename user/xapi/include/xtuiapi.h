@@ -62,4 +62,4 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);
 // 3-5
 void		xapi_GetSystemVersion(WSTR version);
 UINT64		xapi_GetTime();
-void		xapi_GetCurrentUser(UserInfo user_info);
+void		xapi_GetCurrentUser(UserInfo *user_info);

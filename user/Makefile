@@ -22,7 +22,7 @@ cp537.elf: cp537.cpp
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-shell.elf: ./shell/shell.cpp ./shell/gh_sign.cpp
+shell.elf: ./shell/shell.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt

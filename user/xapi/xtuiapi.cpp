@@ -157,6 +157,6 @@ UINT64	xapi_GetTime() {
 	return enter_syscall(XAPI_GET_TIME, 0, 0, 0, 0, 0, 0);
 }
 
-void	xapi_GetCurrentUser(UserInfo user_info) {
-	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)&user_info, 0, 0, 0, 0, 0);
+void	xapi_GetCurrentUser(UserInfo *user_info) {
+	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
 }
