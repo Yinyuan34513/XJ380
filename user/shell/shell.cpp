@@ -29,7 +29,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_DrawRect(handle, 0, 0, 479, 269, 0xFFFFFFFF, true);
     printline("XINGJI SpaceTerminal for XJ380");
     printline("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
-    paint_arrow_sign(0, 40);
+    paint_arrow_sign(2, 40);
     xapi_RefreshWindow(handle);
 
     while (1)
@@ -49,12 +49,13 @@ void paint_arrow_sign(int sx, int sy)
     uint32_t user_name_width = 0;
     xapi_GetCurrentUser(&current_user);
     xapi_DrawTextl(handle, sx, sy, current_user.name, 10, 0xffffffff, &user_name_width);
-    xapi_DrawRect(handle, sx, sy, sx + user_name_width + 4, sy + 16, 0x00a2e8ff, true);
-    // xapi_DrawTextl(handle, sx + 12, sy, current_user.name, 10, 0xffffffff, &user_name_width);
+    xapi_DrawRect(handle, sx, sy, sx + user_name_width + 16, sy + 16, 0x00a2e8ff, true);
 
-    // for (int y = 0; y < 10; y++) {
-    //     for (int x = 0; x < 20; x++) {
-    //         if (arrow_head[y][x] == '@') xapi_DrawPoint(handle, sx + x, sy + y, 0x00a2e8ff);
-    //     }
-    // }
+    for (int y = sy; y < sy + 20; y++) {
+        for (int x = sx + user_name_width + 16; x < sx + user_name_width + 26; x++) {
+            if (arrow_head[y][x] == '.') { xapi_DrawPoint(handle, x, y, 0x00a2e8ff); }
+        }
+    }
+
+    xapi_DrawText(handle, sx + 8, sy - 2, current_user.name, 10, 0xffffffff);
 }
