@@ -75,7 +75,7 @@ int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y,
+    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22,
                {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                 (uint8_t)((color) & 0xFF)});
 

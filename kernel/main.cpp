@@ -339,6 +339,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     ahci_init();
     nvme_init();
 
+    enable_intr();
+    keyboard_init();
+    mouse_init();
+    disable_intr();
+
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
     for (int i = 0; i < MAX_CPU_NUM; ++i)
@@ -372,9 +377,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     fatfs_init();
 
     mount_root();
-
-    keyboard_init();
-    mouse_init();
 
     init_user();
 
