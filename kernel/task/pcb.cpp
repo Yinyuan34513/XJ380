@@ -288,7 +288,7 @@ char *vfs_cwd_path_build(char *src)
     char *s = src;
     char *path;
     if (s[0] == '/') { path = strdup(s); }
-    else { path = pathacat(get_current_task()->parent_group->cwd, s); }
+    else { path = pathacat(get_current_task()->parent_group->cwd->name, s); }
     char *normalized_path = normalize_path(path);
     free(path);
     return normalized_path;
@@ -398,13 +398,13 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     for (uint64_t i = 3; i < 256; i++)
     {
-        if (!get_current_task()->fds[i]) continue;
+        if (!get_current_task()->parent_group->fds[i]) continue;
 
-        if (get_current_task()->fds[i]->flags & O_CLOEXEC)
+        if (get_current_task()->parent_group->fds[i]->flags & O_CLOEXEC)
         {
-            vfs_close(get_current_task()->fds[i]);
-            free(get_current_task()->fds[i]);
-            get_current_task()->fds[i] = NULL;
+            vfs_close(get_current_task()->parent_group->fds[i]);
+            free(get_current_task()->parent_group->fds[i]);
+            get_current_task()->parent_group->fds[i] = NULL;
         }
     }
 
@@ -448,8 +448,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
-    new_pcb->cwd          = (char *)malloc(strlen(current_pcb->cwd));
-    strcpy(new_pcb->cwd, current_pcb->cwd);
+    new_pcb->cwd          = current_pcb->cwd;
     new_pcb->parent_task = current_pcb;
     new_pcb->queue_index = queue_enqueue(pcb_group_queue, new_pcb);
     new_pcb->vfork       = is_vfork;
@@ -739,14 +738,12 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->thread_queue = queue_init();
     pcb->ppid         = 0;
     pcb->pagedir      = directory ? directory : get_kernel_pagedir();
-    pcb->cwd          = (char *)malloc(1024);
+    pcb->cwd          = NULL;
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
     pcb->envp         = NULL;
     pcb->envc         = 0;
     pcb->cmdline      = (char *)malloc(strlen(cmdline));
-    memset(pcb->cwd, 0, 1024);
-    strcpy(pcb->cwd, pcb->parent_task->cwd);
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
     return pcb;
@@ -771,9 +768,8 @@ void process_setup()
     kernel_pcb->status       = RUNNING;
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
-    kernel_pcb->cwd          = (char *)malloc(1024);
-    memset(kernel_pcb->cwd, 0, 1024);
-    kernel_pcb->cwd[0]      = '/';
+    kernel_pcb->cwd          = NULL;
+    kernel_pcb->cwd      = rootdir;
     kernel_pcb->child_pcb   = queue_init();
     kernel_pcb->child_index = 0;
 

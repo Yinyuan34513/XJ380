@@ -363,7 +363,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
 
-    get_current_task()->cwd = NULL;
+    get_current_task()->parent_group->cwd = NULL;
     vfs_init();
     dev_init();
     partition_init();

@@ -146,7 +146,7 @@ int vfs_mkfile(const char *name)
     char      *path;
     if (name[0] != '/')
     {
-        current = get_current_task()->cwd;
+        current = get_current_task()->parent_group->cwd;
         path    = strdup(name);
     }
     else { path = strdup(name + 1); }
@@ -276,8 +276,8 @@ err:
 
 vfs_node_t vfs_open(const char *_path)
 {
-    if (get_current_task() && get_current_task()->cwd)
-        return vfs_open_at(get_current_task()->cwd, _path, false);
+    if (get_current_task() && get_current_task()->parent_group->cwd)
+        return vfs_open_at(get_current_task()->parent_group->cwd, _path, false);
     else
         return vfs_open_at(rootdir, _path, false);
 }
