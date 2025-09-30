@@ -119,6 +119,7 @@
 #define XAPI_DRAW_CIRCLE_FILL 401
 #define XAPI_DRAW_TEXT        402
 #define XAPI_DRAW_TEXT_L      414
+#define XAPI_DRAW_TEXT_SW     415
 
 // P4.3
 #define XAPI_DRAW_BMP 403

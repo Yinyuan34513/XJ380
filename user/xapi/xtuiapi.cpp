@@ -131,13 +131,16 @@ WSTR xcr_hex2char(UINT64 hex) {
 	return buf1;
 }
 
-UINT32 xapi_toRGB(UINT8 r, UINT8 g, UINT8 b) {
+UINT32 toRGB(UINT8 r, UINT8 g, UINT8 b) {
 	return r << 24 | g << 16 | b << 8 | 0xff;
 }
 
-UINT32 xapi_toRGBA(UINT32 color) {
+UINT32 toRGBA(UINT32 color) {
 	return ((color >> 16) & 0xff) | ((color >> 8) & 0xff) | (color & 0xff) | ((color >> 24) & 0xff);
 }
+
+#define CC(color) \
+	(((color >> 16) & 0xff) | ((color >> 8) & 0xff) | (color & 0xff) | ((color >> 24) & 0xff))
 
 // 3-4
 UINT64  xapi_Fork() {

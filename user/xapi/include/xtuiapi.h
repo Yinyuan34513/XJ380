@@ -52,8 +52,8 @@ void xapi_CloseFile(XFILE* fsptr);
 UINT64 	xcr_char2int(WSTR str);
 WSTR 	xcr_int2char(UINT64 dec); 
 WSTR 	xcr_hex2char(UINT64  hex);
-UINT32 	xapi_toRGB(UINT8 r, UINT8 g, UINT8 b);
-UINT32 	xapi_toRGBA(UINT32 color);
+UINT32 	toRGB(UINT8 r, UINT8 g, UINT8 b);
+UINT32 	toRGBA(UINT32 color);
 
 // 3-4
 UINT64  xapi_Fork();

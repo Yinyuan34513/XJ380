@@ -158,6 +158,16 @@ int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t si
     return true;
 }
 
+int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *TextString   = (char *)(str);
+    draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 5, y + 22, size,
+              {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+               (uint8_t)((color) & 0xFF)});
+    return true;
+}
+
 int do_xapi_RefreshWindow(uint64_t handle)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
