@@ -260,6 +260,7 @@ void desktop_flusher()
 
     while (1)
     {
+        enable_intr();
         // if (tw_data->flushing) { continue; } // Sync, but bad performance
         if (tw_data->need_flush)
         {
