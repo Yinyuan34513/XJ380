@@ -70,7 +70,7 @@
 // 透明
 #define DOCK_COL                                                                                                       \
     {                                                                                                                  \
-        0xe6, 0xe6, 0xe6, 0xaa                                                                                         \
+        0xff, 0xff, 0xff, 0x7d                                                                                         \
     } // 任务栏专用色
 
 #endif

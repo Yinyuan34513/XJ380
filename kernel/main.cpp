@@ -221,9 +221,6 @@ void desktop_flusher()
     write_serial_string("CPU Model: ");
     write_serial_string(CPU_Model);
     write_serial_string("\n");
-
-    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479,
-              fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
 #endif
     // wsod_debug();
 
