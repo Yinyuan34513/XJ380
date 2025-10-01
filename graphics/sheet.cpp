@@ -635,3 +635,26 @@ uint32_t get_ver()
 {
     return fbc_addr->vertical_resolution;
 }
+
+void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
+                       uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *dst_sheet_id)
+        {
+            // 找到啦！
+            SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    dst[(dst_y + y) * front_p->width + (dst_x + x)] = src[y * width + x];
+                }
+            }
+        }
+        else if (front_p->next == NULL) { return; }
+        front_p = front_p->next;
+    }
+}

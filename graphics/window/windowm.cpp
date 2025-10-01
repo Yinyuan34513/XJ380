@@ -10,22 +10,6 @@
 #include <proto.hpp>
 #include <ttf.h>
 
-#define WINDOW_ALPHA_VALUE 0xaa
-#define WINDOW_COLOR_R     0x00
-#define WINDOW_COLOR_G     0xa2
-#define WINDOW_COLOR_B     0xe8
-#define WINDOW_COLOR                                                                                                   \
-    {                                                                                                                  \
-        WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, WINDOW_ALPHA_VALUE                                             \
-    }
-#define WINDOW_LIGHT_OFFEST 0x0f
-// #define WINDOW_LIGHT_COLOR  {WINDOW_COLOR_R, WINDOW_COLOR_G, WINDOW_COLOR_B, (uint8_t)(WINDOW_ALPHA_VALUE + WINDOW_LIGHT_OFFEST)}
-#define WINDOW_LIGHT_COLOR                                                                                             \
-    {                                                                                                                  \
-        (uint8_t)(WINDOW_COLOR_R + WINDOW_LIGHT_OFFEST), (uint8_t)(WINDOW_COLOR_G + WINDOW_LIGHT_OFFEST),              \
-            (uint8_t)(WINDOW_COLOR_B + WINDOW_LIGHT_OFFEST), WINDOW_ALPHA_VALUE                                        \
-    }
-
 bool WindowIsCreating = false;
 
 void init_xwm(XWM_INFO *xwmi)
@@ -33,6 +17,13 @@ void init_xwm(XWM_INFO *xwmi)
     write_serial_string("Initializing XWM...\n");
     xwmi->start   = NULL;
     xwmi->win_num = 0;
+    write_serial_string("Reading Theme...\n");
+    LoadPictureOgM(&xwmi->theme.top,      "/system/theme/skyglass/top.png");
+    LoadPictureOgM(&xwmi->theme.bottom,   "/system/theme/skyglass/bottom.png");
+    LoadPictureOgM(&xwmi->theme.left,     "/system/theme/skyglass/left.png");
+    LoadPictureOgM(&xwmi->theme.right,    "/system/theme/skyglass/right.png");
+    LoadPictureOgM(&xwmi->theme.close,    "/system/theme/skyglass/close.png");
+    LoadPictureOgM(&xwmi->theme.min,      "/system/theme/skyglass/min.png");
     write_serial_string("XWM Initializing Success.\n");
 }
 
@@ -70,85 +61,40 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     new_window->w_task = get_current_task();
 
-    create_sheet(sht, 72, 72, width + 10, height + 27, MovableSheetType, -1, &(new_window->w_sheet));
-    draw_rect(sht, &(new_window->w_sheet), 0, 0, width + 9, height + 26, WINDOW_COLOR);
+    create_sheet(sht, 72, 72, width + 24, height + 52, MovableSheetType, -1, &(new_window->w_sheet));
+    draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
 
-    draw_rect(sht, &(new_window->w_sheet), 5, 22, width + 3, height + 21, {0xff, 0xff, 0xff, 0xff});
+    SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((width + 24) * 27 * 4);
+    SHEET_BUFFER *lft = (SHEET_BUFFER *)malloc(height * 12 * 4);
 
-    for (int y = 0; y < 9; y++)
-    {
-        for (int x = 0; x < 9; x++)
-        {
-            if (wbutton_c[y][x] == 'a') { draw_point(sht, &(new_window->w_sheet), x, y, {0, 0, 0, 0}); }
-            else if (wbutton_c[y][x] == '.')
-            {
-                // do nothing
-            }
-            else if (wbutton_c[y][x] == '@')
-            {
-                draw_point(sht, &(new_window->w_sheet), x, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
-            }
-        }
-    }
+    // 标题栏
+    resize_theme_width(top, xwmi->theme.top, width + 24, 336, 27);
+    copy_buffer_by_id(sht, &(new_window->w_sheet), top, 0, 0, width + 24, 27);
+    // 底部
+    resize_theme_width(top, xwmi->theme.bottom, width + 24, 181, 20);
+    copy_buffer_by_id(sht, &(new_window->w_sheet), top, 0, height + 27, width + 24, 20);
+    // 左侧
+    resize_theme_height(lft, xwmi->theme.left, 12, height, 600);
+    copy_buffer_by_id(sht, &(new_window->w_sheet), lft, 0, 27, 12, height);
+    // 右侧
+    resize_theme_height(lft, xwmi->theme.right, 12, height, 600);
+    copy_buffer_by_id(sht, &(new_window->w_sheet), lft, width + 12, 27, 12, height);
 
-    for (int y = 0; y < 17; y++)
-    {
-        for (int x = 0; x < 32; x++)
-        {
-            if (wbutton_close[y][x] == '.')
-            {
-                draw_point(sht, &(new_window->w_sheet), x + width - 22, y, {0xed, 0x1c, 0x24, WINDOW_ALPHA_VALUE});
-            }
-            else if (wbutton_close[y][x] == 'a')
-            {
-                draw_point(sht, &(new_window->w_sheet), x + width - 22, y, {0, 0, 0, 0});
-            }
-            else if (wbutton_close[y][x] == '@')
-            {
-                draw_point(sht, &(new_window->w_sheet), x + width - 22, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
-            }
-        }
-    }
+    print_box_ttf(sht, &(new_window->w_sheet), title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
+    print_box_ttf(sht, &(new_window->w_sheet), title, BLACK, 12, 4, 11);
 
-    for (int y = 0; y < 17; y++)
-    {
-        for (int x = 0; x < 32; x++)
-        {
-            if (wbutton_little[y][x] == '@')
-            {
-                draw_point(sht, &(new_window->w_sheet), x + width - 53, y, {0, 0, 0, WINDOW_ALPHA_VALUE});
-            }
-        }
-    }
+    free(top);
+    free(lft);
 
-    for (int y = 0; y < 4; y++)
-    {
-        for (int x = 0; x < 4; x++)
-        {
-            if (wbutton_cdl[y][x] == 'a') { draw_point(sht, &(new_window->w_sheet), x, y + height + 23, {0, 0, 0, 0}); }
-        }
-    }
-
-    for (int y = 0; y < 4; y++)
-    {
-        for (int x = 0; x < 4; x++)
-        {
-            if (wbutton_cdr[y][x] == 'a')
-            {
-                draw_point(sht, &(new_window->w_sheet), x + width + 6, y + height + 23, {0, 0, 0, 0});
-            }
-        }
-    }
-
-    print_box_ttf(sht, &(new_window->w_sheet), title, WHITE, 22, 0, 11);
-
-    refresh_part_sheet(sht, 72, 72, width + 10 + 72, height + 27 + 72);
+    refresh_part_sheet(sht, 72, 72, width + 24 + 72, height + 52 + 72);
     WindowIsCreating = false;
 }
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
 {
-    draw_rect(sht, &(windowls->w_sheet), 22, 0, getXsize(sht, &(windowls->w_sheet)) - 81, 20, WINDOW_COLOR);
+    SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((windowls->width + 24) * 27 * 4);
+    resize_theme_width(top, xwmi->theme.top, windowls->width + 24, 336, 27);
+    copy_buffer_by_id(sht, &windowls->w_sheet, top, 0, 0, windowls->width + 24, 27);
     print_box_ttf(sht, &(windowls->w_sheet), title, WHITE, 22, 0, 11);
     refresh_part_sheet(sht, getBX(sht, &(windowls->w_sheet)), getBY(sht, &(windowls->w_sheet)),
                        getBX(sht, &(windowls->w_sheet)) + getXsize(sht, &(windowls->w_sheet)) + 10,
