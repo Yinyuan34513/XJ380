@@ -30,7 +30,7 @@ typedef struct WIN_THEME
     SHEET_BUFFER *close;
     SHEET_BUFFER *min;
     SHEET_BUFFER *close_light;
-    SHEET_BUFFER *min_right;
+    SHEET_BUFFER *min_light;
 } WIN_THEME;
 
 typedef struct XWM_INFO

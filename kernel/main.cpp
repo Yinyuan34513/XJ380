@@ -127,6 +127,8 @@ void components_flusher()
     }
 }
 
+extern bool allow_to_flush = false;
+
 void desktop_flusher()
 {
     no_interrupt = true;
@@ -243,6 +245,7 @@ void desktop_flusher()
 
     // delete_window(&xwmi, &shtinf, test_win);
 
+    allow_to_flush = true;
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
 

@@ -79,6 +79,9 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     // 右侧
     resize_theme_height(lft, xwmi->theme.right, 12, height, 600);
     copy_buffer_by_id(sht, &(new_window->w_sheet), lft, width + 12, 27, 12, height);
+    // 关闭 & 最小化按钮
+    copy_buffer_by_id_without_alpha(sht, &(new_window->w_sheet), xwmi->theme.close, width - 21, 5, 41, 18);
+    copy_buffer_by_id_without_alpha(sht, &(new_window->w_sheet), xwmi->theme.min, width - 48, 5, 26, 18);
 
     print_box_ttf(sht, &(new_window->w_sheet), title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
     print_box_ttf(sht, &(new_window->w_sheet), title, BLACK, 12, 4, 11);
