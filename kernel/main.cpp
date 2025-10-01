@@ -43,6 +43,8 @@ void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
+extern bool allow_to_flush = false;
+
 extern UserInfo *current_user;
 
 void test_task()
@@ -97,6 +99,11 @@ TimerWidgetsData *tw_data = NULL;
 
 void components_flusher()
 {
+    while (true)
+    {
+        if (allow_to_flush)
+            break;
+    }
     write_serial_string("components flusher is running\n");
     while (true)
     {
@@ -126,8 +133,6 @@ void components_flusher()
         if (ms_dec.need_flush) { process_mouse_info(); }
     }
 }
-
-extern bool allow_to_flush = false;
 
 void desktop_flusher()
 {

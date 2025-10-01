@@ -10,30 +10,6 @@ enum SystemSheetType
     TopSheetType
 };
 
-typedef struct SHEET *SHEETP;
-
-struct SHEET
-{
-    SHEETP   front;
-    void    *buffer;
-    int      bx, by;
-    uint32_t width, height;
-    uint32_t type;
-    uint16_t index;
-    bool     is_change;
-    SHEETP   next;
-};
-
-typedef struct
-{
-    SHEET                   *start;
-    void                    *temp_buffer;
-    uint32_t                 scrx, scry;
-    uint16_t                 sheet_num; // 图层数量 - 1
-    uint16_t                 sht_numed; // 图层数量 - 1，用于编号
-    const FrameBufferConfig *fbc;
-} SHEET_INFO;
-
 typedef struct
 {
     uint8_t r;
@@ -56,6 +32,38 @@ typedef struct
     uint8_t g;
     uint8_t b;
 } SHEET_BUFFER_ARGB;
+
+struct FoxLandPeek
+{
+    SHEET_BUFFER    *fl_peek_buffer;
+    uint8_t         *peek_sign;
+};
+
+typedef struct SHEET *SHEETP;
+
+struct SHEET
+{
+    SHEETP   front;
+    void    *buffer;
+    int      bx, by;
+    uint32_t width, height;
+    uint32_t type;
+    uint16_t index;
+    bool     is_change;
+    SHEETP   next;
+};
+
+typedef struct
+{
+    SHEET                   *start;
+    void                    *temp_buffer;
+    uint32_t                 scrx, scry;
+    uint16_t                 sheet_num; // 图层数量 - 1
+    uint16_t                 sht_numed; // 图层数量 - 1，用于编号
+    FoxLandPeek              foxland;
+    const FrameBufferConfig *fbc;
+} SHEET_INFO;
+
 void      init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
 void      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                        uint16_t *sheet_id);

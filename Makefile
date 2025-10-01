@@ -135,6 +135,7 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
+	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -146,6 +147,7 @@ vdisk: all
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/
 	@cp -a ./BackGround.jpeg $(BUILD_DIR)/XJ380/
 	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
+	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

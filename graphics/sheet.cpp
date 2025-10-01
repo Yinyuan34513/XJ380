@@ -4,6 +4,14 @@
 bool SheetIsRefreshing = false;
 bool SheetIsCreating   = false;
 
+void init_foxland(SHEET_INFO *sht)
+{
+    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)malloc(sht->scrx * sht->scry * 4);
+    sht->foxland.peek_sign      = (uint8_t *)malloc(sht->scrx * sht->scry * sizeof(uint8_t));
+    // LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, 
+    //             "/system/foxland/peek.png");
+}
+
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 {
     write_serial_string("Initializing Sheet Manager...\n");
@@ -43,6 +51,9 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
             SheetBuffer++;
         }
     }
+
+    init_foxland(sht);
+
     write_serial_string("Sheet Manager Initialize Success.\n");
 }
 
@@ -457,6 +468,8 @@ void refresh_sheet(SHEET_INFO *sht)
     SHEET        *front_p    = sht->start;
     SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
 
+    uint8_t *temp_peek_sign = sht->foxland.peek_sign;
+
     for (int i = 0; i < sht->sheet_num + 1; i++)
     {
         write_serial_string("Refreshing Sheet Index ");
@@ -493,6 +506,7 @@ void refresh_sheet(SHEET_INFO *sht)
                     TempBuffer[BufferOffest].b =
                         SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 +
                         TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
+                    temp_peek_sign[BufferOffest] = 1;
                 }
                 BufferOffest++;
             }
@@ -500,6 +514,29 @@ void refresh_sheet(SHEET_INFO *sht)
         }
         front_p = front_p->next;
     }
+
+    SHEET_BUFFER *temp_peek = sht->foxland.fl_peek_buffer;
+    for (int y = 0; y < sht->scry; y++)
+    {
+        for (int x = 0; x < sht->scrx; x++)
+        {
+            if (temp_peek_sign[y * sht->scrx + x] == 1)
+            {
+                TempBuffer[y * sht->scrx + x].r =
+                    temp_peek[y * sht->scrx + x].r * temp_peek[y * sht->scrx + x].a / 255 +
+                    TempBuffer[y * sht->scrx + x].r * (255 - temp_peek[y * sht->scrx + x].a) / 255;
+                TempBuffer[y * sht->scrx + x].g =
+                    temp_peek[y * sht->scrx + x].g * temp_peek[y * sht->scrx + x].a / 255 +
+                    TempBuffer[y * sht->scrx + x].g * (255 - temp_peek[y * sht->scrx + x].a) / 255;
+                TempBuffer[y * sht->scrx + x].b =
+                    temp_peek[y * sht->scrx + x].b * temp_peek[y * sht->scrx + x].a / 255 +
+                    TempBuffer[y * sht->scrx + x].b * (255 - temp_peek[y * sht->scrx + x].a) / 255;
+            }
+        }
+    }
+
+    memset(temp_peek_sign, 0, sht->scrx * sht->scry * sizeof(uint8_t));
+
     if (USERGB)
     {
         for (int y = 0; y < sht->scry; y++)

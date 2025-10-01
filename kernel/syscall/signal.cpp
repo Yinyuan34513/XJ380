@@ -38,7 +38,10 @@ void signal_end()
 {
     while(get_current_task()->parent_group->sigprci)__asm__ volatile("pause\n\t");
     kill_thread(get_current_task()->tid, get_current_task()->parent_group); // 他紫砂了
-    while (true)__asm__ volatile("pause\n\t");
+    while (true)
+    {
+        __asm__ volatile("pause\n\t");
+    }
 }
 
 void init_signal()
