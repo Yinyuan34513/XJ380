@@ -43,6 +43,8 @@ void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
+extern bool allow_to_flush = false;
+
 extern UserInfo *current_user;
 
 void test_task()
@@ -97,6 +99,11 @@ TimerWidgetsData *tw_data = NULL;
 
 void components_flusher()
 {
+    while (true)
+    {
+        if (allow_to_flush)
+            break;
+    }
     write_serial_string("components flusher is running\n");
     while (true)
     {
@@ -214,9 +221,6 @@ void desktop_flusher()
     write_serial_string("CPU Model: ");
     write_serial_string(CPU_Model);
     write_serial_string("\n");
-
-    draw_rect(&shtinf, &desktop_sheet_id, 440, fbc_addr->vertical_resolution - 70, 479,
-              fbc_addr->vertical_resolution - 21, {0x00, 0xa2, 0xe8, 0xff});
 #endif
     // wsod_debug();
 
@@ -243,6 +247,7 @@ void desktop_flusher()
 
     // delete_window(&xwmi, &shtinf, test_win);
 
+    allow_to_flush = true;
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
 

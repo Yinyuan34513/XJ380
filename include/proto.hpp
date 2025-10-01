@@ -234,4 +234,9 @@ void create_user_process_from_file(char *path, pcb_t pcb);
 void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
 void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
+void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
+void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
+                       uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
+void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
+                                     uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
 #endif

@@ -103,7 +103,7 @@ void init_dock(SHEET_INFO *sht, uint16_t *sheet_id)
     {
         for (int x = 0; x <= y; x++)
         {
-            draw_point(sht, sheet_id, x + tmpx, y + tmpy, {0xe6, 0xe6, 0xe6, 0xaa});
+            draw_point(sht, sheet_id, x + tmpx, y + tmpy, DOCK_COL);
         }
     }
 
