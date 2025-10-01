@@ -40,10 +40,10 @@ enum special_key_code
     KEY_F8,
     KEY_F9,
     KEY_F10,
-    KEY_NUML,
-    KEY_SCROLL,
     KEY_F11,
-    KEY_F12
+    KEY_F12,
+    KEY_NUML,
+    KEY_SCROLL
 };
 #    define wait_KB_write() while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
 

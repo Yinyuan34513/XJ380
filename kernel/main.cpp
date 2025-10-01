@@ -100,6 +100,7 @@ void components_flusher()
     write_serial_string("components flusher is running\n");
     while (true)
     {
+        enable_intr();
         if (tw_data != NULL)
         {
             tm         *time          = &tw_data->time;
@@ -288,17 +289,24 @@ void desktop_flusher()
             WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
             if (a != NULL)
             {
-                do_signal(0, NULL, k_input, a->WinMPf, a->w_task);
+                if (k_input != '\n' && k_input != '\b' && k_input < 128)
+                {
+                    do_signal(0, NULL, k_input, a->WinMPf, a->w_task);
+                }
+                else
+                {
+                    do_signal(7, NULL, k_input, a->WinMPf, a->w_task);
+                }
             }
         }
-        if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
-            k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
+        if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
+            k_input != KEY_CAPS && k_input != '\b')
         {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
             fontx += 8;
         }
-        else if (k_input == KEY_ENTER)
+        else if (k_input == '\n')
         {
             fontx  = 8;
             fonty += 16;

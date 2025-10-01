@@ -157,6 +157,7 @@ void  xapi_DrawPNG(
 // 4-4
 void SetMsgPrcor(HDLE handle, MsgPrcor func);
 #define MSG_CHAR		0
+#define MSG_SPCHAR		7
 #define MSG_MOVE		1
 #define MSG_LBUTTON		2
 #define MSG_RBUTTON		3
