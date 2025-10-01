@@ -43,6 +43,8 @@ void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
+extern UserInfo *current_user;
+
 void test_task()
 {
     uint64_t ret;
@@ -98,6 +100,7 @@ void components_flusher()
     write_serial_string("components flusher is running\n");
     while (true)
     {
+        enable_intr();
         if (tw_data != NULL)
         {
             tm         *time          = &tw_data->time;
@@ -235,8 +238,8 @@ void desktop_flusher()
 
     winRD_lock = true;
 
-    create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
-    create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
+    // create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
+    // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
 
@@ -258,6 +261,7 @@ void desktop_flusher()
 
     while (1)
     {
+        enable_intr();
         // if (tw_data->flushing) { continue; } // Sync, but bad performance
         if (tw_data->need_flush)
         {
@@ -285,17 +289,24 @@ void desktop_flusher()
             WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
             if (a != NULL)
             {
-                do_signal(0, 1, 1, a->WinMPf, a->w_task);
+                if (k_input != '\n' && k_input != '\b' && k_input < 128)
+                {
+                    do_signal(0, NULL, k_input, a->WinMPf, a->w_task);
+                }
+                else
+                {
+                    do_signal(7, NULL, k_input, a->WinMPf, a->w_task);
+                }
             }
         }
-        if (k_input != NULL && k_input != KEY_ENTER && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
-            k_input != KEY_CAPS && k_input != KEY_BACKSPACE)
+        if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
+            k_input != KEY_CAPS && k_input != '\b')
         {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
             fontx += 8;
         }
-        else if (k_input == KEY_ENTER)
+        else if (k_input == '\n')
         {
             fontx  = 8;
             fonty += 16;
@@ -337,6 +348,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     ahci_init();
     nvme_init();
 
+    enable_intr();
+    keyboard_init();
+    mouse_init();
+    disable_intr();
+
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
     for (int i = 0; i < MAX_CPU_NUM; ++i)
@@ -345,9 +361,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_smp(BootConfig.MADT);
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
-
-    keyboard_init();
-    mouse_init();
 
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");
@@ -364,7 +377,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
 
-    get_current_task()->cwd = NULL;
+    get_current_task()->parent_group->cwd = NULL;
     vfs_init();
     dev_init();
     partition_init();
@@ -374,9 +387,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     mount_root();
 
+    init_user();
+
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
-    create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
+    // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     tid = create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
@@ -384,7 +399,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
 
-    create_user_process_from_file((char *)"/init.elf", NULL);
+    create_user_process_from_file((char *)"/shell.elf", NULL);
 
     enable_scheduler();
     open_interrupt;

@@ -11,7 +11,9 @@
 #include <ttf.h>
 
 char          *ttf_buffer;
+char          *ttf_buffer_c;
 stbtt_fontinfo font;
+stbtt_fontinfo fontc;
 SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
@@ -68,7 +70,7 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
 {
     /* 创建位图 */
     int            bitmap_w = 1920; /* 位图的宽 */
-    int            bitmap_h = 786;  /* 位图的高 */
+    int            bitmap_h = 1080; /* 位图的高 */
     unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
     memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
@@ -164,7 +166,14 @@ void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap, unsi
 void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
                    /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
-    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, "%s", buf);
+    uint32_t temp_i_width;
+    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, &temp_i_width, "%s", buf);
+}
+
+void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
+                   /*unsigned bc, */ unsigned x, unsigned y, int size, uint32_t *i_width)
+{
+    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
 #define TTF_BUF_SIZE 128
@@ -200,7 +209,7 @@ static int utf8_char_len(unsigned char c)
 }
 
 // 刷新缓冲区内容到屏幕
-static void flush_ttf_buffer(FbTTFWriterData *data)
+static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
 {
     if (data->idx == 0) return;
 
@@ -245,6 +254,8 @@ static void flush_ttf_buffer(FbTTFWriterData *data)
     put_bitmap(data->sht, data->sheet_id, bitmap, data->x, data->y, width, height, 1920, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
+    *i_width = width;
+
     // 更新光标位置
     data->x += (int)width;
 
@@ -253,12 +264,14 @@ static void flush_ttf_buffer(FbTTFWriterData *data)
     data->idx = 0; // 重置缓冲区
 }
 
+uint32_t *input_width; // 玛德沙比format，只能写成这样了
+
 uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 {
     FbTTFWriterData *fbttf = (FbTTFWriterData *)writer->data;
 
     // 处理缓冲区溢出
-    if (fbttf->idx + utf8_char_len(ch) > fbttf->buf_size - 1) { flush_ttf_buffer(fbttf); }
+    if (fbttf->idx + utf8_char_len(ch) > fbttf->buf_size - 1) { flush_ttf_buffer(fbttf, input_width); }
 
     // 将字符添加到缓冲区
     fbttf->buf[fbttf->idx++] = ch;
@@ -266,7 +279,7 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
     // 如果是换行符，立即刷新
     if (ch == '\n')
     {
-        flush_ttf_buffer(fbttf);
+        flush_ttf_buffer(fbttf, input_width);
         fbttf->y += fbttf->size + 4;
         fbttf->x  = fbttf->start_x;
     }
@@ -277,6 +290,8 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
                        ...)
 {
+    uint32_t temp_i_width;
+    input_width = &temp_i_width;
     char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
     // char buf[TTF_BUF_SIZE];
     buf[0]         = '\0';
@@ -309,7 +324,49 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     va_end(args);
 
     // 刷新剩余内容
-    flush_ttf_buffer(&fb_ttf_writer_data);
+    flush_ttf_buffer(&fb_ttf_writer_data, &temp_i_width);
+
+    free(buf);
+    free(rune_buf);
+}
+
+void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width, const char *fmt,
+                       ...)
+{
+    input_width = i_width;
+    char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
+    // char buf[TTF_BUF_SIZE];
+    buf[0]         = '\0';
+    Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
+    // Rune rune_buf[TTF_BUF_SIZE];
+
+    // 初始化写入器数据
+    FbTTFWriterData fb_ttf_writer_data = {
+        .sht           = sht,
+        .sheet_id      = sheet_id,
+        .color         = fc,
+        .start_x       = x,
+        .start_y       = y,
+        .x             = x,
+        .y             = y,
+        .size          = size,
+        .rune_buf      = rune_buf,
+        .rune_buf_size = TTF_BUF_SIZE,
+        .buf           = buf,
+        .idx           = 0,
+        .buf_size      = TTF_BUF_SIZE,
+        .flush         = 0,
+    };
+
+    Writer fb_ttf_writer = {.data = &fb_ttf_writer_data, .handler = fb_ttf_writer_handler};
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&fb_ttf_writer, fmt, args);
+    va_end(args);
+
+    // 刷新剩余内容
+    flush_ttf_buffer(&fb_ttf_writer_data, i_width);
 
     free(buf);
     free(rune_buf);
@@ -322,11 +379,128 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
 // 				  /*bc, */ x, y, size);
 // }
 
+
+
+// 等宽字体
+unsigned char *TTF_PrintC(int *buf, unsigned *width, unsigned *heigh, int size)
+{
+    /* 创建位图 */
+    int            bitmap_w = 1920; /* 位图的宽 */
+    int            bitmap_h = 768;  /* 位图的高 */
+    unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
+    memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
+
+    /* "STB"的 unicode 编码 */
+    int *word = buf;
+
+    /* 计算字体缩放 */
+    float pixels = size * 2;                                 /* 字体大小（字号） */
+    float scale  = stbtt_ScaleForPixelHeight(&fontc, pixels); /* scale = pixels / (ascent - descent) */
+
+    /**
+	 * 获取垂直方向上的度量
+	 * ascent：字体从基线到顶部的高度；
+	 * descent：基线到底部的高度，通常为负值；
+	 * lineGap：两个字体之间的间距；
+	 * 行间距为：ascent - descent + lineGap。
+	 */
+    int ascent  = 0;
+    int descent = 0;
+    int lineGap = 0;
+    stbtt_GetFontVMetrics(&fontc, &ascent, &descent, &lineGap);
+
+    /* 根据缩放调整字高 */
+    ascent  = roundf(ascent * scale);
+    descent = roundf(descent * scale);
+
+    int x = 0; /*位图的x*/
+
+    float    offset_x = 0; /* 整体的x偏移量 */
+    /* 循环加载word中每个字符 */
+    unsigned h = (int)((float)(ascent - descent + lineGap * scale));
+    for (int i = 0; word[i] != 0; ++i)
+    {
+        /**
+		 * 获取水平方向上的度量
+		 * advanceWidth：字宽；
+		 * leftSideBearing：左侧位置；
+		 */
+        int advanceWidth    = 0;
+        int leftSideBearing = 0;
+        stbtt_GetCodepointHMetrics(&fontc, word[i], &advanceWidth, &leftSideBearing);
+
+        /* 获取字符的边框（边界） */
+        int c_x1, c_y1, c_x2, c_y2;
+        stbtt_GetCodepointBitmapBox(&fontc, word[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
+
+        /* 计算位图的y (不同字符的高度不同） */
+        int y = ascent + c_y1;
+
+        /* 渲染字符 */
+        if (i <= 0) { offset_x = (float)(-leftSideBearing) * scale; } /* 把首个字符的左侧偏移，给整体偏移回去 */
+        int byteOffset = x + leftSideBearing * scale + (y * bitmap_w) + (int)roundf(offset_x);
+        stbtt_MakeCodepointBitmap(&fontc, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, bitmap_w, scale, scale,
+                                  word[i]);
+
+        /* 调整x */
+        x += roundf(advanceWidth * scale);
+
+        /* 调整字距 */
+        int kern;
+        kern  = stbtt_GetCodepointKernAdvance(&fontc, word[i], word[i + 1]);
+        x    += roundf(kern * scale);
+    }
+    *width = x;
+    *heigh = h;
+
+    return bitmap;
+}
+
+// 刷新缓冲区内容到屏幕
+void print_box_ttfc(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
+				   /*unsigned bc, */ unsigned x, unsigned y, int size)
+{
+    Rune *r = (Rune *)malloc((utflen(buf) + 1) * sizeof(Rune));
+	r[utflen(buf)] = 0;
+	int i = 0;
+	while (*buf != '\0')
+	{
+		buf += chartorune(&(r[i++]), buf);
+	}
+
+	// 查找图层
+	SHEET *front_p = sht->start;
+	while (true)
+	{
+		if (front_p->index == *sheet_id)
+		{
+			break;
+		}
+		else if (front_p->next == NULL)
+		{
+			return;
+		}
+		front_p = front_p->next;
+	}
+	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+
+	unsigned width, heigh;
+	unsigned char *bitmap = TTF_PrintC(r, &width, &heigh, size);
+	put_bitmap(sht, sheet_id, bitmap, x, y, width, heigh, 1920, fc);
+	refresh_part_sheet(sht, x, y,
+					   x + width, y + heigh);
+	free(bitmap);
+	free(r);
+}
+
+
+
 void init_ttf()
 {
     write_serial_string("Initializing TTF...\n");
     // delay_s(10);
 
+    // 完整不等宽字体
     vfs_node_t v = vfs_open("/XJ380F.ttf");
     if (!v)
     {
@@ -335,30 +509,37 @@ void init_ttf()
         return;
     }
     ttf_buffer = (char *)malloc(v->size);
-    write_serial_string("Reading TTF...\n");
+    write_serial_string("Reading TTF - XJ380F (1/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
     if (*(uint64_t *)ttf_buffer == 0)
     {
-        // try again
-        free(ttf_buffer);
-        v = vfs_open("/XJ380F.ttf");
-        if (!v)
-        {
-            write_serial_string("Cannot find XJ380F.ttf\n");
-            // wsod_cannot_load_ttf();
-            return;
-        }
-        ttf_buffer = (char *)malloc(v->size);
-        vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
-        if (*(uint64_t *)ttf_buffer == 0)
-        {
-            write_serial_string("Cannot read XJ380F.ttf\n");
-            // wsod_cannot_load_ttf();
-            return;
-        }
+        write_serial_string("Cannot read XJ380F.ttf\n");
+        return;
     }
-    write_serial_string("Loading TTF...\n");
+    write_serial_string("Loading TTF - XJ380F (1/2)...\n");
     stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
+    set_size(16);
+
+    vfs_close(v);
+
+    // 英文等宽字体
+    v = vfs_open("/XJ380C.ttf");
+    if (!v)
+    {
+        write_serial_string("Cannot find XJ380C.ttf\n");
+        // wsod_cannot_load_ttf();
+        return;
+    }
+    ttf_buffer_c = (char *)malloc(v->size);
+    write_serial_string("Reading TTF - XJ380C (2/2)...\n");
+    vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
+    if (*(uint64_t *)ttf_buffer_c == 0)
+    {
+        write_serial_string("Cannot read XJ380C.ttf\n");
+        return;
+    }
+    write_serial_string("Loading TTF - XJ380C (2/2)...\n");
+    stbtt_InitFont(&fontc, (uint8_t *)ttf_buffer_c, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer_c, 0));
     set_size(16);
 
     vfs_close(v);

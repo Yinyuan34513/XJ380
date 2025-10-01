@@ -86,6 +86,12 @@
 #define SXAH_SYSCALL_RETURN         3801
 #define SXAH_CREATE_KERNEL_TERMINAL 3802
 
+// define
+typedef struct {
+    char            name[64];   // 用户名
+    UserType        user_type;  // 用户等级
+} xapi_type_UserInfo;
+
 // P3.1
 #define XAPI_OUTPUT    381
 #define XAPI_INPUTW    382
@@ -103,7 +109,9 @@
 #define XAPI_EXECVE 390
 
 // P3.5
-#define XAPI_GET_VERSION 391
+#define XAPI_GET_VERSION        391
+#define XAPI_GET_TIME           412
+#define XAPI_GET_CURRENT_USER   413
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -119,6 +127,8 @@
 #define XAPI_DRAW_CIRCLE      400
 #define XAPI_DRAW_CIRCLE_FILL 401
 #define XAPI_DRAW_TEXT        402
+#define XAPI_DRAW_TEXT_L      414
+#define XAPI_DRAW_TEXT_SW     415
 
 // P4.3
 #define XAPI_DRAW_BMP 403
@@ -145,6 +155,8 @@
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
+// 当前最大号：415
+
 // Proto (XAPI Edition)
 int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
 int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);
@@ -157,23 +169,70 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 // int do_xapi_DrawCircle_fill(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color);
 // int do_xapi_DrawCircle(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color);
 int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
+int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t size, uint32_t color, uint64_t i_width);
+int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
 int do_xapi_RefreshWindow(uint64_t handle);
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
+void do_xapi_GetSystemVersion(uint64_t str);
+uint64_t do_xapi_GetTime();
+void do_xapi_GetCurrentUser(uint64_t dst);
 
-// // Proto (POSIX Edition)
-// int sys_read(uint32_t fd, uint8_t *buf, size_t count);
-// int sys_write(uint32_t fd, uint8_t *buf, size_t count);
-// int sys_readv(uint32_t fd, struct iovec *iovec, size_t count);
-// int sys_writev(uint32_t fd, struct iovec *iovec, size_t count);
-// int sys_open(const char *pathname, int flags, int mode);
-// int sys_close(uint32_t fd);
-// int sys_fstat(uint32_t fd, struct stat *stat);
-// int sys_execve(struct X64_REGS *regs);
-// int sys_exit(int status);
-// int sys_fork(struct X64_REGS *regs);
-// int sys_vfork(struct X64_REGS *regs);
-// uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
-// uint64_t sys_brk(uint64_t addr);
+
+
+void init_syscall();
+
+// Proto (XAPI Edition)
+void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
+void init_signal();
+void signal_revert();
+void signal_end();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+// Proto (POSIX Edition)
+int sys_read(uint32_t fd, uint8_t *buf, size_t count);
+int sys_write(uint32_t fd, uint8_t *buf, size_t count);
+int sys_readv(uint32_t fd, struct iovec *iovec, size_t count);
+int sys_writev(uint32_t fd, struct iovec *iovec, size_t count);
+int sys_open(const char *pathname, int flags, int mode);
+int sys_close(uint32_t fd);
+int sys_fstat(uint32_t fd, struct stat *stat);
+int sys_execve(struct X64_REGS *regs);
+int sys_exit(int status);
+int sys_fork(struct X64_REGS *regs);
+int sys_vfork(struct X64_REGS *regs);
+uint64_t sys_wait4(unsigned long pid, long *status, int options, void *rusage);
+uint64_t sys_brk(uint64_t addr);
+*/
 
 #define PROT_NONE  0x0
 #define PROT_READ  0x1
@@ -186,11 +245,3 @@ int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
 // uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
 
 // uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
-
-void init_syscall();
-
-// Proto (XAPI Edition)
-void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
-void init_signal();
-void signal_revert();
-void signal_end();

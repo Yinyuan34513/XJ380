@@ -131,9 +131,16 @@ WSTR xcr_hex2char(UINT64 hex) {
 	return buf1;
 }
 
-UINT32 xapi_toRGB(UINT8 r, UINT8 g, UINT8 b) {
+UINT32 toRGB(UINT8 r, UINT8 g, UINT8 b) {
 	return r << 24 | g << 16 | b << 8 | 0xff;
 }
+
+UINT32 toRGBA(UINT32 color) {
+	return ((color >> 16) & 0xff) | ((color >> 8) & 0xff) | (color & 0xff) | ((color >> 24) & 0xff);
+}
+
+#define CC(color) \
+	(((color >> 16) & 0xff) | ((color >> 8) & 0xff) | (color & 0xff) | ((color >> 24) & 0xff))
 
 // 3-4
 UINT64  xapi_Fork() {
@@ -142,4 +149,17 @@ UINT64  xapi_Fork() {
 
 UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
+}
+
+// 3-5
+void	xapi_GetSystemVersion(WSTR version) {
+	enter_syscall(XAPI_GET_VERSION, (uint64_t)version, 0, 0, 0, 0, 0);
+}
+
+UINT64	xapi_GetTime() {
+	return enter_syscall(XAPI_GET_TIME, 0, 0, 0, 0, 0, 0);
+}
+
+void	xapi_GetCurrentUser(UserInfo *user_info) {
+	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
 }

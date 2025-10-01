@@ -75,7 +75,7 @@ int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y,
+    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22,
                {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                 (uint8_t)((color) & 0xFF)});
 
@@ -140,6 +140,29 @@ int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     char          *TextString   = (char *)(str);
     draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 5, y + 22, size,
+              {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+               (uint8_t)((color) & 0xFF)});
+    return true;
+}
+
+int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t size, uint32_t color, uint64_t i_width)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *TextString   = (char *)(str);
+    uint32_t      *input_width  = (uint32_t *)(i_width);
+    uint32_t       x = place & 0xffffffff00000000;
+    uint32_t       y = place & 0x00000000ffffffff;
+    draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 5, y + 22, size,
+                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)}, input_width);
+    return true;
+}
+
+int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *TextString   = (char *)(str);
+    draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 5, y + 22, size,
               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                (uint8_t)((color) & 0xFF)});
     return true;

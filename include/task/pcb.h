@@ -75,7 +75,8 @@ typedef struct
     uint64_t rsi;
     uint64_t ss, cs, ds, es;
 } TaskContext;
-
+struct vfs_node;
+typedef struct vfs_node *vfs_node_t;
 struct process_control_block
 {
     size_t   pid;  // 进程ID
@@ -88,22 +89,22 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 
-    char    *cwd;       // 工作目录路径
+    vfs_node_t cwd;
+    vfs_node_t fds[256];
     char   **envp;      // 环境变量指针
     size_t   envc;      // 环境变量数量
-    UserInfo user_info; // 用户信息
 
     bool        vfork;       // 是否是 vfork 创建的进程
     size_t      child_index; // 子进程队列索引
     lock_queue *child_pcb;   // 子进程列表
     char       *cmdline;
     int         task_level; // 进程等级
+    bool        sigprci;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);
 uint64_t process_execve(char *path, char **argv, char **envp);
-struct vfs_node;
-typedef struct vfs_node *vfs_node_t;
+
 struct thread_control_block
 {
     pcb_t parent_group; // 父进程
@@ -122,13 +123,14 @@ struct thread_control_block
     uint64_t   main;           // 线程入口地址
     uint64_t   user_stack;     // 用户栈
     uint64_t   user_stack_top; // 用户栈顶部地址
-    vfs_node_t cwd;
-    vfs_node_t fds[256];
+    
     uint64_t   syscall_stack;
     uint64_t   brk_start;
     uint64_t   brk_end;
     uint64_t   load_start;
     uint64_t   load_end;
+    
+    UserInfo  *user_info; // 用户信息
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;

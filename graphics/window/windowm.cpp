@@ -161,6 +161,19 @@ void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title
     print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
 }
 
+void draw_textl(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
+               SHEET_BUFFER color, uint32_t *i_width)
+{
+    print_box_ttfl(sht, &(windowls->w_sheet), title, color, x, y, 10, i_width);
+}
+
+void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
+               SHEET_BUFFER color)
+{
+    print_box_ttfc(sht, &(windowls->w_sheet), title, color, x, y, 10);
+}
+
+
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
 {
     while (true)

@@ -289,6 +289,7 @@ void mouse_init()
 
     ms_dec.win_move_lock = false;
     ms_dec.sht_now       = NULL;
+    delay_s(3);
 }
 
 void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id)

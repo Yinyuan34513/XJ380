@@ -76,6 +76,29 @@ void xapi_DrawText(
 	enter_syscall(XAPI_DRAW_TEXT, handle, x, y, (UINT64)(str), size, color);
 }
 
+void xapi_DrawTextl(
+	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
+	WSTR 	str,
+	UINT32	size,
+	UINT32  color,
+	UINT32 *width
+) {
+	enter_syscall(XAPI_DRAW_TEXT_L, handle, (x << 32) | y, (UINT64)(str), size, color, (UINT64)width);
+}
+
+void xapi_DrawSWText(
+	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
+	WSTR 	str,
+	UINT32	size,
+	UINT32  color
+) {
+	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), size, color);
+}
+
 
 // 4-3
 void xapi_DrawBMP (

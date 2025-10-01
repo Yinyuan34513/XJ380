@@ -19,7 +19,7 @@ char *at_resolve_pathname(int dirfd, char *pathname)
         }
         else
         { // relative to dirfd, resolve accordingly
-            vfs_node_t node = get_current_task()->fds[dirfd];
+            vfs_node_t node = get_current_task()->parent_group->fds[dirfd];
             if (!node) return (char *)-EBADF;
             if (node->type != file_dir) return (char *)-ENOTDIR;
 
@@ -55,7 +55,7 @@ uint64_t sys_open(const char *name, uint64_t flags, uint64_t mode)
     uint64_t i = 0;
     for (i = 3; i < 256; i++)
     {
-        if (get_current_task()->fds[i] == NULL) { break; }
+        if (get_current_task()->parent_group->fds[i] == NULL) { break; }
     }
 
     if (i == 256) { return (uint64_t)-EBADF; }
@@ -80,7 +80,7 @@ uint64_t sys_open(const char *name, uint64_t flags, uint64_t mode)
 
     node->flags = flags;
 
-    get_current_task()->fds[i] = node;
+    get_current_task()->parent_group->fds[i] = node;
 
     return i;
 }
@@ -99,36 +99,36 @@ uint64_t sys_openat(uint64_t dirfd, const char *name, uint64_t flags, uint64_t m
 
 uint64_t sys_close(uint64_t fd)
 {
-    if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }
+    if (fd >= 256 || get_current_task()->parent_group->fds[fd] == NULL) { return (uint64_t)-EBADF; }
 
-    get_current_task()->fds[fd]->offset = 0;
-    if (get_current_task()->fds[fd]->lock.l_pid == get_current_task()->parent_group->pid)
+    get_current_task()->parent_group->fds[fd]->offset = 0;
+    if (get_current_task()->parent_group->fds[fd]->lock.l_pid == get_current_task()->parent_group->pid)
     {
-        get_current_task()->fds[fd]->lock.l_type = F_UNLCK;
-        get_current_task()->fds[fd]->lock.l_pid  = 0;
+        get_current_task()->parent_group->fds[fd]->lock.l_type = F_UNLCK;
+        get_current_task()->parent_group->fds[fd]->lock.l_pid  = 0;
     }
 
-    vfs_close(get_current_task()->fds[fd]);
+    vfs_close(get_current_task()->parent_group->fds[fd]);
 
-    get_current_task()->fds[fd] = NULL;
+    get_current_task()->parent_group->fds[fd] = NULL;
 
     return 0;
 }
 
 uint64_t sys_read(uint64_t fd, void *buf, uint64_t len)
 {
-    if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }
+    if (fd >= 256 || get_current_task()->parent_group->fds[fd] == NULL) { return (uint64_t)-EBADF; }
 
-    if (get_current_task()->fds[fd]->type & file_dir)
+    if (get_current_task()->parent_group->fds[fd]->type & file_dir)
     {
         return (uint64_t)-EISDIR; // 读取目录时返回正确错误码
     }
 
     if (!buf) { return (uint64_t)-EFAULT; }
 
-    ssize_t ret = vfs_read(get_current_task()->fds[fd], buf, get_current_task()->fds[fd]->offset, len);
+    ssize_t ret = vfs_read(get_current_task()->parent_group->fds[fd], buf, get_current_task()->parent_group->fds[fd]->offset, len);
 
-    if (ret > 0) { get_current_task()->fds[fd]->offset += ret; }
+    if (ret > 0) { get_current_task()->parent_group->fds[fd]->offset += ret; }
 
     if (ret == -EAGAIN)
     {
@@ -145,18 +145,18 @@ uint64_t sys_write(uint64_t fd, const void *buf, uint64_t len)
         write_serial_fmt((char *)buf);
         return 0;
     }
-    if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }
+    if (fd >= 256 || get_current_task()->parent_group->fds[fd] == NULL) { return (uint64_t)-EBADF; }
 
-    if (get_current_task()->fds[fd]->type & file_dir)
+    if (get_current_task()->parent_group->fds[fd]->type & file_dir)
     {
         return (uint64_t)-EISDIR; // 读取目录时返回正确错误码
     }
 
     if (!buf) { return (uint64_t)-EFAULT; }
 
-    ssize_t ret = vfs_write(get_current_task()->fds[fd], buf, get_current_task()->fds[fd]->offset, len);
+    ssize_t ret = vfs_write(get_current_task()->parent_group->fds[fd], buf, get_current_task()->parent_group->fds[fd]->offset, len);
 
-    if (ret > 0) { get_current_task()->fds[fd]->offset += ret; }
+    if (ret > 0) { get_current_task()->parent_group->fds[fd]->offset += ret; }
 
     if (ret == -EAGAIN)
     {
@@ -168,36 +168,36 @@ uint64_t sys_write(uint64_t fd, const void *buf, uint64_t len)
 
 uint64_t sys_lseek(uint64_t fd, uint64_t offset, uint64_t whence)
 {
-    if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }
+    if (fd >= 256 || get_current_task()->parent_group->fds[fd] == NULL) { return (uint64_t)-EBADF; }
 
     int64_t real_offset = offset;
-    if (real_offset < 0 && get_current_task()->fds[fd]->type & file_none && whence != SEEK_CUR) return (uint64_t)-EBADF;
+    if (real_offset < 0 && get_current_task()->parent_group->fds[fd]->type & file_none && whence != SEEK_CUR) return (uint64_t)-EBADF;
 
     switch (whence)
     {
-    case SEEK_SET: get_current_task()->fds[fd]->offset = real_offset; break;
+    case SEEK_SET: get_current_task()->parent_group->fds[fd]->offset = real_offset; break;
     case SEEK_CUR:
-        get_current_task()->fds[fd]->offset += real_offset;
-        if ((int64_t)get_current_task()->fds[fd]->offset < 0) { get_current_task()->fds[fd]->offset = 0; }
-        else if (get_current_task()->fds[fd]->offset > get_current_task()->fds[fd]->size)
+        get_current_task()->parent_group->fds[fd]->offset += real_offset;
+        if ((int64_t)get_current_task()->parent_group->fds[fd]->offset < 0) { get_current_task()->parent_group->fds[fd]->offset = 0; }
+        else if (get_current_task()->parent_group->fds[fd]->offset > get_current_task()->parent_group->fds[fd]->size)
         {
-            get_current_task()->fds[fd]->offset = get_current_task()->fds[fd]->size;
+            get_current_task()->parent_group->fds[fd]->offset = get_current_task()->parent_group->fds[fd]->size;
         }
 
         break;
-    case SEEK_END: get_current_task()->fds[fd]->offset = get_current_task()->fds[fd]->size - real_offset; break;
+    case SEEK_END: get_current_task()->parent_group->fds[fd]->offset = get_current_task()->parent_group->fds[fd]->size - real_offset; break;
 
     default: return (uint64_t)-ENOSYS; break;
     }
 
-    return get_current_task()->fds[fd]->offset;
+    return get_current_task()->parent_group->fds[fd]->offset;
 }
 
 uint64_t sys_ioctl(uint64_t fd, uint64_t cmd, uint64_t arg)
 {
-    if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }
+    if (fd >= 256 || get_current_task()->parent_group->fds[fd] == NULL) { return (uint64_t)-EBADF; }
 
-    return vfs_ioctl(get_current_task()->fds[fd], cmd, arg);
+    return vfs_ioctl(get_current_task()->parent_group->fds[fd], cmd, arg);
 }
 
 uint64_t sys_readv(uint64_t fd, struct iovec *iovec, uint64_t count)
@@ -237,11 +237,11 @@ uint64_t sys_writev(uint64_t fd, struct iovec *iovec, uint64_t count)
 uint64_t sys_getdents(uint64_t fd, uint64_t buf, uint64_t size)
 {
     if (fd >= 256) return (uint64_t)-EBADF;
-    if (!get_current_task()->fds[fd]) return (uint64_t)-EBADF;
-    if (get_current_task()->fds[fd]->type != file_dir) return (uint64_t)-ENOTDIR;
+    if (!get_current_task()->parent_group->fds[fd]) return (uint64_t)-EBADF;
+    if (get_current_task()->parent_group->fds[fd]->type != file_dir) return (uint64_t)-ENOTDIR;
 
     struct dirent *dents = (struct dirent *)buf;
-    vfs_node_t     node  = get_current_task()->fds[fd];
+    vfs_node_t     node  = get_current_task()->parent_group->fds[fd];
 
     uint64_t child_count = (uint64_t)list_length(node->child);
 
@@ -283,14 +283,14 @@ uint64_t sys_chdir(const char *dirname)
     if (!new_cwd) return (uint64_t)-ENOENT;
     if (new_cwd->type != file_dir) return (uint64_t)-ENOTDIR;
 
-    get_current_task()->cwd = new_cwd;
+    get_current_task()->parent_group->cwd = new_cwd;
 
     return 0;
 }
 
 uint64_t sys_getcwd(char *cwd, uint64_t size)
 {
-    char *str = vfs_get_fullpath(get_current_task()->cwd);
+    char *str = vfs_get_fullpath(get_current_task()->parent_group->cwd);
     if (size < (uint64_t)strlen(str)) { return (uint64_t)-ERANGE; }
     strncpy(cwd, str, size);
     free(str);
@@ -303,7 +303,7 @@ extern int unix_accept_fsid;
 // Implement the sys_dup3 function
 uint64_t sys_dup3(uint64_t oldfd, uint64_t newfd, uint64_t flags)
 {
-    if (oldfd >= 256 || get_current_task()->fds[oldfd] == NULL) { return -EBADF; }
+    if (oldfd >= 256 || get_current_task()->parent_group->fds[oldfd] == NULL) { return -EBADF; }
 
     if (newfd >= 256) { return -EBADF; }
 
@@ -311,12 +311,12 @@ uint64_t sys_dup3(uint64_t oldfd, uint64_t newfd, uint64_t flags)
 
     if (oldfd == newfd) { return -EBADF; }
 
-    if (get_current_task()->fds[newfd] != NULL) { sys_close(newfd); }
+    if (get_current_task()->parent_group->fds[newfd] != NULL) { sys_close(newfd); }
 
-    vfs_node_t new_node = vfs_dup(get_current_task()->fds[oldfd]);
+    vfs_node_t new_node = vfs_dup(get_current_task()->parent_group->fds[oldfd]);
     if (new_node == NULL) { return -EMFILE; }
 
-    get_current_task()->fds[newfd] = new_node;
+    get_current_task()->parent_group->fds[newfd] = new_node;
 
     if (flags & O_CLOEXEC) { new_node->flags |= O_CLOEXEC; }
 
@@ -325,27 +325,27 @@ uint64_t sys_dup3(uint64_t oldfd, uint64_t newfd, uint64_t flags)
 
 uint64_t sys_dup2(uint64_t fd, uint64_t newfd)
 {
-    vfs_node_t node = get_current_task()->fds[fd];
+    vfs_node_t node = get_current_task()->parent_group->fds[fd];
     if (!node) return (uint64_t)-EBADF;
 
     vfs_node_t nw = vfs_dup(node);
     if (!nw) return (uint64_t)-ENOSPC;
 
-    if (get_current_task()->fds[newfd]) { vfs_close(get_current_task()->fds[newfd]); }
-    get_current_task()->fds[newfd] = nw;
+    if (get_current_task()->parent_group->fds[newfd]) { vfs_close(get_current_task()->parent_group->fds[newfd]); }
+    get_current_task()->parent_group->fds[newfd] = nw;
 
     return newfd;
 }
 
 uint64_t sys_dup(uint64_t fd)
 {
-    vfs_node_t node = get_current_task()->fds[fd];
+    vfs_node_t node = get_current_task()->parent_group->fds[fd];
     if (!node) return (uint64_t)-EBADF;
 
     uint64_t i;
     for (i = 3; i < 256; i++)
     {
-        if (get_current_task()->fds[i] == NULL) { break; }
+        if (get_current_task()->parent_group->fds[i] == NULL) { break; }
     }
 
     if (i == 256) { return (uint64_t)-EBADF; }
@@ -355,23 +355,23 @@ uint64_t sys_dup(uint64_t fd)
 
 uint64_t sys_fcntl(uint64_t fd, uint64_t command, uint64_t arg)
 {
-    if (!get_current_task()->fds[fd]) return (uint64_t)-EBADF;
+    if (!get_current_task()->parent_group->fds[fd]) return (uint64_t)-EBADF;
 
     switch (command)
     {
-    case F_GETFD: return !!(get_current_task()->fds[fd]->flags & O_CLOEXEC);
-    case F_SETFD: return get_current_task()->fds[fd]->flags |= O_CLOEXEC;
+    case F_GETFD: return !!(get_current_task()->parent_group->fds[fd]->flags & O_CLOEXEC);
+    case F_SETFD: return get_current_task()->parent_group->fds[fd]->flags |= O_CLOEXEC;
     case F_DUPFD_CLOEXEC: {
         uint64_t newfd                         = sys_dup(fd);
-        get_current_task()->fds[newfd]->flags |= O_CLOEXEC;
+        get_current_task()->parent_group->fds[newfd]->flags |= O_CLOEXEC;
         return newfd;
     }
     case F_DUPFD: return sys_dup(fd);
-    case F_GETFL: return get_current_task()->fds[fd]->flags;
+    case F_GETFL: return get_current_task()->parent_group->fds[fd]->flags;
     case F_SETFL: {
         uint32_t valid_flags                = O_APPEND | O_DIRECT | O_NOATIME | O_NONBLOCK;
-        get_current_task()->fds[fd]->flags &= ~valid_flags;
-        get_current_task()->fds[fd]->flags |= arg & valid_flags;
+        get_current_task()->parent_group->fds[fd]->flags &= ~valid_flags;
+        get_current_task()->parent_group->fds[fd]->flags |= arg & valid_flags;
         return 0;
     }
     }
@@ -407,24 +407,24 @@ uint64_t sys_stat(const char *fd, struct stat *buf)
 
 uint64_t sys_fstat(uint64_t fd, struct stat *buf)
 {
-    if (fd >= 256 || get_current_task()->fds[fd] == NULL) { return (uint64_t)-EBADF; }
+    if (fd >= 256 || get_current_task()->parent_group->fds[fd] == NULL) { return (uint64_t)-EBADF; }
 
     buf->st_dev   = 0;
-    buf->st_ino   = get_current_task()->fds[fd]->inode;
+    buf->st_ino   = get_current_task()->parent_group->fds[fd]->inode;
     buf->st_nlink = 1;
     buf->st_mode =
-        get_current_task()->fds[fd]->mode | ((get_current_task()->fds[fd]->type & file_symlink)
+        get_current_task()->parent_group->fds[fd]->mode | ((get_current_task()->parent_group->fds[fd]->type & file_symlink)
                                                  ? S_IFLNK
-                                                 : (get_current_task()->fds[fd]->type & file_dir ? S_IFDIR : S_IFREG));
+                                                 : (get_current_task()->parent_group->fds[fd]->type & file_dir ? S_IFDIR : S_IFREG));
     buf->st_uid = 0;
     buf->st_gid = 0;
-    if (get_current_task()->fds[fd]->type & file_stream) { buf->st_rdev = (4 << 8) | 1; }
-    else if (get_current_task()->fds[fd]->type & file_fbdev) { buf->st_rdev = (29 << 8) | 0; }
-    else if (get_current_task()->fds[fd]->type & file_keyboard) { buf->st_rdev = (13 << 8) | 0; }
-    else if (get_current_task()->fds[fd]->type & file_mouse) { buf->st_rdev = (13 << 8) | 1; }
+    if (get_current_task()->parent_group->fds[fd]->type & file_stream) { buf->st_rdev = (4 << 8) | 1; }
+    else if (get_current_task()->parent_group->fds[fd]->type & file_fbdev) { buf->st_rdev = (29 << 8) | 0; }
+    else if (get_current_task()->parent_group->fds[fd]->type & file_keyboard) { buf->st_rdev = (13 << 8) | 0; }
+    else if (get_current_task()->parent_group->fds[fd]->type & file_mouse) { buf->st_rdev = (13 << 8) | 1; }
     else { buf->st_rdev = 0; }
-    buf->st_blksize = get_current_task()->fds[fd]->blksz;
-    buf->st_size    = get_current_task()->fds[fd]->size;
+    buf->st_blksize = get_current_task()->parent_group->fds[fd]->blksz;
+    buf->st_size    = get_current_task()->parent_group->fds[fd]->size;
     buf->st_blocks  = (buf->st_size + buf->st_blksize - 1) / buf->st_blksize;
 
     return 0;
@@ -556,7 +556,7 @@ uint64_t sys_readlink(char *path, char *buf, uint64_t size)
 {
     if (path == NULL || buf == NULL || size == 0) { return (uint64_t)-EINVAL; }
 
-    vfs_node_t node = vfs_open_at(get_current_task()->cwd, path, true);
+    vfs_node_t node = vfs_open_at(get_current_task()->parent_group->cwd, path, true);
     if (node == NULL) { return (uint64_t)-ENOENT; }
 
     ssize_t result = vfs_readlink(node, buf, (size_t)size);
@@ -619,7 +619,7 @@ uint64_t sys_eventfd2(uint64_t initial_val, uint64_t flags)
     int fd = -1;
     for (int i = 3; i < 256; i++)
     {
-        if (!get_current_task()->fds[i])
+        if (!get_current_task()->parent_group->fds[i])
         {
             fd = i;
             break;
@@ -644,7 +644,7 @@ uint64_t sys_eventfd2(uint64_t initial_val, uint64_t flags)
     node->fsid      = eventfdfs_id;
     node->handle    = efd;
 
-    get_current_task()->fds[fd] = node;
+    get_current_task()->parent_group->fds[fd] = node;
 
     return fd;
 }
@@ -709,12 +709,12 @@ uint64_t sys_rename(const char *old, const char *nw)
 
 uint64_t sys_fchdir(uint64_t fd)
 {
-    if (fd >= 256 || !get_current_task()->fds[fd]) return -EBADF;
+    if (fd >= 256 || !get_current_task()->parent_group->fds[fd]) return -EBADF;
 
-    vfs_node_t node = get_current_task()->fds[fd];
+    vfs_node_t node = get_current_task()->parent_group->fds[fd];
     if (node->type != file_dir) return -ENOTDIR;
 
-    get_current_task()->cwd = node;
+    get_current_task()->parent_group->cwd = node;
 
     return 0;
 }
@@ -850,9 +850,9 @@ void fs_syscall_init()
 
 uint64_t sys_flock(int fd, uint64_t operation)
 {
-    if (fd < 0 || fd >= 256 || !get_current_task()->fds[fd]) return -EBADF;
+    if (fd < 0 || fd >= 256 || !get_current_task()->parent_group->fds[fd]) return -EBADF;
 
-    vfs_node_t    node = get_current_task()->fds[fd];
+    vfs_node_t    node = get_current_task()->parent_group->fds[fd];
     struct flock *lock = &node->lock;
     uint64_t      pid  = get_current_task()->parent_group->pid;
 

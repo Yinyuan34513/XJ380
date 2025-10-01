@@ -100,7 +100,9 @@
 #define XAPI_EXECVE 390
 
 // P3.5
-#define XAPI_GET_VERSION    391
+#define XAPI_GET_VERSION        391
+#define XAPI_GET_TIME           412
+#define XAPI_GET_CURRENT_USER   413
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -116,6 +118,8 @@
 #define XAPI_DRAW_CIRCLE      400
 #define XAPI_DRAW_CIRCLE_FILL 401
 #define XAPI_DRAW_TEXT        402
+#define XAPI_DRAW_TEXT_L      414
+#define XAPI_DRAW_TEXT_SW     415
 
 // P4.3
 #define XAPI_DRAW_BMP 403

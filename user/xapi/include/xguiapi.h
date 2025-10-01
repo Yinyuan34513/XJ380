@@ -116,6 +116,25 @@ void  xapi_DrawText(
 	UINT32  color
 );
 
+void  xapi_DrawTextl(
+	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
+	WSTR 	str,
+	UINT32	size,
+	UINT32  color,
+	UINT32 *width
+);
+
+void xapi_DrawSWText(
+	HDLE  	handle,
+	UINT32 	x,
+	UINT32 	y,
+	WSTR 	str,
+	UINT32	size,
+	UINT32  color
+);
+
 // 4-3
 void  xapi_DrawBMP (
 	HDLE  	handle,
@@ -138,6 +157,7 @@ void  xapi_DrawPNG(
 // 4-4
 void SetMsgPrcor(HDLE handle, MsgPrcor func);
 #define MSG_CHAR		0
+#define MSG_SPCHAR		7
 #define MSG_MOVE		1
 #define MSG_LBUTTON		2
 #define MSG_RBUTTON		3

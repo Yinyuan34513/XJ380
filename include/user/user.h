@@ -23,6 +23,9 @@ typedef struct
 
 typedef struct
 {
-    UserType      user_type; // 用户等级
-    UserPermisson user_prms; // 用户权限（仅等级为Custom时可用）
+    char            name[64];   // 用户名
+    UserType        user_type;  // 用户等级
+    UserPermisson   user_prms;  // 用户权限（仅等级为Custom时可用）
 } UserInfo;
+
+void init_user();
