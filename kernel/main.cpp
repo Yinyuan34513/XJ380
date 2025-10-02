@@ -306,6 +306,7 @@ void desktop_flusher()
                 }
             }
         }
+#   if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
             k_input != KEY_CAPS && k_input != '\b')
         {
@@ -323,6 +324,7 @@ void desktop_flusher()
             fontx  = 8;
             fonty += 16;
         }
+#   endif
     }
 }
 
