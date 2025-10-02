@@ -80,6 +80,8 @@ void paint_arrow_sign(int sx, int sy)
     UserInfo current_user;
     xapi_GetCurrentUser(&current_user);
 
+    strcpy(current_user.name, "/apps");
+
     xapi_DrawRect(handle, sx, sy, sx + CALC_FONT_WIDTH(current_user.name) + 13, sy + 18, 0x00a2e8ff, true);
     xapi_DrawRect(handle, sx + CALC_FONT_WIDTH(current_user.name) + 27, sy, 
                           sx + CALC_FONT_WIDTH(current_user.name) + 27 + 
