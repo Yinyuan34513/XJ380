@@ -47,6 +47,8 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
 
     // 先糊弄观众一下子
     PrintPicture_blend(sht, sheet_id, 20, 15, 75, 75, "/system/icon/d_system.png");
+    print_box_ttf(sht, sheet_id, "系统", BLACK, 43, 89, 12);
+    print_box_ttf(sht, sheet_id, "系统", WHITE, 44, 90, 11);
 }
 
 void init_dock(SHEET_INFO *sht, uint16_t *sheet_id)
