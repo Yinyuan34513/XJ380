@@ -48,10 +48,29 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
     return *dst;
 }
 
+/**
+ * @brief 显示图片（并进行混色）
+ * 
+ * @param sht 图层信息结构
+ * @param sheet_id 图层编号
+ * @param x 放置位置
+ * @param y 放置位置
+ * @param ow 目标宽度
+ * @param oh 目标高度
+ * @param path 路径
+ */
 void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path)
 {
     int      w, h, bpp;
-    stbi_uc *b = stbi_load(path, &w, &h, &bpp, 4);
+    vfs_node_t v = vfs_open(path);
+    if (!v)
+    {
+        write_serial_string("PrintPic: File load failed\n");
+        return;
+    }
+    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    vfs_read(v, (uint8_t *)bf, 0, v->size);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
     if (!b)
     {
         write_serial_string("PrintPic: File load failed\n");
@@ -80,10 +99,29 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     free(b1);
 }
 
+/**
+ * @brief 显示图片（并进行混色）
+ * 
+ * @param sht 图层信息结构
+ * @param sheet_id 图层编号
+ * @param x 放置位置
+ * @param y 放置位置
+ * @param ow 目标宽度
+ * @param oh 目标高度
+ * @param path 路径
+ */
 void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path)
 {
     int      w, h, bpp;
-    stbi_uc *b = stbi_load(path, &w, &h, &bpp, 4);
+    vfs_node_t v = vfs_open(path);
+    if (!v)
+    {
+        write_serial_string("PrintPic: File load failed\n");
+        return;
+    }
+    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    vfs_read(v, (uint8_t *)bf, 0, v->size);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
     if (!b)
     {
         write_serial_string("PrintPic_PNG: File load failed\n");

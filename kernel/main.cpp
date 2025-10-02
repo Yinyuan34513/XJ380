@@ -1,3 +1,4 @@
+#include "build_settings.h"
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
 #include <efi/boot.h>
@@ -221,13 +222,14 @@ void desktop_flusher()
     write_serial_string("CPU Model: ");
     write_serial_string(CPU_Model);
     write_serial_string("\n");
+    
+    print_fmt_box_ttf(&shtinf, &desktop_sheet_id, WHITE, 64, 64, 16,
+                      "MAKE \nXJ380 \nGREAT \nAGAIN! \n实现XJ380的伟大复兴！");
 #endif
     // wsod_debug();
 
     // print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64,
     //               16);
-    print_fmt_box_ttf(&shtinf, &desktop_sheet_id, WHITE, 64, 64, 16,
-                      "MAKE \nXJ380 \nGREAT \nAGAIN! \n实现XJ380的伟大复兴！");
 
     draw_mouse(&shtinf, &mouse_sheet_id);
     XWM_INFO  xwmi;
@@ -304,6 +306,7 @@ void desktop_flusher()
                 }
             }
         }
+#   if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
             k_input != KEY_CAPS && k_input != '\b')
         {
@@ -321,6 +324,7 @@ void desktop_flusher()
             fontx  = 8;
             fonty += 16;
         }
+#   endif
     }
 }
 

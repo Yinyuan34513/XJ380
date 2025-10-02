@@ -1,3 +1,4 @@
+#include "../../kernel/build_settings.h"
 #include "krlibc.h" // For memset
 #include "mm/alloc/alloc.h"
 #include "stdarg.h"
@@ -8,7 +9,7 @@
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
 
-#if BUILD_VERSION == DEBUG_VERSION
+#if BUILD_EDITION == DEBUG_VERSION
 int serial_x     = 0;
 int serial_y     = 0;
 int serial_x_max = 0;
@@ -71,7 +72,7 @@ void write_serial_string(const char *str)
     spin_lock(serial_lock);
     while (*str)
     {
-#if BUILD_VERSION == DEBUG_VERSION
+#if BUILD_EDITION == DEBUG_VERSION
         if (*str == '\n')
         {
             serial_x  = 0;
