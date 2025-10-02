@@ -11,9 +11,13 @@ int *ab_x = &ab_hsf;
 int *ab_y = &cur_y;
 
 char char_buffer[256];
-char p_chbuffer = 0;
+int p_chbuffer = 0;  // 改为int类型，作为缓冲区索引
+int buffer_dirty = 0; // 新增：标记缓冲区是否有数据需要刷新
 
 HDLE handle;
+
+void flush_buffer(); // 新增：声明缓冲区刷新函数
+
 void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
     switch (Type)
@@ -38,7 +42,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_CreateWindow(&handle, &Winfo);
     SetMsgPrcor(handle, shell_MessagePrcor);
     
-    // // 初始绘制
+    // 初始绘制
     *ab_x = 8;
     *ab_y = 4;
     xapi_DrawRect(handle, 0, 0, 719, 404, 0xFFFFFFFF, true);
@@ -47,8 +51,14 @@ int main(int argc, char *argv[], char *envp[])
     paint_arrow_sign(2, 46);
     xapi_RefreshWindow(handle);
 
-    while (1)
+    while (1) {
+        // 主循环中检查并刷新缓冲区
+        if (buffer_dirty) {
+            flush_buffer();
+            buffer_dirty = 0;
+        }
         __asm__ __volatile__("pause");
+    }
 }
 
 void print_to_console(char *str)
@@ -60,17 +70,49 @@ void print_to_console(char *str)
 
 void putchar_at_cur(char *ch)
 {
-    if (*ch == '\n' || *ch == '\r')
-    {
-        cur_x = 8;
-        cur_y += 16;
+    // 将字符存入缓冲区而不是直接显示
+    if (p_chbuffer < 255) { // 确保不溢出
+        char_buffer[p_chbuffer++] = *ch;
+        buffer_dirty = 1; // 标记缓冲区有数据需要刷新
+        
+        // 如果是换行符，立即刷新缓冲区并重置光标
+        if (*ch == '\n' || *ch == '\r') {
+            flush_buffer();
+            cur_x = 8;
+            cur_y += 16;
+            p_chbuffer = 0; // 重置缓冲区索引
+            buffer_dirty = 0;
+        }
+    } else {
+        // 缓冲区满，强制刷新
+        flush_buffer();
+        // 将当前字符放入刷新后的缓冲区
+        if (p_chbuffer < 255) {
+            char_buffer[p_chbuffer++] = *ch;
+            buffer_dirty = 1;
+        }
     }
-    else
-    {
-        xapi_DrawSWText(handle, cur_x, cur_y, ch, 10, 0x000000ff);
-        cur_x += 10;
+}
+
+// 新增：刷新缓冲区函数
+void flush_buffer()
+{
+    if (p_chbuffer > 0) {
+        // 在缓冲区末尾添加字符串结束符
+        char_buffer[p_chbuffer] = '\0';
+        
+        // 绘制缓冲区内容
+        xapi_DrawSWText(handle, cur_x, cur_y, char_buffer, 10, 0x000000ff);
+        
+        // 更新光标位置（基于字符数量）
+        cur_x += p_chbuffer * 10;
+        
+        // 重置缓冲区
+        p_chbuffer = 0;
+        
+        // 刷新窗口显示
+        xapi_RefreshWindow(handle);
     }
-    xapi_RefreshWindow(handle);
 }
 
 #define CALC_FONT_WIDTH(str) ((strlen(str) - 1) * 10) 
