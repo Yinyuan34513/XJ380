@@ -30,6 +30,8 @@
  
 */
 
+#pragma once
+
 #ifndef _BUILD_SETTINGS_H_
 #define _BUILD_SETTINGS_H_
 
@@ -37,7 +39,7 @@
 #define DEBUG_VERSION 0
 #define REALEASE_VERSION 1
 
-#define BUILD_EDITION DEBUG_VERSION
+#define BUILD_EDITION REALEASE_VERSION
 
 #define OS_VERSION "BuildVersion"
 #define KN_VERSION "XSK 2.1.0"
