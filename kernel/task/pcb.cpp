@@ -55,15 +55,15 @@ void thread_exit(int exit_code)
     }
 
     // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
+    // if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
+    if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
+    switch_page_directory(get_current_directory());
 
     if (!no_interrupt)
     {
         enable_scheduler();
         open_interrupt;
     }
-    switch_page_directory(get_current_directory());
-
 }
 
 pcb_t found_pcb(int pid) {

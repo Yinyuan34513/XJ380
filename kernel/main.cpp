@@ -397,6 +397,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     mount_root();
 
     init_user();
+    init_killer();
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 

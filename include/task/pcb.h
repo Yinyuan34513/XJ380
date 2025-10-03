@@ -158,3 +158,6 @@ void get_thread_name_from_filepath(char *path, char *name);
 size_t create_signal_thread(void *_start, 
                             uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func, 
                             pcb_t pcb);
+
+void addque_killer(pcb_t group);
+void init_killer();
