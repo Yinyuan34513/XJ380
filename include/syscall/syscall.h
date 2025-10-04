@@ -94,15 +94,16 @@ typedef struct {
 
 // P3.1
 #define XAPI_OUTPUT    381
-#define XAPI_INPUTW    382
-#define XAPI_INPUT     383
+#define XAPI_INPUT     382
+#define XAPI_GETCH     383
 #define XAPI_ENDLINE   384
 #define XAPI_PRINTLINE 385
 #define XAPI_PRINTF    386
 
 // P3.2
-#define XAPI_OPEN_FILE  387
-#define XAPI_CLOSE_FILE 388
+#define XAPI_OPEN_FILE      387
+#define XAPI_CLOSE_FILE     388
+#define XAPI_SEARCH_FILE    416
 
 // P3.4
 #define XAPI_FORK   389
@@ -155,9 +156,10 @@ typedef struct {
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
-// 当前最大号：415
+// 当前最大号：416
 
 // Proto (XAPI Edition)
+void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir);
 int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
 int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);
 int do_xapi_CloseWindow(uint64_t handle);

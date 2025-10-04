@@ -85,15 +85,16 @@
 
 // P3.1
 #define XAPI_OUTPUT    381
-#define XAPI_INPUTW    382
-#define XAPI_INPUT     383
+#define XAPI_INPUT     382
+#define XAPI_GETCH     383
 #define XAPI_ENDLINE   384
 #define XAPI_PRINTLINE 385
 #define XAPI_PRINTF    386
 
 // P3.2
-#define XAPI_OPEN_FILE  387
-#define XAPI_CLOSE_FILE 388
+#define XAPI_OPEN_FILE      387
+#define XAPI_CLOSE_FILE     388
+#define XAPI_SEARCH_FILE    416
 
 // P3.4
 #define XAPI_FORK   389

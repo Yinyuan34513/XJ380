@@ -16,6 +16,8 @@ int p_chbuffer = 0;  // 改为int类型，作为缓冲区索引
 char input_buf[1024];
 int p_inbuf = 0;
 
+char current_path[512];
+
 bool front_line_is_arrow = true;
 
 #define TML_X   720
@@ -53,6 +55,7 @@ int main(int argc, char *argv[], char *envp[])
     // 初始绘制
     *ab_x = 8;
     *ab_y = 4;
+    strcpy(current_path, "/");
     xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, 0xFFFFFFFF, true);
     print_to_console("XINGJI SpaceTerminal for XJ380");
     print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
@@ -80,8 +83,23 @@ void check_command()
         print_to_console("Version 1.0.0 - 2025/10/4   Platform: Only for XJ380");
         print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
     }
+    else if (strncmp("dir", input_buf, 3) == 0)
+    {
+        print_dir();
+    }
 
     paint_arrow_sign(2, cur_y + 4);
+}
+
+void print_dir()
+{
+    uint32_t count;
+    DirNode  fdir[256];
+    xapi_SearchFile(current_path, &count, fdir);
+    for (int i = 0; i < count; i++)
+    {
+        print_to_console(fdir[i].filename);
+    }
 }
 
 void print_to_console(char *str)
@@ -158,18 +176,16 @@ void paint_arrow_sign(int sx, int sy)
     UserInfo current_user;
     xapi_GetCurrentUser(&current_user);
 
-    strcpy(current_user.name, "/apps");
-
-    xapi_DrawRect(handle, sx, sy, sx + CALC_FONT_WIDTH(current_user.name) + 13, sy + 18, 0x00a2e8ff, true);
-    xapi_DrawRect(handle, sx + CALC_FONT_WIDTH(current_user.name) + 27, sy, 
-                          sx + CALC_FONT_WIDTH(current_user.name) + 27 + 
+    xapi_DrawRect(handle, sx, sy, sx + CALC_FONT_WIDTH(current_path) + 13 + 2, sy + 18, 0x00a2e8ff, true);
+    xapi_DrawRect(handle, sx + CALC_FONT_WIDTH(current_path) + 27 + 2, sy, 
+                          sx + CALC_FONT_WIDTH(current_path) + 27 + 2 +
                           CALC_FONT_WIDTH(user_type_convert_table[current_user.user_type]) + 13, sy + 18, 
                           0xfff200ff, true);
 
     for (int y = 0; y < 19; y++) {
         for (int x = 0; x < 11; x++) {
             if (arrow_head[y][x] == '#') { 
-                xapi_DrawPoint(handle, x + sx + CALC_FONT_WIDTH(current_user.name) + 19, y + sy, 0xfff200ff); 
+                xapi_DrawPoint(handle, x + sx + CALC_FONT_WIDTH(current_path) + 19 + 2, y + sy, 0xfff200ff); 
             }
         }
     }
@@ -177,7 +193,7 @@ void paint_arrow_sign(int sx, int sy)
     for (int y = 0; y < 19; y++) {
         for (int x = 0; x < 11; x++) {
             if (arrow_head[y][x] == '.') { 
-                xapi_DrawPoint(handle, x + sx + CALC_FONT_WIDTH(current_user.name) + 27 + 
+                xapi_DrawPoint(handle, x + sx + CALC_FONT_WIDTH(current_path) + 27 + 2 +
                                CALC_FONT_WIDTH(user_type_convert_table[current_user.user_type]) + 14, 
                                y + sy, 0xfff200ff); 
             }
@@ -187,16 +203,16 @@ void paint_arrow_sign(int sx, int sy)
     for (int y = 0; y < 19; y++) {
         for (int x = 0; x < 11; x++) {
             if (arrow_head[y][x] == '.') { 
-                xapi_DrawPoint(handle, x + sx + CALC_FONT_WIDTH(current_user.name) + 14, y + sy, 0x00a2e8ff); 
+                xapi_DrawPoint(handle, x + sx + CALC_FONT_WIDTH(current_path) + 14 + 2, y + sy, 0x00a2e8ff); 
             }
         }
     }
 
-    xapi_DrawSWText(handle, sx + 8, sy + 2, current_user.name, 0xffffffff);
-    xapi_DrawSWText(handle, sx + CALC_FONT_WIDTH(current_user.name) + 34, sy + 2, 
+    xapi_DrawSWText(handle, sx + 8, sy + 2, current_path, 0xffffffff);
+    xapi_DrawSWText(handle, sx + CALC_FONT_WIDTH(current_path) + 34, sy + 2, 
                   user_type_convert_table[current_user.user_type], 0x000000ff);
 
-    cur_x = sx + CALC_FONT_WIDTH(current_user.name) + 27 + 
+    cur_x = sx + CALC_FONT_WIDTH(current_path) + 27 + 
                  CALC_FONT_WIDTH(user_type_convert_table[current_user.user_type]) + 29;
     cur_y = sy + 4;
 

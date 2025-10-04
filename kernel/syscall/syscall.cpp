@@ -144,12 +144,15 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     break;
 
     case XAPI_OUTPUT: break;
-    case XAPI_INPUTW: break;
     case XAPI_INPUT: break;
+    case XAPI_GETCH: break;
     case XAPI_ENDLINE: break;
     case XAPI_PRINTLINE: break;
     case XAPI_OPEN_FILE: break;
     case XAPI_CLOSE_FILE: break;
+    case XAPI_SEARCH_FILE: 
+        do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx);
+        break;
     case XAPI_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case XAPI_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);

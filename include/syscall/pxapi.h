@@ -14,3 +14,9 @@ struct XWINDOW
     char    *title;
     uint8_t  sets;
 };
+
+typedef  struct {
+	char	    filename[256];
+	uint64_t	length;
+	uint64_t	filetpye;
+}  XAPIT_DirNode;

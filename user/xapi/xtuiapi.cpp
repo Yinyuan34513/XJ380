@@ -6,12 +6,12 @@ void xapi_Output(WSTR str) {
     enter_syscall(XAPI_OUTPUT, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
-WSTR xapi_InputW() {
-    return (WSTR)(enter_syscall(XAPI_INPUTW, 0, 0, 0, 0, 0, 0));
-}
-
 WSTR xapi_Input() {
     return (WSTR)(enter_syscall(XAPI_INPUT, 0, 0, 0, 0, 0, 0));
+}
+
+WSTR xapi_Getch() {
+    return (WSTR)(enter_syscall(XAPI_GETCH, 0, 0, 0, 0, 0, 0));
 }
 
 void xapi_EndLine() {
@@ -33,6 +33,14 @@ void xapi_OpenFile(
 void xapi_CloseFile(XFILE* fsptr) {
     enter_syscall(XAPI_CLOSE_FILE, (UINT64)(fsptr), 0, 0, 0, 0, 0);
 } 
+
+void  xapi_SearchFile(
+	WSTR	  path,
+	UINT32	 *count,
+	DirNode	 *dir
+) {
+	enter_syscall(XAPI_SEARCH_FILE, (UINT64)(path), (UINT64)(count), (UINT64)(dir), 0, 0, 0);
+}
 
 // 3-3
 UINT64 xcr_char2int(WSTR str) {

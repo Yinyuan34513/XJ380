@@ -33,10 +33,16 @@ typedef struct {
     UserType        user_type;  // 用户等级
 } UserInfo;
 
+typedef struct {
+	char	 filename[256];
+	UINT64	 length;
+	UINT64	 filetpye;
+}  DirNode;
+
 // 3-1
 void xapi_Output(WSTR str);
-WSTR xapi_InputW();
 WSTR xapi_Input();
+WSTR xapi_Getch();
 void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
 
@@ -47,6 +53,12 @@ void xapi_OpenFile(
 );
 
 void xapi_CloseFile(XFILE* fsptr); 
+
+void  xapi_SearchFile(
+	WSTR	 path,
+	UINT32	*count,
+	DirNode	*dir
+);
 
 // 3-3
 UINT64 	xcr_char2int(WSTR str);
