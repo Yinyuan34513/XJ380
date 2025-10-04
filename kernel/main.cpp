@@ -44,7 +44,7 @@ void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
-extern bool allow_to_flush = false;
+extern bool allow_to_flush;
 
 extern UserInfo *current_user;
 

@@ -11,9 +11,10 @@
 #include <ttf.h>
 
 char          *ttf_buffer;
-char          *ttf_buffer_c;
 stbtt_fontinfo font;
-stbtt_fontinfo fontc;
+
+SHEET_BUFFER   *mono_xpf_buffer;
+
 SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
@@ -379,95 +380,13 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
 // 				  /*bc, */ x, y, size);
 // }
 
-
-
-// 等宽字体
-unsigned char *TTF_PrintC(int *buf, unsigned *width, unsigned *heigh, int size)
-{
-    /* 创建位图 */
-    int            bitmap_w = 1920; /* 位图的宽 */
-    int            bitmap_h = 768;  /* 位图的高 */
-    unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
-    memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
-
-    /* "STB"的 unicode 编码 */
-    int *word = buf;
-
-    /* 计算字体缩放 */
-    float pixels = size * 2;                                 /* 字体大小（字号） */
-    float scale  = stbtt_ScaleForPixelHeight(&fontc, pixels); /* scale = pixels / (ascent - descent) */
-
-    /**
-	 * 获取垂直方向上的度量
-	 * ascent：字体从基线到顶部的高度；
-	 * descent：基线到底部的高度，通常为负值；
-	 * lineGap：两个字体之间的间距；
-	 * 行间距为：ascent - descent + lineGap。
-	 */
-    int ascent  = 0;
-    int descent = 0;
-    int lineGap = 0;
-    stbtt_GetFontVMetrics(&fontc, &ascent, &descent, &lineGap);
-
-    /* 根据缩放调整字高 */
-    ascent  = roundf(ascent * scale);
-    descent = roundf(descent * scale);
-
-    int x = 0; /*位图的x*/
-
-    float    offset_x = 0; /* 整体的x偏移量 */
-    /* 循环加载word中每个字符 */
-    unsigned h = (int)((float)(ascent - descent + lineGap * scale));
-    for (int i = 0; word[i] != 0; ++i)
-    {
-        /**
-		 * 获取水平方向上的度量
-		 * advanceWidth：字宽；
-		 * leftSideBearing：左侧位置；
-		 */
-        int advanceWidth    = 0;
-        int leftSideBearing = 0;
-        stbtt_GetCodepointHMetrics(&fontc, word[i], &advanceWidth, &leftSideBearing);
-
-        /* 获取字符的边框（边界） */
-        int c_x1, c_y1, c_x2, c_y2;
-        stbtt_GetCodepointBitmapBox(&fontc, word[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
-
-        /* 计算位图的y (不同字符的高度不同） */
-        int y = ascent + c_y1;
-
-        /* 渲染字符 */
-        if (i <= 0) { offset_x = (float)(-leftSideBearing) * scale; } /* 把首个字符的左侧偏移，给整体偏移回去 */
-        int byteOffset = x + leftSideBearing * scale + (y * bitmap_w) + (int)roundf(offset_x);
-        stbtt_MakeCodepointBitmap(&fontc, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, bitmap_w, scale, scale,
-                                  word[i]);
-
-        /* 调整x */
-        x += roundf(advanceWidth * scale);
-
-        /* 调整字距 */
-        int kern;
-        kern  = stbtt_GetCodepointKernAdvance(&fontc, word[i], word[i + 1]);
-        x    += roundf(kern * scale);
-    }
-    *width = x;
-    *heigh = h;
-
-    return bitmap;
-}
+char mono_index1[53] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+char mono_index2[43] = "0123456789~-=!@#$%^&*()_+[]\\{}|;':\",./<>? ";
 
 // 刷新缓冲区内容到屏幕
 void print_box_ttfc(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
 				   /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
-    Rune *r = (Rune *)malloc((utflen(buf) + 1) * sizeof(Rune));
-	r[utflen(buf)] = 0;
-	int i = 0;
-	while (*buf != '\0')
-	{
-		buf += chartorune(&(r[i++]), buf);
-	}
-
 	// 查找图层
 	SHEET *front_p = sht->start;
 	while (true)
@@ -484,24 +403,59 @@ void print_box_ttfc(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER
 	}
 	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
 
-	unsigned width, heigh;
-	unsigned char *bitmap = TTF_PrintC(r, &width, &heigh, size);
-	put_bitmap(sht, sheet_id, bitmap, x, y, width, heigh, 1920, fc);
-	refresh_part_sheet(sht, x, y,
-					   x + width, y + heigh);
-	free(bitmap);
-	free(r);
+    int ox = x;
+    int oy = y;
+
+    char *current_char = buf;
+    for (int len = 0; len < strlen(buf); len++)
+    {
+        char index_pointer = 0;
+        bool in_index1     = true;
+        while (mono_index1[index_pointer])
+        {
+            if (mono_index1[index_pointer] == *current_char)
+                goto flush_mono;
+            index_pointer++;
+        }
+
+        in_index1 = false;
+        index_pointer = 0;
+        while (mono_index2[index_pointer])
+        {
+            if (mono_index2[index_pointer] == *current_char)
+                goto flush_mono;
+            index_pointer++;
+        }
+
+        write_serial_string("Font Flusher: Character not found.\n");
+        continue;
+
+flush_mono:
+        for (int i = 0; i < 9; i++)
+        {
+            for (int j = 0; j < 16; j++)
+            {
+                SheetBuffer[(y + j) * front_p->width + (x + i)] =
+                    LCD_AlphaBlend(fc, SheetBuffer[(y + j) * front_p->width + (x + i)], 
+                    255 - mono_xpf_buffer[(j + (in_index1 ? 0 : 16)) * 468 + (i + index_pointer * 9)].a);
+            }
+        }
+
+        current_char++;
+        x += 9;
+    }
+    refresh_part_sheet(sht, ox, oy, x + strlen(buf) * 9, y + 16);
 }
 
 
 
 void init_ttf()
 {
-    write_serial_string("Initializing TTF...\n");
+    write_serial_string("Initializing Font...\n");
     // delay_s(10);
 
     // 完整不等宽字体
-    vfs_node_t v = vfs_open("/XJ380F.ttf");
+    vfs_node_t v = vfs_open("/system/XJ380F.ttf");
     if (!v)
     {
         write_serial_string("Cannot find XJ380F.ttf\n");
@@ -509,40 +463,28 @@ void init_ttf()
         return;
     }
     ttf_buffer = (char *)malloc(v->size);
-    write_serial_string("Reading TTF - XJ380F (1/2)...\n");
+    write_serial_string("Reading Font - XJ380F (1/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
     if (*(uint64_t *)ttf_buffer == 0)
     {
         write_serial_string("Cannot read XJ380F.ttf\n");
         return;
     }
-    write_serial_string("Loading TTF - XJ380F (1/2)...\n");
+    write_serial_string("Loading Font - XJ380F (1/2)...\n");
     stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
     set_size(16);
 
     vfs_close(v);
 
     // 英文等宽字体
-    v = vfs_open("/XJ380C.ttf");
-    if (!v)
+    write_serial_string("Reading Font - XJ380C (2/2)...\n");
+    LoadPictureOgM(&mono_xpf_buffer, "/system/XJ380C.xpf");
+    if (!mono_xpf_buffer)
     {
-        write_serial_string("Cannot find XJ380C.ttf\n");
-        // wsod_cannot_load_ttf();
+        write_serial_string("Cannot find/read XJ380C.xpf\n");
         return;
     }
-    ttf_buffer_c = (char *)malloc(v->size);
-    write_serial_string("Reading TTF - XJ380C (2/2)...\n");
-    vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
-    if (*(uint64_t *)ttf_buffer_c == 0)
-    {
-        write_serial_string("Cannot read XJ380C.ttf\n");
-        return;
-    }
-    write_serial_string("Loading TTF - XJ380C (2/2)...\n");
-    stbtt_InitFont(&fontc, (uint8_t *)ttf_buffer_c, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer_c, 0));
-    set_size(16);
-
-    vfs_close(v);
+    write_serial_string("Loading Font - XJ380C (2/2)...\n");
 
     write_serial_string("TTF Initialize Success.\n");
 }

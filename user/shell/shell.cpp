@@ -10,8 +10,16 @@ int ab_hsf = 0;
 int *ab_x = &ab_hsf;
 int *ab_y = &cur_y;
 
-char char_buffer[256];
+char char_buffer[64];
 int p_chbuffer = 0;  // 改为int类型，作为缓冲区索引
+
+char input_buf[1024];
+int p_inbuf = 0;
+
+bool front_line_is_arrow = true;
+
+#define TML_X   720
+#define TML_Y   405
 
 HDLE handle;
 
@@ -23,7 +31,7 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         putchar_at_cur((char *)&lData);
         break;
     case MSG_SPCHAR:
-        if (lData == '\n') { newline(); }
+        if (lData == '\n') { check_command(); }
         break;
     }
     return;
@@ -37,18 +45,18 @@ int main(int argc, char *argv[], char *envp[])
 
     XWINDOW Winfo;
     Winfo.title  = (char *)"终端";
-    Winfo.width  = 720;
-    Winfo.height = 405;
+    Winfo.width  = TML_X;
+    Winfo.height = TML_Y;
     xapi_CreateWindow(&handle, &Winfo);
     SetMsgPrcor(handle, shell_MessagePrcor);
     
     // 初始绘制
     *ab_x = 8;
     *ab_y = 4;
-    xapi_DrawRect(handle, 0, 0, 719, 404, 0xFFFFFFFF, true);
+    xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, 0xFFFFFFFF, true);
     print_to_console("XINGJI SpaceTerminal for XJ380");
     print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
-    paint_arrow_sign(2, 46);
+    paint_arrow_sign(2, 40);
     xapi_RefreshWindow(handle);
 
     while (1) {
@@ -60,9 +68,25 @@ int main(int argc, char *argv[], char *envp[])
     }
 }
 
+void check_command()
+{
+    input_buf[p_inbuf] = '\0';
+    p_inbuf = 0;
+    newline();
+
+    if (strncmp("version", input_buf, 7) == 0)
+    {
+        print_to_console("XINGJI SpaceTerminal for XJ380 [Release Edition]");
+        print_to_console("Version 1.0.0 - 2025/10/4   Platform: Only for XJ380");
+        print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
+    }
+
+    paint_arrow_sign(2, cur_y + 4);
+}
+
 void print_to_console(char *str)
 {
-    xapi_DrawSWText(handle, *ab_x, *ab_y, str, 10, 0x000000ff);
+    xapi_DrawSWText(handle, *ab_x, *ab_y, str, 0x000000ff);
     *ab_x = 8;
     *ab_y += 16;
 }
@@ -74,14 +98,6 @@ void putchar_at_cur(char *ch)
     // 将字符存入缓冲区而不是直接显示
     if (p_chbuffer < 255) { // 确保不溢出
         char_buffer[p_chbuffer++] = *ch;
-        
-        // 如果是换行符，立即刷新缓冲区并重置光标
-        if (*ch == '\n' || *ch == '\r') {
-            flush_buffer();
-            cur_x = 8;
-            cur_y += 16;
-            p_chbuffer = 0; // 重置缓冲区索引
-        }
     } else {
         // 缓冲区满，强制刷新
         flush_buffer();
@@ -94,10 +110,9 @@ void putchar_at_cur(char *ch)
 
 void newline()
 {
-    flush_buffer();
     cur_x = 8;
-    cur_y += 16;
-    p_chbuffer = 0; // 重置缓冲区索引
+    cur_y += front_line_is_arrow ? 20 : 16;
+    front_line_is_arrow = false;
 }
 
 // 新增：刷新缓冲区函数
@@ -112,14 +127,23 @@ void flush_buffer()
 
         int temp_pchb = p_chbuffer;
         
+        // 换行
+        if (cur_x + temp_pchb * 9 >= TML_X - 8)
+        {
+            newline();
+        }
+
         // 重置缓冲区
         p_chbuffer = 0;
         
         // 绘制缓冲区内容
-        xapi_DrawSWText(handle, cur_x, cur_y, temp, 10, 0x000000ff);
+        xapi_DrawSWText(handle, cur_x, cur_y, temp, 0x000000ff);
+
+        strcpy(&input_buf[p_inbuf], char_buffer);
+        p_inbuf += strlen(char_buffer);
         
         // 更新光标位置（基于字符数量）
-        cur_x += temp_pchb * 91 / 10;
+        cur_x += temp_pchb * 9;
         
         // 刷新窗口显示
         xapi_RefreshWindow(handle);
@@ -130,6 +154,7 @@ void flush_buffer()
 
 void paint_arrow_sign(int sx, int sy)
 {
+    front_line_is_arrow = true;
     UserInfo current_user;
     xapi_GetCurrentUser(&current_user);
 
@@ -167,11 +192,13 @@ void paint_arrow_sign(int sx, int sy)
         }
     }
 
-    xapi_DrawSWText(handle, sx + 8, sy - 1, current_user.name, 10, 0xffffffff);
-    xapi_DrawSWText(handle, sx + CALC_FONT_WIDTH(current_user.name) + 34, sy - 1, 
-                  user_type_convert_table[current_user.user_type], 10, 0x000000ff);
+    xapi_DrawSWText(handle, sx + 8, sy + 2, current_user.name, 0xffffffff);
+    xapi_DrawSWText(handle, sx + CALC_FONT_WIDTH(current_user.name) + 34, sy + 2, 
+                  user_type_convert_table[current_user.user_type], 0x000000ff);
 
     cur_x = sx + CALC_FONT_WIDTH(current_user.name) + 27 + 
                  CALC_FONT_WIDTH(user_type_convert_table[current_user.user_type]) + 29;
-    cur_y = sy;
+    cur_y = sy + 4;
+
+    xapi_RefreshWindow(handle);
 }

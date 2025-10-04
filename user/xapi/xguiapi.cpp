@@ -85,7 +85,8 @@ void xapi_DrawTextl(
 	UINT32  color,
 	UINT32 *width
 ) {
-	enter_syscall(XAPI_DRAW_TEXT_L, handle, (x << 32) | y, (UINT64)(str), size, color, (UINT64)width);
+	UINT64 tx = x;
+	enter_syscall(XAPI_DRAW_TEXT_L, handle, (tx << 32) | y, (UINT64)(str), size, color, (UINT64)width);
 }
 
 void xapi_DrawSWText(
@@ -93,10 +94,9 @@ void xapi_DrawSWText(
 	UINT32 	x,
 	UINT32 	y,
 	WSTR 	str,
-	UINT32	size,
 	UINT32  color
 ) {
-	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), size, color);
+	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), 10, color);
 }
 
 
