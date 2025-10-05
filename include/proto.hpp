@@ -102,6 +102,7 @@ void     io_mfence();
 // kernel/cpu/cpuid.cpp
 void asm_cpuid(uint32_t mop, uint32_t sop, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 void get_cpu_name(char *c);
+void get_cpu_vendor(char *c);
 bool mtrr_supported();
 
 // kernel/cpu/mtrr.cpp

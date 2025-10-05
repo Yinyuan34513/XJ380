@@ -399,6 +399,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_user();
     init_killer();
 
+    if (BootConfig.is_qemu == 1)
+        write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
+
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);

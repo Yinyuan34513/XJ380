@@ -26,6 +26,14 @@ void get_cpu_name(char *c)
     c[47] = '\0';
 }
 
+void get_cpu_vendor(char *c)
+{
+    uint32_t *v = (uint32_t *)(c);
+    uint32_t zero;
+    asm_cpuid(0, 0, &zero, &v[0], &v[2], &v[1]);
+    c[12] = '\0';
+}
+
 bool mtrr_supported()
 {
     uint32_t eax, ebx, ecx, edx;
