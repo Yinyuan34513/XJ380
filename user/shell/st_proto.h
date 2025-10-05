@@ -12,3 +12,4 @@ void putchar_at_cur(char *ch);
 void paint_arrow_sign(int sx, int sy);
 void flush_buffer();
 void newline();
+void scroll();

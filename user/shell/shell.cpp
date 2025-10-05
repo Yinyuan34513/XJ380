@@ -18,7 +18,9 @@ int p_inbuf = 0;
 
 char current_path[512];
 
-bool front_line_is_arrow = true;
+bool front_line_is_arrow = false;
+
+bool command_ck_lock = false;
 
 #define TML_X   720
 #define TML_Y   405
@@ -73,6 +75,8 @@ int main(int argc, char *argv[], char *envp[])
 
 void check_command()
 {
+    command_ck_lock = true;
+
     input_buf[p_inbuf] = '\0';
     p_inbuf = 0;
     newline();
@@ -113,6 +117,8 @@ void check_command()
     }
 
     paint_arrow_sign(2, cur_y + 4);
+
+    command_ck_lock = false;
 }
 
 void print_dir()
@@ -149,11 +155,19 @@ int check_dir_com(char *str)
     return 0;
 }
 
+void scroll()
+{
+    XCOLOR winbuf[TML_X * TML_Y];
+    xapi_ReadBuffer(handle, 0, 0, TML_X, TML_Y, winbuf);
+    xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, 0xFFFFFFFF, true);
+    xapi_WriteBuffer(handle, 0, 0, TML_X, TML_Y - 16, winbuf + TML_X * 16);
+    cur_y -= 16;
+}
+
 void print_to_console(char *str)
 {
     xapi_DrawSWText(handle, *ab_x, *ab_y, str, 0x000000ff);
-    *ab_x = 8;
-    *ab_y += 16;
+    newline();
 }
 
 void print_to_console_zh(char *str)
@@ -184,12 +198,20 @@ void newline()
 {
     cur_x = 8;
     cur_y += front_line_is_arrow ? 20 : 16;
+    if (cur_y > TML_Y - 32)
+        scroll();
     front_line_is_arrow = false;
 }
 
 // 新增：刷新缓冲区函数
 void flush_buffer()
 {
+    while (true)
+    {
+        if (!command_ck_lock)
+            break;
+    }
+
     if (p_chbuffer > 0) {
         // 在缓冲区末尾添加字符串结束符
         char_buffer[p_chbuffer] = '\0';
@@ -226,6 +248,7 @@ void flush_buffer()
 
 void paint_arrow_sign(int sx, int sy)
 {
+
     front_line_is_arrow = true;
     UserInfo current_user;
     xapi_GetCurrentUser(&current_user);
@@ -269,6 +292,9 @@ void paint_arrow_sign(int sx, int sy)
     cur_x = sx + CALC_FONT_WIDTH(current_path) + 27 + 
                  CALC_FONT_WIDTH(user_type_convert_table[current_user.user_type]) + 29;
     cur_y = sy + 4;
+    
+    if (cur_y >= TML_Y - 32)
+        scroll();
 
     xapi_RefreshWindow(handle);
 }

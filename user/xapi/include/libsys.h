@@ -86,6 +86,7 @@
 // P3.1
 #define XAPI_OUTPUT    381
 #define XAPI_INPUT     382
+#define XAPI_GETLINE   418
 #define XAPI_GETCH     383
 #define XAPI_ENDLINE   384
 #define XAPI_PRINTLINE 385
