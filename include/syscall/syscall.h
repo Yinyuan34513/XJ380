@@ -149,6 +149,7 @@ typedef struct {
 // P4.5
 #define XAPI_READBUFFER     406
 #define XAPI_WRITEBUFFER    407
+#define XAPI_READBUFFERA    417
 #define XAPI_WRITEBUFFERA   408
 #define XAPI_REFRESH_WINDOW 409
 
@@ -156,7 +157,7 @@ typedef struct {
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
-// 当前最大号：416
+// 当前最大号：417
 
 // Proto (XAPI Edition)
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir);
@@ -173,6 +174,10 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
 int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t size, uint32_t color, uint64_t i_width);
 int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color);
+void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer);
+void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer);
+void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer);
+void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer);
 int do_xapi_RefreshWindow(uint64_t handle);
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func);
 void do_xapi_GetSystemVersion(uint64_t str);

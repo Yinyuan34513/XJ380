@@ -168,6 +168,75 @@ int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, ui
     return true;
 }
 
+void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    SHEET_BUFFER_WOA *buf = (SHEET_BUFFER_WOA *)buffer;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int xsize = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int ysize = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    for (int wy = 0; wy < height; wy++)
+    {
+        for (int wx = 0; wx < width; wx++)
+        {
+            buf[wy * width + wx].r = src[(wy + y + 27) * xsize + (wx + x + 12)].r;
+            buf[wy * width + wx].g = src[(wy + y + 27) * xsize + (wx + x + 12)].g;
+            buf[wy * width + wx].b = src[(wy + y + 27) * xsize + (wx + x + 12)].b;
+        }
+    }
+}
+
+void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    SHEET_BUFFER_WOA *buf = (SHEET_BUFFER_WOA *)buffer;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int xsize = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int ysize = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    for (int wy = 0; wy < height; wy++)
+    {
+        for (int wx = 0; wx < width; wx++)
+        {
+            src[(wy + y + 27) * xsize + (wx + x + 12)].r = buf[wy * width + wx].r;
+            src[(wy + y + 27) * xsize + (wx + x + 12)].g = buf[wy * width + wx].g;
+            src[(wy + y + 27) * xsize + (wx + x + 12)].b = buf[wy * width + wx].b;
+            src[(wy + y + 27) * xsize + (wx + x + 12)].a = 255;
+        }
+    }
+}
+
+void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    SHEET_BUFFER *buf = (SHEET_BUFFER *)buffer;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int xsize = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int ysize = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    for (int wy = 0; wy < height; wy++)
+    {
+        for (int wx = 0; wx < width; wx++)
+        {
+            buf[wy * width + wx] = src[(wy + y + 27) * xsize + (wx + x + 12)];
+        }
+    }
+}
+
+void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    SHEET_BUFFER *buf = (SHEET_BUFFER *)buffer;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int xsize = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int ysize = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    for (int wy = 0; wy < height; wy++)
+    {
+        for (int wx = 0; wx < width; wx++)
+        {
+            src[(wy + y + 27) * xsize + (wx + x + 12)] = buf[wy * width + wx];
+        }
+    }
+}
+
 int do_xapi_RefreshWindow(uint64_t handle)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);

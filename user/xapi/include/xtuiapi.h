@@ -36,7 +36,7 @@ typedef struct {
 typedef struct {
 	char	 filename[256];
 	UINT64	 length;
-	UINT64	 filetpye;
+	UINT64	 filetype;
 }  DirNode;
 
 // 3-1

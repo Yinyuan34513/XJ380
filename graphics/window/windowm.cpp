@@ -59,6 +59,9 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     xwmi->win_num++;
     new_window->WinMPf = NULL;
 
+    new_window->width  = width;
+    new_window->height = height;
+
     new_window->w_task = get_current_task();
 
     create_sheet(sht, 72, 72, width + 24, height + 52, MovableSheetType, -1, &(new_window->w_sheet));
@@ -107,13 +110,13 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color)
 {
-    print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
+    print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, size);
 }
 
 void draw_textl(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color, uint32_t *i_width)
 {
-    print_box_ttfl(sht, &(windowls->w_sheet), title, color, x, y, 10, i_width);
+    print_box_ttfl(sht, &(windowls->w_sheet), title, color, x, y, size, i_width);
 }
 
 void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,

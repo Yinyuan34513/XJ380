@@ -18,5 +18,5 @@ struct XWINDOW
 typedef  struct {
 	char	    filename[256];
 	uint64_t	length;
-	uint64_t	filetpye;
+	uint64_t	filetype;
 }  XAPIT_DirNode;

@@ -51,7 +51,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.height = TML_Y;
     xapi_CreateWindow(&handle, &Winfo);
     SetMsgPrcor(handle, shell_MessagePrcor);
-    
+
     // 初始绘制
     *ab_x = 8;
     *ab_y = 4;
@@ -87,6 +87,30 @@ void check_command()
     {
         print_dir();
     }
+    else if (strncmp("fork", input_buf, 4) == 0)
+    {
+        uint64_t pid = xapi_Fork();
+        if (pid == 0)
+        {
+            xapi_Execve("/system/shell.elf", NULL, NULL);
+        }
+    }
+    else
+    {
+        if (check_dir_com(input_buf) == 1)
+        {
+            // todo: 打开文件
+        }
+        else if (check_dir_com(input_buf) == 2)
+        {
+            // todo: 打开文件夹
+        }
+        else
+        {
+            print_to_console_zh("不存在的命令或路径。请检查您的输入是否有误并再试一次。");
+            print_to_console(   "Bad command. Please check your command and try again.");
+        }
+    }
 
     paint_arrow_sign(2, cur_y + 4);
 }
@@ -102,11 +126,41 @@ void print_dir()
     }
 }
 
+int check_dir_com(char *str)
+{
+    uint32_t count;
+    DirNode  fdir[256];
+    xapi_SearchFile(current_path, &count, fdir);
+    for (int i = 0; i < count; i++)
+    {
+        if (strcmp(fdir[i].filename, str) == 0)
+        {
+            // 不是文件夹
+            if (fdir[i].filetype != 1)
+            {
+                return 1;
+            }
+            else
+            {
+                return 2;
+            }
+        }
+    }
+    return 0;
+}
+
 void print_to_console(char *str)
 {
     xapi_DrawSWText(handle, *ab_x, *ab_y, str, 0x000000ff);
     *ab_x = 8;
     *ab_y += 16;
+}
+
+void print_to_console_zh(char *str)
+{
+    xapi_DrawText(handle, *ab_x, (*ab_y) - 4, str, 12, 0x000000ff);
+    *ab_x = 8;
+    *ab_y += 18;
 }
 
 bool putchar_lock = false;

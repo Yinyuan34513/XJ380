@@ -331,10 +331,17 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
         {
             while (true)
             {
-                if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x && front_p->by <= y &&
-                    front_p->by + 22 >= y && front_p->type == MovableSheetType)
+                if (front_p->type == MovableSheetType) 
                 {
-                    return &front_p->index;
+                    if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x && front_p->by <= y &&
+                        front_p->by + 22 >= y)
+                    {
+                        return &front_p->index;
+                    }
+                    else
+                    {
+                        return NULL;
+                    }
                 }
                 else if (front_p->front == NULL) { return NULL; }
                 front_p = front_p->front;
@@ -490,6 +497,7 @@ void refresh_sheet(SHEET_INFO *sht)
                     TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
                     TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
                     TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
+                    temp_peek_sign[BufferOffest] = 0;
                 }
                 else if (SheetBuffer[y * front_p->width + x].a == 0)
                 {
@@ -627,6 +635,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
                         TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
                         TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
                         TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
+                        temp_peek_sign[BufferOffest] = 0;
                     }
                     else if (SheetBuffer[y * front_p->width + x].a == 0)
                     {
@@ -769,6 +778,17 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SH
             }
         }
         else if (front_p->next == NULL) { return; }
+        front_p = front_p->next;
+    }
+}
+
+void *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id) { return front_p->buffer; }
+        else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }

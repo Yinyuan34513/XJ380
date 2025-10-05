@@ -151,6 +151,17 @@ void xapi_WriteBuffer(
 	enter_syscall(XAPI_WRITEBUFFER, handle, x, y, width, height, (UINT64)(buffer));
 }
 
+void xapi_ReadBufferA(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32		height,
+	XCOLOR*  	buffer
+) {
+	enter_syscall(XAPI_READBUFFERA, handle, x, y, width, height, (UINT64)(buffer));
+}
+
 void xapi_WriteBufferA(
 	HDLE  	 	handle,
 	UINT32  	x,

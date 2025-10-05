@@ -83,6 +83,7 @@ void      refresh_sheet(SHEET_INFO *sht);
 void      refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 uint32_t  get_hor();
 uint32_t  get_ver();
+void     *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id);
 // graphics/draw.cpp
 auto      operator new(size_t size, void *ptr) -> void *;
 auto      operator new[](size_t size, void *ptr) -> void *;
