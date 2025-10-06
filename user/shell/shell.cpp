@@ -25,7 +25,10 @@ bool command_ck_lock = false;
 #define TML_X 720
 #define TML_Y 405
 
-int blkc = 0,cf = 0;
+int blkc = 0, cf = 0;
+
+bool putchar_lock = false;
+bool paint_cursor_lock = false;
 
 HDLE handle;
 
@@ -68,16 +71,6 @@ int main(int argc, char *argv[], char *envp[])
     {
         // 主循环中检查并刷新缓冲区
         if (p_chbuffer) { flush_buffer(); }
-        else if(blkc >= 990000)
-        {
-            if(cf==0)xapi_DrawRect(handle, cur_x, cur_y, cur_x + 2, cur_y + 18, 0xffffffff, true);
-            else xapi_DrawRect(handle, cur_x, cur_y, cur_x + 2, cur_y + 18, 0x727272c3, true);
-            cf^=1;
-            blkc = 0;
-            xapi_RefreshWindow(handle);
-        }
-        blkc++;
-        
         __asm__ __volatile__("pause");
     }
 }
@@ -174,26 +167,6 @@ void print_to_console_zh(char *str)
     *ab_y += 18;
 }
 
-bool putchar_lock = false;
-int  lcurx = 0, lcury = 0;
-void draw_cur(int curx, int cury)
-{
-    if (lcurx != 0 && lcury != 0) {}
-
-    for (int y = 0; y < 19; y++)
-    {
-        for (int x = 0; x < 3; x++)
-        {
-            if (cursor__[y][x] == '#')
-            {
-                // #727272c3
-                xapi_DrawPoint(handle, x + curx, y + cury, 0x727272c3);
-            }
-        }
-    }
-    lcurx = curx;
-    lcury = cury;
-}
 void putchar_at_cur(char *ch)
 {
     // 将字符存入缓冲区而不是直接显示
@@ -214,29 +187,6 @@ void newline()
 {
     cur_x  = 8;
     cur_y += front_line_is_arrow ? 20 : 16;
-    for (int y = 0; y < 19; y++)
-    {
-        for (int x = 0; x < 3; x++)
-        {
-            if (cursor__[y][x] == '#')
-            {
-                // #727272c3
-                xapi_DrawPoint(handle, x + cur_x, y + cur_y, 0xffffffff);
-            }
-        }
-    }
-    if (cur_y > TML_Y - 32) scroll();
-    for (int y = 0; y < 19; y++)
-    {
-        for (int x = 0; x < 3; x++)
-        {
-            if (cursor__[y][x] == '#')
-            {
-                // #727272c3
-                xapi_DrawPoint(handle, x + cur_x, y + cur_y, 0xffffffff);
-            }
-        }
-    }
     front_line_is_arrow = false;
 }
 
@@ -263,17 +213,6 @@ void flush_buffer()
 
         // 重置缓冲区
         p_chbuffer = 0;
-        for (int y = 0; y < 19; y++)
-        {
-            for (int x = 0; x < 3; x++)
-            {
-                if (cursor__[y][x] == '#')
-                {
-                    // #727272c3
-                    xapi_DrawPoint(handle, x + cur_x, y + cur_y, 0xffffffff);
-                }
-            }
-        }
 
         // 绘制缓冲区内容
         xapi_DrawSWText(handle, cur_x, cur_y, temp, 0x000000ff);
@@ -284,8 +223,6 @@ void flush_buffer()
         // 更新光标位置（基于字符数量）
         cur_x += temp_pchb * 9;
 
-        draw_cur(cur_x, cur_y);
-
         // 刷新窗口显示
         xapi_RefreshWindow(handle);
     }
@@ -295,7 +232,6 @@ void flush_buffer()
 
 void paint_arrow_sign(int sx, int sy)
 {
-
     front_line_is_arrow = true;
     UserInfo current_user;
     xapi_GetCurrentUser(&current_user);

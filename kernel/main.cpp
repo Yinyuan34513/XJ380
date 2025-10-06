@@ -135,6 +135,8 @@ void components_flusher()
     }
 }
 
+extern uint16_t *mouse_sheet_id_img;
+
 void desktop_flusher()
 {
     no_interrupt = true;
@@ -238,6 +240,8 @@ void desktop_flusher()
     init_xwm(&xwmi);
     xwmii = &xwmi;
 
+    mouse_sheet_id_img = &mouse_sheet_id;
+
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
@@ -254,8 +258,6 @@ void desktop_flusher()
     // delete_sheet(&shtinf, &dock_sheet_id);
     desktop_done = true;
     uint8_t k_input;
-    int     tby;
-    int     tbx;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
@@ -275,20 +277,6 @@ void desktop_flusher()
         {
             tw_data->need_flush = false;
             refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
-        }
-        if (ms_dec.need_flush)
-        {
-            tbx         = getBX(&shtinf, &mouse_sheet_id);
-            tby         = getBY(&shtinf, &mouse_sheet_id);
-            int mouse_x = get_mouse_x();
-            int mouse_y = get_mouse_y();
-            move_mouse(&shtinf, &mouse_sheet_id, mouse_x, mouse_y);
-            refresh_part_sheet(&shtinf, tbx, tby, tbx + getXsize(&shtinf, &mouse_sheet_id),
-                               tby + getYsize(&shtinf, &mouse_sheet_id));
-            refresh_part_sheet(&shtinf, getBX(&shtinf, &mouse_sheet_id), getBY(&shtinf, &mouse_sheet_id),
-                               getBX(&shtinf, &mouse_sheet_id) + getXsize(&shtinf, &mouse_sheet_id),
-                               getBY(&shtinf, &mouse_sheet_id) + getYsize(&shtinf, &mouse_sheet_id));
-            ms_dec.need_flush = false;
         }
 
         k_input = get_keyboard_input();

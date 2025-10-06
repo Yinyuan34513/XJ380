@@ -14,4 +14,3 @@ void paint_arrow_sign(int sx, int sy);
 void flush_buffer();
 void newline();
 void scroll();
-void draw_cur(int curx, int cury);

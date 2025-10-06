@@ -18,6 +18,8 @@ bool        win_c_bt_isl = false;
 bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
+uint16_t *mouse_sheet_id_img;
+
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
     uint8_t data = inb(PORT_KB_DATA);
@@ -52,6 +54,18 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
     }
 
     send_eoi();
+
+    tbx = getBX(sht_img, mouse_sheet_id_img);
+    tby = getBY(sht_img, mouse_sheet_id_img);
+    int mouse_x = get_mouse_x();
+    int mouse_y = get_mouse_y();
+    move_mouse(sht_img, mouse_sheet_id_img, mouse_x, mouse_y);
+    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_sheet_id_img),
+                        tby + getYsize(sht_img, mouse_sheet_id_img));
+    refresh_part_sheet(sht_img, getBX(sht_img, mouse_sheet_id_img), getBY(sht_img, mouse_sheet_id_img),
+                        getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
+                        getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
+    ms_dec.need_flush = false;
 }
 
 void process_mouse_info()
