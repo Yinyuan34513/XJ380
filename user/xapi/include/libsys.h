@@ -149,6 +149,4 @@
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
-#define XAPI_REFRESH_PART 512
-
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

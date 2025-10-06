@@ -194,9 +194,3 @@ void xapi_StyleButton(
 ) {
 	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), (UINT64)(path), 0, 0);
 }
-
-//私货
-void xapi_RefreshPart(HDLE handle,int stx,int sty,int edx,int edy) {
-	enter_syscall(XAPI_REFRESH_PART, handle, stx, sty, edx, edy, 0);
-}
-

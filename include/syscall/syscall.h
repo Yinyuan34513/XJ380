@@ -85,6 +85,7 @@
 // 一些隐藏的API，不对外开放，严禁泄露！
 #define SXAH_SYSCALL_RETURN         3801
 #define SXAH_CREATE_KERNEL_TERMINAL 3802
+#define SXAH_CHECK_USER_PASSWORD    3803
 
 // define
 typedef struct {
@@ -157,8 +158,6 @@ typedef struct {
 // P4.6
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
-
-#define XAPI_REFRESH_PART 512
 
 // 当前最大号：418
 

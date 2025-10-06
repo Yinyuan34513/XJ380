@@ -213,4 +213,3 @@ void xapi_StyleButton(
 	WSTR  	text,
 	WSTR  	path
 );
-void xapi_RefreshPart(HDLE handle,int stx,int sty,int edx,int edy);

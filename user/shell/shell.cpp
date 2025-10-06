@@ -39,6 +39,7 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_CHAR: putchar_at_cur((char *)&lData); break;
     case MSG_SPCHAR:
         if (lData == '\n') { check_command(); }
+        if (lData == '\b') { backspace(); }
         break;
     }
     return;
@@ -188,6 +189,26 @@ void newline()
     cur_x  = 8;
     cur_y += front_line_is_arrow ? 20 : 16;
     front_line_is_arrow = false;
+    if (cur_y >= TML_Y - 32) scroll();
+}
+
+void backspace()
+{
+    // 如果没有输入内容就无需退格
+    if (p_inbuf == 0)
+        return;
+    if (cur_x != 8)
+    {
+        cur_x -= 9;
+    }
+    else
+    {
+        cur_x = TML_X - 17;
+        cur_y -= 16;
+    }
+    xapi_DrawRect(handle, cur_x, cur_y, cur_x + 9, cur_y + 16, 0xffffffff, true);
+    xapi_RefreshWindow(handle);
+    p_inbuf--;
 }
 
 // 新增：刷新缓冲区函数
