@@ -81,7 +81,6 @@ void check_command()
     command_ck_lock = true;
 
     input_buf[p_inbuf] = '\0';
-    p_inbuf            = 0;
     newline();
 
     if (strncmp("version", input_buf, 7) == 0)
@@ -96,6 +95,11 @@ void check_command()
         uint64_t pid = xapi_Fork();
         if (pid == 0) { xapi_Execve("/system/shell.elf", NULL, NULL); }
     }
+    else if (strncmp("../", input_buf, 3)  == 0 ||
+             strncmp("back", input_buf, 4) == 0)
+    {
+        revert_path(current_path);
+    }
     else
     {
         if (check_dir_com(input_buf) == 1)
@@ -104,14 +108,17 @@ void check_command()
         }
         else if (check_dir_com(input_buf) == 2)
         {
-            // todo: 打开文件夹
+            merge_string(current_path, "/");
+            merge_string(current_path, input_buf);
         }
-        else
+        else if (p_inbuf > 0)
         {
             print_to_console_zh("不存在的命令或路径。请检查您的输入是否有误并再试一次。");
             print_to_console("Bad command. Please check your command and try again.");
         }
     }
+
+    p_inbuf = 0;
 
     paint_arrow_sign(2, cur_y + 4);
 
@@ -123,9 +130,23 @@ void print_dir()
     uint32_t count;
     DirNode  fdir[256];
     xapi_SearchFile(current_path, &count, fdir);
+    print_to_console("Filename         Type   Size");
+    print_to_console("==============================================");
+    if (count == 0 || count == 404)
+        return;
     for (int i = 0; i < count; i++)
     {
-        print_to_console(fdir[i].filename);
+        xapi_DrawSWText(handle, *ab_x, *ab_y, fdir[i].filename, 0x000000ff);
+        xapi_DrawSWText(handle, *ab_x + 17 * 9, *ab_y, 
+                        (char *)(fdir[i].filetype ? "Folder" : "File"), 
+                        0x000000ff);
+        if (fdir[i].filetype == 0)
+        {
+            xapi_DrawSWText(handle, *ab_x + 24 * 9, *ab_y, 
+                            xcr_int2char(fdir[i].length), 
+                            0x000000ff);
+        }
+        newline();
     }
 }
 
@@ -310,4 +331,41 @@ void paint_arrow_sign(int sx, int sy)
     if (cur_y >= TML_Y - 32) scroll();
 
     xapi_RefreshWindow(handle);
+}
+
+void merge_string(char *dst, char *src)
+{
+    char *s1 = dst;
+    char *s2 = src;
+
+    while (*s1)
+        s1++;
+
+    while (*s2)
+    {
+        if (*(s1 - 1) == '/' && *s2 == '/')
+        {
+            s1++; s2++;
+            continue;
+        }
+        *s1 = *s2;
+        s1++; s2++;
+    }
+
+    *s1 = '\0';
+}
+
+void revert_path(char *path)
+{
+    char *s = path;
+    while (*s)
+        s++;
+
+    while (*s != '/')
+        s--;
+
+    if (s == path)
+        s++;
+
+    *s = '\0';
 }

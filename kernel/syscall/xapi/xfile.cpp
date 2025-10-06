@@ -45,7 +45,7 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
         void *data = node->data;
         strcpy(fdir[*fcount].filename, ((vfs_node_t)data)->name);
         fdir[*fcount].length = ((vfs_node_t)data)->size;
-        fdir[*fcount].filetype = (((vfs_node_t)data)->type & (file_symlink | file_dir)) == (file_symlink | file_dir) ? 1 : 0;
+        fdir[*fcount].filetype = ((vfs_node_t)data)->type == file_dir ? 1 : 0;
         (*fcount)++;
     }
 }

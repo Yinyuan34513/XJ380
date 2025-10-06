@@ -16,3 +16,6 @@ void newline();
 void scroll();
 
 void backspace();
+
+void merge_string(char *dst, char *src);
+void revert_path(char *path);

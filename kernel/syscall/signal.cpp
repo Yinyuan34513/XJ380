@@ -23,7 +23,7 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
     tcb_t current = ftask;
 
     // 检查是否有注册的信号处理函数
-    if (WinMpf != NULL)
+    if (WinMpf != NULL && !current->parent_group->sigprci)
     {
         current->parent_group->sigprci = true;
         // 准备信号处理栈
@@ -36,7 +36,7 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 
 void signal_end() 
 {
-    while(get_current_task()->parent_group->sigprci)__asm__ volatile("pause\n\t");
+    get_current_task()->parent_group->sigprci = false;
     kill_thread(get_current_task()->tid, get_current_task()->parent_group); // 他紫砂了
     scheduler_yield();
     while (true)
