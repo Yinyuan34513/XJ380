@@ -26,6 +26,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 
+bool        desktop_done = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
 uint16_t   *msid;
@@ -102,8 +103,7 @@ void components_flusher()
 {
     while (true)
     {
-        if (allow_to_flush)
-            break;
+        if (allow_to_flush) break;
     }
     write_serial_string("components flusher is running\n");
     while (true)
@@ -222,7 +222,7 @@ void desktop_flusher()
     write_serial_string("CPU Model: ");
     write_serial_string(CPU_Model);
     write_serial_string("\n");
-    
+
     print_fmt_box_ttf(&shtinf, &desktop_sheet_id, WHITE, 64, 64, 16,
                       "MAKE \nXJ380 \nGREAT \nAGAIN! \n实现XJ380的伟大复兴！");
 #endif
@@ -252,7 +252,7 @@ void desktop_flusher()
     allow_to_flush = true;
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
-
+    desktop_done = true;
     uint8_t k_input;
     int     tby;
     int     tbx;
@@ -265,6 +265,7 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
+    create_user_process_from_file((char *)"/system/shell.elf", NULL);
 
     while (1)
     {
@@ -300,15 +301,12 @@ void desktop_flusher()
                 {
                     do_signal(0, NULL, k_input, a->WinMPf, a->w_task);
                 }
-                else
-                {
-                    do_signal(7, NULL, k_input, a->WinMPf, a->w_task);
-                }
+                else { do_signal(7, NULL, k_input, a->WinMPf, a->w_task); }
             }
         }
-#   if BUILD_EDITION == DEBUG_VERSION
-        if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL &&
-            k_input != KEY_CAPS && k_input != '\b')
+#if BUILD_EDITION == DEBUG_VERSION
+        if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS &&
+            k_input != '\b')
         {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
@@ -324,14 +322,15 @@ void desktop_flusher()
             fontx  = 8;
             fonty += 16;
         }
-#   endif
+#endif
     }
 }
 
 void tst()
 {
     write_serial_fmt("Stack Test\n");
-    while (1);
+    while (1)
+        ;
 }
 
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
@@ -399,8 +398,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_user();
     init_killer();
 
-    if (BootConfig.is_qemu == 1)
-        write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
+    if (BootConfig.is_qemu == 1) write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
 
     pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
@@ -411,8 +409,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
-
-    create_user_process_from_file((char *)"/system/shell.elf", NULL);
+    
 
     enable_scheduler();
     open_interrupt;

@@ -158,6 +158,8 @@ typedef struct {
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
+#define XAPI_REFRESH_PART 512
+
 // 当前最大号：418
 
 // Proto (XAPI Edition)
@@ -194,7 +196,7 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 void init_signal();
 void signal_revert();
 void signal_end();
-
+void do_xapi_RefreshPart(uint64_t handle,int stx,int sty,int edx,int edy);
 
 
 

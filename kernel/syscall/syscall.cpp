@@ -210,6 +210,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SXAH_SYSCALL_RETURN: 
         get_current_task()->parent_group->sigprci = false;
         signal_end(); break;
+    
+    case XAPI_REFRESH_PART:
+        do_xapi_RefreshPart(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
+        break;
+        
 
     default:
         regs->rax = (uint64_t)-ENOSYS;

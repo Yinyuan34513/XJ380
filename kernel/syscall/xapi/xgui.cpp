@@ -92,6 +92,14 @@ int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
     return true;
 }
 
+void do_xapi_RefreshPart(uint64_t handle,int stx,int sty,int edx,int edy)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    int            bx           = getBX(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int            by           = getBY(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    refresh_part_sheet(sht_img, bx+stx, by+sty, bx+edx+1, by+edy+1);
+}
+
 int do_xapi_DrawRect_fill(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
