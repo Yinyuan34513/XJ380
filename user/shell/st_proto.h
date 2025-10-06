@@ -5,7 +5,6 @@ extern HDLE handle;
 
 void check_command();
 void print_dir();
-int check_dir_com(char *str);
 
 void print_to_console(char *str);
 void print_to_console_zh(char *str);
@@ -19,3 +18,4 @@ void backspace();
 
 void merge_string(char *dst, char *src);
 void revert_path(char *path);
+int check_dir_com(char *str);

@@ -95,8 +95,7 @@ void check_command()
         uint64_t pid = xapi_Fork();
         if (pid == 0) { xapi_Execve("/system/shell.elf", NULL, NULL); }
     }
-    else if (strncmp("../", input_buf, 3)  == 0 ||
-             strncmp("back", input_buf, 4) == 0)
+    else if (strncmp("../", input_buf, 3)  == 0)
     {
         revert_path(current_path);
     }
