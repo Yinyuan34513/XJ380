@@ -374,7 +374,7 @@ struct xhci_hcd {
 
 // XHCI驱动API
 usb_hcd_t *xhci_init(void *mmio_base, pci_device_t *pci_dev);
-void xhci_shutdown(usb_hcd_t *hcd);
+void init_xhci();
 
 // 内部函数
 int xhci_reset(xhci_hcd_t *xhci);
@@ -436,5 +436,4 @@ static inline int xhci_calc_trbs_num(int new_index, int first_index,
                                      uint32_t ring_size) {
     return new_index - first_index;
 }
-
 #endif // XHCI_H

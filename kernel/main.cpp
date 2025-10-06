@@ -25,6 +25,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <xhci/xhci-hcd.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -343,6 +344,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     ahci_init();
     nvme_init();
+    init_xhci();
 
     enable_intr();
     keyboard_init();
