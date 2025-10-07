@@ -322,7 +322,7 @@ void tst()
     while (1)
         ;
 }
-
+extern size_t        now_tid         ;
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -354,6 +354,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     keyboard_setup();
     // mouse_init();
     // disable_intr();
+    process_setup();
     
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
@@ -362,6 +363,19 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         temp_stack[i] = BootConfig.temp_stack[i];
 
     init_smp(BootConfig.MADT);
+
+    tcb_t idle_thread         = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
+    idle_thread->tid          = now_tid++;
+    idle_thread->parent_group = kernel_group;
+    idle_thread->kernel_stack = get_rsp();
+    idle_thread->status       = RUNNING;
+    strcpy(idle_thread->name, "idle thread");
+    idle_thread->group_index  = queue_enqueue(kernel_group->thread_queue, idle_thread);
+    idle_thread->context0.rsp = get_rsp();
+    set_kernel_stack(get_rsp());
+    idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
+
+    get_current_cpu()->current_task = idle_thread;
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
@@ -373,14 +387,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_signal();
 
-    process_setup();
-
     while (true)
     {
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
     
-    get_current_task()->parent_group->cwd = NULL;
     vfs_init();
     dev_init();
     partition_init();

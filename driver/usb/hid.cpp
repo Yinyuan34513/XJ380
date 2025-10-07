@@ -54,8 +54,8 @@ void keyboard_callback(hid_event_t *event, void *user_data) {
 
 void mouse_callback(hid_event_t *event, void *user_data) {
     usb_hid_device_t *hid = (usb_hid_device_t*)user_data;
-    // hid_mouse_event_t *mouse = &event->mouse;
-    // handle_mouse_event(mouse);
+    hid_mouse_event_t *mouse = &event->mouse;
+    handle_mouse_event(mouse);
 }
 
 // 全局 HID 设备列表

@@ -43,7 +43,7 @@ int xhci_wait_for_command(xhci_command_completion_t *completion,
 
     spin_lock(completion->lock);
 
-    enable_intr();
+    // enable_intr();
 
     while (completion->status == COMPLETION_STATUS_PENDING) {
         xhci_handle_events(completion->hcd);
@@ -56,7 +56,7 @@ int xhci_wait_for_command(xhci_command_completion_t *completion,
         }
     }
 
-    disable_intr();
+    // disable_intr();
 
     completion_status_t status = completion->status;
     uint32_t code = completion->completion_code;
@@ -110,7 +110,7 @@ int xhci_wait_for_transfer(xhci_transfer_completion_t *completion,
 
     spin_lock(completion->lock);
 
-    enable_intr();
+    // enable_intr();
 
     while (completion->status == COMPLETION_STATUS_PENDING) {
         xhci_handle_events(completion->hcd);
@@ -123,7 +123,7 @@ int xhci_wait_for_transfer(xhci_transfer_completion_t *completion,
         }
     }
 
-    disable_intr();
+    // disable_intr();
 
     completion_status_t status = completion->status;
     uint32_t code = completion->completion_code;

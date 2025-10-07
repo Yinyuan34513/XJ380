@@ -5,7 +5,7 @@ CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-bu
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
-SMP ?= 8
+SMP ?= 6
 SUDO ?= 1
 KVM ?= 1
 

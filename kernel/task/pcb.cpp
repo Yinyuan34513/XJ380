@@ -777,18 +777,7 @@ void process_setup()
 
     kernel_group = kernel_pcb;
 
-    tcb_t idle_thread         = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
-    idle_thread->tid          = now_tid++;
-    idle_thread->parent_group = kernel_pcb;
-    idle_thread->kernel_stack = get_rsp();
-    idle_thread->status       = RUNNING;
-    strcpy(idle_thread->name, "idle thread");
-    idle_thread->group_index  = queue_enqueue(kernel_pcb->thread_queue, idle_thread);
-    idle_thread->context0.rsp = get_rsp();
-    set_kernel_stack(get_rsp());
-    idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
-
-    get_current_cpu()->current_task = idle_thread;
+    
 
     smp_scheduler_lock = false;
     scheduler_is_ready++;
