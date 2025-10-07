@@ -1,5 +1,6 @@
 #include "cpu/fpu.h"
 #include "cpu/fsgsbase.h"
+#include "cpu/lock.h"
 #include "lock_queue.h"
 #include "proto.hpp"
 #include "smp/smp.h"
@@ -171,12 +172,20 @@ extern pcb_t kernel_group;
 
 extern "C" registers_t *timer_handle(registers_t *reg)
 {
-    send_eoi();
-    if (!is_scheduler) { return reg; }
+    // send_eoi();
+    if (!is_scheduler)
+    {
+        send_eoi();
+        return reg;
+    }
 
     tcb_t current = get_current_task();
     tcb_t best    = select_next_task();
-    if (best == current) return reg;
+    if (best == current)
+    {
+        send_eoi();
+        return reg;
+    }
     write_fsbase((uint64_t)current); // 下面要用内核态的fs，换上
 
     // 任务寻父处理
@@ -203,13 +212,18 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     else
         write_fsbase(current->fs_base); // 同样，没切任务，换回来
 
+    send_eoi();
     return reg;
 }
 
 void scheduler_yield()
 {
+    // for (int i = 0; i < 4096; i++)
+    // {
+    //     cpu_relax();
+    // }
     if (!is_scheduler) return;
-    __asm__ volatile("int %0" ::"i"(32));
+    __asm__ volatile("int $0x20");
 }
 
 void debug_sched_queue(lock_queue *q)
@@ -229,8 +243,7 @@ void debug_sched_queue(lock_queue *q)
 size_t add_task(tcb_t new_task)
 {
     bool interrupt_yes = false;
-    if (!no_interrupt)
-        interrupt_yes = true;
+    if (!no_interrupt) interrupt_yes = true;
     no_interrupt = true;
 
     close_interrupt;
@@ -245,7 +258,6 @@ size_t add_task(tcb_t new_task)
     new_task->cpu_id      = cpu0->processor_id;
     new_task->queue_index = queue_enqueue(cpu0->scheduler_queue, new_task);
     debug_sched_queue(cpu0->scheduler_queue);
-    if (interrupt_yes)
-        no_interrupt = false;
+    if (interrupt_yes) no_interrupt = false;
     return new_task->queue_index;
 }

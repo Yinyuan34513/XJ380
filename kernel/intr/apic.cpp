@@ -216,7 +216,7 @@ void init_apic(uint64_t MADT0)
     write_serial_string("APIC Initialize Success.\n");
 }
 
-void send_eoi()
+extern "C" void send_eoi()
 {
     lapic_write(0xb0, 0);
 }

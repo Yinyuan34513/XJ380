@@ -112,7 +112,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 
-    uint64_t address     = (uint64_t) & (info->tss0);
+    uint64_t address     = (uint64_t)&(info->tss0);
     uint64_t low_base    = (((address & 0xffffffU)) << 16U);
     uint64_t mid_base    = (((((address >> 24U)) & 0xffU)) << 56U);
     uint64_t high_base   = (address >> 32U);
@@ -122,7 +122,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     info->gdt_entries_t[5] = (((low_base | mid_base) | limit) | access_byte);
     info->gdt_entries_t[6] = high_base;
 
-    info->tss0.ist[0] = ((uint64_t) & (info->tss_stack)) + sizeof(tss_stack_t);
+    info->tss0.ist[0] = ((uint64_t)&(info->tss_stack)) + sizeof(tss_stack_t);
 
     __asm__ volatile("ltr %[offset]\n\t" : : [offset] "rm"(0x28U) : "memory");
 
@@ -151,17 +151,16 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 
     get_current_cpu()->current_task = apu_idle;
 
+    scheduler_is_ready++;
     spin_unlock(apu_lock);
     enable_intr();
-
-    scheduler_is_ready++;
 
     while (true)
     {
         asm volatile("pause");
     }
 
-    asm volatile("hlt");    // 你来这干什么？？？
+    asm volatile("hlt"); // 你来这干什么？？？
 }
 
 bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
@@ -200,7 +199,8 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
         lapic_write(LAPIC_REG_ICR0, 0x4500);
     }
 
-    for (int i = 0; i < 250; i++) cpu_relax();
+    for (int i = 0; i < 250; i++)
+        cpu_relax();
 
     // Send the Startup IPI
     if (ApicInfo.x2Apic)

@@ -197,7 +197,7 @@ uint64_t page_virt_to_phys(uint64_t va);
 void init_smp(uint64_t MADT0);
 void set_kernel_stack(uint64_t rsp);
 
-void                   send_eoi();
+extern "C" void        send_eoi();
 struct PROCESSOR_INFO *get_current_cpu();
 
 extern const FrameBufferConfig *fbc_addr;
@@ -212,15 +212,15 @@ extern const FrameBufferConfig *fbc_addr;
 // extern uint8_t             keyboard_code1[256];
 
 // driver/ps2/mouse.cpp
-void    mouse_init();
-void    process_mouse_info();
+void mouse_init();
+void process_mouse_info();
 
 // uint8_t get_Mouse_output();
-bool    mousedecode(uint8_t data);
-int     get_mouse_x();
-int     get_mouse_y();
-void    draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
-void    move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
+bool mousedecode(uint8_t data);
+int  get_mouse_x();
+int  get_mouse_y();
+void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
+void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
 
 /*
  *
@@ -235,8 +235,8 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
 void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
-void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                       uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
-void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                                     uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
+void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+                       uint32_t width, uint32_t height);
+void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
+                                     uint32_t dst_y, uint32_t width, uint32_t height);
 #endif

@@ -25,8 +25,8 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
-#include <xhci/xhci-hcd.h>
 #include <usb/hid.h>
+#include <xhci/xhci-hcd.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -303,8 +303,7 @@ void desktop_flusher()
             }
         }
 #if BUILD_EDITION == DEBUG_VERSION
-        if (k_input != NULL && k_input != '\n' && 
-            k_input != '\b')
+        if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
@@ -330,7 +329,7 @@ void tst()
     while (1)
         ;
 }
-extern size_t        now_tid         ;
+extern size_t   now_tid;
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -360,7 +359,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     mouse_init();
     // disable_intr();
     process_setup();
-    
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
@@ -394,9 +392,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (true)
     {
+        __asm__ volatile("pause");
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
-    
+
     vfs_init();
     dev_init();
     partition_init();
@@ -415,7 +414,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     if (BootConfig.is_qemu == 1) write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
 
-
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
@@ -423,7 +421,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
-    
 
     enable_scheduler();
     open_interrupt;
