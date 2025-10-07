@@ -5,7 +5,7 @@ CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-bu
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
-SMP ?= 4
+SMP ?= 8
 SUDO ?= 1
 KVM ?= 1
 
@@ -23,7 +23,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -device usb-kbd -device usb-mouse -serial file:serial.log $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 

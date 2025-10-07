@@ -45,6 +45,6 @@
 #define KN_VERSION "XSK 2.1.0"
 #define OS_EDITION "XINGJI Confidentiality"
 
-#define STACK_SIZE 32768UL
+#define STACK_SIZE 65536UL
 
 #endif

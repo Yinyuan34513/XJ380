@@ -9,7 +9,7 @@
 #include <mm/page.h>
 
 spin_t transfer_lock = SPIN_INIT;
-
+extern bool no_interrupt;
 // 前向声明
 static int xhci_hcd_init(usb_hcd_t *hcd);
 static int xhci_hcd_shutdown(usb_hcd_t *hcd);
@@ -1436,10 +1436,13 @@ void xhci_handle_port_status(xhci_hcd_t *xhci, uint8_t port_id) {
         arg->port_id = port_id;
         arg->speed = speed;
 
-        create_kernel_thread((void *)xhci_device_enumerater,
+        create_kernel_thread((void*)xhci_device_enumerater,
                     (void*)arg,"enumerater",NULL);
 
-        enable_intr();
+        if(!no_interrupt)
+        {
+            open_interrupt;
+        }
     } else if (!(portsc & XHCI_PORTSC_CCS)) {
         write_serial_fmt("XHCI: Device disconnected on port %d\n", port_id);
         xhci->connection[port_id] = false;

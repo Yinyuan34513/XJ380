@@ -585,10 +585,12 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->user_info->user_type  = XUT_Root;
 
     stack_top = (uint64_t *)new_task->kernel_stack;
-    PUSH_STACK(stack_top, (uint64_t)args);
+    PUSH_STACK(stack_top, 0);
+    PUSH_STACK(stack_top,0);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
     new_task->context0.rsp = (uint64_t)stack_top;
     new_task->kernel_stack = (new_task->context0.rsp);
+    new_task->context0.rdi    = (uint64_t)args; // first argument in rdi
 
     new_task->fs_base = (uint64_t)new_task;
     add_task(new_task);

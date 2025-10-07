@@ -5,6 +5,7 @@
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
+#include <usb/hid.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -22,8 +23,7 @@ uint16_t *mouse_sheet_id_img;
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
-    uint8_t data = inb(PORT_KB_DATA);
-
+    uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
     {
         ms_dec.need_flush = true;
@@ -52,19 +52,63 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
         if (ms_dec.btn & 0x02) { ms_dec.right = true; }
         if (ms_dec.btn & 0x04) { ms_dec.center = true; }
     }
-
     send_eoi();
 
-    tbx = getBX(sht_img, mouse_sheet_id_img);
-    tby = getBY(sht_img, mouse_sheet_id_img);
+    tbx         = getBX(sht_img, mouse_sheet_id_img);
+    tby         = getBY(sht_img, mouse_sheet_id_img);
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
     move_mouse(sht_img, mouse_sheet_id_img, mouse_x, mouse_y);
     refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_sheet_id_img),
-                        tby + getYsize(sht_img, mouse_sheet_id_img));
+                       tby + getYsize(sht_img, mouse_sheet_id_img));
     refresh_part_sheet(sht_img, getBX(sht_img, mouse_sheet_id_img), getBY(sht_img, mouse_sheet_id_img),
-                        getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
-                        getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
+                       getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
+                       getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
+    ms_dec.need_flush = false;
+}
+//去死吧!
+void handle_mouse_event(hid_mouse_event_t *mouse)
+{
+    ms_dec.x   = mouse->x;
+    ms_dec.y   = mouse->y;
+    ms_dec.btn = mouse->buttons;
+
+    ms_dec.need_flush = true;
+
+    mouse_x += ms_dec.x;
+    mouse_y += ms_dec.y;
+    if (mouse_x < 0) mouse_x = 0;
+    if (mouse_y < 0) mouse_y = 0;
+    if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+    if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
+
+    ms_dec.left   = false;
+    ms_dec.center = false;
+    ms_dec.right  = false;
+
+    if (ms_dec.btn & 0x01)
+    {
+        // 左键按下
+        ms_dec.left = true;
+    }
+    else if ((ms_dec.btn & 0x01) == 0)
+    {
+        // 左键松开
+        ms_dec.win_move_lock = false;
+    }
+    if (ms_dec.btn & 0x02) { ms_dec.right = true; }
+    if (ms_dec.btn & 0x04) { ms_dec.center = true; }
+
+    tbx         = getBX(sht_img, mouse_sheet_id_img);
+    tby         = getBY(sht_img, mouse_sheet_id_img);
+    int mouse_x = get_mouse_x();
+    int mouse_y = get_mouse_y();
+    move_mouse(sht_img, mouse_sheet_id_img, mouse_x, mouse_y);
+    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_sheet_id_img),
+                       tby + getYsize(sht_img, mouse_sheet_id_img));
+    refresh_part_sheet(sht_img, getBX(sht_img, mouse_sheet_id_img), getBY(sht_img, mouse_sheet_id_img),
+                       getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
+                       getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
     ms_dec.need_flush = false;
 }
 
@@ -174,22 +218,22 @@ int get_mouse_y()
 
 void mouse_init()
 {
-    wait_KB_write();
-    outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
 
     delay_ms(100);
 
-    wait_KB_write();
-    outb(PORT_KB_CMD, KB_SEND2MOUSE);
-    wait_KB_write();
-    outb(PORT_KB_DATA, MOUSE_EN);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, MOUSE_EN);
 
     delay_ms(100);
 
-    wait_KB_write();
-    outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
-    wait_KB_write();
-    outb(PORT_KB_DATA, KB_INIT_MODE);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, KB_INIT_MODE);
 
     mouse_x      = (get_hor() - 16) / 2;
     mouse_y      = (get_ver() - 28 - 29) / 2;

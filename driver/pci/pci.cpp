@@ -365,7 +365,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
                 // 32 bit
                 case 0b00: {
                     pci_device->bars[i].address = bar & 0xFFFFFFFC;
-                    pci_device->bars[i].mmio    = false;
+                    pci_device->bars[i].mmio    = true;
 
                     uint32_t original_value = pci_device->op->read(bus, device, function, segment_group, offset);
 
@@ -404,7 +404,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
                     pci_device->bars[i].size = ~value + 1;
 
                     pci_device->bars[i].address = bar_address;
-                    pci_device->bars[i].mmio    = false;
+                    pci_device->bars[i].mmio    = true;
                     break;
                 }
             }

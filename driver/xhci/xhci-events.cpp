@@ -65,7 +65,8 @@ void xhci_event_handler(xhci_hcd_t *xhci) {
     while (xhci->event_thread.running) {
         xhci_handle_events(xhci);
 
-        scheduler_yield();
+        // scheduler_yield();
+        cpu_relax();
     }
 
     thread_exit(0);

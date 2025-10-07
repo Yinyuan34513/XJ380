@@ -207,16 +207,15 @@ extern const FrameBufferConfig *fbc_addr;
  */
 
 // driver/ps2/keyboard.cpp
-extern struct keyboard_buf kb_fifo;
-extern uint8_t             keyboard_code[256];
-extern uint8_t             keyboard_code1[256];
-void                       keyboard_init();
-uint8_t                    get_keyboard_input();
+// extern struct keyboard_buf kb_fifo;
+// extern uint8_t             keyboard_code[256];
+// extern uint8_t             keyboard_code1[256];
 
 // driver/ps2/mouse.cpp
 void    mouse_init();
 void    process_mouse_info();
-uint8_t get_Mouse_output();
+
+// uint8_t get_Mouse_output();
 bool    mousedecode(uint8_t data);
 int     get_mouse_x();
 int     get_mouse_y();

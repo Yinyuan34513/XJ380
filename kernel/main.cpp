@@ -26,6 +26,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 #include <xhci/xhci-hcd.h>
+#include <usb/hid.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -268,7 +269,7 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
-    create_user_process_from_file((char *)"/system/shell.elf", NULL);
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL);
 
     while (1)
     {
@@ -280,7 +281,7 @@ void desktop_flusher()
             refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
         }
 
-        k_input = get_keyboard_input();
+        k_input = kernel_getch();
         if (k_input != NULL)
         {
             WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
@@ -294,7 +295,7 @@ void desktop_flusher()
             }
         }
 #if BUILD_EDITION == DEBUG_VERSION
-        if (k_input != NULL && k_input != '\n' && k_input != KEY_SHIFT && k_input != KEY_CTRL && k_input != KEY_CAPS &&
+        if (k_input != NULL && k_input != '\n' && 
             k_input != '\b')
         {
             PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
@@ -344,12 +345,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     ahci_init();
     nvme_init();
-    init_xhci();
+    usb_init();
+    
+    
+    
 
-    enable_intr();
-    keyboard_init();
-    mouse_init();
-    disable_intr();
+    // enable_intr();
+    keyboard_setup();
+    // mouse_init();
+    // disable_intr();
+    
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
     saved_mtrrs = (uint64_t *)((uint64_t)BootConfig.saved_mtrrs + 0xffff800000000000);
@@ -374,7 +379,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     {
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
-
+    
     get_current_task()->parent_group->cwd = NULL;
     vfs_init();
     dev_init();
@@ -387,13 +392,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_user();
     init_killer();
+    write_serial_string("User & Killer is ready");
+
+    init_xhci();
+    hid_init();
 
     if (BootConfig.is_qemu == 1) write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
 
-    pcb_t ugp = create_process_group("Test User Group", NULL, NULL, "");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
-    tid = create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
