@@ -117,7 +117,7 @@ void hid_resubmit_agent(uint64_t arg) {
                                hid->input_buffer_size, hid_interrupt_callback, hid);
 
         while (!hid_transfer_done)
-            scheduler_yield();
+            // scheduler_yield();
 
         hid_transfer_done = false;
     }

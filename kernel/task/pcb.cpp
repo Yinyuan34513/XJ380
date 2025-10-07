@@ -95,10 +95,17 @@ tcb_t found_thread(pcb_t pcb, int tid)
 
 void kill_thread(int tid, pcb_t parent_group)
 {
-    close_interrupt;
-    disable_scheduler();
+    bool interrupt_yes = false;
+    if (!no_interrupt)
+        interrupt_yes = true;
+    no_interrupt = true;
 
     tcb_t current = found_thread(parent_group, tid);
+    if (current == NULL) {
+        write_serial_fmt("[Warning] kill_thread: Cannot found target.\n");
+        return;
+    }
+
     pcb_t group   = current->parent_group;
     // write_serial_fmt("kill thread %s\n", current->name);
 
@@ -125,6 +132,8 @@ void kill_thread(int tid, pcb_t parent_group)
     // 如果进程没有线程了，安排回收
     if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
 
+    if (interrupt_yes)
+        no_interrupt = false;
     if (!no_interrupt)
     {
         enable_scheduler();
@@ -140,6 +149,11 @@ void kill_thread(int tid)
 }
 
 void recycle_process(pcb_t pcb) {
+    bool interrupt_yes = false;
+    if (!no_interrupt)
+        interrupt_yes = true;
+    no_interrupt = true;
+
     // 不要回收内核进程
     if (pcb == kernel_group) return;
 
@@ -170,6 +184,14 @@ void recycle_process(pcb_t pcb) {
 
     // 释放进程本身
     free(pcb);
+
+    if (interrupt_yes)
+        no_interrupt = false;
+    if (!no_interrupt)
+    {   
+        enable_scheduler();
+        open_interrupt;
+    }
 }
 
 [[noreturn]] void process_exit()
@@ -180,7 +202,7 @@ void recycle_process(pcb_t pcb) {
     write_serial_dec(rax);
     write_serial_string("\n");
     thread_exit(rax);
-    //    kill_thread(get_current_task());
+    //    kill_thread(get_current_task()->tid);
     while (true)
         __asm__ volatile("hlt");
 }
@@ -541,8 +563,11 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     return 0;
 }
 
+spin_t create_thread_lock = SPIN_INIT;
+
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
+    spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
@@ -586,7 +611,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, 0);
-    PUSH_STACK(stack_top,0);
+    PUSH_STACK(stack_top, 0);
     PUSH_STACK(stack_top, (uint64_t)process_exit);
     new_task->context0.rsp = (uint64_t)stack_top;
     new_task->kernel_stack = (new_task->context0.rsp);
@@ -599,11 +624,13 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
         enable_scheduler();
         open_interrupt;
     }
+    spin_unlock(create_thread_lock);
     return new_task->tid;
 }
 
 size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
+    spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
@@ -660,6 +687,7 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
         enable_scheduler();
         open_interrupt;
     }
+    spin_unlock(create_thread_lock);
     return new_task->tid;
 }
 
@@ -667,6 +695,7 @@ size_t create_signal_thread(void *_start,
                             uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func, 
                             pcb_t pcb)
 {
+    spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
@@ -726,6 +755,7 @@ size_t create_signal_thread(void *_start,
         enable_scheduler();
         open_interrupt;
     }
+    spin_unlock(create_thread_lock);
     return new_task->tid;
 }
 

@@ -218,22 +218,22 @@ int get_mouse_y()
 
 void mouse_init()
 {
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
+    // wait_ps2_write();
+    // outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
 
-    delay_ms(100);
+    // delay_ms(100);
 
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    wait_ps2_write();
-    outb(PS2_DATA_PORT, MOUSE_EN);
+    // wait_ps2_write();
+    // outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+    // wait_ps2_write();
+    // outb(PS2_DATA_PORT, MOUSE_EN);
 
-    delay_ms(100);
+    // delay_ms(100);
 
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
-    wait_ps2_write();
-    outb(PS2_DATA_PORT, KB_INIT_MODE);
+    // wait_ps2_write();
+    // outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
+    // wait_ps2_write();
+    // outb(PS2_DATA_PORT, KB_INIT_MODE);
 
     mouse_x      = (get_hor() - 16) / 2;
     mouse_y      = (get_ver() - 28 - 29) / 2;

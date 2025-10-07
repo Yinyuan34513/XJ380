@@ -110,7 +110,11 @@ void components_flusher()
     write_serial_string("components flusher is running\n");
     while (true)
     {
-        enable_intr();
+        if (!no_interrupt)
+        {
+            enable_intr();
+            enable_scheduler();
+        }
         if (tw_data != NULL)
         {
             tm         *time          = &tw_data->time;
@@ -273,7 +277,11 @@ void desktop_flusher()
 
     while (1)
     {
-        enable_intr();
+        if (!no_interrupt)
+        {
+            enable_intr();
+            enable_scheduler();
+        }
         // if (tw_data->flushing) { continue; } // Sync, but bad performance
         if (tw_data->need_flush)
         {
@@ -346,13 +354,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     ahci_init();
     nvme_init();
     usb_init();
-    
-    
-    
 
     // enable_intr();
     keyboard_setup();
-    // mouse_init();
+    mouse_init();
     // disable_intr();
     process_setup();
     
@@ -403,7 +408,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_user();
     init_killer();
-    write_serial_string("User & Killer is ready");
+    write_serial_string("User & Killer is ready\n");
 
     init_xhci();
     hid_init();

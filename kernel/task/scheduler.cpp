@@ -228,6 +228,13 @@ void debug_sched_queue(lock_queue *q)
 
 size_t add_task(tcb_t new_task)
 {
+    bool interrupt_yes = false;
+    if (!no_interrupt)
+        interrupt_yes = true;
+    no_interrupt = true;
+
+    close_interrupt;
+    disable_scheduler();
     if (new_task == NULL) return -1;
     PROCESSOR_INFO *cpu0 = get_cpu(get_bsp());
     for (int i = 0; i < get_cpu_num(); i++)
@@ -238,5 +245,7 @@ size_t add_task(tcb_t new_task)
     new_task->cpu_id      = cpu0->processor_id;
     new_task->queue_index = queue_enqueue(cpu0->scheduler_queue, new_task);
     debug_sched_queue(cpu0->scheduler_queue);
+    if (interrupt_yes)
+        no_interrupt = false;
     return new_task->queue_index;
 }
