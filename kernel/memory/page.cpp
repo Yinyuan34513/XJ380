@@ -23,7 +23,7 @@ static bool is_huge_page(page_table_entry_t *entry)
 extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
     disable_intr();
-    // disable_scheduler();         // 长大后在学习吧！
+    disable_scheduler();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
 
@@ -120,6 +120,8 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+
+    backtrace(frame);
 
     while (1)
     {

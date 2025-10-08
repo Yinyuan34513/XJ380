@@ -103,36 +103,10 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
     write_serial_string("Adrress:");
     write_serial_hex(regs->rip);
     write_serial_string("\n");
+    
+    backtrace(regs);
 
     do_wsod("GENERAL_PROTECTION", regs);
-}
-
-// 页错误
-void wsod_page_fault(struct X64_REGS *regs, uint64_t error_code)
-{
-    disable_intr();
-
-    if (!(error_code & 0x01)) write_serial_string("Page Not-Present,\t");
-
-    if (error_code & 0x02)
-        write_serial_string("Write Cause Fault,\t");
-    else
-        write_serial_string("Read Cause Fault,\t");
-
-    if (error_code & 0x04)
-        write_serial_string("Fault in user(3)\t");
-    else
-        write_serial_string("Fault in supervisor(0,1,2)\t");
-
-    if (error_code & 0x08) write_serial_string(",Reserved Bit Cause Fault\t");
-
-    if (error_code & 0x10) write_serial_string(",Instruction fetch Cause Fault");
-
-    write_serial_string("\n");
-
-    handle_page_fault(regs, error_code);
-
-    do_wsod("PAGE_FAULT", regs);
 }
 
 // DEBUG

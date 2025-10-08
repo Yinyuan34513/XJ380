@@ -239,4 +239,6 @@ void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *sr
                        uint32_t width, uint32_t height);
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
                                      uint32_t dst_y, uint32_t width, uint32_t height);
+
+void backtrace(struct X64_REGS *regs);
 #endif
