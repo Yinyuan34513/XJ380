@@ -153,6 +153,8 @@ tcb_t select_next_task()
         if (get_current_cpu()->iter_node == NULL) goto iter_head;
         next = (tcb_t)get_current_cpu()->iter_node->data;
 
+        if (next == NULL) goto iter_head;   // 这个很明显有问题，理论上不用加判断（既然有这个节点就应该已经完成创建了，怎么会是空的呢？）
+
         // 死亡/回收/挂起的线程不调度
         switch (next->status)
         {
@@ -227,6 +229,7 @@ void debug_sched_queue(lock_queue *q)
     if (q == NULL) return;
     spin_lock(q->lock);
     lock_node *current = q->head;
+    write_serial_fmt("Process %d Scheduler Queue: ", get_current_cpu()->lapic_id);
     while (current != NULL)
     {
         write_serial_fmt("-> %s", ((tcb_t)current->data)->name);
@@ -253,7 +256,7 @@ size_t add_task(tcb_t new_task)
     }
     new_task->cpu_id      = cpu0->processor_id;
     new_task->queue_index = queue_enqueue(cpu0->scheduler_queue, new_task);
-    debug_sched_queue(cpu0->scheduler_queue);
+    // debug_sched_queue(cpu0->scheduler_queue);
     if (interrupt_yes) no_interrupt = false;
     return new_task->queue_index;
 }

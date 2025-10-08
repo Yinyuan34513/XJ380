@@ -79,8 +79,8 @@ void keyboard_tmp_writer(const uint8_t *data) {
 
 int kernel_getch() {
     char ch;
-    while ((ch = atom_pop(temp_keyboard_buffer)) == -1) {
-        __asm__ volatile("pause");
+    if ((ch = atom_pop(temp_keyboard_buffer)) == -1) {
+        return NULL;
     }
     return ch;
 }

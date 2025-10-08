@@ -98,6 +98,8 @@ void kill_thread(int tid, pcb_t parent_group)
     bool interrupt_yes = false;
     if (!no_interrupt)
         interrupt_yes = true;
+    close_interrupt;
+    disable_scheduler();
     no_interrupt = true;
 
     tcb_t current = found_thread(parent_group, tid);

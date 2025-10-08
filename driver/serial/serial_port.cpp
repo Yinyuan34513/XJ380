@@ -474,6 +474,7 @@ void serial_wprintf(const char *fmt, ...)
  */
 void write_serial_fmt(const char *fmt, ...)
 {
+    disable_scheduler();
     close_interrupt; // Avoid deadlock
     spin_lock(fmt_lock);
     va_list args;
@@ -487,7 +488,10 @@ void write_serial_fmt(const char *fmt, ...)
     }
     va_end(args);
     spin_unlock(fmt_lock);
-    if (!no_interrupt) open_interrupt;
+    if (!no_interrupt) { 
+        open_interrupt; 
+        enable_scheduler();
+    }
 }
 
 typedef struct UnsafeBufWriterData
