@@ -256,7 +256,7 @@ size_t add_task(tcb_t new_task)
     }
     new_task->cpu_id      = cpu0->processor_id;
     new_task->queue_index = queue_enqueue(cpu0->scheduler_queue, new_task);
-    // debug_sched_queue(cpu0->scheduler_queue);
+    debug_sched_queue(cpu0->scheduler_queue);
     if (interrupt_yes) no_interrupt = false;
     return new_task->queue_index;
 }

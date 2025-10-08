@@ -273,7 +273,7 @@ static int hid_start_interrupt_transfer(usb_hid_device_t *hid)
 
     hid->transfer_active = true;
 
-    create_kernel_thread((void *)hid_resubmit_agent, (void *)hid, "hit resubmit agent", NULL);
+    create_kernel_thread((void *)hid_resubmit_agent, (void *)hid, "hid resubmit agent", NULL);
 
     write_serial_fmt("HID: Interrupt transfers started\n");
     return 0;
