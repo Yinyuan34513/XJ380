@@ -218,12 +218,8 @@ extern "C" registers_t *timer_handle(registers_t *reg)
 
 void scheduler_yield()
 {
-    // for (int i = 0; i < 4096; i++)
-    // {
-    //     cpu_relax();
-    // }
     if (!is_scheduler) return;
-    __asm__ volatile("int $0x20");
+    __asm__ volatile("int %0" ::"i"(32));
 }
 
 void debug_sched_queue(lock_queue *q)

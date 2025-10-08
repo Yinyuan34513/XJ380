@@ -130,7 +130,7 @@ void kill_thread(int tid, pcb_t parent_group)
     }
 
     // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
+    if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
 
     if (interrupt_yes)
         no_interrupt = false;
