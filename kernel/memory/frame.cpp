@@ -3,7 +3,7 @@
 #include <mm/memory.h>
 #include <proto.hpp>
 
-// #define ENABLE_BUDDY 1
+#define ENABLE_BUDDY 0
 
 FrameAllocator frame_allocator;
 uint64_t       memory_size = 0;
@@ -28,7 +28,7 @@ uint64_t get_memory_size(MEMORY_MAP map)
 
 void init_frame(MEMORY_MAP map)
 {
-#ifdef ENABLE_BUDDY
+#if ENABLE_BUDDY
     init_frame_buddy(map);
 #else
     memory_size = get_memory_size(map);
@@ -88,7 +88,7 @@ void init_frame(MEMORY_MAP map)
 
 void free_frame(uint64_t addr)
 {
-#ifdef ENABLE_BUDDY
+#if ENABLE_BUDDY
     buddy_free_pages(addr, 1);
 #else
     if (addr == 0) return;
@@ -102,7 +102,7 @@ void free_frame(uint64_t addr)
 
 uint64_t alloc_frames(size_t count)
 {
-#ifdef ENABLE_BUDDY
+#if ENABLE_BUDDY
     frame_allocator.usable_frames -= count;
     return buddy_alloc_pages(count);
 #else
@@ -121,7 +121,7 @@ spin_t frame_op_lock = SPIN_INIT;
 void   free_frames(uint64_t addr, uint64_t size)
 {
     spin_lock(frame_op_lock);
-#ifdef ENABLE_BUDDY
+#if ENABLE_BUDDY
     buddy_free_pages(addr, size);
 #else
 

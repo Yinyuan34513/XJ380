@@ -26,10 +26,13 @@ extern bool no_interrupt;
 // pcb.cpp
 #include "task/scheduler.h"
 
+extern spin_t scheduler_lock;
+
 void thread_exit(int exit_code)
 {
     close_interrupt;
     disable_scheduler();
+    spin_lock(scheduler_lock);  // 添加锁
 
     tcb_t current = get_current_task();
     pcb_t group   = current->parent_group;
@@ -38,7 +41,7 @@ void thread_exit(int exit_code)
     current->status = DEATH;
 
     // 从调度队列中移除
-    PROCESSOR_INFO *cpu = get_current_cpu();
+    struct PROCESSOR_INFO *cpu = get_current_cpu();
     queue_remove_at(cpu->scheduler_queue, current->queue_index);
 
     // 从进程线程队列中移除
@@ -48,16 +51,15 @@ void thread_exit(int exit_code)
     if (group->thread_queue->size == 0)
     {
         group->status = DEATH;
-        // // 如果是vfork创建的进程，需要特殊处理
-        // if (group->vfork) {
-        //     // 添加vfork的特殊处理逻辑
-        // }
     }
 
     // 如果进程没有线程了，安排回收
-    // if (group->thread_queue->size == 0 && group->status == DEATH) { recycle_process(group); }
-    if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
+    if (group->thread_queue->size == 0 && group->status == DEATH) { 
+        addque_killer(group); 
+    }
+    
     switch_page_directory(get_current_directory());
+    spin_unlock(scheduler_lock);  // 释放锁
 
     if (!no_interrupt)
     {
@@ -65,7 +67,6 @@ void thread_exit(int exit_code)
         open_interrupt;
     }
 }
-
 pcb_t found_pcb(int pid) {
     pcb_t ret = NULL;
     spin_lock(pcb_group_queue->lock);

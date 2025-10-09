@@ -409,18 +409,27 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_killer();
     write_serial_string("User & Killer is ready\n");
 
-    init_xhci();
-    hid_init();
-
     if (BootConfig.is_qemu == 1) write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
+
+    enable_scheduler();
+    open_interrupt;
+    no_interrupt = false;
+    while(!desktop_done)cpu_relax();
+
+    no_interrupt = true;
+    close_interrupt;
+    disable_scheduler();
+
+    init_xhci();
+    hid_init();
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
     open_interrupt;
