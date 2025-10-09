@@ -198,9 +198,9 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
         lapic_write(LAPIC_REG_ICR1, lapic_id << 24);
         lapic_write(LAPIC_REG_ICR0, 0x4500);
     }
-
+    //一群250
     for (int i = 0; i < 250; i++)
-        cpu_relax();
+        cpu_relax();//睡吧宝贝
 
     // Send the Startup IPI
     if (ApicInfo.x2Apic)
@@ -213,7 +213,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
         lapic_write(LAPIC_REG_ICR0, ((size_t)trampoline >> 12) | 0x4600);
     }
 
-    for (int i = 0; i < 200; i++)
+    for (int i = 0; i < 250; i++)
     {
         if (*ready == 1)
         {
@@ -222,7 +222,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
             write_serial_string(" Initialize Success.\n");
             return true;
         }
-        for (int i = 0; i < 200; i++)
+        for (int i = 0; i < 250; i++)
         {
             cpu_relax();
         }
