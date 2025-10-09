@@ -132,7 +132,7 @@ void hid_resubmit_agent(uint64_t arg)
                                hid_interrupt_callback, hid);
 
         while (!hid_transfer_done)
-            scheduler_yield();
+            cpu_relax();
 
         hid_transfer_done = false;
     }

@@ -66,7 +66,7 @@ void xhci_event_handler(xhci_hcd_t *xhci)
     {
         xhci_handle_events(xhci);
 
-        scheduler_yield();
+        // scheduler_yield();
         cpu_relax();
     }
 

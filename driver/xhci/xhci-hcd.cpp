@@ -517,7 +517,7 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
                     break;
                 }
 
-                scheduler_yield();
+                cpu_relax();
             }
 
             if (pls != 0) {
@@ -537,7 +537,7 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
     xhci_writel(&xhci->port_regs[port].portsc, portsc);
 
     // 等待重置完成
-    int timeout = 1000;
+    int timeout = 900000;
     while (timeout--) {
         portsc = xhci_readl(&xhci->port_regs[port].portsc);
         if (!(portsc & XHCI_PORTSC_CCS))
@@ -546,7 +546,7 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
             break;
         }
 
-        scheduler_yield();
+        cpu_relax();
     }
 
     if (timeout <= 0) {
@@ -1423,7 +1423,7 @@ void xhci_handle_port_status(xhci_hcd_t *xhci, uint8_t port_id) {
         // 等待端口稳定
         uint64_t target_time = 100000000ULL + nanoTime(); // 100ms
         while (nanoTime() < target_time) {
-            scheduler_yield();
+            cpu_relax();
         }
 
         // 启动设备枚举
