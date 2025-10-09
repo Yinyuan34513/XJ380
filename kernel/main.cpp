@@ -262,7 +262,6 @@ void desktop_flusher()
     allow_to_flush = true;
     refresh_sheet(&shtinf); // 刷新
     // delete_sheet(&shtinf, &dock_sheet_id);
-    desktop_done = true;
     uint8_t k_input;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));
@@ -274,7 +273,7 @@ void desktop_flusher()
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
     create_user_process_from_file((char *)"/system/shell.elf", NULL);
-
+    desktop_done = true;
     while (1)
     {
         if (!no_interrupt)
