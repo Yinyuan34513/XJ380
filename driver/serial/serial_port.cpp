@@ -72,7 +72,7 @@ void write_serial_string(const char *str)
     spin_lock(serial_lock);
     while (*str)
     {
-#if !BUILD_EDITION == DEBUG_VERSION//闭嘴
+#if BUILD_EDITION == DEBUG_VERSION
         if (*str == '\n')
         {
             serial_x  = 0;
