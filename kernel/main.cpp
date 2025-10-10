@@ -254,7 +254,7 @@ void desktop_flusher()
 
     winRD_lock = true;
 
-    // create_window(&xwmi, &shtinf, &test_win, (char *)"114514", 320, 180);
+    create_window(&xwmi, &shtinf, &test_win, (char *)"0", 80, 50);
     // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
