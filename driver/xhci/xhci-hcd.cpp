@@ -163,7 +163,7 @@ int xhci_reset(xhci_hcd_t *xhci) {
         }
     }
 
-    if (timeout <= 0) {
+    if (timeout) {
         write_serial_fmt("XHCI: Reset timeout\n");
         return -1;
     }
@@ -548,6 +548,7 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
         if (!(portsc & XHCI_PORTSC_CCS))
             return -1;
         if (portsc & XHCI_PORTSC_PED) {
+            timeout = false;
             break;
         }
 
