@@ -241,4 +241,8 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SH
                                      uint32_t dst_y, uint32_t width, uint32_t height);
 
 void backtrace(struct X64_REGS *regs);
+
+uint64_t get_counter();
+uint32_t get_freq();
+
 #endif

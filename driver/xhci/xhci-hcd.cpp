@@ -39,7 +39,7 @@ static usb_hcd_ops_t xhci_ops = {
 
 // 分配DMA内存（对齐到64字节）
 static void *xhci_alloc_dma(size_t size, uint64_t *phys_addr) {
-    void *ptr = alloc_frames_bytes((size + 63) & ~63);
+    void *ptr = alloc_frames_bytes(size);
     if (ptr) {
         memset(ptr, 0, size);
         if (phys_addr) {
@@ -145,7 +145,7 @@ void xhci_ring_doorbell(xhci_hcd_t *xhci, uint8_t slot_id, uint8_t dci) {
 // 重置XHCI控制器
 int xhci_reset(xhci_hcd_t *xhci) {
     uint32_t cmd, status;
-    int timeout = 1000;
+    uint64_t time_ns = nanoTime() + 1ULL * 1000000000ULL;
 
     // 重置控制器
     cmd = xhci_readl(&xhci->op_regs->usbcmd);
@@ -153,11 +153,12 @@ int xhci_reset(xhci_hcd_t *xhci) {
     xhci_writel(&xhci->op_regs->usbcmd, cmd);
 
     // 等待重置完成
-    timeout = 1000;
-    while (timeout--) {
+    bool timeout = true;
+    while (nanoTime() < time_ns) {
         cmd = xhci_readl(&xhci->op_regs->usbcmd);
         status = xhci_readl(&xhci->op_regs->usbsts);
         if (!(cmd & XHCI_CMD_RESET) && !(status & XHCI_STS_CNR)) {
+            timeout = false;
             break;
         }
     }
@@ -181,12 +182,12 @@ int xhci_start(xhci_hcd_t *xhci) {
     cmd |= XHCI_CMD_RUN;
     xhci_writel(&xhci->op_regs->usbcmd, cmd);
 
+    uint64_t time_ns = nanoTime() + 1ULL * 1000000000ULL;
+
     // 等待控制器运行
-    int timeout = 1000;
-    while (timeout--) {
+    while (nanoTime() < time_ns) {
         uint32_t status = xhci_readl(&xhci->op_regs->usbsts);
         if (!(status & XHCI_STS_HCH)) {
-            write_serial_fmt("XHCI: Controller running\n");
             return 0;
         }
     }
@@ -206,11 +207,11 @@ int xhci_stop(xhci_hcd_t *xhci) {
     xhci_writel(&xhci->op_regs->usbcmd, cmd);
 
     // 等待控制器停止
-    int timeout = 1000;
-    while (timeout--) {
+    uint64_t time_ns = nanoTime() + 1ULL * 1000000000ULL;
+
+    while (nanoTime() < time_ns) {
         uint32_t status = xhci_readl(&xhci->op_regs->usbsts);
         if (status & XHCI_STS_HCH) {
-            write_serial_fmt("XHCI: Controller stopped\n");
             return 0;
         }
     }
@@ -306,6 +307,9 @@ static int xhci_hcd_init(usb_hcd_t *hcd) {
     uint32_t hcsparams1 = xhci_readl(&xhci->cap_regs->hcsparams1);
     uint32_t hcsparams2 = xhci_readl(&xhci->cap_regs->hcsparams2);
     uint32_t hccparams1 = xhci_readl(&xhci->cap_regs->hccparams1);
+
+    xhci->use_64byte_context = (hccparams1 & 0x04) != 0;
+    write_serial_fmt("XHCI: context size: %s\n", xhci->use_64byte_context ? "64" : "32");
 
     xhci->max_slots = (hcsparams1 >> 0) & 0xFF;
     xhci->max_intrs = (hcsparams1 >> 8) & 0x7FF;
@@ -507,8 +511,8 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
             write_serial_fmt("  Port not in U0, waiting for link training...\n");
 
             // 等待链路训练完成
-            int timeout = 100;
-            while (timeout-- > 0) {
+            uint64_t time_ns = nanoTime() + 100ULL * 1000000ULL;
+            while (nanoTime() < time_ns) {
                 portsc = xhci_readl(&xhci->port_regs[port].portsc);
                 pls = (portsc >> 5) & 0xF;
 
@@ -537,8 +541,9 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
     xhci_writel(&xhci->port_regs[port].portsc, portsc);
 
     // 等待重置完成
-    int timeout = 900000;
-    while (timeout--) {
+    bool timeout = true;
+    uint64_t time_ns = nanoTime() + 1ULL * 1000000000ULL;
+    while (nanoTime() < time_ns) {
         portsc = xhci_readl(&xhci->port_regs[port].portsc);
         if (!(portsc & XHCI_PORTSC_CCS))
             return -1;
@@ -549,7 +554,7 @@ static int xhci_reset_port(usb_hcd_t *hcd, uint8_t port) {
         cpu_relax();
     }
 
-    if (timeout <= 0) {
+    if (timeout) {
         write_serial_fmt("XHCI: Port reset timeout\n");
         return -1;
     }
@@ -613,18 +618,22 @@ static int xhci_enable_slot(usb_hcd_t *hcd, usb_device_t *device) {
     memset(dev_priv, 0, sizeof(xhci_device_private_t));
 
     // 分配设备上下文
-    dev_priv->device_ctx = (xhci_device_ctx_t *)xhci_alloc_dma(
-        sizeof(xhci_device_ctx_t), &dev_priv->device_ctx_phys);
+    dev_priv->device_ctx = xhci_alloc_dma(
+        sizeof(xhci_device_ctx_t) * (xhci->use_64byte_context ? 2 : 1),
+        &dev_priv->device_ctx_phys);
     if (!dev_priv->device_ctx) {
         free(dev_priv);
         return -1;
     }
 
     // 分配输入上下文
-    dev_priv->input_ctx = (xhci_input_ctx_t *)xhci_alloc_dma(
-        sizeof(xhci_input_ctx_t), &dev_priv->input_ctx_phys);
+    dev_priv->input_ctx = xhci_alloc_dma(sizeof(xhci_input_ctx_t) *
+                                             (xhci->use_64byte_context ? 2 : 1),
+                                         &dev_priv->input_ctx_phys);
     if (!dev_priv->input_ctx) {
-        free_frames_bytes(dev_priv->device_ctx, sizeof(xhci_device_ctx_t));
+        free_frames_bytes(dev_priv->device_ctx,
+                          sizeof(xhci_device_ctx_t) *
+                              (xhci->use_64byte_context ? 2 : 1));
         free(dev_priv);
         return -1;
     }
@@ -632,8 +641,12 @@ static int xhci_enable_slot(usb_hcd_t *hcd, usb_device_t *device) {
     // 分配完成结构
     xhci_command_completion_t *completion = xhci_alloc_command_completion();
     if (!completion) {
-        free_frames_bytes(dev_priv->input_ctx, sizeof(xhci_input_ctx_t));
-        free_frames_bytes(dev_priv->device_ctx, sizeof(xhci_device_ctx_t));
+        free_frames_bytes(dev_priv->input_ctx,
+                          sizeof(xhci_input_ctx_t) *
+                              (xhci->use_64byte_context ? 2 : 1));
+        free_frames_bytes(dev_priv->device_ctx,
+                          sizeof(xhci_device_ctx_t) *
+                              (xhci->use_64byte_context ? 2 : 1));
         free(dev_priv);
         return -1;
     }
@@ -758,78 +771,153 @@ static int xhci_address_device(usb_hcd_t *hcd, usb_device_t *device,
         return -1;
     }
 
-    // 清零输入上下文
-    memset(dev_priv->input_ctx, 0, sizeof(xhci_input_ctx_t));
+    if (xhci->use_64byte_context) {
+        // 清零输入上下文
+        memset(dev_priv->input_ctx_64, 0, sizeof(xhci_input_ctx_64_t));
 
-    // ===== 1. 设置输入控制上下文 =====
-    dev_priv->input_ctx->ctrl.drop_flags = 0;
-    dev_priv->input_ctx->ctrl.add_flags = 0x03; // A0 (Slot) | A1 (EP0)
+        // ===== 1. 设置输入控制上下文 =====
+        dev_priv->input_ctx_64->ctrl.drop_flags = 0;
+        dev_priv->input_ctx_64->ctrl.add_flags = 0x03; // A0 (Slot) | A1 (EP0)
 
-    // ===== 2. 配置 Slot 上下文 =====
-    uint32_t route_string = 0; // Root hub port
-    uint32_t speed = device->speed;
-    uint32_t context_entries = 1; // EP0的DCI是1
+        // ===== 2. 配置 Slot 上下文 =====
+        uint32_t route_string = 0; // Root hub port
+        uint32_t speed = device->speed;
+        uint32_t context_entries = 1; // EP0的DCI是1
 
-    // dev_info: Route String, Speed, Context Entries
-    dev_priv->input_ctx->slot.dev_info =
-        SLOT_CTX_ROUTE_STRING(route_string) | SLOT_CTX_SPEED(speed) |
-        SLOT_CTX_CONTEXT_ENTRIES(context_entries);
+        // dev_info: Route String, Speed, Context Entries
+        dev_priv->input_ctx_64->slot.dev_info =
+            SLOT_CTX_ROUTE_STRING(route_string) | SLOT_CTX_SPEED(speed) |
+            SLOT_CTX_CONTEXT_ENTRIES(context_entries);
 
-    // dev_info2: Root Hub Port Number
-    // 注意：如果设备连接在root hub的port N，这里应该设置为N+1
-    uint8_t root_port = device->port + 1;
-    dev_priv->input_ctx->slot.dev_info2 = SLOT_CTX_ROOT_HUB_PORT(root_port);
+        // dev_info2: Root Hub Port Number
+        // 注意：如果设备连接在root hub的port N，这里应该设置为N+1
+        uint8_t root_port = device->port + 1;
+        dev_priv->input_ctx_64->slot.dev_info2 =
+            SLOT_CTX_ROOT_HUB_PORT(root_port);
 
-    // tt_info: TT相关，对于高速设备为0
-    dev_priv->input_ctx->slot.tt_info = 0;
+        // tt_info: TT相关，对于高速设备为0
+        dev_priv->input_ctx_64->slot.tt_info = 0;
 
-    // dev_state: 由硬件设置
-    dev_priv->input_ctx->slot.dev_state = 0;
+        // dev_state: 由硬件设置
+        dev_priv->input_ctx_64->slot.dev_state = 0;
 
-    // ===== 3. 配置 EP0 上下文 =====
+        // ===== 3. 配置 EP0 上下文 =====
 
-    // 根据速度确定最大包大小
-    uint16_t max_packet_size;
-    switch (speed) {
-    case USB_SPEED_LOW:
-        max_packet_size = 8;
-        break;
-    case USB_SPEED_FULL:
-        max_packet_size = 8; // 初始值，后续可能更新为64
-        break;
-    case USB_SPEED_HIGH:
-        max_packet_size = 64;
-        break;
-    case USB_SPEED_SUPER:
-    case USB_SPEED_SUPER + 1: // Super Speed Plus
-        max_packet_size = 512;
-        break;
-    default:
-        max_packet_size = 8;
-        break;
+        // 根据速度确定最大包大小
+        uint16_t max_packet_size;
+        switch (speed) {
+        case USB_SPEED_LOW:
+            max_packet_size = 8;
+            break;
+        case USB_SPEED_FULL:
+            max_packet_size = 8; // 初始值，后续可能更新为64
+            break;
+        case USB_SPEED_HIGH:
+            max_packet_size = 64;
+            break;
+        case USB_SPEED_SUPER:
+        case USB_SPEED_SUPER + 1: // Super Speed Plus
+            max_packet_size = 512;
+            break;
+        default:
+            max_packet_size = 8;
+            break;
+        }
+
+        // ep_info: EP State, Interval, etc.
+        // Control endpoints 没有 interval，设为0
+        dev_priv->input_ctx_64->endpoints[0].ep_info = 0;
+
+        // ep_info2: Error Count, EP Type, Max Burst, Max Packet Size
+        dev_priv->input_ctx_64->endpoints[0].ep_info2 =
+            EP_CTX_ERROR_COUNT(3) |           // CErr = 3
+            EP_CTX_EP_TYPE(EP_TYPE_CONTROL) | // Control endpoint
+            EP_CTX_MAX_BURST(0) |             // Max Burst = 0 for control
+            EP_CTX_MAX_PACKET_SIZE(max_packet_size);
+
+        // tr_dequeue_ptr: Transfer Ring地址 + DCS bit
+        dev_priv->input_ctx_64->endpoints[0].tr_dequeue_ptr =
+            ep0_priv->transfer_ring->phys_addr | EP_CTX_DCS;
+
+        // tx_info: Average TRB Length
+        // 对于控制端点，设置为8（setup packet大小）
+        dev_priv->input_ctx_64->endpoints[0].tx_info = 8;
+
+        device->endpoints[0].max_packet_size = max_packet_size;
+    } else {
+        // 清零输入上下文
+        memset(dev_priv->input_ctx_32, 0, sizeof(xhci_input_ctx_t));
+
+        // ===== 1. 设置输入控制上下文 =====
+        dev_priv->input_ctx_32->ctrl.drop_flags = 0;
+        dev_priv->input_ctx_32->ctrl.add_flags = 0x03; // A0 (Slot) | A1 (EP0)
+
+        // ===== 2. 配置 Slot 上下文 =====
+        uint32_t route_string = 0; // Root hub port
+        uint32_t speed = device->speed;
+        uint32_t context_entries = 1; // EP0的DCI是1
+
+        // dev_info: Route String, Speed, Context Entries
+        dev_priv->input_ctx_32->slot.dev_info =
+            SLOT_CTX_ROUTE_STRING(route_string) | SLOT_CTX_SPEED(speed) |
+            SLOT_CTX_CONTEXT_ENTRIES(context_entries);
+
+        // dev_info2: Root Hub Port Number
+        // 注意：如果设备连接在root hub的port N，这里应该设置为N+1
+        uint8_t root_port = device->port + 1;
+        dev_priv->input_ctx_32->slot.dev_info2 =
+            SLOT_CTX_ROOT_HUB_PORT(root_port);
+
+        // tt_info: TT相关，对于高速设备为0
+        dev_priv->input_ctx_32->slot.tt_info = 0;
+
+        // dev_state: 由硬件设置
+        dev_priv->input_ctx_32->slot.dev_state = 0;
+
+        // ===== 3. 配置 EP0 上下文 =====
+
+        // 根据速度确定最大包大小
+        uint16_t max_packet_size;
+        switch (speed) {
+        case USB_SPEED_LOW:
+            max_packet_size = 8;
+            break;
+        case USB_SPEED_FULL:
+            max_packet_size = 8; // 初始值，后续可能更新为64
+            break;
+        case USB_SPEED_HIGH:
+            max_packet_size = 64;
+            break;
+        case USB_SPEED_SUPER:
+        case USB_SPEED_SUPER + 1: // Super Speed Plus
+            max_packet_size = 512;
+            break;
+        default:
+            max_packet_size = 8;
+            break;
+        }
+
+        // ep_info: EP State, Interval, etc.
+        // Control endpoints 没有 interval，设为0
+        dev_priv->input_ctx_32->endpoints[0].ep_info = 0;
+
+        // ep_info2: Error Count, EP Type, Max Burst, Max Packet Size
+        dev_priv->input_ctx_32->endpoints[0].ep_info2 =
+            EP_CTX_ERROR_COUNT(3) |           // CErr = 3
+            EP_CTX_EP_TYPE(EP_TYPE_CONTROL) | // Control endpoint
+            EP_CTX_MAX_BURST(0) |             // Max Burst = 0 for control
+            EP_CTX_MAX_PACKET_SIZE(max_packet_size);
+
+        // tr_dequeue_ptr: Transfer Ring地址 + DCS bit
+        dev_priv->input_ctx_32->endpoints[0].tr_dequeue_ptr =
+            ep0_priv->transfer_ring->phys_addr | EP_CTX_DCS;
+
+        // tx_info: Average TRB Length
+        // 对于控制端点，设置为8（setup packet大小）
+        dev_priv->input_ctx_32->endpoints[0].tx_info = 8;
+
+        device->endpoints[0].max_packet_size = max_packet_size;
     }
-
-    // ep_info: EP State, Interval, etc.
-    // Control endpoints 没有 interval，设为0
-    dev_priv->input_ctx->endpoints[0].ep_info = 0;
-
-    // ep_info2: Error Count, EP Type, Max Burst, Max Packet Size
-    dev_priv->input_ctx->endpoints[0].ep_info2 =
-        EP_CTX_ERROR_COUNT(3) |           // CErr = 3
-        EP_CTX_EP_TYPE(EP_TYPE_CONTROL) | // Control endpoint
-        EP_CTX_MAX_BURST(0) |             // Max Burst = 0 for control
-        EP_CTX_MAX_PACKET_SIZE(max_packet_size);
-
-    // tr_dequeue_ptr: Transfer Ring地址 + DCS bit
-    dev_priv->input_ctx->endpoints[0].tr_dequeue_ptr =
-        ep0_priv->transfer_ring->phys_addr | EP_CTX_DCS;
-
-    // tx_info: Average TRB Length
-    // 对于控制端点，设置为8（setup packet大小）
-    dev_priv->input_ctx->endpoints[0].tx_info = 8;
-
-    // 更新设备端点信息
-    device->endpoints[0].max_packet_size = max_packet_size;
 
     // 验证输入上下文物理地址对齐
     if (dev_priv->input_ctx_phys & 0x3F) {
@@ -930,129 +1018,261 @@ static int xhci_configure_endpoint(usb_hcd_t *hcd, usb_endpoint_t *endpoint) {
         return -1;
     }
 
-    // 清空输入上下文
-    memset(dev_priv->input_ctx, 0, sizeof(xhci_input_ctx_t));
+    if (xhci->use_64byte_context) {
+        // 清空输入上下文
+        memset(dev_priv->input_ctx_64, 0, sizeof(xhci_input_ctx_64_t));
 
-    // 设置输入控制上下文
-    // A0 (Slot Context) 必须设置，因为我们要更新 Context Entries
-    // A[DCI] 设置我们要配置的端点
-    dev_priv->input_ctx->ctrl.add_flags = (1 << dci) | (1 << 0); // A[DCI] | A0
-    dev_priv->input_ctx->ctrl.drop_flags = 0;
+        // 设置输入控制上下文
+        // A0 (Slot Context) 必须设置，因为我们要更新 Context Entries
+        // A[DCI] 设置我们要配置的端点
+        dev_priv->input_ctx_64->ctrl.add_flags =
+            (1 << dci) | (1 << 0); // A[DCI] | A0
+        dev_priv->input_ctx_64->ctrl.drop_flags = 0;
 
-    // 更新 Slot Context
-    // Context Entries 必须 >= DCI（包含所有活动端点）
-    uint32_t context_entries = dci; // 至少要包含这个端点
+        // 更新 Slot Context
+        // Context Entries 必须 >= DCI（包含所有活动端点）
+        uint32_t context_entries = dci; // 至少要包含这个端点
 
-    // 保留原有的 route string 和 speed
-    uint32_t route_string = dev_priv->input_ctx->slot.dev_info & 0xFFFFF;
-    uint32_t speed = (dev_priv->input_ctx->slot.dev_info >> 20) & 0xF;
+        // 保留原有的 route string 和 speed
+        uint32_t route_string = dev_priv->input_ctx_64->slot.dev_info & 0xFFFFF;
+        uint32_t speed = (dev_priv->input_ctx_64->slot.dev_info >> 20) & 0xF;
 
-    // 如果这些值为0（没有初始化），使用设备的值
-    if (speed == 0) {
-        speed = device->speed;
-    }
+        // 如果这些值为0（没有初始化），使用设备的值
+        if (speed == 0) {
+            speed = device->speed;
+        }
 
-    dev_priv->input_ctx->slot.dev_info =
-        SLOT_CTX_ROUTE_STRING(route_string) | SLOT_CTX_SPEED(speed) |
-        SLOT_CTX_CONTEXT_ENTRIES(context_entries);
+        dev_priv->input_ctx_64->slot.dev_info =
+            SLOT_CTX_ROUTE_STRING(route_string) | SLOT_CTX_SPEED(speed) |
+            SLOT_CTX_CONTEXT_ENTRIES(context_entries);
 
-    // 保留 Root Hub Port Number
-    uint32_t root_port = (dev_priv->input_ctx->slot.dev_info2 >> 16) & 0xFF;
-    if (root_port == 0) {
-        root_port = device->port + 1;
-    }
+        // 保留 Root Hub Port Number
+        uint32_t root_port =
+            (dev_priv->input_ctx_64->slot.dev_info2 >> 16) & 0xFF;
+        if (root_port == 0) {
+            root_port = device->port + 1;
+        }
 
-    dev_priv->input_ctx->slot.dev_info2 = SLOT_CTX_ROOT_HUB_PORT(root_port);
+        dev_priv->input_ctx_64->slot.dev_info2 =
+            SLOT_CTX_ROOT_HUB_PORT(root_port);
 
-    // 配置端点上下文
+        // 配置端点上下文
 
-    uint32_t ep_type_attr = endpoint->attributes & 0x03;
-    uint32_t xhci_ep_type;
+        uint32_t ep_type_attr = endpoint->attributes & 0x03;
+        uint32_t xhci_ep_type;
 
-    // 确定 XHCI EP Type
-    switch (ep_type_attr) {
-    case USB_ENDPOINT_XFER_CONTROL:
-        xhci_ep_type = EP_TYPE_CONTROL; // 4
-        break;
-    case USB_ENDPOINT_XFER_ISOC:
-        xhci_ep_type = is_in ? EP_TYPE_ISOC_IN : EP_TYPE_ISOC_OUT; // 5 : 1
-        break;
-    case USB_ENDPOINT_XFER_BULK:
-        xhci_ep_type = is_in ? EP_TYPE_BULK_IN : EP_TYPE_BULK_OUT; // 6 : 2
-        break;
-    case USB_ENDPOINT_XFER_INT:
-        xhci_ep_type =
-            is_in ? EP_TYPE_INTERRUPT_IN : EP_TYPE_INTERRUPT_OUT; // 7 : 3
-        break;
-    default:
-        write_serial_fmt("XHCI: Unknown endpoint type: 0x%02x\n", ep_type_attr);
-        xhci_free_ring(ep_priv->transfer_ring);
-        free(ep_priv);
-        return -1;
-    }
+        // 确定 XHCI EP Type
+        switch (ep_type_attr) {
+        case USB_ENDPOINT_XFER_CONTROL:
+            xhci_ep_type = EP_TYPE_CONTROL; // 4
+            break;
+        case USB_ENDPOINT_XFER_ISOC:
+            xhci_ep_type = is_in ? EP_TYPE_ISOC_IN : EP_TYPE_ISOC_OUT; // 5 : 1
+            break;
+        case USB_ENDPOINT_XFER_BULK:
+            xhci_ep_type = is_in ? EP_TYPE_BULK_IN : EP_TYPE_BULK_OUT; // 6 : 2
+            break;
+        case USB_ENDPOINT_XFER_INT:
+            xhci_ep_type =
+                is_in ? EP_TYPE_INTERRUPT_IN : EP_TYPE_INTERRUPT_OUT; // 7 : 3
+            break;
+        default:
+            write_serial_fmt("XHCI: Unknown endpoint type: 0x%02x\n", ep_type_attr);
+            xhci_free_ring(ep_priv->transfer_ring);
+            free(ep_priv);
+            return -1;
+        }
 
-    // 计算 Interval（对于中断和等时端点）
-    uint32_t interval = 0;
-    if (ep_type_attr == USB_ENDPOINT_XFER_INT ||
-        ep_type_attr == USB_ENDPOINT_XFER_ISOC) {
+        // 计算 Interval（对于中断和等时端点）
+        uint32_t interval = 0;
+        if (ep_type_attr == USB_ENDPOINT_XFER_INT ||
+            ep_type_attr == USB_ENDPOINT_XFER_ISOC) {
 
-        // 将 USB bInterval 转换为 XHCI Interval
-        // XHCI Interval = log2(bInterval) for HS/SS
-        // 对于 FS/LS 中断端点，转换公式不同
+            // 将 USB bInterval 转换为 XHCI Interval
+            // XHCI Interval = log2(bInterval) for HS/SS
+            // 对于 FS/LS 中断端点，转换公式不同
 
-        uint8_t bInterval = endpoint->interval;
+            uint8_t bInterval = endpoint->interval;
 
-        if (speed == USB_SPEED_HIGH || speed == USB_SPEED_SUPER) {
-            // 对于高速/超速，Interval = bInterval - 1
-            if (bInterval > 0) {
-                interval = bInterval - 1;
-            }
-        } else {
-            // 对于全速/低速，需要转换
-            // bInterval 是毫秒数，需要转换为 2^n 微帧
-            if (bInterval > 0) {
-                // 简化：取 log2
-                uint32_t val = bInterval;
-                interval = 0;
-                while (val > 1) {
-                    val >>= 1;
-                    interval++;
+            if (speed == USB_SPEED_HIGH || speed == USB_SPEED_SUPER) {
+                // 对于高速/超速，Interval = bInterval - 1
+                if (bInterval > 0) {
+                    interval = bInterval - 1;
                 }
-                interval += 3; // 转换到微帧（8微帧 = 1毫秒）
+            } else {
+                // 对于全速/低速，需要转换
+                // bInterval 是毫秒数，需要转换为 2^n 微帧
+                if (bInterval > 0) {
+                    // 简化：取 log2
+                    uint32_t val = bInterval;
+                    interval = 0;
+                    while (val > 1) {
+                        val >>= 1;
+                        interval++;
+                    }
+                    interval += 3; // 转换到微帧（8微帧 = 1毫秒）
+                }
+            }
+
+            // 限制在有效范围内 (0-15)
+            if (interval > 15) {
+                interval = 15;
             }
         }
 
-        // 限制在有效范围内 (0-15)
-        if (interval > 15) {
-            interval = 15;
+        // ep_info: Interval, MaxPStreams, Mult, etc.
+        dev_priv->input_ctx_64->endpoints[dci - 1].ep_info =
+            EP_CTX_INTERVAL(interval) |
+            EP_CTX_MAX_P_STREAMS(0) | // 0 = Linear Stream Array
+            EP_CTX_MULT(0);           // 0 for non-SS, not isoc
+
+        // ep_info2: Error Count, EP Type, Max Burst Size, Max Packet Size
+        dev_priv->input_ctx_64->endpoints[dci - 1].ep_info2 =
+            EP_CTX_ERROR_COUNT(3) |        // CErr = 3 (retry count)
+            EP_CTX_EP_TYPE(xhci_ep_type) | // EP Type
+            EP_CTX_MAX_BURST(0) |          // 0 for non-SS endpoints
+            EP_CTX_MAX_PACKET_SIZE(endpoint->max_packet_size);
+
+        // tr_dequeue_ptr: Transfer Ring 物理地址 + DCS
+        dev_priv->input_ctx_64->endpoints[dci - 1].tr_dequeue_ptr =
+            ep_priv->transfer_ring->phys_addr | EP_CTX_DCS;
+
+        // tx_info: Average TRB Length (用于带宽计算)
+        // 对于批量端点，设置为典型值或 max packet size
+        uint32_t avg_trb_length = endpoint->max_packet_size;
+        if (ep_type_attr == USB_ENDPOINT_XFER_CONTROL) {
+            avg_trb_length = 8; // Control setup packet
         }
+
+        dev_priv->input_ctx_64->endpoints[dci - 1].tx_info = avg_trb_length;
+    } else {
+        // 清空输入上下文
+        memset(dev_priv->input_ctx_32, 0, sizeof(xhci_input_ctx_t));
+
+        // 设置输入控制上下文
+        // A0 (Slot Context) 必须设置，因为我们要更新 Context Entries
+        // A[DCI] 设置我们要配置的端点
+        dev_priv->input_ctx_32->ctrl.add_flags =
+            (1 << dci) | (1 << 0); // A[DCI] | A0
+        dev_priv->input_ctx_32->ctrl.drop_flags = 0;
+
+        // 更新 Slot Context
+        // Context Entries 必须 >= DCI（包含所有活动端点）
+        uint32_t context_entries = dci; // 至少要包含这个端点
+
+        // 保留原有的 route string 和 speed
+        uint32_t route_string = dev_priv->input_ctx_32->slot.dev_info & 0xFFFFF;
+        uint32_t speed = (dev_priv->input_ctx_32->slot.dev_info >> 20) & 0xF;
+
+        // 如果这些值为0（没有初始化），使用设备的值
+        if (speed == 0) {
+            speed = device->speed;
+        }
+
+        dev_priv->input_ctx_32->slot.dev_info =
+            SLOT_CTX_ROUTE_STRING(route_string) | SLOT_CTX_SPEED(speed) |
+            SLOT_CTX_CONTEXT_ENTRIES(context_entries);
+
+        // 保留 Root Hub Port Number
+        uint32_t root_port =
+            (dev_priv->input_ctx_32->slot.dev_info2 >> 16) & 0xFF;
+        if (root_port == 0) {
+            root_port = device->port + 1;
+        }
+
+        dev_priv->input_ctx_32->slot.dev_info2 =
+            SLOT_CTX_ROOT_HUB_PORT(root_port);
+
+        // 配置端点上下文
+
+        uint32_t ep_type_attr = endpoint->attributes & 0x03;
+        uint32_t xhci_ep_type;
+
+        // 确定 XHCI EP Type
+        switch (ep_type_attr) {
+        case USB_ENDPOINT_XFER_CONTROL:
+            xhci_ep_type = EP_TYPE_CONTROL; // 4
+            break;
+        case USB_ENDPOINT_XFER_ISOC:
+            xhci_ep_type = is_in ? EP_TYPE_ISOC_IN : EP_TYPE_ISOC_OUT; // 5 : 1
+            break;
+        case USB_ENDPOINT_XFER_BULK:
+            xhci_ep_type = is_in ? EP_TYPE_BULK_IN : EP_TYPE_BULK_OUT; // 6 : 2
+            break;
+        case USB_ENDPOINT_XFER_INT:
+            xhci_ep_type =
+                is_in ? EP_TYPE_INTERRUPT_IN : EP_TYPE_INTERRUPT_OUT; // 7 : 3
+            break;
+        default:
+            write_serial_fmt("XHCI: Unknown endpoint type: 0x%02x\n", ep_type_attr);
+            xhci_free_ring(ep_priv->transfer_ring);
+            free(ep_priv);
+            return -1;
+        }
+
+        // 计算 Interval（对于中断和等时端点）
+        uint32_t interval = 0;
+        if (ep_type_attr == USB_ENDPOINT_XFER_INT ||
+            ep_type_attr == USB_ENDPOINT_XFER_ISOC) {
+
+            // 将 USB bInterval 转换为 XHCI Interval
+            // XHCI Interval = log2(bInterval) for HS/SS
+            // 对于 FS/LS 中断端点，转换公式不同
+
+            uint8_t bInterval = endpoint->interval;
+
+            if (speed == USB_SPEED_HIGH || speed == USB_SPEED_SUPER) {
+                // 对于高速/超速，Interval = bInterval - 1
+                if (bInterval > 0) {
+                    interval = bInterval - 1;
+                }
+            } else {
+                // 对于全速/低速，需要转换
+                // bInterval 是毫秒数，需要转换为 2^n 微帧
+                if (bInterval > 0) {
+                    // 简化：取 log2
+                    uint32_t val = bInterval;
+                    interval = 0;
+                    while (val > 1) {
+                        val >>= 1;
+                        interval++;
+                    }
+                    interval += 3; // 转换到微帧（8微帧 = 1毫秒）
+                }
+            }
+
+            // 限制在有效范围内 (0-15)
+            if (interval > 15) {
+                interval = 15;
+            }
+        }
+
+        // ep_info: Interval, MaxPStreams, Mult, etc.
+        dev_priv->input_ctx_32->endpoints[dci - 1].ep_info =
+            EP_CTX_INTERVAL(interval) |
+            EP_CTX_MAX_P_STREAMS(0) | // 0 = Linear Stream Array
+            EP_CTX_MULT(0);           // 0 for non-SS, not isoc
+
+        // ep_info2: Error Count, EP Type, Max Burst Size, Max Packet Size
+        dev_priv->input_ctx_32->endpoints[dci - 1].ep_info2 =
+            EP_CTX_ERROR_COUNT(3) |        // CErr = 3 (retry count)
+            EP_CTX_EP_TYPE(xhci_ep_type) | // EP Type
+            EP_CTX_MAX_BURST(0) |          // 0 for non-SS endpoints
+            EP_CTX_MAX_PACKET_SIZE(endpoint->max_packet_size);
+
+        // tr_dequeue_ptr: Transfer Ring 物理地址 + DCS
+        dev_priv->input_ctx_32->endpoints[dci - 1].tr_dequeue_ptr =
+            ep_priv->transfer_ring->phys_addr | EP_CTX_DCS;
+
+        // tx_info: Average TRB Length (用于带宽计算)
+        // 对于批量端点，设置为典型值或 max packet size
+        uint32_t avg_trb_length = endpoint->max_packet_size;
+        if (ep_type_attr == USB_ENDPOINT_XFER_CONTROL) {
+            avg_trb_length = 8; // Control setup packet
+        }
+
+        dev_priv->input_ctx_32->endpoints[dci - 1].tx_info = avg_trb_length;
     }
-
-    // ep_info: Interval, MaxPStreams, Mult, etc.
-    dev_priv->input_ctx->endpoints[dci - 1].ep_info =
-        EP_CTX_INTERVAL(interval) |
-        EP_CTX_MAX_P_STREAMS(0) | // 0 = Linear Stream Array
-        EP_CTX_MULT(0);           // 0 for non-SS, not isoc
-
-    // ep_info2: Error Count, EP Type, Max Burst Size, Max Packet Size
-    dev_priv->input_ctx->endpoints[dci - 1].ep_info2 =
-        EP_CTX_ERROR_COUNT(3) |        // CErr = 3 (retry count)
-        EP_CTX_EP_TYPE(xhci_ep_type) | // EP Type
-        EP_CTX_MAX_BURST(0) |          // 0 for non-SS endpoints
-        EP_CTX_MAX_PACKET_SIZE(endpoint->max_packet_size);
-
-    // tr_dequeue_ptr: Transfer Ring 物理地址 + DCS
-    dev_priv->input_ctx->endpoints[dci - 1].tr_dequeue_ptr =
-        ep_priv->transfer_ring->phys_addr | EP_CTX_DCS;
-
-    // tx_info: Average TRB Length (用于带宽计算)
-    // 对于批量端点，设置为典型值或 max packet size
-    uint32_t avg_trb_length = endpoint->max_packet_size;
-    if (ep_type_attr == USB_ENDPOINT_XFER_CONTROL) {
-        avg_trb_length = 8; // Control setup packet
-    }
-
-    dev_priv->input_ctx->endpoints[dci - 1].tx_info = avg_trb_length;
 
     // 发送 Configure Endpoint 命令
 
@@ -1443,7 +1663,7 @@ void xhci_handle_port_status(xhci_hcd_t *xhci, uint8_t port_id) {
         {
             open_interrupt;
         }
-    } else if (!(portsc & XHCI_PORTSC_CCS)) {
+    } else if (!(portsc & XHCI_PORTSC_CCS) && xhci->connection[port_id]) {
         write_serial_fmt("XHCI: Device disconnected on port %d\n", port_id);
         xhci->connection[port_id] = false;
     }
