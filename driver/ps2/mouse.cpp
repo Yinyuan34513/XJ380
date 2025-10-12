@@ -20,6 +20,7 @@ bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
 uint16_t *mouse_sheet_id_img;
+MouseType type;
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
@@ -201,6 +202,22 @@ bool mousedecode(uint8_t data)
         if ((ms_dec.buf[0] & 0x10) != 0) ms_dec.x |= 0xffffff00;
         if ((ms_dec.buf[0] & 0x20) != 0) ms_dec.y |= 0xffffff00;
         ms_dec.y = -ms_dec.y;
+        if (type == OnlyScroll || type == FiveButton)
+        {
+            ms_dec.phase = 4;
+            return 0;
+        }
+        else
+            return true;
+    }
+    if (ms_dec.phase == 4)
+    {
+        ms_dec.buf[3]   = data;
+        ms_dec.phase    = 1;
+        int wheel_delta = ms_dec.buf[3];
+        if (wheel_delta >= 255) wheel_delta = -1;
+
+        ms_dec.scroll = -wheel_delta;
         return true;
     }
     return false;
@@ -215,34 +232,92 @@ int get_mouse_y()
 {
     return mouse_y;
 }
+static bool send_command(uint8_t value)
+{
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, value);
+    return inb(PS2_DATA_PORT) != 0xfa;
+}
+
+static MouseType get_mouse_type()
+{
+    send_command(0xf3);
+    send_command(200);
+
+    send_command(0xf3);
+    send_command(100);
+
+    send_command(0xf3);
+    send_command(80);
+
+    send_command(0xf2);
+    wait_ps2_read();
+    uint8_t type0 = inb(PS2_DATA_PORT);
+    return type0 == 0x3 ? OnlyScroll : (type0 == 0x4 ? FiveButton : Standard);
+}
 
 void mouse_init()
 {
-    // wait_ps2_write();
-    // outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
+    open_interrupt;
 
-    // delay_ms(100);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, MOUSE_EN);
 
-    // wait_ps2_write();
-    // outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    // wait_ps2_write();
-    // outb(PS2_DATA_PORT, MOUSE_EN);
+    wait_ps2_read();
+    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("PS/2 mouse enable failed."); }
 
-    // delay_ms(100);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, 0xF3);
+    wait_ps2_read();
+    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("PS/2 mouse enable failed."); }
 
-    // wait_ps2_write();
-    // outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
-    // wait_ps2_write();
-    // outb(PS2_DATA_PORT, KB_INIT_MODE);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, 100); // 100 samples/s
+    wait_ps2_read();
+    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("PS/2 mouse set samples failed."); }
 
+    type = get_mouse_type();
+    write_serial_fmt("Setup PS/2 %s mouse.",
+                     type == OnlyScroll ? "OnlyScroll" : (type == FiveButton ? "FiveButton" : "Standard"));
     mouse_x      = (get_hor() - 16) / 2;
     mouse_y      = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
 
     ms_dec.win_move_lock = false;
     ms_dec.sht_now       = NULL;
-    delay_s(3);
+    close_interrupt;
 }
+// void mouse_init()
+// {
+//     wait_ps2_write();
+//     outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
+
+//     delay_ms(100);
+
+//     wait_ps2_write();
+//     outb(PS2_CMD_PORT, KB_SEND2MOUSE);
+//     wait_ps2_write();
+//     outb(PS2_DATA_PORT, MOUSE_EN);
+
+//     delay_ms(100);
+
+//     wait_ps2_write();
+//     outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
+//     wait_ps2_write();
+//     outb(PS2_DATA_PORT, KB_INIT_MODE);
+
+//     delay_s(3);
+// }
 
 void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id)
 {

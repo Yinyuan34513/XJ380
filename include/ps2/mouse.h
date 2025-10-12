@@ -19,7 +19,13 @@ typedef struct
     int       win_y_offset;
     uint16_t *sheet_id;
     SHEET    *sht_now;
+    int     scroll;
 } mouse_dec;
+typedef enum mouse_type {
+    Standard   = 0,
+    OnlyScroll = 1,
+    FiveButton = 2,
+} MouseType;
 
 #    define KB_SEND2MOUSE 0xd4
 #    define MOUSE_EN      0xf4

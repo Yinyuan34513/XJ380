@@ -218,36 +218,33 @@ void wait_ps2_read()
 
 void keyboard_setup()
 {
+    open_interrupt;
     temp_keyboard_buffer = create_atom_queue(256);
-    // open_interrupt;
-    // kb_fifo.p_head = kb_fifo.buf;
-    // kb_fifo.p_tail = kb_fifo.buf;
-    // kb_fifo.count  = 0;
-    // wait_ps2_write();
-    // outb(PS2_CMD_PORT, 0xAD);
-    // while (inb(PS2_CMD_PORT) & KB_STATUS_OBF)
-    // {
-    //     inb(PS2_DATA_PORT);
-    // }
-    // wait_ps2_write();
-    // outb(PS2_CMD_PORT, KBCMD_WRITE_CMD); // 0x60
-    // wait_ps2_write();
-    // outb(PS2_DATA_PORT, KB_INIT_MODE); // 0x03
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, 0xAD);
+    while (inb(PS2_CMD_PORT) & KB_STATUS_OBF)
+    {
+        inb(PS2_DATA_PORT);
+    }
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, KBCMD_WRITE_CMD); // 0x60
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, KB_INIT_MODE); // 0x03
 
-    // wait_ps2_write();
-    // outb(PS2_CMD_PORT, 0xAE);
+    wait_ps2_write();
+    outb(PS2_CMD_PORT, 0xAE);
 
-    // wait_ps2_write();
-    // outb(PS2_DATA_PORT, 0xFF); // 重置命令
-    // wait_ps2_read();
-    // uint8_t response = inb(PS2_DATA_PORT);
-    // if (response != 0xAA) { write_serial_fmt("Keyboard reset failed: 0x%x", response); }
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, 0xFF); // 重置命令
+    wait_ps2_read();
+    uint8_t response = inb(PS2_DATA_PORT);
+    if (response != 0xAA) { write_serial_fmt("Keyboard reset failed: 0x%x", response); }
 
-    // wait_ps2_write();
-    // outb(PS2_DATA_PORT, 0xF4); // 启用数据报告
-    // wait_ps2_read();
-    // if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("Keyboard enable failed"); }
+    wait_ps2_write();
+    outb(PS2_DATA_PORT, 0xF4); // 启用数据报告
+    wait_ps2_read();
+    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("Keyboard enable failed"); }
     
-    // write_serial_fmt("Setup PS/2 keyboard.");
-    // close_interrupt;
+    write_serial_fmt("Setup PS/2 keyboard.");
+    close_interrupt;
 }
