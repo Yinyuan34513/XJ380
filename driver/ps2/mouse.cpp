@@ -67,7 +67,8 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
                        getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
     ms_dec.need_flush = false;
 }
-//去死吧!
+
+// 去死吧!
 void handle_mouse_event(hid_mouse_event_t *mouse)
 {
     ms_dec.x   = mouse->x;
@@ -262,39 +263,29 @@ void mouse_init()
 {
     open_interrupt;
 
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    wait_ps2_write();
-    outb(PS2_DATA_PORT, MOUSE_EN);
+    wait_KB_write();
+    outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
 
-    wait_ps2_read();
-    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("PS/2 mouse enable failed."); }
+    delay_ms(100);
 
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    wait_ps2_write();
-    outb(PS2_DATA_PORT, 0xF3);
-    wait_ps2_read();
-    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("PS/2 mouse enable failed."); }
+    wait_KB_write();
+    outb(PORT_KB_CMD, KB_SEND2MOUSE);
+    wait_KB_write();
+    outb(PORT_KB_DATA, MOUSE_EN);
 
-    wait_ps2_write();
-    outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    wait_ps2_write();
-    outb(PS2_DATA_PORT, 100); // 100 samples/s
-    wait_ps2_read();
-    if (inb(PS2_DATA_PORT) != 0xFA) { write_serial_fmt("PS/2 mouse set samples failed."); }
+    delay_ms(100);
 
-    type = get_mouse_type();
-    write_serial_fmt("Setup PS/2 %s mouse.",
-                     type == OnlyScroll ? "OnlyScroll" : (type == FiveButton ? "FiveButton" : "Standard"));
-    mouse_x      = (get_hor() - 16) / 2;
-    mouse_y      = (get_ver() - 28 - 29) / 2;
+    wait_KB_write();
+    outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
+    wait_KB_write();
+    outb(PORT_KB_DATA, KB_INIT_MODE);
+
+    mouse_x = (get_hor() - 16) / 2;
+    mouse_y = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
 
     ms_dec.win_move_lock = false;
-    ms_dec.sht_now       = NULL;
+    ms_dec.sht_now = NULL;
     close_interrupt;
 }
 // void mouse_init()
