@@ -107,31 +107,11 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     else
         out = keyboard_scancode(scancode, 0, 0);
 
-    char *c;
-    switch ((uint8_t)out)
-    {
-    case CHARACTER_ENTER: c = "\n"; break;
-    case CHARACTER_BACK: c = "\b"; break;
-    case KEY_BUTTON_UP: c = "\x1b[A"; break;
-    case KEY_BUTTON_DOWN: c = "\x1b[B"; break;
-    case KEY_BUTTON_LEFT: c = "\x1b[D"; break;
-    case KEY_BUTTON_RIGHT: c = "\x1b[C"; break;
-    case KEY_BUTTON_HOME: c = "\x1b[H"; break;
-    case KEY_BUTTON_PDOWN: c = "\x1b[5~"; break;
-    case KEY_BUTTON_END: c = "\x1b[F"; break;
-    case KEY_BUTTON_PUP: c = "\x1b[6~"; break;
-    case KEY_BUTTON_INSERT: c = "\x1b[2~"; break;
-    case KEY_BUTTON_DEL: c = "\x1b[3~"; break;
-    default:
-        if (ctrled) out &= 0x1f;
-        char c0[2];
-        c0[0] = out;
-        c0[1] = '\0';
-        keyboard_tmp_writer((uint8_t *)c0);
-        goto end;
-    }
-    keyboard_tmp_writer((uint8_t *)c);
-end:
+    if (ctrled) out &= 0x1f;
+    char c0[2];
+    c0[0] = out;
+    c0[1] = '\0';
+    keyboard_tmp_writer((uint8_t *)c0);
     send_eoi();
 }
 
@@ -214,7 +194,7 @@ void wait_ps2_read()
 void keyboard_setup()
 {
     open_interrupt;
-    temp_keyboard_buffer=create_atom_queue(256);
+    temp_keyboard_buffer = create_atom_queue(256);
     wait_KB_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_read();
