@@ -124,8 +124,9 @@
 #define XAPI_DRAW_TEXT_SW     415
 
 // P4.3
-#define XAPI_DRAW_BMP 403
-#define XAPI_DRAW_PNG 404
+#define XAPI_DRAW_BMP       403
+#define XAPI_DRAW_PNG       404
+#define XAPI_DRAW_PICTURE   419
 
 // P4.4
 #define XAPI_SET_MSH_PROCOR 405

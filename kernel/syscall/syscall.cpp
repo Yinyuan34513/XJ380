@@ -153,15 +153,26 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_SEARCH_FILE: 
         do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx);
         break;
-    case XAPI_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
+    case XAPI_FORK: 
+        regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case XAPI_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
         break;
-    case XAPI_CREATE_WINDOW: regs->rax = (uint64_t)do_xapi_CreateWindow(regs->rdi, regs->rsi); break;
-    case XAPI_SET_WINDOW_TITLE: regs->rax = (uint64_t)do_xapi_SetWindowTitle(regs->rdi, regs->rsi); break;
-    case XAPI_CLOSE_WINDOW: regs->rax = (uint64_t)do_xapi_CloseWindow(regs->rdi); break;
-    case XAPI_SET_ICON: regs->rax = (uint64_t)do_xapi_SetIcon(regs->rdi, regs->rsi); break;
-    case XAPI_DRAW_POINT: regs->rax = (uint64_t)do_xapi_DrawPoint(regs->rdi, regs->rsi, regs->rdx, regs->r10); break;
+    case XAPI_CREATE_WINDOW: 
+        regs->rax = (uint64_t)do_xapi_CreateWindow(regs->rdi, regs->rsi); 
+        break;
+    case XAPI_SET_WINDOW_TITLE: 
+        regs->rax = (uint64_t)do_xapi_SetWindowTitle(regs->rdi, regs->rsi); 
+        break;
+    case XAPI_CLOSE_WINDOW: 
+        regs->rax = (uint64_t)do_xapi_CloseWindow(regs->rdi); 
+        break;
+    case XAPI_SET_ICON: 
+        regs->rax = (uint64_t)do_xapi_SetIcon(regs->rdi, regs->rsi); 
+        break;
+    case XAPI_DRAW_POINT: 
+        regs->rax = (uint64_t)do_xapi_DrawPoint(regs->rdi, regs->rsi, regs->rdx, regs->r10); 
+        break;
     case XAPI_DRAW_LINE:
         regs->rax = (uint64_t)do_xapi_DrawLine(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
@@ -186,8 +197,13 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_DRAW_TEXT_SW:
         regs->rax = (uint64_t)do_xapi_DrawSWText(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
-    case XAPI_DRAW_BMP: break;
-    case XAPI_DRAW_PNG: break;
+    case XAPI_DRAW_BMP: 
+        do_xapi_DrawBMP(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_PNG: 
+        do_xapi_DrawPNG(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_PICTURE: break;
     case XAPI_SET_MSH_PROCOR: regs->rax = (uint64_t)do_xapi_SetMsgProc(regs->rdi, regs->rsi); break;
     case XAPI_READBUFFER:
         do_xapi_ReadBuffer(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
