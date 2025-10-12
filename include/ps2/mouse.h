@@ -7,7 +7,7 @@
 
 typedef struct
 {
-    uint8_t   buf[3], phase;
+    uint8_t   buf[4], phase;
     int       x, y, btn;
     char      roll;
     bool      left;
@@ -21,6 +21,7 @@ typedef struct
     SHEET    *sht_now;
     int     scroll;
 } mouse_dec;
+
 typedef enum mouse_type {
     Standard   = 0,
     OnlyScroll = 1,

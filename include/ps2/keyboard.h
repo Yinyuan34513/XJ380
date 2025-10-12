@@ -2,6 +2,9 @@
 
 #define KB_BUF_SIZE 100
 
+#define MOUSE_BBIT 0x01
+#define MOUSE_ABIT 0x02
+
 #define PORT_KB_DATA 0x60
 #define PORT_KB_STATUS 0x64
 #define PORT_KB_CMD 0x64

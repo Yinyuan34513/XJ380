@@ -233,6 +233,7 @@ int get_mouse_y()
 {
     return mouse_y;
 }
+
 static bool send_command(uint8_t value)
 {
     wait_ps2_write();
@@ -240,6 +241,34 @@ static bool send_command(uint8_t value)
     wait_ps2_write();
     outb(PS2_DATA_PORT, value);
     return inb(PS2_DATA_PORT) != 0xfa;
+}
+
+void mouse_wait(uint8_t a_type) {
+    uint64_t time_ns = nanoTime() + 1ULL * 1000000000ULL;
+    if (!a_type) {
+        while (nanoTime() < time_ns) {
+            if (inb(PORT_KB_STATUS) & MOUSE_BBIT)
+                break;
+        }
+    } else {
+        while (nanoTime() < time_ns) {
+            if (!((inb(PORT_KB_STATUS) & MOUSE_ABIT)))
+                break;
+        }
+    }
+}
+
+void mouse_write(uint8_t write) {
+    mouse_wait(1);
+    outb(PORT_KB_CMD, KB_SEND2MOUSE);
+    mouse_wait(1);
+    outb(PORT_KB_DATA, write);
+}
+
+uint8_t mouse_read() {
+    mouse_wait(0);
+    char t = inb(PORT_KB_DATA);
+    return t;
 }
 
 static MouseType get_mouse_type()
@@ -263,22 +292,27 @@ void mouse_init()
 {
     open_interrupt;
 
-    wait_KB_write();
-    outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
+    mouse_wait(1);
+    outb(0x64, 0xA8);
 
-    delay_ms(100);
+    // enable interrupts
+    mouse_wait(1);
+    outb(0x64, 0x20);
+    mouse_wait(0);
+    uint8_t status;
+    status = (inb(0x60) | 2);
+    mouse_wait(1);
+    outb(0x64, 0x60);
+    mouse_wait(1);
+    outb(0x60, status);
 
-    wait_KB_write();
-    outb(PORT_KB_CMD, KB_SEND2MOUSE);
-    wait_KB_write();
-    outb(PORT_KB_DATA, MOUSE_EN);
+    // default settings
+    // mouse_write(0xF6);
+    // mouse_read();
 
-    delay_ms(100);
-
-    wait_KB_write();
-    outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
-    wait_KB_write();
-    outb(PORT_KB_DATA, KB_INIT_MODE);
+    // enable device
+    mouse_write(0xF4);
+    mouse_read();
 
     mouse_x = (get_hor() - 16) / 2;
     mouse_y = (get_ver() - 28 - 29) / 2;

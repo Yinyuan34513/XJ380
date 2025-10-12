@@ -1747,7 +1747,7 @@ void init_xhci()
     }
 
     if (mmio_base == 0) {
-        write_serial_fmt("e1000: No MMIO BAR found\n");
+        write_serial_fmt("XHCI: No MMIO BAR found\n");
         return ;
     }
 
