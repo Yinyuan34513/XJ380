@@ -62,7 +62,7 @@ struct keyboard_cmd_state
     .got_ack     = false,
     .got_resend  = false,
 };
-atom_queue *temp_keyboard_buffer = NULL;
+atom_queue *temp_keyboard_buffer = nullptr;
 void keyboard_tmp_writer(const uint8_t *data) {
     if (data[0] == 3) {
         return ;
@@ -83,7 +83,6 @@ int kernel_getch() {
 
 extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 {
-    send_eoi();
 
     uint8_t scancode = inb(0x60);
 
@@ -133,6 +132,7 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     }
     keyboard_tmp_writer((uint8_t *)c);
 end:
+    send_eoi();
 }
 
 uint8_t keyboard_scancode(uint8_t scancode, uint8_t scancode_1, uint8_t scancode_2)
@@ -214,10 +214,7 @@ void wait_ps2_read()
 void keyboard_setup()
 {
     open_interrupt;
-    kb_fifo.p_head = kb_fifo.buf;
-    kb_fifo.p_tail = kb_fifo.buf;
-    kb_fifo.count = 0;
-    memset(kb_fifo.buf, 0, KB_BUF_SIZE);
+    temp_keyboard_buffer=create_atom_queue(256);
     wait_KB_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_read();
