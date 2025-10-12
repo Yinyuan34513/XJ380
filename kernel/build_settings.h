@@ -37,9 +37,9 @@
 
 // 编译版本类型
 #define DEBUG_VERSION 0
-#define REALEASE_VERSION 1
+#define RELEASE_VERSION 1
 
-#define BUILD_EDITION DEBUG_VERSION
+#define BUILD_EDITION RELEASE_VERSION
 
 #define OS_VERSION "BuildVersion"
 #define KN_VERSION "XSK 2.1.0"

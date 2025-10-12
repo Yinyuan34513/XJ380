@@ -168,6 +168,9 @@ void desktop_flusher()
                  &mouse_sheet_id);
 
     init_ttf();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8});    // GUI好了来一下
+
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
     write_serial_string("desktop initialized.\n");
@@ -245,6 +248,8 @@ void desktop_flusher()
     WINDOWLS *test_win2;
     init_xwm(&xwmi);
     xwmii = &xwmi;
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 10, 7, {0x00, 0xa2, 0xe8});    // 全都好了来一下
 
     mouse_sheet_id_img = &mouse_sheet_id;
 
@@ -335,15 +340,23 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     (void)SystemTable; // 暂时不用
     no_interrupt = true;
     disable_intr();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution), 7, {0xe6, 0xe6, 0xe6}); // 开机进度条
+
     init_cpu();
     init_idt();
     init_gdt();
     init_hpet(BootConfig.HPET);
     init_apic(BootConfig.MADT);
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 1, 7, {0x00, 0xa2, 0xe8});    // CPU好了来一下
+
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
     page_setup();
     init_heap();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8});    // 内存好了来一下
 
     serial_wprintf("Output by Serial Writer!!\n");
 
@@ -356,6 +369,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // enable_intr();
     keyboard_setup();
     mouse_init();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
+
     // disable_intr();
     process_setup();
 
@@ -381,6 +397,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8});    // 多任务好了来一下
+
     uint64_t phys = alloc_frames(2);
     write_serial_string("Alloc memory: ");
     write_serial_hex(phys);
@@ -388,6 +406,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_syscall();
     init_signal();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
 
     while (true)
     {
@@ -403,6 +423,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     fatfs_init();
 
     mount_root();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
 
     init_user();
     init_killer();

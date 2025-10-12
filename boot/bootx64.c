@@ -331,7 +331,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     CreateAndMapNewPageTable();
     write_serial_string("New Page Table Created Success.\n");
 
-    ST->ConOut->ClearScreen(ST->ConOut);
+    // ST->ConOut->ClearScreen(ST->ConOut);     // 我不知道是不是关了清屏就可以保留启动时的BIOS厂商logo了
 
     EFI_STATUS                status;
     EFI_PHYSICAL_ADDRESS      entry_addr;
