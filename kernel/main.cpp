@@ -364,13 +364,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     nvme_init();
     usb_init();
 
-    // enable_intr();
+    enable_intr();
     keyboard_setup();
     mouse_init();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
 
-    // disable_intr();
+    disable_intr();
     process_setup();
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
@@ -394,6 +394,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     get_current_cpu()->current_task = idle_thread;
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
+
+    disable_scheduler();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8});    // 多任务好了来一下
 
