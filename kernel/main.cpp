@@ -258,8 +258,6 @@ void desktop_flusher()
     enable_scheduler();
 
     winRD_lock = true;
-
-    create_window(&xwmi, &shtinf, &test_win, (char *)"0", 80, 50);
     // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
     // delete_window(&xwmi, &shtinf, test_win);
@@ -277,7 +275,7 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
-    create_user_process_from_file((char *)"/system/shell.elf", NULL);
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL);
     desktop_done = true;
     while (1)
     {

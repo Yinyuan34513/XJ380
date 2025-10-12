@@ -387,7 +387,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     entry_addr = ehdr->e_entry; // 获取入口点
     // free(kernel_buffer);        // 释放内核文件，丢掉！
 
+#if BUILD_EDITION == DEBUG_VERSION
     SwitchToResolution(1280, 768); // 切换分辨率
+#endif
 
     struct FrameBufferConfig config = {(UINT8 *)(GOP->Mode->FrameBufferBase + 0xffff800000000000),
                                        GOP->Mode->Info->PixelsPerScanLine, GOP->Mode->Info->HorizontalResolution,
