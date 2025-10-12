@@ -156,7 +156,7 @@ uint8_t keyboard_scancode(uint8_t scancode, uint8_t scancode_1, uint8_t scancode
     {
         char character = character_array[capsLocked][shifted][scancode];
 
-        if (character != 0)
+        if (character < 128)
         { // Normal char
             return character;
         }
