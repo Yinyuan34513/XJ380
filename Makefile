@@ -140,8 +140,9 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
-	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
+	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
+	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/
 	@cp -a ./font/ttf/XJ380C.xpf $(BUILD_DIR)/XJ380/system/

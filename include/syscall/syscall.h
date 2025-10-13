@@ -1,6 +1,6 @@
 #pragma once
 #include <proto.hpp>
-#include <pxapi.h>
+#include "pxapi.h"
 
 #define XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS 0xf717f000
 #define XPSR_OFFEST                         0x927

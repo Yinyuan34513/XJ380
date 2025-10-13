@@ -276,6 +276,7 @@ void desktop_flusher()
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
     create_user_process_from_file((char *)"/system/shell.elf", NULL);
+    create_user_process_from_file((char *)"/system/fmanager.elf", NULL);
     desktop_done = true;
     while (1)
     {
