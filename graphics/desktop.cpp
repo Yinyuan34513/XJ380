@@ -16,7 +16,7 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     // draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)malloc(scrx * scry * 4);
     int      w, h, bpp;
-    vfs_node_t v = vfs_open("/system/BackGround.png");
+    vfs_node_t v = vfs_open("/system/image/BackGround.png");
     if (!v)
     {
         write_serial_string("PrintPic: File load failed\n");

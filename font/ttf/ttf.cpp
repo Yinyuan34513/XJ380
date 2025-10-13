@@ -455,7 +455,7 @@ void init_ttf()
     // delay_s(10);
 
     // 完整不等宽字体
-    vfs_node_t v = vfs_open("/system/XJ380F.ttf");
+    vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
     if (!v)
     {
         write_serial_string("Cannot find XJ380F.ttf\n");
@@ -478,7 +478,7 @@ void init_ttf()
 
     // 英文等宽字体
     write_serial_string("Reading Font - XJ380C (2/2)...\n");
-    LoadPictureOgM(&mono_xpf_buffer, "/system/XJ380C.xpf");
+    LoadPictureOgM(&mono_xpf_buffer, "/system/font/XJ380C.xpf");
     if (!mono_xpf_buffer)
     {
         write_serial_string("Cannot find/read XJ380C.xpf\n");

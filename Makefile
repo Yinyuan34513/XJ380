@@ -134,22 +134,35 @@ vdisk: all
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
+	@mkdir -p $(BUILD_DIR)/XJ380/system/font
+	@mkdir -p $(BUILD_DIR)/XJ380/system/image
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
+
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
+
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
+
 	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
+	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/image
+
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/
-	@cp -a ./font/ttf/XJ380C.xpf $(BUILD_DIR)/XJ380/system/
-	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/system
+
+	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
+	@cp -a ./font/ttf/XJ380C.xpf $(BUILD_DIR)/XJ380/system/font
+
+	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/system/image
+
 	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
+
 	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
+
 	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system/
+
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::

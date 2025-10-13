@@ -525,8 +525,8 @@ void refresh_sheet(SHEET_INFO *sht)
                         }
                     }
                     temp_peek_sign[BufferOffest] = 1;
-no_peek1:
                 }
+no_peek1:
                 BufferOffest++;
             }
             BufferOffest += (sht->scrx - front_p->width);
@@ -663,8 +663,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
                             }
                         }
                         temp_peek_sign[BufferOffest] = 1;
-no_peek2:
                     }
+no_peek2:
                     BufferOffest++;
                 }
                 BufferOffest += sht->scrx - front_p->width + offest_x + dlo_x;

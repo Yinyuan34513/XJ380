@@ -12,6 +12,8 @@
 
 bool WindowIsCreating = false;
 
+int window_create_offest_xy = 32;
+
 void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
@@ -64,8 +66,12 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     new_window->w_task = get_current_task();
 
-    create_sheet(sht, 72, 72, width + 24, height + 52, MovableSheetType, -1, &(new_window->w_sheet));
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+                 width + 24, height + 52, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+
+    window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
+    window_create_offest_xy += 32;
 
     SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((width + 24) * 27 * 4);
     SHEET_BUFFER *lft = (SHEET_BUFFER *)malloc(height * 12 * 4);
@@ -86,7 +92,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     copy_buffer_by_id_without_alpha(sht, &(new_window->w_sheet), xwmi->theme.close, width - 21, 5, 41, 18);
     copy_buffer_by_id_without_alpha(sht, &(new_window->w_sheet), xwmi->theme.min, width - 48, 5, 26, 18);
 
-    print_box_ttf(sht, &(new_window->w_sheet), title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
+    // print_box_ttf(sht, &(new_window->w_sheet), title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
     print_box_ttf(sht, &(new_window->w_sheet), title, BLACK, 12, 4, 11);
 
     free(top);

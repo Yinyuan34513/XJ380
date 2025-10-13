@@ -261,7 +261,7 @@ void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
     WINDOW_HANDLE *WindowHandle         = (WINDOW_HANDLE *)(handle);
     char          *filepath             = (char *)(path);
 
-    PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+    PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
 }
 
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path)
@@ -269,7 +269,7 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
     WINDOW_HANDLE *WindowHandle         = (WINDOW_HANDLE *)(handle);
     char          *filepath             = (char *)(path);
 
-    PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+    PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
 }
 
 // 你好，这是XAPI1.1的内容，挤牙膏.png
