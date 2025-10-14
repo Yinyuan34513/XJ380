@@ -171,3 +171,8 @@ UINT64	xapi_GetTime() {
 void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
 }
+
+UINT64 xapi_Mkdir(WSTR path)
+{
+	return enter_syscall(10086,(uint64_t)path,0,0,0,0,0);
+}

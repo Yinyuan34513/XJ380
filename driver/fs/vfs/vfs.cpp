@@ -97,48 +97,72 @@ vfs_node_t vfs_child_append(vfs_node_t parent, const char *name, void *handle)
     return node;
 }
 
-int vfs_mkdir(const char *name)
-{
-    if (name[0] != '/') return -1;
-    char      *path     = strdup(name + 1);
-    char      *save_ptr = path;
-    vfs_node_t current  = rootdir;
-    for (const char *buf = pathtok(&save_ptr); buf; buf = pathtok(&save_ptr))
-    {
-        const vfs_node_t father = current;
-        if (streq(buf, ".")) continue;
-        if (streq(buf, ".."))
-        {
-            if (current->parent && current->type & file_dir)
-            {
-                current = current->parent;
-                goto upd;
-            }
-            else { goto err; }
-        }
-        current = vfs_child_find(current, buf);
+int vfs_mkdir(const char *name) {
+    vfs_node_t current = rootdir;
+    char *path;
+    if (name[0] != '/') {
+        current = get_current_task()->parent_group->cwd;
+        path = strdup(name);
+    } else {
+        path = strdup(name + 1);
+    }
 
-    upd:
-        if (current == NULL)
-        {
-            current       = vfs_node_alloc(father, buf);
-            current->type = file_dir;
-            callbackof(father, mkdir)(father->handle, buf, current);
+    char *save_ptr = path;
+    char *filename = path + strlen(path);
+    if (*--filename == '/') {
+        *filename = '\0';
+    }
+
+    while (*--filename != '/' && filename != path) {
+    }
+    if (filename != path) {
+        *filename++ = '\0';
+    } else {
+        goto create;
+    }
+
+    if (strlen(path) == 0) {
+        free(path);
+        return -1;
+    }
+    for (const char *buf = pathtok(&save_ptr); buf; buf = pathtok(&save_ptr)) {
+        if (streq(buf, "."))
+            continue;
+        if (streq(buf, "..")) {
+            if (!current->parent || !(current->type & file_dir))
+            {
+                free(path);
+                return -1;
+            }
+            current = current->parent;
+            continue;
         }
-        else
+        vfs_node_t new_current = vfs_child_find(current, buf);
+        if (new_current == NULL) {
+            new_current = vfs_node_alloc(current, buf);
+            new_current->type = file_dir;
+            callbackof(current, mkdir)(current->handle, buf, new_current);
+        }
+        current = new_current;
+        do_update(current);
+
+        if (!(current->type & file_dir))
         {
-            do_update(current);
-            if (current->type != file_dir) goto err;
+            free(path);
+            return -1;
         }
     }
 
-    free(path);
-    return 0;
+create:
+    vfs_node_t node = vfs_child_append(current, filename, NULL);
+    node->type = file_dir;
+    callbackof(current, mkdir)(current->handle, filename, node);
 
-err:
     free(path);
-    return -1;
+
+    return 0;
 }
+
 
 int vfs_mkfile(const char *name)
 {

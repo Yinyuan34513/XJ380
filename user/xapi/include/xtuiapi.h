@@ -75,3 +75,7 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);
 void		xapi_GetSystemVersion(WSTR version);
 UINT64		xapi_GetTime();
 void		xapi_GetCurrentUser(UserInfo *user_info);
+
+
+//私货
+UINT64 xapi_Mkdir(WSTR path);

@@ -227,6 +227,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         get_current_task()->parent_group->sigprci = false;
         signal_end(); break;
 
+    case 10086:
+        regs->rax = (uint64_t)vfs_mkdir((char*)regs->rdi);
+        break;
+
     default:
         regs->rax = (uint64_t)-ENOSYS;
         write_serial_string("Unknown syscall index: ");

@@ -19,3 +19,8 @@ void backspace();
 void merge_string(char *dst, char *src);
 void revert_path(char *path);
 int check_dir_com(char *str);
+
+void create_directory(char *path);
+void change_directory(char *path);
+void normalize_path(char *path);
+bool create_directory_recursive(char *path);  // 递归创建函数

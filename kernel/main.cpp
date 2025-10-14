@@ -372,6 +372,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
 
     disable_intr();
+
+    vfs_init();
+    dev_init();
+    partition_init();
+    sysfs_init();
+    fs_syscall_init();
+    fatfs_init();
+
     process_setup();
 
     // 超绝偷懒解法，等有内存管理且在这之前初始化的时候叫我来改
@@ -400,10 +408,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8});    // 多任务好了来一下
 
-    uint64_t phys = alloc_frames(2);
-    write_serial_string("Alloc memory: ");
-    write_serial_hex(phys);
-    write_serial_string("\n");
+    // uint64_t phys = alloc_frames(2);
+    // write_serial_string("Alloc memory: ");
+    // write_serial_hex(phys);
+    // write_serial_string("\n");、
+
+    mount_root();
 
     init_syscall();
     init_signal();
@@ -416,20 +426,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
 
-    vfs_init();
-    dev_init();
-    partition_init();
-    sysfs_init();
-    fs_syscall_init();
-    fatfs_init();
-
-    mount_root();
-
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
 
     init_user();
     init_killer();
     write_serial_string("User & Killer is ready\n");
+
+    vfs_mkdir("./haha");
 
     if (BootConfig.is_qemu == 1) write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
 
