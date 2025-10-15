@@ -15,7 +15,7 @@
 //     {
 //         return 0;
 //     }
-//     struct VFile *file = current_task->parent_group->fds[fd];
+//     struct VFile *file = current_task->fds[fd];
 //     VNode *node = file->file;
 //     if (node->ops->read == NULL && !file->readable)
 //     {
@@ -40,7 +40,7 @@
 //         write_serial_string((const char *)buf);
 //         return strlen((const char *)buf);
 //     }
-//     struct VFile *file = current_task->parent_group->fds[fd];
+//     struct VFile *file = current_task->fds[fd];
 //     VNode *node = file->file;
 //     if (node->ops->write == NULL && !file->writeable)
 //     {
@@ -57,7 +57,7 @@
 //         return -1;
 //     }
 //     int fd = current_task->fd_count++;
-//     struct VFile *file = current_task->parent_group->fds[fd];
+//     struct VFile *file = current_task->fds[fd];
 
 //     if (current_task->fd_count >= MAX_FD_NUM)
 //         current_task->fd_count = 3;
@@ -75,7 +75,7 @@
 //     {
 //         return -1;
 //     }
-//     current_task->parent_group->fds[fd] = NULL;
+//     current_task->fds[fd] = NULL;
 //     return 0;
 // }
 
@@ -89,7 +89,7 @@
 //     {
 //         return -1;
 //     }
-//     struct VFile *file = current_task->parent_group->fds[fd];
+//     struct VFile *file = current_task->fds[fd];
 //     VNode *node = file->file;
 //     if (node->ops->stat == NULL)
 //     {

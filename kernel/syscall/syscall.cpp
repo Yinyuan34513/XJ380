@@ -142,6 +142,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         // case SYS_RT_SIGPROCMASK:
         //     regs->rax = 0;
         //     break;
+    case SYS_GETCWD:
+        regs->rax = (uint64_t)get_current_task()->str_cwd;
+        break;
 
     case XAPI_OUTPUT: break;
     case XAPI_INPUT: break;

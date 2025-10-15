@@ -145,6 +145,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
 
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
+	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/system
 
 	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
 	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/image

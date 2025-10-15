@@ -89,8 +89,6 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 
-    vfs_node_t cwd;
-    vfs_node_t fds[256];
     char   **envp;      // 环境变量指针
     size_t   envc;      // 环境变量数量
 
@@ -100,6 +98,10 @@ struct process_control_block
     char       *cmdline;
     int         task_level; // 进程等级
     bool        sigprci;
+
+    void             *elf_file;    // 可执行文件指针
+    size_t            elf_size;    // 可执行文件大小
+    uint64_t          load_start;  // 加载起始地址
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);
@@ -134,6 +136,10 @@ struct thread_control_block
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
+
+    vfs_node_t cwd;
+    vfs_node_t fds[256];
+    char *     str_cwd;//字符串类型的cwd
 };
 
 extern pcb_t kernel_group;
@@ -143,8 +149,8 @@ void     enable_scheduler();
 void     disable_scheduler();
 tcb_t    get_current_task();
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
-size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
-pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
+size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb, char *cwd);
+pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline,void *elf_file, size_t elf_size);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();
 void     switch_to_user_mode();
