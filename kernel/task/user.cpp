@@ -34,8 +34,6 @@ void init_user()
     // 这里先偷个懒，之后再改
     memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish"));
     current_user->user_type = XUT_Root;
-    sys_mkdir("/Users",NULL);
-    sys_mkdir(strcat("/Users/",current_user->name),NULL);
 }
 
 void get_thread_name_from_filepath(char *path, char *name)
@@ -119,8 +117,6 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
 
-    group->load_start = mapping_space->load_start;
-
     // 获取程序头表
     phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
 
@@ -175,39 +171,6 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     return entry;
 }
 
-void getFileDirectory(const char* path, char* result) {
-    // 查找最后一个路径分隔符的位置
-    int lastSlash = -1;
-    for (int i = 0; path[i] != '\0'; i++) {
-        if (path[i] == '/' || path[i] == '\\') {
-            lastSlash = i;
-        }
-    }
-    
-    // 根据不同的情况处理
-    if (lastSlash == -1) {
-        // 没有分隔符，返回空字符串
-        result[0] = '\0';
-    } else if (lastSlash == 0) {
-        // 只有根目录，如 "/file"
-        result[0] = '/';
-        result[1] = '\0';
-    } else {
-        // 正常路径，复制目录部分
-        for (int i = 0; i < lastSlash; i++) {
-            result[i] = path[i];
-        }
-        result[lastSlash] = '\0';
-    }
-}
-
-char *getCwd(char* path)
-{
-    char result[strlen(path)+1];
-    getFileDirectory(path,result);
-    return result;
-}
-
 void create_user_process_from_file(char *path, pcb_t pcb)
 {
     char  process_name[50];
@@ -218,12 +181,12 @@ void create_user_process_from_file(char *path, pcb_t pcb)
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
-    pcb_t             group         = create_process_group(process_name, NULL, new_directory, (char *)"",NULL,NULL);
+    pcb_t             group         = create_process_group(process_name, NULL, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);
 
-    write_serial_fmt("Creating User Thread. Thread Name: %s Cwd %s\n", process_name, getCwd(path));
-    create_user_thread(entry, NULL, process_name, pcb == NULL ? group : pcb,getCwd(path));
+    write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
+    create_user_thread(entry, NULL, process_name, pcb == NULL ? group : pcb);
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)
@@ -233,5 +196,5 @@ void create_user_thread_from_file(char *path, pcb_t pcb)
     if (entry == NULL) return;
     get_thread_name_from_filepath(path, thread_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
-    create_user_thread(entry, NULL, thread_name, pcb,getCwd(path));
+    create_user_thread(entry, NULL, thread_name, pcb);
 }

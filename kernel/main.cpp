@@ -397,7 +397,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     strcpy(idle_thread->name, "idle thread");
     idle_thread->group_index  = queue_enqueue(kernel_group->thread_queue, idle_thread);
     idle_thread->context0.rsp = get_rsp();
-    idle_thread->cwd          = rootdir;
     set_kernel_stack(get_rsp());
     idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
 
