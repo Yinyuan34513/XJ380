@@ -60,6 +60,13 @@ void  xapi_SearchFile(
 	DirNode	*dir
 );
 
+UINT64 xapi_Mkdir(WSTR path);
+UINT64 xapi_CreateFile(WSTR filename);
+UINT64 xapi_DeleteFile(WSTR path);
+UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path);
+UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
+UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
+
 // 3-3
 UINT64 	xcr_char2int(WSTR str);
 WSTR 	xcr_int2char(UINT64 dec); 
@@ -77,11 +84,4 @@ UINT64		xapi_GetTime();
 void		xapi_GetCurrentUser(UserInfo *user_info);
 
 
-//私货
-UINT64 xapi_Mkdir(WSTR path);
-
-UINT64 xapi_CreateFile(WSTR filename);
-UINT64 xapi_DeleteFile(WSTR path);
-UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path);
-UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
-UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
+// 我************再不通知就私加api我让你飞起来（大恼

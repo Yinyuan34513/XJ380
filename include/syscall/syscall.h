@@ -106,11 +106,6 @@ uint64_t sys_brk(uint64_t addr);
 #define MAP_PRIVATE 0x2
 #define MAP_FIXED   0x10
 
-#define XAPI_CREATE_FILE   10087
-#define XAPI_DELETE_FILE   10088  
-#define XAPI_RENAME_FILE   10089
-#define XAPI_READ_FILE     10090
-#define XAPI_WRITE_FILE    10091
 // uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
 
 // uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);

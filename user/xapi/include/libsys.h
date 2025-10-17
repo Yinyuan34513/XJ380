@@ -86,7 +86,9 @@
 // P3.1
 #define XAPI_OUTPUT    381
 #define XAPI_INPUT     382
+
 #define XAPI_GETLINE   418
+
 #define XAPI_GETCH     383
 #define XAPI_ENDLINE   384
 #define XAPI_PRINTLINE 385
@@ -95,7 +97,15 @@
 // P3.2
 #define XAPI_OPEN_FILE      387
 #define XAPI_CLOSE_FILE     388
+
 #define XAPI_SEARCH_FILE    416
+
+#define XAPI_MAKEDIR        425
+#define XAPI_CREATE_FILE    420
+#define XAPI_DELETE_FILE    421  
+#define XAPI_RENAME_FILE    422
+#define XAPI_READ_FILE      423
+#define XAPI_WRITE_FILE     424
 
 // P3.4
 #define XAPI_FORK   389
@@ -103,6 +113,7 @@
 
 // P3.5
 #define XAPI_GET_VERSION        391
+
 #define XAPI_GET_TIME           412
 #define XAPI_GET_CURRENT_USER   413
 
@@ -120,12 +131,14 @@
 #define XAPI_DRAW_CIRCLE      400
 #define XAPI_DRAW_CIRCLE_FILL 401
 #define XAPI_DRAW_TEXT        402
+
 #define XAPI_DRAW_TEXT_L      414
 #define XAPI_DRAW_TEXT_SW     415
 
 // P4.3
 #define XAPI_DRAW_BMP       403
 #define XAPI_DRAW_PNG       404
+
 #define XAPI_DRAW_PICTURE   419
 
 // P4.4
@@ -143,17 +156,12 @@
 #define XAPI_READBUFFER     406
 #define XAPI_WRITEBUFFER    407
 #define XAPI_READBUFFERA    417
+
 #define XAPI_WRITEBUFFERA   408
 #define XAPI_REFRESH_WINDOW 409
 
 // P4.6
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
-
-#define XAPI_CREATE_FILE   10087
-#define XAPI_DELETE_FILE   10088  
-#define XAPI_RENAME_FILE   10089
-#define XAPI_READ_FILE     10090
-#define XAPI_WRITE_FILE    10091
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);
