@@ -764,8 +764,8 @@ void print_to_console(char *str)
 void print_to_console_zh(char *str)
 {
     xapi_DrawText(handle, *ab_x, (*ab_y) - 4, str, 12, 0x000000ff);
-    *ab_x  = 8;
-    *ab_y += 18;
+    *ab_y += 2;
+    newline();
 }
 
 void putchar_at_cur(char *ch)

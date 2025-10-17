@@ -176,26 +176,26 @@ static void hid_interrupt_callback(usb_transfer_t *transfer)
                 uint8_t key = report->keys[i];
                 if (key == 0) continue;
 
-                // 检查是否是新按键
-                bool is_new = true;
-                for (int j = 0; j < 6; j++)
-                {
-                    if (hid->prev_keyboard_report.keys[j] == key)
-                    {
-                        is_new = false;
-                        break;
-                    }
-                }
+                // // 检查是否是新按键
+                // bool is_new = true;
+                // for (int j = 0; j < 6; j++)
+                // {
+                //     if (hid->prev_keyboard_report.keys[j] == key)
+                //     {
+                //         is_new = false;
+                //         break;
+                //     }
+                // }
 
-                if (is_new)
-                {
+                // if (is_new)
+                // {
                     hid_event_t event = {
                         .type = HID_EVENT_KEY_PRESS,
                         .key  = {.keycode = key, .modifiers = report->modifiers, .pressed = true}
                     };
 
                     hid->event_callback(&event, hid->callback_user_data);
-                }
+                // }
             }
 
             // 检测释放的键
@@ -204,26 +204,26 @@ static void hid_interrupt_callback(usb_transfer_t *transfer)
                 uint8_t key = hid->prev_keyboard_report.keys[i];
                 if (key == 0) continue;
 
-                // 检查键是否仍然按下
-                bool still_pressed = false;
-                for (int j = 0; j < 6; j++)
-                {
-                    if (report->keys[j] == key)
-                    {
-                        still_pressed = true;
-                        break;
-                    }
-                }
+            //     // 检查键是否仍然按下
+            //     bool still_pressed = false;
+            //     for (int j = 0; j < 6; j++)
+            //     {
+            //         if (report->keys[j] == key)
+            //         {
+            //             still_pressed = true;
+            //             break;
+            //         }
+            //     }
 
-                if (!still_pressed)
-                {
+            //     if (!still_pressed)
+            //     {
                     hid_event_t event = {
                         .type = HID_EVENT_KEY_RELEASE,
                         .key  = {.keycode = key, .modifiers = report->modifiers, .pressed = false}
                     };
 
                     hid->event_callback(&event, hid->callback_user_data);
-                }
+            //     }
             }
         }
     }
