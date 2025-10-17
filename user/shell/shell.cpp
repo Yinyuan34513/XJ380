@@ -237,7 +237,7 @@ void change_directory(char *path)
     strcpy(current_path, temp_path);
 
     // 确保路径以/结尾（除了根目录）
-    if (strcmp(current_path, "/") != 0 && current_path[strlen(current_path) - 1] != '/') { strcat(current_path, "/"); }
+    // if (strcmp(current_path, "/") != 0 && current_path[strlen(current_path) - 1] != '/') { strcat(current_path, "/"); }
 }
 
 // 路径规范化函数，处理 .. 和 .
