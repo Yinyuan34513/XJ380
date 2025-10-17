@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./stdint.h"
+#include "./xposix/stdarg.h"
 
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
@@ -123,6 +124,8 @@ typedef struct num_formatter
 /* Placeholder ... */
 typedef struct Writer Writer;
 
+
+
 /**
  * A handle of writing a char
  * `uint8_t` is a bool, if != 0 means write success, if == 0 means write failure
@@ -172,8 +175,30 @@ static inline bool are_interrupts_enabled()
 #ifdef __cplusplus
 } // extern "C"
 #endif
-
+typedef enum num_size
+{
+    HALF_2 = 0, // char
+    HALF_1 = 1, // short
+    INT    = 2, // int
+    LONG_1 = 3, // long
+    LONG_2 = 4, // long long
+    SIZE_T = 5, // size_t
+} num_size_t;
 #define PADDING_DOWN(size, to) ((size_t)(size) / (size_t)(to) * (size_t)(to))
 #define PADDING_UP(size, to)   PADDING_DOWN((size_t)(size) + (size_t)(to) - (size_t)1, to)
 #define IS_DIGIT(c)            ((c) >= '0' && (c) <= '9')
 #define IS_ALPHA(a)            (((a) >= 'A' && (a) <= 'Z') || ((a) >= 'a' && (a) <= 'z'))
+
+// 在 krlibc.h 中添加以下声明
+
+// 格式化输出函数
+int snprintf(char *str, size_t size, const char *format, ...);
+int sprintf(char *str, const char *format, ...);
+int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+int simple_snprintf(char *str, size_t size, const char *format, ...);
+size_t vwprintf(Writer *writer, const char *fmt, va_list args);
+size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args);
+size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type);
+
+void uint64_to_string(uint64_t num, char *buffer, int buffer_size);
+void int_to_string(int num, char *buffer, int buffer_size);

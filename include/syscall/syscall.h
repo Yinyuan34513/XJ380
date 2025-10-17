@@ -105,6 +105,18 @@ uint64_t sys_brk(uint64_t addr);
 #define MAP_SHARED  0x1
 #define MAP_PRIVATE 0x2
 #define MAP_FIXED   0x10
+
+#define XAPI_CREATE_FILE   10087
+#define XAPI_DELETE_FILE   10088  
+#define XAPI_RENAME_FILE   10089
+#define XAPI_READ_FILE     10090
+#define XAPI_WRITE_FILE    10091
 // uint64_t sys_mmap(uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags, uint64_t fd, uint64_t offset);
 
 // uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
+
+uint64_t sys_chmod(const char *pathname, uint64_t mode);
+uint64_t sys_fstatat(uint64_t dirfd, const char *pathname, struct stat *statbuf, uint64_t flags);
+uint64_t sys_renameat2(uint64_t olddirfd, const char *oldpath, uint64_t newdirfd, const char *newpath, uint64_t flags);
+uint64_t sys_mkdirat(uint64_t dirfd, const char *pathname, uint64_t mode);
+uint64_t sys_creat(const char *pathname, uint64_t mode);

@@ -911,3 +911,63 @@ uint64_t sys_mkdir(const char *name, uint64_t mode)
     if (ret < 0) { return (uint64_t)-EEXIST; }
     return 0;
 }
+
+uint64_t sys_creat(const char *pathname, uint64_t mode)
+{
+    return sys_open(pathname, O_CREAT, mode);
+}
+
+// 创建目录系统调用
+uint64_t sys_mkdirat(uint64_t dirfd, const char *pathname, uint64_t mode)
+{
+    char *resolved = at_resolve_pathname(dirfd, (char *)pathname);
+    if (!resolved) return (uint64_t)-ENOENT;
+
+    uint64_t ret = sys_mkdir(resolved, mode);
+
+    free(resolved);
+    return ret;
+}
+// 重命名文件系统调用
+uint64_t sys_renameat2(uint64_t olddirfd, const char *oldpath, uint64_t newdirfd, const char *newpath, uint64_t flags)
+{
+    char *old_resolved = at_resolve_pathname(olddirfd, (char *)oldpath);
+    char *new_resolved = at_resolve_pathname(newdirfd, (char *)newpath);
+    
+    if (!old_resolved || !new_resolved) 
+    {
+        if (old_resolved) free(old_resolved);
+        if (new_resolved) free(new_resolved);
+        return (uint64_t)-ENOENT;
+    }
+
+    uint64_t ret = sys_rename(old_resolved, new_resolved);
+    
+    free(old_resolved);
+    free(new_resolved);
+    return ret;
+}
+
+// 获取文件状态系统调用
+uint64_t sys_fstatat(uint64_t dirfd, const char *pathname, struct stat *statbuf, uint64_t flags)
+{
+    char *resolved = at_resolve_pathname(dirfd, (char *)pathname);
+    if (!resolved) return (uint64_t)-ENOENT;
+
+    uint64_t ret = sys_stat(resolved, statbuf);
+
+    free(resolved);
+    return ret;
+}
+
+// 改变文件权限系统调用
+uint64_t sys_chmod(const char *pathname, uint64_t mode)
+{
+    vfs_node_t node = vfs_open(pathname);
+    if (!node) return (uint64_t)-ENOENT;
+
+    node->mode = mode;
+    vfs_close(node);
+    
+    return 0;
+}

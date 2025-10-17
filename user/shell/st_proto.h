@@ -24,3 +24,14 @@ void create_directory(char *path);
 void change_directory(char *path);
 void normalize_path(char *path);
 bool create_directory_recursive(char *path);  // 递归创建函数
+void list_directory(char *args);
+void print_file_content(char *filename);
+void remove_file_or_directory(char *path);
+void create_file(char *filename);
+void copy_file(char *src, char *dst);
+void move_file(char *src, char *dst);
+void print_working_directory();
+void clear_screen();
+
+// int snprintf(char *str, size_t size, const char *format, ...);
+void text_editor(char *filename);

@@ -176,3 +176,28 @@ UINT64 xapi_Mkdir(WSTR path)
 {
 	return enter_syscall(10086,(uint64_t)path,0,0,0,0,0);
 }
+
+UINT64 xapi_CreateFile(WSTR filename)
+{
+    return enter_syscall(XAPI_CREATE_FILE, (uint64_t)filename, 0, 0, 0, 0, 0);
+}
+
+UINT64 xapi_DeleteFile(WSTR path)
+{
+    return enter_syscall(XAPI_DELETE_FILE, (uint64_t)path, 0, 0, 0, 0, 0);
+}
+
+UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path)
+{
+    return enter_syscall(XAPI_RENAME_FILE, (uint64_t)old_path, (uint64_t)new_path, 0, 0, 0, 0);
+}
+
+UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset)
+{
+    return enter_syscall(XAPI_READ_FILE, (uint64_t)filename, (uint64_t)buffer, size, offset, 0, 0);
+}
+
+UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset)
+{
+    return enter_syscall(XAPI_WRITE_FILE, (uint64_t)filename, (uint64_t)buffer, size, offset, 0, 0);
+}

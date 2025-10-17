@@ -1,5 +1,6 @@
 #include "./include/stdint.h"
 #include "./include/krlibc.h"
+#include "./include/xposix/stdarg.h"
 int memcmp(const void *a_, const void *b_, size_t size)
 {
     const char *a = (const char *)(a_);
@@ -460,4 +461,440 @@ size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type) // NOLI
         write(writer, ' '), result++;
 
     return result;
+}
+
+// 在 krlibc.cpp 末尾添加以下代码
+
+// 安全的缓冲区写入处理器
+typedef struct SafeBufWriterData
+{
+    size_t idx;      // 当前写入位置
+    size_t max_size; // 缓冲区最大大小
+    char  *buf;      // 缓冲区指针
+} SafeBufWriterData;
+
+uint8_t safe_buf_writer_handler(Writer *writer, char ch)
+{
+    SafeBufWriterData *data = (SafeBufWriterData *)writer->data;
+    
+    // 检查是否还有空间（为null终止符保留1字节）
+    if (data->idx < data->max_size - 1) 
+    {
+        data->buf[data->idx] = ch;
+        ++(data->idx);
+        data->buf[data->idx] = '\0'; // 保持null终止
+        return 0; // 成功
+    }
+    
+    return 1; // 缓冲区已满
+}
+typedef struct UnsafeBufWriterData
+{
+    size_t idx; // index of buffer
+    char  *buf; // Unsafe, because unknown size
+} UnsafeBufWriterData;
+
+uint8_t unsafe_buf_writer_handler(Writer *writer, char ch)
+{
+    UnsafeBufWriterData *data = (UnsafeBufWriterData *)writer->data;
+    data->buf[data->idx]      = ch;
+    ++(data->idx);
+    data->buf[data->idx] = '\0'; // EOF (Must do, because the buffer may be full of dirty datas)
+    return 0;                    // Right... Always success...?
+}
+
+// 完整的 snprintf 实现
+int snprintf(char *str, size_t size, const char *format, ...)
+{
+    if (str == NULL || format == NULL || size == 0) 
+        return -1;
+
+    // 初始化缓冲区为空字符串
+    str[0] = '\0';
+
+    va_list args;
+    va_start(args, format);
+    
+    SafeBufWriterData data = {
+        .idx = 0,
+        .max_size = size,
+        .buf = str,
+    };
+    
+    Writer SafeBufWriter = {
+        .data = &data,
+        .handler = safe_buf_writer_handler,
+    };
+    
+    size_t result = vwprintf(&SafeBufWriter, format, args);
+    
+    va_end(args);
+    
+    // 确保字符串以null结尾
+    if (data.idx < size) 
+    {
+        str[data.idx] = '\0';
+    } 
+    else if (size > 0) 
+    {
+        str[size - 1] = '\0';
+    }
+    
+    return (int)result;
+}
+
+// 标准 sprintf 实现（不安全，但兼容）
+int sprintf(char *str, const char *format, ...)
+{
+    if (str == NULL || format == NULL) 
+        return -1;
+
+    va_list args;
+    va_start(args, format);
+    
+    // 使用足够大的缓冲区（假设最大4096字节）
+    // 在实际系统中应该使用动态分配，这里简化处理
+    char buffer[4096];
+    UnsafeBufWriterData data = {
+        .idx = 0,
+        .buf = buffer,
+    };
+    
+    Writer UnsafeBufWriter = {
+        .data = &data,
+        .handler = unsafe_buf_writer_handler,
+    };
+    
+    size_t result = vwprintf(&UnsafeBufWriter, format, args);
+    
+    va_end(args);
+    
+    // 复制到目标缓冲区
+    size_t copy_len = result;
+    if (copy_len >= 4095) copy_len = 4095;
+    memcpy(str, buffer, copy_len);
+    str[copy_len] = '\0';
+    
+    return (int)result;
+}
+
+// vsnprintf 实现
+int vsnprintf(char *str, size_t size, const char *format, va_list ap)
+{
+    if (str == NULL || format == NULL || size == 0) 
+        return -1;
+
+    // 初始化缓冲区为空字符串
+    str[0] = '\0';
+
+    SafeBufWriterData data = {
+        .idx = 0,
+        .max_size = size,
+        .buf = str,
+    };
+    
+    Writer SafeBufWriter = {
+        .data = &data,
+        .handler = safe_buf_writer_handler,
+    };
+    
+    size_t result = vwprintf(&SafeBufWriter, format, ap);
+    
+    // 确保字符串以null结尾
+    if (data.idx < size) 
+    {
+        str[data.idx] = '\0';
+    } 
+    else if (size > 0) 
+    {
+        str[size - 1] = '\0';
+    }
+    
+    return (int)result;
+}
+size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // `fmt_ptr` is a pointer to `fmt`
+{
+    char        *str           = 0; // for `%s`
+    size_t       write_counter = 0;
+    size_t       str_len       = 0; // for align `%s`
+    size_t       result        = 0; // Same as write_counter?
+    WriteHandler write         = writer->handler;
+
+    num_formatter_t num_fmter = {};
+    num_fmt_type    num_flag  = {};
+    int64_t         size_cnt  = INT;
+
+    // Error args
+    if (!writer || !write || !fmt_ptr || !(*fmt_ptr) || **fmt_ptr != '%') { return 0; }
+
+    while (true)
+    {
+        ++(*fmt_ptr); // Skip '%' or any flags
+        switch (**fmt_ptr)
+        {
+        case '-': num_flag.left = true; break;
+        case '+': num_flag.plus = true; break;
+        case ' ': num_flag.space = true; break;
+        case '#': num_flag.special = true; break;
+        case '0': num_flag.zeropad = true; break;
+        default: break;
+        }
+
+        /* Calc num_fmter.size */
+        if (IS_DIGIT(**fmt_ptr)) { num_fmter.size = skip_atoi(fmt_ptr); }
+        else if (**fmt_ptr == '*')
+        {
+            /* by the following argument */
+            ++(*fmt_ptr); // Skip '*'
+            num_fmter.size = (size_t)va_arg(args, int);
+        }
+
+        /* Calc num_fmter.precision */
+        if (**fmt_ptr == '.')
+        {
+            ++(*fmt_ptr); // Skip '.'
+            if (IS_DIGIT(**fmt_ptr)) { num_fmter.precision = skip_atoi(fmt_ptr); }
+            else if (**fmt_ptr == '*')
+            {
+                /* by the following argument */
+                ++(*fmt_ptr); // Skip '*'
+                num_fmter.precision = (size_t)va_arg(args, int);
+            }
+        }
+
+        /* Calc size_cnt */
+        switch (**fmt_ptr)
+        {
+        case 'h':
+            size_cnt--;
+            if (size_cnt < HALF_2) size_cnt = HALF_2; // hh
+            continue;
+        case 'L':       // += 2
+            size_cnt++; // fallthrough
+        case 'l':
+            size_cnt++;
+            if (size_cnt > LONG_2) size_cnt = LONG_2; // ll
+            continue;
+        case 'z':
+            size_cnt = SIZE_T; // z
+            continue;
+        default: break;
+        }
+
+        /* Read argument */
+        switch (**fmt_ptr)
+        {
+        case 'c': num_fmter.num = va_arg(args, int); break;
+        case 's':
+            str                    = va_arg(args, char *);
+            static char null_str[] = "(null)";
+            if (str == 0) str = null_str;
+            break;
+        case 'd':
+        case 'i':
+            // NOLINTBEGIN
+            switch (size_cnt)
+            {
+            case HALF_2: num_fmter.num = (size_t)(char)va_arg(args, int); break;
+            case HALF_1: num_fmter.num = (size_t)(short)va_arg(args, int); break;
+            case INT: num_fmter.num = (size_t)(int)va_arg(args, int); break;
+            case LONG_1: num_fmter.num = (size_t)(long)va_arg(args, long); break;
+            case LONG_2: num_fmter.num = (size_t)(long long)va_arg(args, long long); break;
+            case SIZE_T: // fallthrough
+            default: num_fmter.num = va_arg(args, size_t); break;
+            }
+            // NOLINTEND
+            break;
+        case 'o':
+        case 'x':
+        case 'X':
+        case 'b':
+        case 'u':
+            switch (size_cnt)
+            {
+            case HALF_2: num_fmter.num = (size_t)(unsigned char)va_arg(args, int); break;
+            case HALF_1: num_fmter.num = (size_t)(unsigned short)va_arg(args, int); break;
+            case INT: num_fmter.num = (size_t)(unsigned int)va_arg(args, int); break;
+            case LONG_1: num_fmter.num = (size_t)(unsigned long)va_arg(args, long); break;
+            case LONG_2: num_fmter.num = (size_t)(unsigned long long)va_arg(args, long long); break;
+            case SIZE_T: // fallthrough
+            default: num_fmter.num = va_arg(args, size_t); break;
+            }
+            break;
+        case 'p': num_fmter.num = (size_t)va_arg(args, void *); break;
+        default: // may no data
+            break;
+        }
+
+        /* Calc length of `%s` and set num_flag */
+        switch (**fmt_ptr)
+        {
+        case 'c': break;
+        case 's':
+            str_len = strlen(str);
+            if (num_fmter.size < str_len) num_fmter.size = str_len;
+            break;
+        case 'o': num_fmter.base = 8; break;
+        case 'p':
+            num_flag.small   = true;
+            num_flag.special = true;
+            num_flag.zeropad = true;
+            if (num_fmter.size < 16) num_fmter.size = 16;
+            num_fmter.base = 16;
+            break;
+        case 'x': num_flag.small = true; // fallthrough
+        case 'X': num_fmter.base = 16; break;
+        case 'd':
+        case 'i': num_flag.sign = true;
+        case 'u': num_fmter.base = 10; break;
+        case 'b': num_fmter.base = 2; break;
+        case 'n': va_arg(args, void *); break;
+        case '%': break;
+        default:
+            // Unexpected
+            return 0;
+        }
+
+        /* Write to arg space */
+        switch (**fmt_ptr)
+        {
+        case 'c':
+            // Right align
+            if (!(num_flag.left))
+            {
+                while (write_counter < num_fmter.size - 1)
+                {
+                    write(writer, ' ');
+                    ++write_counter;
+                }
+            }
+            // Write char
+            write(writer, (char)num_fmter.num);
+            // Left align
+            if (num_flag.left)
+            {
+                while (write_counter < num_fmter.size - 1)
+                {
+                    write(writer, ' ');
+                    ++write_counter;
+                }
+            }
+            break;
+        case 's':
+            // Right align
+            if (!(num_flag.left))
+            {
+                while (write_counter < num_fmter.size - str_len)
+                {
+                    write(writer, ' ');
+                    ++write_counter;
+                }
+                str_len = num_fmter.size;
+            }
+            // Write string
+            while (write_counter < str_len)
+            {
+                write(writer, *str);
+                ++str;
+                ++write_counter;
+            }
+            // Left align
+            if (num_flag.left)
+            {
+                while (write_counter < num_fmter.size - str_len)
+                {
+                    write(writer, ' ');
+                    ++write_counter;
+                }
+            }
+            break;
+        case 'o':                                                               // fallthrough
+        case 'p':                                                               // fallthrough
+        case 'x':                                                               // fallthrough
+        case 'X':                                                               // fallthrough
+        case 'd':                                                               // fallthrough
+        case 'i':                                                               // fallthrough
+        case 'u':                                                               // fallthrough
+        case 'b': write_counter += wnumber(writer, num_fmter, num_flag); break; // Format number with `Writer`
+        case '%': write(writer, '%'); break;
+        default: break;
+        }
+        break;
+    }
+    result = write_counter;
+    return result;
+}
+size_t vwprintf(Writer *writer, const char *fmt, va_list args)
+{
+    const char  *fmt_ptr = fmt;
+    WriteHandler write   = writer->handler;
+    size_t       result  = 0;
+    // TODO
+    while (*fmt_ptr != '\0')
+    {
+        if (*fmt_ptr != '%')
+        {
+            write(writer, *fmt_ptr); // TODO: Catch Error
+            fmt_ptr++;
+            result++;
+            continue;
+        }
+        // *fmt_ptr == '%'
+        result += wfmt_arg(writer, &fmt_ptr, args);
+        fmt_ptr++;
+    }
+    return result;
+}
+// 简单的字符串格式化辅助函数（用于shell命令）
+int simple_snprintf(char *str, size_t size, const char *format, ...)
+{
+    if (size == 0) return 0;
+    
+    va_list args;
+    va_start(args, format);
+    int result = vsnprintf(str, size, format, args);
+    va_end(args);
+    
+    return result;
+}
+
+// 在 shell.cpp 中添加辅助函数
+void uint64_to_string(uint64_t num, char *buffer, int buffer_size)
+{
+    if (buffer_size <= 0) return;
+    
+    char *p = buffer;
+    char temp[32];
+    char *temp_p = temp;
+    
+    if (num == 0) {
+        *p++ = '0';
+    } else {
+        // 将数字逆序存入临时缓冲区
+        while (num > 0 && temp_p < temp + sizeof(temp) - 1) {
+            *temp_p++ = '0' + (num % 10);
+            num /= 10;
+        }
+        
+        // 将数字正序复制到目标缓冲区
+        while (temp_p > temp && p < buffer + buffer_size - 1) {
+            *p++ = *(--temp_p);
+        }
+    }
+    
+    *p = '\0';
+}
+
+void int_to_string(int num, char *buffer, int buffer_size)
+{
+    if (buffer_size <= 0) return;
+    
+    char *p = buffer;
+    
+    if (num < 0) {
+        *p++ = '-';
+        num = -num;
+    }
+    
+    uint64_to_string((uint64_t)num, p, buffer_size - (p - buffer));
 }
