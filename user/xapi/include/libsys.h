@@ -123,6 +123,8 @@
 #define XAPI_CLOSE_WINDOW     394
 #define XAPI_SET_ICON         395
 
+#define XAPI_GET_WIN_SZIE     426
+
 // P4.2
 #define XAPI_DRAW_POINT       396
 #define XAPI_DRAW_LINE        397

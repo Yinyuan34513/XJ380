@@ -71,6 +71,18 @@ int do_xapi_SetIcon(uint64_t handle, uint64_t path)
     return true;
 }
 
+int do_xapi_GetWindowSize(uint64_t handle, uint64_t w, uint64_t h)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    uint64_t      *width        = (uint64_t *)(w);
+    uint64_t      *height       = (uint64_t *)(h);
+    
+    *width  = WindowHandle->WindowNodePtr->width;
+    *height = WindowHandle->WindowNodePtr->height;
+
+    return true;
+}
+
 int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);

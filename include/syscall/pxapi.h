@@ -77,6 +77,8 @@ typedef struct {
 #define XAPI_CLOSE_WINDOW     394
 #define XAPI_SET_ICON         395
 
+#define XAPI_GET_WIN_SZIE     426
+
 // P4.2
 #define XAPI_DRAW_POINT       396
 #define XAPI_DRAW_LINE        397
@@ -119,7 +121,7 @@ typedef struct {
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
-// 当前最大号：425
+// 当前最大号：426
 
 // Proto (XAPI Edition)
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir);
@@ -127,6 +129,7 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
 int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);
 int do_xapi_CloseWindow(uint64_t handle);
 int do_xapi_SetIcon(uint64_t handle, uint64_t path);
+int do_xapi_GetWindowSize(uint64_t handle, uint64_t w, uint64_t h);
 int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color);
 int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color);
 int do_xapi_DrawRect_fill(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color);

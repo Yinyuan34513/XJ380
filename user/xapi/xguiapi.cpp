@@ -18,6 +18,10 @@ void xapi_SetIcon(HDLE handle, WSTR path) {
 	enter_syscall(XAPI_SET_ICON, handle, (UINT64)(path), 0, 0, 0, 0);
 }
 
+void xapi_GetWindowSize(HDLE handle, UINT64* width, UINT64* height) {
+	enter_syscall(XAPI_GET_WIN_SZIE, handle, (UINT64)(width), (UINT64)(height), 0, 0, 0);
+}
+
 // 4-2
 void xapi_DrawPoint(HDLE handle, UINT32 x, UINT32 y, UINT32 color) {
 	enter_syscall(XAPI_DRAW_POINT, handle, x, y, color, 0, 0);
