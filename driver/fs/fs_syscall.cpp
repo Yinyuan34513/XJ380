@@ -283,14 +283,14 @@ uint64_t sys_chdir(const char *dirname)
     if (!new_cwd) return (uint64_t)-ENOENT;
     if (new_cwd->type != file_dir) return (uint64_t)-ENOTDIR;
 
-    get_current_task()->parent_group->cwd = new_cwd;
+    get_current_task()->cwd = new_cwd;
 
     return 0;
 }
 
 uint64_t sys_getcwd(char *cwd, uint64_t size)
 {
-    char *str = vfs_get_fullpath(get_current_task()->parent_group->cwd);
+    char *str = vfs_get_fullpath(get_current_task()->cwd);
     if (size < (uint64_t)strlen(str)) { return (uint64_t)-ERANGE; }
     strncpy(cwd, str, size);
     free(str);
@@ -556,7 +556,7 @@ uint64_t sys_readlink(char *path, char *buf, uint64_t size)
 {
     if (path == NULL || buf == NULL || size == 0) { return (uint64_t)-EINVAL; }
 
-    vfs_node_t node = vfs_open_at(get_current_task()->parent_group->cwd, path, true);
+    vfs_node_t node = vfs_open_at(get_current_task()->cwd, path, true);
     if (node == NULL) { return (uint64_t)-ENOENT; }
 
     ssize_t result = vfs_readlink(node, buf, (size_t)size);
@@ -714,7 +714,7 @@ uint64_t sys_fchdir(uint64_t fd)
     vfs_node_t node = get_current_task()->parent_group->fds[fd];
     if (node->type != file_dir) return -ENOTDIR;
 
-    get_current_task()->parent_group->cwd = node;
+    get_current_task()->cwd = node;
 
     return 0;
 }

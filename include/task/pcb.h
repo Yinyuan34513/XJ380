@@ -89,7 +89,6 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 
-    vfs_node_t cwd;
     vfs_node_t fds[256];
     char   **envp;      // 环境变量指针
     size_t   envc;      // 环境变量数量
@@ -134,6 +133,9 @@ struct thread_control_block
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
+
+    vfs_node_t cwd;
+    char      *str_cwd;
 };
 
 extern pcb_t kernel_group;
@@ -143,7 +145,7 @@ void     enable_scheduler();
 void     disable_scheduler();
 tcb_t    get_current_task();
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
-size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
+size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();

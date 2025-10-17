@@ -163,7 +163,6 @@ void recycle_process(pcb_t pcb) {
     // 释放进程资源
     if (pcb->pagedir != get_kernel_pagedir()) { free_page_directory(pcb->pagedir); }
 
-    if (pcb->cwd) free(pcb->cwd);
     if (pcb->cmdline) free(pcb->cmdline);
 
     // 释放环境变量
@@ -230,6 +229,32 @@ void switch_to_user_mode()
                        "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b)
                      : "memory");
 }
+
+void exec_to_um(uint64_t argc, uint64_t argv, uint64_t envp)
+{
+    close_interrupt;
+    uint64_t *rsp                        = (uint64_t *)get_current_task()->user_stack_top;
+    get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
+    uint64_t func                       = get_current_task()->main;
+
+    __asm__ volatile("mov %0, %%es\n"
+                     "mov %0, %%ds\n"
+                     "pushq %5\n" // SS
+                     "pushq %1\n" // RSP
+                     "pushq %2\n" // RFLAGS
+                     "pushq %3\n" // CS
+                     "pushq %4\n" // RIP
+                     "mov %6, %%rdi\n"  // arg1
+                     "mov %7, %%rsi\n"  // arg2
+                     "mov %8, %%rdx\n"  // arg3
+                     "iretq\n"
+                     :
+                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"((uint64_t)rsp), "r"(get_current_task()->context0.rflags),
+                       "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b), 
+                       "r"(argc), "r"(argv), "r"(envp)
+                     : "memory");
+}
+
 
 void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t rf)
 {
@@ -313,7 +338,7 @@ char *vfs_cwd_path_build(char *src)
     char *s = src;
     char *path;
     if (s[0] == '/') { path = strdup(s); }
-    else { path = pathacat(get_current_task()->parent_group->cwd->name, s); }
+    else { path = pathacat(get_current_task()->cwd->name, s); }
     char *normalized_path = normalize_path(path);
     free(path);
     return normalized_path;
@@ -425,12 +450,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     {
         if (!get_current_task()->parent_group->fds[i]) continue;
 
-        if (get_current_task()->parent_group->fds[i]->flags & O_CLOEXEC)
-        {
-            vfs_close(get_current_task()->parent_group->fds[i]);
-            free(get_current_task()->parent_group->fds[i]);
-            get_current_task()->parent_group->fds[i] = NULL;
-        }
+        vfs_close(get_current_task()->parent_group->fds[i]);
+        free(get_current_task()->parent_group->fds[i]);
+        get_current_task()->parent_group->fds[i] = NULL;
     }
 
     free(norm_path);
@@ -473,7 +495,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
-    new_pcb->cwd          = current_pcb->cwd;
     new_pcb->parent_task = current_pcb;
     new_pcb->queue_index = queue_enqueue(pcb_group_queue, new_pcb);
     new_pcb->vfork       = is_vfork;
@@ -621,6 +642,9 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.rdi    = (uint64_t)args; // first argument in rdi
 
     new_task->fs_base = (uint64_t)new_task;
+
+    new_task->str_cwd = "/";
+    new_task->cwd     = rootdir;
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -631,11 +655,16 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
+size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb, char* cwd)
 {
     spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
+    if(!cwd)
+    {
+        write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
+        return (size_t)-(EINVAL);
+    }
     tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
@@ -671,6 +700,9 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.ds      = 0x10;
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
+
+    new_task->cwd     = vfs_open(cwd);
+    new_task->str_cwd = cwd;
 
     new_task->user_info             = current_user;
 
@@ -773,7 +805,6 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->thread_queue = queue_init();
     pcb->ppid         = 0;
     pcb->pagedir      = directory ? directory : get_kernel_pagedir();
-    pcb->cwd          = NULL;
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
     pcb->envp         = NULL;
@@ -803,8 +834,6 @@ void process_setup()
     kernel_pcb->status       = RUNNING;
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
-    kernel_pcb->cwd          = NULL;
-    kernel_pcb->cwd      = rootdir;
     kernel_pcb->child_pcb   = queue_init();
     kernel_pcb->child_index = 0;
 

@@ -57,6 +57,8 @@ __attribute__((naked)) void _setcs_helper()
 
 void init_cpu();
 
+extern vfs_node_t rootdir;
+
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
     disable_intr();
@@ -145,6 +147,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     apu_idle->status          = RUNNING;
     strcpy(apu_idle->name, "XSK_IDLE");
     apu_idle->parent_group = kernel_group;
+    apu_idle->str_cwd      = "/";
+    apu_idle->cwd          = rootdir;
 
     info->current_task    = apu_idle;
     apu_idle->queue_index = queue_enqueue(info->scheduler_queue, apu_idle);
