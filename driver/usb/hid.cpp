@@ -140,6 +140,9 @@ void hid_resubmit_agent(uint64_t arg)
     thread_exit(0);
 }
 
+uint64_t same_key_count = 0; // 重复按键计数器
+uint64_t last_key_ntime = 0; // 上一个按键的触发时间
+
 // 中断传输回调
 static void hid_interrupt_callback(usb_transfer_t *transfer)
 {
@@ -177,25 +180,38 @@ static void hid_interrupt_callback(usb_transfer_t *transfer)
                 if (key == 0) continue;
 
                 // 检查是否是新按键
-                // bool is_new = true;
-                // for (int j = 0; j < 6; j++)
-                // {
-                //     if (hid->prev_keyboard_report.keys[j] == key)
-                //     {
-                //         is_new = false;
-                //         break;
-                //     }
-                // }
+                bool is_new = true;
+                for (int j = 0; j < 6; j++)
+                {
+                    if (hid->prev_keyboard_report.keys[j] == key)
+                    {
+                        is_new = false;
+                        same_key_count++;   // again!
+                        break;
+                    }
+                }
 
-                // if (is_new)
-                // {
+                // 不是新按键但是前面只触发过一次且间隔大于1s
+                if (is_new == false && nanoTime() - last_key_ntime > 1000000000ULL && same_key_count == 2)
+                {
+                    goto key_press_callback_without_reset_samekeycount; // 触发
+                }
+                else if (is_new == false && same_key_count > 2)
+                {
+                    goto key_press_callback_without_reset_samekeycount; // 触发
+                }
+
+                if (is_new)
+                {
+                    same_key_count = 1; // 重置计数器
+key_press_callback_without_reset_samekeycount:
                     hid_event_t event = {
                         .type = HID_EVENT_KEY_PRESS,
                         .key  = {.keycode = key, .modifiers = report->modifiers, .pressed = true}
                     };
 
                     hid->event_callback(&event, hid->callback_user_data);
-                // }
+                }
             }
 
             // 检测释放的键
@@ -225,6 +241,8 @@ static void hid_interrupt_callback(usb_transfer_t *transfer)
                     hid->event_callback(&event, hid->callback_user_data);
                 }
             }
+
+            last_key_ntime = nanoTime();
         }
     }
     else if (hid->device_type == HID_TYPE_MOUSE)

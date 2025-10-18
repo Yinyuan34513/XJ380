@@ -167,6 +167,7 @@ void check_command()
         print_to_console("  clear       - Clear screen");
         print_to_console("  version     - Show version information");
         print_to_console("  help        - Show this help");
+        print_to_console("  edit        - Edit file");
     }
     else if (strncmp("../", input_buf, 3) == 0) { revert_path(current_path); }
     else if (strncmp("edit", cmd, 4) == 0)
