@@ -19,7 +19,7 @@ typedef struct
     int       win_y_offset;
     uint16_t *sheet_id;
     SHEET    *sht_now;
-    int     scroll;
+    int       scroll;
 } mouse_dec;
 
 typedef enum mouse_type {

@@ -22,38 +22,21 @@ bool        win_m_bt_isl = false;
 uint16_t *mouse_sheet_id_img;
 MouseType type;
 
-extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
+void process_mouse_button()
 {
-    uint8_t data = inb(PS2_DATA_PORT);
-    if (mousedecode(data))
+    if (ms_dec.btn & 0x01)
     {
-        ms_dec.need_flush = true;
-
-        mouse_x += ms_dec.x;
-        mouse_y += ms_dec.y;
-        if (mouse_x < 0) mouse_x = 0;
-        if (mouse_y < 0) mouse_y = 0;
-        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
-        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
-
-        ms_dec.left   = false;
-        ms_dec.center = false;
-        ms_dec.right  = false;
-
-        if (ms_dec.btn & 0x01)
-        {
-            // 左键按下
-            ms_dec.left = true;
-        }
-        else if ((ms_dec.btn & 0x01) == 0)
-        {
-            // 左键松开
-            ms_dec.win_move_lock = false;
-        }
-        if (ms_dec.btn & 0x02) { ms_dec.right = true; }
-        if (ms_dec.btn & 0x04) { ms_dec.center = true; }
+        // 左键按下
+        ms_dec.left = true;
     }
-    send_eoi();
+    else if ((ms_dec.btn & 0x01) == 0)
+    {
+        // 左键松开
+        ms_dec.left   = false;
+        ms_dec.win_move_lock = false;
+    }
+    if (ms_dec.btn & 0x02) { ms_dec.right = true; } else { ms_dec.right = false; }
+    if (ms_dec.btn & 0x04) { ms_dec.center = true; } else { ms_dec.center = false; }
 
     tbx         = getBX(sht_img, mouse_sheet_id_img);
     tby         = getBY(sht_img, mouse_sheet_id_img);
@@ -66,6 +49,16 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
                        getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
                        getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
     ms_dec.need_flush = false;
+}
+
+extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
+{
+    uint8_t data = inb(PS2_DATA_PORT);
+    if (mousedecode(data))
+    {
+        process_mouse_button();
+    }
+    send_eoi();
 }
 
 // 去死吧!
@@ -84,34 +77,11 @@ void handle_mouse_event(hid_mouse_event_t *mouse)
     if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
     if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
 
-    ms_dec.left   = false;
-    ms_dec.center = false;
-    ms_dec.right  = false;
+    // ms_dec.left   = false;
+    // ms_dec.center = false;
+    // ms_dec.right  = false;
 
-    if (ms_dec.btn & 0x01)
-    {
-        // 左键按下
-        ms_dec.left = true;
-    }
-    else if ((ms_dec.btn & 0x01) == 0)
-    {
-        // 左键松开
-        ms_dec.win_move_lock = false;
-    }
-    if (ms_dec.btn & 0x02) { ms_dec.right = true; }
-    if (ms_dec.btn & 0x04) { ms_dec.center = true; }
-
-    tbx         = getBX(sht_img, mouse_sheet_id_img);
-    tby         = getBY(sht_img, mouse_sheet_id_img);
-    int mouse_x = get_mouse_x();
-    int mouse_y = get_mouse_y();
-    move_mouse(sht_img, mouse_sheet_id_img, mouse_x, mouse_y);
-    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_sheet_id_img),
-                       tby + getYsize(sht_img, mouse_sheet_id_img));
-    refresh_part_sheet(sht_img, getBX(sht_img, mouse_sheet_id_img), getBY(sht_img, mouse_sheet_id_img),
-                       getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
-                       getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
-    ms_dec.need_flush = false;
+    process_mouse_button();
 }
 
 void process_mouse_info()
