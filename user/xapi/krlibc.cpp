@@ -898,3 +898,64 @@ void int_to_string(int num, char *buffer, int buffer_size)
     
     uint64_to_string((uint64_t)num, p, buffer_size - (p - buffer));
 }
+
+// static inline void *memmove(void *dest, const void *src, size_t n)
+// {
+//     uint8_t       *pdest = (uint8_t *)dest;
+//     const uint8_t *psrc  = (const uint8_t *)src;
+
+//     if (src > dest)
+//     {
+//         for (size_t i = 0; i < n; i++)
+//         {
+//             pdest[i] = psrc[i];
+//         }
+//     }
+//     else if (src < dest)
+//     {
+//         for (size_t i = n; i > 0; i--)
+//         {
+//             pdest[i - 1] = psrc[i - 1];
+//         }
+//     }
+
+//     return dest;
+// }
+
+void merge_string(char *dst, char *src)
+{
+    char *s1 = dst;
+    char *s2 = src;
+
+    while (*s1)
+        s1++;
+
+    while (*s2)
+    {
+        if (*(s1 - 1) == '/' && *s2 == '/')
+        {
+            s1++;
+            s2++;
+            continue;
+        }
+        *s1 = *s2;
+        s1++;
+        s2++;
+    }
+
+    *s1 = '\0';
+}
+
+void revert_path(char *path)
+{
+    char *s = path;
+    while (*s)
+        s++;
+
+    while (*s != '/')
+        s--;
+
+    if (s == path) s++;
+
+    *s = '\0';
+}

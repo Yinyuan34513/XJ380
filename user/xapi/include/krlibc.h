@@ -189,8 +189,6 @@ typedef enum num_size
 #define IS_DIGIT(c)            ((c) >= '0' && (c) <= '9')
 #define IS_ALPHA(a)            (((a) >= 'A' && (a) <= 'Z') || ((a) >= 'a' && (a) <= 'z'))
 
-// 在 krlibc.h 中添加以下声明
-
 // 格式化输出函数
 int snprintf(char *str, size_t size, const char *format, ...);
 int sprintf(char *str, const char *format, ...);
@@ -202,3 +200,8 @@ size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type);
 
 void uint64_to_string(uint64_t num, char *buffer, int buffer_size);
 void int_to_string(int num, char *buffer, int buffer_size);
+
+void merge_string(char *dst, char *src);
+void revert_path(char *path);
+
+// static inline void *memmove(void *dest, const void *src, size_t n);
