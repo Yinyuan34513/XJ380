@@ -296,14 +296,14 @@ void desktop_flusher()
         k_input = kernel_getch();
         if (k_input != NULL)
         {
-            WINDOWLSP a = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-            if (a != NULL)
+            WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+            if (current_window != NULL)
             {
                 if (k_input != '\n' && k_input != '\b' && k_input < 128)
                 {
-                    do_signal(0, NULL, k_input, a->WinMPf, a->w_task);
+                    do_signal(0, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
-                else { do_signal(7, NULL, k_input, a->WinMPf, a->w_task); }
+                else { do_signal(7, NULL, k_input, current_window->WinMPf, current_window->w_task); }
             }
         }
 #if BUILD_EDITION == DEBUG_VERSION

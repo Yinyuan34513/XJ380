@@ -6,6 +6,7 @@
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <usb/hid.h>
+#include <syscall/syscall.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -32,11 +33,52 @@ void process_mouse_button()
     else if ((ms_dec.btn & 0x01) == 0)
     {
         // 左键松开
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (current_window != NULL)
+        {
+            do_signal(MSG_LBUTTON, 
+                      tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
+                      tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                      current_window->WinMPf, current_window->w_task);
+        }
+
         ms_dec.left   = false;
         ms_dec.win_move_lock = false;
     }
-    if (ms_dec.btn & 0x02) { ms_dec.right = true; } else { ms_dec.right = false; }
-    if (ms_dec.btn & 0x04) { ms_dec.center = true; } else { ms_dec.center = false; }
+    if (ms_dec.btn & 0x02) 
+    { 
+        ms_dec.right = true; 
+    }
+    else if ((ms_dec.btn & 0x02) == 0)
+    { 
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (current_window != NULL)
+        {
+            do_signal(MSG_RBUTTON, 
+                      tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
+                      tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                      current_window->WinMPf, current_window->w_task);
+        }
+
+        ms_dec.right = false; 
+    }
+    if (ms_dec.btn & 0x04) 
+    { 
+        ms_dec.center = true; 
+    } 
+    else if ((ms_dec.btn & 0x04) == 0)
+    { 
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (current_window != NULL)
+        {
+            do_signal(MSG_MBUTTON, 
+                      tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
+                      tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                      current_window->WinMPf, current_window->w_task);
+        }
+
+        ms_dec.center = false; 
+    }
 
     tbx         = getBX(sht_img, mouse_sheet_id_img);
     tby         = getBY(sht_img, mouse_sheet_id_img);
