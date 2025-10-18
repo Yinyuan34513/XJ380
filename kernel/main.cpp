@@ -441,6 +441,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
+    // delay_s_hp(60);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
@@ -449,6 +450,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     enable_scheduler();
     open_interrupt;
     no_interrupt = false;
+    
     while(!desktop_done)cpu_relax();
 
     no_interrupt = true;
@@ -462,6 +464,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     enable_scheduler();
     open_interrupt;
     no_interrupt = false;
+
+    
 
     while (true)
     {

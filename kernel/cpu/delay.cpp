@@ -48,12 +48,39 @@ void delay_us(uint64_t us)
     }
 }
 
+extern uint64_t nanoTime();
+
+void delay_ns(uint64_t ns)
+{
+    uint64_t old_t = nanoTime();
+    while (nanoTime() - old_t <= ns)
+    {
+        __asm__ volatile("nop");
+    }
+}
+void delay_us_hp(uint64_t us)
+{
+    delay_ns(us * 1000);
+}
+
+void delay_ms_hp(uint64_t ms)
+{
+    delay_us_hp(ms * 1000);
+}
+
+void delay_s_hp(uint64_t s)
+{
+    for (uint64_t i = 0; i < s; i++)
+    {
+        delay_ms_hp(1000);
+    }
+}
+
 // 毫秒级延时
 void delay_ms(uint64_t ms)
 {
     delay_us(ms * 1000);
 }
-
 // 秒级延时
 void delay_s(uint64_t s)
 {
