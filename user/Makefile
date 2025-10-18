@@ -22,11 +22,25 @@ cp537.elf: cp537.cpp
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-shell.elf: ./shell/shell.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
+
+SHELL_SOURCES := ./shell/shell_main.cpp \
+                ./shell/shell_ui.cpp \
+                ./shell/shell_cmd.cpp \
+                ./shell/shell_fs.cpp \
+                ./shell/shell_editor.cpp
+
+SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
+
+shell.elf: $(SHELL_OBJECTS)
+	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") $(SHELL_OBJECTS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@echo "CPPLD $< -> ../out/$@"
+	@echo "LINK shell objects -> ../out/$@"
+
+# 为每个 shell 源文件定义编译规则
+../out/shell/%.o: ./shell/%.cpp
+	@mkdir -p $(@D)
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
 
 fmanager.elf: ./fmanager/fmanager.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
@@ -36,4 +50,4 @@ fmanager.elf: ./fmanager/fmanager.cpp
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/cp537.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/cp537.* ../out/fmanager.*
