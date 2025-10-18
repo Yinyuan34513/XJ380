@@ -30,16 +30,24 @@ void process_mouse_button()
         // 左键按下
         ms_dec.left = true;
     }
-    else if ((ms_dec.btn & 0x01) == 0)
+    else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
     {
         // 左键松开
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
-            do_signal(MSG_LBUTTON, 
-                      tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
-                      tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
-                      current_window->WinMPf, current_window->w_task);
+            if (tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx + 12 ||
+                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 27 ||
+                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 ||
+                tby > get_sheet(sht_img, &(current_window->w_sheet))->by
+                     + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
+            ) { /* do nothing */ } else {
+                do_signal(MSG_LBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                        current_window->WinMPf, current_window->w_task);
+            }
         }
 
         ms_dec.left   = false;
@@ -49,7 +57,7 @@ void process_mouse_button()
     { 
         ms_dec.right = true; 
     }
-    else if ((ms_dec.btn & 0x02) == 0)
+    else if ((ms_dec.btn & 0x02) == 0 && ms_dec.right)
     { 
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
@@ -66,7 +74,7 @@ void process_mouse_button()
     { 
         ms_dec.center = true; 
     } 
-    else if ((ms_dec.btn & 0x04) == 0)
+    else if ((ms_dec.btn & 0x04) == 0 && ms_dec.center)
     { 
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)

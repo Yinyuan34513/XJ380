@@ -67,7 +67,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->w_task = get_current_task();
 
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
-                 width + 24, height + 52, MovableSheetType, -1, &(new_window->w_sheet));
+                 width + 24, height + 47, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
 
     window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
