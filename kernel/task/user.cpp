@@ -229,7 +229,8 @@ void create_user_process_from_file(char *path, pcb_t pcb)
     entry = (void *)parse_elf_file(path, group);
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
-    create_user_thread(entry, NULL, NULL, process_name, group, getCwd(path));
+    char *a[2]={"argv0"};
+    create_user_thread(entry, (void*)a, 1, process_name, group, getCwd(path));
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

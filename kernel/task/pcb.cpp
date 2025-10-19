@@ -209,17 +209,121 @@ void recycle_process(pcb_t pcb) {
         __asm__ volatile("hlt");
 }
 
+// 在用户栈上构建 argc, argv, envp 参数块
+uint64_t build_user_stack_args(tcb_t task)
+{
+    uint64_t stack_top = task->user_stack_top;
+    char *stack_ptr = (char *)stack_top;
+    
+    int argc = task->argc;
+    char **argv = task->argv;
+    char **envp = task->parent_group->envp;
+    
+    // 计算环境变量数量
+    int envc = 0;
+    while (envp && envp[envc]) envc++;
+    
+    // 调试信息
+    write_serial_fmt("Building user stack: argc=%d, envc=%d\n", argc, envc);
+    
+    // ========== 从栈顶向下构建 ==========
+    
+    // 1. 首先放置所有字符串数据（从栈顶开始）
+    
+    // 环境变量字符串
+    size_t total_string_size = 0;
+    for (int i = 0; i < envc; i++) {
+        if (envp[i]) {
+            size_t len = strlen(envp[i]) + 1;
+            stack_ptr -= len;
+            memcpy(stack_ptr, envp[i], len);
+            total_string_size += len;
+        }
+    }
+    
+    // 参数字符串
+    for (int i = 0; i < argc; i++) {
+        if (argv && argv[i]) {
+            size_t len = strlen(argv[i]) + 1;
+            stack_ptr -= len;
+            memcpy(stack_ptr, argv[i], len);
+            total_string_size += len;
+        }
+    }
+    
+    // 2. 16字节对齐
+    stack_ptr = (char *)((uint64_t)stack_ptr & ~0xF);
+    
+    // 3. 放置 envp 指针数组（NULL结尾）
+    uint64_t *envp_pointers_start = (uint64_t *)stack_ptr;
+    stack_ptr -= (envc + 1) * sizeof(uint64_t);
+    uint64_t *envp_pointers = (uint64_t *)stack_ptr;
+    
+    // 重新计算envp字符串地址并填充指针数组
+    char *env_string_walker = (char *)envp_pointers_start;
+    for (int i = 0; i < envc; i++) {
+        if (envp[i]) {
+            size_t len = strlen(envp[i]) + 1;
+            env_string_walker -= len;
+            envp_pointers[i] = (uint64_t)env_string_walker;
+        } else {
+            envp_pointers[i] = 0;
+        }
+    }
+    envp_pointers[envc] = 0; // NULL结尾
+    
+    // 4. 放置 argv 指针数组（NULL结尾）
+    stack_ptr -= (argc + 1) * sizeof(uint64_t);
+    uint64_t *argv_pointers = (uint64_t *)stack_ptr;
+    
+    // 重新计算argv字符串地址并填充指针数组
+    char *arg_string_walker = (char *)envp_pointers_start;
+    for (int i = 0; i < argc; i++) {
+        if (argv && argv[i]) {
+            size_t len = strlen(argv[i]) + 1;
+            arg_string_walker -= len;
+            argv_pointers[i] = (uint64_t)arg_string_walker;
+        } else {
+            argv_pointers[i] = 0;
+        }
+    }
+    argv_pointers[argc] = 0; // NULL结尾
+    
+    // 5. 放置 argc
+    stack_ptr -= sizeof(uint64_t);
+    *(uint64_t *)stack_ptr = (uint64_t)argc;
+    
+    // 6. 设置寄存器System V AMD64 ABI    hhhhh
+    task->context0.rdi = argc;                          // argc
+    task->context0.rsi = (uint64_t)argv_pointers;       // argv 
+    task->context0.rdx = (uint64_t)envp_pointers;       // envp
+    
+    write_serial_fmt("User stack built: rsp=0x%llx\n", (uint64_t)stack_ptr);
+    write_serial_fmt("  argc=%d at 0x%llx\n", argc, (uint64_t)stack_ptr);
+    write_serial_fmt("  argv at 0x%llx\n", (uint64_t)argv_pointers);
+    write_serial_fmt("  envp at 0x%llx\n", (uint64_t)envp_pointers);
+    
+    return (uint64_t)stack_ptr;
+}
+
+
 void switch_to_user_mode()
 {
     close_interrupt;
-    uint64_t rsp                        = (uint64_t)get_current_task()->user_stack_top;
-    get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
-    uint64_t func                       = get_current_task()->main;
+    
+    tcb_t current = get_current_task();
+    
+    // 在用户栈上构建参数块
+    uint64_t user_rsp = build_user_stack_args(current);
+    
+    current->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
+    uint64_t func = current->main;
 
+    // 现在不需要通过寄存器传递参数了，参数已经在栈上
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
                      "pushq %5\n" // SS
-                     "pushq %1\n" // RSP
+                     "pushq %1\n" // RSP (已经包含参数的栈指针)
                      "pushq %2\n" // RFLAGS
                      "pushq %3\n" // CS
                      "pushq %4\n" // RIP
@@ -228,9 +332,13 @@ void switch_to_user_mode()
                      "mov %8, %%rdx\n"  // arg3
                      "iretq\n"
                      :
-                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp), "r"(get_current_task()->context0.rflags),
-                       "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b), 
-                       "r"(get_current_task()->argc), "r"(get_current_task()->argv), "r"(get_current_task()->parent_group->envp)
+                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), 
+                       "r"(user_rsp), 
+                       "r"(current->context0.rflags),
+                       "r"((uint64_t)0x23), 
+                       "r"(func), 
+                       "r"((uint64_t)0x1b),
+                       "r"(current->context0.rdi), "r"(current->context0.rsi), "r"(current->context0.rdx)
                      : "memory");
 }
 
@@ -662,7 +770,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     }
 
     if (args != NULL)
-        new_task->argv = copy_envp((char **)args); // 复制传参
+        new_task->argv = (char**)args;
+    new_task->argc = 1;
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
     new_task->cpu_id     = get_current_cpu()->processor_id;
