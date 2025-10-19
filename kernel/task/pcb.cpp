@@ -223,35 +223,14 @@ void switch_to_user_mode()
                      "pushq %2\n" // RFLAGS
                      "pushq %3\n" // CS
                      "pushq %4\n" // RIP
-                     "iretq\n"
-                     :
-                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp), "r"(get_current_task()->context0.rflags),
-                       "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b)
-                     : "memory");
-}
-
-void exec_to_um(uint64_t argc, uint64_t argv, uint64_t envp)
-{
-    close_interrupt;
-    uint64_t *rsp                        = (uint64_t *)get_current_task()->user_stack_top;
-    get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
-    uint64_t func                       = get_current_task()->main;
-
-    __asm__ volatile("mov %0, %%es\n"
-                     "mov %0, %%ds\n"
-                     "pushq %5\n" // SS
-                     "pushq %1\n" // RSP
-                     "pushq %2\n" // RFLAGS
-                     "pushq %3\n" // CS
-                     "pushq %4\n" // RIP
                      "mov %6, %%rdi\n"  // arg1
                      "mov %7, %%rsi\n"  // arg2
                      "mov %8, %%rdx\n"  // arg3
                      "iretq\n"
                      :
-                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"((uint64_t)rsp), "r"(get_current_task()->context0.rflags),
+                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp), "r"(get_current_task()->context0.rflags),
                        "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b), 
-                       "r"(argc), "r"(argv), "r"(envp)
+                       "r"(get_current_task()->argc), "r"(get_current_task()->argv), "r"(get_current_task()->parent_group->envp)
                      : "memory");
 }
 
@@ -655,7 +634,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb, char* cwd)
+size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char* cwd)
 {
     spin_lock(create_thread_lock);
     close_interrupt;
@@ -681,6 +660,9 @@ size_t create_user_thread(void *_start, void *args, char *name, pcb_t pcb, char*
         new_task->tid          = now_tid++;
         new_task->parent_group = pcb;
     }
+
+    if (args != NULL)
+        new_task->argv = copy_envp((char **)args); // 复制传参
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
     new_task->cpu_id     = get_current_cpu()->processor_id;
@@ -807,8 +789,20 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->pagedir      = directory ? directory : get_kernel_pagedir();
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
-    pcb->envp         = NULL;
-    pcb->envc         = 0;
+
+    if (parent == NULL)
+    {
+        pcb->envc = current_user->envc;
+        pcb->envp = (char **)malloc(pcb->envc * sizeof(char *));
+        pcb->envp = copy_envp(current_user->envp);
+    } 
+    else 
+    {
+        pcb->envc = parent->envp == NULL ? current_user->envc : parent->envc;
+        pcb->envp = (char **)malloc(pcb->envc * sizeof(char *));
+        pcb->envp = copy_envp(parent->envp == NULL ? current_user->envp : parent->envp);
+    }
+
     pcb->cmdline      = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 

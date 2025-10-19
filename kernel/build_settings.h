@@ -41,9 +41,11 @@
 
 #define BUILD_EDITION DEBUG_VERSION
 
-#define OS_VERSION "BuildVersion"
+#define OS_VERSION "BetaVersion"
 #define KN_VERSION "XSK 2.1.0"
-#define OS_EDITION "XINGJI Confidentiality"
+#define OS_EDITION "XINGJI XJ380 Singularity 1.0.0"
+
+#define ENVP_SYSTEM_VERSION "SYSTEM_VERSION=XINGJI XJ380 Singularity 1.0.0"
 
 #define STACK_SIZE 65536UL
 

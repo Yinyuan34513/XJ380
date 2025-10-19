@@ -136,6 +136,9 @@ struct thread_control_block
 
     vfs_node_t cwd;
     char      *str_cwd;
+
+    char   **argv;      // 参数指针
+    size_t   argc;      // 参数数量
 };
 
 extern pcb_t kernel_group;
@@ -145,7 +148,7 @@ void     enable_scheduler();
 void     disable_scheduler();
 tcb_t    get_current_task();
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
-size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb, char *cwd);
+size_t   create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();
