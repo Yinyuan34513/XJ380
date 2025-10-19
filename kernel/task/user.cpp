@@ -46,6 +46,18 @@ void init_user()
     sys_mkdir(strcat("/Users/", current_user->name), NULL);
 }
 
+void copy_args(char *dst[], char *src[], int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        if (src[i] != NULL)
+        {
+            dst[i] = (char *)malloc(strlen(src[i]) * sizeof(char));
+            strcpy(dst[i], src[i]);
+        }
+    }
+}
+
 void get_thread_name_from_filepath(char *path, char *name)
 {
     char *p = path;

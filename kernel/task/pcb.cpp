@@ -770,8 +770,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     }
 
     if (args != NULL)
-        new_task->argv = (char**)args;
-    new_task->argc = 1;
+        copy_args(new_task->argv, (char **)args, argc); // 复制传参
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
     new_task->cpu_id     = get_current_cpu()->processor_id;

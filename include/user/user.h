@@ -31,3 +31,4 @@ typedef struct
 } UserInfo;
 
 void init_user();
+void copy_args(char *dst[], char *src[], int n);
