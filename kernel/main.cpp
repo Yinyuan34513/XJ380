@@ -277,7 +277,7 @@ void desktop_flusher()
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
     create_user_process_from_file((char *)"/system/shell.elf", NULL);
-    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL);
+    create_user_process_from_file((char *)"/system/fmanager.elf", NULL);
     desktop_done = true;
     while (1)
     {
@@ -457,8 +457,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     close_interrupt;
     disable_scheduler();
 
-    // hid_init();
-    // init_xhci();
+    hid_init();
+    init_xhci();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
