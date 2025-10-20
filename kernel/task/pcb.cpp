@@ -67,6 +67,7 @@ void thread_exit(int exit_code)
         open_interrupt;
     }
 }
+
 pcb_t found_pcb(int pid) {
     pcb_t ret = NULL;
     spin_lock(pcb_group_queue->lock);
@@ -314,16 +315,16 @@ void switch_to_user_mode()
     tcb_t current = get_current_task();
     
     // 在用户栈上构建参数块
-    uint64_t user_rsp = build_user_stack_args(current);
+    // uint64_t user_rsp = build_user_stack_args(current);
+    uint64_t user_rsp = current->user_stack_top;
     
     current->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func = current->main;
 
-    // 现在不需要通过寄存器传递参数了，参数已经在栈上
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
                      "pushq %5\n" // SS
-                     "pushq %1\n" // RSP (已经包含参数的栈指针)
+                     "pushq %1\n" // RSP
                      "pushq %2\n" // RFLAGS
                      "pushq %3\n" // CS
                      "pushq %4\n" // RIP
@@ -769,9 +770,6 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         new_task->parent_group = pcb;
     }
 
-    if (args != NULL)
-        copy_args(new_task->argv, (char **)args, argc); // 复制传参
-
     new_task->task_level = TASK_APPLICATION_LEVEL;
     new_task->cpu_id     = get_current_cpu()->processor_id;
     memcpy(new_task->name, name, strlen(name) + 1);
@@ -793,6 +791,9 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
 
     new_task->cwd     = vfs_open(cwd);
     new_task->str_cwd = cwd;
+
+    new_task->argv = (char **)args;
+    new_task->argc = argc;
 
     new_task->user_info             = current_user;
 
