@@ -315,8 +315,8 @@ void switch_to_user_mode()
     tcb_t current = get_current_task();
     
     // 在用户栈上构建参数块
-    // uint64_t user_rsp = build_user_stack_args(current);
-    uint64_t user_rsp = current->user_stack_top;
+    uint64_t user_rsp = build_user_stack_args(current);
+    // uint64_t user_rsp = current->user_stack_top;
     
     current->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func = current->main;
