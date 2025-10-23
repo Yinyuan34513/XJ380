@@ -1,0 +1,23 @@
+/*
+ *
+ *      X3TP (aka XTTTP)
+ *      XJ380 Terminal Text Transmit Protocol
+ *      XJ380 终端文本传输协议
+ * 
+ *      XINGJI Interactive Software (C) 2017-2025 All rights reserved.
+ * 
+ *      ===介绍===
+ *      为图形化操作系统终端与应用程序间的文本传输提供更加简易与高效的解决方案。
+ *      
+ *      ===基本原理===
+ *      通过 TCB 保存输入输出信息，根据其父进程搜索目标终端（需保证终端的父进程为NULL或kernel group）。
+ * 
+ */
+
+#pragma once
+
+typedef struct 
+{
+    char *input;
+    char *output;
+} xtttp_dtt;
