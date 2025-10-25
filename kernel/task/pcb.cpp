@@ -343,11 +343,10 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 
     return tmp_stack;
 }
+
 void switch_to_user_mode()
 {
-    no_interrupt = true;
     close_interrupt;
-    disable_scheduler();
     
     uint64_t rsp = get_current_task()->user_stack_top;
     
@@ -384,10 +383,6 @@ void switch_to_user_mode()
                        "r"((uint64_t)argv), // %7 -> rsi  
                        "r"((uint64_t)envp)  // %8 -> rdx
                      : "memory");
-
-    no_interrupt = false;
-    open_interrupt;
-    enable_scheduler();
 }
 
 void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t rf)
