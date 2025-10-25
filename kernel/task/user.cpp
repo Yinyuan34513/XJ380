@@ -187,6 +187,16 @@ uint64_t parse_elf_file(char *path, pcb_t group)
         }
     }
 
+    uint64_t buf_len = (file_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    uint8_t *buffer = (uint8_t *)EHDR_START_ADDR;
+    page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, buf_len,
+                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    memcpy(buffer, buf, file_size);
+
+    group->load_start = mapping_space->load_start;
+    group->elf_file = buf;
+    group->elf_size = file_size;
+
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
     // 设置程序入口点
@@ -241,8 +251,22 @@ void create_user_process_from_file(char *path, pcb_t pcb)
     entry = (void *)parse_elf_file(path, group);
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
-    char *a[2]={"argv0"};
-    create_user_thread(entry, (void*)a, 1, process_name, group, getCwd(path));
+    char cmdline[PAGE_SIZE];
+    memset(cmdline, 0, sizeof(cmdline));
+    char *cmdline_ptr = cmdline;
+    char *argv[50];
+    memset((void*)argv,0,sizeof(argv));
+    argv[0] = "argv0";
+
+    for (int i = 0; argv[i]; i++) {
+        int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
+        cmdline_ptr += len;
+    }
+
+    char *old_cmdline = group->cmdline;
+    group->cmdline  = strdup(cmdline);
+
+    create_user_thread(entry, NULL, 1, process_name, group, getCwd(path));
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

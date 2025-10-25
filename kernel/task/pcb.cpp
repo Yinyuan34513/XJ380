@@ -5,6 +5,7 @@
 #include "mm/page.h"
 #include "proto.hpp"
 #include <cpu/longm.h>
+#include <elf.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 
@@ -32,7 +33,7 @@ void thread_exit(int exit_code)
 {
     close_interrupt;
     disable_scheduler();
-    spin_lock(scheduler_lock);  // 添加锁
+    spin_lock(scheduler_lock); // 添加锁
 
     tcb_t current = get_current_task();
     pcb_t group   = current->parent_group;
@@ -48,18 +49,13 @@ void thread_exit(int exit_code)
     queue_remove_at(group->thread_queue, current->group_index);
 
     // 如果这是进程的最后一个线程，标记进程为僵尸状态
-    if (group->thread_queue->size == 0)
-    {
-        group->status = DEATH;
-    }
+    if (group->thread_queue->size == 0) { group->status = DEATH; }
 
     // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) { 
-        addque_killer(group); 
-    }
-    
+    if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
+
     switch_page_directory(get_current_directory());
-    spin_unlock(scheduler_lock);  // 释放锁
+    spin_unlock(scheduler_lock); // 释放锁
 
     if (!no_interrupt)
     {
@@ -68,7 +64,8 @@ void thread_exit(int exit_code)
     }
 }
 
-pcb_t found_pcb(int pid) {
+pcb_t found_pcb(int pid)
+{
     pcb_t ret = NULL;
     spin_lock(pcb_group_queue->lock);
     queue_foreach(pcb_group_queue, node)
@@ -98,19 +95,19 @@ tcb_t found_thread(pcb_t pcb, int tid)
 void kill_thread(int tid, pcb_t parent_group)
 {
     bool interrupt_yes = false;
-    if (!no_interrupt)
-        interrupt_yes = true;
+    if (!no_interrupt) interrupt_yes = true;
     close_interrupt;
     disable_scheduler();
     no_interrupt = true;
 
     tcb_t current = found_thread(parent_group, tid);
-    if (current == NULL) {
+    if (current == NULL)
+    {
         write_serial_fmt("[Warning] kill_thread: Cannot found target.\n");
         return;
     }
 
-    pcb_t group   = current->parent_group;
+    pcb_t group = current->parent_group;
     // write_serial_fmt("kill thread %s\n", current->name);
 
     // 设置线程状态为死亡
@@ -136,15 +133,13 @@ void kill_thread(int tid, pcb_t parent_group)
     // 如果进程没有线程了，安排回收
     if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
 
-    if (interrupt_yes)
-        no_interrupt = false;
+    if (interrupt_yes) no_interrupt = false;
     if (!no_interrupt)
     {
         enable_scheduler();
         open_interrupt;
     }
     switch_page_directory(get_current_directory());
-
 }
 
 void kill_thread(int tid)
@@ -152,10 +147,10 @@ void kill_thread(int tid)
     kill_thread(tid, kernel_group);
 }
 
-void recycle_process(pcb_t pcb) {
+void recycle_process(pcb_t pcb)
+{
     bool interrupt_yes = false;
-    if (!no_interrupt)
-        interrupt_yes = true;
+    if (!no_interrupt) interrupt_yes = true;
     no_interrupt = true;
 
     // 不要回收内核进程
@@ -188,10 +183,9 @@ void recycle_process(pcb_t pcb) {
     // 释放进程本身
     free(pcb);
 
-    if (interrupt_yes)
-        no_interrupt = false;
+    if (interrupt_yes) no_interrupt = false;
     if (!no_interrupt)
-    {   
+    {
         enable_scheduler();
         open_interrupt;
     }
@@ -210,163 +204,215 @@ void recycle_process(pcb_t pcb) {
         __asm__ volatile("hlt");
 }
 
-// 在用户栈上构建 argc, argv, envp 参数块
-uint64_t build_user_stack_args(tcb_t task)
+int cmd_parse(const char *cmd_str, char **argv, char token)
 {
-    uint64_t stack_top = task->user_stack_top;
-    char *stack_ptr = (char *)stack_top;
-    
-    int argc = task->argc;
-    char **argv = task->argv;
-    char **envp = task->parent_group->envp;
-    
-    // 计算环境变量数量
-    int envc = 0;
-    while (envp && envp[envc]) envc++;
-    
-    // 调试信息
-    write_serial_fmt("Building user stack: argc=%d, envc=%d\n", argc, envc);
-    
-    // ========== 从栈顶向下构建 ==========
-    
-    // 1. 首先放置所有字符串数据（从栈顶开始）
-    
-    // 环境变量字符串
-    size_t total_string_size = 0;
-    for (int i = 0; i < envc; i++) {
-        if (envp[i]) {
-            size_t len = strlen(envp[i]) + 1;
-            stack_ptr -= len;
-            memcpy(stack_ptr, envp[i], len);
-            total_string_size += len;
+    int         argc = 0;
+    const char *next = cmd_str;
+
+    while (*next)
+    {
+        while (*next == token)
+            next++;
+        if (*next == '\0') break;
+        const char *start = next;
+        while (*next && *next != token)
+            next++;
+        size_t len = next - start;
+        argv[argc] = (char *)malloc(len + 1);
+        if (!argv[argc])
+        {
+            for (int i = 0; i < argc; i++)
+                free(argv[i]);
+            return -1;
         }
+        memcpy(argv[argc], start, len);
+        argv[argc][len] = '\0';
+
+        argc++;
+        if (argc >= 50) break;
     }
-    
-    // 参数字符串
-    for (int i = 0; i < argc; i++) {
-        if (argv && argv[i]) {
-            size_t len = strlen(argv[i]) + 1;
-            stack_ptr -= len;
-            memcpy(stack_ptr, argv[i], len);
-            total_string_size += len;
-        }
-    }
-    
-    // 2. 16字节对齐
-    stack_ptr = (char *)((uint64_t)stack_ptr & ~0xF);
-    
-    // 3. 放置 envp 指针数组（NULL结尾）
-    uint64_t *envp_pointers_start = (uint64_t *)stack_ptr;
-    stack_ptr -= (envc + 1) * sizeof(uint64_t);
-    uint64_t *envp_pointers = (uint64_t *)stack_ptr;
-    
-    // 重新计算envp字符串地址并填充指针数组
-    char *env_string_walker = (char *)envp_pointers_start;
-    for (int i = 0; i < envc; i++) {
-        if (envp[i]) {
-            size_t len = strlen(envp[i]) + 1;
-            env_string_walker -= len;
-            envp_pointers[i] = (uint64_t)env_string_walker;
-        } else {
-            envp_pointers[i] = 0;
-        }
-    }
-    envp_pointers[envc] = 0; // NULL结尾
-    
-    // 4. 放置 argv 指针数组（NULL结尾）
-    stack_ptr -= (argc + 1) * sizeof(uint64_t);
-    uint64_t *argv_pointers = (uint64_t *)stack_ptr;
-    
-    // 重新计算argv字符串地址并填充指针数组
-    char *arg_string_walker = (char *)envp_pointers_start;
-    for (int i = 0; i < argc; i++) {
-        if (argv && argv[i]) {
-            size_t len = strlen(argv[i]) + 1;
-            arg_string_walker -= len;
-            argv_pointers[i] = (uint64_t)arg_string_walker;
-        } else {
-            argv_pointers[i] = 0;
-        }
-    }
-    argv_pointers[argc] = 0; // NULL结尾
-    
-    // 5. 放置 argc
-    stack_ptr -= sizeof(uint64_t);
-    *(uint64_t *)stack_ptr = (uint64_t)argc;
-    
-    // 6. 设置寄存器System V AMD64 ABI    hhhhh
-    task->context0.rdi = argc;                          // argc
-    task->context0.rsi = (uint64_t)argv_pointers;       // argv 
-    task->context0.rdx = (uint64_t)envp_pointers;       // envp
-    
-    write_serial_fmt("User stack built: rsp=0x%llx\n", (uint64_t)stack_ptr);
-    write_serial_fmt("  argc=%d at 0x%llx\n", argc, (uint64_t)stack_ptr);
-    write_serial_fmt("  argv at 0x%llx\n", (uint64_t)argv_pointers);
-    write_serial_fmt("  envp at 0x%llx\n", (uint64_t)envp_pointers);
-    
-    return (uint64_t)stack_ptr;
+    argv[argc] = NULL;
+    return argc;
 }
 
+void cmd_free(char **argv, int argc)
+{
+    for (int i = 0; i < argc; i++)
+    {
+        free(argv[i]);
+    }
+}
 
+static uint64_t push_slice(uint64_t ustack, uint8_t *slice, uint64_t len)
+{
+    uint64_t tmp_stack  = ustack;
+    tmp_stack          -= len;
+    tmp_stack          -= (tmp_stack % 0x08);
+    memcpy((void *)tmp_stack, slice, len);
+    return tmp_stack;
+}
+
+static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, uint64_t link_start, uint8_t *link_data,
+                                 size_t link_size)
+{
+    uint64_t env_i  = 0;
+    int      argv_i = 0;
+
+    char     *argv[50];
+    char     *build_cmdline = strdup(task->parent_group->cmdline);
+    const int argc          = cmd_parse(build_cmdline, argv, ' ');
+
+    char **envp = task->parent_group->envp ? task->parent_group->envp : current_user->envp;
+
+    uint64_t tmp_stack = sp;
+    tmp_stack          = push_slice(tmp_stack, (uint8_t *)task->name, strlen(task->name) + 1);
+
+    uint64_t execfn_ptr = tmp_stack;
+
+    uint64_t *envps = (uint64_t *)malloc(1024);
+    memset(envps, 0, 1024);
+    uint64_t *argvps = (uint64_t *)malloc(1024);
+    memset(argvps, 0, 1024);
+
+    if (envp != NULL)
+    {
+        for (env_i = 0; env_i < (task->parent_group->envp ? task->parent_group->envc : current_user->envc); env_i++)
+        {
+            if (envp[env_i] != NULL)
+            {
+                tmp_stack    = push_slice(tmp_stack, (uint8_t *)envp[env_i], strlen(envp[env_i]) + 1);
+                envps[env_i] = tmp_stack;
+            }
+        }
+    }
+
+    for (argv_i = 0; argv_i < argc; argv_i++)
+    {
+        tmp_stack      = push_slice(tmp_stack, (uint8_t *)argv[argv_i], strlen(argv[argv_i]) + 1);
+        argvps[argv_i] = tmp_stack;
+    }
+
+    uint64_t total_length = 2 * sizeof(uint64_t) + 7 * 2 * sizeof(uint64_t) + (env_i + 0) * sizeof(uint64_t) +
+                            sizeof(uint64_t) + (argv_i + 0) * sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
+    tmp_stack -= (tmp_stack - total_length) % 0x10;
+
+    // push auxv
+    uint8_t *tmp = (uint8_t *)malloc(2 * sizeof(uint64_t));
+    memset(tmp, 0, 2 * sizeof(uint64_t));
+    tmp_stack = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
+
+    page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, get_current_task()->parent_group->elf_size,
+                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    memcpy((void *)EHDR_START_ADDR, get_current_task()->parent_group->elf_file,
+           get_current_task()->parent_group->elf_size);
+
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)EHDR_START_ADDR;
+    // CP_Kernel 将用户程序本体从 0 地址加载故不加phdrs的偏移
+    Elf64_Phdr *phdrs = (Elf64_Phdr *)(ehdr->e_phoff + get_current_task()->parent_group->load_start);
+
+    ((uint64_t *)tmp)[0] = AT_NULL;
+    ((uint64_t *)tmp)[1] = 0;
+
+    ((uint64_t *)tmp)[0] = AT_ENTRY;
+    ((uint64_t *)tmp)[1] = entry_point;
+    tmp_stack            = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
+
+    ((uint64_t *)tmp)[0] = AT_EXECFN;
+    ((uint64_t *)tmp)[1] = execfn_ptr;
+    tmp_stack            = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
+
+    ((uint64_t *)tmp)[0] = AT_PAGESZ;
+    ((uint64_t *)tmp)[1] = PAGE_SIZE;
+    tmp_stack            = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
+
+    memset(tmp, 0, 2 * sizeof(uint64_t));
+
+    tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)envps, env_i * sizeof(uint64_t));
+
+    tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)argvps, argv_i * sizeof(uint64_t));
+
+    tmp_stack = push_slice(tmp_stack, (uint8_t *)&argv_i, sizeof(uint64_t));
+
+    free(tmp);
+    free(envps);
+    free(argvps);
+    free(link_data);
+    cmd_free(argv, argc);
+
+    return tmp_stack;
+}
 void switch_to_user_mode()
 {
+    no_interrupt = true;
     close_interrupt;
+    disable_scheduler();
     
-    tcb_t current = get_current_task();
+    uint64_t rsp = get_current_task()->user_stack_top;
     
-    // 在用户栈上构建参数块
-    uint64_t user_rsp = build_user_stack_args(current);
-    // uint64_t user_rsp = current->user_stack_top;
+    // 构建用户栈并获取 argc 和 argv
+    rsp = build_user_stack(get_current_task(), rsp, get_current_task()->main, 0, NULL, 0);
     
-    current->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
-    uint64_t func = current->main;
+    // 从栈中读取 argc 和 argv
+    uint64_t argc = *(uint64_t*)rsp;
+    char** argv = (char**)(rsp + 8);
+    char** envp = (char**)(rsp + 8 + (argc + 1) * sizeof(uint64_t));
+    
+    get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
+    uint64_t func = get_current_task()->main;
 
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
-                     "pushq %5\n" // SS
-                     "pushq %1\n" // RSP
-                     "pushq %2\n" // RFLAGS
-                     "pushq %3\n" // CS
-                     "pushq %4\n" // RIP
-                     "mov %6, %%rdi\n"  // arg1
-                     "mov %7, %%rsi\n"  // arg2
-                     "mov %8, %%rdx\n"  // arg3
+                     "pushq %5\n"      // SS
+                     "pushq %1\n"      // RSP
+                     "pushq %2\n"      // RFLAGS
+                     "pushq %3\n"      // CS
+                     "pushq %4\n"      // RIP
+                     "mov %6, %%rdi\n" // argc (arg1)
+                     "mov %7, %%rsi\n" // argv (arg2)  
+                     "mov %8, %%rdx\n" // envp (arg3)
                      "iretq\n"
                      :
                      : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), 
-                       "r"(user_rsp), 
-                       "r"(current->context0.rflags),
+                       "r"(rsp), 
+                       "r"(get_current_task()->context0.rflags),
                        "r"((uint64_t)0x23), 
                        "r"(func), 
                        "r"((uint64_t)0x1b),
-                       "r"(current->context0.rdi), "r"(current->context0.rsi), "r"(current->context0.rdx)
+                       "r"(argc),           // %6 -> rdi
+                       "r"((uint64_t)argv), // %7 -> rsi  
+                       "r"((uint64_t)envp)  // %8 -> rdx
                      : "memory");
-}
 
+    no_interrupt = false;
+    open_interrupt;
+    enable_scheduler();
+}
 
 void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t rf)
 {
     close_interrupt;
-    uint64_t *rsp                        = (uint64_t *)get_current_task()->user_stack_top;
-    PUSH_STACK(rsp, 0);     // 对齐
-    PUSH_STACK(rsp, rf);    // 返回程序
+    uint64_t *rsp = (uint64_t *)get_current_task()->user_stack_top;
+    PUSH_STACK(rsp, 0);  // 对齐
+    PUSH_STACK(rsp, rf); // 返回程序
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
 
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
-                     "pushq %5\n" // SS
-                     "pushq %1\n" // RSP
-                     "pushq %2\n" // RFLAGS
-                     "pushq %3\n" // CS
-                     "pushq %4\n" // RIP
-                     "mov %6, %%rdi\n"  // arg1
-                     "mov %7, %%rsi\n"  // arg2
-                     "mov %8, %%rdx\n"  // arg3
+                     "pushq %5\n"      // SS
+                     "pushq %1\n"      // RSP
+                     "pushq %2\n"      // RFLAGS
+                     "pushq %3\n"      // CS
+                     "pushq %4\n"      // RIP
+                     "mov %6, %%rdi\n" // arg1
+                     "mov %7, %%rsi\n" // arg2
+                     "mov %8, %%rdx\n" // arg3
                      "iretq\n"
                      :
-                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"((uint64_t)rsp), "r"(get_current_task()->context0.rflags),
-                       "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b), 
+                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"((uint64_t)rsp),
+                       "r"(get_current_task()->context0.rflags), "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b),
                        "r"(msg_type), "r"(data1), "r"(data2)
                      : "memory");
 }
@@ -426,7 +472,10 @@ char *vfs_cwd_path_build(char *src)
     char *s = src;
     char *path;
     if (s[0] == '/') { path = strdup(s); }
-    else { path = pathacat(get_current_task()->cwd->name, s); }
+    else
+    {
+        path = pathacat(get_current_task()->cwd->name, s);
+    }
     char *normalized_path = normalize_path(path);
     free(path);
     return normalized_path;
@@ -556,7 +605,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         open_interrupt;
     }
     switch_to_user_mode();
-    return (uint64_t) - (EAGAIN);
+    return (uint64_t)-(EAGAIN);
 }
 
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
@@ -583,16 +632,16 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
-    new_pcb->parent_task = current_pcb;
-    new_pcb->queue_index = queue_enqueue(pcb_group_queue, new_pcb);
-    new_pcb->vfork       = is_vfork;
-    new_pcb->child_pcb   = queue_init();
-    new_pcb->child_index = queue_enqueue(current_pcb->child_pcb, new_pcb);
+    new_pcb->parent_task  = current_pcb;
+    new_pcb->queue_index  = queue_enqueue(pcb_group_queue, new_pcb);
+    new_pcb->vfork        = is_vfork;
+    new_pcb->child_pcb    = queue_init();
+    new_pcb->child_index  = queue_enqueue(current_pcb->child_pcb, new_pcb);
 
     tcb_t parent_task = get_current_task();
 
     tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
-    if (new_task == NULL) return (uint64_t) - (ENOMEM);
+    if (new_task == NULL) return (uint64_t)-(ENOMEM);
     memset(new_task, 0, sizeof(struct thread_control_block));
     new_task->task_level     = TASK_APPLICATION_LEVEL;
     new_task->cpu_id         = get_current_cpu()->processor_id;
@@ -718,8 +767,8 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
 
-    new_task->user_info             = current_user;
-    new_task->user_info->user_type  = XUT_Root;
+    new_task->user_info            = current_user;
+    new_task->user_info->user_type = XUT_Root;
 
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, 0);
@@ -727,7 +776,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     PUSH_STACK(stack_top, (uint64_t)process_exit);
     new_task->context0.rsp = (uint64_t)stack_top;
     new_task->kernel_stack = (new_task->context0.rsp);
-    new_task->context0.rdi    = (uint64_t)args; // first argument in rdi
+    new_task->context0.rdi = (uint64_t)args; // first argument in rdi
 
     new_task->fs_base = (uint64_t)new_task;
 
@@ -743,12 +792,12 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     return new_task->tid;
 }
 
-size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char* cwd)
+size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd)
 {
     spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
-    if(!cwd)
+    if (!cwd)
     {
         write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
         return (size_t)-(EINVAL);
@@ -774,20 +823,15 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->cpu_id     = get_current_cpu()->processor_id;
     memcpy(new_task->name, name, strlen(name) + 1);
 
-    ptr_cast_t cast;
-    cast.ptr                   = new_task;
-    cast.val                  += KERNEL_STACK_SIZE;
-    uint64_t *stack_top        = (uint64_t *)(cast.ptr);
-    new_task->context0.rflags  = 0x202;
-    new_task->context0.rip     = (uint64_t)switch_to_user_mode;
-    new_task->context0.rsp     = (uint64_t)stack_top;                        // 设置上下文
-    new_task->kernel_stack     = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
-    new_task->context0.cs      = 0x8;
-    new_task->context0.ss      = 0x10;
-    new_task->context0.es      = 0x10;
-    new_task->context0.ds      = 0x10;
-    new_task->status           = CREATE;
-    new_task->main             = (uint64_t)_start;
+    uint64_t *stack_top       = (uint64_t *)((uint64_t)new_task + KERNEL_STACK_SIZE);
+    *(--stack_top)            = 0;
+    *(--stack_top)            = 0;
+    *(--stack_top)            = (uint64_t)switch_to_user_mode;
+    new_task->context0.rflags = 0x202;
+    new_task->context0.rip    = (uint64_t)switch_to_user_mode;
+    new_task->context0.rsp    = (uint64_t)stack_top;
+    new_task->kernel_stack    = (uint64_t)stack_top;
+    new_task->syscall_stack   = (uint64_t)aligned_alloc(PAGE_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
 
     new_task->cwd     = vfs_open(cwd);
     new_task->str_cwd = cwd;
@@ -795,18 +839,17 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->argv = (char **)args;
     new_task->argc = argc;
 
-    new_task->user_info             = current_user;
-
-    stack_top = (uint64_t *)new_task->kernel_stack;
-    PUSH_STACK(stack_top, (uint64_t)_start);
-    PUSH_STACK(stack_top, (uint64_t)switch_to_user_mode);
-    new_task->context0.rsp = (uint64_t)stack_top;
-    new_task->kernel_stack = (new_task->context0.rsp);
+    new_task->user_info = current_user;
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+    new_task->main           = (uint64_t)_start;
+    new_task->context0.cs    = 0x8;
+    new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
+    new_task->status                                                      = CREATE;
 
     new_task->fs_base = (uint64_t)new_task;
+
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -817,8 +860,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     return new_task->tid;
 }
 
-size_t create_signal_thread(void *_start, 
-                            uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func, 
+size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func,
                             pcb_t pcb)
 {
     spin_lock(create_thread_lock);
@@ -860,10 +902,10 @@ size_t create_signal_thread(void *_start,
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
 
-    new_task->context0.rdi     = msg_type;
-    new_task->context0.rsi     = data1;
-    new_task->context0.rdx     = data2;
-    new_task->context0.rcx     = revert_func;
+    new_task->context0.rdi = msg_type;
+    new_task->context0.rsi = data1;
+    new_task->context0.rdx = data2;
+    new_task->context0.rcx = revert_func;
 
     stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, (uint64_t)_start);
@@ -904,15 +946,15 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         pcb->envc = current_user->envc;
         pcb->envp = (char **)malloc(pcb->envc * sizeof(char *));
         pcb->envp = copy_envp(current_user->envp);
-    } 
-    else 
+    }
+    else
     {
         pcb->envc = parent->envp == NULL ? current_user->envc : parent->envc;
         pcb->envp = (char **)malloc(pcb->envc * sizeof(char *));
         pcb->envp = copy_envp(parent->envp == NULL ? current_user->envp : parent->envp);
     }
 
-    pcb->cmdline      = (char *)malloc(strlen(cmdline));
+    pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
     return pcb;
@@ -937,12 +979,10 @@ void process_setup()
     kernel_pcb->status       = RUNNING;
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
-    kernel_pcb->child_pcb   = queue_init();
-    kernel_pcb->child_index = 0;
+    kernel_pcb->child_pcb    = queue_init();
+    kernel_pcb->child_index  = 0;
 
     kernel_group = kernel_pcb;
-
-    
 
     smp_scheduler_lock = false;
     scheduler_is_ready++;
