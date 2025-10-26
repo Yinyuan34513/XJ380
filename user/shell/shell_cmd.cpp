@@ -1,4 +1,5 @@
 #include "st_proto.h"
+#include "gh_sign.h"
 #include <stdint.h>
 
 void check_command()
@@ -181,6 +182,18 @@ void check_command()
         {
             text_editor(args);
         }
+    }
+    else if (strncmp("info", cmd, 4) == 0)
+    {
+        char version_info[100];
+        xapi_GetSystemVersion(version_info);
+        print_to_console(info_logo[0]);
+        print_to_console(info_logo[1]);
+        print_to_console(info_logo[2]);
+        print_to_console(info_logo[3]);
+        print_to_console(info_logo[4]);
+        print_to_console(info_logo[5]);
+        print_to_console(version_info);
     }
     else
     {
