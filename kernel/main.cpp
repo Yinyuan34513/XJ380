@@ -142,7 +142,9 @@ void components_flusher()
 }
 
 extern uint16_t *mouse_sheet_id_img;
-
+uint16_t         desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
+uint16_t         dock_sheet_id    = 1145;
+uint16_t         mouse_sheet_id   = 1145;
 
 void desktop_flusher()
 {
@@ -152,9 +154,6 @@ void desktop_flusher()
 
     write_serial_string("desktop flusher is running\n");
 
-    uint16_t   desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
-    uint16_t   dock_sheet_id    = 1145;
-    uint16_t   mouse_sheet_id   = 1145;
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
 
@@ -170,7 +169,7 @@ void desktop_flusher()
 
     init_ttf();
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8});    // GUI好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
     init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
 
@@ -250,7 +249,7 @@ void desktop_flusher()
     init_xwm(&xwmi);
     xwmii = &xwmi;
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 10, 7, {0x00, 0xa2, 0xe8});    // 全都好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 10, 7, {0x00, 0xa2, 0xe8}); // 全都好了来一下
 
     mouse_sheet_id_img = &mouse_sheet_id;
 
@@ -276,8 +275,8 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
-    char *argv[10] = {"a","b","c","d"};
-    create_user_process_from_file((char *)"/system/shell.elf", NULL,argv);
+    char *argv[10]    = {"a", "b", "c", "d"};
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL);
     desktop_done = true;
     while (1)
@@ -304,7 +303,10 @@ void desktop_flusher()
                 {
                     do_signal(0, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
-                else { do_signal(7, NULL, k_input, current_window->WinMPf, current_window->w_task); }
+                else
+                {
+                    do_signal(7, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                }
             }
         }
 #if BUILD_EDITION == DEBUG_VERSION
@@ -350,14 +352,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_hpet(BootConfig.HPET);
     init_apic(BootConfig.MADT);
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 1, 7, {0x00, 0xa2, 0xe8});    // CPU好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 1, 7, {0x00, 0xa2, 0xe8}); // CPU好了来一下
 
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
     page_setup();
     init_heap();
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8});    // 内存好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 
     serial_wprintf("Output by Serial Writer!!\n");
 
@@ -371,7 +373,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     keyboard_setup();
     mouse_init();
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     disable_intr();
 
@@ -411,7 +413,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     disable_scheduler();
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8});    // 多任务好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     // uint64_t phys = alloc_frames(2);
     // write_serial_string("Alloc memory: ");
@@ -423,7 +425,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_signal();
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     while (true)
     {
@@ -431,12 +433,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8});    // 驱动好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     init_user();
     init_killer();
     write_serial_string("User & Killer is ready\n");
-
 
     if (BootConfig.is_qemu == 1) write_serial_fmt("[Warning] XJ380 is running under the QEMU/BOCHS.\n");
 
@@ -451,8 +452,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     enable_scheduler();
     open_interrupt;
     no_interrupt = false;
-    
-    while(!desktop_done)cpu_relax();
+
+    while (!desktop_done)
+        cpu_relax();
 
     no_interrupt = true;
     close_interrupt;

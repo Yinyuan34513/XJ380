@@ -29,6 +29,8 @@ extern bool no_interrupt;
 
 extern spin_t scheduler_lock;
 
+uint16_t         dock_sheet_id;
+
 void thread_exit(int exit_code)
 {
     close_interrupt;
@@ -40,6 +42,11 @@ void thread_exit(int exit_code)
 
     // 设置线程状态为死亡
     current->status = DEATH;
+
+    if(current->hasfscr)
+    {
+        init_dock(sht_img,&dock_sheet_id);
+    }
 
     // 从调度队列中移除
     struct PROCESSOR_INFO *cpu = get_current_cpu();
@@ -563,6 +570,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->user_stack     = stack;
     get_current_task()->user_stack_top = stack + BIG_USER_STACK;
     get_current_task()->main           = e_entry;
+    get_current_task()->hasfscr        = false;
+    get_current_task()->winnum         = 0;
 
     if (!no_interrupt)
     {
@@ -616,6 +625,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->kernel_stack   = ((uint64_t)new_task) + KERNEL_STACK_SIZE;
     new_task->main           = parent_task->main;
     strcpy(new_task->name, parent_task->name);
+    new_task->winnum         = 0;
+    new_task->hasfscr        = false;
 
     new_task->context0.rip    = reg->rcx; // syscall 指令中 rcx 寄存器为 rip
     new_task->context0.rflags = reg->r11; // syscall 指令中 r11 寄存器为 rflags
@@ -732,6 +743,9 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
 
+    new_task->winnum         = 0;
+    new_task->hasfscr        = false;
+
     new_task->user_info            = current_user;
     new_task->user_info->user_type = XUT_Root;
 
@@ -800,6 +814,9 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
 
     new_task->cwd     = vfs_open(cwd);
     new_task->str_cwd = cwd;
+
+    new_task->winnum         = 0;
+    new_task->hasfscr        = false;
 
     new_task->argv = (char **)args;
     new_task->argc = argc;

@@ -9,6 +9,7 @@
 #include <graphics/window/window.h>
 #include <proto.hpp>
 #include <ttf.h>
+#include <syscall/pxapi.h>
 
 bool WindowIsCreating = false;
 
@@ -28,6 +29,108 @@ void init_xwm(XWM_INFO *xwmi)
     LoadPictureOgM(&xwmi->theme.min,      "/system/theme/skyglass/min.png");
     write_serial_string("XWM Initializing Success.\n");
 }
+
+extern uint16_t   dock_sheet_id;
+
+void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+{
+    WindowIsCreating = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL)
+    {
+        // 哦亲爱的孩子我不说了你知道这是干什么的
+        xwmi->start = new_window;
+    }
+    else
+    {
+        WINDOWLS *front_p = xwmi->start;
+        while (true)
+        {
+            if (front_p->next == NULL)
+            {
+                // 链表.exe
+                front_p->next = new_window;
+                break;
+            }
+            front_p = front_p->next;
+        }
+    }
+
+    *windowls = new_window;
+    xwmi->win_num++;
+    new_window->WinMPf = NULL;
+    new_window->type   = XWIN_FULL_SCR;
+    get_current_task()->hasfscr = true;
+    get_current_task()->winnum++;
+
+    new_window->width  = sht_img->fbc->horizontal_resolution;
+    new_window->height = sht_img->fbc->vertical_resolution;
+
+    new_window->w_task = get_current_task();
+
+    create_sheet(sht, 0, 0, 
+                 sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, MovableSheetType, -1, &(new_window->w_sheet));
+    new_window->w_sheet = dock_sheet_id;
+    draw_rect(sht, &(new_window->w_sheet), 0, 0, sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, {0xff, 0xff, 0xff, 0xff});
+
+    refresh_sheet(sht);
+    WindowIsCreating = false;
+}
+
+
+void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height)
+{
+    WindowIsCreating = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL)
+    {
+        // 哦亲爱的孩子我不说了你知道这是干什么的
+        xwmi->start = new_window;
+    }
+    else
+    {
+        WINDOWLS *front_p = xwmi->start;
+        while (true)
+        {
+            if (front_p->next == NULL)
+            {
+                // 链表.exe
+                front_p->next = new_window;
+                break;
+            }
+            front_p = front_p->next;
+        }
+    }
+
+    *windowls = new_window;
+    xwmi->win_num++;
+    new_window->WinMPf = NULL;
+    new_window->type   = XWIN_FRAME_OFF;
+
+    new_window->width  = width;
+    new_window->height = height;
+
+    new_window->w_task = get_current_task();
+
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+                 width + 24, height + 47, MovableSheetType, -1, &(new_window->w_sheet));
+    draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+
+    window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
+    window_create_offest_xy += 32;
+
+    refresh_part_sheet(sht, 72, 72, width + 24 + 72, height + 52 + 72);
+    WindowIsCreating = false;
+}
+
 
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height)
 {
@@ -60,6 +163,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     *windowls = new_window;
     xwmi->win_num++;
     new_window->WinMPf = NULL;
+    new_window->type   = XWIN_NORMAL;
 
     new_window->width  = width;
     new_window->height = height;

@@ -173,9 +173,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
         break;
-        // case SYS_EXIT:
-        //     regs->rax = (uint64_t)sys_exit(regs->rdi);
-        //     break;
+    case SYS_EXIT:
+        thread_exit(regs->rdi);
+        break;
         // case SYS_EXIT_GROUP:
         //     regs->rax = (uint64_t)sys_exit(regs->rdi);
         //     break;

@@ -145,6 +145,9 @@ struct thread_control_block
 
     char   **argv;      // 参数指针
     size_t   argc;      // 参数数量
+
+    uint64_t winnum;
+    bool     hasfscr;
 };
 
 extern pcb_t kernel_group;

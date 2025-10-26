@@ -124,6 +124,11 @@ typedef struct {
 #define XAPI_BUTTON       410
 #define XAPI_BUTTON_STYLE 411
 
+// 4-1
+#define XWIN_NORMAL				0
+#define XWIN_FRAME_OFF			1
+#define XWIN_FULL_SCR			2
+
 // 当前最大号：426
 
 // Proto (XAPI Edition)
