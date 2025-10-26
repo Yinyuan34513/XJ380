@@ -201,6 +201,7 @@ void process_mouse_info()
             else
             {
                 // 点在了窗口上
+                write_serial_fmt("114514\n");
                 ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
                 lift_sheet(sht_img, ms_dec.sheet_id);
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,

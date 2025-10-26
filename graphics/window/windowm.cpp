@@ -72,10 +72,11 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 
     new_window->w_task = get_current_task();
 
-    create_sheet(sht, 0, 0, 
-                 sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, MovableSheetType, -1, &(new_window->w_sheet));
+    // create_sheet(sht, 0, 0, 
+    //              sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, FixedSheetType, -1, &(new_window->w_sheet));
     new_window->w_sheet = dock_sheet_id;
-    draw_rect(sht, &(new_window->w_sheet), 0, 0, sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, {0xff, 0xff, 0xff, 0xff});
+    change_sheet_type(sht, &(new_window->w_sheet), TopWindowSheetType);
+    draw_rect(sht, &(new_window->w_sheet), 0, 0, sht_img->fbc->horizontal_resolution - 1, sht_img->fbc->vertical_resolution - 1, {0xff, 0xff, 0xff, 0xff});
 
     refresh_sheet(sht);
     WindowIsCreating = false;
@@ -121,7 +122,7 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     new_window->w_task = get_current_task();
 
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
-                 width + 24, height + 47, MovableSheetType, -1, &(new_window->w_sheet));
+                 width + 24, height + 47, NoEdgeWindowSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
 
     window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;

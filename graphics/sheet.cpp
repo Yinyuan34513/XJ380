@@ -309,7 +309,9 @@ uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
             while (true)
             {
                 if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
-                    front_p->by + front_p->height >= y && front_p->type == MovableSheetType)
+                    front_p->by + front_p->height >= y && ( front_p->type == MovableSheetType || 
+                                                            front_p->type == NoEdgeWindowSheetType || 
+                                                            front_p->type == TopWindowSheetType))
                 {
                     return &front_p->index;
                 }
@@ -343,10 +345,40 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
                         return NULL;
                     }
                 }
+                else if (front_p->type == NoEdgeWindowSheetType) 
+                {
+                    if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
+                        front_p->by + front_p->height >= y)
+                    {
+                        return &front_p->index;
+                    }
+                    else
+                    {
+                        return NULL;
+                    }
+                }
                 else if (front_p->front == NULL) { return NULL; }
                 front_p = front_p->front;
             }
             return NULL;
+        }
+        front_p = front_p->next;
+    }
+}
+
+void change_sheet_type(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t new_type)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id) 
+        { 
+            front_p->type = new_type; 
+            return; 
+        }
+        else if (front_p->next == NULL) 
+        { 
+            return; 
         }
         front_p = front_p->next;
     }
