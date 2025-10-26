@@ -18,6 +18,7 @@
 
 typedef struct 
 {
+    bool  is_shell;
     char *input;
     char *output;
 } xtttp_dtt;

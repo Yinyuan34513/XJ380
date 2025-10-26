@@ -9,6 +9,7 @@
 #include "mm/page.h"
 #include "stdint.h"
 #include "user/user.h"
+#include "user/x3tp.h"
 
 typedef struct registers
 {
@@ -102,6 +103,8 @@ struct process_control_block
     void             *elf_file;    // 可执行文件指针
     size_t            elf_size;    // 可执行文件大小
     uint64_t          load_start;  // 加载起始地址
+
+    xtttp_dtt   xtttp_stc;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);

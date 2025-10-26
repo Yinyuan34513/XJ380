@@ -466,8 +466,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     open_interrupt;
     no_interrupt = false;
 
-    
-
     while (true)
     {
         __asm__ __volatile__("pause");

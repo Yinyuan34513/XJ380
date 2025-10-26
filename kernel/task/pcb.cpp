@@ -307,6 +307,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 
     return tmp_stack;
 }
+
 void switch_to_user_mode()
 {
     close_interrupt;
