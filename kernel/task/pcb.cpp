@@ -488,7 +488,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
 
     write_serial_fmt("path in execve %s\n", path);
-    char      *norm_path = vfs_cwd_path_build(path);
+    char      *norm_path = path;
     vfs_node_t node      = vfs_open(norm_path);
     if (node == NULL) { return (uint64_t)-ENOENT; }
     uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
@@ -522,6 +522,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         size_t old_envc = process->envc;
         process->envp   = copy_envp(envp);
         process->envc   = envp_length(envp);
+    }else{
+        process->envp   = copy_envp(current_user->envp);
+        process->envc   = current_user->envc;
     }
 
     write_serial_fmt(" process name :%s \n", process->name);
@@ -543,16 +546,18 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     vfs_close(node);
 
-    for (uint64_t i = 3; i < 256; i++)
-    {
-        if (!get_current_task()->parent_group->fds[i]) continue;
+    for (uint64_t i = 3; i < 256; i++) {
+        if (!get_current_task()->parent_group->fds[i])
+            continue;
 
-        vfs_close(get_current_task()->parent_group->fds[i]);
-        free(get_current_task()->parent_group->fds[i]);
-        get_current_task()->parent_group->fds[i] = NULL;
+        if (get_current_task()->parent_group->fds[i]->flags & O_CLOEXEC) {
+            vfs_close(get_current_task()->parent_group->fds[i]);
+            free(get_current_task()->parent_group->fds[i]);
+            get_current_task()->parent_group->fds[i] = NULL;
+        }
     }
 
-    free(norm_path);
+    // free(norm_path);
 
     uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     get_current_task()->user_stack     = stack;
@@ -914,6 +919,11 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         pcb->envp = copy_envp(parent->envp == NULL ? current_user->envp : parent->envp);
     }
 
+    for(int i=0;i<256;i++)
+    {
+        pcb->fds[i]=NULL;
+    }
+
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
@@ -940,6 +950,11 @@ void process_setup()
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
     kernel_pcb->child_pcb    = queue_init();
+    for(int i=0;i<256;i++)
+    {
+        kernel_pcb->fds[i]=NULL;
+    }
+
     kernel_pcb->child_index  = 0;
 
     kernel_group = kernel_pcb;

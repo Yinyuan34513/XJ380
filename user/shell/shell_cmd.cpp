@@ -172,15 +172,7 @@ void check_command()
     else if (strncmp("../", input_buf, 3) == 0) { revert_path(current_path); }
     else if (strncmp("edit", cmd, 4) == 0)
     {
-        if (args == NULL || *args == '\0')
-        {
-            print_to_console("edit: 缺少文件名");
-            print_to_console("用法: edit 文件名");
-        }
-        else
-        {
-            text_editor(args);
-        }
+        // xapi_Execve("/system/shell.elf",NULL,NULL);
     }
     else
     {
