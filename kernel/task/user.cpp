@@ -236,7 +236,7 @@ char *getCwd(char* path)
     return result;
 }
 
-void create_user_process_from_file(char *path, pcb_t pcb)
+void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
     char  process_name[50];
     void *entry;
@@ -254,9 +254,6 @@ void create_user_process_from_file(char *path, pcb_t pcb)
     char cmdline[PAGE_SIZE];
     memset(cmdline, 0, sizeof(cmdline));
     char *cmdline_ptr = cmdline;
-    char *argv[50];
-    memset((void*)argv,0,sizeof(argv));
-    argv[0] = "argv0";
 
     for (int i = 0; argv[i]; i++) {
         int len      = sprintf(cmdline_ptr, "%s ", argv[i]);

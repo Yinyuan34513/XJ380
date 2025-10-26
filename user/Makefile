@@ -12,13 +12,13 @@ build_xapi:
 
 init.elf: init.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
+	@$(LD) $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 # 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
 cp537.elf: cp537.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
+	@$(LD) $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
@@ -32,7 +32,7 @@ SHELL_SOURCES := ./shell/shell_main.cpp \
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
 
 shell.elf: $(SHELL_OBJECTS)
-	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") $(SHELL_OBJECTS) -o ../out/$@
+	@$(LD) -z muldefs $(shell find ../out/xapi -name "*.o") $(SHELL_OBJECTS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK shell objects -> ../out/$@"
 
@@ -44,7 +44,7 @@ shell.elf: $(SHELL_OBJECTS)
 
 fmanager.elf: ./fmanager/fmanager.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
+	@$(LD) $(shell find ../out/xapi -name "*.o") ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 

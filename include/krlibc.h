@@ -204,6 +204,9 @@ static inline void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
+void cmd_free(char **argv, int argc);
+int cmd_parse(const char *cmd_str, char **argv, char token);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

@@ -1,8 +1,8 @@
+#include "../xapi/include/krlibc.h"
+#include "../xapi/include/x3api.h"
 #include "convert.h"
 #include "gh_sign.h"
-#include "../xapi/include/krlibc.h"
 #include "st_proto.h"
-#include "../xapi/include/x3api.h"
 
 // 全局变量定义
 int  cur_x  = 0;
@@ -20,9 +20,9 @@ int  p_inbuf = 0;
 char current_path[512];
 
 bool front_line_is_arrow = false;
-bool command_ck_lock = false;
-bool putchar_lock      = false;
-bool paint_cursor_lock = false;
+bool command_ck_lock     = false;
+bool putchar_lock        = false;
+bool paint_cursor_lock   = false;
 
 HDLE handle;
 
@@ -45,7 +45,13 @@ int main(int argc, char *argv[], char *envp[])
 {
     write(1, xcr_hex2char(argc), 0);
     write(1, "\n", 0);
-    write(1, argv[0], 0);
+    for (int i = 0; i < argc; i++)
+    {
+        write(1, argv[i], 0);
+        write(1, "\n", 0);
+    }
+
+    write(1, envp[0], 0);
     write(1, "\n", 0);
 
     XWINDOW Winfo;

@@ -204,45 +204,6 @@ void recycle_process(pcb_t pcb)
         __asm__ volatile("hlt");
 }
 
-int cmd_parse(const char *cmd_str, char **argv, char token)
-{
-    int         argc = 0;
-    const char *next = cmd_str;
-
-    while (*next)
-    {
-        while (*next == token)
-            next++;
-        if (*next == '\0') break;
-        const char *start = next;
-        while (*next && *next != token)
-            next++;
-        size_t len = next - start;
-        argv[argc] = (char *)malloc(len + 1);
-        if (!argv[argc])
-        {
-            for (int i = 0; i < argc; i++)
-                free(argv[i]);
-            return -1;
-        }
-        memcpy(argv[argc], start, len);
-        argv[argc][len] = '\0';
-
-        argc++;
-        if (argc >= 50) break;
-    }
-    argv[argc] = NULL;
-    return argc;
-}
-
-void cmd_free(char **argv, int argc)
-{
-    for (int i = 0; i < argc; i++)
-    {
-        free(argv[i]);
-    }
-}
-
 static uint64_t push_slice(uint64_t ustack, uint8_t *slice, uint64_t len)
 {
     uint64_t tmp_stack  = ustack;
@@ -253,7 +214,7 @@ static uint64_t push_slice(uint64_t ustack, uint8_t *slice, uint64_t len)
 }
 
 static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, uint64_t link_start, uint8_t *link_data,
-                                 size_t link_size)
+                                 size_t link_size, uint64_t* ep)
 {
     uint64_t env_i  = 0;
     int      argv_i = 0;
@@ -280,6 +241,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
         {
             if (envp[env_i] != NULL)
             {
+                // write_serial_fmt("envp[%d]: %s\n",env_i,envp[env_i]);
                 tmp_stack    = push_slice(tmp_stack, (uint8_t *)envp[env_i], strlen(envp[env_i]) + 1);
                 envps[env_i] = tmp_stack;
             }
@@ -328,7 +290,9 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     memset(tmp, 0, 2 * sizeof(uint64_t));
 
     tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
+    
     tmp_stack = push_slice(tmp_stack, (uint8_t *)envps, env_i * sizeof(uint64_t));
+    *ep = tmp_stack;
 
     tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
     tmp_stack = push_slice(tmp_stack, (uint8_t *)argvps, argv_i * sizeof(uint64_t));
@@ -345,19 +309,18 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 }
 void switch_to_user_mode()
 {
-    no_interrupt = true;
     close_interrupt;
-    disable_scheduler();
     
     uint64_t rsp = get_current_task()->user_stack_top;
     
     // 构建用户栈并获取 argc 和 argv
-    rsp = build_user_stack(get_current_task(), rsp, get_current_task()->main, 0, NULL, 0);
+    uint64_t ep;
+    rsp = build_user_stack(get_current_task(), rsp, get_current_task()->main, 0, NULL, 0,&ep);
     
     // 从栈中读取 argc 和 argv
     uint64_t argc = *(uint64_t*)rsp;
     char** argv = (char**)(rsp + 8);
-    char** envp = (char**)(rsp + 8 + (argc + 1) * sizeof(uint64_t));
+    // char** envp = (char**)ep;
     
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func = get_current_task()->main;
@@ -382,12 +345,8 @@ void switch_to_user_mode()
                        "r"((uint64_t)0x1b),
                        "r"(argc),           // %6 -> rdi
                        "r"((uint64_t)argv), // %7 -> rsi  
-                       "r"((uint64_t)envp)  // %8 -> rdx
+                       "r"((uint64_t)ep)  // %8 -> rdx
                      : "memory");
-
-    no_interrupt = false;
-    open_interrupt;
-    enable_scheduler();
 }
 
 void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t rf)
