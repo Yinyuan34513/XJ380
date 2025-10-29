@@ -845,7 +845,7 @@ size_t vwprintf(Writer *writer, const char *fmt, va_list args)
     }
     return result;
 }
-// 简单的字符串格式化辅助函数（用于shell命令）
+
 int simple_snprintf(char *str, size_t size, const char *format, ...)
 {
     if (size == 0) return 0;
@@ -858,7 +858,6 @@ int simple_snprintf(char *str, size_t size, const char *format, ...)
     return result;
 }
 
-// 在 shell.cpp 中添加辅助函数
 void uint64_to_string(uint64_t num, char *buffer, int buffer_size)
 {
     if (buffer_size <= 0) return;

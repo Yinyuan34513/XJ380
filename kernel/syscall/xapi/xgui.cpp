@@ -97,9 +97,18 @@ int do_xapi_GetWindowSize(uint64_t handle, uint64_t w, uint64_t h)
 int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27,
-               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                (uint8_t)((color) & 0xFF)});
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27,
+                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                    (uint8_t)((color) & 0xFF)});
+    }
+    else
+    {
+        draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y,
+                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                    (uint8_t)((color) & 0xFF)});
+    }
 
     return true;
 }
@@ -107,9 +116,18 @@ int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
 int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y2 + 27,
-              {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-               (uint8_t)((color) & 0xFF)});
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y2 + 27,
+                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)});
+    }
+    else
+    {
+        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y2,
+                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)});
+    }
 
     return true;
 }
@@ -117,9 +135,18 @@ int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 int do_xapi_DrawRect_fill(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t color)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y2 + 27,
-              {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-               (uint8_t)((color) & 0xFF)});
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y2 + 27,
+                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)});
+    }
+    else
+    {
+        draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y2,
+                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)});
+    }
 
     return true;
 }
@@ -143,7 +170,9 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
         draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x2 + 12, y1 + 27, x2 + 12, y2 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
-    }else{
+    }
+    else
+    {
         draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y1,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
@@ -178,9 +207,18 @@ int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     char          *TextString   = (char *)(str);
-    draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
-              {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-               (uint8_t)((color) & 0xFF)});
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
+                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)});
+    }
+    else
+    {
+        draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
+                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                   (uint8_t)((color) & 0xFF)});
+    }
     return true;
 }
 
@@ -191,10 +229,20 @@ int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t si
     uint32_t      *input_width  = (uint32_t *)(i_width);
     uint32_t       x            = place & 0xffffffff00000000;
     uint32_t       y            = place & 0x00000000ffffffff;
-    draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
-               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                (uint8_t)((color) & 0xFF)},
-               input_width);
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
+                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                    (uint8_t)((color) & 0xFF)},
+                   input_width);
+    }
+    else
+    {
+        draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
+                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                    (uint8_t)((color) & 0xFF)},
+                   input_width);
+    }
     return true;
 }
 
@@ -202,9 +250,18 @@ int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, ui
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     char          *TextString   = (char *)(str);
-    draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
-                 {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                  (uint8_t)((color) & 0xFF)});
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
+                     {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                      (uint8_t)((color) & 0xFF)});
+    }
+    else
+    {
+        draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
+                     {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                      (uint8_t)((color) & 0xFF)});
+    }
     return true;
 }
 
@@ -215,13 +272,28 @@ void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width,
     SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int               xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int               ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    for (int wy = 0; wy < height; wy++)
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        for (int wx = 0; wx < width; wx++)
+        for (int wy = 0; wy < height; wy++)
         {
-            buf[wy * width + wx].r = src[(wy + y + 27) * xsize + (wx + x + 12)].r;
-            buf[wy * width + wx].g = src[(wy + y + 27) * xsize + (wx + x + 12)].g;
-            buf[wy * width + wx].b = src[(wy + y + 27) * xsize + (wx + x + 12)].b;
+            for (int wx = 0; wx < width; wx++)
+            {
+                buf[wy * width + wx].r = src[(wy + y + 27) * xsize + (wx + x + 12)].r;
+                buf[wy * width + wx].g = src[(wy + y + 27) * xsize + (wx + x + 12)].g;
+                buf[wy * width + wx].b = src[(wy + y + 27) * xsize + (wx + x + 12)].b;
+            }
+        }
+    }
+    else
+    {
+        for (int wy = 0; wy < height; wy++)
+        {
+            for (int wx = 0; wx < width; wx++)
+            {
+                buf[wy * width + wx].r = src[(wy + y) * xsize + (wx + x)].r;
+                buf[wy * width + wx].g = src[(wy + y) * xsize + (wx + x)].g;
+                buf[wy * width + wx].b = src[(wy + y) * xsize + (wx + x)].b;
+            }
         }
     }
 }
@@ -233,14 +305,30 @@ void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int               xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int               ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    for (int wy = 0; wy < height; wy++)
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        for (int wx = 0; wx < width; wx++)
+        for (int wy = 0; wy < height; wy++)
         {
-            src[(wy + y + 27) * xsize + (wx + x + 12)].r = buf[wy * width + wx].r;
-            src[(wy + y + 27) * xsize + (wx + x + 12)].g = buf[wy * width + wx].g;
-            src[(wy + y + 27) * xsize + (wx + x + 12)].b = buf[wy * width + wx].b;
-            src[(wy + y + 27) * xsize + (wx + x + 12)].a = 255;
+            for (int wx = 0; wx < width; wx++)
+            {
+                src[(wy + y + 27) * xsize + (wx + x + 12)].r = buf[wy * width + wx].r;
+                src[(wy + y + 27) * xsize + (wx + x + 12)].g = buf[wy * width + wx].g;
+                src[(wy + y + 27) * xsize + (wx + x + 12)].b = buf[wy * width + wx].b;
+                src[(wy + y + 27) * xsize + (wx + x + 12)].a = 255;
+            }
+        }
+    }
+    else
+    {
+        for (int wy = 0; wy < height; wy++)
+        {
+            for (int wx = 0; wx < width; wx++)
+            {
+                src[(wy + y) * xsize + (wx + x)].r = buf[wy * width + wx].r;
+                src[(wy + y) * xsize + (wx + x)].g = buf[wy * width + wx].g;
+                src[(wy + y) * xsize + (wx + x)].b = buf[wy * width + wx].b;
+                src[(wy + y) * xsize + (wx + x)].a = 255;
+            }
         }
     }
 }
@@ -252,11 +340,24 @@ void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int            xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int            ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    for (int wy = 0; wy < height; wy++)
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        for (int wx = 0; wx < width; wx++)
+        for (int wy = 0; wy < height; wy++)
         {
-            buf[wy * width + wx] = src[(wy + y + 27) * xsize + (wx + x + 12)];
+            for (int wx = 0; wx < width; wx++)
+            {
+                buf[wy * width + wx] = src[(wy + y + 27) * xsize + (wx + x + 12)];
+            }
+        }
+    }
+    else
+    {
+        for (int wy = 0; wy < height; wy++)
+        {
+            for (int wx = 0; wx < width; wx++)
+            {
+                buf[wy * width + wx] = src[(wy + y) * xsize + (wx + x)];
+            }
         }
     }
 }
@@ -268,11 +369,24 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
     SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int            xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
     int            ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    for (int wy = 0; wy < height; wy++)
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        for (int wx = 0; wx < width; wx++)
+        for (int wy = 0; wy < height; wy++)
         {
-            src[(wy + y + 27) * xsize + (wx + x + 12)] = buf[wy * width + wx];
+            for (int wx = 0; wx < width; wx++)
+            {
+                src[(wy + y + 27) * xsize + (wx + x + 12)] = buf[wy * width + wx];
+            }
+        }
+    }
+    else
+    {
+        for (int wy = 0; wy < height; wy++)
+        {
+            for (int wx = 0; wx < width; wx++)
+            {
+                src[(wy + y) * xsize + (wx + x)] = buf[wy * width + wx];
+            }
         }
     }
 }
@@ -302,7 +416,14 @@ void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     char          *filepath     = (char *)(path);
 
-    PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+    }
+    else
+    {
+        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+    }
 }
 
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path)
@@ -310,7 +431,14 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     char          *filepath     = (char *)(path);
 
-    PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+    }
+    else
+    {
+        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+    }
 }
 
 // 你好，这是XAPI1.1的内容，挤牙膏.png

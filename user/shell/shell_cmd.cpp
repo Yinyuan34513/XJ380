@@ -2,6 +2,8 @@
 #include "gh_sign.h"
 #include <stdint.h>
 
+uint64_t rp = 0;
+
 void check_command()
 {
     command_ck_lock = true;
@@ -186,6 +188,14 @@ void check_command()
         print_to_console(info_logo[4]);
         print_to_console(info_logo[5]);
         print_to_console(version_info);
+    }else if(strncmp("RP++", cmd, 4)==0)
+    {
+        print_to_console("Your RP: ");
+        rp++;
+        char buf[1024];
+        uint64_to_string(rp,buf,sizeof(buf));
+        print_to_console(buf);
+        print_to_console_zh(" 祝你2025 CSP J/S 一等奖!\n");
     }
     else
     {
