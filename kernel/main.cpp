@@ -27,6 +27,8 @@
 #include <ttf.h>
 #include <usb/hid.h>
 #include <xhci/xhci-hcd.h>
+#include <hda/hda.h>
+#include <hda/pcspk.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -368,6 +370,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     ahci_init();
     nvme_init();
     usb_init();
+
+    hda_init();
+
+    pcspk_init();
+
+    pcspk_test();
 
     enable_intr();
     keyboard_setup();
