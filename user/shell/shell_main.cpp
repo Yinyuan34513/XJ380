@@ -58,7 +58,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.title  = (char *)"终端";
     Winfo.width  = TML_X;
     Winfo.height = TML_Y;
-    Winfo.sets   = XWIN_FULL_SCR;
+    Winfo.sets   = XWIN_NORMAL;
     xapi_CreateWindow(&handle, &Winfo);
     SetMsgPrcor(handle, shell_MessagePrcor);
 

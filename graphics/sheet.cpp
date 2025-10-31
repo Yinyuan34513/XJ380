@@ -552,7 +552,10 @@ void refresh_sheet(SHEET_INFO *sht)
                         {
                             if (!SheetBuffer[y * front_p->width + x].b)
                             {
-                                goto no_peek1;
+                                if (!SheetBuffer[y * front_p->width + x].b && SheetBuffer[y * front_p->width + x].a != 0)
+                                {
+                                    goto no_peek1;
+                                }
                             }
                         }
                     }
@@ -690,7 +693,10 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
                             {
                                 if (!SheetBuffer[y * front_p->width + x].b)
                                 {
-                                    goto no_peek2;
+                                    if (!SheetBuffer[y * front_p->width + x].b && SheetBuffer[y * front_p->width + x].a != 0)
+                                    {
+                                        goto no_peek2;
+                                    }
                                 }
                             }
                         }
@@ -820,6 +826,17 @@ void *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id)
     while (true)
     {
         if (front_p->index == *sheet_id) { return front_p->buffer; }
+        else if (front_p->next == NULL) { return NULL; }
+        front_p = front_p->next;
+    }
+}
+
+SHEET *found_sheet_byid(SHEET_INFO *sht, uint16_t *sheet_id)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *sheet_id) { return front_p; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }

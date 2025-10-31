@@ -111,7 +111,62 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_DUP: regs->rax = (uint64_t)sys_dup(regs->rdi); break;
     case SYS_DUP2: regs->rax = (uint64_t)sys_dup2(regs->rdi, regs->rsi); break;
 
-    // 添加新的XAPI文件操作调用
+    case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
+    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
+    case SYS_EXECVE:
+        regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
+        break;
+    case SYS_EXIT:
+        thread_exit(regs->rdi);
+        break;
+        // case SYS_EXIT_GROUP:
+        //     regs->rax = (uint64_t)sys_exit(regs->rdi);
+        //     break;
+        // case SYS_GETPID:
+        //     regs->rax = get_current_task()->parent_group->pid;
+        //     break;
+        // case SYS_GETTID:
+        //     regs->rax = get_current_task()->parent_group->pid;
+        //     break;
+        // case SYS_WAIT4:
+        //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
+        //     break;
+        // case SYS_BRK:
+        //     regs->rax = (uint64_t)sys_brk(regs->rdi);
+        //     break;
+        // case SYS_MMAP:
+        //     regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        //     break;
+
+        // case SYS_ARCH_PRCTL:
+        //     regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);
+        //     break;
+        // case SYS_SET_TID_ADDRESS:
+        //     // todo
+        //     regs->rax = get_current_task()->parent_group->pid;
+        //     break;
+        // case SYS_SET_ROBUST_LIST:
+        //     // todo
+        //     regs->rax = 0;
+        //     break;
+        // case SYS_RSEQ:
+        //     // todo
+        //     regs->rax = 0;
+        //     break;
+
+        // case SYS_RT_SIGPROCMASK:
+        //     regs->rax = 0;
+        //     break;
+
+    case XAPI_OUTPUT: break;
+    case XAPI_INPUT: break;
+    case XAPI_GETCH: break;
+    case XAPI_ENDLINE: break;
+    case XAPI_PRINTLINE: break;
+    case XAPI_OPEN_FILE: break;
+    case XAPI_CLOSE_FILE: break;
+    case XAPI_SEARCH_FILE: do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx); break;
+    case XAPI_MAKEDIR: regs->rax = (uint64_t)vfs_mkdir((char *)regs->rdi); break;
     case XAPI_CREATE_FILE: regs->rax = (uint64_t)sys_creat((const char *)regs->rdi, 0644); break;
     case XAPI_DELETE_FILE: regs->rax = (uint64_t)sys_unlink((const char *)regs->rdi); break;
     case XAPI_RENAME_FILE: regs->rax = (uint64_t)sys_rename((const char *)regs->rdi, (const char *)regs->rsi); break;
@@ -168,61 +223,6 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)ret;
         break;
     }
-    case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
-    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
-    case SYS_EXECVE:
-        regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
-        break;
-    case SYS_EXIT:
-        thread_exit(regs->rdi);
-        break;
-        // case SYS_EXIT_GROUP:
-        //     regs->rax = (uint64_t)sys_exit(regs->rdi);
-        //     break;
-        // case SYS_GETPID:
-        //     regs->rax = get_current_task()->parent_group->pid;
-        //     break;
-        // case SYS_GETTID:
-        //     regs->rax = get_current_task()->parent_group->pid;
-        //     break;
-        // case SYS_WAIT4:
-        //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
-        //     break;
-        // case SYS_BRK:
-        //     regs->rax = (uint64_t)sys_brk(regs->rdi);
-        //     break;
-        // case SYS_MMAP:
-        //     regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
-        //     break;
-
-        // case SYS_ARCH_PRCTL:
-        //     regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);
-        //     break;
-        // case SYS_SET_TID_ADDRESS:
-        //     // todo
-        //     regs->rax = get_current_task()->parent_group->pid;
-        //     break;
-        // case SYS_SET_ROBUST_LIST:
-        //     // todo
-        //     regs->rax = 0;
-        //     break;
-        // case SYS_RSEQ:
-        //     // todo
-        //     regs->rax = 0;
-        //     break;
-
-        // case SYS_RT_SIGPROCMASK:
-        //     regs->rax = 0;
-        //     break;
-
-    case XAPI_OUTPUT: break;
-    case XAPI_INPUT: break;
-    case XAPI_GETCH: break;
-    case XAPI_ENDLINE: break;
-    case XAPI_PRINTLINE: break;
-    case XAPI_OPEN_FILE: break;
-    case XAPI_CLOSE_FILE: break;
-    case XAPI_SEARCH_FILE: do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case XAPI_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
@@ -271,12 +271,12 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_GET_VERSION: do_xapi_GetSystemVersion(regs->rdi); break;
     case XAPI_GET_TIME: regs->rax = (uint64_t)do_xapi_GetTime(); break;
     case XAPI_GET_CURRENT_USER: do_xapi_GetCurrentUser(regs->rdi); break;
+
     case SXAH_SYSCALL_RETURN:
         get_current_task()->parent_group->sigprci = false;
         signal_end();
         break;
-
-    case 10086: regs->rax = (uint64_t)vfs_mkdir((char *)regs->rdi); break;
+    case SXAH_MARK_IS_TERMINAL: get_current_task()->parent_group->xtttp_stc.is_shell = true; break;
 
     default:
         regs->rax = (uint64_t)-ENOSYS;
