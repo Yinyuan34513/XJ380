@@ -24,6 +24,9 @@ extern bool paint_cursor_lock;
 #define TML_X 720
 #define TML_Y 405
 
+#define BACKGROUND_COLOR    0xffffffff
+#define TERMINAL_TEXT_COLOR 0x000000ff
+
 void check_command();
 void print_dir();
 
