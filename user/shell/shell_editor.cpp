@@ -156,7 +156,7 @@ void text_editor(char *filename)
         char prompt[32];
         int  current_line = editor_count_lines(editor_buffer) - editor_count_lines(editor_buffer + editor_cursor) + 1;
         snprintf(prompt, sizeof(prompt), "EDIT[%d]:", current_line);
-        xapi_DrawSWText(handle, 8, cur_y, prompt, 0x000000ff);
+        xapi_DrawSWText(handle, 8, cur_y, prompt, TERMINAL_TEXT_COLOR);
 
         p_inbuf = 0;
         while (p_inbuf == 0) {

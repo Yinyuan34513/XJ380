@@ -58,7 +58,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.title  = (char *)"终端";
     Winfo.width  = TML_X;
     Winfo.height = TML_Y;
-    Winfo.sets   = XWIN_FULL_SCR;
+    Winfo.sets   = XWIN_NORMAL;
     xapi_CreateWindow(&handle, &Winfo);
     SetMsgPrcor(handle, shell_MessagePrcor);
 
@@ -66,7 +66,7 @@ int main(int argc, char *argv[], char *envp[])
     *ab_x = 8;
     *ab_y = 4;
     strcpy(current_path, "/");
-    xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, 0xFFFFFFFF, true);
+    xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, BACKGROUND_COLOR, true);
     print_to_console("XINGJI SpaceTerminal for XJ380");
     print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
     paint_arrow_sign(2, 40);

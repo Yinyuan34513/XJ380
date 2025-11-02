@@ -936,9 +936,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         pcb->envp = copy_envp(parent->envp == NULL ? current_user->envp : parent->envp);
     }
 
-    for(int i=0;i<256;i++)
+    for(int i = 0; i < 256; i++)
     {
-        pcb->fds[i]=NULL;
+        pcb->fds[i] = NULL;
     }
 
     pcb->cmdline     = (char *)malloc(strlen(cmdline));

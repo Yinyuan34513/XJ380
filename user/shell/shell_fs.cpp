@@ -10,11 +10,11 @@ void print_dir()
     if (count == 0 || count == 404) return;
     for (int i = 0; i < count; i++)
     {
-        xapi_DrawSWText(handle, *ab_x, *ab_y, fdir[i].filename, 0x000000ff);
-        xapi_DrawSWText(handle, *ab_x + 17 * 9, *ab_y, (char *)(fdir[i].filetype ? "Folder" : "File"), 0x000000ff);
+        xapi_DrawSWText(handle, *ab_x, *ab_y, fdir[i].filename, TERMINAL_TEXT_COLOR);
+        xapi_DrawSWText(handle, *ab_x + 17 * 9, *ab_y, (char *)(fdir[i].filetype ? "Folder" : "File"), TERMINAL_TEXT_COLOR);
         if (fdir[i].filetype == 0)
         {
-            xapi_DrawSWText(handle, *ab_x + 24 * 9, *ab_y, xcr_int2char(fdir[i].length), 0x000000ff);
+            xapi_DrawSWText(handle, *ab_x + 24 * 9, *ab_y, xcr_int2char(fdir[i].length), TERMINAL_TEXT_COLOR);
         }
         newline();
     }
