@@ -157,6 +157,15 @@ void  xapi_DrawPNG(
 	WSTR  	path
 );
 
+void xapi_DrawPicture(
+	HDLE  	handle,
+	UINT32  x,
+	UINT32  y,
+	UINT32	width,
+	UINT32	height,
+	WSTR  	path
+);
+
 // 4-4
 void SetMsgPrcor(HDLE handle, MsgPrcor func);
 #define MSG_CHAR		0
