@@ -1,3 +1,13 @@
+/*
+ *
+ *
+ *      XJ380 图形化应用程序启动框架
+ *      2025/11/5 - GuoqiFish
+ *      Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.
+ * 
+ * 
+ */
+
 #include "./include/xposix.h"
 
 extern int main(int argc, char *argv[], char *envp[]);
