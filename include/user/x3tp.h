@@ -19,6 +19,10 @@
 typedef struct 
 {
     bool  is_shell;
+    bool  input_lock;       // false = waiting input
+    bool  output_lock;      // false = waiting flush
+    bool  wait_for_getch;   // true  = waiting getch
+    char  char_for_getch;
     char *input;
     char *output;
 } xtttp_dtt;

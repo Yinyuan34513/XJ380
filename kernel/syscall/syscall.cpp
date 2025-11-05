@@ -158,11 +158,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     regs->rax = 0;
         //     break;
 
-    case XAPI_OUTPUT: break;
-    case XAPI_INPUT: break;
-    case XAPI_GETCH: break;
-    case XAPI_ENDLINE: break;
-    case XAPI_PRINTLINE: break;
+    case XAPI_OUTPUT: do_xapi_Output((char *)regs->rdi); break;
+    case XAPI_INPUT: do_xapi_Input((char *)regs->rdi); break;
+    case XAPI_GETCH: regs->rax = (uint64_t)do_xapi_Getch(); break;
+    case XAPI_ENDLINE: do_xapi_Endline(); break;
+    case XAPI_PRINTLINE: do_xapi_Printline((char *)regs->rdi); break;
     case XAPI_OPEN_FILE: break;
     case XAPI_CLOSE_FILE: break;
     case XAPI_SEARCH_FILE: do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx); break;
@@ -259,7 +259,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case XAPI_DRAW_BMP: do_xapi_DrawBMP(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_DRAW_PNG: do_xapi_DrawPNG(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
-    case XAPI_DRAW_PICTURE: break;
+    case XAPI_DRAW_PICTURE: do_xapi_DrawPicture(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_SET_MSH_PROCOR: regs->rax = (uint64_t)do_xapi_SetMsgProc(regs->rdi, regs->rsi); break;
     case XAPI_READBUFFER: do_xapi_ReadBuffer(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_WRITEBUFFER: do_xapi_WriteBuffer(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;

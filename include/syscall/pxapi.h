@@ -132,6 +132,11 @@ typedef struct {
 // 当前最大号：426
 
 // Proto (XAPI Edition)
+void do_xapi_Output(char *str);
+void do_xapi_Input(char *str);
+char do_xapi_Getch();
+void do_xapi_Endline();
+void do_xapi_Printline(char *str);
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir);
 int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
 int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);
@@ -158,6 +163,7 @@ uint64_t do_xapi_GetTime();
 void do_xapi_GetCurrentUser(uint64_t dst);
 void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
+void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 
 
 

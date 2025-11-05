@@ -22,6 +22,13 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 {
     tcb_t current = ftask;
 
+    // 看看需不需要getch?
+    if (current->parent_group->xtttp_stc.wait_for_getch && msg_type == MSG_CHAR)
+    {
+        current->parent_group->xtttp_stc.char_for_getch = data2;
+        current->parent_group->xtttp_stc.wait_for_getch = false;
+    }
+
     // 检查是否有注册的信号处理函数
     if (WinMpf != NULL && !current->parent_group->sigprci)
     {
