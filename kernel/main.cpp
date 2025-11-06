@@ -371,12 +371,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     nvme_init();
     usb_init();
 
-    hda_init();
-
-    pcspk_init();
-
-    pcspk_test();
-
     enable_intr();
     keyboard_setup();
     mouse_init();
