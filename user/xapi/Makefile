@@ -1,7 +1,19 @@
-SRC_FILES := $(shell find . \( -name "*.cpp" -o -name "*.S" \))
+SRC_FILES := $(shell find . \( -name "*.cpp" -o -name "*.S" \) |grep -v "start.cpp" |grep -v "constart.cpp")
 OBJ_FILES := $(patsubst ./%, ../../out/xapi/%.o, $(SRC_FILES))
 
+compile_head1:
+	@mkdir -p ../../out/xapi
+	@$(CC) $(CFLAGS) -c start.cpp -o ../../out/xapi/start.cpp.o
+	@echo "SP-CPP start.cpp"
+
+compile_head2:
+	@mkdir -p ../../out/xapi
+	@$(CC) $(CFLAGS) -c constart.cpp -o ../../out/xapi/constart.cpp.o
+	@echo "SP-CPP constart.cpp"
+
 all: $(OBJ_FILES)
+
+build_all_api: all compile_head1 compile_head2
 
 ../../out/xapi/%.S.o: ./%.S
 	@mkdir -p $(@D)

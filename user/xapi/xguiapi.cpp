@@ -127,6 +127,17 @@ void xapi_DrawPNG(
 	enter_syscall(XAPI_DRAW_PNG, handle, x, y, width, height, (UINT64)(path));
 }
 
+void xapi_DrawPicture(
+	HDLE  	handle,
+	UINT32  x,
+	UINT32  y,
+	UINT32	width,
+	UINT32	height,
+	WSTR  	path
+) {
+	enter_syscall(XAPI_DRAW_PICTURE, handle, x, y, width, height, (UINT64)(path));
+}
+
 // 4-4
 void SetMsgPrcor(HDLE handle, MsgPrcor func) {
 	enter_syscall(XAPI_SET_MSH_PROCOR, handle, (UINT64)(func), 0, 0, 0, 0);
