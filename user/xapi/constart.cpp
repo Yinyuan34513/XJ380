@@ -9,6 +9,7 @@
  */
 
 #include "./include/xposix.h"
+#include "./include/libsys.h"
 
 extern int main(int argc, char *argv[], char *envp[]);
 // extern void _init();
@@ -18,6 +19,8 @@ extern int main(int argc, char *argv[], char *envp[]);
 // extern void __init_array_end();
 // extern void __fini_array_start();
 // extern void __fini_array_end();
+
+#define SXAH_INIT_TERMINAL_APP  3801    // 初始化为终端应用程序
 
 extern "C" void xapi_start(int argc, char *argv[], char *envp[])
 {
@@ -40,6 +43,8 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
     //        fn++;
     //    }
     //}
+
+    enter_syscall(SXAH_INIT_TERMINAL_APP, 0, 0, 0, 0, 0, 0);
 
     exit(main(argc, argv, envp));
 }

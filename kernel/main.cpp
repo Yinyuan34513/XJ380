@@ -371,13 +371,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     nvme_init();
     usb_init();
 
-    enable_intr();
-    keyboard_setup();
-    mouse_init();
-
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
-
-    disable_intr();
 
     vfs_init();
     dev_init();
@@ -464,6 +458,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     hid_init();
     init_xhci();
+    keyboard_setup();
+    mouse_init();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
