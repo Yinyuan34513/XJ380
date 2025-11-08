@@ -90,7 +90,7 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 
-    vfs_node_t fds[256];
+    lock_queue       *file_open;   // 文件句柄占用队列
     char   **envp;      // 环境变量指针
     size_t   envc;      // 环境变量数量
 

@@ -1,38 +1,16 @@
 #pragma once
 
-#include "proto.hpp"
-#include <fs/vfs/vfs.h>
-
-#define MAX_PARTITIONS_NUM 128
-
+#define GPT_HEADER_SIGNATURE  "EFI PART"
+#define MAX_PARTITIONS_NUM    128
 #define MBR_MAX_PARTITION_NUM 4
 
-struct MBR_DPTE
-{
-    uint8_t  flags;
-    uint8_t  start_head;
-    uint16_t start_sector : 6,  // 0~5
-        start_cylinder    : 10; // 6~15
-    uint8_t  type;
-    uint8_t  end_head;
-    uint16_t end_sector : 6,  // 0~5
-        end_cylinder    : 10; // 6~15
-    uint32_t start_lba;
-    uint32_t sectors_limit;
-} __attribute__((packed));
+#define PARTITION_TYPE_GPT     0xC12A7328
+#define PARTITION_TYPE_MBR     0xEBD0A0A2
+#define PARTITION_TYPE_UNKNOWN 0xFFFFFFFF
 
-struct MBR_DPT
-{
-    uint8_t         bs_reserved[446];
-    struct MBR_DPTE dpte[4];
-    uint16_t        bs_trail_sig;
-} __attribute__((packed));
+#include "krlibc.h"
 
-#define GPT_MAX_PARTITION_NUM 128
-#define GPT_HEADER_SIGNATURE  "EFI PART"
-
-struct GPT_DPT
-{
+struct GPT_DPT {
     char     signature[8];                // 签名，必须是 "EFI PART"
     uint32_t revision;                    // 修订版本，通常为 0x00010000
     uint32_t header_size;                 // 头部大小，通常为 92 字节
@@ -49,34 +27,49 @@ struct GPT_DPT
     uint32_t partition_entry_array_crc32; // 分区表项的CRC32校验值
 } __attribute__((packed));
 
-struct GPT_DPTE
-{
+struct GPT_DPTE {
     uint8_t  partition_type_guid[16];   // Partition type GUID
     uint8_t  unique_partition_guid[16]; // Unique partition GUID
     uint64_t starting_lba;              // Starting LBA of the partition
     uint64_t ending_lba;                // Ending LBA of the partition
     uint64_t attributes;                // Partition attributes
     uint16_t partition_name[36];        // Partition name (UTF-16LE, null-terminated)
-};
+} __attribute__((packed));
 
-typedef struct partition
-{
-    uint64_t blkdev_id;
-    uint64_t starting_lba;
-    uint64_t ending_lba;
-    enum
-    {
+struct MBR_DPTE {
+    uint8_t  flags;
+    uint8_t  start_head;
+    uint16_t start_sector : 6,  // 0~5
+        start_cylinder    : 10; // 6~15
+    uint8_t  type;
+    uint8_t  end_head;
+    uint16_t end_sector : 6,  // 0~5
+        end_cylinder    : 10; // 6~15
+    uint32_t start_lba;
+    uint32_t sectors_limit;
+} __attribute__((packed));
+
+struct MBR_DPT {
+    uint8_t         bs_reserved[446];
+    struct MBR_DPTE dpte[4];
+    uint16_t        bs_trail_sig;
+} __attribute__((packed));
+
+typedef struct partition {
+    size_t vdisk_id;
+    size_t starting_lba;
+    size_t ending_lba;
+    size_t sector_size;
+    enum {
         MBR = 1,
         GPT,
-        RAW,
+        PRAW,
     } type;
+    bool     is_used;
+    uint16_t partition_name[36];
+    uint8_t  partition_type_guid[16];   // 分区类型 GUID
+    uint8_t  unique_partition_guid[16]; // 分区 GUID
+    uint8_t  disk_guid[16];             // 设备 GUID
 } partition_t;
 
-extern partition_t partitions[MAX_PARTITIONS_NUM];
-extern uint64_t    partition_num;
-
-ssize_t partition_read(void *data, uint64_t offset, void *buf, uint64_t len);
-ssize_t partition_write(void *data, uint64_t offset, const void *buf, uint64_t len);
-
 void partition_init();
-void mount_root();

@@ -3,9 +3,34 @@
 #include <stdint.h>
 #define MAX_WAIT_INDEX 1000000 // 阻塞最大循环数
 
+
+
+
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
 #endif
+
+#define container_of(ptr, type, member)                                                            \
+    ({                                                                                             \
+        uint64_t __mptr = ((uint64_t)(ptr));                                                       \
+        (type *)((char *)__mptr - offsetof(type, member));                                         \
+    })
+
+// 分支预测优化: x 很可能为假
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+// 分支预测优化: x 很可能为真
+#define likely(x) __builtin_expect(!!(x), 1)
+
+typedef typeof(nullptr) nullptr_t;
+#define offsetof(s, m) __builtin_offsetof(s, m)
+#define cpu_hlt loop __asm__("hlt")
+typedef int errno_t;
+
+#define UNUSED(...)                                                                                \
+    do {                                                                                           \
+        (void)(0, ##__VA_ARGS__);                                                                  \
+    } while (0)
 #define waitif(cond)                                                                                                   \
     ((void)({                                                                                                          \
         while (cond) {}                                                                                                \

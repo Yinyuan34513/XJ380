@@ -525,7 +525,70 @@ int sprintf(char *buf, const char *fmt, ...)
     va_end(args);
     return (int)result; // Why use int??
 }
+/**
+ * 安全版本的 sprintf，限制输出字符数防止缓冲区溢出
+ * 
+ * @param buf 输出缓冲区
+ * @param size 缓冲区大小
+ * @param fmt 格式字符串
+ * @param ... 可变参数
+ * @return 实际应该写入的字符数（不包括终止空字符）
+ */
+// 使用安全的缓冲区写入器
+typedef struct SafeBufWriterData
+{
+    size_t idx;       // 当前写入位置
+    char  *buf;       // 输出缓冲区
+    size_t size;      // 缓冲区总大小
+    bool   truncated; // 是否发生了截断
+} SafeBufWriterData;
+uint8_t safe_buf_writer_handler(Writer *writer, char ch)
+{
+    SafeBufWriterData *data = (SafeBufWriterData *)writer->data;
 
+    // 检查是否还有空间（为终止空字符保留一个位置）
+    if (data->idx < data->size - 1)
+    {
+        data->buf[data->idx] = ch;
+        ++(data->idx);
+        data->buf[data->idx] = '\0'; // 始终保持以空字符结尾
+    }
+    else
+    {
+        // 缓冲区已满，标记截断但不再写入
+        data->truncated = true;
+    }
+    return 0;
+}
+int snprintf(char *buf, size_t size, const char *fmt, ...)
+{
+    if (size == 0)
+    {
+        return 0; // 缓冲区大小为0，直接返回
+    }
+
+    va_list args;
+    va_start(args, fmt);
+
+    SafeBufWriterData data = {.idx = 0, .buf = buf, .size = size, .truncated = false};
+
+    Writer SafeBufWriter = {
+        .data    = &data,
+        .handler = safe_buf_writer_handler,
+    };
+
+    // 确保缓冲区初始为空字符串
+    if (size > 0) { buf[0] = '\0'; }
+
+    // 执行格式化输出
+    size_t result = vwprintf(&SafeBufWriter, fmt, args);
+
+    va_end(args);
+
+    // 如果发生了截断，返回应该写入的字符数（不包括终止空字符）
+    // 否则返回实际写入的字符数（不包括终止空字符）
+    return (int)(data.truncated ? result : data.idx);
+}
 /**
  * Needn't heap now!!!
  */

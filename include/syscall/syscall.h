@@ -80,6 +80,19 @@
 
 #define SYS_RSEQ 334
 
+typedef struct {
+    vfs_node_t node;
+    size_t     offset;
+    size_t     fd;
+    uint64_t   flags;
+} fd_file_handle;
+
+#define FD_SETSIZE           1024
+
+typedef struct {
+    unsigned long fds_bits[FD_SETSIZE / 8 / sizeof(long)];
+} fd_set;
+
 /*
 // Proto (POSIX Edition)
 int sys_read(uint32_t fd, uint8_t *buf, size_t count);

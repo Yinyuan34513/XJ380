@@ -26,7 +26,7 @@ extern uint16_t   *msid;
  *  driver/serial/
  * 
  */
-
+int snprintf(char *buf, size_t size, const char *fmt, ...);
 // driver/serial/serial_port.cpp
 int    init_serial();
 void   write_serial(char a);

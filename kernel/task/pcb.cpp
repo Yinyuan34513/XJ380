@@ -8,6 +8,7 @@
 #include <elf.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
+#include <syscall/syscall.h>
 
 #define SA_RPL3 3
 
@@ -384,69 +385,7 @@ void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t 
                      : "memory");
 }
 
-char *normalize_path(const char *path)
-{
-    if (!path) return NULL;
 
-    size_t len    = strlen(path);
-    char  *result = (char *)malloc(len + 1);
-    if (!result) return NULL;
-
-    char *dup = strdup(path);
-    if (!dup)
-    {
-        free(result);
-        return NULL;
-    }
-
-    strcpy(result, "/");
-    if (strcmp(path, "/") == 0)
-    {
-        free(dup);
-        return result;
-    }
-
-    char *start = dup;
-    if (*start == '/') start++;
-
-    char *token = strtok(start, "/");
-    while (token)
-    {
-        if (strcmp(token, ".") == 0) {}
-        else if (strcmp(token, "..") == 0)
-        {
-            char *last_slash = strrchr(result, '/');
-            if (last_slash != result)
-                *last_slash = '\0';
-            else
-                result[1] = '\0';
-        }
-        else
-        {
-            if (result[strlen(result) - 1] != '/') strcat(result, "/");
-            strcat(result, token);
-        }
-
-        token = strtok(NULL, "/");
-    }
-
-    free(dup);
-    return result;
-}
-
-char *vfs_cwd_path_build(char *src)
-{
-    char *s = src;
-    char *path;
-    if (s[0] == '/') { path = strdup(s); }
-    else
-    {
-        path = pathacat(get_current_task()->cwd->name, s);
-    }
-    char *normalized_path = normalize_path(path);
-    free(path);
-    return normalized_path;
-}
 
 size_t envp_length(char **envp)
 {
@@ -553,15 +492,11 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     vfs_close(node);
 
-    for (uint64_t i = 3; i < 256; i++) {
-        if (!get_current_task()->parent_group->fds[i])
-            continue;
-
-        if (get_current_task()->parent_group->fds[i]->flags & O_CLOEXEC) {
-            vfs_close(get_current_task()->parent_group->fds[i]);
-            free(get_current_task()->parent_group->fds[i]);
-            get_current_task()->parent_group->fds[i] = NULL;
-        }
+    spin_lock(process->file_open->lock);
+    queue_foreach(process->file_open, node) {
+        fd_file_handle *file_node = (fd_file_handle *)node->data;
+        vfs_close(file_node->node);
+        free(file_node);
     }
 
     // free(norm_path);
@@ -936,10 +871,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         pcb->envp = copy_envp(parent->envp == NULL ? current_user->envp : parent->envp);
     }
 
-    for(int i = 0; i < 256; i++)
-    {
-        pcb->fds[i] = NULL;
-    }
+    pcb->file_open = queue_init();
 
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
@@ -967,10 +899,7 @@ void process_setup()
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
     kernel_pcb->child_pcb    = queue_init();
-    for(int i=0;i<256;i++)
-    {
-        kernel_pcb->fds[i]=NULL;
-    }
+    kernel_pcb->file_open = queue_init();
 
     kernel_pcb->child_index  = 0;
 
