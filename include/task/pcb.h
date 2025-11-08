@@ -177,3 +177,4 @@ void addque_killer(pcb_t group);
 void init_killer();
 
 typedef void (*elf_start)(int, char **, char **);
+pcb_t found_pcb(int pid);

@@ -24,7 +24,7 @@ extern "C" {
 
 typedef typeof(nullptr) nullptr_t;
 #define offsetof(s, m) __builtin_offsetof(s, m)
-#define cpu_hlt loop __asm__("hlt")
+#define cpu_hlt while(1) __asm__("hlt")
 typedef int errno_t;
 
 #define UNUSED(...)                                                                                \

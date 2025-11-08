@@ -14,6 +14,7 @@
 #include "task/pcb.h"
 #include <cpu/lock.h>
 // #include "pipefs.h"
+#include <syscall/syscall.h>
 
 vfs_node_t rootdir = NULL;
 
@@ -376,26 +377,26 @@ void vfs_deinit() {
     // 目前并不支持
 }
 
-// fd_file_handle *fd_dup(fd_file_handle *src) {
-//     fd_file_handle *new = (fd_file_handle *)malloc(sizeof(fd_file_handle));
-//     not_null_assets(new, "fd_dup out of memory.");
-//     src->node->refcount++;
-//     new->node       = src->node;
-//     new->offset     = src->offset;
-//     new->flags      = src->flags;
-//     new->fd         = src->fd;
-//     vfs_node_t node = new->node;
-//     if (node->type == file_pipe) {
-//         pipe_specific_t *spec = node->handle;
-//         pipe_info_t     *pipe = spec->info;
-//         if (spec->write) {
-//             pipe->write_fds++;
-//         } else {
-//             pipe->read_fds++;
-//         }
-//     }
-//     return new;
-// }
+fd_file_handle *fd_dup(fd_file_handle *src) {
+    fd_file_handle *nw = (fd_file_handle *)malloc(sizeof(fd_file_handle));
+    // not_null_assets(new, "fd_dup out of memory.");
+    src->node->refcount++;
+    nw->node       = src->node;
+    nw->offset     = src->offset;
+    nw->flags      = src->flags;
+    nw->fd         = src->fd;
+    vfs_node_t node = nw->node;
+    // if (node->type == file_pipe) {
+    //     pipe_specific_t *spec = node->handle;
+    //     pipe_info_t     *pipe = spec->info;
+    //     if (spec->write) {
+    //         pipe->write_fds++;
+    //     } else {
+    //         pipe->read_fds++;
+    //     }
+    // }
+    return nw;
+}
 
 vfs_node_t get_rootdir() {
     return rootdir;

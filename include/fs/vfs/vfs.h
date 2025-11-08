@@ -1,6 +1,6 @@
 #pragma once
 
-
+char *normalize_path(const char *path);
 #define VFS_STATUS_FAILED  (-1)
 #define VFS_STATUS_SUCCESS 0
 
