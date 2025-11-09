@@ -36,8 +36,8 @@ void check_command()
     else if (strncmp("dir", cmd, 3) == 0 || strncmp("ls", cmd, 2) == 0) { print_dir(); }
     else if (strncmp("fork", cmd, 4) == 0)
     {
-        uint64_t pid = xapi_Fork();
-        if (pid == 0) { xapi_Execve("/system/shell.elf", NULL, NULL); }
+        // uint64_t pid = xapi_Fork();
+        xapi_Execve("/system/shell.elf", NULL, NULL);
     }
     else if (strncmp("mkdir", cmd, 5) == 0)
     {

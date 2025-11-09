@@ -195,6 +195,16 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     group->load_start = mapping_space->load_start;
     group->elf_file = buf;
     group->elf_size = file_size;
+    // VMA
+    vma_t *ld_so_vma = vma_alloc();
+
+    ld_so_vma->vm_start  = mapping_space->load_start;
+    ld_so_vma->vm_end    = mapping_space->load_end;
+    ld_so_vma->vm_flags |= VMA_READ | VMA_WRITE | VMA_EXEC;
+
+    ld_so_vma->vm_type = VMA_TYPE_ANON;
+    ld_so_vma->vm_name = strdup(group->name);
+    vma_insert(&group->vma_manager, ld_so_vma);
 
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
@@ -261,8 +271,9 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 
     char *old_cmdline = group->cmdline;
     group->cmdline  = strdup(cmdline);
-
-    create_user_thread(entry, NULL, 1, process_name, group, getCwd(path));
+    write_serial_fmt("CWD: %s\n",getCwd(path));
+    char *cwd = getCwd(path);
+    create_user_thread(entry, NULL, 1, process_name, group, strdup(cwd));
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

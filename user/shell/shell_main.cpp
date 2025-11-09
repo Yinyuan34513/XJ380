@@ -43,16 +43,16 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    write(1, xcr_hex2char(argc), 0);
-    write(1, "\n", 0);
-    for (int i = 0; i < argc; i++)
-    {
-        write(1, argv[i], 0);
-        write(1, "\n", 0);
-    }
+    // write(1, xcr_hex2char(argc), 0);
+    // write(1, "\n", 0);
+    // for (int i = 0; i < argc; i++)
+    // {
+    //     write(1, argv[i], 0);
+    //     write(1, "\n", 0);
+    // }
 
-    write(1, envp[0], 0);
-    write(1, "\n", 0);
+    // write(1, envp[0], 0);
+    // write(1, "\n", 0);
 
     XWINDOW Winfo;
     Winfo.title  = (char *)"终端";

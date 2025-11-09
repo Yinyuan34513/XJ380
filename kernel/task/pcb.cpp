@@ -436,7 +436,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
 
     write_serial_fmt("path in execve %s\n", path);
-    char      *norm_path = vfs_cwd_path_build(path);
+    char      *norm_path = path;
     vfs_node_t node      = vfs_open(norm_path);
     if (node == NULL) { return (uint64_t)-ENOENT; }
     uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
@@ -480,7 +480,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     write_serial_fmt(" process name :%s \n", process->name);
 
     page_directory_t *old_page_dir = process->pagedir;
-    switch_process_page_directory(clone_page_directory(get_kernel_pagedir(), false));
+    switch_process_page_directory(clone_page_directory(get_current_directory(), false));
 
     uint8_t *pcb_buffer = (uint8_t *)malloc(node->size);
     vfs_read(node, pcb_buffer, 0, node->size);
@@ -526,7 +526,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     queue_destroy(process->ipc_queue);
     process->ipc_queue = queue_init();
 
-    free(norm_path);
+    // free(norm_path);
 
     uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     get_current_task()->user_stack     = stack;
@@ -586,6 +586,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->child_index  = queue_enqueue(current_pcb->child_pcb, new_pcb);
     new_pcb->virt_queue  = queue_copy(current_pcb->virt_queue, virt_copy);
     new_pcb->file_open   = queue_copy(current_pcb->file_open, file_copy);
+    new_pcb->ipc_queue = queue_init();
 
 
     tcb_t parent_task = get_current_task();
@@ -601,7 +602,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->kernel_stack   = ((uint64_t)new_task) + KERNEL_STACK_SIZE;
     new_task->main           = parent_task->main;
     new_task->cwd            = parent_task->cwd;
-    new_task->cwd->refcount ++;
     new_task->user_info      = parent_task->user_info;
     strcpy(new_task->name, parent_task->name);
     new_task->winnum         = 0;
@@ -646,9 +646,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         open_interrupt;
     }
 
+    write_serial_fmt("PID: %d\n",new_pcb->pid);
     if (!is_vfork) return new_pcb->pid;
 
-    if (!is_vfork) return new_pcb->pid;
     while (true) {
         ipc_message_t msg = ipc_recv_wait2(IPC_MSG_TYPE_EXEC, IPC_MSG_TYPE_EPID);
         if (msg->pid == new_pcb->pid) {
@@ -782,7 +782,9 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->kernel_stack    = (uint64_t)stack_top;
     new_task->syscall_stack   = (uint64_t)aligned_alloc(PAGE_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
 
+    
     new_task->cwd     = vfs_open(cwd);
+    write_serial_fmt("CWD %s\n",new_task->cwd->name);
     new_task->str_cwd = cwd;
 
     new_task->winnum         = 0;
