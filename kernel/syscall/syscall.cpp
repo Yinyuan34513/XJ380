@@ -9,6 +9,9 @@
 #include <cpu/fsgsbase.h>
 #include "../build_settings.h"
 #include <rtc.h>
+#include <task/poll.h>
+#include <mm/vma.h>
+#include <mm/lazyalloc.h>
 
 // MSR寄存器地址定义
 #define MSR_EFER         0xC0000080 // EFER MSR寄存器
@@ -379,131 +382,131 @@ sys_(readv, int fd, struct iovec *iov, int iovcnt0)
     return status;
 }
 
-// sys_(munmap, uint64_t addr, size_t size) {
-//     if (size == 0) return SYSCALL_SUCCESS;
+sys_(munmap, uint64_t addr, size_t size) {
+    if (size == 0) return SYSCALL_SUCCESS;
 
-//     addr = addr & (~(PAGE_SIZE - 1));
-//     size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    addr = addr & (~(PAGE_SIZE - 1));
+    size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-//     if (check_user_overflow(addr, size)) { return -EFAULT; }
+    if (check_user_overflow(addr, size)) { return -EFAULT; }
 
-//     vma_manager_t *mgr  = &get_current_task()->parent_group->vma_manager;
-//     vma_t         *vma  = mgr->vma_list;
-//     vma_t         *next = NULL;
+    vma_manager_t *mgr  = &get_current_task()->parent_group->vma_manager;
+    vma_t         *vma  = mgr->vma_list;
+    vma_t         *next = NULL;
 
-//     uint64_t start = addr;
-//     uint64_t end   = addr + size;
+    uint64_t start = addr;
+    uint64_t end   = addr + size;
 
-//     while (vma) {
-//         next = vma->vm_next;
+    while (vma) {
+        next = vma->vm_next;
 
-//         // 完全包含在要取消映射的范围内
-//         if (vma->vm_start >= start && vma->vm_end <= end) {
-//             vma_remove(mgr, vma);
-//             vma_free(vma);
-//         }
-//         // 部分重叠 - 需要分割
-//         else if (!(vma->vm_end <= start || vma->vm_start >= end)) {
-//             if (vma->vm_start < start && vma->vm_end > end) {
-//                 // VMA跨越整个取消映射范围 - 分割成两部分
-//                 vma_split(vma, end);
-//                 vma_split(vma, start);
-//                 // 移除中间部分
-//                 vma_t *middle = vma->vm_next;
-//                 vma_remove(mgr, middle);
-//                 vma_free(middle);
-//             } else if (vma->vm_start < start) {
-//                 // 截断VMA的末尾
-//                 vma->vm_end = start;
-//             } else if (vma->vm_end > end) {
-//                 // 截断VMA的开头
-//                 vma->vm_start = end;
-//                 if (vma->vm_type == VMA_TYPE_FILE) { vma->vm_offset += end - vma->vm_start; }
-//             }
-//         }
+        // 完全包含在要取消映射的范围内
+        if (vma->vm_start >= start && vma->vm_end <= end) {
+            vma_remove(mgr, vma);
+            vma_free(vma);
+        }
+        // 部分重叠 - 需要分割
+        else if (!(vma->vm_end <= start || vma->vm_start >= end)) {
+            if (vma->vm_start < start && vma->vm_end > end) {
+                // VMA跨越整个取消映射范围 - 分割成两部分
+                vma_split(vma, end);
+                vma_split(vma, start);
+                // 移除中间部分
+                vma_t *middle = vma->vm_next;
+                vma_remove(mgr, middle);
+                vma_free(middle);
+            } else if (vma->vm_start < start) {
+                // 截断VMA的末尾
+                vma->vm_end = start;
+            } else if (vma->vm_end > end) {
+                // 截断VMA的开头
+                vma->vm_start = end;
+                if (vma->vm_type == VMA_TYPE_FILE) { vma->vm_offset += end - vma->vm_start; }
+            }
+        }
 
-//         vma = next;
-//     }
+        vma = next;
+    }
 
-//     unmap_virtual_page(get_current_task()->parent_group, addr, size);
-//     unmap_page_range(get_current_directory(), addr, size);
-//     return SYSCALL_SUCCESS;
-// }
+    unmap_virtual_page(get_current_task()->parent_group, addr, size);
+    unmap_page_range(get_current_directory(), addr, size);
+    return SYSCALL_SUCCESS;
+}
 
-// sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t flags,
-//          uint64_t new_addr) {
-//     old_addr = old_addr & (~(PAGE_SIZE - 1));
-//     new_addr = new_addr & (~(PAGE_SIZE - 1));
-//     old_size = (old_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-//     new_size = (new_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t flags,
+         uint64_t new_addr) {
+    old_addr = old_addr & (~(PAGE_SIZE - 1));
+    new_addr = new_addr & (~(PAGE_SIZE - 1));
+    old_size = (old_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    new_size = (new_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-//     vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
+    vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
 
-//     vma_t *vma = vma_find(mgr, (unsigned long)old_addr);
-//     if (!vma || vma->vm_start != (unsigned long)old_addr) { return SYSCALL_FAULT_(EINVAL); }
+    vma_t *vma = vma_find(mgr, (unsigned long)old_addr);
+    if (!vma || vma->vm_start != (unsigned long)old_addr) { return SYSCALL_FAULT_(EINVAL); }
 
-//     uint64_t old_addr_phys = page_virt_to_phys(old_addr);
+    uint64_t old_addr_phys = page_virt_to_phys(old_addr);
 
-//     // 如果新大小更小，直接截断
-//     if (new_size <= vma->vm_end - vma->vm_start) {
-//         unmap_page_range(get_current_directory(), vma->vm_end,
-//                          vma->vm_start + new_size - vma->vm_end);
-//         vma->vm_end = vma->vm_start + new_size;
-//         return old_addr;
-//     }
+    // 如果新大小更小，直接截断
+    if (new_size <= vma->vm_end - vma->vm_start) {
+        unmap_page_range(get_current_directory(), vma->vm_end,
+                         vma->vm_start + new_size - vma->vm_end);
+        vma->vm_end = vma->vm_start + new_size;
+        return old_addr;
+    }
 
-//     // 如果需要扩大，检查是否有足够空间
-//     uint64_t new_end = vma->vm_start + new_size;
-//     if (!vma_find_intersection(mgr, vma->vm_end, new_end)) {
-//         uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
+    // 如果需要扩大，检查是否有足够空间
+    uint64_t new_end = vma->vm_start + new_size;
+    if (!vma_find_intersection(mgr, vma->vm_end, new_end)) {
+        uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
 
-//         if (vma->vm_flags & VMA_READ) pt_flags |= PTE_PRESENT;
-//         if (vma->vm_flags & VMA_WRITE) pt_flags |= PTE_WRITEABLE;
-//         if (!(vma->vm_flags & VMA_EXEC)) pt_flags |= PTE_NO_EXECUTE;
+        if (vma->vm_flags & VMA_READ) pt_flags |= PTE_PRESENT;
+        if (vma->vm_flags & VMA_WRITE) pt_flags |= PTE_WRITEABLE;
+        if (!(vma->vm_flags & VMA_EXEC)) pt_flags |= PTE_NO_EXECUTE;
 
-//         page_map_range(get_current_directory(), vma->vm_end,
-//                        old_addr_phys + vma->vm_end - vma->vm_start, new_end - vma->vm_end,
-//                        vma->vm_flags);
+        page_map_range(get_current_directory(), vma->vm_end,
+                       old_addr_phys + vma->vm_end - vma->vm_start, new_end - vma->vm_end,
+                       vma->vm_flags);
 
-//         vma->vm_end = new_end;
-//         return old_addr;
-//     }
+        vma->vm_end = new_end;
+        return old_addr;
+    }
 
-//     if (flags & MREMAP_MAYMOVE) {
-//         // 简单的地址分配策略：从高地址开始
-//         uint64_t start_addr = USER_MMAP_START;
-//         while (vma_find_intersection(mgr, start_addr, start_addr + new_size)) {
-//             start_addr += PAGE_SIZE;
-//             if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
-//         }
+    if (flags & MREMAP_MAYMOVE) {
+        // 简单的地址分配策略：从高地址开始
+        uint64_t start_addr = USER_MMAP_START;
+        while (vma_find_intersection(mgr, start_addr, start_addr + new_size)) {
+            start_addr += PAGE_SIZE;
+            if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
+        }
 
-//         vma_t *new_vma = vma_alloc();
-//         if (!new_vma) return SYSCALL_FAULT_(ENOMEM);
+        vma_t *new_vma = vma_alloc();
+        if (!new_vma) return SYSCALL_FAULT_(ENOMEM);
 
-//         memcpy(new_vma, vma, sizeof(vma_t));
-//         new_vma->vm_start = start_addr;
-//         new_vma->vm_end   = start_addr + new_size;
-//         new_vma->vm_flags = 0;
+        memcpy(new_vma, vma, sizeof(vma_t));
+        new_vma->vm_start = start_addr;
+        new_vma->vm_end   = start_addr + new_size;
+        new_vma->vm_flags = 0;
 
-//         if (vma_insert(mgr, new_vma) != 0) {
-//             vma_free(new_vma);
-//             return SYSCALL_FAULT_(ENOMEM);
-//         }
+        if (vma_insert(mgr, new_vma) != 0) {
+            vma_free(new_vma);
+            return SYSCALL_FAULT_(ENOMEM);
+        }
 
-//         uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
+        uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
 
-//         if (new_vma->vm_flags & VMA_READ) pt_flags |= PTE_PRESENT;
-//         if (new_vma->vm_flags & VMA_WRITE) pt_flags |= PTE_WRITEABLE;
-//         if (!(new_vma->vm_flags & VMA_EXEC)) pt_flags |= PTE_NO_EXECUTE;
+        if (new_vma->vm_flags & VMA_READ) pt_flags |= PTE_PRESENT;
+        if (new_vma->vm_flags & VMA_WRITE) pt_flags |= PTE_WRITEABLE;
+        if (!(new_vma->vm_flags & VMA_EXEC)) pt_flags |= PTE_NO_EXECUTE;
 
-//         page_map_range(get_current_directory(), start_addr, old_addr_phys, new_size, pt_flags);
+        page_map_range(get_current_directory(), start_addr, old_addr_phys, new_size, pt_flags);
 
-//         syscall_munmap(old_addr, old_size, 0, 0, 0, 0, regs);
-//         return start_addr;
-//     }
+        sys_munmap(old_addr, old_size, 0, 0, 0, 0, regs);
+        return start_addr;
+    }
 
-//     return (uint64_t)-ENOMEM;
-// }
+    return (uint64_t)-ENOMEM;
+}
 
 sys_(getcwd, char *buffer, size_t length)
 {
@@ -565,55 +568,55 @@ sys_(chdir, char *s)
 //     cpu_hlt;
 // }
 
-// sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
-// {
-//     int      ready      = 0;
-//     uint64_t start_time = nanoTime();
-//     bool     sigexit    = false;
+sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
+{
+    int      ready      = 0;
+    uint64_t start_time = nanoTime();
+    bool     sigexit    = false;
 
-//     extern vfs_callback_t fs_callbacks[256];
+    extern vfs_callback_t fs_callbacks[256];
 
-//     do
-//     {
-//         // 检查每个文件描述符
-//         size_t i = 0;
-//         queue_foreach(get_current_task()->parent_group->file_open, node0)
-//         {
-//             if (i >= nfds) break;
-//             fd_file_handle *handle = (fd_file_handle *)node0->data;
-//             vfs_node_t      node   = handle->node;
-//             if (fs_callbacks[node->fsid]->poll == (void *)empty)
-//             {
-//                 if (fds_user[i].events & POLLIN || fds_user[i].events & POLLOUT)
-//                 {
-//                     fds_user[i].revents = fds_user[i].events & POLLIN ? POLLIN : POLLOUT;
-//                     ready++;
-//                 }
-//                 i++;
-//                 continue;
-//             }
-//             int revents = (int)epoll_to_poll_comp(vfs_poll(node, poll_to_epoll_comp(fds_user[i].events)));
-//             if (revents > 0)
-//             {
-//                 fds_user[i].revents = (short)revents;
-//                 ready++;
-//             }
-//             i++;
-//         }
+    do
+    {
+        // 检查每个文件描述符
+        size_t i = 0;
+        queue_foreach(get_current_task()->parent_group->file_open, node0)
+        {
+            if (i >= nfds) break;
+            fd_file_handle *handle = (fd_file_handle *)node0->data;
+            vfs_node_t      node   = handle->node;
+            if (fs_callbacks[node->fsid]->poll == (void *)empty)
+            {
+                if (fds_user[i].events & POLLIN || fds_user[i].events & POLLOUT)
+                {
+                    fds_user[i].revents = fds_user[i].events & POLLIN ? POLLIN : POLLOUT;
+                    ready++;
+                }
+                i++;
+                continue;
+            }
+            int revents = (int)epoll_to_poll_comp(vfs_poll(node, poll_to_epoll_comp(fds_user[i].events)));
+            if (revents > 0)
+            {
+                fds_user[i].revents = (short)revents;
+                ready++;
+            }
+            i++;
+        }
 
-//         // sigexit = signals_pending_quick(current_task);
+        // sigexit = signals_pending_quick(current_task);
 
-//         if (ready > 0 || sigexit) break;
+        if (ready > 0 || sigexit) break;
 
-//         open_interrupt;
-//         __asm__("pause");
-//     } while (timeout != 0 && ((int)timeout == -1 || (nano_time() - start_time) < timeout));
+        open_interrupt;
+        __asm__("pause");
+    } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout));
 
-//     close_interrupt;
+    close_interrupt;
 
-//     if (!ready && sigexit) return (size_t)-EINTR;
-//     return ready;
-// }
+    if (!ready && sigexit) return (size_t)-EINTR;
+    return ready;
+}
 
 // sys_(set_tid_address, int *tidptr)
 // {

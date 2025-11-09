@@ -3,9 +3,6 @@
 #include <stdint.h>
 #define MAX_WAIT_INDEX 1000000 // 阻塞最大循环数
 
-
-
-
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
 #endif
@@ -24,8 +21,15 @@ extern "C" {
 
 typedef typeof(nullptr) nullptr_t;
 #define offsetof(s, m) __builtin_offsetof(s, m)
+
 #define cpu_hlt while(1) __asm__("hlt")
+
 typedef int errno_t;
+
+#define KERNEL_AREA_MEM        0xf000000000000000       // 内核地址空间起始
+static inline bool check_user_overflow(uint64_t addr, uint64_t size) {
+    return (addr + size) > KERNEL_AREA_MEM;
+}
 
 #define UNUSED(...)                                                                                \
     do {                                                                                           \
