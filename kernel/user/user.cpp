@@ -6,9 +6,8 @@
 #include <errno.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
-#include <fs/fs_syscall.h>
 #include <fs/partition.h>
-#include <fs/vfs/dev.h>
+#include <fs/vfs/devfs.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -42,8 +41,8 @@ void init_user()
     current_user->user_type = XUT_Root;
     current_user->envc = 2;
     current_user->envp = current_user_envp;
-    sys_mkdir("/Users", NULL);
-    sys_mkdir(strcat("/Users/", current_user->name), NULL);
+    vfs_mkdir("/Users");
+    vfs_mkdir(strcat("/Users/", current_user->name));
 }
 
 void copy_args(char *dst[], char *src[], int n)

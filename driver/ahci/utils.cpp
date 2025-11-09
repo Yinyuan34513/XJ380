@@ -1,5 +1,4 @@
 #include "ahci/ahci.h"
-#include "ahci/sata.h"
 #include "proto.hpp"
 
 int ahci_try_send(struct hba_port *port, int slot)

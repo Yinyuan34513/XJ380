@@ -705,6 +705,6 @@ bool vfs_init() {
     llist_init_head(&fs_metadata_list);
     rootdir       = vfs_node_alloc(NULL, "/");
     rootdir->type = file_dir;
-    write_serial_fmt("Virtual File System initialize.");
+    write_serial_fmt("Virtual File System initialize.\n");
     return true;
 }

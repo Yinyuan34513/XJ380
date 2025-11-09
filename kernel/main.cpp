@@ -6,9 +6,8 @@
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
-#include <fs/fs_syscall.h>
 #include <fs/partition.h>
-#include <fs/vfs/dev.h>
+#include <fs/vfs/devfs.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -29,6 +28,7 @@
 #include <xhci/xhci-hcd.h>
 #include <hda/hda.h>
 #include <hda/pcspk.h>
+#include <device.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -365,10 +365,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     serial_wprintf("Output by Serial Writer!!\n");
 
+    device_manager_init();
+    vfs_init();
+    fatfs_init();
+    devfs_setup();
+
     pci_setup(BootConfig.MCFG);
     pci_init();
-    ahci_init();
-    nvme_init();
+    ahci_setup();
+    // nvme_init();
     usb_init();
 
     enable_intr();
@@ -378,13 +383,21 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     disable_intr();
-
-    vfs_init();
-    dev_init();
+    
     partition_init();
-    sysfs_init();
-    fs_syscall_init();
-    fatfs_init();
+
+    vfs_node_t dev = vfs_open("/dev");
+    vfs_node_t c   = NULL;
+    bool       win = false;
+    list_foreach(dev->child, i) {
+        c = (vfs_node_t)i->data;
+        char buf[20];
+        sprintf(buf, "/dev/%s", c->name);
+        if (vfs_mount(buf, vfs_open("/")) != -1) {
+            win = true;
+            break;
+        }
+    }
 
     process_setup();
 
@@ -422,7 +435,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // write_serial_hex(phys);
     // write_serial_string("\n");、
 
-    mount_root();
 
     init_syscall();
     init_signal();

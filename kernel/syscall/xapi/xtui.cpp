@@ -4,9 +4,8 @@
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
-#include <fs/fs_syscall.h>
 #include <fs/partition.h>
-#include <fs/vfs/dev.h>
+#include <fs/vfs/devfs.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>

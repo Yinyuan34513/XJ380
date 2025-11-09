@@ -6,13 +6,21 @@
 #include "vbuffer.h"
 #include <fs/vfs/vfs.h>
 
-typedef enum {
+typedef enum
+{
     DEVICE_BLOCK,
     DEVICE_STREAM,
     DEVICE_FB,
 } device_flag_t;
-
-typedef struct _device {
+typedef size_t (*read_vbuff)(int drive, struct vecbuf *buffer, size_t number, size_t lba);
+typedef size_t (*write_vbuff)(int drive, struct vecbuf *buffer, size_t number, size_t lba);
+typedef size_t (*readf)(int drive, uint8_t *buffer, size_t number, size_t lba);
+typedef size_t (*writef)(int drive, uint8_t *buffer, size_t number, size_t lba);
+typedef int (*ioctlf)(struct _device *device, size_t req, void *handle);
+typedef int (*pollf)(size_t events);
+typedef void *(*mapf)(int drive, void *addr, size_t len);
+typedef struct _device
+{
     size_t (*read_vbuf)(int drive, struct vecbuf *buffer, size_t number, size_t lba);
     size_t (*write_vbuf)(int drive, struct vecbuf *buffer, size_t number, size_t lba);
     size_t (*read)(int drive, uint8_t *buffer, size_t number, size_t lba);

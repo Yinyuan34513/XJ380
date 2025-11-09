@@ -2,7 +2,6 @@
 #include<xhci/xhci-hcd.h>
 #include <proto.hpp>
 #include <mm/frame.h>
-#include <ahci/block.h>
 #include <usb/usb.h>
 #include <usb/usb_enumeration.h>
 #include <pci/pci.h>
@@ -39,7 +38,11 @@ static usb_hcd_ops_t xhci_ops = {
 
 // 分配DMA内存（对齐到64字节）
 static void *xhci_alloc_dma(size_t size, uint64_t *phys_addr) {
-    void *ptr = alloc_frames_bytes(size);
+    size_t aligned_bytes = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    size_t required_pages = aligned_bytes / PAGE_SIZE;
+    uint64_t phys = alloc_frames(required_pages);
+    page_map_range_to(get_current_directory(),phys,aligned_bytes,KERNEL_PTE_FLAGS);
+    void *ptr = phys_to_virt(phys);
     if (ptr) {
         memset(ptr, 0, size);
         if (phys_addr) {
@@ -79,7 +82,7 @@ void xhci_free_ring(xhci_ring_t *ring) {
         return;
 
     if (ring->trbs) {
-        free_frames_bytes(ring->trbs, ring->size * sizeof(xhci_trb_t));
+        unmap_page_range(get_current_directory(),(uint64_t)ring->trbs,ring->size);
     }
     free(ring);
 }
@@ -292,7 +295,7 @@ static int xhci_parse_protocol_caps(xhci_hcd_t *xhci) {
 }
 
 void xhci_handle_port_status(xhci_hcd_t *xhci, uint8_t port_id);
-
+#define PADDING_REQ(size, to) ((size + (to) - 1) & ~((to) - 1) / (to))
 // 初始化XHCI HCD
 static int xhci_hcd_init(usb_hcd_t *hcd) {
     xhci_hcd_t *xhci = (xhci_hcd_t *)hcd->private_data;
@@ -346,9 +349,9 @@ static int xhci_hcd_init(usb_hcd_t *hcd) {
     if (xhci->num_scratchpads > 0) {
         xhci->scratchpad_array = (uint64_t *)xhci_alloc_dma(
             xhci->num_scratchpads * sizeof(uint64_t), NULL);
-        xhci->scratchpad_buffers =
-            (void **)alloc_frames_bytes(xhci->num_scratchpads * sizeof(void *));
-
+        uint64_t scphy = alloc_frames(PADDING_REQ(xhci->num_scratchpads * sizeof(void *),PAGE_SIZE));
+        page_map_range_to(get_current_directory(),scphy,xhci->num_scratchpads * sizeof(void *),KERNEL_PTE_FLAGS);
+        xhci->scratchpad_buffers = (void **)phys_to_virt(scphy);
         for (uint32_t i = 0; i < xhci->num_scratchpads; i++) {
             uint64_t phys;
             xhci->scratchpad_buffers[i] = xhci_alloc_dma(4096, &phys);
@@ -628,13 +631,10 @@ static int xhci_enable_slot(usb_hcd_t *hcd, usb_device_t *device) {
     }
 
     // 分配输入上下文
-    dev_priv->input_ctx = xhci_alloc_dma(sizeof(xhci_input_ctx_t) *
-                                             (xhci->use_64byte_context ? 2 : 1),
-                                         &dev_priv->input_ctx_phys);
+    dev_priv->input_ctx =
+        (xhci_input_ctx_t *)xhci_alloc_dma(sizeof(xhci_input_ctx_t), &dev_priv->input_ctx_phys);
     if (!dev_priv->input_ctx) {
-        free_frames_bytes(dev_priv->device_ctx,
-                          sizeof(xhci_device_ctx_t) *
-                              (xhci->use_64byte_context ? 2 : 1));
+        free(dev_priv->device_ctx);
         free(dev_priv);
         return -1;
     }
@@ -642,12 +642,8 @@ static int xhci_enable_slot(usb_hcd_t *hcd, usb_device_t *device) {
     // 分配完成结构
     xhci_command_completion_t *completion = xhci_alloc_command_completion();
     if (!completion) {
-        free_frames_bytes(dev_priv->input_ctx,
-                          sizeof(xhci_input_ctx_t) *
-                              (xhci->use_64byte_context ? 2 : 1));
-        free_frames_bytes(dev_priv->device_ctx,
-                          sizeof(xhci_device_ctx_t) *
-                              (xhci->use_64byte_context ? 2 : 1));
+        free(dev_priv->input_ctx);
+        free(dev_priv->device_ctx);
         free(dev_priv);
         return -1;
     }
@@ -685,8 +681,8 @@ static int xhci_enable_slot(usb_hcd_t *hcd, usb_device_t *device) {
         if (ret != 0) {
             write_serial_fmt("XHCI: Failed to setup EP0\n");
             xhci->dcbaa[dev_priv->slot_id] = 0;
-            free_frames_bytes(dev_priv->input_ctx, sizeof(xhci_input_ctx_t));
-            free_frames_bytes(dev_priv->device_ctx, sizeof(xhci_device_ctx_t));
+            free(dev_priv->input_ctx);
+            free(dev_priv->device_ctx);
             free(dev_priv);
             device->hcd_private = NULL;
             xhci_free_command_completion(completion);
@@ -694,8 +690,8 @@ static int xhci_enable_slot(usb_hcd_t *hcd, usb_device_t *device) {
         }
     } else {
         // 命令失败
-        free_frames_bytes(dev_priv->input_ctx, sizeof(xhci_input_ctx_t));
-        free_frames_bytes(dev_priv->device_ctx, sizeof(xhci_device_ctx_t));
+        free(dev_priv->input_ctx);
+        free(dev_priv->device_ctx);
         free(dev_priv);
     }
 

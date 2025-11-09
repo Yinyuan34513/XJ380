@@ -133,14 +133,14 @@ int partition_ioctl(device_t *device, size_t req, void *arg) {
     partition_t partition = partitions[device_id];
     switch (req) {
     case IOGPTYPE:
-        if (arg == NULL) return -EINVAL;
+        {if (arg == NULL) return -EINVAL;
         uint16_t *type = (uint16_t *)arg;
         *type          = partition.type == partition.GPT   ? PARTITION_TYPE_GPT
                          : partition.type == partition.MBR ? PARTITION_TYPE_MBR
                                                  : PARTITION_TYPE_UNKNOWN;
-        break;
+        break;}
     case IOGPINFO:
-        if (arg == NULL) return -EINVAL;
+        {if (arg == NULL) return -EINVAL;
         if (partition.type == partition.GPT) {
             struct ioctl_gpt_partition *info = (struct ioctl_gpt_partition *)arg;
             memcpy(info->disk_guid, partition.disk_guid, 16);
@@ -150,7 +150,7 @@ int partition_ioctl(device_t *device, size_t req, void *arg) {
             info->size  = partition.sector_size;
             info->start = partition.starting_lba;
             info->end   = partition.ending_lba;
-        }
+        }}
         break;
     }
     return EOK;
@@ -161,6 +161,7 @@ void partition_init() {
         if (device_ctl[i].flag >= 1 && device_ctl[i].type == DEVICE_BLOCK) {
             char buf[50];
             sprintf(buf, "/dev/%s", device_ctl[i].drive_name);
+            write_serial_fmt("PART: %s\n",buf);
             vfs_node_t device = vfs_open(buf);
             if (device == NULL) {
                 write_serial_fmt("part: Partition init failed, device %s not found.\n",

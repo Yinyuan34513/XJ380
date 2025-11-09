@@ -677,15 +677,15 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
     case F_GETFD: return (handle->node->flags & O_CLOEXEC) != 0;
     case F_SETFD: return handle->node->flags |= O_CLOEXEC;
     case F_DUPFD_CLOEXEC:
-        uint64_t newfd       = sys_dup(fd, 0, 0, 0, 0, 0, regs);
+        {uint64_t newfd       = sys_dup(fd, 0, 0, 0, 0, 0, regs);
         handle->node->flags |= O_CLOEXEC;
-        return newfd;
+        return newfd;}
     case F_DUPFD: return sys_dup(fd, 0, 0, 0, 0, 0, regs);
     case F_GETFL: return handle->node->flags;
     case F_SETFL:
-        uint32_t valid_flags  = O_APPEND | O_DIRECT | O_NOATIME | O_NONBLOCK;
+        {uint32_t valid_flags  = O_APPEND | O_DIRECT | O_NOATIME | O_NONBLOCK;
         handle->node->flags  &= ~valid_flags;
-        handle->node->flags  |= arg & valid_flags;
+        handle->node->flags  |= arg & valid_flags;}
     default: break;
     }
     return SYSCALL_SUCCESS;
@@ -988,20 +988,20 @@ sys_(lseek, int fd, size_t offset, size_t whence)
 //     return ret;
 // }
 
-sys_(reboot, unsigned int magic1, unsigned int magic2, uint32_t cmd, void *arg)
-{
-    extern void cp_shutdown();
-    extern void cp_reset();
+// sys_(reboot, unsigned int magic1, unsigned int magic2, uint32_t cmd, void *arg)
+// {
+//     extern void cp_shutdown();
+//     extern void cp_reset();
 
-    if (magic1 != REBOOT_MAGIC1 || magic2 != REBOOT_MAGIC2) { return SYSCALL_FAULT_(EINVAL); }
-    switch (cmd)
-    {
-    case REBOOT_CMD_RESTART: cp_reset(); break;
-    case REBOOT_CMD_CAD_OFF: cp_shutdown(); break;
-    default: return SYSCALL_FAULT_(EINVAL);
-    }
-    return SYSCALL_SUCCESS;
-}
+//     if (magic1 != REBOOT_MAGIC1 || magic2 != REBOOT_MAGIC2) { return SYSCALL_FAULT_(EINVAL); }
+//     switch (cmd)
+//     {
+//     case REBOOT_CMD_RESTART: cp_reset(); break;
+//     case REBOOT_CMD_CAD_OFF: cp_shutdown(); break;
+//     default: return SYSCALL_FAULT_(EINVAL);
+//     }
+//     return SYSCALL_SUCCESS;
+// }
 
 sys_(getdents, int fd, struct dirent *dents, size_t size)
 {
