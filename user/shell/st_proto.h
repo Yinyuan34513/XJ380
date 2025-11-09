@@ -57,8 +57,3 @@ void print_working_directory();
 void clear_screen();
 
 // int snprintf(char *str, size_t size, const char *format, ...);
-
-void  text_editor(char *filename);
-void  editor_save_file(char *filename, char *content);
-char *editor_read_file(char *filename);
-void  editor_display_help();
