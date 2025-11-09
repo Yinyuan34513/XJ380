@@ -91,6 +91,8 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 
+    lock_queue       *ipc_queue;   // 进程消息队列
+
     lock_queue *file_open; // 文件句柄占用队列
     char      **envp;      // 环境变量指针
     size_t      envc;      // 环境变量数量

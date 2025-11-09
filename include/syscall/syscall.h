@@ -435,6 +435,7 @@ struct statfs {
     uint64_t        f_flags;
     uint64_t        f_spare[4];
 };
+fd_file_handle *fd_dup(fd_file_handle *src);
 /*
 // Proto (POSIX Edition)
 int sys_read(uint32_t fd, uint8_t *buf, size_t count);

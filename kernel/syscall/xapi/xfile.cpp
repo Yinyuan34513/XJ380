@@ -23,9 +23,9 @@
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
 {
-    char *fpath = (char *)path;
-    uint32_t *fcount = (uint32_t *)count;
-    XAPIT_DirNode *fdir = (XAPIT_DirNode *)dir;
+    char          *fpath  = (char *)path;
+    uint32_t      *fcount = (uint32_t *)count;
+    XAPIT_DirNode *fdir   = (XAPIT_DirNode *)dir;
 
     vfs_node_t v = vfs_open(fpath);
     if (!v)
@@ -42,9 +42,12 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
             break;
         }
         void *data = node->data;
-        strcpy(fdir[*fcount].filename, ((vfs_node_t)data)->name);
-        fdir[*fcount].length = ((vfs_node_t)data)->size;
-        fdir[*fcount].filetype = ((vfs_node_t)data)->type == file_dir ? 1 : 0;
-        (*fcount)++;
+        if (strcmp(((vfs_node_t)data)->name,"")!=0)
+        {
+            strcpy(fdir[*fcount].filename, ((vfs_node_t)data)->name);
+            fdir[*fcount].length   = ((vfs_node_t)data)->size;
+            fdir[*fcount].filetype = ((vfs_node_t)data)->type == file_dir ? 1 : 0;
+            (*fcount)++;
+        }
     }
 }

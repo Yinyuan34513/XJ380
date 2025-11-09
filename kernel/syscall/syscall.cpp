@@ -71,11 +71,11 @@ sys_(open, char *path0, uint64_t flags, uint64_t mode)
 {
     if (unlikely(path0 == NULL)) return SYSCALL_FAULT_(EINVAL);
 
-    char *normalized_path = vfs_cwd_path_build(path0);
+    char *normalized_path = path0;
 
-    write_serial_fmt("sys_open: open %s\n", normalized_path);
+    write_serial_fmt("sys_open: open %s path0 %s\n", normalized_path,path0);
 
-    vfs_node_t node = vfs_open(normalized_path);
+    vfs_node_t node = vfs_open(path0);
     if (node == NULL)
     {
         if (flags & O_CREAT)
@@ -110,7 +110,7 @@ next:
         free(normalized_path);
         return SYSCALL_FAULT_(ENOENT);
     }
-    free(normalized_path);
+    // free(normalized_path);
     return index;
 }
 
@@ -1885,7 +1885,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_CLOSE_FILE: break;
     case XAPI_SEARCH_FILE: do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_MAKEDIR: regs->rax = (uint64_t)vfs_mkdir((char *)regs->rdi); break;
-    case XAPI_CREATE_FILE: regs->rax = (uint64_t)sys_open(( char *)regs->rdi, O_CREAT,0,0,0,0,regs); break;
+    case XAPI_CREATE_FILE: regs->rax = (uint64_t)sys_open(( char *)regs->rdi, O_CREAT,0644,0,0,0,regs); break;
     case XAPI_DELETE_FILE: regs->rax = (uint64_t)sys_unlink(regs->rdi,0,0,0,0,0,regs); break;
     case XAPI_RENAME_FILE: regs->rax = (uint64_t)sys_rename((char *)regs->rdi, (char *)regs->rsi,0,0,0,0,regs); break;
     case XAPI_READ_FILE: {

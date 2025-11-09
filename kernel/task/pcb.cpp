@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 #include <syscall/syscall.h>
+#include <mm/lazyalloc.h>
+#include <task/ipc.h>
 
 #define SA_RPL3 3
 
@@ -434,7 +436,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
 
     write_serial_fmt("path in execve %s\n", path);
-    char      *norm_path = path;
+    char      *norm_path = vfs_cwd_path_build(path);
     vfs_node_t node      = vfs_open(norm_path);
     if (node == NULL) { return (uint64_t)-ENOENT; }
     uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
@@ -473,11 +475,12 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->envc   = current_user->envc;
     }
 
+    if(!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
+
     write_serial_fmt(" process name :%s \n", process->name);
 
     page_directory_t *old_page_dir = process->pagedir;
-    switch_process_page_directory(clone_page_directory(get_current_directory(), false));
-    process->pagedir = clone_page_directory(get_current_directory(), false);
+    switch_process_page_directory(clone_page_directory(get_kernel_pagedir(), false));
 
     uint8_t *pcb_buffer = (uint8_t *)malloc(node->size);
     vfs_read(node, pcb_buffer, 0, node->size);
@@ -489,6 +492,15 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         switch_page_directory(old_page_dir);
         return 0;
     }
+    if (process->vfork) {
+        ipc_message_t message = (ipc_message_t)calloc(1, sizeof(struct ipc_message));
+        message->type         = IPC_MSG_TYPE_EXEC;
+        message->pid          = process->pid;
+        ipc_send(process->parent_task, message);
+    }
+    if (!process->vfork) free_page_directory(old_page_dir);
+    process->pagedir = get_current_directory();
+    process->vfork    = false;
 
     vfs_close(node);
 
@@ -498,8 +510,23 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         vfs_close(file_node->node);
         free(file_node);
     }
+    spin_unlock(process->file_open->lock);
+    queue_destroy(process->file_open);
+    process->file_open = queue_init();
+    spin_unlock(process->virt_queue->lock);
+    queue_destroy(process->virt_queue);
+    process->virt_queue = queue_init();
 
-    // free(norm_path);
+    spin_lock(process->ipc_queue->lock);
+    queue_foreach(process->ipc_queue, node) {
+        ipc_message_t msg = (ipc_message_t)node->data;
+        free(msg);
+    }
+    spin_unlock(process->ipc_queue->lock);
+    queue_destroy(process->ipc_queue);
+    process->ipc_queue = queue_init();
+
+    free(norm_path);
 
     uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     get_current_task()->user_stack     = stack;
@@ -515,6 +542,12 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
+}
+
+static void *file_copy(void *ptr) {
+    if (ptr == NULL) return NULL;
+    fd_file_handle *src = (fd_file_handle*)ptr;
+    return fd_dup(src);
 }
 
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
@@ -539,6 +572,11 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
 
+    if(!vma_manager_clone(&current_pcb->vma_manager,&new_pcb->vma_manager)){
+        write_serial_fmt("task: cannot clone process vma information.\n");
+        free(new_pcb);
+        return -ENOMEM;
+    }
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
     new_pcb->parent_task  = current_pcb;
@@ -546,6 +584,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->vfork        = is_vfork;
     new_pcb->child_pcb    = queue_init();
     new_pcb->child_index  = queue_enqueue(current_pcb->child_pcb, new_pcb);
+    new_pcb->virt_queue  = queue_copy(current_pcb->virt_queue, virt_copy);
+    new_pcb->file_open   = queue_copy(current_pcb->file_open, file_copy);
+
 
     tcb_t parent_task = get_current_task();
 
@@ -559,6 +600,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->user_stack_top = parent_task->user_stack_top;
     new_task->kernel_stack   = ((uint64_t)new_task) + KERNEL_STACK_SIZE;
     new_task->main           = parent_task->main;
+    new_task->cwd            = parent_task->cwd;
+    new_task->cwd->refcount ++;
+    new_task->user_info      = parent_task->user_info;
     strcpy(new_task->name, parent_task->name);
     new_task->winnum         = 0;
     new_task->hasfscr        = false;
@@ -604,8 +648,16 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     if (!is_vfork) return new_pcb->pid;
 
-    /*
     if (!is_vfork) return new_pcb->pid;
+    while (true) {
+        ipc_message_t msg = ipc_recv_wait2(IPC_MSG_TYPE_EXEC, IPC_MSG_TYPE_EPID);
+        if (msg->pid == new_pcb->pid) {
+            free(msg);
+            return new_pcb->pid;
+        }
+        ipc_send(current_pcb->parent_task, msg);
+    }
+
     int npid = new_pcb->pid;
     do {
         ipc_message_t msg = ipc_recv_wait(IPC_MSG_TYPE_EXEC);
@@ -615,24 +667,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         }
         ipc_send(current_pcb->parent_task, msg);
     } while (true);
-     */
-
-    /*
-    if (is_vfork) {
-        int npid = new_pcb->pid;
-        do {
-            ipc_message_t msg = ipc_recv_wait(IPC_MSG_TYPE_EXEC);
-            if (npid == msg->pid) {
-                free(msg);
-                break;
-            }
-            ipc_send(current_pcb->parent_task, msg);
-        } while (true);
-    }
-
-    return new_pcb->pid;
-     */
-    return 0;
 }
 
 spin_t create_thread_lock = SPIN_INIT;
@@ -696,6 +730,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     new_task->str_cwd = "/";
     new_task->cwd     = rootdir;
+    new_task->cwd->refcount++;
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -857,6 +892,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->pagedir      = directory ? directory : get_kernel_pagedir();
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
+    pcb->file_open   = queue_init();
+    pcb->virt_queue  = queue_init();
+    pcb->ipc_queue   = queue_init();
 
     if (parent == NULL)
     {
@@ -900,6 +938,8 @@ void process_setup()
     kernel_pcb->thread_queue = queue_init();
     kernel_pcb->child_pcb    = queue_init();
     kernel_pcb->file_open = queue_init();
+    kernel_group->virt_queue  = queue_init();
+    kernel_group->ipc_queue   = queue_init();
 
     kernel_pcb->child_index  = 0;
 

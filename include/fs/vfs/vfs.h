@@ -11,6 +11,8 @@ char *normalize_path(const char *path);
 #define FBIOPUTCMAP         0x4605
 #define FBIOPAN_DISPLAY     0x4606
 
+
+
 #define F_DUPFD         0
 #define F_GETFD         1
 #define F_SETFD         2

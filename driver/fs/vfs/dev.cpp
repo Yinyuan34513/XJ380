@@ -80,6 +80,7 @@ static errno_t devfs_mount(const char *handle, vfs_node_t node) {
 
     for (size_t i = 0; i < 256; i++) {
         device_t *device = &device_ctl[i];
+        write_serial_fmt("mount dev name: %s\n", device->drive_name);
         devfs_register0(device->path, i);
     }
 
