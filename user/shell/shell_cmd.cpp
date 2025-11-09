@@ -126,32 +126,33 @@ void check_command()
     }
     else if (strncmp("mv", cmd, 2) == 0)
     {
-        char *src = args;
-        char *dst = NULL;
+        //会PF
+        // char *src = args;
+        // char *dst = NULL;
 
-        if (src)
-        {
-            while (*src && *src != ' ')
-                src++;
-            if (*src)
-            {
-                *src = '\0';
-                src  = args;
-                dst  = src + strlen(src) + 1;
-                while (*dst == ' ')
-                    dst++;
-            }
-        }
+        // if (src)
+        // {
+        //     while (*src && *src != ' ')
+        //         src++;
+        //     if (*src)
+        //     {
+        //         *src = '\0';
+        //         src  = args;
+        //         dst  = src + strlen(src) + 1;
+        //         while (*dst == ' ')
+        //             dst++;
+        //     }
+        // }
 
-        if (src == NULL || dst == NULL || *dst == '\0')
-        {
-            print_to_console("mv: missing operand");
-            print_to_console("Usage: mv source destination");
-        }
-        else
-        {
-            move_file(src, dst);
-        }
+        // if (src == NULL || dst == NULL || *dst == '\0')
+        // {
+        //     print_to_console("mv: missing operand");
+        //     print_to_console("Usage: mv source destination");
+        // }
+        // else
+        // {
+        //     move_file(src, dst);
+        // }
     }
     else if (strncmp("pwd", cmd, 3) == 0) { print_working_directory(); }
     else if (strncmp("clear", cmd, 5) == 0) { clear_screen(); }
