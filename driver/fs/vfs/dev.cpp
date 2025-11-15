@@ -80,7 +80,7 @@ static errno_t devfs_mount(const char *handle, vfs_node_t node) {
 
     for (size_t i = 0; i < 256; i++) {
         device_t *device = &device_ctl[i];
-        write_serial_fmt("mount dev name: %s\n", device->drive_name);
+        // write_serial_fmt("mount dev name: %s\n", device->drive_name);
         devfs_register0(device->path, i);
     }
 
@@ -151,6 +151,7 @@ size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir) return VFS_STATUS_FAILED;
     device_t *deivce = handle->device;
+    write_serial_fmt("device name: %s\n",deivce->drive_name);
 
     size_t sector_size;
     size_t sectors_to_do;

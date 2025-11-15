@@ -13,6 +13,7 @@ int regist_device(const char *path, device_t vd) {
     if (i == -1) return -1;
     device_ctl[i]         = vd;
     device_ctl[i].vdiskid = i;
+    write_serial_fmt("path: %s id %d\n",path,i);
     errno_t ret;
     if ((ret = devfs_register(path, i)) != EOK) {
         write_serial_fmt("Registers (%s)device error: %d\n", vd.drive_name, ret);

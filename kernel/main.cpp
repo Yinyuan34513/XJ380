@@ -345,6 +345,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     (void)SystemTable; // 暂时不用
     no_interrupt = true;
     disable_intr();
+    disable_scheduler();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution), 7, {0xe6, 0xe6, 0xe6}); // 开机进度条
 
@@ -373,7 +374,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_setup();
-    // nvme_init();
+    enable_intr();
+    nvme_setup();
+    disable_intr();
     usb_init();
 
     enable_intr();

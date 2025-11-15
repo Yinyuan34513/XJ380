@@ -150,69 +150,127 @@ int ahci_init_device(struct hba_port *port) {
     struct hba_cmdt *cmd_table;
     struct hba_cmdh *cmd_header;
 
+    // 分配并映射IDENTIFY数据缓冲区
     uint16_t *data_in = (uint16_t *)alloc_frames(1);
-    uint16_t *data    = (uint16_t*)driver_phys_to_virt((uint64_t)data_in);
+    if (!data_in) {
+        write_serial_fmt("AHCI: Failed to allocate buffer for IDENTIFY\n");
+        return 0;
+    }
+    uint16_t *data = (uint16_t*)driver_phys_to_virt((uint64_t)data_in);
     page_map_to(get_current_directory(), (uint64_t)data, (uint64_t)data_in, KERNEL_PTE_FLAGS);
+    memset(data, 0, 512); // 清零缓冲区
 
+    // 准备命令结构
     int slot = hba_prepare_cmd(port, &cmd_table, &cmd_header);
-    hba_bind_sbuf(cmd_header, cmd_table, data, 512);
+    if (slot < 0) {
+        write_serial_fmt("AHCI: No free command slot\n");
+        free_frame((uint64_t)data_in);
+        return 0;
+    }
+    
+    if (hba_bind_sbuf(cmd_header, cmd_table, data, 512) != 0) {
+        write_serial_fmt("AHCI: Failed to bind buffer\n");
+        free_frame((uint64_t)data_in);
+        free_frame((uint64_t)virt_to_phys((uint64_t)cmd_table));
+        return 0;
+    }
 
+    // 分配并初始化设备结构
+    struct sata_reg_fis *cmd_fis = NULL;
+    uint32_t sig=0;
     port->device = (struct hba_device*)malloc(sizeof(struct hba_device));
+    if (!port->device) {
+        write_serial_fmt("AHCI: Out of memory for device struct\n");
+        goto fail_cleanup;
+    }
     memset(port->device, 0, sizeof(struct hba_device));
     port->device->port = port;
-    port->device->hba  = port->hba;
+    port->device->hba = port->hba;
 
-    struct sata_reg_fis *cmd_fis = (struct sata_reg_fis *)(&cmd_table->command_fis);
+    cmd_fis = (struct sata_reg_fis *)(&cmd_table->command_fis);
 
-    // 根据设备类型使用合适的命令
-    if (port->regs[HBA_RPxSIG] == HBA_DEV_SIG_ATA) {
-        // ATA 一般为硬盘
+    // 根据设备签名选择IDENTIFY命令
+    sig = port->regs[HBA_RPxSIG];
+    write_serial_fmt("SIG!!: %d\n",sig);
+    if (sig == HBA_DEV_SIG_ATA) {
+        // ATA 设备
         sata_create_fis(cmd_fis, ATA_IDENTIFY_DEVICE, 0, 0);
-    } else {
-        // ATAPI 一般为光驱，软驱，或者磁带机
+        write_serial_fmt("AHCI: ATA device detected, sending IDENTIFY\n");
+    } else if (sig == HBA_DEV_SIG_ATAPI) {
+        // ATAPI 设备
         port->device->flags |= HBA_DEV_FATAPI;
         sata_create_fis(cmd_fis, ATA_IDENTIFY_PAKCET_DEVICE, 0, 0);
+        write_serial_fmt("AHCI: ATAPI device detected, sending IDENTIFY PACKET\n");
+    } else {
+        write_serial_fmt("AHCI: Unknown device signature: 0x%x\n", sig);
+        goto fail_cleanup;
     }
 
-    if (!ahci_try_send(port, slot)) { goto fail; }
+    // 发送IDENTIFY命令
+    if (!ahci_try_send(port, slot)) {
+        write_serial_fmt("AHCI: IDENTIFY command failed\n");
+        goto fail_cleanup;
+    }
 
+    // 解析IDENTIFY数据
     ahci_parse_dev_info(port->device, data);
 
-    if (!(port->device->flags & HBA_DEV_FATAPI)) { goto done; }
+    // 如果是ATAPI设备，需要获取容量信息
+    if (port->device->flags & HBA_DEV_FATAPI) {
+        write_serial_fmt("AHCI: Initializing ATAPI device\n");
+        
+        // 准备READ CAPACITY命令
+        memset(cmd_table, 0, sizeof(struct hba_cmdt)); // 清空命令表
+        sata_create_fis(cmd_fis, ATA_PACKET, 0, 0); // 设置PACKET FIS
+        
+        // 根据CDB大小创建SCSI命令
+        if (port->device->cbd_size == SCSI_CDB12) {
+            struct scsi_cdb12 *cdb12 = (struct scsi_cdb12 *)cmd_table->atapi_cmd;
+            scsi_create_packet12(cdb12, SCSI_READ_CAPACITY_10, 0, 0);
+        } else {
+            struct scsi_cdb16 *cdb16 = (struct scsi_cdb16 *)cmd_table->atapi_cmd;
+            scsi_create_packet16(cdb16, SCSI_READ_CAPACITY_16, 0, 0);
+            cdb16->misc1 = 0x10; // service action for READ CAPACITY(16)
+        }
 
-    // If the device is SATAPI device
+        // 重新绑定数据缓冲区
+        memset(data, 0, 512);
+        if (hba_bind_sbuf(cmd_header, cmd_table, data, 512) != 0) {
+            write_serial_fmt("AHCI: Failed to bind buffer for READ CAPACITY\n");
+            goto fail_cleanup;
+        }
 
-    sata_create_fis(cmd_fis, ATA_PACKET, 512 << 8, 0);
+        cmd_header->options |= HBA_CMDH_ATAPI;
+        cmd_header->transferred_size = 0;
 
-    // for dev use 12 bytes cdb, READ_CAPACITY must use the 10 bytes variation.
-    if (port->device->cbd_size == SCSI_CDB12) {
-        struct scsi_cdb12 *cdb12 = (struct scsi_cdb12 *)cmd_table->atapi_cmd;
-        // ugly tricks to construct 10 byte cdb from 12 byte cdb
-        scsi_create_packet12(cdb12, SCSI_READ_CAPACITY_10, 0, 512 << 8);
-    } else {
-        struct scsi_cdb16 *cdb16 = (struct scsi_cdb16 *)cmd_table->atapi_cmd;
-        scsi_create_packet16(cdb16, SCSI_READ_CAPACITY_16, 0, 512);
-        cdb16->misc1 = 0x10; // service action
+        // 发送READ CAPACITY命令
+        if (!ahci_try_send(port, slot)) {
+            write_serial_fmt("AHCI: READ CAPACITY command failed\n");
+            goto fail_cleanup;
+        }
+
+        // 解析容量信息
+        scsi_parse_capacity(port->device, (uint32_t *)data);
     }
 
-    cmd_header->transferred_size  = 0;
-    cmd_header->options          |= HBA_CMDH_ATAPI;
-
-    if (!ahci_try_send(port, slot)) { goto fail; }
-
-    scsi_parse_capacity(port->device, (uint32_t *)data);
-
-done:
+    // 注册设备操作
     achi_register_ops(port);
 
+    write_serial_fmt("AHCI: Device initialized: %s, blocks: %d, block_size: %d\n",
+          port->device->model, port->device->max_lba, port->device->block_size);
+
+    // 清理资源
     free_frame((uint64_t)data_in);
     free_frame((uint64_t)virt_to_phys((uint64_t)cmd_table));
     return 1;
 
-fail:
+fail_cleanup:
+    if (port->device) {
+        free(port->device);
+        port->device = NULL;
+    }
     free_frame((uint64_t)data_in);
     free_frame((uint64_t)virt_to_phys((uint64_t)cmd_table));
-
     return 0;
 }
 
@@ -232,73 +290,147 @@ size_t ahci_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     return size;
 }
 
+// 在 utils.cpp 中添加
+void __hba_reset_port_13(hba_reg_t *port_reg, uint32_t major, uint32_t minor) {
+    // 停止命令处理
+    port_reg[HBA_RPxCMD] &= ~HBA_PxCMD_ST;
+    
+    // 停止FIS接收
+    port_reg[HBA_RPxCMD] &= ~HBA_PxCMD_FRE;
+    
+    // 等待命令处理停止
+    int timeout = 1000000;
+    while ((port_reg[HBA_RPxCMD] & HBA_PxCMD_CR) && timeout--) {
+        asm volatile("pause");
+    }
+    
+    if (timeout <= 0) {
+        write_serial_fmt("AHCI: Port reset timeout waiting for CR to clear\n");
+        return;
+    }
+    
+    // AHCI 1.3 推荐的复位流程
+    if (major >= 1 && minor >= 3) {
+        // 清除错误状态
+        hba_clear_reg(port_reg[HBA_RPxSERR]);
+        hba_clear_reg(port_reg[HBA_RPxSERR2]);
+        
+        // 发送COMRESET
+        port_reg[HBA_RPxSCTL] = (port_reg[HBA_RPxSCTL] & ~0xF) | 1;
+        wait_until_expire(true, 100000); // 等待1ms
+        
+        // 清除SControl
+        port_reg[HBA_RPxSCTL] &= ~0xF;
+        wait_until_expire(true, 1000000); // 等待10ms让设备恢复
+    } else {
+        // 旧版本复位流程
+        port_reg[HBA_RPxSCTL] = (port_reg[HBA_RPxSCTL] & ~0xF) | 1;
+        wait_until_expire(true, 100000);
+        port_reg[HBA_RPxSCTL] &= ~0xF;
+    }
+}
+// 修改 ahci_setup 函数，添加版本检测和1.3特定处理
 void ahci_setup() {
     pci_device_t *device = pci_find_class(0x010601);
     if (device == NULL) return;
+    
+    // 读取PCI配置空间获取BAR5
     pci_bar_base_address bar5 = device->bars[5];
+    
     if (bar5.address == 0 || bar5.size == 0) {
         write_serial_fmt("AHCI: BAR5 is not valid, skipping AHCI setup\n");
         return;
     }
+    
     op_buffer = (void *)alloc_frames(0x400000UL / PAGE_SIZE);
 
     struct ahci_hba *hba = (struct ahci_hba*)malloc(sizeof(struct ahci_hba));
-    // not_null_assets(hba, "Out of memory for AHCI HBA structure\n");
     memset(hba, 0, sizeof(struct ahci_hba));
 
     hba->base = (hba_reg_t *)phys_to_virt(bar5.address);
-    //WARN limine v3 时需要插入 page_map_to 以映射
+    
+    // 检测AHCI版本
+    hba->version = hba->base[HBA_RVER];
+    uint32_t major = (hba->version >> 16) & 0xFF;
+    uint32_t minor = (hba->version >> 8) & 0xFF;
+    
+    write_serial_fmt("AHCI Controller Version: %d.%d.%d\n", 
+        major, minor, hba->version & 0xFF);
 
+    // 启用AHCI模式
     hba->base[HBA_RGHC] |= HBA_RGHC_ACHI_ENABLE;
-    hba->base[HBA_RGHC] &= ~HBA_RGHC_INTR_ENABLE;
+    
+    // 等待AHCI就绪
+    int timeout = 1000000;
+    while ((hba->base[HBA_RGHC] & HBA_RGHC_ACHI_ENABLE) == 0 && timeout--) {
+        asm volatile("pause");
+    }
+    
+    if (timeout <= 0) {
+        write_serial_fmt("AHCI: Failed to enable AHCI mode\n");
+        free(hba);
+        return;
+    }
 
-    hba_reg_t cap  = hba->base[HBA_RCAP];
+    hba_reg_t cap = hba->base[HBA_RCAP];
     hba_reg_t pmap = hba->base[HBA_RPI];
 
-    hba->ports_num = (cap & 0x1f) + 1;  // CAP.PI
-    hba->cmd_slots = (cap >> 8) & 0x1f; // CAP.NCS
-    hba->version   = hba->base[HBA_RVER];
+    // AHCI 1.3 使用不同的端口数计算方式
+    if (major >= 1 && minor >= 3) {
+        hba->ports_num = (cap & HBA_CAP_NP) ? ((cap & HBA_CAP_NP) >> 8) + 1 : 32;
+    } else {
+        hba->ports_num = (cap & 0x1f) + 1;  // 旧版本
+    }
+    
+    hba->cmd_slots = ((cap >> 8) & 0x1f) + 1; // NCS + 1
     hba->ports_bmp = pmap;
 
     uint64_t clb_pa = 0, fis_pa = 0;
 
-    for (size_t i = 0, fisp = 0, clbp = 0; i < 32;
-         i++, pmap >>= 1, fisp = (fisp + 1) % 16, clbp = (clbp + 1) % 4) {
-        if (!(pmap & 0x1)) continue;
+    for (size_t i = 0; i < 32; i++) {
+        if (!(pmap & (1 << i))) continue;
 
         struct hba_port *port = (struct hba_port *)malloc(sizeof(struct hba_port));
         memset(port, 0, sizeof(struct hba_port));
 
         hba_reg_t *port_regs = (hba_reg_t *)(&hba->base[HBA_RPBASE + i * HBA_RPSIZE]);
 
-        __hba_reset_port(port_regs);
+        // 使用兼容1.3的端口重置
+        __hba_reset_port_13(port_regs, major, minor);
 
-        if (!clbp) {
+        // 分配命令列表和FIS接收区域
+        if (clb_pa == 0) {
             clb_pa = alloc_frames(1);
-            memset((void *)phys_to_virt(clb_pa), 0, 0x1000);
+            memset((void *)phys_to_virt(clb_pa), 0, PAGE_SIZE);
         }
-        if (!fisp) {
+        if (fis_pa == 0) {
             fis_pa = alloc_frames(1);
-            memset((void *)phys_to_virt(fis_pa), 0, 0x1000);
+            memset((void *)phys_to_virt(fis_pa), 0, PAGE_SIZE);
         }
 
-        uint64_t addr             = clb_pa + clbp * HBA_CLB_SIZE;
-        port_regs[HBA_RPxCLB]     = (uint32_t)(addr & 0xFFFFFFFF);
+        uint64_t addr = clb_pa + i * HBA_CLB_SIZE;
+        port_regs[HBA_RPxCLB] = (uint32_t)(addr & 0xFFFFFFFF);
         port_regs[HBA_RPxCLB + 1] = (uint32_t)(addr >> 32);
-        addr                      = fis_pa + fisp * HBA_FIS_SIZE;
-        port_regs[HBA_RPxFB]      = (uint32_t)(addr & 0xFFFFFFFF);
-        port_regs[HBA_RPxFB + 1]  = (uint32_t)(addr >> 32);
+        
+        addr = fis_pa + i * HBA_FIS_SIZE;
+        port_regs[HBA_RPxFB] = (uint32_t)(addr & 0xFFFFFFFF);
+        port_regs[HBA_RPxFB + 1] = (uint32_t)(addr >> 32);
 
-        port->regs   = port_regs;
-        port->ssts   = port_regs[HBA_RPxSSTS];
-        port->cmdlst = (struct hba_cmdh *)(clb_pa + clbp * HBA_CLB_SIZE);
-        port->fis    = (void *)(fis_pa + fisp * HBA_FIS_SIZE);
-        port->hba    = hba;
+        port->regs = port_regs;
+        port->ssts = port_regs[HBA_RPxSSTS];
+        port->cmdlst = (struct hba_cmdh *)(clb_pa + i * HBA_CLB_SIZE);
+        port->fis = (void *)(fis_pa + i * HBA_FIS_SIZE);
+        port->hba = hba;
 
         port_regs[HBA_RPxCI] = 0;
 
+        // AHCI 1.3 需要清除更多的错误寄存器
         hba_clear_reg(port_regs[HBA_RPxSERR]);
+        if (major >= 1 && minor >= 3) {
+            hba_clear_reg(port_regs[HBA_RPxSERR2]);
+        }
 
+        // 检查端口是否有设备连接
         if (!HBA_RPxSSTS_IF(port->ssts)) {
             free(port);
             continue;
@@ -306,37 +438,40 @@ void ahci_setup() {
 
         hba->ports[i] = port;
 
+        // 等待命令列表就绪
         wait_until(!(port_regs[HBA_RPxCMD] & HBA_PxCMD_CR));
+        
+        // 启用FIS接收和命令处理
         port_regs[HBA_RPxCMD] |= HBA_PxCMD_FRE;
         port_regs[HBA_RPxCMD] |= HBA_PxCMD_ST;
 
         if (!ahci_init_device(port)) {
-            write_serial_fmt("ahci device init failed\n");
+            write_serial_fmt("AHCI device init failed for port %d\n", i);
             continue;
         }
 
+        // 设备注册代码保持不变...
         struct hba_device *hbadev = port->device;
-
         char name_buf[20];
         sprintf(name_buf, "sata%d", i);
         device_t sata;
-        sata.size        = hbadev->max_lba * hbadev->block_size;
+        sata.size = hbadev->max_lba * hbadev->block_size;
         sata.sector_size = hbadev->block_size;
-        sata.type        = DEVICE_BLOCK;
-        sata.read        = ahci_read;
-        sata.write       = ahci_write;
-        sata.flag        = 1;
-        sata.ioctl       = (ioctlf)empty;
-        sata.poll        = (pollf)empty;
-        sata.map         = (mapf)empty;
-        sata.read_vbuf   = NULL;
-        sata.write_vbuf  = NULL;
+        sata.type = DEVICE_BLOCK;
+        sata.read = ahci_read;
+        sata.write = ahci_write;
+        sata.flag = 1;
+        sata.ioctl = (ioctlf)empty;
+        sata.poll = (pollf)empty;
+        sata.map = (mapf)empty;
+        sata.read_vbuf = NULL;
+        sata.write_vbuf = NULL;
         strcpy(sata.drive_name, name_buf);
-        int id        = regist_device(NULL, sata);
+        int id = regist_device(NULL, sata);
         hbaDevice[id] = hbadev;
-        write_serial_fmt("sata%d: blk_size=%d, blk=0..%d, %s\n", i, hbadev->block_size, hbadev->max_lba,
-              hbadev->model);
+        write_serial_fmt("sata%d: blk_size=%d, blk=0..%d, %s\n", i, hbadev->block_size, hbadev->max_lba, hbadev->model);
     }
-    write_serial_fmt("AHCI initialized with %d ports, version %d.%d.%d\n", hba->ports_num,
-          (hba->version >> 16) & 0xff, (hba->version >> 8) & 0xff, hba->version & 0xff);
+    
+    write_serial_fmt("AHCI initialized with %d ports, version %d.%d.%d\n", 
+        hba->ports_num, major, minor, hba->version & 0xFF);
 }

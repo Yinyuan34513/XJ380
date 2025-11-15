@@ -43,6 +43,8 @@ void mouse_handler();
 
 void syscall_handler();
 
+void nv_handler();
+
 // 默认处理程序
 void undefined_interrupt();
 

@@ -262,36 +262,31 @@ void pci_write_command(pci_device_t *device, uint8_t offset, uint32_t value)
     outl(PCI_DATA_PORT, value);
 }
 
-uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type)
-{
+uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type) {
     uint32_t cap_offset;
-    switch (pci_dev->header_type)
-    {
+    switch (pci_dev->header_type) {
     case 0x00: cap_offset = pci_dev->capability_point; break;
     case 0x10: cap_offset = pci_dev->capability_point; break;
     default:
         // 不支持
         return 0;
     }
-
     uint32_t tmp;
-    while (true)
-    {
-        tmp = pci_dev->op->read(pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment, cap_offset);
-        if ((tmp & 0xff) != cap_type)
-        {
-            if (((tmp & 0xff00) >> 8))
-            {
+    while (1) {
+        tmp = pci_dev->op->read(pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment,
+                                cap_offset);
+        if ((tmp & 0xff) != cap_type) {
+            if (((tmp & 0xff00) >> 8)) {
                 cap_offset = (tmp & 0xff00) >> 8;
                 continue;
-            }
-            else
+            } else
                 return 0;
         }
 
         return cap_offset;
     }
 }
+
 
 pci_device_op_t pcie_device_op = {
     .read  = pci_read,

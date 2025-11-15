@@ -123,10 +123,45 @@
 #define HBA_FIS_SIZE 256
 #define HBA_CLB_SIZE 1024
 
-#define MAX_RETRY        2
+#define MAX_RETRY        10086
 #define AHCI_MAX_DEVICES 20
 
 #define HBA_PRDTE_BYTE_CNT(cnt) ((cnt & 0x3FFFFF) | 0x1)
+
+// AHCI 1.3 新增的寄存器偏移
+#define HBA_RCAP2 0x24
+#define HBA_RBOHC 0x28
+
+// AHCI 1.3 新增的端口寄存器
+#define HBA_RPxCMD2 0x18
+#define HBA_RPxSERR2 0x30
+
+// AHCI 1.3 新增的能力位
+#define HBA_CAP_SXS (1 << 5)    // 支持外部SATA
+#define HBA_CAP_NP (0x1f << 8)  // 端口数
+#define HBA_CAP_SNTF (1 << 6)   // 支持SNotification寄存器
+#define HBA_CAP_SSS (1 << 27)   // 支持Staggered Spin-up
+
+// AHCI 1.3 新增的命令位
+#define HBA_PxCMD_ICC(x) (((x) & 0xf) << 28) // 接口电源控制
+#define HBA_PxCMD_ASP (1 << 27)              //  aggressive Slumber/Partial
+#define HBA_PxCMD_ALPE (1 << 26)             //  aggressive Link PM enable
+#define HBA_PxCMD_DLAE (1 << 25)             //  Device Sleep Auto Enable
+
+// AHCI 1.3 新增的状态位
+#define HBA_PxSERR_DIAG_X (1 << 26) //  exchanged
+#define HBA_PxSERR_DIAG_F (1 << 25) //  unknown FIS type
+#define HBA_PxSERR_DIAG_T (1 << 24) //  transport state transition error
+#define HBA_PxSERR_DIAG_S (1 << 23) //  Link sequence error
+#define HBA_PxSERR_DIAG_H (1 << 22) //  Handshake error
+#define HPA_PxSERR_DIAG_C (1 << 21) //  CRC error
+#define HBA_PxSERR_DIAG_D (1 << 20) //  disconnected
+#define HBA_PxSERR_DIAG_B (1 << 19) //  10b to 8b decode error
+
+// AHCI 1.3 新增的FIS类型
+#define SATA_FIS_BIST_ACTIVATE 0x58
+#define SATA_FIS_PIO_SETUP 0x5F
+#define SATA_FIS_SET_DEVICE_BITS 0xA1
 
 #define BLKIO_WRITE (1UL << 0)
 

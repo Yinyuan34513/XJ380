@@ -285,6 +285,13 @@ ENTRY(mouse_handler)
     xchgq %rax, (%rsp)
     jmp Err_Code
 
+ENTRY(nv_handler)
+    pushq $0
+    pushq %rax
+    leaq c_nv_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code
+
 ENTRY(syscall_handler)
     cli
     cld

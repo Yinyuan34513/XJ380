@@ -44,6 +44,7 @@ bool is_partition_used(struct GPT_DPTE *entry) {
 
 bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id) {
     uint8_t *mbr = (uint8_t*)malloc(disk.sector_size);
+    write_serial_fmt("Y\n");
     if (vfs_read(device, mbr, 0, disk.sector_size) == (size_t)VFS_STATUS_FAILED) return false;
     if (mbr[0x1FE] == 0x55 && mbr[0x1FF] == 0xAA) {
         uint8_t part_type = mbr[0x1BE + 4];
