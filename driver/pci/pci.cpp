@@ -286,7 +286,17 @@ uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type)
         return cap_offset;
     }
 }
+uint32_t read_bar_n(pci_device_t *device, uint8_t bar_n) {
+    uint32_t bar_offset = 0x10 + 4 * bar_n;
+    return pci_read0(device->bus, device->slot, device->func, NULL,bar_offset);
+}
+uint32_t pci_read_command_status(uint8_t bus, uint8_t slot, uint8_t func) {
+    return pci_read0(bus, slot, func, NULL,0x04);
+}
 
+void pci_write_command_status(uint8_t bus, uint8_t slot, uint8_t func, uint32_t value) {
+    pci_write0(bus, slot, func, NULL,0x04, value);
+}
 
 pci_device_op_t pcie_device_op = {
     .read  = pci_read,

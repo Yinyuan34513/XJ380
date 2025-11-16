@@ -151,7 +151,7 @@ size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir) return VFS_STATUS_FAILED;
     device_t *deivce = handle->device;
-    write_serial_fmt("device name: %s\n",deivce->drive_name);
+    write_serial_fmt("device name: %s vdid %d\n",deivce->drive_name, deivce->vdiskid);
 
     size_t sector_size;
     size_t sectors_to_do;

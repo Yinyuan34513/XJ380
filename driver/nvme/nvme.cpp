@@ -1122,7 +1122,7 @@ void nvme_probe(pci_device_t *device)
     }
     g_nvme_platform_ops->log("NVMe: Model=%.40s, Namespaces=%d\n", id_ctrl.mn, ctrl->num_namespaces);
 
-    ctrl->num_io_queues = min(8, get_cpu_num());
+    ctrl->num_io_queues = min(8, 3);
 
     num_prp_lists = NVME_IO_QUEUE_SIZE * ctrl->num_io_queues;
     if (nvme_init_prp_pool(ctrl, num_prp_lists) != 0) { goto error; }

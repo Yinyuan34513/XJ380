@@ -75,6 +75,7 @@ size_t rw_device(int drive, size_t lba, uint8_t *buffer, size_t number, int read
     uint8_t *kbuf = (uint8_t*)driver_phys_to_virt(phys);
     size_t   ret  = 0;
     if (read) {
+        write_serial_fmt("DRIVE %d\n",drive);
         ret = device_ctl[indx].read(drive, kbuf, number, lba);
         memcpy(buffer, kbuf, total_size);
     } else {

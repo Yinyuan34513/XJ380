@@ -374,9 +374,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_setup();
-    enable_intr();
-    nvme_setup();
-    disable_intr();
+    // enable_intr();
+    // nvme_setup();
+    // disable_intr();
     usb_init();
 
     enable_intr();
@@ -401,6 +401,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
             break;
         }
     }
+    init_user();
 
     process_setup();
 
@@ -424,6 +425,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
+    // idle_thread->cwd->refcount++;
 
     get_current_cpu()->current_task = idle_thread;
 
@@ -452,7 +454,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    init_user();
+    
     init_killer();
     write_serial_string("User & Killer is ready\n");
 

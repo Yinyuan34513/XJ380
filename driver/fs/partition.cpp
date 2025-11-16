@@ -5,13 +5,14 @@
 #include "fs/vfs/vfs.h"
 #include <ioctl.h>
 
-extern device_t device_ctl[26];
+extern device_t device_ctl[256];
 partition_t     partitions[MAX_PARTITIONS_NUM];
 size_t          partition_num = 0;
 partition_t    *device_lists[MAX_PARTITIONS_NUM];
 
 size_t partition_read(int part, uint8_t *buf, size_t number, size_t lba) {
     partition_t *partition = device_lists[part];
+    write_serial_fmt("Y K %s %d\n",device_ctl[partition->vdisk_id].drive_name,partition->vdisk_id);
     return device_ctl[partition->vdisk_id].read(partition->vdisk_id, buf, number,
                                                 partition->starting_lba + lba);
 }
