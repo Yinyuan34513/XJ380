@@ -285,6 +285,20 @@ ENTRY(mouse_handler)
     xchgq %rax, (%rsp)
     jmp Err_Code
 
+ENTRY(hda_interrupt)
+    pushq $0
+    pushq %rax
+    leaq hda_interrupt_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code
+
+ENTRY(sb16_interr)
+    pushq $0
+    pushq %rax
+    leaq sb16_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code
+
 ENTRY(nv_handler)
     pushq $0
     pushq %rax

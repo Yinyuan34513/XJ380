@@ -45,8 +45,12 @@ void syscall_handler();
 
 void nv_handler();
 
+void sb16_interr();
+
 // 默认处理程序
 void undefined_interrupt();
+
+void hda_interrupt();
 
 #ifdef __cplusplus
 }

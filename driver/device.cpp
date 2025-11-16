@@ -13,7 +13,7 @@ int regist_device(const char *path, device_t vd) {
     if (i == -1) return -1;
     device_ctl[i]         = vd;
     device_ctl[i].vdiskid = i;
-    write_serial_fmt("path: %s id %d\n",path,i);
+    // write_serial_fmt("path: %s id %d\n",path,i);
     errno_t ret;
     if ((ret = devfs_register(path, i)) != EOK) {
         write_serial_fmt("Registers (%s)device error: %d\n", vd.drive_name, ret);
@@ -75,7 +75,7 @@ size_t rw_device(int drive, size_t lba, uint8_t *buffer, size_t number, int read
     uint8_t *kbuf = (uint8_t*)driver_phys_to_virt(phys);
     size_t   ret  = 0;
     if (read) {
-        write_serial_fmt("DRIVE %d\n",drive);
+        // write_serial_fmt("DRIVE %d\n",drive);
         ret = device_ctl[indx].read(drive, kbuf, number, lba);
         memcpy(buffer, kbuf, total_size);
     } else {

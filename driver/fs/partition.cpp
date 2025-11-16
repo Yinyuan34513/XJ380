@@ -12,7 +12,7 @@ partition_t    *device_lists[MAX_PARTITIONS_NUM];
 
 size_t partition_read(int part, uint8_t *buf, size_t number, size_t lba) {
     partition_t *partition = device_lists[part];
-    write_serial_fmt("Y K %s %d\n",device_ctl[partition->vdisk_id].drive_name,partition->vdisk_id);
+    // write_serial_fmt("Y K %s %d\n",device_ctl[partition->vdisk_id].drive_name,partition->vdisk_id);
     return device_ctl[partition->vdisk_id].read(partition->vdisk_id, buf, number,
                                                 partition->starting_lba + lba);
 }
@@ -45,7 +45,7 @@ bool is_partition_used(struct GPT_DPTE *entry) {
 
 bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id) {
     uint8_t *mbr = (uint8_t*)malloc(disk.sector_size);
-    write_serial_fmt("Y\n");
+    // write_serial_fmt("Y\n");
     if (vfs_read(device, mbr, 0, disk.sector_size) == (size_t)VFS_STATUS_FAILED) return false;
     if (mbr[0x1FE] == 0x55 && mbr[0x1FF] == 0xAA) {
         uint8_t part_type = mbr[0x1BE + 4];
@@ -163,7 +163,7 @@ void partition_init() {
         if (device_ctl[i].flag >= 1 && device_ctl[i].type == DEVICE_BLOCK) {
             char buf[50];
             sprintf(buf, "/dev/%s", device_ctl[i].drive_name);
-            write_serial_fmt("PART: %s\n",buf);
+            // write_serial_fmt("PART: %s\n",buf);
             vfs_node_t device = vfs_open(buf);
             if (device == NULL) {
                 write_serial_fmt("part: Partition init failed, device %s not found.\n",

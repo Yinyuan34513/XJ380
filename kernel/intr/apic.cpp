@@ -124,6 +124,7 @@ void init_IOApic()
     ioapic_add((uint8_t)32, 0);
     ioapic_add((uint8_t)33, 1);
     ioapic_add((uint8_t)34, 12);
+    ioapic_add((uint8_t)40, 5);
 
     write_serial_string("Setup I/O apic.\n");
 

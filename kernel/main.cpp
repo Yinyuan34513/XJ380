@@ -29,6 +29,7 @@
 #include <hda/hda.h>
 #include <hda/pcspk.h>
 #include <device.h>
+#include <sb16.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -338,6 +339,14 @@ void tst()
     while (1)
         ;
 }
+void judge_bigend_littleend1() {
+   int i = 48;
+   char c = *((char*)&i);
+   if (c == '0')
+       write_serial_fmt("小端\n");
+   else
+       write_serial_fmt("大端\n");
+}
 extern size_t   now_tid;
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
@@ -354,6 +363,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_gdt();
     init_hpet(BootConfig.HPET);
     init_apic(BootConfig.MADT);
+    judge_bigend_littleend1();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 1, 7, {0x00, 0xa2, 0xe8}); // CPU好了来一下
 
@@ -378,6 +388,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // nvme_setup();
     // disable_intr();
     usb_init();
+    hda_init();
+    sb16_init();
 
     enable_intr();
     keyboard_setup();

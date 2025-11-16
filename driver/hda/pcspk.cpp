@@ -11,7 +11,7 @@
 #define PIT_FREQUENCY 1193180
 
 static int pcspk_initialized = 0;
-
+[[deprecated]]
 void pcspk_play(uint32_t frequency) {
     if (!pcspk_initialized) {
         write_serial_string("PC Speaker not initialized\n");
@@ -41,13 +41,13 @@ void pcspk_play(uint32_t frequency) {
     
     write_serial_fmt("PC Speaker: Playing frequency %d Hz\n", frequency);
 }
-
+[[deprecated]]
 void pcspk_stop() {
     uint8_t tmp = inb(PC_SPEAKER_PORT) & 0xFC;
     outb(PC_SPEAKER_PORT, tmp);
     write_serial_string("PC Speaker: Stopped\n");
 }
-
+[[deprecated]]
 int pcspk_init() {
     // 确保扬声器被禁用
     pcspk_stop();
@@ -57,6 +57,7 @@ int pcspk_init() {
 }
 
 // 播放简单的音阶（测试用）
+[[deprecated]]
 void pcspk_test() {
     if (!pcspk_initialized) {
         pcspk_init();
