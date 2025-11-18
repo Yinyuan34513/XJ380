@@ -54,8 +54,8 @@
 #define NVME_MAX_PRP_LIST_ENTRIES (NVME_PAGE_SIZE / NVME_PRP_ENTRY_SIZE) // 512 entries
 
 #include "pci/pci.h"
-#include "cpu/lock.h"
 #include "krlibc.h"
+#include <proto.hpp>
 
 // NVMe Submission Queue Entry
 typedef struct {

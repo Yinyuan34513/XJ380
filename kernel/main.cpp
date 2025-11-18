@@ -385,19 +385,21 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     ahci_setup();
     // enable_intr();
-    // nvme_setup();
+    
     // disable_intr();
     usb_init();
-    hda_init();
-    sb16_init();
+    // hda_init();
+    // sb16_init();
 
-    enable_intr();
-    keyboard_setup();
-    mouse_init();
+    // enable_intr();
+    // keyboard_setup();
+    // write_serial_fmt("KEYBOARD (PS2) \n");
+    // mouse_init();
+    // write_serial_fmt("MOUSE (PS2) \n");
 
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
+    // rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    disable_intr();
+    // disable_intr();
     
     partition_init();
 
@@ -413,7 +415,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
             break;
         }
     }
-    init_user();
+    // init_user();
 
     process_setup();
 
@@ -466,6 +468,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
+    nvme_setup();
     
     init_killer();
     write_serial_string("User & Killer is ready\n");

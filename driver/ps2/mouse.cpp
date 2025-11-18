@@ -360,8 +360,8 @@ void mouse_init()
     outb(0x60, status);
 
     // default settings
-    // mouse_write(0xF6);
-    // mouse_read();
+    mouse_write(0xF6);
+    mouse_read();
 
     // enable device
     mouse_write(0xF4);

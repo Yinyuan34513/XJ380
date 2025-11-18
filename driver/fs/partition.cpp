@@ -159,11 +159,11 @@ int partition_ioctl(device_t *device, size_t req, void *arg) {
 }
 
 void partition_init() {
-    for (size_t i = 0; i < 26; i++) {
+    for (size_t i = 0; i < 256; i++) {
         if (device_ctl[i].flag >= 1 && device_ctl[i].type == DEVICE_BLOCK) {
             char buf[50];
             sprintf(buf, "/dev/%s", device_ctl[i].drive_name);
-            // write_serial_fmt("PART: %s\n",buf);
+            write_serial_fmt("PART: %s\n",buf);
             vfs_node_t device = vfs_open(buf);
             if (device == NULL) {
                 write_serial_fmt("part: Partition init failed, device %s not found.\n",

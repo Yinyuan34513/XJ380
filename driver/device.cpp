@@ -17,6 +17,8 @@ int regist_device(const char *path, device_t vd) {
     errno_t ret;
     if ((ret = devfs_register(path, i)) != EOK) {
         write_serial_fmt("Registers (%s)device error: %d\n", vd.drive_name, ret);
+    }else{
+        write_serial_fmt("Registers (%s)device success\n", vd.drive_name);
     }
     return i;
 }

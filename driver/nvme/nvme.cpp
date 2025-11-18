@@ -1,8 +1,9 @@
 #include "nvme/nvme.h"
+#include "device.h"
 #include "krlibc.h"
 #include "pci/msi.h"
-#include <device.h>
-#include <pctable/idt.h>
+#include <math.hpp>
+#include <proto.hpp>
 
 void nvme_interrupt_handler(uint64_t irq_num, void *data, struct pt_regs *r);
 
@@ -25,10 +26,25 @@ void cpkrnl_dma_free(void *virt, size_t size)
 {
     unmap_page_range(get_current_directory(), (uint64_t)virt, size);
 }
+static inline void memory_barrier(void) {
+    __asm__ volatile("mfence" : : : "memory");
+}
 
-void naos_memory_barrier(void) {}
-void naos_read_barrier(void) {}
-void naos_write_barrier(void) {}
+static inline void read_barrier(void) {
+    __asm__ volatile("lfence" : : : "memory");
+}
+
+static inline void write_barrier(void) {
+    __asm__ volatile("sfence" : : : "memory");
+}
+static inline void dma_wmb(void) { write_barrier(); }
+
+static inline void dma_rmb(void) { read_barrier(); }
+
+static inline void dma_mb(void) { memory_barrier(); }
+void naos_memory_barrier(void) {dma_mb();}
+void naos_read_barrier(void) {dma_rmb();}
+void naos_write_barrier(void) {dma_wmb();}
 
 void naos_udelay(uint32_t us)
 {
@@ -242,20 +258,10 @@ static int nvme_enable_controller(nvme_controller_t *ctrl)
     return nvme_wait_ready(ctrl, true, 10000); // Increased timeout to 10s
 }
 
-extern void *idt_datas[256];
-extern "C" void c_nv_handler(void *regs_ptr, uint64_t error_code)
-{
-    write_serial_fmt("ERROR CODE %d\n",error_code);
-    nvme_interrupt_handler(error_code, (nvme_queue_t*)idt_datas[error_code], (pt_regs*)regs_ptr);
-    send_eoi();
-}
-
-extern void init_idt_desc(uint8_t number, uint8_t gate_type, int_func function, uint8_t privilege,void* data);
-
 // 为队列绑定中断向量
 static int nvme_bind_queue_interrupt(nvme_controller_t *ctrl, nvme_queue_t *queue, uint16_t vector)
 {
-    write_serial_fmt("nvme: bind queue int irq:%llu vector:%llu\n\r", vector, vector + 32);
+    // write_serial_fmt("nvme: bind queue int irq:%llu vector:%llu\n\r", vector, vector + IRQ_BASE_VECTOR);
     // 注册中断处理程序
 #if defined(__x86_64__)
     uint64_t          cpu_id = queue->queue_id ? (queue->queue_id - 1) : 0;
@@ -277,17 +283,16 @@ static int nvme_bind_queue_interrupt(nvme_controller_t *ctrl, nvme_queue_t *queu
         return -1;
     }
 
-    init_idt_desc(vector + 32, X86_64_INTR_GATE, nv_handler, 0,(void*)queue);
     // extern intctl_t apic_controller;
-    // irq_regist_irq(vector + IRQ_BASE_VECTOR, nvme_interrupt_handler, vector, queue, &apic_controller, "NVMe",
-    //                IRQ_FLAGS_MSIX);
+    // irq_regist_irq(vector + IRQ_BASE_VECTOR, nvme_interrupt_handler, vector, queue,
+    //                &apic_controller, "NVMe", IRQ_FLAGS_MSIX, PCI_MSI);
 #endif
 
     g_nvme_platform_ops->log("NVMe: Queue %u bound to interrupt vector %u\n", queue->queue_id, vector);
 
     return 0;
 }
-int globi=3;
+
 // Initialize queue with alignment checks
 static int nvme_init_queue(nvme_controller_t *ctrl, nvme_queue_t *queue, uint16_t queue_id, uint16_t queue_depth)
 {
@@ -347,9 +352,9 @@ static int nvme_init_queue(nvme_controller_t *ctrl, nvme_queue_t *queue, uint16_
     g_nvme_platform_ops->log("NVMe: Queue %d doorbells - SQ offset=0x%x CQ offset=0x%x\n", queue_id, doorbell_offset,
                              doorbell_offset + ctrl->doorbell_stride);
 
-    // nvme_bind_queue_interrupt(ctrl, queue, globi);
-    // queue->vector = globi;
-    // globi++;
+    // int irq = irq_allocate_irqnum();
+    // nvme_bind_queue_interrupt(ctrl, queue, irq);
+    // queue->vector = irq;
 
     return 0;
 }
@@ -418,7 +423,7 @@ static int nvme_process_queue_completions(nvme_controller_t *ctrl, nvme_queue_t 
 
         // Find and invoke callback
         uint16_t cid = cqe->cid;
-        if (cid < __UINT16_MAX__ && ctrl->requests[cid])
+        if (cid < UINT16_MAX && ctrl->requests[cid])
         {
             nvme_request_t *req = ctrl->requests[cid];
             if (req->callback) { req->callback(req->ctx, success, cqe->dw0); }
@@ -513,7 +518,7 @@ static int nvme_admin_cmd_sync(nvme_controller_t *ctrl, nvme_sqe_t *cmd, uint32_
     g_nvme_platform_ops->log("NVMe: Submitting admin command - opcode=%d cid=%d cdw0=0x%08x\n", cmd->cdw0 & 0xFF, cid,
                              cmd->cdw0);
 
-    open_interrupt;
+    // arch_open_interrupt();
 
     if (nvme_submit_cmd(&ctrl->admin_queue, cmd) != 0)
     {
@@ -524,10 +529,10 @@ static int nvme_admin_cmd_sync(nvme_controller_t *ctrl, nvme_sqe_t *cmd, uint32_
     // Poll for completion
     while (!sync_ctx.done)
     {
-        nvme_process_queue_completions(ctrl,&ctrl->admin_queue);
-        cpu_relax();
+        nvme_process_queue_completions(ctrl, &ctrl->admin_queue);
+        // arch_pause();
     }
-    close_interrupt;
+    // arch_close_interrupt();
 
     if (result) { *result = sync_ctx.result; }
 
@@ -589,7 +594,7 @@ static int nvme_create_io_cq(nvme_controller_t *ctrl, nvme_queue_t *queue)
     uint32_t cdw11  = 0;
 
     cdw11 |= (1 << 0);                          // PC (Physically Contiguous) = 1
-    cdw11 |= (1 << 1);                          // IEN (Interrupts Enabled) = 1
+    cdw11 |= (0 << 1);                          // IEN (Interrupts Enabled) = 1
     cdw11 |= ((uint32_t)queue->queue_id << 16); // IV (Interrupt Vector)
 
     cmd.cdw11 = cdw11;
@@ -597,7 +602,16 @@ static int nvme_create_io_cq(nvme_controller_t *ctrl, nvme_queue_t *queue)
     g_nvme_platform_ops->log("NVMe: Creating I/O CQ %d (depth=%d, phys=0x%llx)\n", queue->queue_id, queue->queue_depth,
                              queue->cq_phys);
 
-    return nvme_admin_cmd_sync(ctrl, &cmd, NULL, 5000);
+    int ret = nvme_admin_cmd_sync(ctrl, &cmd, NULL, 5000);
+    
+    if (ret != 0) {
+        g_nvme_platform_ops->log("NVMe: CREATE_CQ failed - QID=%d, Depth=%d, Phys=0x%llx\n", 
+                                queue->queue_id, queue->queue_depth, queue->cq_phys);
+        g_nvme_platform_ops->log("NVMe: CDW10=0x%08x, CDW11=0x%08x\n", cmd.cdw10, cmd.cdw11);
+        nvme_dump_status(ctrl);
+    }
+    
+    return ret;
 }
 
 //  Create I/O Submission Queue
@@ -612,7 +626,7 @@ static int nvme_create_io_sq(nvme_controller_t *ctrl, nvme_queue_t *queue)
     g_nvme_platform_ops->log("NVMe: Creating I/O SQ %d (depth=%d, phys=0x%llx)\n", queue->queue_id, queue->queue_depth,
                              queue->sq_phys);
 
-    return nvme_admin_cmd_sync(ctrl, &cmd, NULL, 5000);
+    return nvme_admin_cmd_sync(ctrl, &cmd, NULL, 100000);
 }
 
 // Check PCI configuration
@@ -935,14 +949,12 @@ typedef struct nvme_ns
     nvme_namespace_t  *ns;
 } nvme_ns_t;
 
+nvme_ns_t *NV_map[256];
 extern bool no_interrupt;
-
-nvme_ns_t *NVMEdev[256];
-
-size_t      nvme_read(int data, uint8_t *buffer, size_t size, size_t lba)
+size_t      nvme_read(int drive, uint8_t *buffer, size_t size, size_t lba)
 {
-    nvme_ns_t *ns = NVMEdev[data];
-    write_serial_fmt("READ: blkc %d blks %d\n",ns->ns->block_count,ns->ns->block_size);
+    
+    nvme_ns_t *ns = (nvme_ns_t *)NV_map[drive];
 
     nvme_queue_t *queue = &ns->ctrl->io_queues[get_current_cpu()->processor_id];
 
@@ -967,7 +979,7 @@ size_t      nvme_read(int data, uint8_t *buffer, size_t size, size_t lba)
             timeout = false;
             break;
         }
-        __asm__ volatile("pause\n\t");
+        __asm__ volatile("hlt\n\t");
     }
     if (!en) close_interrupt;
     if (timeout)
@@ -991,9 +1003,9 @@ size_t      nvme_read(int data, uint8_t *buffer, size_t size, size_t lba)
     return ret;
 }
 
-size_t nvme_write(int data, uint8_t *buffer, size_t size, size_t lba)
+size_t nvme_write(int drive, uint8_t *buffer, size_t size, size_t lba)
 {
-    nvme_ns_t *ns = NVMEdev[data];
+    nvme_ns_t *ns = (nvme_ns_t *)NV_map[drive];
 
     nvme_queue_t *queue = &ns->ctrl->io_queues[get_current_cpu()->processor_id];
 
@@ -1056,13 +1068,13 @@ void nvme_probe(pci_device_t *device)
     ctrl->cid_alloc_lock = SPIN_INIT;
 
     ctrl->pci_dev = device;
-    ctrl->bar0    = (volatile uint8_t*)phys_to_virt(device->bars[0].address);
+    ctrl->bar0    = (volatile uint8_t *)phys_to_virt(device->bars[0].address);
     page_map_range(get_kernel_pagedir(), (uint64_t)ctrl->bar0, device->bars[0].address, device->bars[0].size,
                    KERNEL_PTE_FLAGS);
     uint64_t cap;
     uint32_t mpsmin;
     uint32_t mpsmax;
-    uint32_t num_prp_lists;
+    uint32_t num_prp_lists = 0;
     if (!ctrl->bar0)
     {
         g_nvme_platform_ops->log("NVMe: BAR0 not mapped\n");
@@ -1122,7 +1134,7 @@ void nvme_probe(pci_device_t *device)
     }
     g_nvme_platform_ops->log("NVMe: Model=%.40s, Namespaces=%d\n", id_ctrl.mn, ctrl->num_namespaces);
 
-    ctrl->num_io_queues = min(8, 3);
+    ctrl->num_io_queues = MIN(8, 4);
 
     num_prp_lists = NVME_IO_QUEUE_SIZE * ctrl->num_io_queues;
     if (nvme_init_prp_pool(ctrl, num_prp_lists) != 0) { goto error; }
@@ -1172,31 +1184,30 @@ void nvme_probe(pci_device_t *device)
             g_nvme_platform_ops->log("NVMe: NS%d: %lld blocks x %d bytes\n", i, id_ns.nsze,
                                      ctrl->namespaces[i - 1].block_size);
 
-            nvme_ns_t *ns = (nvme_ns_t*)malloc(sizeof(nvme_ns_t));
+            nvme_ns_t *ns = (nvme_ns_t *)malloc(sizeof(nvme_ns_t));
             ns->ctrl      = ctrl;
             ns->ns        = &ctrl->namespaces[i - 1];
 
             device_t device_b;
-            char     name_buf[20];
-            sprintf(name_buf, "nvme%d", i);
+            char name[50];
+            sprintf(name, "nvme%d", i);
             device_b.write       = (writef)nvme_write;
             device_b.read        = (readf)nvme_read;
-            device_b.flag        = 1;
-            device_b.ioctl       = (ioctlf)empty;
-            device_b.poll        = (pollf)empty;
-            device_b.map         = (mapf)empty;
-            device_b.size        = ns->ns->block_count * ns->ns->block_size;
-            device_b.type        = DEVICE_BLOCK;
             device_b.sector_size = ns->ns->block_size;
+            device_b.size        = ns->ns->block_count * ns->ns->block_size;
+            device_b.flag        = 1;
             device_b.read_vbuf   = NULL;
             device_b.write_vbuf  = NULL;
-            strcpy(device_b.drive_name, name_buf);
-            int numb = regist_device(NULL, device_b);
-            NVMEdev[numb] = ns;
+            device_b.ioctl       = (ioctlf)NULL;
+            device_b.poll        = (pollf)NULL;
+            device_b.map         = (mapf)NULL;
+            device_b.type        = DEVICE_BLOCK;
+            strcpy(device_b.drive_name,name);
+            int c = regist_device(NULL, device_b);
+            write_serial_fmt("NAME: %s \n",name);
+            NV_map[c] = ns;
         }
     }
-
-    // device->desc = ctrl;
 
     g_nvme_platform_ops->log("NVMe: Initialization complete\n");
     return;
@@ -1213,6 +1224,6 @@ error:
 void nvme_setup()
 {
     nvme_set_platform_ops(&nvme_platform_ops);
-    pci_device_t *nvdev = pci_find_class(0x00010802);
-    nvme_probe(nvdev);
+    pci_device_t *nv_dev = pci_find_class(0x00010802);
+    nvme_probe(nv_dev);
 }
