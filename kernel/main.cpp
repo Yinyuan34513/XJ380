@@ -401,20 +401,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     // disable_intr();
     
-    partition_init();
-
-    vfs_node_t dev = vfs_open("/dev");
-    vfs_node_t c   = NULL;
-    bool       win = false;
-    list_foreach(dev->child, i) {
-        c = (vfs_node_t)i->data;
-        char buf[20];
-        sprintf(buf, "/dev/%s", c->name);
-        if (vfs_mount(buf, vfs_open("/")) != -1) {
-            win = true;
-            break;
-        }
-    }
     // init_user();
 
     process_setup();
@@ -469,7 +455,22 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     nvme_setup();
+    partition_init();
+
+    vfs_node_t dev = vfs_open("/dev");
+    vfs_node_t c   = NULL;
+    bool       win = false;
+    list_foreach(dev->child, i) {
+        c = (vfs_node_t)i->data;
+        char buf[20];
+        sprintf(buf, "/dev/%s", c->name);
+        if (vfs_mount(buf, vfs_open("/")) != -1) {
+            win = true;
+            break;
+        }
+    }
     
+    init_user();
     init_killer();
     write_serial_string("User & Killer is ready\n");
 

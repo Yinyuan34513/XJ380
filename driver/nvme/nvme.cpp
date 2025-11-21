@@ -401,6 +401,7 @@ static int nvme_process_queue_completions(nvme_controller_t *ctrl, nvme_queue_t 
 
     while (1)
     {
+        delay_ms_hp(20);
         // Read memory barrier
         g_nvme_platform_ops->rmb();
 
@@ -419,11 +420,12 @@ static int nvme_process_queue_completions(nvme_controller_t *ctrl, nvme_queue_t 
         {
             g_nvme_platform_ops->log("NVMe: Command failed - CID=%d Status=0x%04x (SC=%d SCT=%d)\n", cqe->cid,
                                      cqe->status, status_code, status_type);
+            nvme_dump_status(ctrl);
         }
 
         // Find and invoke callback
         uint16_t cid = cqe->cid;
-        if (cid < UINT16_MAX && ctrl->requests[cid])
+        if (cid < __UINT16_MAX__ && ctrl->requests[cid])
         {
             nvme_request_t *req = ctrl->requests[cid];
             if (req->callback) { req->callback(req->ctx, success, cqe->dw0); }
@@ -594,8 +596,8 @@ static int nvme_create_io_cq(nvme_controller_t *ctrl, nvme_queue_t *queue)
     uint32_t cdw11  = 0;
 
     cdw11 |= (1 << 0);                          // PC (Physically Contiguous) = 1
-    cdw11 |= (0 << 1);                          // IEN (Interrupts Enabled) = 1
-    cdw11 |= ((uint32_t)queue->queue_id << 16); // IV (Interrupt Vector)
+    // cdw11 |= (0 << 1);                          // IEN (Interrupts Enabled) = 1
+    // cdw11 |= ((uint32_t)queue->queue_id << 16); // IV (Interrupt Vector)
 
     cmd.cdw11 = cdw11;
 
@@ -955,6 +957,7 @@ size_t      nvme_read(int drive, uint8_t *buffer, size_t size, size_t lba)
 {
     
     nvme_ns_t *ns = (nvme_ns_t *)NV_map[drive];
+    write_serial_fmt("READ BLKSIZE: %d\n",ns->ns->block_size);
 
     nvme_queue_t *queue = &ns->ctrl->io_queues[get_current_cpu()->processor_id];
 
@@ -962,7 +965,7 @@ size_t      nvme_read(int drive, uint8_t *buffer, size_t size, size_t lba)
     cb_ctx->completed           = false;
     cb_ctx->success             = false;
     bool en                     = no_interrupt;
-    open_interrupt;
+    // open_interrupt;
     int r = nvme_read_async(ns->ctrl, ns->ns->nsid, lba, size, buffer, (uint64_t)virt_to_phys((uint64_t)buffer),
                             nvme_io_callback, cb_ctx);
     if (r < 0)
@@ -971,17 +974,17 @@ size_t      nvme_read(int drive, uint8_t *buffer, size_t size, size_t lba)
         return 0;
     }
     bool     timeout    = true;
-    uint64_t timeout_ns = nanoTime() + 500ULL * 1000000ULL;
-    while (nanoTime() < timeout_ns)
-    {
-        if (cb_ctx->completed)
-        {
-            timeout = false;
-            break;
-        }
-        __asm__ volatile("hlt\n\t");
-    }
-    if (!en) close_interrupt;
+    // uint64_t timeout_ns = nanoTime() + 500ULL * 1000000ULL;
+    // while (nanoTime() < timeout_ns)
+    // {
+    //     if (cb_ctx->completed)
+    //     {
+    //         timeout = false;
+    //         break;
+    //     }
+    //     __asm__ volatile("hlt\n\t");
+    // }
+    // if (!en) close_interrupt;
     if (timeout)
     {
         while (nvme_process_queue_completions(ns->ctrl, queue))
@@ -1012,7 +1015,7 @@ size_t nvme_write(int drive, uint8_t *buffer, size_t size, size_t lba)
     nvme_callback_ctx_t *cb_ctx = (nvme_callback_ctx_t *)malloc(sizeof(nvme_callback_ctx_t));
     cb_ctx->completed           = false;
     cb_ctx->success             = false;
-    open_interrupt;
+    // open_interrupt;
     int r = nvme_write_async(ns->ctrl, ns->ns->nsid, lba, size, buffer, (uint64_t)virt_to_phys((uint64_t)buffer),
                              nvme_io_callback, cb_ctx);
     if (r < 0)
@@ -1021,17 +1024,17 @@ size_t nvme_write(int drive, uint8_t *buffer, size_t size, size_t lba)
         return 0;
     }
     bool     timeout    = true;
-    uint64_t timeout_ns = nanoTime() + 500ULL * 1000000ULL;
-    while (nanoTime() < timeout_ns)
-    {
-        if (cb_ctx->completed)
-        {
-            timeout = false;
-            break;
-        }
-        __asm__ volatile("hlt\n\t");
-    }
-    close_interrupt;
+    // uint64_t timeout_ns = nanoTime() + 500ULL * 1000000ULL;
+    // while (nanoTime() < timeout_ns)
+    // {
+    //     if (cb_ctx->completed)
+    //     {
+    //         timeout = false;
+    //         break;
+    //     }
+    //     __asm__ volatile("hlt\n\t");
+    // }
+    // close_interrupt;
     if (timeout)
     {
         while (nvme_process_queue_completions(ns->ctrl, queue))
@@ -1134,7 +1137,7 @@ void nvme_probe(pci_device_t *device)
     }
     g_nvme_platform_ops->log("NVMe: Model=%.40s, Namespaces=%d\n", id_ctrl.mn, ctrl->num_namespaces);
 
-    ctrl->num_io_queues = MIN(8, 4);
+    ctrl->num_io_queues = MIN(8, get_cpu_num());
 
     num_prp_lists = NVME_IO_QUEUE_SIZE * ctrl->num_io_queues;
     if (nvme_init_prp_pool(ctrl, num_prp_lists) != 0) { goto error; }
