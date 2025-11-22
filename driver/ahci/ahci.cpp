@@ -466,6 +466,7 @@ void ahci_setup() {
         sata.map = (mapf)empty;
         sata.read_vbuf = NULL;
         sata.write_vbuf = NULL;
+        sata.max_size   = __UINT64_MAX__;//随便读!
         strcpy(sata.drive_name, name_buf);
         int id = regist_device(NULL, sata);
         hbaDevice[id] = hbadev;

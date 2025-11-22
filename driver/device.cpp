@@ -119,6 +119,169 @@ size_t device_write(size_t lba, size_t number, const void *buffer, int drive) {
     return 0;
 }
 
+size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length) {
+    device_t device;
+    if (have_vdisk(drive))
+    {
+        device = device_ctl[drive];
+    }
+    uint64_t start_sector    = offset / device.sector_size;
+    uint64_t end_sector      = (offset + length - 1) / device.sector_size;
+    uint64_t sector_count    = end_sector - start_sector + 1;
+    uint64_t offset_in_block = offset % device.sector_size;
+
+    size_t   total_size = sector_count * device.sector_size;
+    size_t   page_size  = (total_size / PAGE_SIZE) == 0 ? 1 : (total_size / PAGE_SIZE);
+    uint64_t phys       = alloc_frames(page_size);
+    page_map_range(get_current_directory(), (uint64_t)driver_phys_to_virt(phys), phys,
+                   page_size * PAGE_SIZE, KERNEL_PTE_FLAGS);
+    uint8_t *kbuf = (uint8_t*)driver_phys_to_virt(phys);
+
+    if ((offset_in_block == 0) && ((length % device.sector_size) == 0)) {
+        uint64_t total_copied      = 0;
+        uint64_t remaining_sectors = sector_count;
+        while (remaining_sectors > 0) {
+            uint64_t to_copy_sectors =
+                MIN(remaining_sectors, device.max_size / device.sector_size);
+            device.read(device.vdiskid, kbuf, to_copy_sectors,
+                             start_sector + total_copied / device.sector_size);
+            uint64_t to_copy_bytes = to_copy_sectors * device.sector_size;
+            memcpy(((uint64_t*)buffer + total_copied), kbuf, to_copy_bytes);
+            total_copied      += to_copy_bytes;
+            remaining_sectors -= to_copy_sectors;
+        }
+        unmap_page_range(get_kernel_pagedir(), (uint64_t)kbuf, sector_count * device.sector_size);
+        return total_copied;
+    }
+
+    uint64_t total_read = 0;
+    uint64_t remaining  = length;
+    uint8_t *dest       = (uint8_t *)buffer;
+
+    while (remaining > 0) {
+        // 计算本次操作的扇区数和长度
+        uint64_t chunk_sectors = sector_count;
+        uint64_t chunk_size    = remaining;
+
+        // 限制单次I/O大小
+        if (chunk_sectors * device.sector_size > device.max_size) {
+            chunk_sectors = device.max_size / device.sector_size;
+            chunk_size    = chunk_sectors * device.sector_size - offset_in_block;
+            if (chunk_size > remaining) { chunk_size = remaining; }
+        }
+
+        // 执行块设备读取
+        if (device.read(device.vdiskid, kbuf, chunk_sectors, start_sector) != chunk_sectors) {
+            write_serial_fmt("Read block device failed!!!\n");
+            unmap_page_range(get_kernel_pagedir(), (uint64_t)kbuf,
+                             sector_count * device.sector_size);
+            return (uint64_t)-1;
+        }
+
+        // 复制数据到目标缓冲区
+        uint64_t copy_size = (chunk_size > remaining) ? remaining : chunk_size;
+
+        memcpy(dest, kbuf + offset_in_block, copy_size);
+
+        // 更新状态
+        dest            += copy_size;
+        remaining       -= copy_size;
+        total_read      += copy_size;
+        start_sector    += chunk_sectors;
+        offset_in_block  = 0; // 第一次之后不需要再处理块内偏移
+    }
+
+    unmap_page_range(get_kernel_pagedir(), (uint64_t)kbuf, sector_count * device.sector_size);
+
+    return total_read;
+}
+
+size_t blk_device_write(device_t device, const void *buffer, size_t offset, size_t length) {
+
+    uint64_t start_sector    = offset / device.sector_size;
+    uint64_t end_sector      = (offset + length - 1) / device.sector_size;
+    uint64_t sector_count    = end_sector - start_sector + 1;
+    uint64_t offset_in_block = offset % device.sector_size;
+
+    size_t   total_size = sector_count * device.sector_size;
+    size_t   page_size  = (total_size / PAGE_SIZE) == 0 ? 1 : (total_size / PAGE_SIZE);
+    uint64_t phys       = alloc_frames(page_size);
+    page_map_range(get_current_directory(), (uint64_t)driver_phys_to_virt(phys), phys,
+                   page_size * PAGE_SIZE, KERNEL_PTE_FLAGS);
+    uint8_t *tmp = (uint8_t*)driver_phys_to_virt(phys);
+
+    if ((offset_in_block == 0) && ((length % device.sector_size) == 0)) {
+        uint64_t total_copied      = 0;
+        uint64_t remaining_sectors = sector_count;
+        while (remaining_sectors > 0) {
+            uint64_t to_copy_sectors =
+                MIN(remaining_sectors, device.max_size / device.sector_size);
+            uint64_t to_copy_bytes = to_copy_sectors * device.sector_size;
+            memcpy(tmp, ((uint64_t*)buffer + total_copied), to_copy_bytes);
+            uint64_t ret       = device.write(device.vdiskid, tmp,
+                                                   start_sector + total_copied / device.sector_size,
+                                                   to_copy_sectors);
+            total_copied      += to_copy_bytes;
+            remaining_sectors -= to_copy_sectors;
+        }
+        unmap_page_range(get_kernel_pagedir(), (uint64_t)tmp, sector_count * device.sector_size);
+        return total_copied;
+    }
+
+    uint64_t       total_written = 0;
+    uint64_t       remaining     = length;
+    const uint8_t *src           = (const uint8_t *)buffer;
+
+    while (remaining > 0) {
+        // 计算本次操作的扇区数和长度
+        uint64_t chunk_sectors = sector_count;
+        uint64_t chunk_size    = remaining;
+
+        // 限制单次I/O大小
+        if (chunk_sectors * device.sector_size > device.max_size) {
+            chunk_sectors = device.max_size / device.sector_size;
+            chunk_size    = chunk_sectors * device.sector_size - offset_in_block;
+            if (chunk_size > remaining) { chunk_size = remaining; }
+        }
+
+        // 对于部分块写入，需要先读取原始数据
+        if (offset_in_block != 0 || chunk_size < chunk_sectors * device.sector_size) {
+            if (device.read(device.vdiskid, tmp, chunk_sectors, start_sector) !=
+                chunk_sectors) {
+                write_serial_fmt("Read block device failed!!!\n");
+                unmap_page_range(get_kernel_pagedir(), (uint64_t)tmp,
+                                 sector_count * device.sector_size);
+                return (uint64_t)-1;
+            }
+        }
+
+        // 复制数据到临时缓冲区
+        uint64_t copy_size = (chunk_size > remaining) ? remaining : chunk_size;
+
+        memcpy(tmp + offset_in_block, src, copy_size);
+
+        // 执行块设备写入
+        if (device.write(device.vdiskid, tmp, chunk_sectors, start_sector) != chunk_sectors) {
+            write_serial_fmt("Write block device failed!!!\n");
+            unmap_page_range(get_kernel_pagedir(), (uint64_t)tmp,
+                             sector_count * device.sector_size);
+            return (uint64_t)-1;
+        }
+
+        // 更新状态
+        src             += copy_size;
+        remaining       -= copy_size;
+        total_written   += copy_size;
+        start_sector    += chunk_sectors;
+        offset_in_block  = 0; // 第一次之后不需要再处理块内偏移
+    }
+
+    unmap_page_range(get_kernel_pagedir(), (uint64_t)tmp, sector_count * device.sector_size);
+
+    return total_written;
+}
+
+
 int device_manager_init() {
     for (size_t i = 0; i < 256; i++) {
         device_ctl[i].flag = 0; // 设置为未使用

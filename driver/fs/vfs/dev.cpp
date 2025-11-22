@@ -146,31 +146,31 @@ static void devfs_open(void *parent, const char *name, vfs_node_t node) {
     node->fsid     = devfs_id;
     node->refcount = 1;
 }
-
+extern size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length);
 size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir) return VFS_STATUS_FAILED;
     device_t *deivce = handle->device;
     // write_serial_fmt("device name: %s vdid %d\n",deivce->drive_name, deivce->vdiskid);
 
-    size_t sector_size;
-    size_t sectors_to_do;
-    if (deivce->flag == 0) return VFS_STATUS_FAILED;
-    sector_size                      = deivce->sector_size;
-    size_t padding_up_to_sector_size = PADDING_UP(size, sector_size);
-    offset                           = PADDING_UP(offset, sector_size);
+//     size_t sector_size;
+//     size_t sectors_to_do;
+//     if (deivce->flag == 0) return VFS_STATUS_FAILED;
+//     sector_size                      = deivce->sector_size;
+//     size_t padding_up_to_sector_size = PADDING_UP(size, sector_size);
+//     offset                           = PADDING_UP(offset, sector_size);
 
-    if (deivce->type == DEVICE_STREAM) goto read;
-    if (offset > deivce->size) return VFS_STATUS_SUCCESS;
-    if (deivce->size < offset + padding_up_to_sector_size) {
-        // 计算需要读取的扇区数
-        padding_up_to_sector_size = deivce->size - offset;
-        if (size > padding_up_to_sector_size) { size = padding_up_to_sector_size; }
-    }
-read:
+//     if (deivce->type == DEVICE_STREAM) goto read;
+//     if (offset > deivce->size) return VFS_STATUS_SUCCESS;
+//     if (deivce->size < offset + padding_up_to_sector_size) {
+//         // 计算需要读取的扇区数
+//         padding_up_to_sector_size = deivce->size - offset;
+//         if (size > padding_up_to_sector_size) { size = padding_up_to_sector_size; }
+//     }
+// read:
 
-    sectors_to_do    = padding_up_to_sector_size / sector_size;
-    size_t read_size = device_read(offset / sector_size, sectors_to_do, addr, deivce->vdiskid);
+//     sectors_to_do    = padding_up_to_sector_size / sector_size;
+    size_t read_size = blk_device_read(deivce->vdiskid, addr, offset, size);
     return read_size;
 }
 

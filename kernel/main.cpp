@@ -348,6 +348,7 @@ void judge_bigend_littleend1() {
        write_serial_fmt("大端\n");
 }
 extern size_t   now_tid;
+extern void nvme_setup();
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -391,15 +392,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // hda_init();
     // sb16_init();
 
-    // enable_intr();
-    // keyboard_setup();
-    // write_serial_fmt("KEYBOARD (PS2) \n");
-    // mouse_init();
-    // write_serial_fmt("MOUSE (PS2) \n");
+    enable_intr();
+    keyboard_setup();
+    write_serial_fmt("KEYBOARD (PS2) \n");
+    mouse_init();
+    write_serial_fmt("MOUSE (PS2) \n");
 
-    // rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    // disable_intr();
+    disable_intr();
     
     // init_user();
 
@@ -439,21 +440,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // write_serial_string("Alloc memory: ");
     // write_serial_hex(phys);
     // write_serial_string("\n");、
-
-
-    init_syscall();
-    init_signal();
-
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
-
-    while (true)
-    {
-        __asm__ volatile("pause");
-        if (scheduler_is_ready == xsi->cpu_count) break;
-    }
-
-    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
-
     nvme_setup();
     partition_init();
 
@@ -469,6 +455,21 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
             break;
         }
     }
+
+
+    init_syscall();
+    init_signal();
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
+
+    while (true)
+    {
+        __asm__ volatile("pause");
+        if (scheduler_is_ready == xsi->cpu_count) break;
+    }
+
+    rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
+
     
     init_user();
     init_killer();

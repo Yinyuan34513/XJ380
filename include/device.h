@@ -35,7 +35,8 @@ typedef struct _device
     char          drive_name[50];
     size_t        vdiskid; // 设备号
     char         *path;    // 设备注册路径
-} device_t;                // 设备句柄
+    uint64_t      max_size;
+} device_t; // 设备句柄
 
 size_t disk_size(int drive);
 int    device_manager_init();

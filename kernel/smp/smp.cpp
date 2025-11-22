@@ -423,4 +423,5 @@ void init_smp(uint64_t MADT0)
         }
         current += (uint64_t)header->length;
     }
+    write_serial_fmt("SMP init with %d cpus\n",xsi->cpu_count);
 }

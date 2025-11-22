@@ -472,7 +472,7 @@ void serial_wprintf(const char *fmt, ...)
 /**
  * Needn't heap now!!!
  */
-void write_serial_fmt(const char *fmt, ...)
+int write_serial_fmt(const char *fmt, ...)
 {
     disable_scheduler();
     close_interrupt; // Avoid deadlock
@@ -492,6 +492,7 @@ void write_serial_fmt(const char *fmt, ...)
         open_interrupt; 
         enable_scheduler();
     }
+    return 0;
 }
 
 typedef struct UnsafeBufWriterData
