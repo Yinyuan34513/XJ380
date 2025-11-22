@@ -22,7 +22,15 @@ typedef struct
     bool  input_lock;       // false = waiting input
     bool  output_lock;      // false = waiting flush
     bool  wait_for_getch;   // true  = waiting getch
+    bool  wait_for_input;   // true  = waiting input (for console)
     char  char_for_getch;
     char *input;
     char *output;
 } xtttp_dtt;
+
+void init_terminal_app(struct X64_REGS *reg);
+void mark_process_is_terminal();
+int check_input_waiting_status();
+void read_terminal_app_output_buffer(char *str);
+void write_terminal_app_output_buffer(char *str);
+void terminal_finish_app_output();

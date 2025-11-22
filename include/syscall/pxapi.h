@@ -33,6 +33,8 @@ typedef  struct {
 #define SXAH_MARK_IS_TERMINAL       128956723895689204      // 标记为命令行
 #define SXAH_WRITE_INPUT_BUFFER     128956723895689205      // 写入XTTTP输入缓冲区
 #define SXAH_READ_OUTPUT_BUFFER     128956723895689206      // 读取XTTTP输出缓冲区
+#define SXAH_CHECK_INPUT_BUFFER     128956723895689207      // 检查是否需要输入
+#define SXAH_UNLOCK_OUTPUT_LOCK     128956723895689208      // 完成输出，关闭输出锁
 
 #define SXAH_INIT_TERMINAL_APP  3801    // 初始化为终端应用程序
 
@@ -166,6 +168,8 @@ void do_xapi_GetCurrentUser(uint64_t dst);
 void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
+uint64_t do_xapi_ReadFile(struct X64_REGS *regs);
+uint64_t do_xapi_WriteFile(struct X64_REGS *regs);
 
 
 

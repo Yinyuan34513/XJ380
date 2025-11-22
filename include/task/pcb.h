@@ -104,7 +104,7 @@ struct process_control_block
     size_t            elf_size;    // 可执行文件大小
     uint64_t          load_start;  // 加载起始地址
 
-    xtttp_dtt   xtttp_stc;
+    xtttp_dtt   *xtttp_stc;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);

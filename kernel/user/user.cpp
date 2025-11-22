@@ -255,9 +255,12 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     memset(cmdline, 0, sizeof(cmdline));
     char *cmdline_ptr = cmdline;
 
-    for (int i = 0; argv[i]; i++) {
-        int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
-        cmdline_ptr += len;
+    if (argv != NULL) 
+    {
+        for (int i = 0; argv[i]; i++) {
+            int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
+            cmdline_ptr += len;
+        }
     }
 
     char *old_cmdline = group->cmdline;

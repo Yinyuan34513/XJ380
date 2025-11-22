@@ -278,8 +278,9 @@ void desktop_flusher()
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
     char *argv[10]    = {"a", "b", "c", "d"};
-    create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL);
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     desktop_done = true;
     while (1)
     {
@@ -371,6 +372,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     nvme_init();
     usb_init();
 
+    keyboard_setup();
+    mouse_init();
+
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     vfs_init();
@@ -458,8 +462,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     hid_init();
     init_xhci();
-    keyboard_setup();
-    mouse_init();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();

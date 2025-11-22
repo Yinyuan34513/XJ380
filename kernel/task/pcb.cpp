@@ -43,7 +43,7 @@ void thread_exit(int exit_code)
     // 设置线程状态为死亡
     current->status = DEATH;
 
-    if(current->hasfscr)
+    if (current->hasfscr)
     {
         init_dock(sht_img,&dock_sheet_id);
     }
@@ -529,7 +529,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         size_t old_envc = process->envc;
         process->envp   = copy_envp(envp);
         process->envc   = envp_length(envp);
-    }else{
+    } else {
         process->envp   = copy_envp(current_user->envp);
         process->envc   = current_user->envc;
     }
@@ -943,6 +943,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
 
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
+    
+    pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
+    memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
 
     return pcb;
 }
