@@ -37,7 +37,7 @@ void init_terminal_app(struct X64_REGS *reg)
 {
     uint64_t pid  = process_fork(reg, false, 0);
     tcb_t current = get_current_task();
-    // return;
+
     if (pid == 0)
     {
         // 是子进程！

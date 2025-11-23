@@ -31,6 +31,7 @@
 #include <hda/pcspk.h>
 
 bool        desktop_done = false;
+bool        xhci_done    = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
 uint16_t   *msid;
@@ -277,11 +278,15 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
+
+    desktop_done = true;
+    while (!xhci_done)
+        cpu_relax();
+
     char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
-    desktop_done = true;
     while (1)
     {
         if (!no_interrupt)
@@ -463,6 +468,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     hid_init();
     init_xhci();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+
+    xhci_done = true;
 
     enable_scheduler();
     open_interrupt;
