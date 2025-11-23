@@ -1268,7 +1268,7 @@ typedef struct enumerater_arg {
 } enumerater_arg_t;
 
 spin_t enumerate_lock = SPIN_INIT;
-
+extern bool        xhci_done    ;
 void xhci_device_enumerater(enumerater_arg_t *arg) {
     spin_lock(enumerate_lock);
     usb_hcd_t *hcd = arg->hcd;
@@ -1282,6 +1282,7 @@ void xhci_device_enumerater(enumerater_arg_t *arg) {
     }
     free(arg);
     spin_unlock(enumerate_lock);
+    xhci_done = true;
     thread_exit(0);
 }
 

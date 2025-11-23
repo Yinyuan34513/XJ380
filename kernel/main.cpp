@@ -284,6 +284,8 @@ void desktop_flusher()
     while (!xhci_done)
         cpu_relax();
 
+    delay_s_hp(3);
+
     char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
@@ -506,17 +508,17 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     while (!desktop_done)
         cpu_relax();
 
+    hid_init();
+    xhci_setup();
+
     no_interrupt = true;
     close_interrupt;
     disable_scheduler();
     // hid_init();
     // init_xhci();
 
-    hid_init();
-    xhci_setup();
+    
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
-
-    xhci_done = true;
 
     enable_scheduler();
     open_interrupt;
@@ -524,6 +526,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (true)
     {
+        if(!no_interrupt)
+        {
+            enable_intr();
+            enable_scheduler();
+        }
+        
         __asm__ __volatile__("pause");
     }
 }

@@ -104,7 +104,7 @@ uint64_t do_xapi_WriteFile(struct X64_REGS *regs)
         return 0;
     }
 
-    ssize_t ret = vfs_write(node, (const void *)regs->rsi, regs->r9, regs->rdx);
+    ssize_t ret = vfs_write(node, (void *)regs->rsi, regs->r9, regs->rdx);
     vfs_close(node);
     return ret;
 }

@@ -47,6 +47,7 @@ void tam_main_loop()
     while (true)
     {
         // 获取输入
+        __asm__ volatile("pause\n\t");
         if (p_chbuffer) { tam_flush_buffer(); }
 
         // 检查输出缓冲区
