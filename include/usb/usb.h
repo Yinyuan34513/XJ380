@@ -3,6 +3,7 @@
 #define USB_CORE_H
 
 #include <proto.hpp>
+#include <usb/usb.h>
 
 // USB标准定义
 #define USB_DIR_OUT 0

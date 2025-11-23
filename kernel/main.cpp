@@ -343,12 +343,17 @@ void judge_bigend_littleend1() {
    int i = 48;
    char c = *((char*)&i);
    if (c == '0')
-       write_serial_fmt("小端\n");
+       write_serial_fmt("小端 LE\n");
    else
-       write_serial_fmt("大端\n");
+       write_serial_fmt("大端 BE\n");
 }
+
+
 extern size_t   now_tid;
 extern void nvme_setup();
+extern int xhci_setup();
+extern void mount_root();
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -385,6 +390,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_setup();
+    nvme_setup();
+    partition_init();
     // enable_intr();
     
     // disable_intr();
@@ -440,21 +447,22 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // write_serial_string("Alloc memory: ");
     // write_serial_hex(phys);
     // write_serial_string("\n");、
-    nvme_setup();
-    partition_init();
+    
 
-    vfs_node_t dev = vfs_open("/dev");
-    vfs_node_t c   = NULL;
-    bool       win = false;
-    list_foreach(dev->child, i) {
-        c = (vfs_node_t)i->data;
-        char buf[20];
-        sprintf(buf, "/dev/%s", c->name);
-        if (vfs_mount(buf, vfs_open("/")) != -1) {
-            win = true;
-            break;
-        }
-    }
+    // vfs_node_t dev = vfs_open("/dev");
+    // vfs_node_t c   = NULL;
+    // bool       win = false;
+    // list_foreach(dev->child, i) {
+    //     c = (vfs_node_t)i->data;
+    //     char buf[20];
+    //     sprintf(buf, "/dev/%s", c->name);
+    //     if (vfs_mount(buf, vfs_open("/")) == 0) {
+    //         win = true;
+    //         write_serial_fmt("Mount success\n");
+    //         break;
+    //     }
+    // }
+    mount_root();
 
 
     init_syscall();
@@ -497,7 +505,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     disable_scheduler();
 
     hid_init();
-    init_xhci();
+    xhci_setup();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();

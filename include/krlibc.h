@@ -242,5 +242,6 @@ int cmd_parse(const char *cmd_str, char **argv, char token);
 
 #define PADDING_DOWN(size, to) ((size_t)(size) / (size_t)(to) * (size_t)(to))
 #define PADDING_UP(size, to)   PADDING_DOWN((size_t)(size) + (size_t)(to) - (size_t)1, to)
+#define PADDING_REQ(size, to)  ((size + (to) - 1) & ~((to) - 1) / (to))
 #define IS_DIGIT(c)            ((c) >= '0' && (c) <= '9')
 #define IS_ALPHA(a)            (((a) >= 'A' && (a) <= 'Z') || ((a) >= 'a' && (a) <= 'z'))

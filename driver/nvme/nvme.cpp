@@ -25,5 +25,6 @@ void nvme_shutdown(pci_device_t *dev)
 void nvme_setup()
 {
     pci_device_t * nvdev = pci_find_class(0x010800);
+    if(nvdev==NULL)return;
     nvme_probe(nvdev,NULL);
 }

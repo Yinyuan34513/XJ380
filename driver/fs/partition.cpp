@@ -301,3 +301,33 @@ void partition_init()
         device_lists[id] = &partitions[j];
     }
 }
+void mount_root()
+{
+    bool err = true;
+
+    for (uint64_t i = 0; i < partition_num; i++)
+    {
+        partition_t p =  partitions[i];
+        device_t *src_dev = get_device(p.vdisk_id);
+        char buf[1024] = {};
+        sprintf(buf, "/dev/%sp%zu", src_dev->drive_name, i);
+        write_serial_string(buf);
+        write_serial_string("\n");
+
+        if (!vfs_mount((const char *)buf, rootdir))
+        {
+            err = false;
+            write_serial_fmt("Mount root OK!\n");
+            break;
+        }
+    }
+
+    if (err)
+    {
+        write_serial_fmt("Mount root failed\n");
+        while (1)
+        {
+            __asm__ volatile("pause\n\t");
+        }
+    }
+}
