@@ -105,6 +105,7 @@ struct process_control_block
     uint64_t          load_start;  // 加载起始地址
 
     xtttp_dtt   *xtttp_stc;
+    bool     co;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);

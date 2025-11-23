@@ -48,9 +48,11 @@ void do_xapi_GetCurrentUser(uint64_t dst)
 void do_xapi_Output(char *str)
 {
     pcb_t front_p = get_current_task()->parent_group;
+    // while(!front_p->parent_task->co)cpu_relax();
+    
     while (true)
     {
-        if (front_p == NULL && front_p == kernel_group)
+        if (front_p == NULL)
         {
             write_serial_fmt("[Warning] A program call xapi_Output, but cannot found parent terminal. ");
             return;
@@ -58,7 +60,7 @@ void do_xapi_Output(char *str)
         if (front_p->xtttp_stc->is_shell)
         {
             // found it!
-            strcpy(front_p->xtttp_stc->output, str);
+            strcat(front_p->xtttp_stc->output, str);//如果还有怎么办?
             // 等待命令行刷新
             while (true)
             {

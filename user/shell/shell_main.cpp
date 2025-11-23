@@ -75,6 +75,7 @@ int main(int argc, char *argv[], char *envp[])
     {
         // 这代表是给别的命令行程序用的
         server_mode = true;
+        xapi_RefreshWindow(handle);
         tam_main_loop();
         return 0;
     }

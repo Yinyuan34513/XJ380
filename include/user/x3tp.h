@@ -24,8 +24,8 @@ typedef struct
     bool  wait_for_getch;   // true  = waiting getch
     bool  wait_for_input;   // true  = waiting input (for console)
     char  char_for_getch;
-    char *input;
-    char *output;
+    char input[1024];
+    char output[1024];
 } xtttp_dtt;
 
 void init_terminal_app(struct X64_REGS *reg);

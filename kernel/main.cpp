@@ -279,7 +279,7 @@ void desktop_flusher()
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
 
-    desktop_done = true;
+     desktop_done = true;
     while (!xhci_done)
         cpu_relax();
 
@@ -287,6 +287,7 @@ void desktop_flusher()
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+   
     while (1)
     {
         if (!no_interrupt)
@@ -464,9 +465,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     no_interrupt = true;
     close_interrupt;
     disable_scheduler();
+    // hid_init();
+    // init_xhci();
 
-    hid_init();
-    init_xhci();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     xhci_done = true;

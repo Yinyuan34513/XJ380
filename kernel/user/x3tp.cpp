@@ -29,8 +29,10 @@
 
 void init_process_xtttp(pcb_t pcb)
 {
-    pcb->xtttp_stc->input    = (char *)malloc(1024 * sizeof(char));
-    pcb->xtttp_stc->output   = (char *)malloc(1024 * sizeof(char));
+    // pcb->xtttp_stc->input    = (char *)malloc(1024 * sizeof(char));
+    memset(pcb->xtttp_stc->output,0,sizeof(pcb->xtttp_stc->output));
+    // pcb->xtttp_stc->output   = (char *)malloc(1024 * sizeof(char));
+    memset(pcb->xtttp_stc->input,0,sizeof(pcb->xtttp_stc->input));
 }
 
 void init_terminal_app(struct X64_REGS *reg)
@@ -50,7 +52,7 @@ void init_terminal_app(struct X64_REGS *reg)
         return;
     }
 
-    char *argv[1] = {"-xj380sys-terminal-app-mode"};
+    char *argv[2] = {"-xj380sys-terminal-app-mode"};
     process_execve("/system/shell.elf", argv, NULL);
 }
 
@@ -60,6 +62,7 @@ void mark_process_is_terminal()
     tcb_t current = get_current_task();
     init_process_xtttp(current->parent_group);
     current->parent_group->xtttp_stc->is_shell = true;
+    current->parent_group->co = true;
 }
 
 int check_input_waiting_status()
@@ -71,6 +74,7 @@ int check_input_waiting_status()
 void read_terminal_app_output_buffer(char *str)
 {
     tcb_t current = get_current_task();
+    // write_serial_fmt("NAME!! %s\n",current->name);
     strcpy(str, current->parent_group->parent_task->xtttp_stc->output);
 }
 

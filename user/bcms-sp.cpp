@@ -2,7 +2,8 @@
 
 int main(int argc, char *argv[], char *envp[])
 {
-    // xapi_Output("Hello World!");
+    
+    xapi_Output("Hello World!");
     while (1);
     return 0;
 }

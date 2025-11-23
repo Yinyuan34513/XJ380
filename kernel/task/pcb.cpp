@@ -501,6 +501,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
     pcb_t process = get_current_task()->parent_group;
+    process->co   = false;
 
     close_interrupt;
     disable_scheduler();
@@ -611,6 +612,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->vfork        = is_vfork;
     new_pcb->child_pcb    = queue_init();
     new_pcb->child_index  = queue_enqueue(current_pcb->child_pcb, new_pcb);
+    new_pcb->co   = false;
+    new_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
+    memset(new_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
 
     tcb_t parent_task = get_current_task();
 
@@ -946,6 +950,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
+    pcb->co   = false;
 
     return pcb;
 }
@@ -970,6 +975,9 @@ void process_setup()
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
     kernel_pcb->child_pcb    = queue_init();
+    kernel_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
+    memset(kernel_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
+    kernel_pcb->co   = false;
     for(int i=0;i<256;i++)
     {
         kernel_pcb->fds[i]=NULL;
