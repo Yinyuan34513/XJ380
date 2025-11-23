@@ -11,10 +11,17 @@
 pcb_t   wait_kill_queue[10];
 uint8_t wait_kill_count = 0;
 
+extern bool no_interrupt; // 为true时代表严禁开启中断
+
 void killer_thread()
 {
     while (true)
     {
+        if (!no_interrupt)
+        {
+            open_interrupt;
+            enable_scheduler();
+        }
         if (wait_kill_count)
         {
             for (int i = 0; i < 10; i++)

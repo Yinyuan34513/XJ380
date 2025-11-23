@@ -4,8 +4,17 @@
 
 uint64_t rp = 0;
 
+extern bool input_is_enter; // shell_tam.cpp
+extern bool server_mode; // shell_main.cpp
+
 void check_command()
 {
+    if (server_mode)
+    {
+        input_is_enter = true;
+        return;
+    }
+
     command_ck_lock = true;
 
     input_buf[p_inbuf] = '\0';

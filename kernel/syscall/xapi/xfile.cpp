@@ -17,9 +17,13 @@
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <rtc.h>
+#include <pctable/gdt.h>
+#include <pctable/idt.h>
+#include <syscall/syscall.h>
 #include <syscall/pxapi.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <errno.h>
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
 {
@@ -50,4 +54,57 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
             (*fcount)++;
         }
     }
+}
+
+uint64_t do_xapi_ReadFile(struct X64_REGS *regs)
+{
+    vfs_node_t node = vfs_open((const char *)regs->rdi);
+    if (!node)
+    {
+        regs->rax = (uint64_t)-ENOENT;
+        return 0;
+    }
+
+    if (node->type & file_dir)
+    {
+        vfs_close(node);
+        regs->rax = (uint64_t)-EISDIR;
+        return 0;
+    }
+
+    ssize_t ret = vfs_read(node, (void *)regs->rsi, regs->r9, regs->rdx);
+    vfs_close(node);
+    return ret;
+}
+
+uint64_t do_xapi_WriteFile(struct X64_REGS *regs)
+{
+    vfs_node_t node = vfs_open((const char *)regs->rdi);
+    if (!node)
+    {
+        // 文件不存在，创建它
+        int create_ret = vfs_mkfile((const char *)regs->rdi);
+        if (create_ret < 0)
+        {
+            regs->rax = (uint64_t)-ENOENT;
+            return 0;
+        }
+        node = vfs_open((const char *)regs->rdi);
+        if (!node)
+        {
+            regs->rax = (uint64_t)-ENOENT;
+            return 0;
+        }
+    }
+
+    if (node->type & file_dir)
+    {
+        vfs_close(node);
+        regs->rax = (uint64_t)-EISDIR;
+        return 0;
+    }
+
+    ssize_t ret = vfs_write(node, (const void *)regs->rsi, regs->r9, regs->rdx);
+    vfs_close(node);
+    return ret;
 }

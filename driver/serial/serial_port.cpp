@@ -474,7 +474,7 @@ void serial_wprintf(const char *fmt, ...)
  */
 int write_serial_fmt(const char *fmt, ...)
 {
-    disable_scheduler();
+    // disable_scheduler();
     close_interrupt; // Avoid deadlock
     spin_lock(fmt_lock);
     va_list args;
@@ -490,7 +490,7 @@ int write_serial_fmt(const char *fmt, ...)
     spin_unlock(fmt_lock);
     if (!no_interrupt) { 
         open_interrupt; 
-        enable_scheduler();
+        // enable_scheduler();
     }
     return 0;
 }

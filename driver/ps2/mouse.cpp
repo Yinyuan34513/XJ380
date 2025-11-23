@@ -131,8 +131,6 @@ void process_mouse_button()
                     current_window->WinMPf, current_window->w_task);
         }
     }
-
-    ms_dec.need_flush = false;
 }
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
@@ -140,6 +138,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
     uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
     {
+        ms_dec.need_flush = true;
         process_mouse_button();
     }
     send_eoi();
@@ -262,7 +261,15 @@ bool mousedecode(uint8_t data)
             return 0;
         }
         else
+        {
+            mouse_x += ms_dec.x;
+            mouse_y += ms_dec.y;
+            if (mouse_x < 0) mouse_x = 0;
+            if (mouse_y < 0) mouse_y = 0;
+            if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+            if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
             return true;
+        }
     }
     if (ms_dec.phase == 4)
     {
@@ -345,34 +352,29 @@ void mouse_init()
 {
     open_interrupt;
 
-    mouse_wait(1);
-    outb(0x64, 0xA8);
+    wait_KB_write();
+    outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
 
-    // enable interrupts
-    mouse_wait(1);
-    outb(0x64, 0x20);
-    mouse_wait(0);
-    uint8_t status;
-    status = (inb(0x60) | 2);
-    mouse_wait(1);
-    outb(0x64, 0x60);
-    mouse_wait(1);
-    outb(0x60, status);
+    delay_ms(100);
 
-    // default settings
-    mouse_write(0xF6);
-    mouse_read();
+    wait_KB_write();
+    outb(PORT_KB_CMD, KB_SEND2MOUSE);
+    wait_KB_write();
+    outb(PORT_KB_DATA, MOUSE_EN);
 
-    // enable device
-    mouse_write(0xF4);
-    mouse_read();
+    delay_ms(100);
 
-    mouse_x = (get_hor() - 16) / 2;
-    mouse_y = (get_ver() - 28 - 29) / 2;
+    wait_KB_write();
+    outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
+    wait_KB_write();
+    outb(PORT_KB_DATA, KB_INIT_MODE);
+
+    mouse_x      = (get_hor() - 16) / 2;
+    mouse_y      = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
 
     ms_dec.win_move_lock = false;
-    ms_dec.sht_now = NULL;
+    ms_dec.sht_now       = NULL;
     close_interrupt;
 }
 // void mouse_init()

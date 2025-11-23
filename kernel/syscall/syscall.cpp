@@ -1782,6 +1782,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     switch (syscall_number)
     {
+    /* XJ380API POSIX Edition */
     // case SYS_READ:
     //     regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
     //     break;
@@ -1876,6 +1877,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     regs->rax = 0;
         //     break;
 
+    
+    /* XJ380API XAPI Edition */
     case XAPI_OUTPUT: do_xapi_Output((char *)regs->rdi); break;
     case XAPI_INPUT: do_xapi_Input((char *)regs->rdi); break;
     case XAPI_GETCH: regs->rax = (uint64_t)do_xapi_Getch(); break;
@@ -1888,59 +1891,12 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_CREATE_FILE: regs->rax = (uint64_t)sys_open(( char *)regs->rdi, O_CREAT,0644,0,0,0,regs); break;
     case XAPI_DELETE_FILE: regs->rax = (uint64_t)sys_unlink(regs->rdi,0,0,0,0,0,regs); break;
     case XAPI_RENAME_FILE: regs->rax = (uint64_t)sys_rename((char *)regs->rdi, (char *)regs->rsi,0,0,0,0,regs); break;
-    case XAPI_READ_FILE: {
-        // 参数: filename, buffer, size, offset
-        vfs_node_t node = vfs_open((const char *)regs->rdi);
-        if (!node)
-        {
-            regs->rax = (uint64_t)-ENOENT;
-            break;
-        }
-
-        if (node->type & file_dir)
-        {
-            vfs_close(node);
-            regs->rax = (uint64_t)-EISDIR;
-            break;
-        }
-
-        ssize_t ret = vfs_read(node, (void *)regs->rsi, regs->r9, regs->rdx);
-        vfs_close(node);
-        regs->rax = (uint64_t)ret;
+    case XAPI_READ_FILE:
+        regs->rax = (uint64_t)do_xapi_ReadFile(regs);
         break;
-    }
-    case XAPI_WRITE_FILE: {
-        // 参数: filename, buffer, size, offset
-        vfs_node_t node = vfs_open((const char *)regs->rdi);
-        if (!node)
-        {
-            // 文件不存在，创建它
-            int create_ret = vfs_mkfile((const char *)regs->rdi);
-            if (create_ret < 0)
-            {
-                regs->rax = (uint64_t)-ENOENT;
-                break;
-            }
-            node = vfs_open((const char *)regs->rdi);
-            if (!node)
-            {
-                regs->rax = (uint64_t)-ENOENT;
-                break;
-            }
-        }
-
-        if (node->type & file_dir)
-        {
-            vfs_close(node);
-            regs->rax = (uint64_t)-EISDIR;
-            break;
-        }
-
-        ssize_t ret = vfs_write(node, (uint8_t *)regs->rsi, regs->r9, regs->rdx);
-        vfs_close(node);
-        regs->rax = (uint64_t)ret;
+    case XAPI_WRITE_FILE:
+        regs->rax = (uint64_t)do_xapi_WriteFile(regs);
         break;
-    }
     case XAPI_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case XAPI_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
@@ -1990,11 +1946,18 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_GET_TIME: regs->rax = (uint64_t)do_xapi_GetTime(); break;
     case XAPI_GET_CURRENT_USER: do_xapi_GetCurrentUser(regs->rdi); break;
 
+    case SXAH_INIT_TERMINAL_APP: init_terminal_app(regs); break;
+
+    /* XJ380API 隐藏版（严禁泄露） */
     case SXAH_SYSCALL_RETURN:
         get_current_task()->parent_group->sigprci = false;
         signal_end();
         break;
-    case SXAH_MARK_IS_TERMINAL: get_current_task()->parent_group->xtttp_stc.is_shell = true; break;
+    case SXAH_MARK_IS_TERMINAL: mark_process_is_terminal(); break;
+    case SXAH_READ_OUTPUT_BUFFER: read_terminal_app_output_buffer((char *)regs->rdi); break;
+    case SXAH_WRITE_INPUT_BUFFER: write_terminal_app_output_buffer((char *)regs->rdi); break;
+    case SXAH_CHECK_INPUT_BUFFER: check_input_waiting_status(); break;
+    case SXAH_UNLOCK_OUTPUT_LOCK: terminal_finish_app_output(); break;
 
     default:
         regs->rax = (uint64_t)-ENOSYS;

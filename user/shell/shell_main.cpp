@@ -24,6 +24,8 @@ bool command_ck_lock     = false;
 bool putchar_lock        = false;
 bool paint_cursor_lock   = false;
 
+bool server_mode = false;
+
 HDLE handle;
 
 int blkc = 0, cf = 0;
@@ -62,11 +64,23 @@ int main(int argc, char *argv[], char *envp[])
     xapi_CreateWindow(&handle, &Winfo);
     SetMsgPrcor(handle, shell_MessagePrcor);
 
+    mark_terminal();
+
     // 初始绘制
     *ab_x = 8;
     *ab_y = 4;
-    strcpy(current_path, "/");
     xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, BACKGROUND_COLOR, true);
+
+    if (strcmp(argv[0], "-xj380sys-terminal-app-mode") == 0)
+    {
+        // 这代表是给别的命令行程序用的
+        server_mode = true;
+        xapi_RefreshWindow(handle);
+        tam_main_loop();
+        return 0;
+    }
+
+    strcpy(current_path, "/");
     print_to_console("XINGJI SpaceTerminal for XJ380");
     print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
     paint_arrow_sign(2, 40);

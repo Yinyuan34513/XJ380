@@ -338,6 +338,8 @@ size_t add_task(tcb_t new_task)
     
     new_task->cpu_id = min_cpu->processor_id;
     new_task->queue_index = queue_enqueue(min_cpu->scheduler_queue, new_task);
+
+    // debug_sched_queue(min_cpu->scheduler_queue);
     
     spin_unlock(scheduler_lock);
     return new_task->queue_index;

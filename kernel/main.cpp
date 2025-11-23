@@ -32,6 +32,7 @@
 #include <sb16.h>
 
 bool        desktop_done = false;
+bool        xhci_done    = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
 uint16_t   *msid;
@@ -278,10 +279,16 @@ void desktop_flusher()
     tw_data->sht      = &shtinf;
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
+
+     desktop_done = true;
+    while (!xhci_done)
+        cpu_relax();
+
     char *argv[10]    = {"a", "b", "c", "d"};
-    create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL);
-    desktop_done = true;
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+   
     while (1)
     {
         if (!no_interrupt)
@@ -399,7 +406,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // hda_init();
     // sb16_init();
 
-    enable_intr();
     keyboard_setup();
     write_serial_fmt("KEYBOARD (PS2) \n");
     mouse_init();
@@ -503,10 +509,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     no_interrupt = true;
     close_interrupt;
     disable_scheduler();
+    // hid_init();
+    // init_xhci();
 
     hid_init();
     xhci_setup();
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+
+    xhci_done = true;
 
     enable_scheduler();
     open_interrupt;

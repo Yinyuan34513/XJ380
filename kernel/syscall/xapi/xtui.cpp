@@ -47,23 +47,25 @@ void do_xapi_GetCurrentUser(uint64_t dst)
 void do_xapi_Output(char *str)
 {
     pcb_t front_p = get_current_task()->parent_group;
+    // while(!front_p->parent_task->co)cpu_relax();
+    
     while (true)
     {
-        if (front_p == NULL && front_p == kernel_group)
+        if (front_p == NULL)
         {
             write_serial_fmt("[Warning] A program call xapi_Output, but cannot found parent terminal. ");
             return;
         }
-        if (front_p->xtttp_stc.is_shell)
+        if (front_p->xtttp_stc->is_shell)
         {
             // found it!
-            strcpy(front_p->xtttp_stc.output, str);
+            strcat(front_p->xtttp_stc->output, str);//如果还有怎么办?
             // 等待命令行刷新
             while (true)
             {
-                if (front_p->xtttp_stc.output_lock) break;
+                if (front_p->xtttp_stc->output_lock) break;
             }
-            front_p->xtttp_stc.output_lock = false;
+            front_p->xtttp_stc->output_lock = false;
             return;
         }
         front_p = front_p->parent_task;
@@ -80,16 +82,17 @@ void do_xapi_Input(char *str)
             write_serial_fmt("[Warning] A program call xapi_Input, but cannot found parent terminal. ");
             return;
         }
-        if (front_p->xtttp_stc.is_shell)
+        if (front_p->xtttp_stc->is_shell)
         {
             // 等待命令行输入
+            front_p->xtttp_stc->wait_for_input = true;
             while (true)
             {
-                if (front_p->xtttp_stc.input_lock) break;
+                if (front_p->xtttp_stc->input_lock) break;
             }
             // found it!
-            strcpy(str, front_p->xtttp_stc.input);
-            front_p->xtttp_stc.input_lock = false;
+            strcpy(str, front_p->xtttp_stc->input);
+            front_p->xtttp_stc->input_lock = false;
             return;
         }
         front_p = front_p->parent_task;
@@ -106,16 +109,16 @@ char do_xapi_Getch()
             write_serial_fmt("[Warning] A program call xapi_Getch, but cannot found parent terminal. ");
             return 0;
         }
-        if (front_p->xtttp_stc.is_shell)
+        if (front_p->xtttp_stc->is_shell)
         {
             // 等待命令行输入
-            front_p->xtttp_stc.wait_for_getch = true;
+            front_p->xtttp_stc->wait_for_getch = true;
             while (true)
             {
-                if (!front_p->xtttp_stc.wait_for_getch) break;
+                if (!front_p->xtttp_stc->wait_for_getch) break;
             }
             // found it!
-            return front_p->xtttp_stc.char_for_getch;
+            return front_p->xtttp_stc->char_for_getch;
         }
         front_p = front_p->parent_task;
     }

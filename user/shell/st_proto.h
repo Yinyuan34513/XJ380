@@ -57,3 +57,16 @@ void print_working_directory();
 void clear_screen();
 
 // int snprintf(char *str, size_t size, const char *format, ...);
+
+void  text_editor(char *filename);
+void  editor_save_file(char *filename, char *content);
+char *editor_read_file(char *filename);
+void  editor_display_help();
+
+void tam_main_loop();
+
+void mark_terminal();
+void write_xttp_buffer(char *str);
+void read_xttp_buffer(char *str);
+bool check_read_xttp_buffer();
+void terminal_app_mark_finish_output();
