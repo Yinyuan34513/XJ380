@@ -381,7 +381,7 @@ void init_smp(uint64_t MADT0)
 
             if (!start_ap(xsi->cpu_count, lapic->local_apic_id, cpuinf))
             {
-                write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
+                pr_err("Failed to Bring Up AP.\n");
                 current += (uint64_t)header->length;
                 continue;
             }
@@ -414,7 +414,7 @@ void init_smp(uint64_t MADT0)
 
             if (!start_ap(xsi->cpu_count, x2lapic->x2apic_id, cpuinf))
             {
-                write_serial_string("[Warning][SMP] Failed to Bring Up AP.\n");
+                pr_err("Failed to Bring Up AP.\n");
                 current += (uint64_t)header->length;
                 continue;
             }

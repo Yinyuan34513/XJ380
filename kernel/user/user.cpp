@@ -89,7 +89,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     if (group == NULL)
     {
-        write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
+        pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   ? Where is your parent group?\n");
         return NULL;
     }
@@ -98,7 +98,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     buf = (uint8_t *)phys_to_virt(alloc_frames((file_size + PAGE_SIZE - 1) / PAGE_SIZE));
     if (!buf)
     {
-        write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
+        pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Cannot Alloc Memory.\n");
         return NULL;
     }
@@ -106,7 +106,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     if (vfs_read(file, buf, 0, file->size) == -1)
     {
-        write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
+        pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Cannot Read File.\n");
         return NULL;
     }
@@ -119,7 +119,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
         && (*(uint32_t *)ehdr.e_ident != 0x46504524)) // EPF
     {
         free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
-        write_serial_fmt("[Warning] Parse ELF/EPF file failed.\n");
+        pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Bad Format.\n");
         return NULL;
     }

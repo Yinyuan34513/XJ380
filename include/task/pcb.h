@@ -111,7 +111,6 @@ struct process_control_block
     vma_manager_t     vma_manager; // VMA 分配管理器
 
     xtttp_dtt   *xtttp_stc;
-    bool     co;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);

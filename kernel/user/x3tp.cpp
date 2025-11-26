@@ -38,6 +38,7 @@ void init_terminal_app(struct X64_REGS *reg)
 {
     uint64_t pid  = process_fork(reg, false, 0);
     tcb_t current = get_current_task();
+    pr_debug("xtttp pid: %d\n", pid);
 
     if (pid == 0)
     {
@@ -61,7 +62,6 @@ void mark_process_is_terminal()
     tcb_t current = get_current_task();
     init_process_xtttp(current->parent_group);
     current->parent_group->xtttp_stc->is_shell = true;
-    current->parent_group->co = true;
 }
 
 int check_input_waiting_status()

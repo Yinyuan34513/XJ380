@@ -113,7 +113,7 @@ void kill_thread(int tid, pcb_t parent_group)
     tcb_t current = found_thread(parent_group, tid);
     if (current == NULL)
     {
-        write_serial_fmt("[Warning] kill_thread: Cannot found target.\n");
+        pr_warn("kill_thread: Cannot found target.\n");
         return;
     }
 
@@ -442,7 +442,6 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
     pcb_t process = get_current_task()->parent_group;
-    process->co   = false;
 
     close_interrupt;
     disable_scheduler();
@@ -589,7 +588,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->file_open   = queue_copy(current_pcb->file_open, file_copy);
     new_pcb->ipc_queue = queue_init();
 
-    new_pcb->co   = false;
     new_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(new_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
 
@@ -922,7 +920,6 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
-    pcb->co   = false;
 
     return pcb;
 }
@@ -949,7 +946,6 @@ void process_setup()
     kernel_pcb->child_pcb    = queue_init();
     kernel_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(kernel_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
-    kernel_pcb->co   = false;
     kernel_pcb->file_open = queue_init();
     kernel_group->virt_queue  = queue_init();
     kernel_group->ipc_queue   = queue_init();

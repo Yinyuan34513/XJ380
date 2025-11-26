@@ -33,11 +33,19 @@ void   write_serial(char a);
 void   write_serial_string(const char *str);
 void   write_serial_dec(unsigned long long dec);
 void   write_serial_hex(unsigned long long hex);
-int write_serial_fmt(const char *fmt, ...);
+int    write_serial_fmt(const char *fmt, ...);
 void   write_serial_fmt_heapless(const char *fmt, ...);
 void   serial_wprintf(const char *fmt, ...);
 size_t vwprintf(Writer *writer, const char *fmt, va_list args);
 int    sprintf(char *buf, const char *fmt, ...);
+
+int printk(const char *fmt, ...);
+int pr_debug(const char *fmt, ...);
+int pr_warn(const char *fmt, ...);
+int pr_info(const char *fmt, ...);
+int pr_notice(const char *fmt, ...);
+int pr_err(const char *fmt, ...);
+
 /*
  *
  *  kernel/

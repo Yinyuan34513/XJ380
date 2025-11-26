@@ -234,7 +234,7 @@ uint32_t pci_read(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offse
 {
     uint32_t pci_address  = segment_bus_device_functon_to_pci_address(s, b, d, f);
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
-    if (mmio_address == 0) { write_serial_string("[Error] Cannot read pci: failed to get mmio address\n"); }
+    if (mmio_address == 0) { pr_err("Cannot read pci: failed to get mmio address\n"); }
     return *(uint32_t *)mmio_address;
 }
 
@@ -242,7 +242,7 @@ void pci_write(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offset, 
 {
     uint32_t pci_address  = segment_bus_device_functon_to_pci_address(s, b, d, f);
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
-    if (mmio_address == 0) { write_serial_string("[Error] Cannot write pci: failed to get mmio address"); }
+    if (mmio_address == 0) { pr_err("Cannot write pci: failed to get mmio address"); }
     *(uint32_t *)mmio_address = value;
 }
 
@@ -438,7 +438,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     case 0x02:
         // Ignore
         break;
-    default: write_serial_fmt("[Error] Failed to parse header type, header type = %x\n", header_type);
+    default: pr_err("Failed to parse header type, header type = %x\n", header_type);
     }
 }
 

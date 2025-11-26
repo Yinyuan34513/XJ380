@@ -47,7 +47,7 @@ void free(void *ptr) noexcept
 void *xmalloc(size_t size) noexcept
 {
     void *ptr = malloc(size);
-    if (ptr == NULL) write_serial_string("[Error][HEAP]xmalloc failed.");
+    if (ptr == NULL) pr_err("xmalloc failed.");
     return ptr;
 }
 

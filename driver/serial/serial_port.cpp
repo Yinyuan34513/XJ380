@@ -495,6 +495,173 @@ int write_serial_fmt(const char *fmt, ...)
     return 0;
 }
 
+
+
+// 封装一下下~
+// 用于输出消息
+int printk(const char *fmt, ...)
+{
+    // disable_scheduler();
+    close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+
+    write_serial_string("[XJ380 System Kernel][MESSAGE] ");
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+    va_end(args);
+    spin_unlock(fmt_lock);
+    if (!no_interrupt) { 
+        open_interrupt; 
+        // enable_scheduler();
+    }
+    return 0;
+}
+
+// 用于输出调试消息
+int pr_debug(const char *fmt, ...)
+{
+    // disable_scheduler();
+    close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+
+    write_serial_string("[XJ380 System Kernel][DEBUG] ");
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+    va_end(args);
+    spin_unlock(fmt_lock);
+    if (!no_interrupt) { 
+        open_interrupt; 
+        // enable_scheduler();
+    }
+    return 0;
+}
+
+// 用于输出警告消息
+int pr_warn(const char *fmt, ...)
+{
+    // disable_scheduler();
+    close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+
+    write_serial_string("[XJ380 System Kernel][WARNING] ");
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+    va_end(args);
+    spin_unlock(fmt_lock);
+    if (!no_interrupt) { 
+        open_interrupt; 
+        // enable_scheduler();
+    }
+    return 0;
+}
+
+// 用于输出调试信息消息
+int pr_info(const char *fmt, ...)
+{
+    // disable_scheduler();
+    close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+
+    write_serial_string("[XJ380 System Kernel][INFO] ");
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+    va_end(args);
+    spin_unlock(fmt_lock);
+    if (!no_interrupt) { 
+        open_interrupt; 
+        // enable_scheduler();
+    }
+    return 0;
+}
+
+// 用于输出提示消息
+int pr_notice(const char *fmt, ...)
+{
+    // disable_scheduler();
+    close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+
+    write_serial_string("[XJ380 System Kernel][NOTICE] ");
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+    va_end(args);
+    spin_unlock(fmt_lock);
+    if (!no_interrupt) { 
+        open_interrupt; 
+        // enable_scheduler();
+    }
+    return 0;
+}
+
+// 用于输出错误消息
+int pr_err(const char *fmt, ...)
+{
+    // disable_scheduler();
+    close_interrupt; // Avoid deadlock
+    spin_lock(fmt_lock);
+
+    write_serial_string("[XJ380 System Kernel][ERROR] ");
+
+    va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+    va_end(args);
+    spin_unlock(fmt_lock);
+    if (!no_interrupt) { 
+        open_interrupt; 
+        // enable_scheduler();
+    }
+    return 0;
+}
+
+
+
 typedef struct UnsafeBufWriterData
 {
     size_t idx; // index of buffer

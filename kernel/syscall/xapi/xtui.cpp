@@ -47,19 +47,19 @@ void do_xapi_GetCurrentUser(uint64_t dst)
 void do_xapi_Output(char *str)
 {
     pcb_t front_p = get_current_task()->parent_group;
-    // while(!front_p->parent_task->co)cpu_relax();
+    // // while(!front_p->parent_task->co)cpu_relax();
     
     while (true)
     {
-        if (front_p == NULL)
+        if (front_p == NULL || front_p == kernel_group)
         {
-            write_serial_fmt("[Warning] A program call xapi_Output, but cannot found parent terminal. ");
+            pr_warn("A program call xapi_Output, but cannot found parent terminal. \n");
             return;
         }
         if (front_p->xtttp_stc->is_shell)
         {
             // found it!
-            strcat(front_p->xtttp_stc->output, str);//如果还有怎么办?
+            strcat(front_p->xtttp_stc->output, str); // 如果还有怎么办? // ? 怎么会还有呢，这就是一次性输出完的啊
             // 等待命令行刷新
             while (true)
             {
@@ -77,9 +77,9 @@ void do_xapi_Input(char *str)
     pcb_t front_p = get_current_task()->parent_group;
     while (true)
     {
-        if (front_p == NULL && front_p == kernel_group)
+        if (front_p == NULL || front_p == kernel_group)
         {
-            write_serial_fmt("[Warning] A program call xapi_Input, but cannot found parent terminal. ");
+            pr_warn("A program call xapi_Input, but cannot found parent terminal. \n");
             return;
         }
         if (front_p->xtttp_stc->is_shell)
@@ -104,9 +104,9 @@ char do_xapi_Getch()
     pcb_t front_p = get_current_task()->parent_group;
     while (true)
     {
-        if (front_p == NULL && front_p == kernel_group)
+        if (front_p == NULL || front_p == kernel_group)
         {
-            write_serial_fmt("[Warning] A program call xapi_Getch, but cannot found parent terminal. ");
+            pr_warn("A program call xapi_Getch, but cannot found parent terminal. \n");
             return 0;
         }
         if (front_p->xtttp_stc->is_shell)
