@@ -8,7 +8,7 @@
  * 
  */
 
-#include "./include/xposix.h"
+#include "./include/x3api.h"
 #include "./include/libsys.h"
 
 extern int main(int argc, char *argv[], char *envp[]);
@@ -20,7 +20,7 @@ extern int main(int argc, char *argv[], char *envp[]);
 // extern void __fini_array_start();
 // extern void __fini_array_end();
 
-#define SXAH_INIT_TERMINAL_APP  3801    // 初始化为终端应用程序
+#define SXAH_CHECK_TERMINAL_INIT_STATUS  3801    // 查询终端初始化状态
 
 extern "C" void xapi_start(int argc, char *argv[], char *envp[])
 {
@@ -44,7 +44,23 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
     //    }
     //}
 
-    enter_syscall(SXAH_INIT_TERMINAL_APP, 0, 0, 0, 0, 0, 0);
+    uint64_t pid  = xapi_Fork();
 
-    exit(main(argc, argv, envp));
+    if (pid == 0)
+    {
+        // 是子进程！
+        // 等待命令行初始化
+        while (true)
+        {
+            // 这时命令行肯定是他的父进程，循环检查是否标记为命令行，检测到标记即代表可以吃了
+            if (enter_syscall(SXAH_CHECK_TERMINAL_INIT_STATUS, 0, 0, 0, 0, 0, 0)) break;
+        }
+        // return; // 国企鱼是超级大傻逼
+        exit(main(argc, argv, envp));
+    }
+
+    char *execve_argv[2] = {"-xj380sys-terminal-app-mode"};
+    xapi_Execve("/system/shell.elf", execve_argv, NULL);
+
+    exit(0);
 }

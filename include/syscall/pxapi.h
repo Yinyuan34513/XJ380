@@ -36,7 +36,7 @@ typedef  struct {
 #define SXAH_CHECK_INPUT_BUFFER     128956723895689207      // 检查是否需要输入
 #define SXAH_UNLOCK_OUTPUT_LOCK     128956723895689208      // 完成输出，关闭输出锁
 
-#define SXAH_INIT_TERMINAL_APP  3801    // 初始化为终端应用程序
+#define SXAH_CHECK_TERMINAL_INIT_STATUS  3801    // 查询终端初始化状态
 
 // define
 typedef struct {

@@ -34,26 +34,10 @@ void init_process_xtttp(pcb_t pcb)
     memset(pcb->xtttp_stc->input,0,sizeof(pcb->xtttp_stc->input));
 }
 
-void init_terminal_app(struct X64_REGS *reg)
+int check_terminal_init_status()
 {
-    uint64_t pid  = process_fork(reg, false, 0);
     tcb_t current = get_current_task();
-    pr_debug("xtttp pid: %d\n", pid);
-
-    if (pid == 0)
-    {
-        // 是子进程！
-        // 等待命令行初始化
-        while (true)
-        {
-            // 这时命令行肯定是他的父进程，循环检查是否标记为命令行，检测到标记即代表可以吃了
-            if (current->parent_group->parent_task->xtttp_stc->is_shell) break;
-        }
-        return;
-    }
-
-    char *argv[2] = {"-xj380sys-terminal-app-mode"};
-    process_execve("/system/shell.elf", argv, NULL);
+    return current->parent_group->parent_task->xtttp_stc->is_shell ? 1 : 0;
 }
 
 void mark_process_is_terminal()

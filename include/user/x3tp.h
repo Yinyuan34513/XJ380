@@ -28,7 +28,7 @@ typedef struct
     char output[1024];
 } xtttp_dtt;
 
-void init_terminal_app(struct X64_REGS *reg);
+int check_terminal_init_status();
 void mark_process_is_terminal();
 int check_input_waiting_status();
 void read_terminal_app_output_buffer(char *str);
