@@ -1283,7 +1283,7 @@ void xhci_device_enumerater(enumerater_arg_t *arg) {
     free(arg);
     spin_unlock(enumerate_lock);
     xhci_done = true;
-    thread_exit(0);
+    kill_thread(get_current_task());
 }
 
 // 处理端口状态变化

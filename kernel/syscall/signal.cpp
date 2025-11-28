@@ -43,7 +43,7 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 void signal_end() 
 {
     get_current_task()->parent_group->sigprci = false;
-    kill_thread(get_current_task()->tid, get_current_task()->parent_group); // 他紫砂了
+    kill_thread(get_current_task()); // 他紫砂了
     while (true)
     {
         __asm__ volatile("pause\n\t");

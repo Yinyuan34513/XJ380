@@ -281,15 +281,15 @@ void desktop_flusher()
     tw_data->scdx     = scdx;
 
      desktop_done = true;
-    while (!xhci_done)
-        cpu_relax();
+    // while (!xhci_done)
+        // cpu_relax();
 
-    delay_s_hp(3);
+    // delay_s_hp(3);
 
-    char *argv[10]    = {"a", "b", "c", "d"};
+    // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
    
     while (1)
     {
@@ -488,7 +488,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     
     init_user();
-    init_killer();
+    // init_killer();
     write_serial_string("User & Killer is ready\n");
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
@@ -515,8 +515,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     close_interrupt;
     disable_scheduler();
     
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    // create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
+    while(!xhci_done)cpu_relax();
+    delay_s_hp(3);
+    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     enable_scheduler();
     open_interrupt;
     no_interrupt = false;

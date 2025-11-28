@@ -344,3 +344,12 @@ size_t add_task(tcb_t new_task)
     spin_unlock(scheduler_lock);
     return new_task->queue_index;
 }
+
+void remove_task(tcb_t task) {
+    if (task == NULL) return;
+    spin_lock(scheduler_lock);
+
+    PROCESSOR_INFO *smp = get_cpu(task->cpu_id);
+    queue_remove_at(smp->scheduler_queue, task->queue_index);
+    spin_unlock(scheduler_lock);
+}

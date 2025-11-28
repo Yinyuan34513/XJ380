@@ -53,6 +53,7 @@ typedef enum
     START   = 4, // 准备调度
     FUTEX   = 5, // 被挂起(无法被调度, 线程状态为等待唤醒)
     OUT     = 6, // 已被处死(无法被调度)
+    ZOMBIE  = 7,
 } TaskStatus;
 
 typedef struct
@@ -168,11 +169,6 @@ pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();
 void     switch_to_user_mode();
-void     recycle_process(pcb_t pcb);
-void     thread_exit(int exit_code);
-void     kill_thread(int tid, pcb_t parent_group);
-void     kill_thread(int tid);
-
 void get_thread_name_from_filepath(char *path, char *name);
 
 size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func,
@@ -182,4 +178,8 @@ void addque_killer(pcb_t group);
 void init_killer();
 
 typedef void (*elf_start)(int, char **, char **);
+void kill_proc(pcb_t pcb, int exit_code, bool is_zombie);
+void kill_thread(tcb_t task);
+void kill_thread0(tcb_t task);
+void kill_proc0(pcb_t pcb);
 pcb_t found_pcb(int pid);

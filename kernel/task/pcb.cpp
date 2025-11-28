@@ -33,47 +33,6 @@ extern bool no_interrupt;
 extern spin_t scheduler_lock;
 
 uint16_t         dock_sheet_id;
-
-void thread_exit(int exit_code)
-{
-    close_interrupt;
-    disable_scheduler();
-    spin_lock(scheduler_lock); // 添加锁
-
-    tcb_t current = get_current_task();
-    pcb_t group   = current->parent_group;
-
-    // 设置线程状态为死亡
-    current->status = DEATH;
-
-    if (current->hasfscr)
-    {
-        init_dock(sht_img,&dock_sheet_id);
-    }
-
-    // 从调度队列中移除
-    struct PROCESSOR_INFO *cpu = get_current_cpu();
-    queue_remove_at(cpu->scheduler_queue, current->queue_index);
-
-    // 从进程线程队列中移除
-    queue_remove_at(group->thread_queue, current->group_index);
-
-    // 如果这是进程的最后一个线程，标记进程为僵尸状态
-    if (group->thread_queue->size == 0) { group->status = DEATH; }
-
-    // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
-
-    switch_page_directory(get_current_directory());
-    spin_unlock(scheduler_lock); // 释放锁
-
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
-}
-
 pcb_t found_pcb(int pid)
 {
     pcb_t ret = NULL;
@@ -102,103 +61,103 @@ tcb_t found_thread(pcb_t pcb, int tid)
     return NULL;
 }
 
-void kill_thread(int tid, pcb_t parent_group)
-{
-    bool interrupt_yes = false;
-    if (!no_interrupt) interrupt_yes = true;
-    close_interrupt;
-    disable_scheduler();
-    no_interrupt = true;
-
-    tcb_t current = found_thread(parent_group, tid);
-    if (current == NULL)
-    {
-        pr_warn("kill_thread: Cannot found target.\n");
+void kill_proc(pcb_t pcb, int exit_code, bool is_zombie) {
+    if (pcb == NULL) return;
+    if (pcb->pid == kernel_group->pid) {
+        write_serial_fmt("Cannot kill System process.");
         return;
     }
 
-    pcb_t group = current->parent_group;
-    // write_serial_fmt("kill thread %s\n", current->name);
+    // if (get_current_user()->fgproc == pcb->pid) { get_current_user()->fgproc = 0; }
 
-    // 设置线程状态为死亡
-    current->status = DEATH;
-
-    // 从调度队列中移除
-    PROCESSOR_INFO *cpu = get_current_cpu();
-    queue_remove_at(cpu->scheduler_queue, current->queue_index);
-
-    // 从进程线程队列中移除
-    queue_remove_at(group->thread_queue, current->group_index);
-
-    // 如果这是进程的最后一个线程，标记进程为僵尸状态
-    if (group->thread_queue->size == 0)
-    {
-        group->status = DEATH;
-        // // 如果是vfork创建的进程，需要特殊处理
-        // if (group->vfork) {
-        //     // 添加vfork的特殊处理逻辑
-        // }
-    }
-
-    // 如果进程没有线程了，安排回收
-    if (group->thread_queue->size == 0 && group->status == DEATH) { addque_killer(group); }
-
-    if (interrupt_yes) no_interrupt = false;
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
-    switch_page_directory(get_current_directory());
-}
-
-void kill_thread(int tid)
-{
-    kill_thread(tid, kernel_group);
-}
-
-void recycle_process(pcb_t pcb)
-{
-    bool interrupt_yes = false;
-    if (!no_interrupt) interrupt_yes = true;
-    no_interrupt = true;
-
-    // 不要回收内核进程
-    if (pcb == kernel_group) return;
-
-    // 释放进程资源
-    if (pcb->pagedir != get_kernel_pagedir()) { free_page_directory(pcb->pagedir); }
-
-    if (pcb->cmdline) free(pcb->cmdline);
-
-    // 释放环境变量
-    if (pcb->envp)
-    {
-        for (size_t i = 0; i < pcb->envc; i++)
-        {
-            free(pcb->envp[i]);
+    if (is_zombie) {
+        if (pcb->thread_queue->size > 0) {
+            spin_lock(pcb->thread_queue->lock);
+            queue_foreach(pcb->thread_queue, node) {
+                tcb_t tcb = (tcb_t)node->data;
+                kill_thread(tcb);
+            }
+            spin_unlock(pcb->thread_queue->lock);
         }
-        free(pcb->envp);
-    }
 
-    // 从进程队列中移除
+        pcb->status       = ZOMBIE;
+        ipc_message_t msg = (ipc_message_t)malloc(sizeof(struct ipc_message));
+        msg->pid          = pcb->pid;
+        msg->type         = IPC_MSG_TYPE_EPID;
+        msg->data[0]      = exit_code & 0xFF;
+        msg->data[1]      = (exit_code >> 8) & 0xFF;
+        msg->data[2]      = (exit_code >> 16) & 0xFF;
+        msg->data[3]      = (exit_code >> 24) & 0xFF;
+        ipc_send(pcb->parent_task, msg);
+    } else {
+        queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
+        pcb->status = DEATH;
+        kill_proc0(pcb);
+    }
+}
+void free_envp(char **envp) {
+    if (!envp) return;
+    for (size_t i = 0; envp[i] != NULL; i++) {
+        free(envp[i]);
+    }
+    free(envp);
+}
+
+void kill_proc0(pcb_t pcb) {
+    do {
+        tcb_t thread = NULL;
+        queue_foreach(pcb->thread_queue, thread0) {
+            thread = (tcb_t)thread0->data;
+        }
+        if (thread == NULL) break;
+        queue_remove_at(pcb->thread_queue, thread->group_index);
+        kill_thread0(thread);
+        free(thread);
+    } while (true);
+
+    queue_destroy(pcb->thread_queue);
     queue_remove_at(pcb_group_queue, pcb->queue_index);
 
-    // 从父进程的子进程队列中移除
-    if (pcb->parent_task && pcb->parent_task->child_pcb)
-    {
-        queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
+    //procfs_update_task_list();
+
+    while(1) {
+        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
+        if (handle == NULL) break;
+        vfs_close(handle->node);
+        free(handle);
     }
 
-    // 释放进程本身
+    lazy_free(pcb);
+
+    queue_destroy(pcb->file_open);
+    queue_destroy(pcb->ipc_queue);
+    queue_destroy(pcb->virt_queue);
+    free(pcb->cmdline);
+    free(pcb->elf_file);
+    if (pcb->envp) free_envp(pcb->envp);
+    write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", pcb->name, pcb->pid,
+          pcb->vfork ? "true" : "false");
+    if (!pcb->vfork) free_page_directory(pcb->pagedir);
     free(pcb);
+}
 
-    if (interrupt_yes) no_interrupt = false;
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
+void kill_thread(tcb_t task) {
+    if (task == NULL) return;
+    if (task->task_level == TASK_IDLE_LEVEL) {
+        write_serial_fmt("Cannot stop kernel thread.");
+        return;
     }
+    task->status = DEATH;
+
+}
+extern void remove_task(tcb_t task);
+void kill_thread0(tcb_t task) {
+    task->status = OUT;
+    free((void *)(task->syscall_stack - KERNEL_STACK_SIZE));
+    page_directory_t *src_dir = get_current_directory();
+    switch_process_page_directory(task->parent_group->pagedir);
+    switch_process_page_directory(src_dir);
+    remove_task(task);
 }
 
 [[noreturn]] void process_exit()
@@ -208,7 +167,8 @@ void recycle_process(pcb_t pcb)
     write_serial_string("Kernel thread exit, Code: ");
     write_serial_dec(rax);
     write_serial_string("\n");
-    thread_exit(rax);
+    kill_thread(get_current_task());
+    open_interrupt;
     //    kill_thread(get_current_task()->tid);
     while (true)
         __asm__ volatile("hlt");

@@ -70,7 +70,7 @@ void xhci_event_handler(xhci_hcd_t *xhci)
         cpu_relax();
     }
 
-    thread_exit(0);
+    kill_thread(get_current_task());
 }
 
 // 启动事件处理线程

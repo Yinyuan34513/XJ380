@@ -61,7 +61,7 @@ sys_(exit, int exit_code)
 {
     tcb_t exit_thread = get_current_task();
     write_serial_fmt("sys_exit: Thread %s exit with code %d.\n", exit_thread->name, exit_code);
-    thread_exit(exit_code);
+    kill_thread(exit_thread);
     open_interrupt;
     cpu_hlt;
     return SYSCALL_SUCCESS;
@@ -557,16 +557,17 @@ sys_(chdir, char *s)
     return SYSCALL_SUCCESS;
 }
 
-// sys_(exit_group, int exit_code)
-// {
-//     pcb_t exit_process = get_current_task()->parent_group;
-//     write_serial_fmt("task: Process %s exit with code %d.\n", exit_process->name, exit_code);
-//     close_interrupt;
-//     addque_killer(exit_process); // 子进程调用，is_zombie = true，不能在child_pcb中删除当前进程
-//     open_interrupt;
-//     //scheduler_yield();
-//     cpu_hlt;
-// }
+sys_(exit_group, int exit_code)
+{
+    pcb_t exit_process = get_current_task()->parent_group;
+    write_serial_fmt("task: Process %s exit with code %d.\n", exit_process->name, exit_code);
+    close_interrupt;
+    kill_proc(exit_process, exit_code,
+              true); // 子进程调用，is_zombie = true，不能在child_pcb中删除当前进程
+    open_interrupt;
+    //scheduler_yield();
+    cpu_hlt;
+}
 
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 {
@@ -1836,7 +1837,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
         break;
     case SYS_EXIT:
-        thread_exit(regs->rdi);
+        sys_exit(regs->rdi,0,0,0,0,0,regs);
         break;
         // case SYS_EXIT_GROUP:
         //     regs->rax = (uint64_t)sys_exit(regs->rdi);

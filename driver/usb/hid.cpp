@@ -137,7 +137,7 @@ void hid_resubmit_agent(uint64_t arg)
         hid->hid_transfer_done = false;
     }
 
-    thread_exit(0);
+    
 }
 
 uint64_t same_key_count = 0; // 重复按键计数器
