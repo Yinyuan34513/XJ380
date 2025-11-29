@@ -362,7 +362,7 @@ extern size_t   now_tid;
 extern void nvme_setup();
 extern int xhci_setup();
 extern void mount_root();
-
+extern void stdio_init();
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -451,26 +451,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
-    // uint64_t phys = alloc_frames(2);
-    // write_serial_string("Alloc memory: ");
-    // write_serial_hex(phys);
-    // write_serial_string("\n");、
-    
-
-    // vfs_node_t dev = vfs_open("/dev");
-    // vfs_node_t c   = NULL;
-    // bool       win = false;
-    // list_foreach(dev->child, i) {
-    //     c = (vfs_node_t)i->data;
-    //     char buf[20];
-    //     sprintf(buf, "/dev/%s", c->name);
-    //     if (vfs_mount(buf, vfs_open("/")) == 0) {
-    //         win = true;
-    //         write_serial_fmt("Mount success\n");
-    //         break;
-    //     }
-    // }
     mount_root();
+    stdio_init();
 
 
     init_syscall();

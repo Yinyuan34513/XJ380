@@ -116,9 +116,9 @@ static bool try_gpt_at_lba1(vfs_node_t device, device_t disk, size_t vdisk_id)
 }
 bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
 {
-    uint8_t *mbr = (uint8_t *)malloc(disk.sector_size*4);
+    uint8_t *mbr = (uint8_t *)malloc(disk.sector_size * 4);
     write_serial_fmt("Y\n");
-    if (vfs_read(device, mbr, 0, disk.sector_size*4) == (size_t)VFS_STATUS_FAILED) return false;
+    if (vfs_read(device, mbr, 0, disk.sector_size * 4) == (size_t)VFS_STATUS_FAILED) return false;
     // for(int i=0;i<disk.sector_size*4;i++)
     // {
     //     if(i%32==0 && i!=0)
@@ -203,7 +203,11 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
     }
     else
     {
-        if (try_gpt_at_lba1(device,disk,vdisk_id)) { free(mbr); return true; }
+        if (try_gpt_at_lba1(device, disk, vdisk_id))
+        {
+            free(mbr);
+            return true;
+        }
     }
 end:
     free(mbr);
@@ -307,9 +311,9 @@ void mount_root()
 
     for (uint64_t i = 0; i < partition_num; i++)
     {
-        partition_t p =  partitions[i];
-        device_t *src_dev = get_device(p.vdisk_id);
-        char buf[1024] = {};
+        partition_t p         = partitions[i];
+        device_t   *src_dev   = get_device(p.vdisk_id);
+        char        buf[1024] = {};
         sprintf(buf, "/dev/%sp%zu", src_dev->drive_name, i);
         write_serial_string(buf);
         write_serial_string("\n");

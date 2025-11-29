@@ -15,6 +15,7 @@
 #include <cpu/lock.h>
 // #include "pipefs.h"
 #include <syscall/syscall.h>
+#include <device.h>
 
 vfs_node_t rootdir = NULL;
 
@@ -707,4 +708,49 @@ bool vfs_init() {
     rootdir->type = file_dir;
     write_serial_fmt("Virtual File System initialize.\n");
     return true;
+}
+
+static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) {
+    bool is_sti = are_interrupts_enabled();
+    open_interrupt;
+
+    size_t i = 0;
+    for (; i < number; i++) {
+        char c = (char)kernel_getch();
+        if (c == 0x7f) { c = '\b'; }
+        if (c == 0x9) { c = '\t'; }
+        if (c == '\b') {
+            if (i > 0) {
+                buffer[i--] = '\0';
+                i--;
+            }
+            continue;
+        }
+        buffer[i] = c;
+    }
+
+    if (!is_sti) open_interrupt;
+
+    return i;
+}
+
+static size_t stdout_write(int drive, uint8_t *buffer, size_t number, size_t lba) {
+    write_serial_fmt((char*)buffer);
+    return number;
+}
+
+void stdio_init()
+{
+    device_t stdio;
+    stdio.type = DEVICE_STREAM;
+    strcpy(stdio.drive_name, "stdio");
+    stdio.flag        = 1;
+    stdio.sector_size = 1;
+    stdio.size        = 1;
+    stdio.read        = stdin_read;
+    stdio.write       = stdout_write;
+    stdio.ioctl       = (ioctlf)empty;
+    stdio.poll        = (pollf)empty;
+    stdio.map         = (mapf)empty;
+    regist_device(NULL, stdio);
 }

@@ -44,23 +44,23 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
     //    }
     //}
 
-    uint64_t pid  = xapi_Fork();
+    // uint64_t pid  = xapi_Fork();
 
-    if (pid == 0)
-    {
-        // 是子进程！
-        // 等待命令行初始化
-        while (true)
-        {
-            // 这时命令行肯定是他的父进程，循环检查是否标记为命令行，检测到标记即代表可以吃了
-            if (enter_syscall(SXAH_CHECK_TERMINAL_INIT_STATUS, 0, 0, 0, 0, 0, 0)) break;
-        }
-        // return; // 国企鱼是超级大傻逼
-        exit(main(argc, argv, envp));
-    }
+    // if (pid == 0)
+    // {
+    //     // 是子进程！
+    //     // 等待命令行初始化
+    //     while (true)
+    //     {
+    //         // 这时命令行肯定是他的父进程，循环检查是否标记为命令行，检测到标记即代表可以吃了
+    //         // if (enter_syscall(SXAH_CHECK_TERMINAL_INIT_STATUS, 0, 0, 0, 0, 0, 0)) break;
+    //     }
+    //     // return; // 国企鱼是超级大傻逼
+    //     // exit(main(argc, argv, envp));
+    // }
 
     char *execve_argv[2] = {"-xj380sys-terminal-app-mode"};
     xapi_Execve("/system/shell.elf", execve_argv, NULL);
 
-    exit(0);
+    exit(main(argc,argv,envp));
 }

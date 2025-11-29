@@ -296,6 +296,25 @@ void switch_to_user_mode()
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func = get_current_task()->main;
 
+    char             *new_path   = (char*)malloc(strlen("/dev/") + 10);
+    sprintf(new_path, "/dev/stdio");
+    vfs_node_t stdio        = vfs_open(new_path);
+    stdio->refcount        += 3;
+    fd_file_handle *stdout  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+    stdout->node            = stdio;
+    stdout->offset          = 0;
+    fd_file_handle *stdin   = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+    stdin->node             = stdio;
+    stdin->offset           = 0;
+    fd_file_handle *stderr  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+    stderr->node            = stdio;
+    stderr->offset          = 0;
+    stdin->fd  = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
+    stdout->fd = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
+    stderr->fd = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
+
+    free(new_path);
+
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
                      "pushq %5\n"      // SS
@@ -396,7 +415,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
 
     write_serial_fmt("path in execve %s\n", path);
-    char      *norm_path = path;
+    char      *norm_path = strdup(path);
     vfs_node_t node      = vfs_open(norm_path);
     if (node == NULL) { return (uint64_t)-ENOENT; }
     uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
@@ -473,6 +492,11 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     spin_unlock(process->file_open->lock);
     queue_destroy(process->file_open);
     process->file_open = queue_init();
+    spin_lock(process->virt_queue->lock);
+    queue_foreach(process->virt_queue, node) {
+        mm_virtual_page_t *vpage = (mm_virtual_page_t *)node->data;
+        free(vpage);
+    }
     spin_unlock(process->virt_queue->lock);
     queue_destroy(process->virt_queue);
     process->virt_queue = queue_init();
@@ -486,7 +510,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     queue_destroy(process->ipc_queue);
     process->ipc_queue = queue_init();
 
-    // free(norm_path);
+    free(norm_path);
 
     uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     get_current_task()->user_stack     = stack;
@@ -495,11 +519,11 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->hasfscr        = false;
     get_current_task()->winnum         = 0;
 
-    if (!no_interrupt)
-    {
+    // if (!no_interrupt)
+    // {
         enable_scheduler();
         open_interrupt;
-    }
+    // }
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }
@@ -746,6 +770,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
 
     
     new_task->cwd     = vfs_open(cwd);
+    new_task->cwd->refcount++;
     write_serial_fmt("CWD %s\n",new_task->cwd->name);
     new_task->str_cwd = cwd;
 
