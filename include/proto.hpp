@@ -14,8 +14,8 @@ extern SHEET_INFO *sht_img;
 extern XWM_INFO   *xwmii;
 extern uint16_t   *msid;
 
-#define close_interrupt __asm__ volatile("cli" ::: "memory")
-#define open_interrupt  __asm__ volatile("sti" ::: "memory")
+#define close_interrupt disable_intr()
+#define open_interrupt  enable_intr()
 
 /*
  *   graphics

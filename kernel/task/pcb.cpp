@@ -33,6 +33,7 @@ extern bool no_interrupt;
 extern spin_t scheduler_lock;
 
 uint16_t         dock_sheet_id;
+
 pcb_t found_pcb(int pid)
 {
     pcb_t ret = NULL;
@@ -95,6 +96,7 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie) {
         kill_proc0(pcb);
     }
 }
+
 void free_envp(char **envp) {
     if (!envp) return;
     for (size_t i = 0; envp[i] != NULL; i++) {
@@ -148,9 +150,10 @@ void kill_thread(tcb_t task) {
         return;
     }
     task->status = DEATH;
-
 }
+
 extern void remove_task(tcb_t task);
+
 void kill_thread0(tcb_t task) {
     task->status = OUT;
     free((void *)(task->syscall_stack - KERNEL_STACK_SIZE));

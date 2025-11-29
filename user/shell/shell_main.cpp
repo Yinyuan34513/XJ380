@@ -45,17 +45,6 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    // write(1, xcr_hex2char(argc), 0);
-    // write(1, "\n", 0);
-    // for (int i = 0; i < argc; i++)
-    // {
-    //     write(1, argv[i], 0);
-    //     write(1, "\n", 0);
-    // }
-
-    // write(1, envp[0], 0);
-    // write(1, "\n", 0);
-
     XWINDOW Winfo;
     Winfo.title  = (char *)"终端";
     Winfo.width  = TML_X;
@@ -71,13 +60,16 @@ int main(int argc, char *argv[], char *envp[])
     *ab_y = 4;
     xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, BACKGROUND_COLOR, true);
 
-    if (strcmp(argv[0], "-xj380sys-terminal-app-mode") == 0)
+    if (argv != NULL && argv[0] != NULL)
     {
-        // 这代表是给别的命令行程序用的
-        server_mode = true;
-        xapi_RefreshWindow(handle);
-        tam_main_loop();
-        return 0;
+        if (strcmp(argv[0], "-xj380sys-terminal-app-mode") == 0)
+        {
+            // 这代表是给别的命令行程序用的
+            server_mode = true;
+            xapi_RefreshWindow(handle);
+            tam_main_loop();
+            return 0;
+        }
     }
 
     strcpy(current_path, "/");

@@ -135,7 +135,9 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
     reg->ds     = target->context0.ds;
     reg->cs     = target->context0.cs;
 }
+
 spin_t scheduler_lock = SPIN_INIT;
+
 tcb_t select_next_task_safe()
 {
     spin_lock(scheduler_lock);
@@ -219,6 +221,7 @@ tcb_t select_next_task_safe()
     spin_unlock(scheduler_lock);
     return result;
 }
+
 tcb_t select_next_task()
 {
     tcb_t next = select_next_task_safe();
@@ -234,6 +237,7 @@ tcb_t select_next_task()
     
     return next;
 }
+
 extern pcb_t kernel_group;
 extern "C" registers_t *timer_handle(registers_t *reg)
 {
@@ -295,6 +299,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     send_eoi();
     return reg;
 }
+
 void scheduler_yield()
 {
     if (!is_scheduler) return;

@@ -280,14 +280,14 @@ void desktop_flusher()
     tw_data->sheet_id = &dock_sheet_id;
     tw_data->scdx     = scdx;
 
-     desktop_done = true;
-    // while (!xhci_done)
-        // cpu_relax();
+    desktop_done = true;
+    while (!xhci_done)
+        cpu_relax();
 
     // delay_s_hp(3);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, argv);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
    
@@ -348,15 +348,15 @@ void tst()
     while (1)
         ;
 }
+
 void judge_bigend_littleend1() {
    int i = 48;
    char c = *((char*)&i);
    if (c == '0')
-       write_serial_fmt("小端 LE\n");
+       write_serial_fmt("Littleend LE\n");
    else
-       write_serial_fmt("大端 BE\n");
+       write_serial_fmt("Bigend BE\n");
 }
-
 
 extern size_t   now_tid;
 extern void nvme_setup();
@@ -416,8 +416,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     disable_intr();
-    
-    // init_user();
 
     process_setup();
 
@@ -497,11 +495,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     close_interrupt;
     disable_scheduler();
     
-    // create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
-    while(!xhci_done)cpu_relax();
-    delay_s_hp(3);
-    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     enable_scheduler();
     open_interrupt;
     no_interrupt = false;
