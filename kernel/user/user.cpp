@@ -186,11 +186,12 @@ uint64_t parse_elf_file(char *path, pcb_t group)
         }
     }
 
-    uint64_t buf_len = (file_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-    uint8_t *buffer = (uint8_t *)EHDR_START_ADDR;
-    page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, buf_len,
-                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    memcpy(buffer, buf, file_size);
+    // 何意味
+    // uint64_t buf_len = (file_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    // uint8_t *buffer = (uint8_t *)EHDR_START_ADDR;
+    // page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, buf_len,
+    //                          PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    // memcpy(buffer, buf, file_size);
 
     group->load_start = mapping_space->load_start;
     group->elf_file = buf;
@@ -206,7 +207,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     // ld_so_vma->vm_name = strdup(group->name);
     // vma_insert(&group->vma_manager, ld_so_vma);
 
-    free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+    // free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
     // 设置程序入口点
     return entry;
