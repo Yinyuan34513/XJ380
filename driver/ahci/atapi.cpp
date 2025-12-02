@@ -1,7 +1,4 @@
 #include "ahci/ahci.h"
-#include "ahci/hba.h"
-#include "ahci/sata.h"
-#include "ahci/scsi.h"
 #include "proto.hpp"
 
 void scsi_create_packet12(struct scsi_cdb12 *cdb, uint8_t opcode, uint32_t lba, uint32_t alloc_size)

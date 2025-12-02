@@ -26,9 +26,6 @@ struct list
     list_t next;
 };
 
-#ifdef LIST_IMPLEMENTATION
-#    define extern static
-#endif
 
 /**
  *\brief 创建一个新的链表节点
@@ -136,14 +133,14 @@ extern size_t list_length(list_t list);
  *\param[in] list 链表头指针
  */
 extern void list_print(list_t list);
-
+#define LIST_IMPLEMENTATION
 #ifdef LIST_IMPLEMENTATION
 #    undef extern
 #endif
 
 #ifdef LIST_IMPLEMENTATION
 
-static list_t list_alloc(void *data)
+ list_t list_alloc(void *data)
 {
     list_t node = (list_t)malloc(sizeof(*node));
     if (node == NULL) return NULL;
@@ -153,7 +150,7 @@ static list_t list_alloc(void *data)
     return node;
 }
 
-static list_t list_free(list_t list)
+ list_t list_free(list_t list)
 {
     while (list != NULL)
     {
@@ -164,7 +161,7 @@ static list_t list_free(list_t list)
     return NULL;
 }
 
-static list_t list_free_with(list_t list, void (*free_data)(void *))
+ list_t list_free_with(list_t list, void (*free_data)(void *))
 {
     while (list != NULL)
     {
@@ -176,7 +173,7 @@ static list_t list_free_with(list_t list, void (*free_data)(void *))
     return NULL;
 }
 
-static list_t list_append(list_t list, void *data)
+ list_t list_append(list_t list, void *data)
 {
     list_t node = list_alloc(data);
     if (node == NULL) return list;
@@ -196,7 +193,7 @@ static list_t list_append(list_t list, void *data)
     return list;
 }
 
-static list_t list_prepend(list_t list, void *data)
+ list_t list_prepend(list_t list, void *data)
 {
     list_t node = list_alloc(data);
     if (node == NULL) return list;
@@ -208,7 +205,7 @@ static list_t list_prepend(list_t list, void *data)
     return list;
 }
 
-static void *list_pop(list_t *list_p)
+ void *list_pop(list_t *list_p)
 {
     if (list_p == NULL || *list_p == NULL) return NULL;
     list_t list = list_tail(*list_p);
@@ -219,21 +216,21 @@ static void *list_pop(list_t *list_p)
     return data;
 }
 
-static list_t list_head(list_t list)
+ list_t list_head(list_t list)
 {
     if (list == NULL) return NULL;
     for (; list->prev; list = list->prev) {}
     return list;
 }
 
-static list_t list_tail(list_t list)
+ list_t list_tail(list_t list)
 {
     if (list == NULL) return NULL;
     for (; list->next; list = list->next) {}
     return list;
 }
 
-static list_t list_nth(list_t list, size_t n)
+ list_t list_nth(list_t list, size_t n)
 {
     if (list == NULL) return NULL;
     list = list_head(list);
@@ -245,7 +242,7 @@ static list_t list_nth(list_t list, size_t n)
     return list;
 }
 
-static list_t list_nth_last(list_t list, size_t n)
+ list_t list_nth_last(list_t list, size_t n)
 {
     if (list == NULL) return NULL;
     list = list_tail(list);
@@ -257,7 +254,7 @@ static list_t list_nth_last(list_t list, size_t n)
     return list;
 }
 
-static bool list_search(list_t list, void *data)
+ bool list_search(list_t list, void *data)
 {
     list_t current = list;
     while (current != NULL)
@@ -268,7 +265,7 @@ static bool list_search(list_t list, void *data)
     return false;
 }
 
-static list_t list_delete(list_t list, void *data)
+ list_t list_delete(list_t list, void *data)
 {
     if (list == NULL) return NULL;
 
@@ -294,7 +291,7 @@ static list_t list_delete(list_t list, void *data)
     return list;
 }
 
-static list_t list_delete_with(list_t list, void *data, free_t callback)
+ list_t list_delete_with(list_t list, void *data, free_t callback)
 {
     if (list == NULL) return NULL;
 
@@ -322,7 +319,7 @@ static list_t list_delete_with(list_t list, void *data, free_t callback)
     return list;
 }
 
-static list_t list_delete_node(list_t list, list_t node)
+ list_t list_delete_node(list_t list, list_t node)
 {
     if (list == NULL || node == NULL) return list;
 
@@ -340,7 +337,7 @@ static list_t list_delete_node(list_t list, list_t node)
     return list;
 }
 
-static list_t list_delete_node_with(list_t list, list_t node, free_t callback)
+ list_t list_delete_node_with(list_t list, list_t node, free_t callback)
 {
     if (list == NULL || node == NULL) return list;
 
@@ -360,7 +357,7 @@ static list_t list_delete_node_with(list_t list, list_t node, free_t callback)
     return list;
 }
 
-static size_t list_length(list_t list)
+ size_t list_length(list_t list)
 {
     size_t count   = 0;
     list_t current = list;
@@ -372,16 +369,16 @@ static size_t list_length(list_t list)
     return count;
 }
 
-static void list_print(list_t list)
-{
-    list_t current = list;
-    while (current != NULL)
-    {
-        write_serial_fmt("%p -> ", current->data);
-        current = current->next;
-    }
-    write_serial_fmt("NULL");
-}
+//  void list_print(list_t list)
+// {
+//     list_t current = list;
+//     while (current != NULL)
+//     {
+//         write_serial_fmt("%p -> ", current->data);
+//         current = current->next;
+//     }
+//     write_serial_fmt("NULL");
+// }
 
 #    undef LIST_IMPLEMENTATION
 #endif

@@ -1,435 +1,306 @@
-#include "fs/vfs/dev.h"
-#include "proto.hpp"
-#include "rtc.h"
-#include <errno.h>
-#include <fs/fs_syscall.h>
-#include <task/pcb.h>
+/**
+ * Device Virtual File System
+ * 设备虚拟文件系统
+ */
+#define ALL_IMPLEMENTATION
+#include "fs/vfs/devfs.h"
+#include "device.h"
+#include "errno.h"
+// #include "kprint.h"
+#include "krlibc.h"
+// #include "sprintf.h"
+#include "fs/vfs/vfs.h"
 
-#define FLANTERM_IN_FLANTERM
+extern device_t device_ctl[26]; // vdisk.c
 
-int        devfs_id   = 0;
-vfs_node_t devfs_root = NULL;
-vfs_node_t input_root = NULL;
+int             devfs_id    = 0;
+static int      devfs_inode = 2;
+vfs_node_t      devfs_root  = NULL;
+device_handle_t root_handle = NULL;
 
-devfs_handle_t devfs_handles[MAX_DEV_NUM];
-
-static int dummy()
-{
-    return -ENOSYS;
-}
-
-ssize_t devfs_read(void *file, void *addr, size_t offset, size_t size)
-{
-    devfs_handle_t handle = (devfs_handle_t)file;
-    if (handle->read) { return handle->read(handle->data, offset, addr, size); }
-
-    return 0;
-}
-
-ssize_t devfs_write(void *file, const void *addr, size_t offset, size_t size)
-{
-    devfs_handle_t handle = (devfs_handle_t)file;
-    if (handle->write) { return handle->write(handle->data, offset, addr, size); }
-
-    return 0;
-}
-
-void devfs_open(void *parent, const char *name, vfs_node_t node)
-{
-    (void)parent;
-
-    if (node->type & file_dir) { return; }
-
-    for (uint64_t i = 0; i < MAX_DEV_NUM; i++)
-    {
-        if (devfs_handles[i] != NULL && !strncmp(devfs_handles[i]->name, name, MAX_DEV_NAME_LEN))
-        {
-            devfs_handle_t handle = devfs_handles[i];
-            node->handle          = handle;
-            if (!strncmp(handle->name, "event", 5))
-            {
-                dev_input_event_t *event = (dev_input_event_t *)handle->data;
-                event->timesOpened++;
-            }
-            break;
-        }
+static errno_t devfs_register0(const char *path, size_t id) {
+    device_t *device = &device_ctl[id];
+    char     *buf    = NULL;
+    if (path != NULL) {
+        buf = (char*)malloc(strlen(path) + 6);
+        sprintf(buf, "/dev/%s", path);
+    } else {
+        buf = (char*)malloc(5);
+        strcpy(buf, "/dev");
     }
-}
 
-bool devfs_close(void *current)
-{
-    devfs_handle_t handle = (devfs_handle_t)current;
-    if (!strncmp(handle->name, "event", 5))
-    {
-        dev_input_event_t *event = (dev_input_event_t *)handle->data;
-        event->timesOpened--;
-        if (event->timesOpened) return false;
+    vfs_node_t node = vfs_open(buf);
+    if (node == NULL) {
+        free(buf);
+        return ENOENT;
     }
-    return true;
+
+    device_handle_t parent = (device_handle_t)node->handle;
+    if (parent == NULL) {
+        vfs_close(node);
+        free(buf);
+        return ENODEV;
+    }
+
+    if (!parent->is_dir) {
+        vfs_close(node);
+        free(buf);
+        return ENOTDIR;
+    }
+
+    device_handle_t handle = (device_handle_t)calloc(1, sizeof(struct device_handle));
+    // not_null_assets(handle, "device handle is null.");
+    handle->is_dir = false;
+    handle->device = device;
+    handle->name   = strdup(device->drive_name);
+    node->rdev     = device->vdiskid;
+    vfs_child_append(node, device->drive_name, handle);
+    llist_append(&parent->child, &handle->curr);
+    vfs_close(node);
+    free(buf);
+    return EOK;
 }
 
-int devfs_ioctl(devfs_handle_t handle, ssize_t cmd, ssize_t arg)
-{
-    if (handle->ioctl) { return handle->ioctl(handle->data, cmd, arg); }
+static errno_t devfs_mount(const char *handle, vfs_node_t node) {
+    if ((uint64_t)handle != DEVFS_REGISTER_ID) return VFS_STATUS_FAILED;
+    if (devfs_root) {
+        write_serial_fmt("Device file system has been mounted.");
+        return VFS_STATUS_FAILED;
+    }
+    root_handle         =  (device_handle_t)calloc(1, sizeof(struct device_handle));
+    root_handle->device = NULL;
+    root_handle->is_dir = true;
+    llist_init_head(&root_handle->child);
+    llist_init_head(&root_handle->curr);
 
-    return 0;
+    node->fsid   = devfs_id;
+    node->handle = root_handle;
+    node->dev    = 0;
+    devfs_root   = node;
+
+    for (size_t i = 0; i < 256; i++) {
+        device_t *device = &device_ctl[i];
+        // write_serial_fmt("mount dev name: %s\n", device->drive_name);
+        devfs_register0(device->path, i);
+    }
+
+    return VFS_STATUS_SUCCESS;
 }
 
-int devfs_mkdir(void *parent, const char *name, vfs_node_t node)
-{
-    vfs_node_t child = vfs_child_append(node, name, NULL);
-    child->type      = file_dir;
+static errno_t devfs_mkdir(void *handle, const char *name, vfs_node_t node) {
+    if (handle == NULL) return VFS_STATUS_FAILED;
+    device_handle_t dev_t =  (device_handle_t)handle;
+    device_handle_t nw   =  (device_handle_t)calloc(1, sizeof(struct device_handle));
+    nw->name             = strdup(name);
+    nw->is_dir           = true;
+    nw->device           = NULL;
+    llist_init_head(&nw->child);
+    llist_init_head(&nw->curr);
 
-    return 0;
+    llist_append(&dev_t->child, &nw->curr);
+    node->handle = nw;
+    node->fsid   = 0;
+    return EOK;
 }
 
-int devfs_mkfile(void *parent, const char *name, vfs_node_t node)
-{
-    return 0;
+static errno_t devfs_stat(void *handle, vfs_node_t node) {
+    if (node->type == file_dir) return VFS_STATUS_SUCCESS;
+    if (handle == NULL) return VFS_STATUS_FAILED;
+    device_handle_t dev_t =  (device_handle_t)handle;
+
+    node->handle = dev_t;
+    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream : file_block;
+    node->size =
+        dev_t->device->type == DEVICE_STREAM ? (uint64_t)-1 : disk_size(dev_t->device->vdiskid);
+    node->realsize = dev_t->device->sector_size;
+    node->fsid     = devfs_id;
+    node->rdev     = dev_t->device->vdiskid;
+    return VFS_STATUS_SUCCESS;
 }
 
-int devfs_poll(devfs_handle_t handle, size_t event)
-{
-    if (handle->poll) { return handle->poll(handle->data, event); }
+static void devfs_open(void *parent, const char *name, vfs_node_t node) {
+    if (node == devfs_root) {
+        node->handle = root_handle;
+        node->type   = file_dir;
+        return;
+    }
+    if (node->type == file_dir) return;
+    if (parent == NULL) return;
 
-    return 0;
+    device_handle_t dir_t =  (device_handle_t)parent;
+    device_handle_t pos, nxt;
+
+    device_handle_t dev_t = NULL;
+    llist_for_each(pos, nxt, &dir_t->child, curr) {
+        if (strcmp(pos->name, name) == 0) { dev_t = pos; }
+    }
+    if (dev_t == NULL) {
+        node->handle = NULL;
+        return;
+    }
+
+    node->handle = dev_t;
+    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream : file_block;
+    node->size =
+        dev_t->device->type == DEVICE_STREAM ? (uint64_t)-1 : disk_size(dev_t->device->vdiskid);
+    node->fsid     = devfs_id;
+    node->refcount = 1;
+}
+extern size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length);
+size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
+    device_handle_t handle =  (device_handle_t)file;
+    if (handle->is_dir) return VFS_STATUS_FAILED;
+    device_t *deivce = handle->device;
+    // write_serial_fmt("device name: %s vdid %d\n",deivce->drive_name, deivce->vdiskid);
+
+    size_t sector_size;
+    size_t sectors_to_do;
+    if (deivce->flag == 0) return VFS_STATUS_FAILED;
+    sector_size                      = deivce->sector_size;
+    size_t padding_up_to_sector_size = PADDING_UP(size, sector_size);
+    offset                           = PADDING_UP(offset, sector_size);
+
+    if (deivce->type == DEVICE_STREAM) goto read;
+    if (offset > deivce->size) return VFS_STATUS_SUCCESS;
+    if (deivce->size < offset + padding_up_to_sector_size) {
+        // 计算需要读取的扇区数
+        padding_up_to_sector_size = deivce->size - offset;
+        if (size > padding_up_to_sector_size) { size = padding_up_to_sector_size; }
+    }
+read:
+
+    sectors_to_do    = padding_up_to_sector_size / sector_size;
+    size_t read_size = device_read(offset / sector_size, sectors_to_do, addr, deivce->vdiskid);
+    return read_size;
 }
 
-vfs_node_t devfs_dup(vfs_node_t node)
-{
-    if (!node || !node->handle) return NULL;
+size_t devfs_write(void *file, const void *addr, size_t offset, size_t size) {
+    device_handle_t handle =  (device_handle_t)file;
+    if (handle->is_dir) return VFS_STATUS_FAILED;
+    device_t *deivce = handle->device;
 
-    devfs_handle_t handle = (devfs_handle_t)node->handle;
+    size_t sector_size;
+    size_t sectors_to_do;
+    if (deivce->flag == 0) return VFS_STATUS_FAILED;
+    sector_size                      = deivce->sector_size;
+    size_t padding_up_to_sector_size = PADDING_UP(size, sector_size);
+    offset                           = PADDING_UP(offset, sector_size);
+    if (deivce->type == DEVICE_STREAM) goto write;
+    if (offset > deivce->size) return VFS_STATUS_SUCCESS;
+    if (deivce->size < offset + padding_up_to_sector_size) {
+        padding_up_to_sector_size = deivce->size - offset;
+        if (size > padding_up_to_sector_size) { size = padding_up_to_sector_size; }
+    }
+write:
+    sectors_to_do = padding_up_to_sector_size / sector_size;
 
+    if (padding_up_to_sector_size == size) {
+    } else {
+        device_read(offset / sector_size, sectors_to_do, (void*)addr, deivce->vdiskid);
+    }
+    size_t ret_size = device_write(offset / sector_size, sectors_to_do, addr, deivce->vdiskid);
+    return ret_size;
+}
+
+static errno_t devfs_ioctl(void *file, size_t req, void *arg) {
+    device_handle_t handle =  (device_handle_t)file;
+    if (handle->device->flag == 0) return VFS_STATUS_FAILED;
+    return handle->device->ioctl(handle->device, req, arg);
+}
+
+static vfs_node_t devfs_dup(vfs_node_t node) {
     vfs_node_t new_node = vfs_node_alloc(node->parent, node->name);
-    if (!new_node) return NULL;
-
-    memcpy(new_node, node, sizeof(struct vfs_node));
-
-    devfs_handle_t new_handle = (devfs_handle_t)malloc(sizeof(struct devfs_handle));
-    if (!new_handle)
-    {
-        vfs_free(new_node);
-        return NULL;
-    }
-
-    memcpy(new_handle, handle, sizeof(struct devfs_handle));
-    new_node->handle = new_handle;
-
-    if (!strncmp(new_handle->name, "event", 5))
-    {
-        dev_input_event_t *event = (dev_input_event_t *)new_handle->data;
-        event->timesOpened++;
-    }
-
+    if (new_node == NULL) return NULL;
+    new_node->type        = node->type;
+    new_node->handle      = node->handle;
+    new_node->size        = node->size;
+    new_node->child       = node->child;
+    new_node->flags       = node->flags;
+    new_node->permissions = node->permissions;
+    new_node->realsize    = node->realsize;
     return new_node;
 }
 
-static struct vfs_callback callbacks = {
-    .mount   = (vfs_mount_t)dummy,
-    .unmount = (vfs_unmount_t)dummy,
-    .open    = devfs_open,
-    .close   = devfs_close,
-    .read    = devfs_read,
-    .write   = devfs_write,
-    .mkdir   = (vfs_mk_t)devfs_mkdir,
-    .mkfile  = (vfs_mk_t)devfs_mkfile,
-    .del     = (vfs_del_t)dummy,
-    .rename  = (vfs_rename_t)dummy,
-    .stat    = (vfs_stat_t)dummy,
-    .ioctl   = (vfs_ioctl_t)devfs_ioctl,
-    .poll    = (vfs_poll_t)devfs_poll,
-    .dup     = (vfs_dup_t)devfs_dup,
-};
-
-// ssize_t inputdev_event_read(void *data, uint64_t offset, void *buf, uint64_t len)
-// {
-//     dev_input_event_t *event = (dev_input_event_t*)data;
-
-//     ssize_t cnt = (ssize_t)circular_int_read(&event->device_events, (uint8_t*)buf, len);
-
-//     return cnt;
-// }
-
-ssize_t inputdev_event_write(void *data, uint64_t offset, const void *buf, uint64_t len)
-{
-    dev_input_event_t *event = (dev_input_event_t *)data;
-
-    // todo
-
-    return len;
+static errno_t devfs_poll(void *file, size_t events) {
+    device_handle_t handle =  (device_handle_t)file;
+    if (handle->device->flag == 0) return VFS_STATUS_FAILED;
+    if (handle->device->poll != (void *)empty) {
+        return handle->device->poll(events);
+    } else
+        return VFS_STATUS_SUCCESS;
 }
 
-ssize_t inputdev_ioctl(void *data, ssize_t request, ssize_t arg)
-{
-    dev_input_event_t *event  = (dev_input_event_t *)data;
-    size_t             type   = _IOC_TYPE(request);
-    size_t             dir    = _IOC_DIR(request);
-    size_t             number = _IOC_NR(request);
-    size_t             size   = _IOC_SIZE(request);
-
-    (void)type;
-    (void)dir;
-
-    ssize_t ret = -ENOTTY;
-
-    if (number >= 0x20 && number < (0x20 + EV_CNT))
-    {
-        // we are in EVIOCGBIT(event: 0x20 - x) territory, beware
-        return event->event_bit(data, request, (void *)arg);
-    }
-    else if (number >= 0x40 && number < (0x40 + ABS_CNT))
-    {
-        // we are in EVIOCGABS(event: 0x40 - x) territory, beware
-        return event->event_bit(data, request, (void *)arg);
-    }
-
-    if (request == 0x540b) // TCFLSH, idk why don't ask me!
-        return 0;
-
-    switch (number)
-    {
-    case 0x01: // EVIOCGVERSION idk, stolen from vmware
-    {
-        *((int *)arg) = 0x10001;
-        ret           = 0;
-        break;
-    }
-    case 0x02: // EVIOCGID
-        memcpy((void *)arg, &event->inputid, sizeof(struct input_id));
-        ret = 0;
-        break;
-    case 0x06: { // EVIOCGNAME(len)
-        int toCopy = MIN(size, (size_t)strlen(event->devname) + 1);
-        memcpy((void *)arg, event->devname, toCopy);
-        ret = toCopy;
-        break;
-    }
-    case 0x07: { // EVIOCGPHYS(len)
-        int toCopy = MIN(size, (size_t)strlen(event->physloc) + 1);
-        memcpy((void *)arg, event->physloc, toCopy);
-        ret = toCopy;
-        break;
-    }
-    case 0x08: // EVIOCGUNIQ()
-        if (event->uniq[0])
-        {
-            int toCopy = MIN(size, (size_t)strlen(event->uniq) + 1);
-            memcpy((void *)arg, event->uniq, toCopy);
-            ret = toCopy;
-        }
-        else { ret = -ENODATA; }
-        break;
-    case 0x09: // EVIOCGPROP()
-    {
-        int toCopy = MIN(sizeof(size_t), size);
-        memcpy((void *)arg, &event->properties, toCopy);
-        ret = size;
-        break;
-    }
-    case 0x18: // EVIOCGKEY()
-        ret = event->event_bit(data, request, (void *)arg);
-        break;
-    case 0x19: // EVIOCGLED()
-        ret = event->event_bit(data, request, (void *)arg);
-        break;
-    case 0x1b: // EVIOCGSW()
-        ret = event->event_bit(data, request, (void *)arg);
-        break;
-    default:
-        write_serial_fmt("unsupported ioctl! %lx", number);
-        ret = -ENOTTY;
-        break;
-    }
-
-    return ret;
-}
-
-// ssize_t inputdev_poll(void *data, size_t event)
-// {
-//     dev_input_event_t *e = (dev_input_event_t*)data;
-//     size_t cnt = circular_int_read_poll(&e->device_events);
-//     if (cnt > 0 && event & EPOLLIN)
-//         return EPOLLIN;
-//     return 0;
-// }
-
-vfs_node_t regist_dev(const char *name, ssize_t (*read)(void *data, uint64_t offset, void *buf, uint64_t len),
-                      ssize_t (*write)(void *data, uint64_t offset, const void *buf, uint64_t len),
-                      ssize_t (*ioctl)(void *data, ssize_t cmd, ssize_t arg), ssize_t (*poll)(void *data, size_t event),
-                      void *data)
-{
-    const char *new_name = name;
-
-    vfs_node_t dev = devfs_root;
-
-    if (strstr(name, "/") != NULL)
-    {
-        new_name          = strstr(name, "/") + 1;
-        uint64_t path_len = new_name - name;
-        char     new_path[32];
-        strcpy(new_path, "/dev/");
-        strncpy(new_path + 5, name, path_len);
-        dev = vfs_open((const char *)new_path);
-        if (!dev)
-        {
-            vfs_mkdir((const char *)new_path);
-            dev       = vfs_open((const char *)new_path);
-            dev->mode = 0644;
-        }
-    }
-
-    for (uint64_t i = 0; i < MAX_DEV_NUM; i++)
-    {
-        if (devfs_handles[i] == NULL)
-        {
-            devfs_handles[i] = (devfs_handle_t)malloc(sizeof(struct devfs_handle));
-            strncpy(devfs_handles[i]->name, new_name, MAX_DEV_NAME_LEN);
-            devfs_handles[i]->read  = read;
-            devfs_handles[i]->write = write;
-            devfs_handles[i]->ioctl = ioctl;
-            devfs_handles[i]->poll  = poll;
-            devfs_handles[i]->data  = data;
-            vfs_node_t child        = vfs_child_append(dev, devfs_handles[i]->name, NULL);
-            child->type             = file_block;
-            if (!strncmp(devfs_handles[i]->name, "std", 3) || !strncmp(devfs_handles[i]->name, "tty", 3))
-                child->type = file_stream;
-            else if (!strncmp(devfs_handles[i]->name, "fb", 2))
-                child->type = file_fbdev;
-            else if (!strncmp(devfs_handles[i]->name, "event0", 6))
-                child->type = file_keyboard;
-            else if (!strncmp(devfs_handles[i]->name, "event1", 6))
-                child->type = file_mouse;
-
-            child->mode = 0700;
-
-            return child;
-        }
-    }
-
+static void *devfs_map(void *file, void *addr, size_t offset, size_t size, size_t prot,
+                       size_t flags) {
+    device_handle_t handle =  (device_handle_t)file;
+    if (handle->device->flag == 0) return NULL;
+    if (handle->device->map) { return handle->device->map(handle->device->vdiskid, addr, size); }
     return NULL;
 }
 
-ssize_t stdout_write(void *data, uint64_t offset, const void *buf, uint64_t len)
-{
-    (void)data;
-    (void)offset;
+static int dummy() {
+    return -ENOSYS;
+}
 
-    for (uint64_t i = 0; i < len; i++)
-    {
-        write_serial_fmt("%c", ((const char *)buf)[i]);
+static struct vfs_callback devfs_callbacks = {
+    .mount    = devfs_mount,
+    .unmount  = (vfs_unmount_t)empty,
+    .mkdir    = devfs_mkdir,
+    .close    = (vfs_close_t)empty,
+    .stat     = devfs_stat,
+    .open     = devfs_open,
+    .read     = devfs_read,
+    .write    = devfs_write,
+    .readlink = (vfs_readlink_t)dummy,
+    .mkfile   = (vfs_mk_t)empty,
+    .link     = (vfs_mk_t)dummy,
+    .symlink  = (vfs_mk_t)dummy,
+    .ioctl    = devfs_ioctl,
+    .dup      = devfs_dup,
+    .del   = (vfs_del_t)empty,
+    .rename   = (vfs_rename_t)empty,
+    .poll     = devfs_poll,
+    .map      = devfs_map,
+};
+
+void devfs_setup() {
+    devfs_id = vfs_regist("devfs", &devfs_callbacks, DEVFS_REGISTER_ID, 0x454d444d);
+    vfs_mkdir("/dev");
+    vfs_node_t dev = vfs_open("/dev");
+    if (dev == NULL) {
+        write_serial_fmt("'dev' handle is null.");
+        return;
+    }
+    if (vfs_mount((char*)DEVFS_REGISTER_ID, dev) == VFS_STATUS_FAILED) {
+        write_serial_fmt("Cannot mount device file system.");
+        return;
+    }
+    vfs_mkdir("/dev/ptx");
+}
+
+errno_t devfs_delete(const char *path) {
+    char *buf = NULL;
+    if (path != NULL) {
+        buf = (char*)malloc(strlen(path) + 6);
+        sprintf(buf, "/dev/%s", path);
+    } else {
+        buf = (char*)malloc(5);
+        strcpy(buf, "/dev");
     }
 
-    return (ssize_t)len;
-}
-
-extern struct flanterm_context *ft_ctx;
-
-bool ioSwitch = false;
-
-ssize_t stdio_poll(void *data, size_t events)
-{
-    ssize_t revents = 0;
-    if (events & EPOLLIN && ioSwitch) revents |= EPOLLIN;
-    if (events & EPOLLOUT) revents |= EPOLLOUT;
-    ioSwitch = !ioSwitch;
-    return revents;
-}
-
-uint64_t next = 0;
-
-ssize_t random_dev_read(void *data, uint64_t offset, void *buf, uint64_t len)
-{
-    tm time;
-    time_read(&time);
-    next = mktime();
-    next = next * 1103515245 + 12345;
-    return ((unsigned)(next / 65536) % 32768);
-}
-
-ssize_t null_dev_read(void *data, uint64_t offset, void *buf, uint64_t len)
-{
-    (void)data;
-    (void)offset;
-    (void)buf;
-    (void)len;
-    return 0;
-}
-
-ssize_t null_dev_write(void *data, uint64_t offset, const void *buf, uint64_t len)
-{
-    (void)data;
-    (void)offset;
-    (void)buf;
-    (void)len;
-    return 0;
-}
-
-static uint32_t simple_rand()
-{
-    tm time;
-    time_read(&time);
-    uint32_t seed = mktime();
-    seed          = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
-    return seed;
-}
-
-ssize_t urandom_dev_read(void *data, uint64_t offset, void *buf, uint64_t len)
-{
-    for (uint64_t i = 0; i < len; i++)
-    {
-        ((uint8_t *)buf)[i] = (uint8_t)(simple_rand() & 0xFF);
+    vfs_node_t node = vfs_open(buf);
+    if (node == NULL) {
+        free(buf);
+        return -ENOENT;
     }
-    return len;
+    list_delete(node->parent->child, node);
+    vfs_free(node);
 }
 
-ssize_t urandom_dev_write(void *data, uint64_t offset, const void *buf, uint64_t len)
-{
-    return len;
-}
-
-ssize_t urandom_dev_ioctl(void *data, ssize_t cmd, ssize_t arg)
-{
-    switch (cmd)
-    {
-    default: return -ENOTTY;
-    }
-}
-
-void dev_init()
-{
-    devfs_id = vfs_regist("devfs", &callbacks);
-
-    devfs_root       = vfs_node_alloc(rootdir, "dev");
-    devfs_root->type = file_dir;
-    devfs_root->fsid = devfs_id;
-    devfs_root->mode = 0644;
-
-    memset(devfs_handles, 0, sizeof(devfs_handles));
-
-    //长大了再做吧
-    // dev_input_event_t *kb_input_event = malloc(sizeof(dev_input_event_t));
-    // kb_input_event->inputid.bustype = 0x05;   // BUS_PS2
-    // kb_input_event->inputid.vendor = 0x045e;  // Microsoft
-    // kb_input_event->inputid.product = 0x0001; // Generic MS Keyboard
-    // kb_input_event->inputid.version = 0x0100; // Basic MS Version
-    // kb_input_event->event_bit = kb_event_bit;
-    // kb_input_event->device_events.read_ptr = 0;
-    // kb_input_event->device_events.write_ptr = 0;
-    // circular_int_init(&kb_input_event->device_events, 16384);
-    // vfs_node_t kb_node = regist_dev("input/event0", inputdev_event_read, inputdev_event_write, inputdev_ioctl, inputdev_poll, kb_input_event);
-    // dev_input_event_t *mouse_input_event = malloc(sizeof(dev_input_event_t));
-    // mouse_input_event->inputid.bustype = 0x05;   // BUS_PS2
-    // mouse_input_event->inputid.vendor = 0x045e;  // Microsoft
-    // mouse_input_event->inputid.product = 0x00b4; // Generic MS Mouse
-    // mouse_input_event->inputid.version = 0x0100; // Basic MS Version
-    // mouse_input_event->event_bit = mouse_event_bit;
-    // mouse_input_event->device_events.read_ptr = 0;
-    // mouse_input_event->device_events.write_ptr = 0;
-    // circular_int_init(&mouse_input_event->device_events, 16384);
-    // vfs_node_t mouse_node = regist_dev("input/event1", inputdev_event_read, inputdev_event_write, inputdev_ioctl, inputdev_poll, mouse_input_event);
-
-    regist_dev("null", null_dev_read, null_dev_write, NULL, NULL, NULL);
-    regist_dev("random", random_dev_read, NULL, NULL, NULL, NULL);
-    regist_dev("urandom", urandom_dev_read, urandom_dev_write, urandom_dev_ioctl, NULL, NULL);
+errno_t devfs_register(const char *path, size_t id) {
+    device_t *device = &device_ctl[id];
+    char     *buf    = NULL;
+    device->path     = strdup(path);
+    if (devfs_root == NULL) { return EOK; }
+    return devfs_register0(device->path, id);
 }

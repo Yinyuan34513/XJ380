@@ -59,6 +59,11 @@ typedef struct
     uint8_t              func;
     pci_bar_base_address bars[6];
 
+    uint64_t msix_mmio_vaddr;
+    uint64_t msix_mmio_size;
+    uint32_t msix_offset;
+    uint16_t msix_table_size;
+
     uint32_t capability_point;
 
     pci_device_op_t *op;

@@ -19,6 +19,7 @@ typedef struct WINDOWLS
     MsgPrcor  WinMPf;
     tcb_t     w_task;
     WINDOWLSP next;
+    uint64_t  type;
 } WINDOWLS;
 
 typedef struct WIN_THEME
@@ -42,13 +43,15 @@ typedef struct XWM_INFO
 
 void init_xwm(XWM_INFO *xwmi);
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
+void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height);
+void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color);
 void draw_textl(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
-               SHEET_BUFFER color, uint32_t *i_width);
+                SHEET_BUFFER color, uint32_t *i_width);
 void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
-               SHEET_BUFFER color);
+                  SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 

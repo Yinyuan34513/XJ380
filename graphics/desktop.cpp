@@ -1,12 +1,11 @@
 #include "./image/stbi.h"
 #include "./image/stbir.h"
-#include "graphics/xingji_logo_16px.hpp"
-#include "graphics/xj380_logo_rect_72x64px.hpp"
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
 #include <proto.hpp>
 #include <ttf.h>
+#include <fs/vfs/vfs.h>
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
@@ -15,11 +14,20 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     int           scry = sht->scry;
     // #136dff
     // draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
-    int           w, h, bpp;
-    stbi_uc      *b = stbi_load("/BackGround.jpeg", &w, &h, &bpp, 4);
-    uint8_t      *b1 = (uint8_t *)(malloc(scrx * scry * 4));
-    stbir_resize_uint8(b, w, h, 0, b1, scrx, scry, 0, 4);
-    SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
+    SHEET_BUFFER *buff = (SHEET_BUFFER *)malloc(scrx * scry * 4);
+    int      w, h, bpp;
+    vfs_node_t v = vfs_open("/system/image/BackGround.png");
+    if (!v)
+    {
+        write_serial_string("PrintPic: File load failed\n");
+        return;
+    }
+    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    vfs_read(v, (uint8_t *)bf, 0, v->size);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    if (!b) { write_serial_string("PrintPic: File load failed\n"); }
+    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buff), scrx, scry, 0, 4);
+    vfs_close(v);
 
     SHEET *front_p = sht->start;
     while (true)
@@ -29,66 +37,18 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
         front_p = front_p->next;
     }
 
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-    const int     width       = front_p->width;
+    // SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
 
     // 检查内存对齐情况
-    int is_src_aligned  = ((uintptr_t)buff & 0xF) == 0;
-    int is_dest_aligned = ((uintptr_t)SheetBuffer & 0xF) == 0;
-
-    for (int i = 0; i < scry; i++)
-    {
-        SHEET_BUFFER       *dest_row = &SheetBuffer[i * width];
-        const SHEET_BUFFER *src_row  = &buff[i * scrx];
-
-        int j = 0;
-
-        // 根据对齐情况选择最优复制方式
-        if (is_src_aligned && is_dest_aligned)
-        {
-            // 双方都对齐的情况 - 使用 movaps
-            for (; j <= scrx - 16; j += 16)
-            {
-                __asm__ volatile("movaps (%1), %%xmm0\n\t"
-                                 "movaps 16(%1), %%xmm1\n\t"
-                                 "movaps 32(%1), %%xmm2\n\t"
-                                 "movaps 48(%1), %%xmm3\n\t"
-                                 "movaps %%xmm0, (%0)\n\t"
-                                 "movaps %%xmm1, 16(%0)\n\t"
-                                 "movaps %%xmm2, 32(%0)\n\t"
-                                 "movaps %%xmm3, 48(%0)\n\t"
-                                 :
-                                 : "r"(dest_row + j), "r"(src_row + j)
-                                 : "xmm0", "xmm1", "xmm2", "xmm3", "memory");
-            }
-        }
-        else
-        {
-            // 至少一方未对齐的情况 - 使用 movups
-            for (; j <= scrx - 16; j += 16)
-            {
-                __asm__ volatile("movups (%1), %%xmm0\n\t"
-                                 "movups 16(%1), %%xmm1\n\t"
-                                 "movups 32(%1), %%xmm2\n\t"
-                                 "movups 48(%1), %%xmm3\n\t"
-                                 "movups %%xmm0, (%0)\n\t"
-                                 "movups %%xmm1, 16(%0)\n\t"
-                                 "movups %%xmm2, 32(%0)\n\t"
-                                 "movups %%xmm3, 48(%0)\n\t"
-                                 :
-                                 : "r"(dest_row + j), "r"(src_row + j)
-                                 : "xmm0", "xmm1", "xmm2", "xmm3", "memory");
-            }
-        }
-
-        // 处理剩余不足 16 个的元素
-        for (; j < scrx; j++)
-        {
-            dest_row[j] = src_row[j];
-        }
-    }
+    front_p->buffer = (void *)buff;
+    
     init_dock(sht, dock_sheet_id);
     init_shortcut_dock(sht, dock_sheet_id);
+
+    // 先糊弄观众一下子
+    PrintPicture_blend(sht, sheet_id, 20, 15, 75, 75, "/system/icon/d_system.png");
+    print_box_ttf(sht, sheet_id, "系统", BLACK, 43, 89, 12);
+    print_box_ttf(sht, sheet_id, "系统", WHITE, 44, 90, 11);
 }
 
 void init_dock(SHEET_INFO *sht, uint16_t *sheet_id)
@@ -132,34 +92,53 @@ void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id)
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8 + 64 + 8, 4, "About", BLACK);
 }
 
+SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
+{
+    uint8_t       text_r   = foreground_color.r;
+    uint8_t       text_g   = foreground_color.g;
+    uint8_t       text_b   = foreground_color.b;
+    uint8_t       text_a   = foreground_color.a;
+    uint8_t       coverage = alpha;
+    SHEET_BUFFER *dst      = &background_color;
+
+    // 转换为浮点运算（0.0-1.0范围）
+    float cov       = coverage / 255.0f;
+    float txt_alpha = text_a / 255.0f;
+    float src_alpha = cov * txt_alpha;
+
+    // 源颜色预乘alpha
+    float src_r = (text_r / 255.0f) * src_alpha;
+    float src_g = (text_g / 255.0f) * src_alpha;
+    float src_b = (text_b / 255.0f) * src_alpha;
+
+    // 目标颜色预乘alpha
+    float dst_a = dst->a / 255.0f;
+    float dst_r = (dst->r / 255.0f) * dst_a;
+    float dst_g = (dst->g / 255.0f) * dst_a;
+    float dst_b = (dst->b / 255.0f) * dst_a;
+
+    // 混合计算
+    float blended_alpha = src_alpha + dst_a * (1.0f - src_alpha);
+
+    // 颜色混合
+    float blended_r = (src_r + dst_r * (1.0f - src_alpha)) / blended_alpha;
+    float blended_g = (src_g + dst_g * (1.0f - src_alpha)) / blended_alpha;
+    float blended_b = (src_b + dst_b * (1.0f - src_alpha)) / blended_alpha;
+
+    // 转换回0-255并存储
+    dst->r = (uint8_t)(blended_r * 255 + 0.5f);
+    dst->g = (uint8_t)(blended_g * 255 + 0.5f);
+    dst->b = (uint8_t)(blended_b * 255 + 0.5f);
+    dst->a = (uint8_t)(blended_alpha * 255 + 0.5f);
+    return *dst;
+}
+
 void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
 {
-    for (int y = 0; y < 63; y++)
-    {
-        for (int x = 0; x < 73; x++)
-        {
-            if (xj380_logo_rect_72x64px[y][x] == '.')
-            {
-                // pass
-            }
-            else if (xj380_logo_rect_72x64px[y][x] == '#') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE); }
-            else if (xj380_logo_rect_72x64px[y][x] == '@') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW); }
-        }
-    }
+    PrintPicture_blend(sht, sheet_id, xi, yi, 84, 64, "/system/xj380.png");
 }
 
 void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
 {
-    for (int y = 0; y < 16; y++)
-    {
-        for (int x = 0; x < 16; x++)
-        {
-            if (xingji_logo_16px[y][x] == '.')
-            {
-                // pass
-            }
-            else if (xingji_logo_16px[y][x] == '@') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_BLUE); }
-            else if (xingji_logo_16px[y][x] == '#') { draw_point(sht, sheet_id, x + xi, y + yi, XINGJI_YELLOW); }
-        }
-    }
+    PrintPicture_blend(sht, sheet_id, xi, yi, 16, 16, "/system/xingji.png");
 }

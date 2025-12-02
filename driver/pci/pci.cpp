@@ -234,7 +234,7 @@ uint32_t pci_read(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offse
 {
     uint32_t pci_address  = segment_bus_device_functon_to_pci_address(s, b, d, f);
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
-    if (mmio_address == 0) { write_serial_string("[Error] Cannot read pci: failed to get mmio address\n"); }
+    if (mmio_address == 0) { pr_err("Cannot read pci: failed to get mmio address\n"); }
     return *(uint32_t *)mmio_address;
 }
 
@@ -242,7 +242,7 @@ void pci_write(uint32_t b, uint32_t d, uint32_t f, uint32_t s, uint32_t offset, 
 {
     uint32_t pci_address  = segment_bus_device_functon_to_pci_address(s, b, d, f);
     uint64_t mmio_address = get_mmio_address(pci_address, offset);
-    if (mmio_address == 0) { write_serial_string("[Error] Cannot write pci: failed to get mmio address"); }
+    if (mmio_address == 0) { pr_err("Cannot write pci: failed to get mmio address"); }
     *(uint32_t *)mmio_address = value;
 }
 
@@ -262,35 +262,40 @@ void pci_write_command(pci_device_t *device, uint8_t offset, uint32_t value)
     outl(PCI_DATA_PORT, value);
 }
 
-uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type)
-{
+uint32_t pci_enumerate_capability_list(pci_device_t *pci_dev, uint32_t cap_type) {
     uint32_t cap_offset;
-    switch (pci_dev->header_type)
-    {
+    switch (pci_dev->header_type) {
     case 0x00: cap_offset = pci_dev->capability_point; break;
     case 0x10: cap_offset = pci_dev->capability_point; break;
     default:
         // 不支持
         return 0;
     }
-
     uint32_t tmp;
-    while (true)
-    {
-        tmp = pci_dev->op->read(pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment, cap_offset);
-        if ((tmp & 0xff) != cap_type)
-        {
-            if (((tmp & 0xff00) >> 8))
-            {
+    while (1) {
+        tmp = pci_dev->op->read(pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment,
+                                cap_offset);
+        if ((tmp & 0xff) != cap_type) {
+            if (((tmp & 0xff00) >> 8)) {
                 cap_offset = (tmp & 0xff00) >> 8;
                 continue;
-            }
-            else
+            } else
                 return 0;
         }
 
         return cap_offset;
     }
+}
+uint32_t read_bar_n(pci_device_t *device, uint8_t bar_n) {
+    uint32_t bar_offset = 0x10 + 4 * bar_n;
+    return pci_read0(device->bus, device->slot, device->func, NULL,bar_offset);
+}
+uint32_t pci_read_command_status(uint8_t bus, uint8_t slot, uint8_t func) {
+    return pci_read0(bus, slot, func, NULL,0x04);
+}
+
+void pci_write_command_status(uint8_t bus, uint8_t slot, uint8_t func, uint32_t value) {
+    pci_write0(bus, slot, func, NULL,0x04, value);
 }
 
 pci_device_op_t pcie_device_op = {
@@ -365,7 +370,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
                 // 32 bit
                 case 0b00: {
                     pci_device->bars[i].address = bar & 0xFFFFFFFC;
-                    pci_device->bars[i].mmio    = false;
+                    pci_device->bars[i].mmio    = true;
 
                     uint32_t original_value = pci_device->op->read(bus, device, function, segment_group, offset);
 
@@ -404,7 +409,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
                     pci_device->bars[i].size = ~value + 1;
 
                     pci_device->bars[i].address = bar_address;
-                    pci_device->bars[i].mmio    = false;
+                    pci_device->bars[i].mmio    = true;
                     break;
                 }
             }
@@ -433,7 +438,7 @@ void pci_scan_function(uint16_t segment_group, uint8_t bus, uint8_t device, uint
     case 0x02:
         // Ignore
         break;
-    default: write_serial_fmt("[Error] Failed to parse header type, header type = %x\n", header_type);
+    default: pr_err("Failed to parse header type, header type = %x\n", header_type);
     }
 }
 

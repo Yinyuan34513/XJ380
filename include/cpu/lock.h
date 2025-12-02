@@ -10,7 +10,6 @@ typedef _Atomic volatile bool spin_t;
 #define spin_trylock(_spin_) (!__atomic_test_and_set(&(_spin_), __ATOMIC_SEQ_CST))
 #define spin_lock(_spin_)                                                                                              \
     ({                                                                                                                 \
-        scheduler_yield();                                                                                             \
         while (__atomic_test_and_set(&(_spin_), __ATOMIC_SEQ_CST)) {}                                                  \
     })
 #define spin_unlock(_spin_) __atomic_clear(&(_spin_), __ATOMIC_SEQ_CST)

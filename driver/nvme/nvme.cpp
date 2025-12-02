@@ -1,27 +1,30 @@
-#include <nvme/nvme.h>
+#include "nvme/nvme.h"
 #include <pci/pci.h>
-#include <proto.hpp>
 
-NVME_NAMESPACE *namespaces[MAX_NVME_DEV_NUM];
-uint64_t        nvme_device_num = 0;
-
-void nvme_init()
+int nvme_probe(pci_device_t *dev, uint32_t vendor_device_id)
 {
-    pci_device_t *devs[MAX_NVME_DEV_NUM];
-    uint32_t      num;
+    write_serial_fmt("Found NVME controller.\n");
 
-    pci_find_class(devs, &num, 0x010802);
+    NVME_CONTROLLER *nvme = nvme_driver_init(dev->bars[0].address, dev->bars[0].size);
+    if (!nvme)
+        return -1;
 
-    if (num == 0)
-    {
-        write_serial_fmt("No NVME controller found\n");
-        return;
-    }
+    // dev->desc = nvme;
 
-    for (uint32_t i = 0; i < num; i++)
-    {
-        pci_device_t *dev = devs[i];
+    return 0;
+}
 
-        nvme_driver_init(dev->bars[0].address, dev->bars[0].size);
-    }
+void nvme_remove(pci_device_t *dev)
+{
+}
+
+void nvme_shutdown(pci_device_t *dev)
+{
+}
+
+void nvme_setup()
+{
+    pci_device_t * nvdev = pci_find_class(0x010800);
+    if(nvdev==NULL)return;
+    nvme_probe(nvdev,NULL);
 }

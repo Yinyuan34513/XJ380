@@ -94,22 +94,25 @@ typedef struct
 
 enum EFI_MEMORY_TYPE
 {
-    EfiReservedMemoryType,      // 0 不要动
-    EfiLoaderCode,              // 1 不要动
-    EfiLoaderData,              // 2 不要动
-    EfiBootServicesCode,        // 3 可以动
-    EfiBootServicesData,        // 4 可以动
-    EfiRuntimeServicesCode,     // 5 不要动
-    EfiRuntimeServicesData,     // 6 不要动
-    EfiConventionalMemory,      // 7 可以动
-    EfiUnusableMemory,          // 8 不要动
-    EfiACPIReclaimMemory,       // 9 不要动
-    EfiACPIMemoryNVS,           // A 不要动
-    EfiMemoryMappedIO,          // B 不要动
-    EfiMemoryMappedIOPortSpace, // C 不要动
-    EfiPalCode,                 // D 不知道
-    EfiPersistentMemory,        // E 不知道
-    EfiMaxMemoryType            // F 不知道
+    EfiReservedMemoryType,      // 0 绝对不要动
+    EfiLoaderCode,              // 1 绝对不要动
+    EfiLoaderData,              // 2 绝对不要动
+    EfiBootServicesCode,        // 3 退出BS后可以动
+    EfiBootServicesData,        // 4 同上
+    EfiRuntimeServicesCode,     // 5 绝对不要动
+    EfiRuntimeServicesData,     // 6 绝对不要动
+    EfiConventionalMemory,      // 7 随便动
+    EfiUnusableMemory,          // 8 不要动, 有问题
+    EfiACPIReclaimMemory,       // 9 解析ACPI表前不能动，解析后可回收
+    EfiACPIMemoryNVS,           // A 绝对不要动
+    EfiMemoryMappedIO,          // B 绝对不要动
+    EfiMemoryMappedIOPortSpace, // C 绝对不要动
+    EfiPalCode,                 // D Use of 处理器  不可以
+    EfiPersistentMemory,        // E 持久内存，你想干什么?? ramfs??
+    EfiMaxMemoryType           // F 枚举上限
+    // 15(F没有一点用) ~ 0xFFFFFFFF 保留
+    // 0x70000000 ~ 0x7FFFFFFF  OEM
+    // 0x80000000 ~ 0xFFFFFFFF IDK
 };
 
 typedef enum

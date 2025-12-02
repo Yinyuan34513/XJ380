@@ -320,6 +320,46 @@ int64_t strtol(const char *str, char **endptr, int base)
     return (acc);
 }
 
+int cmd_parse(const char *cmd_str, char **argv, char token)
+{
+    int         argc = 0;
+    const char *next = cmd_str;
+
+    while (*next)
+    {
+        while (*next == token)
+            next++;
+        if (*next == '\0') break;
+        const char *start = next;
+        while (*next && *next != token)
+            next++;
+        size_t len = next - start;
+        argv[argc] = (char *)malloc(len + 1);
+        if (!argv[argc])
+        {
+            for (int i = 0; i < argc; i++)
+                free(argv[i]);
+            return -1;
+        }
+        memcpy(argv[argc], start, len);
+        argv[argc][len] = '\0';
+
+        argc++;
+        if (argc >= 50) break;
+    }
+    argv[argc] = NULL;
+    return argc;
+}
+
+void cmd_free(char **argv, int argc)
+{
+    for (int i = 0; i < argc; i++)
+    {
+        free(argv[i]);
+    }
+}
+
+
 char *strdup(const char *str)
 {
     if (str == NULL) return NULL;

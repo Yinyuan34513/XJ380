@@ -14,3 +14,5 @@
 
 #include "xapi.h"
 #include "xposix.h"
+
+#include "krlibc.h" // 友情链接（确信

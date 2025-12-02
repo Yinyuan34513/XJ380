@@ -4,6 +4,7 @@
 #include <krlibc.h>
 #include <mm/page.h>
 #include <proto.hpp>
+#include <mm/lazyalloc.h>
 #include <stdint.h>
 
 spin_t page_lock;
@@ -23,7 +24,7 @@ static bool is_huge_page(page_table_entry_t *entry)
 extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
     disable_intr();
-    // disable_scheduler();         // 长大后在学习吧！
+    disable_scheduler();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
 
@@ -35,82 +36,20 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
                                                 : "Unknown";
 
     // 长大后在学习吧！
-    // if (get_current_task() != NULL) {
-    //     pcb_t current_proc = get_current_task()->parent_group;
-
-    //     // 应用程序懒分配机制
-    //     if (current_proc->task_level == TASK_APPLICATION_LEVEL) {
-    //         logkf("Lazy alloc try(%p) %s Current process PID: %d:%s (%s) CPU%d\n", faulting_address,
-    //               error_msg, get_current_task()->pid, get_current_task()->name, current_proc->name,
-    //               get_current_task()->cpu_id);
-    //         mm_virtual_page_t *virt_page = NULL;
-    //         spin_lock(current_proc->virt_queue->lock);
-    //         queue_foreach(current_proc->virt_queue, node) {
-    //             mm_virtual_page_t *vpage = (mm_virtual_page_t *)node->data;
-    //             if (faulting_address >= vpage->start &&
-    //                 faulting_address < vpage->start + vpage->count * PAGE_SIZE) {
-    //                 virt_page = vpage;
-    //                 break;
-    //             }
-    //         }
-
-    //         if (virt_page == NULL) {
-    //             spin_unlock(current_proc->virt_queue->lock);
-    //             logkf("Page fault virtual address 0x%x %p\n", faulting_address, frame->rip);
-    //             logkf("Type: %s\n", error_msg);
-    //             kill_proc(get_current_task()->parent_group, -1);
-    //             terminal_open_flush();
-    //             enable_scheduler();
-    //             update_terminal();
-    //             open_interrupt;
-    //             cpu_hlt;
-    //         } else {
-    //             size_t   fault_index = (faulting_address - virt_page->start) / PAGE_SIZE;
-    //             uint64_t page_addr   = virt_page->start + fault_index * PAGE_SIZE;
-
-    //             logkf("lazy alloc %p\n", page_addr);
-
-    //             uint64_t phys = alloc_frames(1);
-    //             page_map_to(get_current_directory(), page_addr, phys, virt_page->pte_flags);
-    //             memset((void *)page_addr, 0, PAGE_SIZE);
-
-    //             uint64_t range_start = virt_page->start;
-    //             // uint64_t range_end = range_start + virt_page->count * PAGE_SIZE;
-
-    //             mm_virtual_page_t *left  = NULL;
-    //             mm_virtual_page_t *right = NULL;
-
-    //             spin_unlock(current_proc->virt_queue->lock);
-
-    //             // 左侧未分配部分
-    //             if (fault_index > 0) {
-    //                 left            = malloc(sizeof(mm_virtual_page_t));
-    //                 left->start     = range_start;
-    //                 left->count     = fault_index;
-    //                 left->pte_flags = virt_page->pte_flags;
-    //                 left->index     = queue_enqueue(current_proc->virt_queue, left);
-    //             }
-
-    //             // 右侧未分配部分
-    //             if (fault_index + 1 < virt_page->count) {
-    //                 right            = malloc(sizeof(mm_virtual_page_t));
-    //                 right->start     = range_start + (fault_index + 1) * PAGE_SIZE;
-    //                 right->count     = virt_page->count - fault_index - 1;
-    //                 right->pte_flags = virt_page->pte_flags;
-    //                 right->index     = queue_enqueue(current_proc->virt_queue, right);
-    //             }
-
-    //             // 移除原始 mm_virtual_page
-    //             queue_remove_at(current_proc->virt_queue, virt_page->index);
-    //             free(virt_page);
-    //             terminal_open_flush();
-    //             enable_scheduler();
-    //             open_interrupt;
-    //             update_terminal();
-    //             return;
-    //         }
-    //     }
-    // }
+    if (get_current_task() != NULL) {
+        pcb_t current_proc = get_current_task()->parent_group;
+        if (current_proc->task_level == TASK_APPLICATION_LEVEL) {
+            errno_t status = lazy_tryalloc(current_proc, faulting_address);
+            if (status != 0) {
+                goto err;
+            } else {
+                enable_scheduler();
+                open_interrupt;
+                return;
+            }
+        }
+    }
+err:;
     write_serial_string("Page fault virtual address (cr2): ");
     write_serial_hex(faulting_address);
     write_serial_string(" ");
@@ -120,6 +59,8 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+
+    backtrace(frame);
 
     while (1)
     {

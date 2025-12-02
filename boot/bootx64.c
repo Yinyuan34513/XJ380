@@ -295,6 +295,20 @@ void MapVirtToPhys(UINT64 virt, UINT64 size)
     }
 }
 
+int check_qemu(char *acpi_oem_id)
+{
+    if (acpi_oem_id[0] == 'B' && 
+        acpi_oem_id[1] == 'O' && 
+        acpi_oem_id[2] == 'C' && 
+        acpi_oem_id[3] == 'H' && 
+        acpi_oem_id[4] == 'S'
+        )
+    {
+        return 1;
+    }
+    return 0;
+}
+
 void asm_cpuid(UINT32 mop, UINT32 sop, UINT32 *eax, UINT32 *ebx, UINT32 *ecx, UINT32 *edx)
 {
     __asm__ volatile("cpuid \n\t" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "0"(mop), "2"(sop) : "memory");
@@ -317,7 +331,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     CreateAndMapNewPageTable();
     write_serial_string("New Page Table Created Success.\n");
 
-    ST->ConOut->ClearScreen(ST->ConOut);
+    // ST->ConOut->ClearScreen(ST->ConOut);
 
     EFI_STATUS                status;
     EFI_PHYSICAL_ADDRESS      entry_addr;
@@ -373,7 +387,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     entry_addr = ehdr->e_entry; // 获取入口点
     // free(kernel_buffer);        // 释放内核文件，丢掉！
 
+#if BUILD_EDITION == DEBUG_VERSION
     SwitchToResolution(1280, 768); // 切换分辨率
+#endif
 
     struct FrameBufferConfig config = {(UINT8 *)(GOP->Mode->FrameBufferBase + 0xffff800000000000),
                                        GOP->Mode->Info->PixelsPerScanLine, GOP->Mode->Info->HorizontalResolution,
@@ -401,6 +417,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     BootConfig = malloc(sizeof(BOOT_CONFIG)) + 0xFFFF800000000000;
     xmemset(BootConfig, 0, sizeof(BOOT_CONFIG));
 
+    BootConfig->is_qemu = 0;
+
     // 获取RSDP
     EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;
     UINT8                    AcpiTableWasFound = 0; // 0=找不着 1=找到了
@@ -423,6 +441,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
                 write_serial_string("XSDT Address: ");
                 write_serial_string(Hex2Char(AcpiRsdp->XsdtAddr));
                 write_serial_string("\n");
+                BootConfig->is_qemu = check_qemu(AcpiRsdp->OEMID);
 
                 ACPI_TABLE_HEADER *XSDT              = (ACPI_TABLE_HEADER *)(AcpiRsdp->XsdtAddr); // 指向XSDT的指针
                 UINT64            *AcpiTableEntryPtr = (UINT64 *)(XSDT + 1); // 指向XSDT后面的其他SDT的地址的指针

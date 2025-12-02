@@ -1,5 +1,6 @@
 #include "cpu/fpu.h"
 #include "cpu/fsgsbase.h"
+#include "cpu/lock.h"
 #include "lock_queue.h"
 #include "proto.hpp"
 #include "smp/smp.h"
@@ -135,74 +136,167 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
     reg->cs     = target->context0.cs;
 }
 
+spin_t scheduler_lock = SPIN_INIT;
+
+tcb_t select_next_task_safe()
+{
+    spin_lock(scheduler_lock);
+    
+    struct PROCESSOR_INFO *cpu = get_current_cpu();
+    lock_queue *queue = cpu->scheduler_queue;
+    
+    if (queue == NULL || queue->size == 0) {
+        spin_unlock(scheduler_lock);
+        return NULL;
+    }
+    
+    // 如果只有一个任务，直接返回
+    if (queue->size == 1) {
+        tcb_t only_task = (tcb_t)queue->head->data;
+        spin_unlock(scheduler_lock);
+        
+        // 检查任务状态
+        if (only_task->status == RUNNING || only_task->status == START) {
+            return only_task;
+        }
+        return NULL;
+    }
+    
+    // 从当前任务开始寻找下一个可运行任务
+    tcb_t current = get_current_task();
+    lock_node *start_node = NULL;
+    lock_node *node = queue->head;
+    
+    // 找到当前任务在队列中的位置
+    while (node != NULL) {
+        if (node->data == current) {
+            start_node = node;
+            break;
+        }
+        node = node->next;
+    }
+    
+    // 如果没找到当前任务，从头开始
+    if (start_node == NULL) {
+        start_node = queue->head;
+    }
+    
+    // 从下一个节点开始循环查找
+    lock_node *current_node = start_node->next ? start_node->next : queue->head;
+    int attempts = 0;
+    const int max_attempts = queue->size * 2; // 防止无限循环
+    
+    while (attempts < max_attempts) {
+        tcb_t candidate = (tcb_t)current_node->data;
+        
+        // 检查任务状态是否可调度
+        if (candidate != current && 
+            candidate->status != DEATH && 
+            candidate->status != OUT && 
+            candidate->status != FUTEX &&
+            candidate->task_level != TASK_IDLE_LEVEL) {
+            
+            // 检查父进程状态
+            if (candidate->parent_group && 
+                candidate->parent_group->status != DEATH && 
+                candidate->parent_group->status != FUTEX) {
+                
+                spin_unlock(scheduler_lock);
+                return candidate;
+            }
+        }
+        
+        // 移动到下一个节点
+        current_node = current_node->next ? current_node->next : queue->head;
+        attempts++;
+        
+        // 如果又回到起点，说明没找到合适的任务
+        if (current_node == start_node) {
+            break;
+        }
+    }
+    
+    // 没找到其他任务，返回当前任务或NULL
+    tcb_t result = (current->status == RUNNING || current->status == START) ? current : NULL;
+    spin_unlock(scheduler_lock);
+    return result;
+}
+
 tcb_t select_next_task()
 {
-    tcb_t next;
-    if (get_current_cpu()->scheduler_queue->size == 1) { return get_current_task(); }
-    if (get_current_cpu()->iter_node == NULL)
-    {
-    iter_head:
-        get_current_cpu()->iter_node = get_current_cpu()->scheduler_queue->head;
-        next                         = (tcb_t)get_current_cpu()->iter_node->data;
-    }
-    else
-    {
-    resche:
-        get_current_cpu()->iter_node = get_current_cpu()->iter_node->next;
-        if (get_current_cpu()->iter_node == NULL) goto iter_head;
-        next = (tcb_t)get_current_cpu()->iter_node->data;
-
-        // 死亡/回收/挂起的线程不调度
-        switch (next->status)
-        {
-        case FUTEX:
-        case DEATH:
-        case OUT: goto resche;
-        default:
-            if (next->parent_group->status == DEATH || next->parent_group->status == FUTEX) { goto resche; }
+    tcb_t next = select_next_task_safe();
+    
+    // 如果没有找到合适的任务，返回当前任务（如果可运行）
+    if (next == NULL) {
+        tcb_t current = get_current_task();
+        if (current && (current->status == RUNNING || current->status == START)) {
+            return current;
         }
-
-        if (next->task_level == TASK_IDLE_LEVEL) goto resche;
+        return NULL;
     }
+    
     return next;
 }
 
 extern pcb_t kernel_group;
-
 extern "C" registers_t *timer_handle(registers_t *reg)
 {
-    send_eoi();
-    if (!is_scheduler) { return reg; }
+    // send_eoi();
+    if (!is_scheduler) { 
+        send_eoi();
+        return reg; 
+    }
 
     tcb_t current = get_current_task();
-    tcb_t best    = select_next_task();
-    if (best == current) return reg;
-    write_fsbase((uint64_t)current); // 下面要用内核态的fs，换上
+    if (current == NULL) {
+        send_eoi();
+        return reg;
+    }
+
+    tcb_t best = select_next_task();
+    if (best == NULL || best == current) {
+        send_eoi();
+        return reg;
+    }
+
+    // 保存当前FSBASE
+    write_fsbase((uint64_t)current);
 
     // 任务寻父处理
-    if (best->parent_group->parent_task == NULL || best->parent_group->parent_task->status == DEATH ||
-        best->parent_group->parent_task->status == OUT)
-    {
+    if (best->parent_group && 
+        (best->parent_group->parent_task == NULL || 
+         best->parent_group->parent_task->status == DEATH || 
+         best->parent_group->parent_task->status == OUT)) {
         best->parent_group->parent_task = kernel_group;
     }
 
     // 正式切换
-    if (get_current_cpu()->current_task != best)
-    {
+    if (get_current_cpu()->current_task != best) {
         disable_scheduler();
-        if (current->status == RUNNING) { current->status = START; }
-        if (best->status == START || best->status == CREATE) { best->status = RUNNING; }
-        if (best->context0.rip != 0)
-        {
-            change_proccess(reg, get_current_cpu()->current_task, best);
-            // write_serial_fmt("best.name=%s, RIP=0x%016llx\n", best->name, best->context0.rip);
-            get_current_cpu()->current_task = best;
+        
+        // 更新任务状态
+        if (current->status == RUNNING) { 
+            current->status = START; 
         }
+        if (best->status == START || best->status == CREATE) { 
+            best->status = RUNNING; 
+        }
+        
+        // 只有上下文有效的任务才切换
+        if (best->context0.rip != 0) {
+            change_proccess(reg, current, best);
+            get_current_cpu()->current_task = best;
+        } else {
+            // 如果上下文无效，不切换并恢复状态
+            current->status = RUNNING;
+        }
+        
         enable_scheduler();
+    } else {
+        // 没切换任务，恢复原来的FSBASE
+        write_fsbase(current->fs_base);
     }
-    else
-        write_fsbase(current->fs_base); // 同样，没切任务，换回来
-
+    send_eoi();
     return reg;
 }
 
@@ -217,6 +311,7 @@ void debug_sched_queue(lock_queue *q)
     if (q == NULL) return;
     spin_lock(q->lock);
     lock_node *current = q->head;
+    write_serial_fmt("Process %d Scheduler Queue: ", get_current_cpu()->lapic_id);
     while (current != NULL)
     {
         write_serial_fmt("-> %s", ((tcb_t)current->data)->name);
@@ -229,14 +324,37 @@ void debug_sched_queue(lock_queue *q)
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
-    PROCESSOR_INFO *cpu0 = get_cpu(get_bsp());
-    for (int i = 0; i < get_cpu_num(); i++)
-    {
-        PROCESSOR_INFO *cpui = get_cpu(i);
-        if (cpui->scheduler_queue->size < cpu0->scheduler_queue->size) { cpu0 = cpui; }
+    
+    spin_lock(scheduler_lock);
+    
+    // 确保任务有基本设置
+    if (new_task->status == CREATE) {
+        new_task->status = START;
     }
-    new_task->cpu_id      = cpu0->processor_id;
-    new_task->queue_index = queue_enqueue(cpu0->scheduler_queue, new_task);
-    // debug_sched_queue(cpu0->scheduler_queue);
+    
+    // 选择负载最少的CPU
+    struct PROCESSOR_INFO *min_cpu = get_cpu(0);
+    for (int i = 1; i < get_cpu_num(); i++) {
+        struct PROCESSOR_INFO *cpui = get_cpu(i);
+        if (cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) { 
+            min_cpu = cpui; 
+        }
+    }
+    
+    new_task->cpu_id = min_cpu->processor_id;
+    new_task->queue_index = queue_enqueue(min_cpu->scheduler_queue, new_task);
+
+    // debug_sched_queue(min_cpu->scheduler_queue);
+    
+    spin_unlock(scheduler_lock);
     return new_task->queue_index;
+}
+
+void remove_task(tcb_t task) {
+    if (task == NULL) return;
+    spin_lock(scheduler_lock);
+
+    PROCESSOR_INFO *smp = get_cpu(task->cpu_id);
+    queue_remove_at(smp->scheduler_queue, task->queue_index);
+    spin_unlock(scheduler_lock);
 }

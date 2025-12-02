@@ -77,7 +77,7 @@ void outsl(uint32_t port, const void *addr, int cnt)
 // 复活中断
 void enable_intr()
 {
-    asm volatile("sti");
+    asm volatile("sti" ::: "memory");
 }
 
 // 谋害中断

@@ -9,6 +9,8 @@
 #include "mm/page.h"
 #include "stdint.h"
 #include "user/user.h"
+#include "user/x3tp.h"
+#include <mm/vma.h>
 
 typedef struct registers
 {
@@ -51,6 +53,7 @@ typedef enum
     START   = 4, // 准备调度
     FUTEX   = 5, // 被挂起(无法被调度, 线程状态为等待唤醒)
     OUT     = 6, // 已被处死(无法被调度)
+    ZOMBIE  = 7,
 } TaskStatus;
 
 typedef struct
@@ -89,17 +92,26 @@ struct process_control_block
     size_t            queue_index;  // 进程队列索引
     TaskStatus        status;       // 进程状态
 
-    vfs_node_t cwd;
-    vfs_node_t fds[256];
-    char   **envp;      // 环境变量指针
-    size_t   envc;      // 环境变量数量
+    lock_queue       *ipc_queue;   // 进程消息队列
+
+    lock_queue *file_open; // 文件句柄占用队列
+    char      **envp;      // 环境变量指针
+    size_t      envc;      // 环境变量数量
 
     bool        vfork;       // 是否是 vfork 创建的进程
     size_t      child_index; // 子进程队列索引
     lock_queue *child_pcb;   // 子进程列表
+    uint64_t    mmap_start;  // 映射起始地址
     char       *cmdline;
     int         task_level; // 进程等级
     bool        sigprci;
+    lock_queue *virt_queue; // 虚拟页分配队列
+    void       *elf_file;   // 可执行文件指针
+    size_t      elf_size;   // 可执行文件大小
+    uint64_t    load_start; // 加载起始地址
+    vma_manager_t     vma_manager; // VMA 分配管理器
+
+    xtttp_dtt   *xtttp_stc;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);
@@ -117,23 +129,32 @@ struct thread_control_block
     TaskContext   context0;    // 线程上下文
     fpu_context_t fpu_context; // 浮点寄存器上下文
 
-    uint64_t   kernel_stack;   // 内核栈地址
-    size_t     queue_index;    // 调度队列索引
-    size_t     group_index;    // 进程队列索引
-    uint64_t   main;           // 线程入口地址
-    uint64_t   user_stack;     // 用户栈
-    uint64_t   user_stack_top; // 用户栈顶部地址
-    
-    uint64_t   syscall_stack;
-    uint64_t   brk_start;
-    uint64_t   brk_end;
-    uint64_t   load_start;
-    uint64_t   load_end;
-    
-    UserInfo  *user_info; // 用户信息
+    uint64_t kernel_stack;   // 内核栈地址
+    size_t   queue_index;    // 调度队列索引
+    size_t   group_index;    // 进程队列索引
+    uint64_t main;           // 线程入口地址
+    uint64_t user_stack;     // 用户栈
+    uint64_t user_stack_top; // 用户栈顶部地址
+
+    uint64_t syscall_stack;
+    uint64_t brk_start;
+    uint64_t brk_end;
+    uint64_t load_start;
+    uint64_t load_end;
+
+    UserInfo *user_info; // 用户信息
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
+
+    vfs_node_t cwd;
+    char      *str_cwd;
+
+    char **argv; // 参数指针
+    size_t argc; // 参数数量
+
+    uint64_t winnum;
+    bool     hasfscr;
 };
 
 extern pcb_t kernel_group;
@@ -143,18 +164,22 @@ void     enable_scheduler();
 void     disable_scheduler();
 tcb_t    get_current_task();
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
-size_t   create_user_thread(void *_start, void *args, char *name, pcb_t pcb);
+size_t   create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
 void     process_setup();
 void     switch_to_user_mode();
-void     recycle_process(pcb_t pcb);
-void     thread_exit(int exit_code);
-void kill_thread(int tid, pcb_t parent_group);
-void     kill_thread(int tid);
-
 void get_thread_name_from_filepath(char *path, char *name);
 
-size_t create_signal_thread(void *_start, 
-                            uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func, 
+size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func,
                             pcb_t pcb);
+
+void addque_killer(pcb_t group);
+void init_killer();
+
+typedef void (*elf_start)(int, char **, char **);
+void kill_proc(pcb_t pcb, int exit_code, bool is_zombie);
+void kill_thread(tcb_t task);
+void kill_thread0(tcb_t task);
+void kill_proc0(pcb_t pcb);
+pcb_t found_pcb(int pid);

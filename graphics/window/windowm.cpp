@@ -9,8 +9,11 @@
 #include <graphics/window/window.h>
 #include <proto.hpp>
 #include <ttf.h>
+#include <syscall/pxapi.h>
 
 bool WindowIsCreating = false;
+
+int window_create_offest_xy = 32;
 
 void init_xwm(XWM_INFO *xwmi)
 {
@@ -26,6 +29,109 @@ void init_xwm(XWM_INFO *xwmi)
     LoadPictureOgM(&xwmi->theme.min,      "/system/theme/skyglass/min.png");
     write_serial_string("XWM Initializing Success.\n");
 }
+
+extern uint16_t   dock_sheet_id;
+
+void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+{
+    WindowIsCreating = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL)
+    {
+        // 哦亲爱的孩子我不说了你知道这是干什么的
+        xwmi->start = new_window;
+    }
+    else
+    {
+        WINDOWLS *front_p = xwmi->start;
+        while (true)
+        {
+            if (front_p->next == NULL)
+            {
+                // 链表.exe
+                front_p->next = new_window;
+                break;
+            }
+            front_p = front_p->next;
+        }
+    }
+
+    *windowls = new_window;
+    xwmi->win_num++;
+    new_window->WinMPf = NULL;
+    new_window->type   = XWIN_FULL_SCR;
+    get_current_task()->hasfscr = true;
+    get_current_task()->winnum++;
+
+    new_window->width  = sht_img->fbc->horizontal_resolution;
+    new_window->height = sht_img->fbc->vertical_resolution;
+
+    new_window->w_task = get_current_task();
+
+    // create_sheet(sht, 0, 0, 
+    //              sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, FixedSheetType, -1, &(new_window->w_sheet));
+    new_window->w_sheet = dock_sheet_id;
+    change_sheet_type(sht, &(new_window->w_sheet), TopWindowSheetType);
+    draw_rect(sht, &(new_window->w_sheet), 0, 0, sht_img->fbc->horizontal_resolution - 1, sht_img->fbc->vertical_resolution - 1, {0xff, 0xff, 0xff, 0xff});
+
+    refresh_sheet(sht);
+    WindowIsCreating = false;
+}
+
+
+void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height)
+{
+    WindowIsCreating = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL)
+    {
+        // 哦亲爱的孩子我不说了你知道这是干什么的
+        xwmi->start = new_window;
+    }
+    else
+    {
+        WINDOWLS *front_p = xwmi->start;
+        while (true)
+        {
+            if (front_p->next == NULL)
+            {
+                // 链表.exe
+                front_p->next = new_window;
+                break;
+            }
+            front_p = front_p->next;
+        }
+    }
+
+    *windowls = new_window;
+    xwmi->win_num++;
+    new_window->WinMPf = NULL;
+    new_window->type   = XWIN_FRAME_OFF;
+
+    new_window->width  = width;
+    new_window->height = height;
+
+    new_window->w_task = get_current_task();
+
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+                 width + 24, height + 47, NoEdgeWindowSheetType, -1, &(new_window->w_sheet));
+    draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+
+    window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
+    window_create_offest_xy += 32;
+
+    refresh_part_sheet(sht, 72, 72, width + 24 + 72, height + 52 + 72);
+    WindowIsCreating = false;
+}
+
 
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height)
 {
@@ -58,11 +164,19 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     *windowls = new_window;
     xwmi->win_num++;
     new_window->WinMPf = NULL;
+    new_window->type   = XWIN_NORMAL;
+
+    new_window->width  = width;
+    new_window->height = height;
 
     new_window->w_task = get_current_task();
 
-    create_sheet(sht, 72, 72, width + 24, height + 52, MovableSheetType, -1, &(new_window->w_sheet));
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+                 width + 24, height + 47, MovableSheetType, -1, &(new_window->w_sheet));
     draw_rect(sht, &(new_window->w_sheet), 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+
+    window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
+    window_create_offest_xy += 32;
 
     SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((width + 24) * 27 * 4);
     SHEET_BUFFER *lft = (SHEET_BUFFER *)malloc(height * 12 * 4);
@@ -83,7 +197,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     copy_buffer_by_id_without_alpha(sht, &(new_window->w_sheet), xwmi->theme.close, width - 21, 5, 41, 18);
     copy_buffer_by_id_without_alpha(sht, &(new_window->w_sheet), xwmi->theme.min, width - 48, 5, 26, 18);
 
-    print_box_ttf(sht, &(new_window->w_sheet), title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
+    // print_box_ttf(sht, &(new_window->w_sheet), title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
     print_box_ttf(sht, &(new_window->w_sheet), title, BLACK, 12, 4, 11);
 
     free(top);
@@ -107,13 +221,13 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color)
 {
-    print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, 10);
+    print_box_ttf(sht, &(windowls->w_sheet), title, color, x, y, size);
 }
 
 void draw_textl(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color, uint32_t *i_width)
 {
-    print_box_ttfl(sht, &(windowls->w_sheet), title, color, x, y, 10, i_width);
+    print_box_ttfl(sht, &(windowls->w_sheet), title, color, x, y, size, i_width);
 }
 
 void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,

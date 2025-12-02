@@ -6,12 +6,12 @@ void xapi_Output(WSTR str) {
     enter_syscall(XAPI_OUTPUT, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
-WSTR xapi_InputW() {
-    return (WSTR)(enter_syscall(XAPI_INPUTW, 0, 0, 0, 0, 0, 0));
-}
-
 WSTR xapi_Input() {
     return (WSTR)(enter_syscall(XAPI_INPUT, 0, 0, 0, 0, 0, 0));
+}
+
+WSTR xapi_Getch() {
+    return (WSTR)(enter_syscall(XAPI_GETCH, 0, 0, 0, 0, 0, 0));
 }
 
 void xapi_EndLine() {
@@ -33,6 +33,44 @@ void xapi_OpenFile(
 void xapi_CloseFile(XFILE* fsptr) {
     enter_syscall(XAPI_CLOSE_FILE, (UINT64)(fsptr), 0, 0, 0, 0, 0);
 } 
+
+void  xapi_SearchFile(
+	WSTR	  path,
+	UINT32	 *count,
+	DirNode	 *dir
+) {
+	enter_syscall(XAPI_SEARCH_FILE, (UINT64)(path), (UINT64)(count), (UINT64)(dir), 0, 0, 0);
+}
+
+UINT64 xapi_Mkdir(WSTR path)
+{
+	return enter_syscall(XAPI_MAKEDIR, (uint64_t)path, 0, 0, 0, 0, 0);
+}
+
+UINT64 xapi_CreateFile(WSTR filename)
+{
+    return enter_syscall(XAPI_CREATE_FILE, (uint64_t)filename, 0, 0, 0, 0, 0);
+}
+
+UINT64 xapi_DeleteFile(WSTR path)
+{
+    return enter_syscall(XAPI_DELETE_FILE, (uint64_t)path, 0, 0, 0, 0, 0);
+}
+
+UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path)
+{
+    return enter_syscall(XAPI_RENAME_FILE, (uint64_t)old_path, (uint64_t)new_path, 0, 0, 0, 0);
+}
+
+UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset)
+{
+    return enter_syscall(XAPI_READ_FILE, (uint64_t)filename, (uint64_t)buffer, size, offset, 0, 0);
+}
+
+UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset)
+{
+    return enter_syscall(XAPI_WRITE_FILE, (uint64_t)filename, (uint64_t)buffer, size, offset, 0, 0);
+}
 
 // 3-3
 UINT64 xcr_char2int(WSTR str) {

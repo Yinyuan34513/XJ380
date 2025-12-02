@@ -6,6 +6,35 @@
 #ifdef __cplusplus // Fuck you C++
 extern "C" {
 #endif
+
+#define container_of(ptr, type, member)                                                            \
+    ({                                                                                             \
+        uint64_t __mptr = ((uint64_t)(ptr));                                                       \
+        (type *)((char *)__mptr - offsetof(type, member));                                         \
+    })
+
+// 分支预测优化: x 很可能为假
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+// 分支预测优化: x 很可能为真
+#define likely(x) __builtin_expect(!!(x), 1)
+
+typedef typeof(nullptr) nullptr_t;
+#define offsetof(s, m) __builtin_offsetof(s, m)
+
+#define cpu_hlt while(1) __asm__("hlt")
+
+typedef int errno_t;
+
+#define KERNEL_AREA_MEM        0xf000000000000000       // 内核地址空间起始
+static inline bool check_user_overflow(uint64_t addr, uint64_t size) {
+    return (addr + size) > KERNEL_AREA_MEM;
+}
+
+#define UNUSED(...)                                                                                \
+    do {                                                                                           \
+        (void)(0, ##__VA_ARGS__);                                                                  \
+    } while (0)
 #define waitif(cond)                                                                                                   \
     ((void)({                                                                                                          \
         while (cond) {}                                                                                                \
@@ -204,11 +233,15 @@ static inline void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
+void cmd_free(char **argv, int argc);
+int cmd_parse(const char *cmd_str, char **argv, char token);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
 
 #define PADDING_DOWN(size, to) ((size_t)(size) / (size_t)(to) * (size_t)(to))
 #define PADDING_UP(size, to)   PADDING_DOWN((size_t)(size) + (size_t)(to) - (size_t)1, to)
+#define PADDING_REQ(size, to)  ((size + (to) - 1) & ~((to) - 1) / (to))
 #define IS_DIGIT(c)            ((c) >= '0' && (c) <= '9')
 #define IS_ALPHA(a)            (((a) >= 'A' && (a) <= 'Z') || ((a) >= 'a' && (a) <= 'z'))

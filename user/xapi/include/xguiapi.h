@@ -30,12 +30,16 @@ struct XWINDOW
     UINT8 	sets;
 };
 
+#pragma pack(1)
+
 struct XCOLOR
 {
 	UINT8 	Red;
 	UINT8 	Green;
 	UINT8 	Blue;
 };
+
+#pragma pack()
 
 struct XCOLORA
 {
@@ -131,7 +135,6 @@ void xapi_DrawSWText(
 	UINT32 	x,
 	UINT32 	y,
 	WSTR 	str,
-	UINT32	size,
 	UINT32  color
 );
 
@@ -146,6 +149,15 @@ void  xapi_DrawBMP (
 );
 
 void  xapi_DrawPNG(
+	HDLE  	handle,
+	UINT32  x,
+	UINT32  y,
+	UINT32	width,
+	UINT32	height,
+	WSTR  	path
+);
+
+void xapi_DrawPicture(
 	HDLE  	handle,
 	UINT32  x,
 	UINT32  y,

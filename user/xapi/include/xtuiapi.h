@@ -33,10 +33,16 @@ typedef struct {
     UserType        user_type;  // 用户等级
 } UserInfo;
 
+typedef struct {
+	char	 filename[256];
+	UINT64	 length;
+	UINT64	 filetype;
+}  DirNode;
+
 // 3-1
 void xapi_Output(WSTR str);
-WSTR xapi_InputW();
 WSTR xapi_Input();
+WSTR xapi_Getch();
 void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
 
@@ -47,6 +53,19 @@ void xapi_OpenFile(
 );
 
 void xapi_CloseFile(XFILE* fsptr); 
+
+void  xapi_SearchFile(
+	WSTR	 path,
+	UINT32	*count,
+	DirNode	*dir
+);
+
+UINT64 xapi_Mkdir(WSTR path);
+UINT64 xapi_CreateFile(WSTR filename);
+UINT64 xapi_DeleteFile(WSTR path);
+UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path);
+UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
+UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
 
 // 3-3
 UINT64 	xcr_char2int(WSTR str);
@@ -63,3 +82,6 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);
 void		xapi_GetSystemVersion(WSTR version);
 UINT64		xapi_GetTime();
 void		xapi_GetCurrentUser(UserInfo *user_info);
+
+
+// 我************再不通知就私加api我让你飞起来（大恼

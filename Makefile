@@ -1,7 +1,7 @@
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
 C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include 
-CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include
+CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
@@ -23,7 +23,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -d cpu_reset -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device nec-usb-xhci,id=xhci -serial file:serial.log $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -device usb-kbd -device usb-mouse -serial file:serial.log -device sb16 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -134,20 +134,39 @@ vdisk: all
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
+	@mkdir -p $(BUILD_DIR)/XJ380/system/font
+	@mkdir -p $(BUILD_DIR)/XJ380/system/image
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
+	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
+
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
-	@cp -a ./1.txt $(BUILD_DIR)/XJ380/
-	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/
-	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/
-	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/
-	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/
-	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/
-	@cp -a ./BackGround.jpeg $(BUILD_DIR)/XJ380/
+
+	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
+
+	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
+	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/image
+	@cp -a ./user/fmanager/bleft.png $(BUILD_DIR)/XJ380/system/image
+	@cp -a ./user/fmanager/bright.png $(BUILD_DIR)/XJ380/system/image
+
+	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
+
+	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
+	@cp -a ./font/ttf/XJ380C.xpf $(BUILD_DIR)/XJ380/system/font
+
+	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/system/image
+
 	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
+
 	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
+
+	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system/
+
+	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

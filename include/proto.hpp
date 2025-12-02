@@ -14,8 +14,8 @@ extern SHEET_INFO *sht_img;
 extern XWM_INFO   *xwmii;
 extern uint16_t   *msid;
 
-#define close_interrupt __asm__ volatile("cli" ::: "memory")
-#define open_interrupt  __asm__ volatile("sti" ::: "memory")
+#define close_interrupt disable_intr()
+#define open_interrupt  enable_intr()
 
 /*
  *   graphics
@@ -26,18 +26,26 @@ extern uint16_t   *msid;
  *  driver/serial/
  * 
  */
-
+int snprintf(char *buf, size_t size, const char *fmt, ...);
 // driver/serial/serial_port.cpp
 int    init_serial();
 void   write_serial(char a);
 void   write_serial_string(const char *str);
 void   write_serial_dec(unsigned long long dec);
 void   write_serial_hex(unsigned long long hex);
-void   write_serial_fmt(const char *fmt, ...);
+int    write_serial_fmt(const char *fmt, ...);
 void   write_serial_fmt_heapless(const char *fmt, ...);
 void   serial_wprintf(const char *fmt, ...);
 size_t vwprintf(Writer *writer, const char *fmt, va_list args);
 int    sprintf(char *buf, const char *fmt, ...);
+
+int printk(const char *fmt, ...);
+int pr_debug(const char *fmt, ...);
+int pr_warn(const char *fmt, ...);
+int pr_info(const char *fmt, ...);
+int pr_notice(const char *fmt, ...);
+int pr_err(const char *fmt, ...);
+
 /*
  *
  *  kernel/
@@ -102,6 +110,7 @@ void     io_mfence();
 // kernel/cpu/cpuid.cpp
 void asm_cpuid(uint32_t mop, uint32_t sop, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 void get_cpu_name(char *c);
+void get_cpu_vendor(char *c);
 bool mtrr_supported();
 
 // kernel/cpu/mtrr.cpp
@@ -116,6 +125,9 @@ uint64_t               get_cpu_freq_mhz();
 void                   delay_us(uint64_t us);
 void                   delay_ms(uint64_t ms);
 void                   delay_s(uint64_t s);
+void                   delay_us_hp(uint64_t us);
+void                   delay_ms_hp(uint64_t ms);
+void                   delay_s_hp(uint64_t s);
 
 /*
  *
@@ -180,7 +192,7 @@ void    *virt_to_phys(uint64_t virt_addr);
 void    *driver_phys_to_virt(uint64_t phys_addr);
 void    *driver_virt_to_phys(uint64_t virt_addr);
 uint64_t page_virt_to_phys(uint64_t va);
-
+#define USER_MMAP_START        0x0000400000000000UL     // 用户堆映射起始地址
 // kernel/memory/page.cpp
 #include <mm/page.h>
 
@@ -196,7 +208,7 @@ uint64_t page_virt_to_phys(uint64_t va);
 void init_smp(uint64_t MADT0);
 void set_kernel_stack(uint64_t rsp);
 
-void                   send_eoi();
+extern "C" void        send_eoi();
 struct PROCESSOR_INFO *get_current_cpu();
 
 extern const FrameBufferConfig *fbc_addr;
@@ -206,21 +218,20 @@ extern const FrameBufferConfig *fbc_addr;
  */
 
 // driver/ps2/keyboard.cpp
-extern struct keyboard_buf kb_fifo;
-extern uint8_t             keyboard_code[256];
-extern uint8_t             keyboard_code1[256];
-void                       keyboard_init();
-uint8_t                    get_keyboard_input();
+// extern struct keyboard_buf kb_fifo;
+// extern uint8_t             keyboard_code[256];
+// extern uint8_t             keyboard_code1[256];
 
 // driver/ps2/mouse.cpp
-void    mouse_init();
-void    process_mouse_info();
-uint8_t get_Mouse_output();
-bool    mousedecode(uint8_t data);
-int     get_mouse_x();
-int     get_mouse_y();
-void    draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
-void    move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
+void mouse_init();
+void process_mouse_info();
+
+// uint8_t get_Mouse_output();
+bool mousedecode(uint8_t data);
+int  get_mouse_x();
+int  get_mouse_y();
+void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
+void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
 
 /*
  *
@@ -230,13 +241,19 @@ void    move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
 
 // kernel/task/user.cpp
 void create_user_thread_from_file(char *path, pcb_t pcb);
-void create_user_process_from_file(char *path, pcb_t pcb);
+void create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
 void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
 void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
-void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                       uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
-void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                                     uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
+void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+                       uint32_t width, uint32_t height);
+void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
+                                     uint32_t dst_y, uint32_t width, uint32_t height);
+
+void backtrace(struct X64_REGS *regs);
+
+uint64_t get_counter();
+uint32_t get_freq();
+
 #endif

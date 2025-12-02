@@ -1,6 +1,5 @@
 #include <cpu/msr.h>
 #include <errno.h>
-#include <fs/fs_syscall.h>
 #include <pctable/gdt.h>
 #include <pctable/idt.h>
 #include <proto.hpp>
@@ -22,8 +21,15 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 {
     tcb_t current = ftask;
 
+    // 看看需不需要getch?
+    if (current->parent_group->xtttp_stc->wait_for_getch && msg_type == MSG_CHAR)
+    {
+        current->parent_group->xtttp_stc->char_for_getch = data2;
+        current->parent_group->xtttp_stc->wait_for_getch = false;
+    }
+
     // 检查是否有注册的信号处理函数
-    if (WinMpf != NULL)
+    if (WinMpf != NULL && !current->parent_group->sigprci)
     {
         current->parent_group->sigprci = true;
         // 准备信号处理栈
@@ -36,10 +42,11 @@ void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMp
 
 void signal_end() 
 {
-    while(get_current_task()->parent_group->sigprci)__asm__ volatile("pause\n\t");
-    kill_thread(get_current_task()->tid, get_current_task()->parent_group); // 他紫砂了
+    get_current_task()->parent_group->sigprci = false;
+    kill_thread(get_current_task()); // 他紫砂了
     while (true)
     {
+        scheduler_yield();
         __asm__ volatile("pause\n\t");
     }
 }

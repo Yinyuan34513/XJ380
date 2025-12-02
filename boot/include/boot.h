@@ -17,6 +17,8 @@ typedef struct
     // SMP用的，因为懒得写内存管理，属于是另辟蹊径了……
     UINT64 *saved_mtrrs;
     void   *temp_stack[MAX_CPU_NUM];
+
+    int is_qemu;
 } BOOT_CONFIG;
 
 #endif

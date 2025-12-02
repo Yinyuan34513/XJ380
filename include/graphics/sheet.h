@@ -7,6 +7,8 @@ enum SystemSheetType
 {
     FixedSheetType,
     MovableSheetType,
+    NoEdgeWindowSheetType,
+    TopWindowSheetType,
     TopSheetType
 };
 
@@ -74,6 +76,7 @@ uint32_t  getYsize(SHEET_INFO *sht, uint16_t *sheet_id);
 uint16_t *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y);
 uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y);
 uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y);
+void      change_sheet_type(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t new_type);
 SHEET    *get_sheet(SHEET_INFO *sht, uint16_t *sheet_id);
 void      setBX(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num);
 void      setBY(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num);
@@ -83,6 +86,9 @@ void      refresh_sheet(SHEET_INFO *sht);
 void      refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 uint32_t  get_hor();
 uint32_t  get_ver();
+void     *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id);
+SHEET *found_sheet_byid(SHEET_INFO *sht, uint16_t *sheet_id);
+
 // graphics/draw.cpp
 auto      operator new(size_t size, void *ptr) -> void *;
 auto      operator new[](size_t size, void *ptr) -> void *;

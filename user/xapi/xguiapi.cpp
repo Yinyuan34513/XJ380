@@ -18,6 +18,10 @@ void xapi_SetIcon(HDLE handle, WSTR path) {
 	enter_syscall(XAPI_SET_ICON, handle, (UINT64)(path), 0, 0, 0, 0);
 }
 
+void xapi_GetWindowSize(HDLE handle, UINT64* width, UINT64* height) {
+	enter_syscall(XAPI_GET_WIN_SZIE, handle, (UINT64)(width), (UINT64)(height), 0, 0, 0);
+}
+
 // 4-2
 void xapi_DrawPoint(HDLE handle, UINT32 x, UINT32 y, UINT32 color) {
 	enter_syscall(XAPI_DRAW_POINT, handle, x, y, color, 0, 0);
@@ -85,7 +89,8 @@ void xapi_DrawTextl(
 	UINT32  color,
 	UINT32 *width
 ) {
-	enter_syscall(XAPI_DRAW_TEXT_L, handle, (x << 32) | y, (UINT64)(str), size, color, (UINT64)width);
+	UINT64 tx = x;
+	enter_syscall(XAPI_DRAW_TEXT_L, handle, (tx << 32) | y, (UINT64)(str), size, color, (UINT64)width);
 }
 
 void xapi_DrawSWText(
@@ -93,10 +98,9 @@ void xapi_DrawSWText(
 	UINT32 	x,
 	UINT32 	y,
 	WSTR 	str,
-	UINT32	size,
 	UINT32  color
 ) {
-	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), size, color);
+	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), 10, color);
 }
 
 
@@ -121,6 +125,17 @@ void xapi_DrawPNG(
 	WSTR  	path
 ) {
 	enter_syscall(XAPI_DRAW_PNG, handle, x, y, width, height, (UINT64)(path));
+}
+
+void xapi_DrawPicture(
+	HDLE  	handle,
+	UINT32  x,
+	UINT32  y,
+	UINT32	width,
+	UINT32	height,
+	WSTR  	path
+) {
+	enter_syscall(XAPI_DRAW_PICTURE, handle, x, y, width, height, (UINT64)(path));
 }
 
 // 4-4
@@ -149,6 +164,17 @@ void xapi_WriteBuffer(
 	XCOLOR*  	buffer
 ) {
 	enter_syscall(XAPI_WRITEBUFFER, handle, x, y, width, height, (UINT64)(buffer));
+}
+
+void xapi_ReadBufferA(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32		height,
+	XCOLOR*  	buffer
+) {
+	enter_syscall(XAPI_READBUFFERA, handle, x, y, width, height, (UINT64)(buffer));
 }
 
 void xapi_WriteBufferA(
@@ -183,6 +209,3 @@ void xapi_StyleButton(
 ) {
 	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), (UINT64)(path), 0, 0);
 }
-
-
-

@@ -1,7 +1,4 @@
 #include "ahci/ahci.h"
-#include "ahci/hba.h"
-#include "ahci/sata.h"
-#include "ahci/scsi.h"
 #include "proto.hpp"
 
 void sata_read_error(struct hba_port *port)
