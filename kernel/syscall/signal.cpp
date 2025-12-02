@@ -46,6 +46,7 @@ void signal_end()
     kill_thread(get_current_task()); // 他紫砂了
     while (true)
     {
+        scheduler_yield();
         __asm__ volatile("pause\n\t");
     }
 }

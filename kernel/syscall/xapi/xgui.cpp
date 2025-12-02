@@ -34,6 +34,7 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     while (true)
     {
         if (winRD_lock) { break; }
+        scheduler_yield();
     }
     *(uint64_t *)(handle)       = (uint64_t)(malloc(sizeof(WINDOW_HANDLE))); // HDLE
     WINDOW_HANDLE *WindowHandle = *(WINDOW_HANDLE **)(handle);
