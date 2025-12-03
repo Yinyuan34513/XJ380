@@ -1406,6 +1406,7 @@ int xhci_setup() {
     pci_device_t *device = pci_find_class(0x000C0330);
     if (device == NULL) {
         write_serial_fmt("xhci: cannot find xhci controller.\n");
+        xhci_done = true;
         return -ENODEV;
     }
     uint64_t mmio_base = 0;
