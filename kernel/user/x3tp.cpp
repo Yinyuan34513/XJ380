@@ -29,9 +29,9 @@
 void init_process_xtttp(pcb_t pcb)
 {
     // pcb->xtttp_stc->input    = (char *)malloc(1024 * sizeof(char));
-    memset(pcb->xtttp_stc->output,0,sizeof(pcb->xtttp_stc->output));
+    memset(pcb->xtttp_stc->output, 0, sizeof(pcb->xtttp_stc->output));
     // pcb->xtttp_stc->output   = (char *)malloc(1024 * sizeof(char));
-    memset(pcb->xtttp_stc->input,0,sizeof(pcb->xtttp_stc->input));
+    memset(pcb->xtttp_stc->input, 0, sizeof(pcb->xtttp_stc->input));
 }
 
 int check_terminal_init_status()
@@ -51,24 +51,24 @@ void mark_process_is_terminal()
 int check_input_waiting_status()
 {
     tcb_t current = get_current_task();
-    return current->parent_group->parent_task->xtttp_stc->wait_for_input ? 1 : 0;
+    return current->parent_group->xtttp_stc->wait_for_input ? 1 : 0;
 }
 
 void read_terminal_app_output_buffer(char *str)
 {
     tcb_t current = get_current_task();
-    // write_serial_fmt("NAME!! %s\n",current->name);
-    strcpy(str, current->parent_group->parent_task->xtttp_stc->output);
+    if (current->parent_group->xtttp_stc->output_lock) { return; }
+    strcpy(str, current->parent_group->xtttp_stc->output);
 }
 
 void write_terminal_app_output_buffer(char *str)
 {
     tcb_t current = get_current_task();
-    strcpy(current->parent_group->parent_task->xtttp_stc->input, str);
+    strcpy(current->parent_group->xtttp_stc->input, str);
 }
 
 void terminal_finish_app_output()
 {
     tcb_t current = get_current_task();
-    current->parent_group->parent_task->xtttp_stc->output_lock = true;
+    current->parent_group->xtttp_stc->output_lock = true;
 }

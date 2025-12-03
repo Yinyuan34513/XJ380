@@ -89,10 +89,11 @@
 
 #define XAPI_GETLINE   418
 
-#define XAPI_GETCH     383
-#define XAPI_ENDLINE   384
-#define XAPI_PRINTLINE 385
-#define XAPI_PRINTF    386
+#define XAPI_GETCH          383
+#define XAPI_ENDLINE        384
+#define XAPI_PRINTLINE      385
+#define XAPI_PRINTF         386
+#define XAPI_OUTPUT_SERIAL  427
 
 // P3.2
 #define XAPI_OPEN_FILE      387
@@ -116,6 +117,10 @@
 
 #define XAPI_GET_TIME           412
 #define XAPI_GET_CURRENT_USER   413
+
+// P3.6
+#define XAPI_BROKEN         428
+#define XAPI_SEND_APP_MSG   429
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392

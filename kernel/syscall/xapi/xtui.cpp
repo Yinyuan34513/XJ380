@@ -60,12 +60,12 @@ void do_xapi_Output(char *str)
         {
             // found it!
             strcat(front_p->xtttp_stc->output, str); // 如果还有怎么办? // ? 怎么会还有呢，这就是一次性输出完的啊
+            front_p->xtttp_stc->output_lock = false;
             // 等待命令行刷新
             while (true)
             {
                 if (front_p->xtttp_stc->output_lock) break;
             }
-            front_p->xtttp_stc->output_lock = false;
             return;
         }
         front_p = front_p->parent_task;
@@ -132,4 +132,9 @@ void do_xapi_Endline()
 void do_xapi_Printline(char *str)
 {
     do_xapi_Output(strcat(str, "\n"));
+}
+
+void do_xapi_OutputSerial(char *str)
+{
+    write_serial_string(str);
 }

@@ -50,10 +50,11 @@ typedef struct {
 
 #define XAPI_GETLINE   418
 
-#define XAPI_GETCH     383
-#define XAPI_ENDLINE   384
-#define XAPI_PRINTLINE 385
-#define XAPI_PRINTF    386
+#define XAPI_GETCH          383
+#define XAPI_ENDLINE        384
+#define XAPI_PRINTLINE      385
+#define XAPI_PRINTF         386
+#define XAPI_OUTPUT_SERIAL  427
 
 // P3.2
 #define XAPI_OPEN_FILE      387
@@ -77,6 +78,10 @@ typedef struct {
 
 #define XAPI_GET_TIME           412
 #define XAPI_GET_CURRENT_USER   413
+
+// P3.6
+#define XAPI_BROKEN         428
+#define XAPI_SEND_APP_MSG   429
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -133,7 +138,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：426
+// 当前最大号：429
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -141,6 +146,7 @@ void do_xapi_Input(char *str);
 char do_xapi_Getch();
 void do_xapi_Endline();
 void do_xapi_Printline(char *str);
+void do_xapi_OutputSerial(char *str);
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir);
 int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin);
 int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str);

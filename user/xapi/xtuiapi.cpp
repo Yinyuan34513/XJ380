@@ -22,6 +22,10 @@ void xapi_PrintLine(WSTR str) {
     enter_syscall(XAPI_PRINTLINE, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
+void xapi_OutputSerial(WSTR str) {
+    enter_syscall(XAPI_OUTPUT_SERIAL, (UINT64)(str), 0, 0, 0, 0, 0);
+}
+
 // 3-2
 void xapi_OpenFile(
 	WSTR	path,
@@ -200,4 +204,13 @@ UINT64	xapi_GetTime() {
 
 void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
+}
+
+// 3-6
+void	xapi_Broken(WSTR broken_info) {
+	enter_syscall(XAPI_BROKEN, (uint64_t)broken_info, 0, 0, 0, 0, 0);
+}
+
+void	xapi_SendAppMessage(WSTR title, WSTR text) {
+	enter_syscall(XAPI_BROKEN, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
 }

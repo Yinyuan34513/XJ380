@@ -45,6 +45,7 @@ WSTR xapi_Input();
 WSTR xapi_Getch();
 void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
+void xapi_OutputSerial(WSTR str);
 
 // 3-2
 void xapi_OpenFile(
@@ -79,9 +80,10 @@ UINT64  xapi_Fork();
 UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);
 
 // 3-5
-void		xapi_GetSystemVersion(WSTR version);
-UINT64		xapi_GetTime();
-void		xapi_GetCurrentUser(UserInfo *user_info);
+void	xapi_GetSystemVersion(WSTR version);
+UINT64	xapi_GetTime();
+void	xapi_GetCurrentUser(UserInfo *user_info);
 
-
-// 我************再不通知就私加api我让你飞起来（大恼
+// 3-6
+void	xapi_Broken(WSTR broken_info);
+void	xapi_SendAppMessage(WSTR title, WSTR text);
