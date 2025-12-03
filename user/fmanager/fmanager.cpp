@@ -38,7 +38,7 @@ void paint_fm_back()
     xapi_DrawRect(handle, 0, 0 , FMR_X - 1, 25, 0xeaeaeaff, true);
     xapi_DrawRect(handle, 52, 4, FMR_X - 5, 22, 0xffffffff, true);
     xapi_DrawPNG(handle, 0, 26, FMR_X - 1, 94, "/system/image/fm_bg.png");
-    xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/image/bleft.png");
-    xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/image/bright.png");
+    xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
+    xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/icon/bright.png");
     xapi_DrawText(handle, 56, 2, path, 11, 0x000000ff);
 }
