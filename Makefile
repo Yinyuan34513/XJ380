@@ -162,7 +162,7 @@ vdisk: all
 
 	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
 
-	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system/
+	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 

@@ -1,7 +1,6 @@
-// file_manager.cpp
-#include "krlibc.h"
+#include <x3api.h>
+#include <krlibc.h>
 #include "fm_proto.h"
-#include "x3api.h"
 
 // 文件管理器窗口尺寸
 #define FMR_X 800
