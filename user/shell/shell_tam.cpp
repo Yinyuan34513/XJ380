@@ -65,7 +65,9 @@ void tam_main_loop()
         // 检查输入缓冲区
         if (check_read_xttp_buffer() && input_is_enter)
         {
+            newline();
             input_is_enter = false;
+            strcat(app_input_buffer, "\0");
             write_xttp_buffer(app_input_buffer);
         }
     }

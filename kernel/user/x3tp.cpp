@@ -65,6 +65,7 @@ void write_terminal_app_output_buffer(char *str)
 {
     tcb_t current = get_current_task();
     strcpy(current->parent_group->xtttp_stc->input, str);
+    current->parent_group->xtttp_stc->input_lock = true;
 }
 
 void terminal_finish_app_output()

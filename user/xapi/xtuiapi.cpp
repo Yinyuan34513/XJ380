@@ -6,12 +6,12 @@ void xapi_Output(WSTR str) {
     enter_syscall(XAPI_OUTPUT, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
-WSTR xapi_Input() {
-    return (WSTR)(enter_syscall(XAPI_INPUT, 0, 0, 0, 0, 0, 0));
+void xapi_Input(WSTR str) {
+    enter_syscall(XAPI_INPUT, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
-WSTR xapi_Getch() {
-    return (WSTR)(enter_syscall(XAPI_GETCH, 0, 0, 0, 0, 0, 0));
+char xapi_Getch() {
+   return (char)(enter_syscall(XAPI_GETCH, 0, 0, 0, 0, 0, 0));
 }
 
 void xapi_EndLine() {

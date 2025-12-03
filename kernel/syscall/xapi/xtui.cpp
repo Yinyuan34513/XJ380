@@ -65,7 +65,9 @@ void do_xapi_Output(char *str)
             while (true)
             {
                 if (front_p->xtttp_stc->output_lock) break;
+                scheduler_yield();
             }
+            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->output) + 1) * sizeof(uint8_t));
             return;
         }
         front_p = front_p->parent_task;
@@ -89,10 +91,13 @@ void do_xapi_Input(char *str)
             while (true)
             {
                 if (front_p->xtttp_stc->input_lock) break;
+                scheduler_yield();
             }
             // found it!
+            strcat(str, "\0");
             strcpy(str, front_p->xtttp_stc->input);
             front_p->xtttp_stc->input_lock = false;
+            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->input) + 1) * sizeof(uint8_t));
             return;
         }
         front_p = front_p->parent_task;
@@ -116,6 +121,7 @@ char do_xapi_Getch()
             while (true)
             {
                 if (!front_p->xtttp_stc->wait_for_getch) break;
+                scheduler_yield();
             }
             // found it!
             return front_p->xtttp_stc->char_for_getch;

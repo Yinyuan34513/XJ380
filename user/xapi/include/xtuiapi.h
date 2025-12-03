@@ -41,8 +41,8 @@ typedef struct {
 
 // 3-1
 void xapi_Output(WSTR str);
-WSTR xapi_Input();
-WSTR xapi_Getch();
+void xapi_Input(WSTR str);
+char xapi_Getch();
 void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
 void xapi_OutputSerial(WSTR str);
