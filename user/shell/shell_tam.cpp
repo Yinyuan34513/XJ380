@@ -44,7 +44,7 @@ void tam_flush_buffer()
 
 void tam_main_loop()
 {
-    cur_x += 4;
+    cur_y += 2;
     while (true)
     {
         // 获取输入
