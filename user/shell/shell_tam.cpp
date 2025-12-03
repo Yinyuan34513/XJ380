@@ -44,7 +44,7 @@ void tam_flush_buffer()
 
 void tam_main_loop()
 {
-    cur_x += 2;
+    cur_x += 4;
     while (true)
     {
         // 获取输入
@@ -58,6 +58,7 @@ void tam_main_loop()
         {
             print_to_console(output_stream);
             memset(output_stream, 0, (strlen(output_stream) + 1) * sizeof(uint8_t));
+            xapi_RefreshWindow(handle);
         }
         terminal_app_mark_finish_output();
 
