@@ -905,6 +905,8 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
 
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
+
+    pcb->sigprci = false;
     
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
