@@ -28,6 +28,7 @@ typedef struct
     UserPermisson   user_prms;  // 用户权限（仅等级为Custom时可用）
     char   **envp;              // 环境变量指针
     size_t   envc;              // 环境变量数量
+    int      fgproc;//前台进程
 } UserInfo;
 
 void init_user();

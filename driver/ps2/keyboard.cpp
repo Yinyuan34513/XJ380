@@ -64,8 +64,16 @@ struct keyboard_cmd_state
 };
 atom_queue *temp_keyboard_buffer = nullptr;
 void keyboard_tmp_writer(const uint8_t *data) {
-    if (data[0] == 3) {
-        return ;
+    // write_serial_fmt("%d\n",data[0]);
+    if (data[0] == 99) {
+        do {
+            pcb_t process = get_current_task()->parent_group;//这不行 xhci会占用的
+            write_serial_fmt("%s %s\n",process->name,get_current_task()->name);
+            if (process == NULL) { break; }
+            if (process->task_level == TASK_KERNEL_LEVEL || process->status == DEATH) break;
+            
+            kill_proc(process, 128 + 2, true);
+        } while (true);
     }
     while (*data != '\0') {
         atom_push(temp_keyboard_buffer, *data);

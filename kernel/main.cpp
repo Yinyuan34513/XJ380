@@ -6,6 +6,7 @@
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
+#include <syscall/signal.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
 #include <fs/vfs/sys.h>
@@ -30,6 +31,8 @@
 #include <hda/pcspk.h>
 #include <device.h>
 #include <sb16.h>
+#include <fs/vfs/proc.h>
+#include <pipe.h>
 
 bool        desktop_done = false;
 bool        xhci_done    = false;
@@ -289,7 +292,7 @@ void desktop_flusher()
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
    
     while (1)
     {
@@ -439,7 +442,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
-    // idle_thread->cwd->refcount++;
+    idle_thread->cwd->refcount++;
 
     get_current_cpu()->current_task = idle_thread;
 
@@ -449,10 +452,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
+    procfs_setup();
+    pipefs_setup();
     mount_root();
     stdio_init();
 
 
+    signal_init();
     init_syscall();
     init_signal();
 

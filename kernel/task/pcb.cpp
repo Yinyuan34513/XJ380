@@ -11,6 +11,7 @@
 #include <syscall/syscall.h>
 #include <mm/lazyalloc.h>
 #include <task/ipc.h>
+#include <fs/vfs/proc.h>
 
 #define SA_RPL3 3
 
@@ -121,6 +122,7 @@ void kill_proc0(pcb_t pcb) {
     queue_remove_at(pcb_group_queue, pcb->queue_index);
 
     //procfs_update_task_list();
+    procfs_on_exit_task(pcb);
 
     while(1) {
         fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
@@ -634,6 +636,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         enable_scheduler();
         open_interrupt;
     }
+    procfs_on_new_task(new_pcb);
 
     write_serial_fmt("PID: %d\n",new_pcb->pid);
     if (!is_vfork) return new_pcb->pid;
@@ -908,6 +911,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
+    procfs_on_new_task(pcb);
 
     return pcb;
 }
