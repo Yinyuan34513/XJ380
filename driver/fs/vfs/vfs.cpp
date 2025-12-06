@@ -34,6 +34,8 @@ static int fs_nextid = 1;
 
 #define callbackof(node, _name_) (fs_callbacks[(node)->fsid]->_name_)
 
+spin_t vfs_operate_lock = SPIN_INIT;
+
 static inline char *pathtok(char **sp) {
     char *s = *sp;
     char *e = *sp;
