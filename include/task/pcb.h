@@ -11,7 +11,6 @@
 #include "user/user.h"
 #include "user/x3tp.h"
 #include <mm/vma.h>
-#include <syscall/signal.h>
 
 typedef struct registers
 {
@@ -111,8 +110,6 @@ struct process_control_block
     size_t      elf_size;   // 可执行文件大小
     uint64_t    load_start; // 加载起始地址
     vma_manager_t     vma_manager; // VMA 分配管理器
-    vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
-    vfs_node_t        proc_root;   // 进程私有根文件节点
 
     xtttp_dtt   *xtttp_stc;
 };
@@ -132,16 +129,12 @@ struct thread_control_block
     TaskContext   context0;    // 线程上下文
     fpu_context_t fpu_context; // 浮点寄存器上下文
 
-    sigaction_t   actions[64]; // 信号处理器回调
-    uint64_t      blocked;         // 屏蔽位图
-    uint64_t      signal;          // 信号位图
     uint64_t kernel_stack;   // 内核栈地址
     size_t   queue_index;    // 调度队列索引
     size_t   group_index;    // 进程队列索引
     uint64_t main;           // 线程入口地址
     uint64_t user_stack;     // 用户栈
     uint64_t user_stack_top; // 用户栈顶部地址
-    
 
     uint64_t syscall_stack;
     uint64_t brk_start;

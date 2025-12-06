@@ -37,7 +37,7 @@ void init_user()
 {
     current_user = (UserInfo *)malloc(sizeof(UserInfo));
     // 这里先偷个懒，之后再改
-    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish"));//内核用户
+    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish"));
     current_user->user_type = XUT_Root;
     current_user->envc = 2;
     current_user->envp = current_user_envp;
