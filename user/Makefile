@@ -43,7 +43,8 @@ SHELL_SOURCES := ./shell/shell_main.cpp \
                 ./shell/sxah.cpp 
 
 FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
-                ./fmanager/fm_devmain.cpp 
+                ./fmanager/fm_paint.cpp \
+                ./fmanager/fm_pathp.cpp 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))

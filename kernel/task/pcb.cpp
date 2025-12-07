@@ -238,14 +238,14 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     memset(tmp, 0, 2 * sizeof(uint64_t));
     tmp_stack = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
 
-    page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, get_current_task()->parent_group->elf_size,
-                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    memcpy((void *)EHDR_START_ADDR, get_current_task()->parent_group->elf_file,
-           get_current_task()->parent_group->elf_size);
+    // page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, get_current_task()->parent_group->elf_size,
+    //                          PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    // memcpy((void *)EHDR_START_ADDR, get_current_task()->parent_group->elf_file,
+    //        get_current_task()->parent_group->elf_size);
 
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)EHDR_START_ADDR;
-    // CP_Kernel 将用户程序本体从 0 地址加载故不加phdrs的偏移
-    Elf64_Phdr *phdrs = (Elf64_Phdr *)(ehdr->e_phoff + get_current_task()->parent_group->load_start);
+    // Elf64_Ehdr *ehdr = (Elf64_Ehdr *)EHDR_START_ADDR;
+    // // CP_Kernel 将用户程序本体从 0 地址加载故不加phdrs的偏移
+    // Elf64_Phdr *phdrs = (Elf64_Phdr *)(ehdr->e_phoff + get_current_task()->parent_group->load_start);
 
     ((uint64_t *)tmp)[0] = AT_NULL;
     ((uint64_t *)tmp)[1] = 0;
