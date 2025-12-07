@@ -1,0 +1,73 @@
+#include <x3api.h>
+#include <krlibc.h>
+#include "fm_proto.h"
+
+char path[1024] = "/";
+
+FILE_TYPEINFO_INDEX file_ti_index[2048];
+
+void paint_fm_back()
+{
+    xapi_DrawRect(handle, 0, 0 , FMR_X - 1, 25, 0xeaeaeaff, true);
+    xapi_DrawRect(handle, 52, 4, FMR_X - 5, 22, 0xffffffff, true);
+    xapi_DrawPNG(handle, 0, 26, FMR_X - 1, 94, "/system/image/fm_bg.png");
+    xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
+    xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/icon/bright.png");
+    xapi_DrawText(handle, 56, 2, current_path, 11, 0x000000ff);
+}
+
+void paint_item(int index, char *name, bool is_folder, int size)
+{
+    xapi_DrawText(handle, 28, 148 + 24 * index - 3, name, 10, 0x000000ff);
+    if (is_folder)
+    {
+        xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
+        xapi_DrawText(handle, 240, 148 + 24 * index - 3, "文件夹", 10, 0x6d6d6dff);
+    }
+    else
+    {
+        char file_type[32];
+        if (get_file_type(name, file_type))
+        {
+            for (int i = 0; file_ti_index[i].file_type[0] != '\0'; i++)
+            {
+                if (strcmp(file_type, file_ti_index[i].file_type) == 0)
+                {
+                    // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
+                    xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_ti_index[i].file_type_name, 10, 0x6d6d6dff);
+                    goto type_is_found;
+                }
+            }
+            strcat(file_type, "文件");
+            xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
+        }
+        else 
+        {
+            xapi_DrawText(handle, 240, 148 + 24 * index - 3, "未知类型文件", 10, 0x6d6d6dff);
+        }
+        xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
+type_is_found:
+        char file_size_str[32];
+        strcpy(file_size_str, xcr_int2char((size + 1024) / 1024));
+        strcat(file_size_str, " KB");
+        xapi_DrawText(handle, 400, 148 + 24 * index - 3, file_size_str, 10, 0x6d6d6dff);
+    }
+}
+
+void paint_dir(char *path)
+{
+    uint32_t count;
+    DirNode  fdir[256];
+    xapi_DrawRect(handle, 0, 0, FMR_X - 1, FMR_Y - 1, 0xffffffff, true);
+    paint_fm_back();
+    xapi_DrawLine(handle, 0, 141, FMR_X - 1, 141, 0xc4c4c4ff);
+    xapi_DrawText(handle, 16, 120, "文件名称", 10, 0x000000ff);
+    xapi_DrawText(handle, 240, 120, "类型", 10, 0x000000ff);
+    xapi_DrawText(handle, 400, 120, "大小", 10, 0x000000ff);
+    xapi_SearchFile(path, &count, fdir);
+    if (count == 0 || count == 404) return;
+    for (int i = 0; i < count; i++)
+    {
+        paint_item(i, fdir[i].filename, fdir[i].filetype, fdir[i].length);
+    }
+}
