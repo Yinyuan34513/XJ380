@@ -18,3 +18,4 @@ extern FILE_TYPEINFO_INDEX file_ti_index[2048];
 void paint_fm_back();
 void paint_dir(char *path);
 bool get_file_type(char *name, char *type);
+void register_click(int x, int y);

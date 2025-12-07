@@ -6,6 +6,17 @@ char current_path[1024] = "/";
 
 HDLE handle;
 
+void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
+{
+    switch (Type)
+    {
+    case MSG_LBUTTON:
+        register_click(hData, lData);
+        break;
+    }
+    return;
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
     (void)argc;
