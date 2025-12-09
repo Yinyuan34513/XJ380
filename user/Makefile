@@ -40,9 +40,15 @@ SHELL_SOURCES := ./shell/shell_main.cpp \
                 ./shell/shell_fs.cpp \
                 ./shell/shell_editor.cpp \
                 ./shell/shell_tam.cpp \
-                ./shell/sxah.cpp
+                ./shell/sxah.cpp 
+
+FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
+                ./fmanager/fm_paint.cpp \
+                ./fmanager/fm_pathp.cpp \
+                ./fmanager/fm_processp.cpp 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
+FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
 
 shell.elf: $(SHELL_OBJECTS)
 	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(SHELL_OBJECTS) -o ../out/$@
@@ -55,12 +61,16 @@ shell.elf: $(SHELL_OBJECTS)
 	@$(CPP) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
-fmanager.elf: ./fmanager/fmanager.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/$@.o -o ../out/$@
+fmanager.elf: $(FMANAGER_OBJECTS)
+	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(FMANAGER_OBJECTS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@echo "CPPLD $< -> ../out/$@"
+	@echo "LINK shell objects -> ../out/$@"
+
+../out/fmanager/%.o: ./fmanager/%.cpp
+	@mkdir -p $(@D)
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/cp537.* ../out/fmanager.* ../out/bcms-sp.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager.* ../out/fmanager/*.* ../out/bcms-sp.*

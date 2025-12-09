@@ -60,12 +60,14 @@ void do_xapi_Output(char *str)
         {
             // found it!
             strcat(front_p->xtttp_stc->output, str); // 如果还有怎么办? // ? 怎么会还有呢，这就是一次性输出完的啊
+            front_p->xtttp_stc->output_lock = false;
             // 等待命令行刷新
             while (true)
             {
                 if (front_p->xtttp_stc->output_lock) break;
+                scheduler_yield();
             }
-            front_p->xtttp_stc->output_lock = false;
+            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->output) + 1) * sizeof(uint8_t));
             return;
         }
         front_p = front_p->parent_task;
@@ -89,10 +91,13 @@ void do_xapi_Input(char *str)
             while (true)
             {
                 if (front_p->xtttp_stc->input_lock) break;
+                scheduler_yield();
             }
             // found it!
+            strcat(str, "\0");
             strcpy(str, front_p->xtttp_stc->input);
             front_p->xtttp_stc->input_lock = false;
+            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->input) + 1) * sizeof(uint8_t));
             return;
         }
         front_p = front_p->parent_task;
@@ -116,6 +121,7 @@ char do_xapi_Getch()
             while (true)
             {
                 if (!front_p->xtttp_stc->wait_for_getch) break;
+                scheduler_yield();
             }
             // found it!
             return front_p->xtttp_stc->char_for_getch;
@@ -132,4 +138,9 @@ void do_xapi_Endline()
 void do_xapi_Printline(char *str)
 {
     do_xapi_Output(strcat(str, "\n"));
+}
+
+void do_xapi_OutputSerial(char *str)
+{
+    write_serial_string(str);
 }

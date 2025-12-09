@@ -6,12 +6,12 @@ void xapi_Output(WSTR str) {
     enter_syscall(XAPI_OUTPUT, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
-WSTR xapi_Input() {
-    return (WSTR)(enter_syscall(XAPI_INPUT, 0, 0, 0, 0, 0, 0));
+void xapi_Input(WSTR str) {
+    enter_syscall(XAPI_INPUT, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
-WSTR xapi_Getch() {
-    return (WSTR)(enter_syscall(XAPI_GETCH, 0, 0, 0, 0, 0, 0));
+char xapi_Getch() {
+   return (char)(enter_syscall(XAPI_GETCH, 0, 0, 0, 0, 0, 0));
 }
 
 void xapi_EndLine() {
@@ -20,6 +20,10 @@ void xapi_EndLine() {
 
 void xapi_PrintLine(WSTR str) {
     enter_syscall(XAPI_PRINTLINE, (UINT64)(str), 0, 0, 0, 0, 0);
+}
+
+void xapi_OutputSerial(WSTR str) {
+    enter_syscall(XAPI_OUTPUT_SERIAL, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
 // 3-2
@@ -200,4 +204,13 @@ UINT64	xapi_GetTime() {
 
 void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
+}
+
+// 3-6
+void	xapi_Broken(WSTR broken_info) {
+	enter_syscall(XAPI_BROKEN, (uint64_t)broken_info, 0, 0, 0, 0, 0);
+}
+
+void	xapi_SendAppMessage(WSTR title, WSTR text) {
+	enter_syscall(XAPI_BROKEN, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
 }

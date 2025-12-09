@@ -11,6 +11,7 @@
 #include <syscall/syscall.h>
 #include <mm/lazyalloc.h>
 #include <task/ipc.h>
+#include <fs/vfs/proc.h>
 
 #define SA_RPL3 3
 
@@ -121,6 +122,7 @@ void kill_proc0(pcb_t pcb) {
     queue_remove_at(pcb_group_queue, pcb->queue_index);
 
     //procfs_update_task_list();
+    procfs_on_exit_task(pcb);
 
     while(1) {
         fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
@@ -236,14 +238,14 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     memset(tmp, 0, 2 * sizeof(uint64_t));
     tmp_stack = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
 
-    page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, get_current_task()->parent_group->elf_size,
-                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    memcpy((void *)EHDR_START_ADDR, get_current_task()->parent_group->elf_file,
-           get_current_task()->parent_group->elf_size);
+    // page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, get_current_task()->parent_group->elf_size,
+    //                          PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    // memcpy((void *)EHDR_START_ADDR, get_current_task()->parent_group->elf_file,
+    //        get_current_task()->parent_group->elf_size);
 
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)EHDR_START_ADDR;
-    // CP_Kernel 将用户程序本体从 0 地址加载故不加phdrs的偏移
-    Elf64_Phdr *phdrs = (Elf64_Phdr *)(ehdr->e_phoff + get_current_task()->parent_group->load_start);
+    // Elf64_Ehdr *ehdr = (Elf64_Ehdr *)EHDR_START_ADDR;
+    // // CP_Kernel 将用户程序本体从 0 地址加载故不加phdrs的偏移
+    // Elf64_Phdr *phdrs = (Elf64_Phdr *)(ehdr->e_phoff + get_current_task()->parent_group->load_start);
 
     ((uint64_t *)tmp)[0] = AT_NULL;
     ((uint64_t *)tmp)[1] = 0;
@@ -634,6 +636,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         enable_scheduler();
         open_interrupt;
     }
+    procfs_on_new_task(new_pcb);
 
     write_serial_fmt("PID: %d\n",new_pcb->pid);
     if (!is_vfork) return new_pcb->pid;
@@ -905,9 +908,12 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
 
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
+
+    pcb->msgprci = false;
     
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
+    procfs_on_new_task(pcb);
 
     return pcb;
 }

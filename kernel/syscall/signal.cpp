@@ -1,64 +1,91 @@
-#include <cpu/msr.h>
-#include <errno.h>
-#include <pctable/gdt.h>
-#include <pctable/idt.h>
 #include <proto.hpp>
-#include <stdint.h>
-#include <syscall/syscall.h>
-#include <task/pcb.h>
-#include <mm/frame.h>
+#include <syscall/signal.h>
 
-uint64_t sg_rvt_offest;
+signal_internal_t signal_internal_decisions[MAXSIG];
+bool signals_pending_quick(tcb_t task) {
+    sigset_t pending_list   = task->signal;
+    sigset_t unblocked_list = pending_list & (~task->blocked);
+    for (int i = MINSIG; i <= MAXSIG; i++) {
+        if (!(unblocked_list & SIGMASK(i))) continue;
+        sigaction_t *action       = &task->actions[i];
+        sighandler_t user_handler = action->sa_handler;
+        if (user_handler == SIG_IGN) continue;
+        if (user_handler == SIG_DFL && signal_internal_decisions[i] == SIGNAL_INTERNAL_IGN)
+            continue;
 
-// 信号恢复函数
-void signal_revert()
-{
-    // 通过系统调用返回
-    __asm__ __volatile__("syscall" : : "a"(SXAH_SYSCALL_RETURN) : "rcx", "r11", "memory");
+        return true;
+    }
+    return false;
 }
 
-void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask)
-{
-    tcb_t current = ftask;
-
-    // 看看需不需要getch?
-    if (current->parent_group->xtttp_stc->wait_for_getch && msg_type == MSG_CHAR)
-    {
-        current->parent_group->xtttp_stc->char_for_getch = data2;
-        current->parent_group->xtttp_stc->wait_for_getch = false;
+int syscall_ssetmask(int how, sigset_t *nset, sigset_t *oset) {
+    if (oset) *oset = get_current_task()->blocked;
+    if (nset) {
+        uint64_t safe  = *nset;
+        safe          &= ~(SIGMASK(SIGKILL) | SIGMASK(SIGSTOP));
+        switch (how) {
+        case SIG_BLOCK: get_current_task()->blocked |= safe; break;
+        case SIG_UNBLOCK: get_current_task()->blocked &= ~(safe); break;
+        case SIG_SETMASK: get_current_task()->blocked = safe; break;
+        default: return -EINVAL;
+        }
     }
-
-    // 检查是否有注册的信号处理函数
-    if (WinMpf != NULL && !current->parent_group->sigprci)
-    {
-        current->parent_group->sigprci = true;
-        // 准备信号处理栈
-        create_signal_thread((void *)WinMpf, msg_type, data1, data2, 
-                             XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS + XPSR_OFFEST, 
-                             current->parent_group);
-    }
-    // 空的就不用管了
+    return EOK;
 }
 
-void signal_end() 
-{
-    get_current_task()->parent_group->sigprci = false;
-    kill_thread(get_current_task()); // 他紫砂了
-    while (true)
-    {
-        scheduler_yield();
-        __asm__ volatile("pause\n\t");
+int syscall_sig_action(int sig, sigaction_t *action, sigaction_t *oldaction) {
+    if (sig < MINSIG || sig > MAXSIG || sig == SIGKILL) { return -EINVAL; }
+
+    sigaction_t *ptr = &get_current_task()->actions[sig];
+    if (oldaction) { *oldaction = *ptr; }
+
+    if (action) { *ptr = *action; }
+
+    if (ptr->sa_flags & SIG_NOMASK) {
+        ptr->sa_mask = 0;
+    } else {
+        ptr->sa_mask |= SIGMASK(sig);
     }
+
+    return 0;
 }
 
-void init_signal()
-{
-    page_map_range_to_random(get_current_directory(), 
-                             XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS, 1, 
-                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-                             
-    memcpy((void *)(XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS + XPSR_OFFEST), 
-           (void *)signal_revert, 0xff);   // 我也不知道这个会有多大，就这样吧先
-
-    write_serial_fmt("XJ380 Signal(Message) Initialize Success.\n");
+void signal_init() {
+    signal_internal_decisions[SIGABRT] = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGALRM] = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGBUS]  = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGCHLD] = SIGNAL_INTERNAL_IGN;
+    // signal_internal_decisions[SIGCLD] = SIGNAL_INTERNAL_IGN;
+    signal_internal_decisions[SIGCONT] = SIGNAL_INTERNAL_CONT;
+    // signal_internal_decisions[SIGEMT] = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGFPE]  = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGHUP]  = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGILL]  = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGINT]  = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGIO]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGIOT]  = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGKILL] = SIGNAL_INTERNAL_TERM;
+    // signal_internal_decisions[SIGLOST] = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGPIPE]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGPOLL]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGPROF]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGPWR]    = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGQUIT]   = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGSEGV]   = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGSTKFLT] = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGSTOP]   = SIGNAL_INTERNAL_STOP;
+    signal_internal_decisions[SIGTSTP]   = SIGNAL_INTERNAL_STOP;
+    signal_internal_decisions[SIGSYS]    = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGTERM]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGTRAP]   = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGTTIN]   = SIGNAL_INTERNAL_STOP;
+    signal_internal_decisions[SIGTTOU]   = SIGNAL_INTERNAL_STOP;
+    signal_internal_decisions[SIGUNUSED] = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGURG]    = SIGNAL_INTERNAL_IGN;
+    signal_internal_decisions[SIGUSR1]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGUSR2]   = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGVTALRM] = SIGNAL_INTERNAL_TERM;
+    signal_internal_decisions[SIGXCPU]   = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGXFSZ]   = SIGNAL_INTERNAL_CORE;
+    signal_internal_decisions[SIGWINCH]  = SIGNAL_INTERNAL_IGN;
 }

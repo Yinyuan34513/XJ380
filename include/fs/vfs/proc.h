@@ -1,15 +1,22 @@
 #pragma once
 
-#include <fs/vfs/vfs.h>
+#define MAX_PID_NAME_LEN 5
 
-typedef struct proc_handle
-{
+#include "task/pcb.h"
+#include "vfs.h"
+
+typedef struct proc_handle {
     char       name[64];
     char       content[256];
     vfs_node_t node;
-    tcb_t      task;
+    pcb_t      task;
 } proc_handle_t;
 
-ssize_t procfs_read(void *file, void *addr, size_t offset, size_t size);
+typedef struct procfs_self_handle {
+    vfs_node_t self;
+} procfs_self_handle_t;
 
-void proc_init();
+void procfs_update_task_list();
+void procfs_on_new_task(pcb_t task);
+void procfs_on_exit_task(pcb_t task);
+void procfs_setup();
