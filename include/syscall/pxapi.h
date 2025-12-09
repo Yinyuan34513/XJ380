@@ -182,7 +182,7 @@ uint64_t do_xapi_WriteFile(struct X64_REGS *regs);
 void init_syscall();
 
 // Proto (XAPI Edition)
-void do_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
+void do_message(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
 void init_signal();
-void signal_revert();
-void signal_end();
+void message_revert();
+void message_end();

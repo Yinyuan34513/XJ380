@@ -1,9 +1,10 @@
 #pragma once
 #include <proto.hpp>
 #include "pxapi.h"
+#include <syscall/signal.h>
 #include <cpu/longm.h>
 
-#define XJ380_PRIVATE_SIGNAL_REVERT_ADDRESS 0xf717f000
+#define XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS 0x000000011717450000
 #define XPSR_OFFEST                         0x927
 
 #define SYSCALL_SUCCESS      EOK
@@ -341,10 +342,10 @@ typedef struct {
     unsigned long fds_bits[FD_SETSIZE / 8 / sizeof(long)];
 } fd_set;
 
-// typedef struct {
-//     sigset_t *ss;
-//     size_t    ss_len;
-// } WeirdPselect6;
+typedef struct {
+    sigset_t *ss;
+    size_t    ss_len;
+} WeirdPselect6;
 
 struct timeval {
     long tv_sec;

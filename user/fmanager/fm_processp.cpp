@@ -21,5 +21,6 @@ void register_click(int x, int y)
     else
     {
         first_click = true;
+        clicktime_recorder = xapi_GetTime();
     }
 }

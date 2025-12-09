@@ -6,6 +6,7 @@
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
+#include <syscall/signal.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
 #include <fs/vfs/sys.h>
@@ -30,6 +31,8 @@
 #include <hda/pcspk.h>
 #include <device.h>
 #include <sb16.h>
+#include <fs/vfs/proc.h>
+#include <pipe.h>
 
 bool        desktop_done = false;
 bool        xhci_done    = false;
@@ -284,11 +287,11 @@ void desktop_flusher()
     while (!xhci_done)
         cpu_relax();
 
-    // delay_s_hp(3);
+    delay_s_hp(3);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
    
     while (1)
@@ -313,11 +316,11 @@ void desktop_flusher()
             {
                 if (k_input != '\n' && k_input != '\b' && k_input < 128)
                 {
-                    do_signal(0, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                    do_message(0, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
                 else
                 {
-                    do_signal(7, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                    do_message(7, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
             }
         }
@@ -439,7 +442,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
-    // idle_thread->cwd->refcount++;
+    idle_thread->cwd->refcount++;
 
     get_current_cpu()->current_task = idle_thread;
 
@@ -449,10 +452,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
+    
     mount_root();
+    procfs_setup();
+    pipefs_setup();
     stdio_init();
 
 
+    signal_init();
     init_syscall();
     init_signal();
 
