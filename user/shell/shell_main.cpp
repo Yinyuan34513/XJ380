@@ -7,8 +7,7 @@
 // 全局变量定义
 int  cur_x  = 0;
 int  cur_y  = 0;
-int  ab_hsf = 0;
-int *ab_x   = &ab_hsf;
+int *ab_x   = &cur_x;
 int *ab_y   = &cur_y;
 
 char char_buffer[64];

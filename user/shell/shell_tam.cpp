@@ -5,7 +5,6 @@
 
 extern int  cur_x;
 extern int  cur_y;
-extern int  ab_hsf;
 extern int *ab_x;
 extern int *ab_y;
 extern char char_buffer[64];
@@ -42,6 +41,36 @@ void tam_flush_buffer()
     }
 }
 
+void ptt_console_sp(char *str)
+{
+    char *p = str;
+    while (*p != '\0')
+    {
+        if (cur_x + 9 >= TML_X - 8) { newline(); }
+
+        if (*p == '\n')
+        {
+            // 换行
+            newline();
+        }
+        else if (*p == '\b')
+        {
+            // 退格
+            backspace();
+        }
+        else
+        {
+            // 可见字符
+            char temp_char_buffer[2];
+            temp_char_buffer[0] = *p;
+            temp_char_buffer[1] = '\0';
+            xapi_DrawSWText(handle, *ab_x, *ab_y, temp_char_buffer, TERMINAL_TEXT_COLOR);
+            cur_x += 9;
+        }
+        p++;
+    }
+}
+
 void tam_main_loop()
 {
     cur_y += 2;
@@ -56,7 +85,7 @@ void tam_main_loop()
         read_xttp_buffer(output_stream);
         if (output_stream[0] != '\0') 
         {
-            print_to_console(output_stream);
+            ptt_console_sp(output_stream);
             memset(output_stream, 0, (strlen(output_stream) + 1) * sizeof(uint8_t));
             xapi_RefreshWindow(handle);
         }

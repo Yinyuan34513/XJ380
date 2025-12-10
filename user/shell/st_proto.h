@@ -4,7 +4,6 @@
 extern HDLE handle;
 extern int  cur_x;
 extern int  cur_y;
-extern int  ab_hsf;
 extern int *ab_x;
 extern int *ab_y;
 
