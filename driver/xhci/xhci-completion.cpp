@@ -235,6 +235,8 @@ void xhci_complete_command(xhci_hcd_t *xhci, xhci_trb_t *event_trb) {
 
 // 完成传输
 void xhci_complete_transfer(xhci_hcd_t *xhci, xhci_trb_t *event_trb) {
+
+try_again:
     uint64_t transfer_trb_addr = event_trb->parameter;
     uint32_t completion_code = (event_trb->status >> 24) & 0xFF;
     uint32_t transfer_length = event_trb->status & 0xFFFFFF;
@@ -298,5 +300,6 @@ void xhci_complete_transfer(xhci_hcd_t *xhci, xhci_trb_t *event_trb) {
     }
 
     spin_unlock(xhci->tracker_mutex);
+    goto try_again; // 如果会跑到这里来的话一般横竖都是死，所以回去重试一下吧（     # by GuoqiFish
     write_serial_fmt("XHCI: Warning - No matching transfer tracker found\n");
 }
