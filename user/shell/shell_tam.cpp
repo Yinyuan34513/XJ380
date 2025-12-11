@@ -88,8 +88,8 @@ void tam_main_loop()
             ptt_console_sp(output_stream);
             memset(output_stream, 0, (strlen(output_stream) + 1) * sizeof(uint8_t));
             xapi_RefreshWindow(handle);
+            terminal_app_mark_finish_output();
         }
-        terminal_app_mark_finish_output();
 
         // 检查输入缓冲区
         if (check_read_xttp_buffer() && input_is_enter)

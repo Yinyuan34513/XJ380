@@ -29,9 +29,9 @@
 void init_process_xtttp(pcb_t pcb)
 {
     // pcb->xtttp_stc->input    = (char *)malloc(1024 * sizeof(char));
-    memset(pcb->xtttp_stc->output, 0, sizeof(pcb->xtttp_stc->output));
+    memset(pcb->xtttp_stc->output, 0, sizeof(char) * 1024);
     // pcb->xtttp_stc->output   = (char *)malloc(1024 * sizeof(char));
-    memset(pcb->xtttp_stc->input, 0, sizeof(pcb->xtttp_stc->input));
+    memset(pcb->xtttp_stc->input, 0, sizeof(char) * 1024);
 }
 
 int check_terminal_init_status()
