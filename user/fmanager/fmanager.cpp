@@ -49,8 +49,6 @@ int main(int argc, char *argv[], char *envp[])
             DirNode  fdir[256];
             memset(fdir, 0, sizeof(DirNode) * 256);
             xapi_SearchFile(current_path, &count, fdir);
-            xapi_OutputSerial(xcr_int2char((UINT64)count));
-            xapi_OutputSerial("\n");
             if (count == 0 || count == 404)
             {
                 paint_dir(current_path);

@@ -14,6 +14,7 @@ void paint_fm_back()
     xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
     xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/icon/bright.png");
     xapi_DrawText(handle, 56, 2, current_path, 11, 0x000000ff);
+    xapi_RefreshWindow(handle);
 }
 
 void paint_item(int index, char *name, bool is_folder, int size)
