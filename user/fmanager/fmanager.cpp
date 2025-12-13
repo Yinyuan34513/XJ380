@@ -28,6 +28,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.width  = FMR_X;
     Winfo.height = FMR_Y;
     xapi_CreateWindow(&handle, &Winfo);
+    SetMsgPrcor(handle, fmanager_MessagePrcor);
     memset(file_ti_index, 0, 2048 * sizeof(FILE_TYPEINFO_INDEX));
 
     paint_fm_back();
@@ -37,6 +38,31 @@ int main(int argc, char *argv[], char *envp[])
 
     while (1)
     {
+        if (double_click)
+        {
+            double_click = false;
+            // Double Click!
+            // 搜索点到了哪个文件夹/文件
+            // y_begin = 148 + 24 * index
+            int click_index = (click_y - 148) / 24;
+            uint32_t count = 0;
+            DirNode  fdir[256];
+            memset(fdir, 0, sizeof(DirNode) * 256);
+            xapi_SearchFile(current_path, &count, fdir);
+            xapi_OutputSerial(xcr_int2char((UINT64)count));
+            xapi_OutputSerial("\n");
+            if (count == 0 || count == 404)
+            {
+                paint_dir(current_path);
+                continue;
+            }
+            if (fdir[click_index].filetype == 1)
+            {
+                // 是文件夹
+                cat_path(fdir[click_index].filename);
+                paint_dir(current_path);
+            }
+        }
         __asm__ __volatile__("pause");
     }
 }

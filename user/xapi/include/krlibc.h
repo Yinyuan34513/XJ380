@@ -202,6 +202,5 @@ void uint64_to_string(uint64_t num, char *buffer, int buffer_size);
 void int_to_string(int num, char *buffer, int buffer_size);
 
 void merge_string(char *dst, char *src);
-void revert_path(char *path);
 
 // static inline void *memmove(void *dest, const void *src, size_t n);

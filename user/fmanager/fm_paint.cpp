@@ -27,6 +27,7 @@ void paint_item(int index, char *name, bool is_folder, int size)
     else
     {
         char file_type[32];
+        memset(file_type, 0, sizeof(char) * 32);
         if (get_file_type(name, file_type))
         {
             for (int i = 0; file_ti_index[i].file_type[0] != '\0'; i++)
@@ -38,7 +39,7 @@ void paint_item(int index, char *name, bool is_folder, int size)
                     goto type_is_found;
                 }
             }
-            strcat(file_type, "文件");
+            strcat(file_type, " 文件");
             xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
         }
         else 
@@ -48,6 +49,7 @@ void paint_item(int index, char *name, bool is_folder, int size)
         xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
 type_is_found:
         char file_size_str[32];
+        memset(file_size_str, 0, sizeof(char) * 32);
         strcpy(file_size_str, xcr_int2char((size + 1024) / 1024));
         strcat(file_size_str, " KB");
         xapi_DrawText(handle, 400, 148 + 24 * index - 3, file_size_str, 10, 0x6d6d6dff);
@@ -56,8 +58,9 @@ type_is_found:
 
 void paint_dir(char *path)
 {
-    uint32_t count;
+    uint32_t count = 0;
     DirNode  fdir[256];
+    memset(fdir, 0, sizeof(DirNode) * 256);
     xapi_DrawRect(handle, 0, 0, FMR_X - 1, FMR_Y - 1, 0xffffffff, true);
     paint_fm_back();
     xapi_DrawLine(handle, 0, 141, FMR_X - 1, 141, 0xc4c4c4ff);
@@ -70,4 +73,5 @@ void paint_dir(char *path)
     {
         paint_item(i, fdir[i].filename, fdir[i].filetype, fdir[i].length);
     }
+    xapi_RefreshWindow(handle);
 }

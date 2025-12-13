@@ -1,5 +1,19 @@
 #include "st_proto.h"
 
+void revert_path(char *path)
+{
+    char *s = path;
+    while (*s)
+        s++;
+
+    while (*s != '/')
+        s--;
+
+    if (s == path) s++;
+
+    *s = '\0';
+}
+
 void print_dir()
 {
     uint32_t count;

@@ -15,7 +15,14 @@ extern HDLE handle;
 extern char current_path[1024];
 extern FILE_TYPEINFO_INDEX file_ti_index[2048];
 
+extern bool double_click;
+
+extern int click_x;
+extern int click_y;
+
 void paint_fm_back();
 void paint_dir(char *path);
 bool get_file_type(char *name, char *type);
 void register_click(int x, int y);
+void cat_path(char *folder_name);
+void revert_path(char *path);
