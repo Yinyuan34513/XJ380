@@ -69,7 +69,11 @@ void paint_dir(char *path)
     xapi_DrawText(handle, 240, 120, "类型", 10, 0x000000ff);
     xapi_DrawText(handle, 400, 120, "大小", 10, 0x000000ff);
     xapi_SearchFile(path, &count, fdir);
-    if (count == 0 || count == 404) return;
+    if (count == 0 || count == 404) 
+    {
+        // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
+        xapi_DrawText(handle, FMR_X / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
+    }
     for (int i = 0; i < count; i++)
     {
         paint_item(i, fdir[i].filename, fdir[i].filetype, fdir[i].length);
