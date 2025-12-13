@@ -45,6 +45,7 @@ void xapi_Input(WSTR str);
 char xapi_Getch();
 void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
+void xapi_Printf(WSTR fmt, ...);
 void xapi_OutputSerial(WSTR str);
 
 // 3-2

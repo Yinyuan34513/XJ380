@@ -25,6 +25,41 @@ void xapi_PrintLine(WSTR str) {
 void xapi_OutputSerial(WSTR str) {
     enter_syscall(XAPI_OUTPUT_SERIAL, (UINT64)(str), 0, 0, 0, 0, 0);
 }
+#define SERIAL_WRITE_BUFFER_SIZE 1024
+char   serial_write_buffer[SERIAL_WRITE_BUFFER_SIZE] = {0};
+size_t serial_write_buffer_index                     = 0;
+
+uint8_t serial_write_handler(Writer *writer, char ch)
+{
+    (void)writer;
+    serial_write_buffer[serial_write_buffer_index] = ch;
+    ++serial_write_buffer_index;
+    if (serial_write_buffer_index >= SERIAL_WRITE_BUFFER_SIZE - 1) // 1 for '\0'
+    {
+        xapi_Output(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    } // Flush buffer
+    serial_write_buffer[serial_write_buffer_index] = '\0';
+    return 0;
+}
+
+Writer SerialWriter = {
+    .data    = serial_write_buffer,
+    .handler = serial_write_handler,
+};
+
+void xapi_Printf(WSTR fmt, ...)
+{
+	va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        xapi_Output(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+}
 
 // 3-2
 void xapi_OpenFile(

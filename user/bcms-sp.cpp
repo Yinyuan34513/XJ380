@@ -2,7 +2,7 @@
 
 int main(int argc, char *argv[], char *envp[])
 {
-    xapi_Output("你好世界\n");
+    xapi_Printf("%s 哈机密\n","gulu");
     char t[114514];
     xapi_Input(t);
     xapi_Output("Hello World!");
