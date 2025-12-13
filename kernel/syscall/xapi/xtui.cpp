@@ -144,3 +144,8 @@ void do_xapi_OutputSerial(char *str)
 {
     write_serial_string(str);
 }
+
+void do_xapi_Printf(char *str)
+{
+    do_xapi_Output(str);
+}

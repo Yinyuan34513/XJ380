@@ -176,6 +176,7 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
 void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs);
 uint64_t do_xapi_WriteFile(struct X64_REGS *regs);
+void do_xapi_Printf(char *str);
 
 
 
