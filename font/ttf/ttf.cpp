@@ -16,6 +16,9 @@ stbtt_fontinfo font;
 extern char          *ttf_buffer_c;
 extern stbtt_fontinfo font_c;
 
+extern char          *ttf_buffer_m;
+extern stbtt_fontinfo font_m;
+
 SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
