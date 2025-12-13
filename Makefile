@@ -154,7 +154,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
-	@cp -a ./font/ttf/XJ380C.xpf $(BUILD_DIR)/XJ380/system/font
+	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
 
 	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/system/image
 

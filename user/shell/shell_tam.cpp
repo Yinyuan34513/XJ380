@@ -80,7 +80,7 @@ void ptt_console_sp(char *str)
                 char temp_char_buffer[2];
                 temp_char_buffer[0] = *p;
                 temp_char_buffer[1] = '\0';
-                xapi_DrawText(handle, *ab_x, *ab_y, temp_char_buffer,10, TERMINAL_TEXT_COLOR);
+                xapi_DrawSWText(handle, *ab_x, *ab_y, temp_char_buffer, TERMINAL_TEXT_COLOR);
                 cur_x += 9;  // 等宽字体每个字符9像素
             }
             else
@@ -93,7 +93,7 @@ void ptt_console_sp(char *str)
                 p--; // 退一步
                 
                 // 中文
-                xapi_DrawText(handle, *ab_x, *ab_y - 4, utf8_char,10, TERMINAL_TEXT_COLOR);
+                xapi_DrawSWText(handle, *ab_x, *ab_y, utf8_char, TERMINAL_TEXT_COLOR);
                 cur_x += 18;  // 中文字符宽度 = ASCII * 2 （也许）
             }
         }

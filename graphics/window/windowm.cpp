@@ -233,7 +233,7 @@ void draw_textl(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *titl
 void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color)
 {
-    print_box_ttfc(sht, &(windowls->w_sheet), title, color, x, y, 10);
+    print_box_ttf_c(sht, &(windowls->w_sheet), title, color, x, y, 10);
 }
 
 

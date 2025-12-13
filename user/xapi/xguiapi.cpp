@@ -100,7 +100,7 @@ void xapi_DrawSWText(
 	WSTR 	str,
 	UINT32  color
 ) {
-	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), 10, color);
+	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y - 2, (UINT64)(str), 10, color);
 }
 
 
