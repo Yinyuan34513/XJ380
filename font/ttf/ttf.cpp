@@ -455,22 +455,22 @@ void init_ttf()
     // delay_s(10);
 
     // 完整不等宽字体
-    vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
+    vfs_node_t v = vfs_open("/system/font/MapleMonoNormalNL-CN-Light.ttf");
     if (!v)
     {
-        write_serial_string("Cannot find XJ380F.ttf\n");
+        write_serial_string("Cannot find MapleMonoNormalNL-CN-Light.ttf\n");
         // wsod_cannot_load_ttf();
         return;
     }
     ttf_buffer = (char *)malloc(v->size);
-    write_serial_string("Reading Font - XJ380F (1/2)...\n");
+    write_serial_string("Reading Font - MapleMonoNormalNL-CN-Light (1/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
     if (*(uint64_t *)ttf_buffer == 0)
     {
-        write_serial_string("Cannot read XJ380F.ttf\n");
+        write_serial_string("Cannot read MapleMonoNormalNL-CN-Light.ttf\n");
         return;
     }
-    write_serial_string("Loading Font - XJ380F (1/2)...\n");
+    write_serial_string("Loading Font - MapleMonoNormalNL-CN-Light (1/2)...\n");
     stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
     set_size(16);
 
