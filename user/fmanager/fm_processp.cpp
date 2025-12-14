@@ -26,7 +26,19 @@ void register_click(int x, int y)
 
     if (x >= 5 && x <= 23 && y >= 4 && y <= 22)
     {
-        revert_path(current_path);
+        if (path_p > 0) {
+            path_p--;  // 后退到上一个位置
+            strcpy(current_path, path_his[path_p]);
+        }
+        paint_dir(current_path);
+    }
+
+    if(x>=29 && x<=47 && y>= 4 && y<= 22)
+    {
+        if (path_p < path_r) {
+            path_p++;  // 前进到下一个位置
+            strcpy(current_path, path_his[path_p]);
+        }
         paint_dir(current_path);
     }
 }

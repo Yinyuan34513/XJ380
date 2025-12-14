@@ -3,6 +3,9 @@
 #include "fm_proto.h"
 
 char current_path[1024] = "/";
+char path_his[20][1024];
+int path_p = 0;
+int path_r = 0;
 
 HDLE handle;
 
@@ -34,6 +37,14 @@ int main(int argc, char *argv[], char *envp[])
     paint_fm_back();
     paint_dir(current_path);
 
+    // 初始化路径历史
+    for (int i = 0; i < 20; i++) {
+        memset(path_his[i], 0, 1024);
+    }
+    strcpy(path_his[0], "/");  // 初始路径为根目录
+    path_p = 0;  // 当前位置指针
+    path_r = 0;  // 最新位置指针
+
     xapi_RefreshWindow(handle);
 
     while (1)
@@ -56,7 +67,14 @@ int main(int argc, char *argv[], char *envp[])
             }
             if (fdir[click_index].filetype == 1)
             {
-                // 是文件夹
+                // 是文件夹，记录到历史路径
+                char new_path[1024];
+                strcpy(new_path, current_path);
+                if (current_path[strlen(current_path)-1] != '/')//规范，
+                    strcat(new_path, "/");
+                strcat(new_path, fdir[click_index].filename);
+                
+                his_path(new_path);  // 添加到历史记录
                 cat_path(fdir[click_index].filename);
                 paint_dir(current_path);
             }

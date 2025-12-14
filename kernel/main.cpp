@@ -292,7 +292,7 @@ void desktop_flusher()
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
    
     while (1)
     {
@@ -301,7 +301,7 @@ void desktop_flusher()
             enable_intr();
             enable_scheduler();
         }
-        // if (tw_data->flushing) { continue; } // Sync, but bad performance
+        if (tw_data->flushing) { continue; } // Sync, but bad performance
         if (tw_data->need_flush)
         {
             tw_data->need_flush = false;
