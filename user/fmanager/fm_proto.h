@@ -30,4 +30,4 @@ bool get_file_type(char *name, char *type);
 void register_click(int x, int y);
 void cat_path(char *folder_name);
 void revert_path(char *path);
-void his_path(char * path);
+void record_current_path();

@@ -50,14 +50,29 @@ void cat_path(char *folder_name)
     }
 }
 
-void his_path(char * path)
+void revert_path(char *path)
 {
-    // 已经在历史记录中
-    if (strcmp(path, path_his[path_p]) == 0)
-        return;
-    
-    // 移动到下一个位置
-    path_p = (path_p + 1) % 20;
-    strcpy(path_his[path_p], path);
-    path_r = path_p;  // 更新最新位置指针
+    record_current_path();
+
+    char *s = path;
+    while (*s)
+        s++;
+
+    while (*s != '/')
+        s--;
+
+    if (s == path) s++;
+
+    *s = '\0';
+}
+
+void record_current_path()
+{
+    if (path_p + 1 == path_r) path_r++;
+    if (path_r == 20) path_r = 0;
+
+    strcpy(path_his[path_p], current_path);
+    path_p++;
+
+    if (path_p == 20) path_p = 0;
 }

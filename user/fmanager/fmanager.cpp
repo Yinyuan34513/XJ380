@@ -43,7 +43,7 @@ int main(int argc, char *argv[], char *envp[])
     }
     strcpy(path_his[0], "/");  // 初始路径为根目录
     path_p = 0;  // 当前位置指针
-    path_r = 0;  // 最新位置指针
+    path_r = 0;  // 最早位置指针
 
     xapi_RefreshWindow(handle);
 
@@ -67,14 +67,9 @@ int main(int argc, char *argv[], char *envp[])
             }
             if (fdir[click_index].filetype == 1)
             {
-                // 是文件夹，记录到历史路径
+                // 是文件夹
+                record_current_path();
                 char new_path[1024];
-                strcpy(new_path, current_path);
-                if (current_path[strlen(current_path)-1] != '/')//规范，
-                    strcat(new_path, "/");
-                strcat(new_path, fdir[click_index].filename);
-                
-                his_path(new_path);  // 添加到历史记录
                 cat_path(fdir[click_index].filename);
                 paint_dir(current_path);
             }
