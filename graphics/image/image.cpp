@@ -100,7 +100,7 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
 }
 
 /**
- * @brief 显示图片（并进行混色）
+ * @brief 显示图片
  * 
  * @param sht 图层信息结构
  * @param sheet_id 图层编号

@@ -103,6 +103,11 @@ void xapi_DrawSWText(
 	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y - 2, (UINT64)(str), 10, color);
 }
 
+UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size)
+{
+	enter_syscall(XAPI_CALC_TEXT_WIDTH, (UINT64)str, size, 0, 0, 0, 0);
+}
+
 
 // 4-3
 void xapi_DrawBMP (

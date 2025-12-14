@@ -82,6 +82,7 @@ typedef struct {
 // P3.6
 #define XAPI_BROKEN         428
 #define XAPI_SEND_APP_MSG   429
+#define XAPI_SLEEP          430
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -102,6 +103,7 @@ typedef struct {
 
 #define XAPI_DRAW_TEXT_L      414
 #define XAPI_DRAW_TEXT_SW     415
+#define XAPI_CALC_TEXT_WIDTH  431
 
 // P4.3
 #define XAPI_DRAW_BMP       403
@@ -131,14 +133,14 @@ typedef struct {
 
 // P4.6
 #define XAPI_BUTTON       410
-#define XAPI_BUTTON_STYLE 411
+#define XAPI_BUTTON_EMP   411
 
 // 4-1
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：429
+// 当前最大号：431
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -177,13 +179,14 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs);
 uint64_t do_xapi_WriteFile(struct X64_REGS *regs);
 void do_xapi_Printf(char *str);
+void do_xapi_Sleep(uint64_t ms);
 
 
 
 void init_syscall();
 
 // Proto (XAPI Edition)
-void do_message(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask);
+void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask);
 void init_signal();
 void message_revert();
 void message_end();

@@ -138,6 +138,8 @@ void xapi_DrawSWText(
 	UINT32  color
 );
 
+UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size);
+
 // 4-3
 void  xapi_DrawBMP (
 	HDLE  	handle,

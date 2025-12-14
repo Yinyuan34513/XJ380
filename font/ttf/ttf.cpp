@@ -181,6 +181,14 @@ void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER
     print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
+uint64_t calc_ttf_length(char *str, int size)
+{
+    // 懒得整了就这样吧
+    uint32_t temp_i_width;
+    uint16_t temp_sid = 32000;
+    print_fmt_box_ttf(sht_img, &temp_sid, {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
+}
+
 #define TTF_BUF_SIZE 128
 
 // 辅助函数：计算UTF-8字符的字节数

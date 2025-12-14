@@ -15,14 +15,14 @@ void message_revert()
     __asm__ __volatile__("syscall" : : "a"(SXAH_SYSCALL_RETURN) : "rcx", "r11", "memory");
 }
 
-void do_message(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask)
+void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask)
 {
     tcb_t current = ftask;
 
     // 看看需不需要getch?
     if (current->parent_group->xtttp_stc->wait_for_getch && msg_type == MSG_CHAR)
     {
-        current->parent_group->xtttp_stc->char_for_getch = data2;
+        current->parent_group->xtttp_stc->char_for_getch = lData;
         current->parent_group->xtttp_stc->wait_for_getch = false;
     }
 
@@ -31,7 +31,7 @@ void do_message(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinM
     {
         current->parent_group->msgprci = true;
         // 准备信号处理栈
-        create_signal_thread((void *)WinMpf, msg_type, data1, data2, 
+        create_signal_thread((void *)WinMpf, msg_type, hData, lData, 
                              XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST, 
                              current->parent_group);
     }

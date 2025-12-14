@@ -14,6 +14,9 @@ void print_box_ttf_c(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFE
 				   /*unsigned bc, */ unsigned x, unsigned y, int size);
 void init_ttf();
 
+// 劲爆美味！
+uint64_t calc_ttf_length(char *str, int size);
+
 typedef struct FbTTFWriterData
 {
     SHEET_INFO  *sht;

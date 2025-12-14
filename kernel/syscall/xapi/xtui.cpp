@@ -149,3 +149,8 @@ void do_xapi_Printf(char *str)
 {
     do_xapi_Output(str);
 }
+
+void do_xapi_Sleep(uint64_t ms)
+{
+    delay_ms(ms);
+}

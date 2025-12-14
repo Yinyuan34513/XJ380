@@ -121,6 +121,7 @@
 // P3.6
 #define XAPI_BROKEN         428
 #define XAPI_SEND_APP_MSG   429
+#define XAPI_SLEEP          430
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -141,6 +142,7 @@
 
 #define XAPI_DRAW_TEXT_L      414
 #define XAPI_DRAW_TEXT_SW     415
+#define XAPI_CALC_TEXT_WIDTH  431
 
 // P4.3
 #define XAPI_DRAW_BMP       403
