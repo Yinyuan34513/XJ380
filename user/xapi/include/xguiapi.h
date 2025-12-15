@@ -215,12 +215,15 @@ void xapi_RefreshWindow(
 void xapi_Button(
 	HDLE  	handle,
 	UINT64  CRLid,
+	UINT64  x,
+	UINT64  y,
 	WSTR  	text
 );
 
-void xapi_StyleButton(
+void xapi_ButtonEmp(
 	HDLE  	handle,
 	UINT64  CRLid,
-	WSTR  	text,
-	WSTR  	path
+	UINT64  x,
+	UINT64  y,
+	WSTR  	text
 );

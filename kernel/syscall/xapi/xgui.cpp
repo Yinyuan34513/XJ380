@@ -20,6 +20,7 @@
 #include <syscall/pxapi.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <graphics/components/button.h>
 
 bool winRD_lock = false;
 
@@ -454,4 +455,41 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     {
         PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
     }
+}
+
+void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *button_text  = (char *)(text);
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x + 12, y + 27, button_text, CRLid, false);
+    }
+    else
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x, y, button_text, CRLid, false);
+    }
+}
+
+void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *button_text  = (char *)(text);
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x + 12, y + 27, button_text, CRLid, true);
+    }
+    else
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x, y, button_text, CRLid, true);
+    }
+}
+
+void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    unregister_button_components(found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)),
+                                 CRLid);
 }

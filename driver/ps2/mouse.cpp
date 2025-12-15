@@ -7,6 +7,7 @@
 #include <ps2/mouse.h>
 #include <usb/hid.h>
 #include <syscall/syscall.h>
+#include <graphics/components/button.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -48,6 +49,7 @@ void process_mouse_button()
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
             }
+            process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), tbx, tby);
         }
 
         ms_dec.left   = false;

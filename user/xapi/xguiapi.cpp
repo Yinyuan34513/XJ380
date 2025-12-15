@@ -201,16 +201,19 @@ void xapi_RefreshWindow(HDLE handle) {
 void xapi_Button(
 	HDLE  	handle,
 	UINT64  CRLid,
+	UINT64  x,
+	UINT64  y,
 	WSTR  	text
 ) {
-	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), 0, 0, 0);
+	enter_syscall(XAPI_BUTTON, handle, x, y, CRLid, (UINT64)(text), 0);
 }
 
-void xapi_StyleButton(
+void xapi_ButtonEmp(
 	HDLE  	handle,
 	UINT64  CRLid,
-	WSTR  	text,
-	WSTR  	path
+	UINT64  x,
+	UINT64  y,
+	WSTR  	text
 ) {
-	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), (UINT64)(path), 0, 0);
+	enter_syscall(XAPI_BUTTON_EMP, handle, x, y, CRLid, (UINT64)(text), 0);
 }

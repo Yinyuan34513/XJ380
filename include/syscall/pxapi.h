@@ -181,6 +181,9 @@ uint64_t do_xapi_ReadFile(struct X64_REGS *regs);
 uint64_t do_xapi_WriteFile(struct X64_REGS *regs);
 void do_xapi_Printf(char *str);
 void do_xapi_Sleep(uint64_t ms);
+void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
+void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
+void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
 
 
 

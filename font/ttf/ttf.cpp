@@ -184,7 +184,7 @@ void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER
 uint64_t calc_ttf_length(char *str, int size)
 {
     // 懒得整了就这样吧
-    uint32_t temp_i_width;
+    uint32_t temp_i_width = 0;
     uint16_t temp_sid = 32000;
     print_fmt_box_ttf(sht_img, &temp_sid, {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
     return temp_i_width;
@@ -228,6 +228,12 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         p += chartorune(&r[i++], p);
     }
 
+    // 渲染文本
+    unsigned int   width  = 0;
+    unsigned int   height = 0;
+    unsigned char *bitmap = TTF_Print(r, &width, &height, data->size);
+    *i_width = width;
+
     // 查找图层
     SHEET *front_p = data->sht->start;
     while (front_p != NULL)
@@ -241,10 +247,6 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         return;
     }
 
-    // 渲染文本
-    unsigned int   width  = 0;
-    unsigned int   height = 0;
-    unsigned char *bitmap = TTF_Print(r, &width, &height, data->size);
     put_bitmap(data->sht, data->sheet_id, bitmap, data->x, data->y, width, height, 1920, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
