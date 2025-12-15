@@ -187,6 +187,7 @@ uint64_t calc_ttf_length(char *str, int size)
     uint32_t temp_i_width;
     uint16_t temp_sid = 32000;
     print_fmt_box_ttf(sht_img, &temp_sid, {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
+    return temp_i_width;
 }
 
 #define TTF_BUF_SIZE 128
