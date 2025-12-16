@@ -61,6 +61,7 @@ void unregister_button_components(SHEET *sheet, int CRLid)
 
 void process_click_event(SHEET *current_sht, int x, int y)
 {
+    write_serial_fmt("111");
     button_regt_p front_p = first_button;
     while (true)
     {
@@ -87,7 +88,7 @@ void process_click_event(SHEET *current_sht, int x, int y)
 void put_button_theme(WINDOWLS *windowls, int x, int y, char *str, int CRLid, bool underline)
 {
     uint64_t width = calc_ttf_length(str, 10);
-    SHEET_BUFFER *mtl;
+    SHEET_BUFFER *mtl = (SHEET_BUFFER *)malloc((width + 44) * 34 * 4);
     SHEET_BUFFER *dst = (SHEET_BUFFER *)malloc((width + 44) * 34 * 4);
     if (dst == NULL) return;
     if (!underline) { LoadPictureOgM(&mtl, "/system/icon/button.png"); }
@@ -96,9 +97,9 @@ void put_button_theme(WINDOWLS *windowls, int x, int y, char *str, int CRLid, bo
     write_serial_fmt("%x\n", mtl);
     write_serial_fmt("%x\n", dst);
     resize_theme_width(dst, mtl, width + 44, 76, 34);
-    // copy_buffer_by_id(sht_img, &(windowls->w_sheet), dst, x, y, width + 44, 34);
-    // register_button_components(found_sheet_byid(sht_img, &(windowls->w_sheet)), 
-    //                            x, y, x + width + 44, y + 34, CRLid);
-    // free(mtl);
-    // free(dst);
+    copy_buffer_by_id(sht_img, &(windowls->w_sheet), dst, x, y, width + 44, 34);
+    register_button_components(found_sheet_byid(sht_img, &(windowls->w_sheet)), 
+                               x, y, x + width + 44, y + 34, CRLid);
+    free(mtl);
+    free(dst);
 }
