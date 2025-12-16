@@ -44,6 +44,7 @@ int main(int argc, char *argv[], char *envp[])
     // window.sets = NORMAL;
     HDLE handle;
     xapi_CreateWindow(&handle, &window);
+
     // 以下颜色用的都是ARGB，不知道用不用调
     xapi_DrawText(handle, 10, 27, (char *)"山地奥斯卡537 2023/8/14 20:35:14", 10, 0x45459eff);
     xapi_DrawRect(handle, 26, 48, 382, 106, 0xc6c6c6ff, true);

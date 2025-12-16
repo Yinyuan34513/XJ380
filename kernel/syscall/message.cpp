@@ -49,7 +49,7 @@ void message_end()
     }
 }
 
-void init_signal()
+void init_message()
 {
     page_map_range_to_random(get_current_directory(), 
                              XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS, 1, 
@@ -58,5 +58,5 @@ void init_signal()
     memcpy((void *)(XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST), 
            (void *)message_revert, 0xff);   // 我也不知道这个会有多大，就这样吧先
 
-    write_serial_fmt("XJ380 Signal(Message) Initialize Success.\n");
+    write_serial_fmt("XJ380 Message Initialize Success.\n");
 }

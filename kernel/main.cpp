@@ -152,6 +152,7 @@ extern uint16_t *mouse_sheet_id_img;
 uint16_t         desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
 uint16_t         dock_sheet_id    = 1145;
 uint16_t         mouse_sheet_id   = 1145;
+uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi = 1145;
 
 void desktop_flusher()
 {
@@ -173,6 +174,10 @@ void desktop_flusher()
                  &dock_sheet_id);
     create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 10000,
                  &mouse_sheet_id);
+
+    // 草稿纸吗，有点意思
+    create_sheet(&shtinf, get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, -1,
+                 &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
 
@@ -292,7 +297,9 @@ void desktop_flusher()
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    // calc_ttf_length("114514 测试", 10);
    
     while (1)
     {
@@ -461,7 +468,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     signal_init();
     init_syscall();
-    init_signal();
+    init_message();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 

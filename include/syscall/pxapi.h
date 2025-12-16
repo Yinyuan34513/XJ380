@@ -191,6 +191,6 @@ void init_syscall();
 
 // Proto (XAPI Edition)
 void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask);
-void init_signal();
+void init_message();
 void message_revert();
 void message_end();

@@ -490,133 +490,6 @@ void lift_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
 
 bool allow_to_flush = false;
 
-void refresh_sheet(SHEET_INFO *sht)
-{
-    if (!allow_to_flush)
-        return;
-    SheetIsRefreshing = true;
-
-    bool USERGB = true;
-    switch (sht->fbc->pixel_format)
-    {
-    case PixelFormat::kRGBR: USERGB = true; break;
-    case PixelFormat::kBGRR: USERGB = false; break;
-    default: break;
-    }
-
-    SHEET        *front_p    = sht->start;
-    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
-
-    uint8_t *temp_peek_sign = sht->foxland.peek_sign;
-
-    for (int i = 0; i < sht->sheet_num + 1; i++)
-    {
-        write_serial_string("Refreshing Sheet Index ");
-        write_serial_dec(front_p->index);
-        write_serial_string("\n");
-        SHEET_BUFFER *SheetBuffer  = (SHEET_BUFFER *)(front_p->buffer);
-        uint32_t      BufferOffest = sht->scrx * front_p->by + front_p->bx; // 起始位置
-        for (int y = 0; y < front_p->height; y++)
-        {
-            for (int x = 0; x < front_p->width; x++)
-            {
-                // 起始位置 = sht->scrx * front_p->by + front_p->bx
-                // 偏移量 = 起始位置 + y * sht->scrx + x
-                // 即TempBuffer[起始位置 + y * sht->scrx + x] = SheetBuffer[y * front_p->width + x]
-                // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                if (SheetBuffer[y * front_p->width + x].a == 255)
-                {
-                    TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
-                    TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
-                    TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
-                    temp_peek_sign[BufferOffest] = 0;
-                }
-                else if (SheetBuffer[y * front_p->width + x].a == 0)
-                {
-                    // pass
-                }
-                else
-                {
-                    TempBuffer[BufferOffest].r =
-                        SheetBuffer[y * front_p->width + x].r * SheetBuffer[y * front_p->width + x].a / 255 +
-                        TempBuffer[BufferOffest].r * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                    TempBuffer[BufferOffest].g =
-                        SheetBuffer[y * front_p->width + x].g * SheetBuffer[y * front_p->width + x].a / 255 +
-                        TempBuffer[BufferOffest].g * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                    TempBuffer[BufferOffest].b =
-                        SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 +
-                        TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                    if (!SheetBuffer[y * front_p->width + x].r)
-                    {
-                        if (!SheetBuffer[y * front_p->width + x].g)
-                        {
-                            if (!SheetBuffer[y * front_p->width + x].b)
-                            {
-                                if (!SheetBuffer[y * front_p->width + x].b && SheetBuffer[y * front_p->width + x].a != 0)
-                                {
-                                    goto no_peek1;
-                                }
-                            }
-                        }
-                    }
-                    temp_peek_sign[BufferOffest] = 1;
-                }
-no_peek1:
-                BufferOffest++;
-            }
-            BufferOffest += (sht->scrx - front_p->width);
-        }
-        front_p = front_p->next;
-    }
-
-    SHEET_BUFFER *temp_peek = sht->foxland.fl_peek_buffer;
-    for (int y = 0; y < sht->scry; y++)
-    {
-        for (int x = 0; x < sht->scrx; x++)
-        {
-            if (temp_peek_sign[y * sht->scrx + x] == 1)
-            {
-                TempBuffer[y * sht->scrx + x].r =
-                    temp_peek[y * sht->scrx + x].r * temp_peek[y * sht->scrx + x].a / 255 +
-                    TempBuffer[y * sht->scrx + x].r * (255 - temp_peek[y * sht->scrx + x].a) / 255;
-                TempBuffer[y * sht->scrx + x].g =
-                    temp_peek[y * sht->scrx + x].g * temp_peek[y * sht->scrx + x].a / 255 +
-                    TempBuffer[y * sht->scrx + x].g * (255 - temp_peek[y * sht->scrx + x].a) / 255;
-                TempBuffer[y * sht->scrx + x].b =
-                    temp_peek[y * sht->scrx + x].b * temp_peek[y * sht->scrx + x].a / 255 +
-                    TempBuffer[y * sht->scrx + x].b * (255 - temp_peek[y * sht->scrx + x].a) / 255;
-            }
-        }
-    }
-
-    memset(temp_peek_sign, 0, sht->scrx * sht->scry * sizeof(uint8_t));
-
-    if (USERGB)
-    {
-        for (int y = 0; y < sht->scry; y++)
-        {
-            for (int x = 0; x < sht->scrx; x++)
-            {
-                WriteRGBR(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b}, *sht->fbc);
-                TempBuffer++;
-            }
-        }
-    }
-    else
-    {
-        for (int y = 0; y < sht->scry; y++)
-        {
-            for (int x = 0; x < sht->scrx; x++)
-            {
-                WriteBGRR(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b}, *sht->fbc);
-                TempBuffer++;
-            }
-        }
-    }
-    SheetIsRefreshing = false;
-    write_serial_string("Refresh Success.\n");
-}
-
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
     if (!allow_to_flush)
@@ -763,6 +636,12 @@ no_peek2:
     SheetIsRefreshing = false;
 }
 
+void refresh_sheet(SHEET_INFO *sht)
+{
+    // 已摆烂
+    refresh_part_sheet(sht, 0, 0, sht->scrx - 1, sht->scry - 1);
+}
+
 uint32_t get_hor()
 {
     return fbc_addr->horizontal_resolution;
@@ -812,6 +691,32 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SH
                 {
                     if (src[y * width + x].a > 10)
                         dst[(dst_y + y) * front_p->width + (dst_x + x)] = src[y * width + x];
+                }
+            }
+        }
+        else if (front_p->next == NULL) { return; }
+        front_p = front_p->next;
+    }
+}
+
+SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha);
+
+void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
+                                     uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height)
+{
+    SHEET *front_p = sht->start;
+    while (true)
+    {
+        if (front_p->index == *dst_sheet_id)
+        {
+            // 找到啦！
+            SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    dst[(dst_y + y) * front_p->width + (dst_x + x)] = 
+                        LCD_AlphaBlend(src[y * width + x], dst[(dst_y + y) * front_p->width + (dst_x + x)], src[y * width + x].a);
                 }
             }
         }

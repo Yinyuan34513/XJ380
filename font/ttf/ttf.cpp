@@ -181,12 +181,15 @@ void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER
     print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
+extern uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
+
 uint64_t calc_ttf_length(char *str, int size)
 {
     // 懒得整了就这样吧
     uint32_t temp_i_width = 0;
-    uint16_t temp_sid = 32000;
-    print_fmt_box_ttf(sht_img, &temp_sid, {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
+    print_fmt_box_ttf(sht_img, 
+                      &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi, 
+                      {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
     return temp_i_width;
 }
 
