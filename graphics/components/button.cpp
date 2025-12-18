@@ -68,7 +68,7 @@ void process_click_event(SHEET *current_sht, int x, int y)
         {
             break;
         }
-        else if (front_p->obj_sheet == current_sht)
+        else if (front_p->obj_sheet->index == current_sht->index)
         {
             if (x >= front_p->x1 && x <= front_p->x2 
              && y >= front_p->y1 && y <= front_p->y2)

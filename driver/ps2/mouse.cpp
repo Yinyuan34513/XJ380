@@ -48,8 +48,10 @@ void process_mouse_button()
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
+                process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by);
             }
-            process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), tbx, tby);
+            
         }
 
         ms_dec.left   = false;
