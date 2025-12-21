@@ -14,7 +14,7 @@ DEBUG_FLAG = -s -S
 endif
 
 ifeq ($(SUDO), 1)
-SUDO_CMD = sudo
+SUDO_CMD = sudo -E env DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY
 endif
 
 ifeq ($(KVM), 1)
