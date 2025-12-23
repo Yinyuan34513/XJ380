@@ -73,10 +73,19 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                do_message(MSG_RBUTTON, 
+                if(current_window->type == XWIN_NORMAL)
+                {
+                    do_message(MSG_RBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
+                }else{
+                    do_message(MSG_RBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        current_window->WinMPf, current_window->w_task);
+                }
+                
             }
         }
 
@@ -98,10 +107,18 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                do_message(MSG_MBUTTON, 
+                if(current_window->type == XWIN_NORMAL)
+                {
+                    do_message(MSG_MBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
+                }else{
+                    do_message(MSG_MBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        current_window->WinMPf, current_window->w_task);
+                }
             }
         }
 
@@ -129,10 +146,19 @@ void process_mouse_button()
             tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                  + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
         ) { /* do nothing */ } else {
-            do_message(MSG_MOVE, 
+            if(current_window->type == XWIN_NORMAL)
+            {
+                do_message(MSG_MOVE, 
                     tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                     tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                     current_window->WinMPf, current_window->w_task);
+            }else{
+                do_message(MSG_MOVE, 
+                    tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                    tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                    current_window->WinMPf, current_window->w_task);
+            }
+            
         }
     }
 }
