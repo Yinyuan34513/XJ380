@@ -44,12 +44,26 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                do_message(MSG_LBUTTON, 
+                if (current_window->type == XWIN_NORMAL)
+                {
+                    do_message(MSG_LBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
-                process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+
+                    process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27);
+                } else {
+                    do_message(MSG_LBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        current_window->WinMPf, current_window->w_task);
+
+                    process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by);
+                }
             }
             
         }
@@ -73,13 +87,13 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                if(current_window->type == XWIN_NORMAL)
+                if (current_window->type == XWIN_NORMAL)
                 {
                     do_message(MSG_RBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
-                }else{
+                } else {
                     do_message(MSG_RBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
@@ -107,13 +121,13 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                if(current_window->type == XWIN_NORMAL)
+                if (current_window->type == XWIN_NORMAL)
                 {
                     do_message(MSG_MBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
-                }else{
+                } else {
                     do_message(MSG_MBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
@@ -146,13 +160,13 @@ void process_mouse_button()
             tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                  + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
         ) { /* do nothing */ } else {
-            if(current_window->type == XWIN_NORMAL)
+            if (current_window->type == XWIN_NORMAL)
             {
                 do_message(MSG_MOVE, 
                     tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                     tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                     current_window->WinMPf, current_window->w_task);
-            }else{
+            } else {
                 do_message(MSG_MOVE, 
                     tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
                     tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
