@@ -5,7 +5,6 @@
 #include <cpu/lock.h>
 #include <font.h>
 #include <proto.hpp>
-#include <fs/vfs/vfs.h>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
@@ -66,12 +65,11 @@ void write_serial(char a)
 }
 
 extern bool no_interrupt;
-extern vfs_node_t lognode;
+
 void write_serial_string(const char *str)
 {
     close_interrupt; // Avoid deadlock
     spin_lock(serial_lock);
-    if(lognode)vfs_write(lognode,(void*)str,lognode->size,strlen(str));
     while (*str)
     {
 #if BUILD_EDITION == DEBUG_VERSION  // 串口那么可爱为什么要谋害他（哭

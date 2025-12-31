@@ -62,29 +62,6 @@ tcb_t found_thread(pcb_t pcb, int tid)
     }
     return NULL;
 }
-int waitpid(int pid, int *pid_ret) {
-    get_current_task()->status = WAIT;
-    bool is_sti                = are_interrupts_enabled();
-    open_interrupt;
-
-    ipc_message_t mesg;
-    int           exit_code;
-    while (1) {
-        mesg = ipc_recv_wait(IPC_MSG_TYPE_EPID);
-        exit_code =
-            (mesg->data[3] << 24) | (mesg->data[2] << 16) | (mesg->data[1] << 8) | mesg->data[0];
-        if (pid == -1 || pid == mesg->pid) break;
-        ipc_send(get_current_task()->parent_group, mesg);
-    }
-    pcb_t wait_p = found_pcb(mesg->pid);
-    if (wait_p->status == ZOMBIE) kill_proc(wait_p, exit_code, false);
-    *pid_ret = mesg->pid;
-    free(mesg);
-
-    if (!is_sti) close_interrupt;
-    get_current_task()->status = RUNNING;
-    return exit_code;
-}
 
 void kill_proc(pcb_t pcb, int exit_code, bool is_zombie) {
     if (pcb == NULL) return;
@@ -162,36 +139,22 @@ void kill_proc0(pcb_t pcb) {
     free(pcb->cmdline);
     free(pcb->elf_file);
     if (pcb->envp) free_envp(pcb->envp);
-    if(pcb->parent_task && pcb->parent_task->xtttp_stc->is_shell)
-    {
-        kill_proc0(pcb->parent_task);
-    }
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", pcb->name, pcb->pid,
           pcb->vfork ? "true" : "false");
     if (!pcb->vfork) free_page_directory(pcb->pagedir);
     free(pcb);
 }
-extern void remove_task(tcb_t task);
+
 void kill_thread(tcb_t task) {
     if (task == NULL) return;
     if (task->task_level == TASK_IDLE_LEVEL) {
         write_serial_fmt("Cannot stop kernel thread.");
         return;
     }
-    task->status = OUT;
-    if(task->parent_group->thread_queue->size==1)
-    {
-        queue_remove_at(task->parent_group->thread_queue, task->group_index);
-        kill_proc0(task->parent_group);
-    }
-    
-    free((void *)(task->syscall_stack - KERNEL_STACK_SIZE));
-    page_directory_t *src_dir = get_current_directory();
-    switch_process_page_directory(task->parent_group->pagedir);
-    switch_process_page_directory(src_dir);
-    remove_task(task);
-    free(task);
+    task->status = DEATH;
 }
+
+extern void remove_task(tcb_t task);
 
 void kill_thread0(tcb_t task) {
     task->status = OUT;

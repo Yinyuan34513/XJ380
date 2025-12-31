@@ -373,7 +373,6 @@ extern void nvme_setup();
 extern int xhci_setup();
 extern void mount_root();
 extern void stdio_init();
-vfs_node_t lognode=NULL;
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -406,18 +405,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     vfs_init();
     fatfs_init();
     devfs_setup();
-    procfs_setup();
-    pipefs_setup();
-    stdio_init();
 
     pci_setup(BootConfig.MCFG);
     pci_init();
     ahci_setup();
     nvme_setup();
     partition_init();
-    mount_root();
-    vfs_mkfile("/system/LOG.txt");
-    lognode = vfs_open("/system/LOG.txt");
     // enable_intr();
     
     // disable_intr();
@@ -466,6 +459,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
+    
+    mount_root();
+    procfs_setup();
+    pipefs_setup();
+    stdio_init();
 
 
     signal_init();
@@ -511,7 +509,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     close_interrupt;
     disable_scheduler();
     
-    // create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
     open_interrupt;

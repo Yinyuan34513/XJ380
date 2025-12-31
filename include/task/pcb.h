@@ -81,8 +81,6 @@ typedef struct
 } TaskContext;
 struct vfs_node;
 typedef struct vfs_node *vfs_node_t;
-#define USER_BRK_START 0x0000700000000000
-#define USER_BRK_END 0x00007ffff0000000
 struct process_control_block
 {
     size_t   pid;  // 进程ID
@@ -115,7 +113,6 @@ struct process_control_block
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点
-    
 
     xtttp_dtt   *xtttp_stc;
 };
@@ -162,6 +159,7 @@ struct thread_control_block
 
     char **argv; // 参数指针
     size_t argc; // 参数数量
+
     uint64_t winnum;
     bool     hasfscr;
 };
