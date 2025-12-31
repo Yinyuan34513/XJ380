@@ -1890,8 +1890,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_PRINTLINE: do_xapi_Printline((char *)regs->rdi); break;
     case XAPI_PRINTF: do_xapi_Printf((char *)regs->rdi); break;
     case XAPI_OUTPUT_SERIAL: do_xapi_OutputSerial((char *)regs->rdi); break;
-    case XAPI_OPEN_FILE: break;
-    case XAPI_CLOSE_FILE: break;
+    case XAPI_OPEN_FILE: regs->rax = do_xapi_OpenFile(regs->rdi); break;
+    case XAPI_CLOSE_FILE: do_xapi_CloseFile(regs->rdi); break;
     case XAPI_SEARCH_FILE: do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_MAKEDIR: regs->rax = (uint64_t)vfs_mkdir((char *)regs->rdi); break;
     case XAPI_CREATE_FILE: regs->rax = (uint64_t)sys_open(( char *)regs->rdi, O_CREAT,0644,0,0,0,regs); break;

@@ -63,11 +63,8 @@ void xapi_Printf(WSTR fmt, ...)
 }
 
 // 3-2
-void xapi_OpenFile(
-	WSTR	path,
-	XFILE*	fsptr
-) {
-    enter_syscall(XAPI_OPEN_FILE, (UINT64)(path), (UINT64)(fsptr), 0, 0, 0, 0);
+XFILE *xapi_OpenFile(WSTR path) {
+    return (XFILE *)enter_syscall(XAPI_OPEN_FILE, (UINT64)(path), 0, 0, 0, 0, 0);
 }
 
 void xapi_CloseFile(XFILE* fsptr) {

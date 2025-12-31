@@ -49,9 +49,8 @@ void xapi_Printf(WSTR fmt, ...);
 void xapi_OutputSerial(WSTR str);
 
 // 3-2
-void xapi_OpenFile(
-	WSTR	path,
-	XFILE*	fsptr
+XFILE *xapi_OpenFile(
+	WSTR	path
 );
 
 void xapi_CloseFile(XFILE* fsptr); 

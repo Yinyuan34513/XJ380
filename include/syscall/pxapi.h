@@ -21,6 +21,10 @@ typedef  struct {
 	uint64_t	filetype;
 }  XAPIT_DirNode;
 
+typedef struct {
+	uint64_t    length;
+	void*	    buffer;
+} XFILE;
 
 
 // XJ380API XAPI Edition
@@ -184,6 +188,8 @@ void do_xapi_Sleep(uint64_t ms);
 void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
+uint64_t do_xapi_OpenFile(uint64_t path);
+void do_xapi_CloseFile(uint64_t ptr);
 
 
 

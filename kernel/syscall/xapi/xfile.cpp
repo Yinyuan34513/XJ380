@@ -25,6 +25,27 @@
 #include <ttf.h>
 #include <errno.h>
 
+uint64_t do_xapi_OpenFile(uint64_t path)
+{
+    char    *fpath = (char *)path;
+    XFILE   *fsptr = (XFILE *)malloc(sizeof(XFILE));
+
+    vfs_node_t f = vfs_open(fpath);
+    uint64_t length = f->size;
+    fsptr->buffer = malloc(length);
+    
+    vfs_read(f, fsptr->buffer, 0, length);
+
+    return (uint64_t)fsptr;
+}
+
+void do_xapi_CloseFile(uint64_t ptr)
+{
+    XFILE *fsptr = (XFILE *)ptr;
+    free(fsptr->buffer);
+    fsptr->buffer = NULL;
+}
+
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
 {
     char          *fpath  = (char *)path;
