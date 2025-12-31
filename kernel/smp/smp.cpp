@@ -217,7 +217,9 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
         lapic_write(LAPIC_REG_ICR0, ((size_t)trampoline >> 12) | 0x4600);
     }
 
-    for (int i = 0; i < 250; i++)
+    // 有的CPU（如275HX）会跑太快。。。
+    while (1)
+    // for (int i = 0; i < 250; i++)
     {
         if (*ready == 1)
         {

@@ -27,9 +27,9 @@ void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinM
     }
 
     // 检查是否有注册的信号处理函数
-    if (WinMpf != NULL && !current->parent_group->msgprci)
+    if (WinMpf != NULL)
     {
-        current->parent_group->msgprci = true;
+        // current->parent_group->msgprci = true;
         // 准备信号处理栈
         create_signal_thread((void *)WinMpf, msg_type, hData, lData, 
                              XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST, 
@@ -40,7 +40,7 @@ void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinM
 
 void message_end() 
 {
-    get_current_task()->parent_group->msgprci = false;
+    // get_current_task()->parent_group->msgprci = false;
     kill_thread(get_current_task()); // 他紫砂了
     while (true)
     {
