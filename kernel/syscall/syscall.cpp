@@ -155,7 +155,7 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
         if (handle->offset >= handle->node->size)
         {
             if (handle->node->type & file_pipe) { goto pipe; }
-            return EOK;
+            return 0;
         }
     }
 read:;
@@ -173,21 +173,21 @@ pipe:;
 }
 
 //要IPC
+extern int waitpid(int pid, int *pid_ret);
+sys_(waitpid, int pid, int *status, uint64_t options)
 
-// sys_(waitpid, int pid, int *status, uint64_t options)
-
-// {
-//     pcb_t wait_p;
-//     if (get_current_task()->parent_group->child_pcb->size == 0) return SYSCALL_FAULT_(ECHILD);
-//     if (pid == -1) goto wait;
-//     wait_p = found_pcb(pid);
-//     if (wait_p == NULL) return SYSCALL_FAULT_(ECHILD);
-// wait:
-//     int ret_pid = 0;
-//     int   status0 = waitpid(pid, &ret_pid);
-//     if (status) *status = status0;
-//     return ret_pid;
-// }
+{
+    pcb_t wait_p;
+    if (get_current_task()->parent_group->child_pcb->size == 0) return SYSCALL_FAULT_(ECHILD);
+    if (pid == -1) goto wait;
+    wait_p = found_pcb(pid);
+    if (wait_p == NULL) return SYSCALL_FAULT_(ECHILD);
+wait:
+    int ret_pid = 0;
+    int   status0 = waitpid(pid, &ret_pid);
+    if (status) *status = status0;
+    return ret_pid;
+}
 
 sys_(sigret)
 {
@@ -435,6 +435,106 @@ sys_(munmap, uint64_t addr, size_t size) {
     unmap_page_range(get_current_directory(), addr, size);
     return SYSCALL_SUCCESS;
 }
+spin_t mm_op_lock=SPIN_INIT;
+sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
+         uint64_t offset) {
+
+    addr = addr & (~(PAGE_SIZE - 1));
+
+    uint64_t aligned_len = (length + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+
+    if (check_user_overflow(addr, aligned_len)) { return -EFAULT; }
+
+    if (aligned_len == 0) { return SYSCALL_FAULT_(EINVAL); }
+    pcb_t process = get_current_task()->parent_group;
+
+    vma_manager_t *mgr        = &process->vma_manager;
+    uint64_t       start_addr = 0;
+    if (flags & MAP_FIXED) {
+        if (!addr) return SYSCALL_FAULT_(EINVAL);
+
+        start_addr = addr;
+        // 检查地址是否可用
+        if (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+            vma_unmap_range(mgr, start_addr, start_addr + aligned_len);
+        }
+    } else {
+        if (addr) {
+            start_addr = addr;
+            // 检查地址是否可用
+            if (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+        } else {
+            start_addr = USER_MMAP_START;
+            while (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+                start_addr += PAGE_SIZE;
+                if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
+            }
+        }
+    }
+
+    if (!(flags & MAP_ANONYMOUS)) {
+        if (queue_get(process->file_open, fd) == NULL) return SYSCALL_FAULT_(EBADF);
+    }
+
+    spin_lock(mm_op_lock);
+
+    vma_t *vma = vma_alloc();
+    if (!vma) return SYSCALL_FAULT_(ENOMEM);
+
+    vma->vm_start = start_addr;
+    vma->vm_end   = start_addr + aligned_len;
+    vma->vm_flags = 0;
+
+    if (prot & PROT_READ) vma->vm_flags |= VMA_READ;
+    if (prot & PROT_WRITE) vma->vm_flags |= VMA_WRITE;
+    if (prot & PROT_EXEC) vma->vm_flags |= VMA_EXEC;
+    if (flags & MAP_SHARED) vma->vm_flags |= VMA_SHARED;
+
+    if (flags & MAP_ANONYMOUS) {
+        vma->vm_type   = VMA_TYPE_ANON;
+        vma->vm_flags |= VMA_ANON;
+        vma->vm_fd     = -1;
+    } else {
+        vma->vm_type   = VMA_TYPE_FILE;
+        vma->vm_fd     = fd;
+        vma->vm_offset = (int64_t)offset;
+    }
+
+    vma_t *region = vma_find_intersection(mgr, start_addr, start_addr + aligned_len);
+    if (region) {
+        vma_remove(mgr, region);
+        vma_free(region);
+    }
+
+    if (vma_insert(mgr, vma) != 0) {
+        vma_free(vma);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    if (!(flags & MAP_ANONYMOUS)) {
+        uint64_t ret = (uint64_t)vfs_map((vfs_node_t)queue_get(process->file_open, fd), start_addr, aligned_len,
+                                         prot, flags, offset);
+        spin_unlock(mm_op_lock);
+        return ret;
+    }
+
+    uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
+
+    if (prot != PROT_NONE) {
+        if (prot & PROT_READ) pt_flags |= PTE_PRESENT;
+        if (prot & PROT_WRITE) pt_flags |= PTE_WRITEABLE;
+        if (!(prot & PROT_EXEC)) pt_flags |= PTE_NO_EXECUTE;
+    }
+
+    lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags);
+    spin_unlock(mm_op_lock);
+
+    return start_addr;
+
+    return addr;
+}
 
 sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t flags,
          uint64_t new_addr) {
@@ -568,7 +668,7 @@ sys_(exit_group, int exit_code)
     kill_proc(exit_process, exit_code,
               true); // 子进程调用，is_zombie = true，不能在child_pcb中删除当前进程
     open_interrupt;
-    //scheduler_yield();
+    scheduler_yield();
     cpu_hlt;
 }
 
@@ -608,7 +708,7 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
             i++;
         }
 
-        // sigexit = signals_pending_quick(current_task);
+        // sigexit = signals_pending_quick(get_current_task());
 
         if (ready > 0 || sigexit) break;
 
@@ -1670,18 +1770,18 @@ error_pr:
     return SYSCALL_FAULT_(EINVAL);
 }
 
-// sys_(chroot, char *path)
-// {
-//     if (path == NULL) return SYSCALL_FAULT_(EINVAL);
-//     char      *npath   = vfs_cwd_path_build(path);
-//     pcb_t      process = get_current_task()->parent_group;
-//     vfs_node_t node    = vfs_open(npath);
-//     free(npath);
-//     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
-//     if (process->proc_root != NULL) vfs_close(process->proc_root);
-//     process->proc_root = node;
-//     return SYSCALL_SUCCESS;
-// }
+sys_(chroot, char *path)
+{
+    if (path == NULL) return SYSCALL_FAULT_(EINVAL);
+    char      *npath   = vfs_cwd_path_build(path);
+    pcb_t      process = get_current_task()->parent_group;
+    vfs_node_t node    = vfs_open(npath);
+    free(npath);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    if (process->proc_root != NULL) vfs_close(process->proc_root);
+    process->proc_root = node;
+    return SYSCALL_SUCCESS;
+}
 
 sys_(statfs, char *path, struct statfs *buf)
 {

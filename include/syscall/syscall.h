@@ -3,11 +3,12 @@
 #include "pxapi.h"
 #include <syscall/signal.h>
 #include <cpu/longm.h>
+#include <errno.h>
 
 #define XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS 0x000000011717450000
 #define XPSR_OFFEST                         0x927
 
-#define SYSCALL_SUCCESS      EOK
+#define SYSCALL_SUCCESS      0
 #define SYSCALL_FAULT        ((uint64_t)-(ENOSYS))
 #define SYSCALL_FAULT_(name) ((uint64_t)-(name))
 #define FD_SETSIZE           1024
