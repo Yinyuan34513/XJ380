@@ -74,6 +74,12 @@ void  xapi_SetIcon(
 	WSTR  	path
 );
 
+void xapi_GetWindowSize(
+	HDLE handle, 
+	UINT64* width, 
+	UINT64* height
+);
+
 
 // 4-2
 void  xapi_DrawPoint (

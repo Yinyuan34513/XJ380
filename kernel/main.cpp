@@ -108,6 +108,8 @@ typedef struct TimerWidgetsData
 
 TimerWidgetsData *tw_data = NULL;
 
+bool have_full_screen_app = false;
+
 void components_flusher()
 {
     while (true)
@@ -122,7 +124,7 @@ void components_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data != NULL)
+        if (tw_data != NULL && !have_full_screen_app)
         {
             tm         *time          = &tw_data->time;
             tm         *old_time      = &tw_data->old_time;
@@ -296,7 +298,8 @@ void desktop_flusher()
 
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);

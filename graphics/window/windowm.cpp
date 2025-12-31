@@ -31,10 +31,12 @@ void init_xwm(XWM_INFO *xwmi)
 }
 
 extern uint16_t   dock_sheet_id;
+extern bool have_full_screen_app;
 
 void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 {
     WindowIsCreating = true;
+    have_full_screen_app = true;
 
     WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
     memset(new_window, 0, sizeof(WINDOWLS));
