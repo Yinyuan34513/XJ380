@@ -43,7 +43,7 @@ void do_xapi_CloseFile(uint64_t ptr)
 {
     XFILE *fsptr = (XFILE *)ptr;
     free(fsptr->buffer);
-    fsptr->buffer = NULL;
+    free(fsptr);
 }
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
