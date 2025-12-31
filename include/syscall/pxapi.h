@@ -190,6 +190,7 @@ void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, 
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
 uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
+void do_xapi_Broken(char *info);
 
 
 

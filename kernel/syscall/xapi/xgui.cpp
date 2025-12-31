@@ -493,3 +493,22 @@ void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
     unregister_button_components(found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)),
                                  CRLid);
 }
+
+void do_xapi_Broken(char *info)
+{
+    WINDOWLS *BrokenNoticeWindow;
+    create_window(xwmii, sht_img, &BrokenNoticeWindow, "Oops!", 400, 100);
+    char title[64];
+    memset(title, 0, sizeof(char) * 64);
+    strcat(title, get_current_task()->name);
+    strcat(title, " 崩溃了！");
+    char einfo[64];
+    memset(einfo, 0, sizeof(char) * 64);
+    strcat(einfo, "崩溃信息：");
+    strcat(einfo, info);
+    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), title, BLACK, 20, 0 + 27, 16);
+    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), einfo, BGRAY, 20, 32 + 27, 10);
+    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), "您可以尝试向应用程序开发者提供本窗口的信息进行求助。", BGRAY, 20, 48 + 27, 10);
+
+    draw_rect(sht_img, &(BrokenNoticeWindow->w_sheet), 12, 70 + 27, 411, 126, GRAY);
+}

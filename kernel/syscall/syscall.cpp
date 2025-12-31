@@ -1952,8 +1952,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_GET_TIME: regs->rax = (uint64_t)do_xapi_GetTime(); break;
     case XAPI_GET_CURRENT_USER: do_xapi_GetCurrentUser(regs->rdi); break;
     case XAPI_SLEEP: do_xapi_Sleep(regs->rdi); break;
-    case XAPI_CALC_TEXT_WIDTH: regs->rax = calc_ttf_length((char *)regs->rdi, regs->rsi);
-    case XAPI_DELETE_BUTTON: do_xapi_DeleteButton(regs->rdi, regs->rsi);
+    case XAPI_CALC_TEXT_WIDTH: regs->rax = calc_ttf_length((char *)regs->rdi, regs->rsi); break;
+    case XAPI_DELETE_BUTTON: do_xapi_DeleteButton(regs->rdi, regs->rsi); break;
+    case XAPI_BROKEN: do_xapi_Broken((char *)regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 

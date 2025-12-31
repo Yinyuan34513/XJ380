@@ -16,9 +16,6 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         register_click(hData, lData);
         break;
-    case MSG_CRL:
-        xapi_OutputSerial("114514\n");
-        break;
     }
     return;
 }
@@ -47,8 +44,6 @@ int main(int argc, char *argv[], char *envp[])
     strcpy(path_his[0], "/");  // 初始路径为根目录
     path_p = 0;  // 当前位置指针
     path_r = 0;  // 最早位置指针
-
-    xapi_Button(handle, 100, 100, 0, "114514 测试");
 
     xapi_RefreshWindow(handle);
 

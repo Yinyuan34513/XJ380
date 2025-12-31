@@ -71,7 +71,6 @@ void process_click_event(SHEET *current_sht, int x, int y)
         else if (front_p->obj_sheet->index == current_sht->index)
         {
             WINDOWLSP current_window = sht_found_win(xwmii, sht_img, current_sht);
-            write_serial_fmt("X: %d, Y: %d, X1: %d, X2: %d, Y1: %d, Y2: %d\n", x, y, front_p->x1, front_p->x2, front_p->y1, front_p->y2);
             if (x >= front_p->x1 && x <= front_p->x2 
              && y >= front_p->y1 && y <= front_p->y2)
             {
