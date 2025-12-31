@@ -88,14 +88,18 @@ void put_button_theme(WINDOWLS *windowls, int x, int y, char *str, int CRLid, bo
 {
     uint64_t width = calc_ttf_length(str, 10);
     SHEET_BUFFER *mtl;
-    SHEET_BUFFER *dst = (SHEET_BUFFER *)malloc((width + 7) * 17 * 4);
+    SHEET_BUFFER *dst = (SHEET_BUFFER *)malloc((width + 22) * 24 * 4);
     if (dst == NULL) return;
     if (!underline) { LoadPictureOgM(&mtl, "/system/icon/button.png"); }
     else { LoadPictureOgM(&mtl, "/system/icon/buttonemp.png"); }
-    resize_theme_width(dst, mtl, width + 7, 37, 17);
-    copy_buffer_blend_by_id(sht_img, &(windowls->w_sheet), dst, x, y, width + 7, 17);
+    resize_theme_width(dst, mtl, width + 22, 52, 24);
+    copy_buffer_blend_by_id(sht_img, &(windowls->w_sheet), dst, x, y, width + 22, 24);
     register_button_components(found_sheet_byid(sht_img, &(windowls->w_sheet)), 
-                               x, y, x + width + 7, y + 17, CRLid);
+                               x, y, x + width + 22, y + 24, CRLid);
+
+    if (!underline) { print_box_ttf(sht_img, &(windowls->w_sheet), str, {0x00, 0x00, 0x00, 0xff}, x + 12, y + 2, 10); }
+    else { print_box_ttf(sht_img, &(windowls->w_sheet), str, {0xff, 0xff, 0xff, 0xff}, x + 12, y + 2, 10); }
+    
     free(mtl);
     free(dst);
 }
