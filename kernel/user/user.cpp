@@ -74,7 +74,21 @@ void get_thread_name_from_filepath(char *path, char *name)
     }
     *q = '\0';
 }
-
+void* aligned_malloc(size_t size, size_t alignment) {
+    // 分配额外空间用于存储原始指针
+    size_t extra = alignment - 1 + sizeof(void*);
+    void* original = malloc(size + extra);
+    
+    if (!original) return nullptr;
+    
+    // 计算对齐后的地址
+    void* aligned = (void*)(((uintptr_t)original + sizeof(void*) + alignment - 1) & ~(alignment - 1));
+    
+    // 在aligned指针前保存original指针
+    ((void**)aligned)[-1] = original;
+    
+    return aligned;
+}
 uint64_t parse_elf_file(char *path, pcb_t group)
 {
     Elf64_Ehdr  ehdr;
@@ -126,7 +140,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     uint64_t entry = ehdr.e_entry;
 
-    elf_mapping_space *mapping_space = (elf_mapping_space *)malloc(sizeof(elf_mapping_space));
+    elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16,sizeof(elf_mapping_space));
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
                          (uint64_t *)&mapping_space->load_end);
 
