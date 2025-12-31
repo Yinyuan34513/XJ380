@@ -48,7 +48,7 @@ int main(int argc, char *argv[], char *envp[])
     path_p = 0;  // 当前位置指针
     path_r = 0;  // 最早位置指针
 
-    xapi_Button(handle, 0, 0, 0, "114514 测试");
+    xapi_Button(handle, 100, 100, 0, "114514 测试");
 
     xapi_RefreshWindow(handle);
 
