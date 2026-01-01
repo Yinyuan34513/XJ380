@@ -7,8 +7,7 @@
 // 全局变量定义
 int  cur_x  = 0;
 int  cur_y  = 0;
-int  ab_hsf = 0;
-int *ab_x   = &ab_hsf;
+int *ab_x   = &cur_x;
 int *ab_y   = &cur_y;
 
 char char_buffer[64];
@@ -74,7 +73,7 @@ int main(int argc, char *argv[], char *envp[])
 
     strcpy(current_path, "/");
     print_to_console("XINGJI SpaceTerminal for XJ380");
-    print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
+    print_to_console("Copyright(C) XINGJI Interactive Software 2017-2026 All rights reserved.");
     paint_arrow_sign(2, 40);
     xapi_RefreshWindow(handle);
 

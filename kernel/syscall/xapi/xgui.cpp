@@ -20,6 +20,7 @@
 #include <syscall/pxapi.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <graphics/components/button.h>
 
 bool winRD_lock = false;
 
@@ -454,4 +455,60 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     {
         PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
     }
+}
+
+void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *button_text  = (char *)(text);
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x + 12, y + 27, button_text, CRLid, false);
+    }
+    else
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x, y, button_text, CRLid, false);
+    }
+}
+
+void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *button_text  = (char *)(text);
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x + 12, y + 27, button_text, CRLid, true);
+    }
+    else
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x, y, button_text, CRLid, true);
+    }
+}
+
+void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    unregister_button_components(found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)),
+                                 CRLid);
+}
+
+void do_xapi_Broken(char *info)
+{
+    WINDOWLS *BrokenNoticeWindow;
+    create_window(xwmii, sht_img, &BrokenNoticeWindow, "Oops!", 400, 100);
+    char title[64];
+    memset(title, 0, sizeof(char) * 64);
+    strcat(title, get_current_task()->name);
+    strcat(title, " 崩溃了！");
+    char einfo[64];
+    memset(einfo, 0, sizeof(char) * 64);
+    strcat(einfo, "崩溃信息：");
+    strcat(einfo, info);
+    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), title, BLACK, 20, 0 + 27, 16);
+    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), einfo, BGRAY, 20, 32 + 27, 10);
+    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), "您可以尝试向应用程序开发者提供本窗口的信息进行求助。", BGRAY, 20, 48 + 27, 10);
+
+    draw_rect(sht_img, &(BrokenNoticeWindow->w_sheet), 12, 70 + 27, 411, 126, GRAY);
 }

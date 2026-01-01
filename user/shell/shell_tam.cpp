@@ -5,7 +5,6 @@
 
 extern int  cur_x;
 extern int  cur_y;
-extern int  ab_hsf;
 extern int *ab_x;
 extern int *ab_y;
 extern char char_buffer[64];
@@ -42,6 +41,65 @@ void tam_flush_buffer()
     }
 }
 
+#include <stdint.h>
+
+// UTF-8辅助函数
+static int utf8_char_len(unsigned char c) {
+    if ((c & 0x80) == 0x00) return 1;      // ASCII
+    if ((c & 0xE0) == 0xC0) return 2;      // 2字节
+    if ((c & 0xF0) == 0xE0) return 3;      // 3字节（大多数中文字符）
+    if ((c & 0xF8) == 0xF0) return 4;      // 4字节
+    return 1;  // 无效，按单字节处理
+}
+
+void ptt_console_sp(char *str)
+{
+    char *p = str;
+    while (*p != '\0')
+    {
+        if (cur_x + 9 >= TML_X - 8) { newline(); }
+
+        if (*p == '\n')
+        {
+            // 换行
+            newline();
+        }
+        else if (*p == '\b')
+        {
+            // 退格
+            backspace();
+        }
+        else
+        {
+            // 获取UTF-8字符长度
+            int char_len = utf8_char_len((unsigned char)*p);
+            
+            if (char_len == 1)
+            {
+                // ASCII字符：使用等宽字体
+                char temp_char_buffer[2];
+                temp_char_buffer[0] = *p;
+                temp_char_buffer[1] = '\0';
+                xapi_DrawSWText(handle, *ab_x, *ab_y, temp_char_buffer, TERMINAL_TEXT_COLOR);
+                cur_x += 9;  // 等宽字体每个字符9像素
+            }
+            else
+            {
+                // 中文字符
+                char utf8_char[5] = {0};
+                for (int i = 0; i < char_len && *p != '\0'; i++) {
+                    utf8_char[i] = *p++;
+                }
+                p--; // 退一步
+                
+                // 中文
+                xapi_DrawSWText(handle, *ab_x, *ab_y, utf8_char, TERMINAL_TEXT_COLOR);
+                cur_x += 18;  // 中文字符宽度 = ASCII * 2 （也许）
+            }
+        }
+        p++;
+    }
+}
 void tam_main_loop()
 {
     cur_y += 2;
@@ -56,11 +114,11 @@ void tam_main_loop()
         read_xttp_buffer(output_stream);
         if (output_stream[0] != '\0') 
         {
-            print_to_console(output_stream);
+            ptt_console_sp(output_stream);
             memset(output_stream, 0, (strlen(output_stream) + 1) * sizeof(uint8_t));
             xapi_RefreshWindow(handle);
+            terminal_app_mark_finish_output();
         }
-        terminal_app_mark_finish_output();
 
         // 检查输入缓冲区
         if (check_read_xttp_buffer() && input_is_enter)

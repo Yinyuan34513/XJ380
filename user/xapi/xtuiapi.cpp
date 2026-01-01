@@ -26,12 +26,45 @@ void xapi_OutputSerial(WSTR str) {
     enter_syscall(XAPI_OUTPUT_SERIAL, (UINT64)(str), 0, 0, 0, 0, 0);
 }
 
+#define SERIAL_WRITE_BUFFER_SIZE 1024
+char   serial_write_buffer[SERIAL_WRITE_BUFFER_SIZE] = {0};
+size_t serial_write_buffer_index                     = 0;
+
+uint8_t serial_write_handler(Writer *writer, char ch)
+{
+    (void)writer;
+    serial_write_buffer[serial_write_buffer_index] = ch;
+    ++serial_write_buffer_index;
+    if (serial_write_buffer_index >= SERIAL_WRITE_BUFFER_SIZE - 1) // 1 for '\0'
+    {
+        xapi_Output(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    } // Flush buffer
+    serial_write_buffer[serial_write_buffer_index] = '\0';
+    return 0;
+}
+
+Writer SerialWriter = {
+    .data    = serial_write_buffer,
+    .handler = serial_write_handler,
+};
+
+void xapi_Printf(WSTR fmt, ...)
+{
+	va_list args;
+    va_start(args, fmt);
+    vwprintf(&SerialWriter, fmt, args);
+    // flush buffer
+    if (serial_write_buffer_index > 0)
+    {
+        enter_syscall(XAPI_PRINTF, (UINT64)(serial_write_buffer), 0, 0, 0, 0, 0);
+        serial_write_buffer_index = 0;
+    }
+}
+
 // 3-2
-void xapi_OpenFile(
-	WSTR	path,
-	XFILE*	fsptr
-) {
-    enter_syscall(XAPI_OPEN_FILE, (UINT64)(path), (UINT64)(fsptr), 0, 0, 0, 0);
+XFILE *xapi_OpenFile(WSTR path) {
+    return (XFILE *)enter_syscall(XAPI_OPEN_FILE, (UINT64)(path), 0, 0, 0, 0, 0);
 }
 
 void xapi_CloseFile(XFILE* fsptr) {
@@ -193,6 +226,10 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }
 
+void	xapi_Exit(UINT64 value) {
+	enter_syscall(SYS_EXIT, value, 0, 0, 0, 0, 0);
+}
+
 // 3-5
 void	xapi_GetSystemVersion(WSTR version) {
 	enter_syscall(XAPI_GET_VERSION, (uint64_t)version, 0, 0, 0, 0, 0);
@@ -206,6 +243,10 @@ void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
 }
 
+void	xapi_GetTimeX(TimeType *tm) {
+	enter_syscall(XAPI_GET_TIME_X, (uint64_t)tm, 0, 0, 0, 0, 0);
+}
+
 // 3-6
 void	xapi_Broken(WSTR broken_info) {
 	enter_syscall(XAPI_BROKEN, (uint64_t)broken_info, 0, 0, 0, 0, 0);
@@ -213,4 +254,9 @@ void	xapi_Broken(WSTR broken_info) {
 
 void	xapi_SendAppMessage(WSTR title, WSTR text) {
 	enter_syscall(XAPI_BROKEN, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
+}
+
+void 	xapi_Sleep(UINT64 ms)
+{
+	enter_syscall(XAPI_SLEEP, ms, 0, 0, 0, 0, 0);
 }

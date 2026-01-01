@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf
 
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -Wno-writable-strings
 
@@ -47,8 +47,13 @@ FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
                 ./fmanager/fm_pathp.cpp \
                 ./fmanager/fm_processp.cpp 
 
+CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
+                ./ctrlmenu/cm_graph.cpp \
+                ./ctrlmenu/cm_processp.cpp 
+
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
+CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
 
 shell.elf: $(SHELL_OBJECTS)
 	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(SHELL_OBJECTS) -o ../out/$@
@@ -64,13 +69,23 @@ shell.elf: $(SHELL_OBJECTS)
 fmanager.elf: $(FMANAGER_OBJECTS)
 	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(FMANAGER_OBJECTS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@echo "LINK shell objects -> ../out/$@"
+	@echo "LINK fmanager objects -> ../out/$@"
 
 ../out/fmanager/%.o: ./fmanager/%.cpp
 	@mkdir -p $(@D)
 	@$(CPP) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
+ctrlmenu.elf: $(CTRLMENU_OBJECTS)
+	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(CTRLMENU_OBJECTS) -o ../out/$@
+#	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "LINK ctrlmenu objects -> ../out/$@"
+
+../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp
+	@mkdir -p $(@D)
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager.* ../out/fmanager/*.* ../out/bcms-sp.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.*

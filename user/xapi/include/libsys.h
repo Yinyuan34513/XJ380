@@ -118,9 +118,12 @@
 #define XAPI_GET_TIME           412
 #define XAPI_GET_CURRENT_USER   413
 
+#define XAPI_GET_TIME_X         433
+
 // P3.6
 #define XAPI_BROKEN         428
 #define XAPI_SEND_APP_MSG   429
+#define XAPI_SLEEP          430
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -141,6 +144,7 @@
 
 #define XAPI_DRAW_TEXT_L      414
 #define XAPI_DRAW_TEXT_SW     415
+#define XAPI_CALC_TEXT_WIDTH  431
 
 // P4.3
 #define XAPI_DRAW_BMP       403
@@ -169,6 +173,7 @@
 
 // P4.6
 #define XAPI_BUTTON       410
-#define XAPI_BUTTON_STYLE 411
+#define XAPI_BUTTON_EMP   411
+#define XAPI_DELETE_BUTTON  432
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

@@ -944,17 +944,3 @@ void merge_string(char *dst, char *src)
 
     *s1 = '\0';
 }
-
-void revert_path(char *path)
-{
-    char *s = path;
-    while (*s)
-        s++;
-
-    while (*s != '/')
-        s--;
-
-    if (s == path) s++;
-
-    *s = '\0';
-}

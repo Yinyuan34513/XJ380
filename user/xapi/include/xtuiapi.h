@@ -4,7 +4,7 @@
  *      XACT C\C++ Header
  *      XJ380API XAPI Edition TUI Part
  *      Release Version 1.0.0 - 2025/5/10
- *      Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.
+ *      Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
  * 
@@ -39,18 +39,31 @@ typedef struct {
 	UINT64	 filetype;
 }  DirNode;
 
+typedef struct
+{
+    int tm_sec;   // 秒数 [0，59]
+    int tm_min;   // 分钟数 [0，59]
+    int tm_hour;  // 小时数 [0，59]
+    int tm_mday;  // 1 个月的天数 [1，31]
+    int tm_mon;   // 1 年中月份 [1，12]
+    int tm_year;  // 年数
+    int tm_wday;  // 1 星期中的某天 [0，6] (星期一 =0)
+    int tm_yday;  // 1 年中的某天 [0，365]
+    int tm_isdst; // 夏令时标志
+} TimeType;
+
 // 3-1
 void xapi_Output(WSTR str);
 void xapi_Input(WSTR str);
 char xapi_Getch();
 void xapi_EndLine();
 void xapi_PrintLine(WSTR str);
+void xapi_Printf(WSTR fmt, ...);
 void xapi_OutputSerial(WSTR str);
 
 // 3-2
-void xapi_OpenFile(
-	WSTR	path,
-	XFILE*	fsptr
+XFILE *xapi_OpenFile(
+	WSTR	path
 );
 
 void xapi_CloseFile(XFILE* fsptr); 
@@ -78,12 +91,15 @@ UINT32 	toRGBA(UINT32 color);
 // 3-4
 UINT64  xapi_Fork();
 UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);
+void	xapi_Exit(UINT64 value);
 
 // 3-5
 void	xapi_GetSystemVersion(WSTR version);
 UINT64	xapi_GetTime();
 void	xapi_GetCurrentUser(UserInfo *user_info);
+void	xapi_GetTimeX(TimeType *tm);
 
 // 3-6
 void	xapi_Broken(WSTR broken_info);
 void	xapi_SendAppMessage(WSTR title, WSTR text);
+void 	xapi_Sleep(UINT64 ms);

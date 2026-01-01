@@ -325,7 +325,7 @@ size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
     
-    spin_lock(scheduler_lock);
+    // spin_lock(scheduler_lock);
     
     // 确保任务有基本设置
     if (new_task->status == CREATE) {
@@ -346,15 +346,15 @@ size_t add_task(tcb_t new_task)
 
     // debug_sched_queue(min_cpu->scheduler_queue);
     
-    spin_unlock(scheduler_lock);
+    // spin_unlock(scheduler_lock);
     return new_task->queue_index;
 }
 
 void remove_task(tcb_t task) {
     if (task == NULL) return;
-    spin_lock(scheduler_lock);
+    // spin_lock(scheduler_lock);
 
     PROCESSOR_INFO *smp = get_cpu(task->cpu_id);
     queue_remove_at(smp->scheduler_queue, task->queue_index);
-    spin_unlock(scheduler_lock);
+    // spin_unlock(scheduler_lock);
 }

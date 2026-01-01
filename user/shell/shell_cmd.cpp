@@ -39,7 +39,7 @@ void check_command()
     if (strncmp("version", cmd, 7) == 0)
     {
         print_to_console("XINGJI SpaceTerminal for XJ380 [Release Edition]");
-        print_to_console("Version 1.0.0 - 2025/10/4   Platform: Only for XJ380");
+        print_to_console("Version 1.0.0 - 2026/10/4   Platform: Only for XJ380");
         print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
     }
     else if (strncmp("dir", cmd, 3) == 0 || strncmp("ls", cmd, 2) == 0) { print_dir(); }

@@ -13,7 +13,11 @@
 char          *ttf_buffer;
 stbtt_fontinfo font;
 
-SHEET_BUFFER   *mono_xpf_buffer;
+extern char          *ttf_buffer_c;
+extern stbtt_fontinfo font_c;
+
+extern char          *ttf_buffer_m;
+extern stbtt_fontinfo font_m;
 
 SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
@@ -177,27 +181,19 @@ void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER
     print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
-#define TTF_BUF_SIZE 128
+extern uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
-typedef struct FbTTFWriterData
+uint64_t calc_ttf_length(char *str, int size)
 {
-    SHEET_INFO  *sht;
-    uint16_t    *sheet_id;
-    SHEET_BUFFER color;
-    int          start_x;
-    int          start_y;
-    int          x;
-    int          y;
-    int          size;
+    // 懒得整了就这样吧
+    uint32_t temp_i_width = 0;
+    print_fmt_box_ttf(sht_img, 
+                      &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi, 
+                      {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
+    return temp_i_width;
+}
 
-    // 缓冲区设计
-    Rune   *rune_buf;      // Rune缓冲区指针
-    size_t  rune_buf_size; // Rune缓冲区总大小
-    char   *buf;           // 缓冲区指针
-    size_t  idx;           // 当前写入位置
-    size_t  buf_size;      // 缓冲区总大小
-    uint8_t flush;         // 刷新标志
-} FbTTFWriterData;
+#define TTF_BUF_SIZE 128
 
 // 辅助函数：计算UTF-8字符的字节数
 static int utf8_char_len(unsigned char c)
@@ -235,6 +231,12 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         p += chartorune(&r[i++], p);
     }
 
+    // 渲染文本
+    unsigned int   width  = 0;
+    unsigned int   height = 0;
+    unsigned char *bitmap = TTF_Print(r, &width, &height, data->size);
+    *i_width = width;
+
     // 查找图层
     SHEET *front_p = data->sht->start;
     while (front_p != NULL)
@@ -248,10 +250,6 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         return;
     }
 
-    // 渲染文本
-    unsigned int   width  = 0;
-    unsigned int   height = 0;
-    unsigned char *bitmap = TTF_Print(r, &width, &height, data->size);
     put_bitmap(data->sht, data->sheet_id, bitmap, data->x, data->y, width, height, 1920, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
@@ -380,81 +378,12 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
 // 				  /*bc, */ x, y, size);
 // }
 
-char mono_index1[53] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-char mono_index2[43] = "0123456789~-=!@#$%^&*()_+[]\\{}|;':\",./<>? ";
-
-// 刷新缓冲区内容到屏幕
-void print_box_ttfc(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
-				   /*unsigned bc, */ unsigned x, unsigned y, int size)
-{
-	// 查找图层
-	SHEET *front_p = sht->start;
-	while (true)
-	{
-		if (front_p->index == *sheet_id)
-		{
-			break;
-		}
-		else if (front_p->next == NULL)
-		{
-			return;
-		}
-		front_p = front_p->next;
-	}
-	SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-
-    int ox = x;
-    int oy = y;
-
-    char *current_char = buf;
-    for (int len = 0; len < strlen(buf); len++)
-    {
-        char index_pointer = 0;
-        bool in_index1     = true;
-        while (mono_index1[index_pointer])
-        {
-            if (mono_index1[index_pointer] == *current_char)
-                goto flush_mono;
-            index_pointer++;
-        }
-
-        in_index1 = false;
-        index_pointer = 0;
-        while (mono_index2[index_pointer])
-        {
-            if (mono_index2[index_pointer] == *current_char)
-                goto flush_mono;
-            index_pointer++;
-        }
-
-        write_serial_string("Font Flusher: Character not found.\n");
-        continue;
-
-flush_mono:
-        for (int i = 0; i < 9; i++)
-        {
-            for (int j = 0; j < 16; j++)
-            {
-                SheetBuffer[(y + j) * front_p->width + (x + i)] =
-                    LCD_AlphaBlend(fc, SheetBuffer[(y + j) * front_p->width + (x + i)], 
-                    255 - mono_xpf_buffer[(j + (in_index1 ? 0 : 16)) * 468 + (i + index_pointer * 9)].a);
-            }
-        }
-
-        current_char++;
-        x += 9;
-    }
-    refresh_part_sheet(sht, ox, oy, x + strlen(buf) * 9, y + 16);
-}
-
-
-
 void init_ttf()
 {
     write_serial_string("Initializing Font...\n");
     // delay_s(10);
 
-    // 完整不等宽字体
+    // 不等宽字体
     vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
     if (!v)
     {
@@ -476,15 +405,27 @@ void init_ttf()
 
     vfs_close(v);
 
-    // 英文等宽字体
-    write_serial_string("Reading Font - XJ380C (2/2)...\n");
-    LoadPictureOgM(&mono_xpf_buffer, "/system/font/XJ380C.xpf");
-    if (!mono_xpf_buffer)
+    // 等宽字体
+    v = vfs_open("/system/font/XJ380C.ttf");
+    if (!v)
     {
-        write_serial_string("Cannot find/read XJ380C.xpf\n");
+        write_serial_string("Cannot find XJ380C.ttf\n");
+        // wsod_cannot_load_ttf();
+        return;
+    }
+    ttf_buffer_c = (char *)malloc(v->size);
+    write_serial_string("Reading Font - XJ380C (2/2)...\n");
+    vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
+    if (*(uint64_t *)ttf_buffer_c == 0)
+    {
+        write_serial_string("Cannot read XJ380C.ttf\n");
         return;
     }
     write_serial_string("Loading Font - XJ380C (2/2)...\n");
+    stbtt_InitFont(&font_c, (uint8_t *)ttf_buffer_c, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer_c, 0));
+    set_size(16);
+
+    vfs_close(v);
 
     write_serial_string("TTF Initialize Success.\n");
 }

@@ -60,6 +60,12 @@ err:;
     write_serial_string(error_msg);
     write_serial_string("\n");
 
+    write_serial_string("Fault Thread Name: ");
+    write_serial_string(get_current_task()->name);
+    write_serial_string(" ");
+    write_serial_hex((uint64_t)get_current_task());
+    write_serial_string("\n");
+
     backtrace(frame);
 
     while (1)

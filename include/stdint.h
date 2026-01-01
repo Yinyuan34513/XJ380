@@ -1,4 +1,4 @@
-// 版权所有©XINGJI Studios 2017-2025 保留所有权利。
+// 版权所有©XINGJI Studios 2017-2026 保留所有权利。
 // XJ380 类型定义头文件
 #ifndef _STDINT_H_
 #define _STDINT_H_

@@ -100,7 +100,12 @@ void xapi_DrawSWText(
 	WSTR 	str,
 	UINT32  color
 ) {
-	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y, (UINT64)(str), 10, color);
+	enter_syscall(XAPI_DRAW_TEXT_SW, handle, x, y - 2, (UINT64)(str), 10, color);
+}
+
+UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size)
+{
+	enter_syscall(XAPI_CALC_TEXT_WIDTH, (UINT64)str, size, 0, 0, 0, 0);
 }
 
 
@@ -196,16 +201,19 @@ void xapi_RefreshWindow(HDLE handle) {
 void xapi_Button(
 	HDLE  	handle,
 	UINT64  CRLid,
+	UINT64  x,
+	UINT64  y,
 	WSTR  	text
 ) {
-	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), 0, 0, 0);
+	enter_syscall(XAPI_BUTTON, handle, x, y, CRLid, (UINT64)(text), 0);
 }
 
-void xapi_StyleButton(
+void xapi_ButtonEmp(
 	HDLE  	handle,
 	UINT64  CRLid,
-	WSTR  	text,
-	WSTR  	path
+	UINT64  x,
+	UINT64  y,
+	WSTR  	text
 ) {
-	enter_syscall(XAPI_WRITEBUFFERA, handle, CRLid, (UINT64)(text), (UINT64)(path), 0, 0);
+	enter_syscall(XAPI_BUTTON_EMP, handle, x, y, CRLid, (UINT64)(text), 0);
 }

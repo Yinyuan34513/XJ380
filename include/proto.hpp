@@ -74,6 +74,11 @@ void default_isr(struct X64_REGS *regs, uint64_t error_code);
 
 // graphics/sheet.cpp
 
+// graphics/window/theme.cpp
+
+void resize_theme_width(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t swidth, uint32_t height);
+void resize_theme_height(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t height, uint32_t sheight);
+
 // graphics/window/windowm.cpp
 
 // lib/utflib.c
@@ -249,7 +254,9 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
 void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height);
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
-                                     uint32_t dst_y, uint32_t width, uint32_t height);
+                        uint32_t dst_y, uint32_t width, uint32_t height);
+void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
+                        uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
 
 void backtrace(struct X64_REGS *regs);
 

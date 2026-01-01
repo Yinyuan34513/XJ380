@@ -14,6 +14,7 @@
 #include <mm/vma.h>
 #include <mm/lazyalloc.h>
 #include <pipe.h>
+#include <ttf.h>
 
 // MSR寄存器地址定义
 #define MSR_EFER         0xC0000080 // EFER MSR寄存器
@@ -1887,9 +1888,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_GETCH: regs->rax = (uint64_t)do_xapi_Getch(); break;
     case XAPI_ENDLINE: do_xapi_Endline(); break;
     case XAPI_PRINTLINE: do_xapi_Printline((char *)regs->rdi); break;
+    case XAPI_PRINTF: do_xapi_Printf((char *)regs->rdi); break;
     case XAPI_OUTPUT_SERIAL: do_xapi_OutputSerial((char *)regs->rdi); break;
-    case XAPI_OPEN_FILE: break;
-    case XAPI_CLOSE_FILE: break;
+    case XAPI_OPEN_FILE: regs->rax = do_xapi_OpenFile(regs->rdi); break;
+    case XAPI_CLOSE_FILE: do_xapi_CloseFile(regs->rdi); break;
     case XAPI_SEARCH_FILE: do_xapi_SearchFile(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_MAKEDIR: regs->rax = (uint64_t)vfs_mkdir((char *)regs->rdi); break;
     case XAPI_CREATE_FILE: regs->rax = (uint64_t)sys_open(( char *)regs->rdi, O_CREAT,0644,0,0,0,regs); break;
@@ -1944,17 +1946,22 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_READBUFFERA: do_xapi_ReadBufferA(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_WRITEBUFFERA: do_xapi_WriteBufferA(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_REFRESH_WINDOW: regs->rax = (uint64_t)do_xapi_RefreshWindow(regs->rdi); break;
-    case XAPI_BUTTON: break;
-    case XAPI_BUTTON_STYLE: break;
+    case XAPI_BUTTON: do_xapi_Button(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
+    case XAPI_BUTTON_EMP: do_xapi_ButtonEmp(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_GET_VERSION: do_xapi_GetSystemVersion(regs->rdi); break;
     case XAPI_GET_TIME: regs->rax = (uint64_t)do_xapi_GetTime(); break;
     case XAPI_GET_CURRENT_USER: do_xapi_GetCurrentUser(regs->rdi); break;
+    case XAPI_SLEEP: do_xapi_Sleep(regs->rdi); break;
+    case XAPI_CALC_TEXT_WIDTH: regs->rax = calc_ttf_length((char *)regs->rdi, regs->rsi); break;
+    case XAPI_DELETE_BUTTON: do_xapi_DeleteButton(regs->rdi, regs->rsi); break;
+    case XAPI_BROKEN: do_xapi_Broken((char *)regs->rdi); break;
+    case XAPI_GET_TIME_X: do_xapi_GetTimeX(regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 
     /* XJ380API 隐藏版（严禁泄露） */
     case SXAH_SYSCALL_RETURN:
-        get_current_task()->parent_group->msgprci = false;
+        // get_current_task()->parent_group->msgprci = false;
         message_end();
         break;
     case SXAH_MARK_IS_TERMINAL: mark_process_is_terminal(); break;

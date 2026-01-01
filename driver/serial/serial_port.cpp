@@ -45,7 +45,7 @@ int init_serial()
     // #if BUILD_VERSION == DEBUG_VERSION
     // 	WriteString(*fbc_addr, serial_x, serial_y, "XJ380 Operating System - Debug Mode (Serial Outputer)", {0xFF, 0xFF, 0xFF});
     // 	serial_y += 16;
-    // 	WriteString(*fbc_addr, serial_x, serial_y, "Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.", {0xFF, 0xFF, 0xFF});
+    // 	WriteString(*fbc_addr, serial_x, serial_y, "Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.", {0xFF, 0xFF, 0xFF});
     // 	serial_y += 16;
     // #endif
     return 0;

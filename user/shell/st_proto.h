@@ -4,7 +4,6 @@
 extern HDLE handle;
 extern int  cur_x;
 extern int  cur_y;
-extern int  ab_hsf;
 extern int *ab_x;
 extern int *ab_y;
 
@@ -70,3 +69,5 @@ void write_xttp_buffer(char *str);
 void read_xttp_buffer(char *str);
 bool check_read_xttp_buffer();
 void terminal_app_mark_finish_output();
+
+void revert_path(char *path);

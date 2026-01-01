@@ -80,8 +80,7 @@ void print_to_console(char *str)
 
 void print_to_console_zh(char *str)
 {
-    xapi_DrawText(handle, *ab_x, (*ab_y) - 4, str, 12, TERMINAL_TEXT_COLOR);
-    *ab_y += 2;
+    xapi_DrawSWText(handle, *ab_x, *ab_y, str, TERMINAL_TEXT_COLOR);
     newline();
 }
 

@@ -108,6 +108,8 @@ typedef struct TimerWidgetsData
 
 TimerWidgetsData *tw_data = NULL;
 
+bool have_full_screen_app = false;
+
 void components_flusher()
 {
     while (true)
@@ -122,7 +124,7 @@ void components_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data != NULL)
+        if (tw_data != NULL && !have_full_screen_app)
         {
             tm         *time          = &tw_data->time;
             tm         *old_time      = &tw_data->old_time;
@@ -136,9 +138,9 @@ void components_flusher()
             {
                 tw_data->flushing = true;
                 *old_time         = *time;
-                draw_rect(shtinf, dock_sheet_id, scdx - 40, 0, scdx - 3, 24, DOCK_COL);
+                draw_rect(shtinf, dock_sheet_id, scdx - 40, 0, scdx - 3, 23, DOCK_COL);
                 // 12 小时制
-                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", (time->tm_hour + 8) % 24,
+                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", time->tm_hour % 24,
                                   time->tm_min);
                 tw_data->flushing   = false;
                 tw_data->need_flush = true;
@@ -152,6 +154,7 @@ extern uint16_t *mouse_sheet_id_img;
 uint16_t         desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
 uint16_t         dock_sheet_id    = 1145;
 uint16_t         mouse_sheet_id   = 1145;
+uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi = 1145;
 
 void desktop_flusher()
 {
@@ -169,10 +172,14 @@ void desktop_flusher()
 
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
                  &desktop_sheet_id);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 254,
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 9999,
                  &dock_sheet_id);
-    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 255,
+    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 10000,
                  &mouse_sheet_id);
+
+    // 草稿纸吗，有点意思
+    create_sheet(&shtinf, get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, -1,
+                 &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
 
@@ -290,9 +297,12 @@ void desktop_flusher()
     delay_s_hp(3);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
-    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    // calc_ttf_length("114514 测试", 10);
    
     while (1)
     {
@@ -301,7 +311,7 @@ void desktop_flusher()
             enable_intr();
             enable_scheduler();
         }
-        // if (tw_data->flushing) { continue; } // Sync, but bad performance
+        if (tw_data->flushing) { continue; } // Sync, but bad performance
         if (tw_data->need_flush)
         {
             tw_data->need_flush = false;
@@ -461,7 +471,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     signal_init();
     init_syscall();
-    init_signal();
+    init_message();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -475,7 +485,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     
     init_user();
-    // init_killer();
+    init_killer();
     write_serial_string("User & Killer is ready\n");
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");

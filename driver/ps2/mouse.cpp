@@ -7,6 +7,7 @@
 #include <ps2/mouse.h>
 #include <usb/hid.h>
 #include <syscall/syscall.h>
+#include <graphics/components/button.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -21,6 +22,7 @@ bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
 uint16_t *mouse_sheet_id_img;
+extern uint16_t *desktop_sheet_id;
 MouseType type;
 
 void process_mouse_button()
@@ -43,11 +45,42 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                do_message(MSG_LBUTTON, 
+                if (current_window->type == XWIN_NORMAL)
+                {
+                    do_message(MSG_LBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
+                } else {
+                    do_message(MSG_LBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        current_window->WinMPf, current_window->w_task);
+                }
+
+                process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), 
+                    tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                    tby - get_sheet(sht_img, &(current_window->w_sheet))->by);
             }
+            if (current_window->type == XWIN_NORMAL && 
+                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx 
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 21 &&
+                tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width + 18 &&
+                tby > get_sheet(sht_img, &(current_window->w_sheet))->by + 5 &&
+                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 18 + 5
+            ) { 
+                // 关闭窗口
+                ms_dec.sht_now = NULL;
+                ms_dec.sheet_id = NULL;
+                tcb_t current_win_task = current_window->w_task;
+                delete_window(xwmii, sht_img, current_window);
+                if (current_win_task->window_count == 0)
+                {
+                    kill_thread(current_win_task);
+                }
+            }
+            
         }
 
         ms_dec.left   = false;
@@ -69,10 +102,19 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                do_message(MSG_RBUTTON, 
+                if (current_window->type == XWIN_NORMAL)
+                {
+                    do_message(MSG_RBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
+                } else {
+                    do_message(MSG_RBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        current_window->WinMPf, current_window->w_task);
+                }
+                
             }
         }
 
@@ -94,10 +136,18 @@ void process_mouse_button()
                 tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                      + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
             ) { /* do nothing */ } else {
-                do_message(MSG_MBUTTON, 
+                if (current_window->type == XWIN_NORMAL)
+                {
+                    do_message(MSG_MBUTTON, 
                         tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                         current_window->WinMPf, current_window->w_task);
+                } else {
+                    do_message(MSG_MBUTTON, 
+                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        current_window->WinMPf, current_window->w_task);
+                }
             }
         }
 
@@ -125,10 +175,19 @@ void process_mouse_button()
             tby > get_sheet(sht_img, &(current_window->w_sheet))->by
                  + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
         ) { /* do nothing */ } else {
-            do_message(MSG_MOVE, 
+            if (current_window->type == XWIN_NORMAL)
+            {
+                do_message(MSG_MOVE, 
                     tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
                     tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
                     current_window->WinMPf, current_window->w_task);
+            } else {
+                do_message(MSG_MOVE, 
+                    tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
+                    tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                    current_window->WinMPf, current_window->w_task);
+            }
+            
         }
     }
 }

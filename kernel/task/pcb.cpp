@@ -459,7 +459,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->envc   = current_user->envc;
     }
 
-    // if(!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
+    if(!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
 
     write_serial_fmt(" process name :%s \n", process->name);
 
@@ -561,11 +561,11 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
 
-    // if(!vma_manager_clone(&current_pcb->vma_manager,&new_pcb->vma_manager)){
-    //     write_serial_fmt("task: cannot clone process vma information.\n");
-    //     free(new_pcb);
-    //     return -ENOMEM;
-    // }
+    if(!vma_manager_clone(&current_pcb->vma_manager,&new_pcb->vma_manager)){
+        write_serial_fmt("task: cannot clone process vma information.\n");
+        free(new_pcb);
+        return -ENOMEM;
+    }
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
     new_pcb->parent_task  = current_pcb;
@@ -629,6 +629,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->parent_group = new_pcb;
     new_task->group_index  = queue_enqueue(new_pcb->thread_queue, new_task);
     new_task->tid          = now_tid++;
+    
+    new_task->window_count = 0;
 
     add_task(new_task);
     if (!no_interrupt)
@@ -723,6 +725,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->str_cwd = "/";
     new_task->cwd     = rootdir;
     new_task->cwd->refcount++;
+    new_task->window_count = 0;
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -796,6 +799,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->status                                                      = CREATE;
 
     new_task->fs_base = (uint64_t)new_task;
+
+    new_task->window_count = 0;
 
     add_task(new_task);
     if (!no_interrupt)
@@ -876,7 +881,7 @@ size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uin
 
 pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline)
 {
-    pcb_t pcb        = (pcb_t)malloc(sizeof(struct process_control_block));
+    pcb_t pcb        = (pcb_t)calloc(1,sizeof(struct process_control_block));
     pcb->pid         = now_pid++;
     pcb->parent_task = parent == NULL ? kernel_group : parent;
     pcb->status      = START;
@@ -909,7 +914,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
-    pcb->msgprci = false;
+    // pcb->msgprci = false;
     
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
@@ -929,7 +934,7 @@ extern int scheduler_is_ready;
 void process_setup()
 {
     pcb_group_queue     = queue_init();
-    pcb_t kernel_pcb    = (pcb_t)malloc(sizeof(struct process_control_block));
+    pcb_t kernel_pcb    = (pcb_t)calloc(1,sizeof(struct process_control_block));
     kernel_pcb->pid     = now_pid++;
     kernel_pcb->pagedir = get_kernel_pagedir();
     strcpy(kernel_pcb->name, "XSK System");

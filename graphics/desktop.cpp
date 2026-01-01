@@ -1,11 +1,39 @@
 #include "./image/stbi.h"
 #include "./image/stbir.h"
+#include <ahci/ahci.h>
+#include <cpu/regio.h>
+#include <efi/boot.h>
+#include <efi/efi.h>
+#include <efi/fbc.h>
+#include <font.h>
+#include <fs/fatfs/fatfs.h>
+#include <syscall/signal.h>
+#include <fs/partition.h>
+#include <fs/vfs/devfs.h>
+#include <fs/vfs/sys.h>
+#include <fs/vfs/vfs.h>
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <krlibc.h>
+#include <mm/frame.h>
+#include <nvme/nvme.h>
+#include <pci/pci.h>
 #include <proto.hpp>
+#include <ps2/keyboard.h>
+#include <ps2/mouse.h>
+#include <rtc.h>
+#include <syscall/syscall.h>
+#include <task/pcb.h>
 #include <ttf.h>
-#include <fs/vfs/vfs.h>
+#include <usb/hid.h>
+#include <xhci/xhci-hcd.h>
+#include <hda/hda.h>
+#include <hda/pcspk.h>
+#include <device.h>
+#include <sb16.h>
+#include <fs/vfs/proc.h>
+#include <pipe.h>
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
@@ -90,6 +118,11 @@ void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id)
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8, 4, "Terminal", BLACK);
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8, 4, "Graphics", BLACK);
     // PrintString(sht, sheet_id, x1 + 32 + 40 + 8 + 64 + 8 + 64 + 8 + 64 + 8, 4, "About", BLACK);
+    tm time;
+    time_read(&time);
+    draw_rect(sht, sheet_id, x2 - 40, 0, x2 - 3, 23, DOCK_COL);
+    print_fmt_box_ttf(sht, sheet_id, BLACK, x2 - 40, 1, 10, "%02u:%02u", time.tm_hour % 24,
+                           time.tm_min);
 }
 
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)

@@ -1398,7 +1398,8 @@ pci_device_t *deviceA = NULL;
 
 int xhci_st() {
     usb_hcd_t *xhci_hcd = xhci_init(mmio_vaddr, deviceA);
-    write_serial_fmt("xhci: %s inited。\n", xhci_hcd->name);
+    if(xhci_hcd != NULL)write_serial_fmt("xhci: %s inited\n", xhci_hcd->name);
+    else return -ENODEV;
     return EOK;
 }
 

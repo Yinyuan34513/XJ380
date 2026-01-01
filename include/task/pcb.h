@@ -105,7 +105,6 @@ struct process_control_block
     uint64_t    mmap_start;  // 映射起始地址
     char       *cmdline;
     int         task_level; // 进程等级
-    bool        msgprci;
     lock_queue *virt_queue; // 虚拟页分配队列
     void       *elf_file;   // 可执行文件指针
     size_t      elf_size;   // 可执行文件大小
@@ -162,6 +161,8 @@ struct thread_control_block
 
     uint64_t winnum;
     bool     hasfscr;
+
+    uint64_t window_count;
 };
 
 extern pcb_t kernel_group;

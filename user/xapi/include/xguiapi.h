@@ -4,7 +4,7 @@
  *      XACT C\C++ Header
  *      XJ380API XAPI Edition GUI Part
  *      Release Version 1.0.0 - 2025/5/10
- *      Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.
+ *      Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
  * 
@@ -74,6 +74,12 @@ void  xapi_SetIcon(
 	WSTR  	path
 );
 
+void xapi_GetWindowSize(
+	HDLE handle, 
+	UINT64* width, 
+	UINT64* height
+);
+
 
 // 4-2
 void  xapi_DrawPoint (
@@ -137,6 +143,8 @@ void xapi_DrawSWText(
 	WSTR 	str,
 	UINT32  color
 );
+
+UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size);
 
 // 4-3
 void  xapi_DrawBMP (
@@ -213,12 +221,15 @@ void xapi_RefreshWindow(
 void xapi_Button(
 	HDLE  	handle,
 	UINT64  CRLid,
+	UINT64  x,
+	UINT64  y,
 	WSTR  	text
 );
 
-void xapi_StyleButton(
+void xapi_ButtonEmp(
 	HDLE  	handle,
 	UINT64  CRLid,
-	WSTR  	text,
-	WSTR  	path
+	UINT64  x,
+	UINT64  y,
+	WSTR  	text
 );

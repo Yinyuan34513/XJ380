@@ -15,23 +15,23 @@ void message_revert()
     __asm__ __volatile__("syscall" : : "a"(SXAH_SYSCALL_RETURN) : "rcx", "r11", "memory");
 }
 
-void do_message(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinMpf, tcb_t ftask)
+void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask)
 {
     tcb_t current = ftask;
 
     // 看看需不需要getch?
     if (current->parent_group->xtttp_stc->wait_for_getch && msg_type == MSG_CHAR)
     {
-        current->parent_group->xtttp_stc->char_for_getch = data2;
+        current->parent_group->xtttp_stc->char_for_getch = lData;
         current->parent_group->xtttp_stc->wait_for_getch = false;
     }
 
     // 检查是否有注册的信号处理函数
-    if (WinMpf != NULL && !current->parent_group->msgprci)
+    if (WinMpf != NULL)
     {
-        current->parent_group->msgprci = true;
+        // current->parent_group->msgprci = true;
         // 准备信号处理栈
-        create_signal_thread((void *)WinMpf, msg_type, data1, data2, 
+        create_signal_thread((void *)WinMpf, msg_type, hData, lData, 
                              XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST, 
                              current->parent_group);
     }
@@ -40,7 +40,7 @@ void do_message(uint64_t msg_type, uint64_t data1, uint64_t data2, MsgPrcor WinM
 
 void message_end() 
 {
-    get_current_task()->parent_group->msgprci = false;
+    // get_current_task()->parent_group->msgprci = false;
     kill_thread(get_current_task()); // 他紫砂了
     while (true)
     {
@@ -49,7 +49,7 @@ void message_end()
     }
 }
 
-void init_signal()
+void init_message()
 {
     page_map_range_to_random(get_current_directory(), 
                              XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS, 1, 
@@ -58,5 +58,5 @@ void init_signal()
     memcpy((void *)(XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST), 
            (void *)message_revert, 0xff);   // 我也不知道这个会有多大，就这样吧先
 
-    write_serial_fmt("XJ380 Signal(Message) Initialize Success.\n");
+    write_serial_fmt("XJ380 Message Initialize Success.\n");
 }
