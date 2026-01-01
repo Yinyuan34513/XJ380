@@ -50,5 +50,5 @@ void draw_background()
 void draw_mainpage()
 {
     xapi_DrawRect(handle, 8, win_height - 38, win_width - 8, win_height - 8, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 12, win_height - 38, "→ 返回桌面", 16, 0xffffffff);
+    xapi_DrawText(handle, 16, win_height - 38, "→ 返回桌面", 16, 0xffffffff);
 }

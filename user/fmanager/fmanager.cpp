@@ -47,8 +47,6 @@ int main(int argc, char *argv[], char *envp[])
 
     xapi_RefreshWindow(handle);
 
-    xapi_Broken("114514");
-
     while (1)
     {
         if (double_click)

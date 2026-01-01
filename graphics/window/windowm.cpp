@@ -20,6 +20,7 @@ void init_xwm(XWM_INFO *xwmi)
     write_serial_string("Initializing XWM...\n");
     WINDOWLS *tmp_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
     memset(tmp_window, 0, sizeof(WINDOWLS));
+    tmp_window->number = 30000;
     xwmi->start   = tmp_window;
     xwmi->win_num = 0;
     write_serial_string("Reading Theme...\n");
@@ -251,6 +252,17 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         if (!WindowIsCreating) { break; }
     }
 
+    if (windowls->type == XWIN_FULL_SCR)
+    {
+        have_full_screen_app = false;
+        memset(found_sheet_byid(sht_img, &(windowls->w_sheet))->buffer, 
+                0, sizeof(SHEET_BUFFER) * 
+                found_sheet_byid(sht_img, &(windowls->w_sheet))->width * 
+                found_sheet_byid(sht_img, &(windowls->w_sheet))->height);
+        init_dock(sht_img, &(windowls->w_sheet));
+        init_shortcut_dock(sht_img, &(windowls->w_sheet));
+    }
+
     WindowIsCreating  = true;
     WINDOWLS *front_p = xwmi->start;
     WINDOWLS *front_p2;
@@ -286,7 +298,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             else
                 xwmi->start = front_p->next;
             windowls->w_task->window_count--;
-            delete_sheet(sht, &(windowls->w_sheet));
+            if (windowls->type != XWIN_FULL_SCR) delete_sheet(sht, &(windowls->w_sheet));
             memset(windowls, 0, sizeof(SHEET));
             free((void *)(windowls));
             // xwmi->win_num--;
@@ -314,6 +326,18 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
     while (true)
     {
         if (front_p->w_sheet == csheet->index) { return front_p; }
+        else if (front_p->next == NULL) { return NULL; }
+        front_p = front_p->next;
+    }
+}
+
+WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread)
+{
+    WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL) { return NULL; }
+    while (true)
+    {
+        if (front_p->w_task == thread) { return front_p; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }

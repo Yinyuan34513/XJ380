@@ -16,6 +16,7 @@ void process_left_key(int x, int y)
         if (x > 8 && y > win_height - 38 && 
             x < win_width - 8 && y < win_height - 8)
         {
+            xapi_CloseWindow(handle);
             xapi_Exit(0);
         }
     }

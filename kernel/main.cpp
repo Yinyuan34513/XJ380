@@ -138,7 +138,7 @@ void components_flusher()
             {
                 tw_data->flushing = true;
                 *old_time         = *time;
-                draw_rect(shtinf, dock_sheet_id, scdx - 40, 0, scdx - 3, 24, DOCK_COL);
+                draw_rect(shtinf, dock_sheet_id, scdx - 40, 0, scdx - 3, 23, DOCK_COL);
                 // 12 小时制
                 print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", time->tm_hour % 24,
                                   time->tm_min);

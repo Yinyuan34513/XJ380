@@ -54,6 +54,7 @@ void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
                   SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
+WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 
 void resize_theme_width(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t swidth, uint32_t height);
 void resize_theme_height(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t height, uint32_t sheight);
