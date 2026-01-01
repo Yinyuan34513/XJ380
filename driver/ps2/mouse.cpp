@@ -22,6 +22,7 @@ bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
 uint16_t *mouse_sheet_id_img;
+extern uint16_t *desktop_sheet_id;
 MouseType type;
 
 void process_mouse_button()
@@ -60,6 +61,24 @@ void process_mouse_button()
                 process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), 
                     tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
                     tby - get_sheet(sht_img, &(current_window->w_sheet))->by);
+            }
+            if (current_window->type == XWIN_NORMAL && 
+                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx 
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 21 &&
+                tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width + 18 &&
+                tby > get_sheet(sht_img, &(current_window->w_sheet))->by + 5 &&
+                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 18 + 5
+            ) { 
+                // 关闭窗口
+                ms_dec.sht_now = NULL;
+                ms_dec.sheet_id = NULL;
+                tcb_t current_win_task = current_window->w_task;
+                delete_window(xwmii, sht_img, current_window);
+                if (current_win_task->window_count == 0)
+                {
+                    kill_thread(current_win_task);
+                }
             }
             
         }

@@ -447,7 +447,7 @@ void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
             write_serial_string("Sheet Delete Success. SheetID: ");
             write_serial_dec(*sheet_id);
             write_serial_string("\n");
-            return;
+            break;
         }
         else if (front_p->next == NULL)
         {

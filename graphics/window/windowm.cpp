@@ -18,7 +18,9 @@ int window_create_offest_xy = 32;
 void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
-    xwmi->start   = NULL;
+    WINDOWLS *tmp_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
+    memset(tmp_window, 0, sizeof(WINDOWLS));
+    xwmi->start   = tmp_window;
     xwmi->win_num = 0;
     write_serial_string("Reading Theme...\n");
     LoadPictureOgM(&xwmi->theme.top,      "/system/theme/skyglass/top.png");
@@ -73,6 +75,7 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
     new_window->height = sht_img->fbc->vertical_resolution;
 
     new_window->w_task = get_current_task();
+    get_current_task()->window_count++;
 
     // create_sheet(sht, 0, 0, 
     //              sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, FixedSheetType, -1, &(new_window->w_sheet));
@@ -122,6 +125,7 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     new_window->height = height;
 
     new_window->w_task = get_current_task();
+    get_current_task()->window_count++;
 
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
                  width + 24, height + 47, NoEdgeWindowSheetType, -1, &(new_window->w_sheet));
@@ -172,6 +176,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->height = height;
 
     new_window->w_task = get_current_task();
+    get_current_task()->window_count++;
 
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
                  width + 24, height + 47, MovableSheetType, -1, &(new_window->w_sheet));
@@ -260,6 +265,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             by = front_p3->by;
             ex = bx + front_p3->width;
             ey = by + front_p3->height;
+            break;
         }
         else if (front_p3->next == NULL)
         {
@@ -279,12 +285,13 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
                 front_p2->next = front_p->next;
             else
                 xwmi->start = front_p->next;
+            windowls->w_task->window_count--;
             delete_sheet(sht, &(windowls->w_sheet));
             memset(windowls, 0, sizeof(SHEET));
             free((void *)(windowls));
             // xwmi->win_num--;
             refresh_part_sheet(sht_img, bx, by, ex, ey);
-            return;
+            break;
         }
         else if (front_p->next == NULL)
         {
@@ -303,6 +310,7 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
     if (csheet == NULL) { return NULL; }
 
     WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL) { return NULL; }
     while (true)
     {
         if (front_p->w_sheet == csheet->index) { return front_p; }

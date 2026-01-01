@@ -161,6 +161,8 @@ struct thread_control_block
 
     uint64_t winnum;
     bool     hasfscr;
+
+    uint64_t window_count;
 };
 
 extern pcb_t kernel_group;

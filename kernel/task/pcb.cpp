@@ -629,6 +629,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->parent_group = new_pcb;
     new_task->group_index  = queue_enqueue(new_pcb->thread_queue, new_task);
     new_task->tid          = now_tid++;
+    
+    new_task->window_count = 0;
 
     add_task(new_task);
     if (!no_interrupt)
@@ -723,6 +725,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->str_cwd = "/";
     new_task->cwd     = rootdir;
     new_task->cwd->refcount++;
+    new_task->window_count = 0;
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -796,6 +799,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->status                                                      = CREATE;
 
     new_task->fs_base = (uint64_t)new_task;
+
+    new_task->window_count = 0;
 
     add_task(new_task);
     if (!no_interrupt)
