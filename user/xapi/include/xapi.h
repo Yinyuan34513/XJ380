@@ -4,7 +4,7 @@
  *      XACT C\C++ Header
  *      XJ380API XAPI Edition
  *      Release Version 1.0.0 - 2025/5/10
- *      Copyright(C) XINGJI Interactive Software 2017 - 2025 All rights reserved.
+ *      Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
  * 

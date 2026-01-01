@@ -226,6 +226,10 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }
 
+void	xapi_Exit(UINT64 value) {
+	enter_syscall(SYS_EXIT, value, 0, 0, 0, 0, 0);
+}
+
 // 3-5
 void	xapi_GetSystemVersion(WSTR version) {
 	enter_syscall(XAPI_GET_VERSION, (uint64_t)version, 0, 0, 0, 0, 0);
@@ -237,6 +241,10 @@ UINT64	xapi_GetTime() {
 
 void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
+}
+
+void	xapi_GetTimeX(TimeType *tm) {
+	enter_syscall(XAPI_GET_TIME_X, (uint64_t)tm, 0, 0, 0, 0, 0);
 }
 
 // 3-6

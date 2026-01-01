@@ -154,3 +154,10 @@ void do_xapi_Sleep(uint64_t ms)
 {
     delay_ms(ms);
 }
+
+void do_xapi_GetTimeX(uint64_t tt)
+{
+    if (!tt) { return; }
+    tm *time_s = (tm *)tt;
+    time_read(time_s);
+}

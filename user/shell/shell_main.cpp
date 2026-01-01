@@ -73,7 +73,7 @@ int main(int argc, char *argv[], char *envp[])
 
     strcpy(current_path, "/");
     print_to_console("XINGJI SpaceTerminal for XJ380");
-    print_to_console("Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.");
+    print_to_console("Copyright(C) XINGJI Interactive Software 2017-2026 All rights reserved.");
     paint_arrow_sign(2, 40);
     xapi_RefreshWindow(handle);
 

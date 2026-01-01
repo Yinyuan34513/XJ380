@@ -140,7 +140,7 @@ void components_flusher()
                 *old_time         = *time;
                 draw_rect(shtinf, dock_sheet_id, scdx - 40, 0, scdx - 3, 24, DOCK_COL);
                 // 12 小时制
-                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", (time->tm_hour + 8) % 24,
+                print_fmt_box_ttf(shtinf, dock_sheet_id, BLACK, scdx - 40, 1, 10, "%02u:%02u", time->tm_hour % 24,
                                   time->tm_min);
                 tw_data->flushing   = false;
                 tw_data->need_flush = true;
@@ -298,8 +298,8 @@ void desktop_flusher()
 
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);

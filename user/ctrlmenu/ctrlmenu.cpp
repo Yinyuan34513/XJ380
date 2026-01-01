@@ -7,6 +7,17 @@ HDLE handle;
 UINT64 win_width;
 UINT64 win_height;
 
+void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
+{
+    switch (Type)
+    {
+    case MSG_LBUTTON:
+        process_left_key(hData, lData);
+        break;
+    }
+    return;
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
     (void)argc;
@@ -18,6 +29,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.sets  = XWIN_FULL_SCR;  
     xapi_CreateWindow(&handle, &Winfo);
     xapi_GetWindowSize(handle, &win_width, &win_height);
+    SetMsgPrcor(handle, ctrlmenu_MessagePrcor);
 
     draw_background();
 

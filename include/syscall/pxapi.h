@@ -83,6 +83,8 @@ typedef struct {
 #define XAPI_GET_TIME           412
 #define XAPI_GET_CURRENT_USER   413
 
+#define XAPI_GET_TIME_X         433
+
 // P3.6
 #define XAPI_BROKEN         428
 #define XAPI_SEND_APP_MSG   429
@@ -145,7 +147,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：432
+// 当前最大号：433
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -191,6 +193,7 @@ void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
 uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
 void do_xapi_Broken(char *info);
+void do_xapi_GetTimeX(uint64_t tt);
 
 
 

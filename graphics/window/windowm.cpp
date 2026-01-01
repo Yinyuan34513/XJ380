@@ -1,7 +1,7 @@
 /*
  *
  *      XJ380 Window Manager
- *      Copyright(C) XINGJI Interactive Software 2017-2025 All rights reserved.
+ *      Copyright(C) XINGJI Interactive Software 2017-2026 All rights reserved.
  *
  */
 #include "./wbuttons.h"

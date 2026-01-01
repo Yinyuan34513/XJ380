@@ -118,6 +118,8 @@
 #define XAPI_GET_TIME           412
 #define XAPI_GET_CURRENT_USER   413
 
+#define XAPI_GET_TIME_X         433
+
 // P3.6
 #define XAPI_BROKEN         428
 #define XAPI_SEND_APP_MSG   429

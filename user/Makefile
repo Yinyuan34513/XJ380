@@ -48,7 +48,8 @@ FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
                 ./fmanager/fm_processp.cpp 
 
 CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
-                ./ctrlmenu/cm_graph.cpp 
+                ./ctrlmenu/cm_graph.cpp \
+                ./ctrlmenu/cm_processp.cpp 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))

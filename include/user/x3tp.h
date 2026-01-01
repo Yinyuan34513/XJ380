@@ -4,7 +4,7 @@
  *      XJ380 Terminal Text Transmit Protocol
  *      XJ380 终端文本传输协议
  * 
- *      XINGJI Interactive Software (C) 2017-2025 All rights reserved.
+ *      XINGJI Interactive Software (C) 2017-2026 All rights reserved.
  * 
  *      ===介绍===
  *      为图形化操作系统终端与应用程序间的文本传输提供更加简易与高效的解决方案。
