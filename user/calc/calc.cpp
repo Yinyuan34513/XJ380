@@ -118,11 +118,11 @@ void update_display(HDLE handle)
     // 计算文本位置（右对齐）
     // 文本大小24，将文本垂直居中（显示区域高度70，文本高度约24）
     // 垂直位置 = 20(上边距) + (70-24)/2 + 文本基线调整
-    UINT32 text_y = 20 + (70 - 24) / 2-10; // +18 是基线调整，让字符在矩形中垂直居中
+    UINT32 text_y = 20 + (70 - 24) / 2-10;
 
     // 右对齐文本
     int    text_len = strlen(calc_state.display);
-    UINT32 text_x   = 340 - text_len * 14 - 10; // 每个字符约14像素宽
+    UINT32 text_x   = 340 - text_len * 18; // 每个字符约14像素宽
     if (text_x < 30) text_x = 30;
 
     // 显示文本
@@ -139,7 +139,7 @@ void handle_number(int num)
     }
 
     // 检查长度限制
-    if (strlen(calc_state.display) >= 15) { return; }
+    if (strlen(calc_state.display) >= 8) { return; }
 
     if (strcmp(calc_state.display, "0") == 0)
     {

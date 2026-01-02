@@ -105,7 +105,7 @@ void xapi_DrawSWText(
 
 UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size)
 {
-	enter_syscall(XAPI_CALC_TEXT_WIDTH, (UINT64)str, size, 0, 0, 0, 0);
+	return enter_syscall(XAPI_CALC_TEXT_WIDTH, (uint64_t)str, (uint64_t)size, 0, 0, 0, 0);
 }
 
 
