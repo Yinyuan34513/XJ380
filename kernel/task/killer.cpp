@@ -8,10 +8,40 @@
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 
-pcb_t   wait_kill_queue[10];
-uint8_t wait_kill_count = 0;
-
 extern bool no_interrupt; // 为true时代表严禁开启中断
+
+void check_group(pcb_t group)
+{
+    if (group == NULL) return;
+
+    if (group->child_index != 0)
+    {
+        lock_node *front_p = group->child_pcb->head;
+        for (int i = 0; i < group->child_index; i++)
+        {
+            check_group((pcb_t)front_p->data);
+            front_p = front_p->next;
+        }
+    }
+
+    lock_node *front_p = group->thread_queue->head;
+    bool group_dead = true;
+    for (int i = 0; i < group->thread_queue->size; i++)
+    {
+        tcb_t thread = (tcb_t)front_p->data;
+        if (thread->status != OUT || thread->status != DEATH)
+        {
+            group_dead = false;
+        }
+        front_p = front_p->next;
+    }
+
+    if (group_dead)
+    {
+        kill_proc(group, 0, false);
+        kill_proc0(group);
+    }
+}
 
 void killer_thread()
 {
@@ -22,38 +52,12 @@ void killer_thread()
             open_interrupt;
             enable_scheduler();
         }
-        if (wait_kill_count)
-        {
-            for (int i = 0; i < 10; i++)
-            {
-                if (wait_kill_queue[i] != NULL)
-                {
-                    kill_proc0(wait_kill_queue[i]);
-                    wait_kill_queue[i] = NULL;
-                    wait_kill_count--;
-                }
-            }
-        }
+        check_group(kernel_group);
         __asm__ volatile("pause\n\t");
-    }
-}
-
-void addque_killer(pcb_t group)
-{
-    for (int i = 0; i < 10; i++)
-    {
-        if (wait_kill_queue[i] == NULL)
-        {
-            kill_proc(group,0,false);
-            wait_kill_queue[i] = group;
-            wait_kill_count++;
-            return;
-        }
     }
 }
 
 void init_killer()
 {
     create_kernel_thread((void *)killer_thread, NULL, "Process Killer", NULL);
-    memset(wait_kill_queue, 0, sizeof(pcb_t) * 10);
 }

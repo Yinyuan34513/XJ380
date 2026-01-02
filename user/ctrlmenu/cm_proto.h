@@ -12,3 +12,4 @@ extern int cindex;
 void draw_background();
 void process_left_key(int x, int y);
 void draw_mainpage();
+void draw_setting();
