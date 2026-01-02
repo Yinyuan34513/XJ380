@@ -407,6 +407,7 @@ int main(int argc, char *argv[], char *envp[])
     window.sets   = XWIN_NORMAL;
 
     xapi_CreateWindow(&window_handle, &window);
+    xapi_SetIcon(window_handle, "/system/icon/calc.png");
 
     // 设置消息处理器
     SetMsgPrcor(window_handle, message_handler);
