@@ -205,11 +205,11 @@ spin_t task_dock_lock = SPIN_INIT;
 
 void paint_task_dock_item(TDB_t tdb, int count)
 {
-    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 108 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 108 * count + 64, sht_img->scry - 1, DOCK_COL);
+    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
 
     PrintPicture_blend(sht_img, &dock_sheet_id, 
-                        task_dock_index_bx + 108 * count, 
+                        task_dock_index_bx + 80 * count, 
                         sht_img->scry - 24 - 63, 
                         64, 64, tdb->path);
 
@@ -222,7 +222,7 @@ void paint_task_dock_item(TDB_t tdb, int count)
                 if (in_focus_window_dock_ball_bitmap[y][x] == '#')
                 {
                     draw_point(sht_img, &dock_sheet_id, 
-                        x + task_dock_index_bx + 108 * count + 24, y + sht_img->scry - 16, WIN_BLUE);
+                        x + task_dock_index_bx + 80 * count + 24, y + sht_img->scry - 16, WIN_BLUE);
                 }
             }
         }
@@ -236,14 +236,14 @@ void paint_task_dock_item(TDB_t tdb, int count)
                 if (out_focus_window_dock_ball_bitmap[y][x] == '#')
                 {
                     draw_point(sht_img, &dock_sheet_id, 
-                        x + task_dock_index_bx + 108 * count + 30, y + sht_img->scry - 16, BGRAY);
+                        x + task_dock_index_bx + 80 * count + 30, y + sht_img->scry - 16, BGRAY);
                 }
             }
         }
     }
 
-    refresh_part_sheet(sht_img, task_dock_index_bx + 108 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 108 * count + 64, sht_img->scry);
+    refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry);
 }
 
 void flush_task_dock()

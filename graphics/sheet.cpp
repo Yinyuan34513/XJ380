@@ -639,7 +639,7 @@ no_peek2:
 void refresh_sheet(SHEET_INFO *sht)
 {
     // 已摆烂
-    refresh_part_sheet(sht, 0, 0, sht->scrx - 1, sht->scry - 1);
+    refresh_part_sheet(sht, 0, 0, sht->scrx, sht->scry);
 }
 
 uint32_t get_hor()
