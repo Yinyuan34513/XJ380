@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf
 
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -Wno-writable-strings
 
@@ -51,9 +51,18 @@ CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
                 ./ctrlmenu/cm_graph.cpp \
                 ./ctrlmenu/cm_processp.cpp 
 
+CALC_SOURCES := ./calc/calc.cpp
+
+
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
 CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
+CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
+
+../out/calc/%.o: ./calc/%.cpp
+	@mkdir -p $(@D)
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
 
 shell.elf: $(SHELL_OBJECTS)
 	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(SHELL_OBJECTS) -o ../out/$@
@@ -71,10 +80,17 @@ fmanager.elf: $(FMANAGER_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK fmanager objects -> ../out/$@"
 
+calc.elf: $(CALC_OBJECTS)
+	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(CALC_OBJECTS) -o ../out/$@
+#	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "LINK clac objects -> ../out/$@"
+
 ../out/fmanager/%.o: ./fmanager/%.cpp
 	@mkdir -p $(@D)
 	@$(CPP) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
+
+
 
 ctrlmenu.elf: $(CTRLMENU_OBJECTS)
 	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(CTRLMENU_OBJECTS) -o ../out/$@

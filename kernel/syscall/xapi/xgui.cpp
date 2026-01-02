@@ -472,6 +472,22 @@ void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uin
     }
 }
 
+void do_xapi_Button_(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
+{
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *button_text  = (char *)(text);
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x + 12, y + 27, button_text, CRLid, false);
+    }
+    else
+    {
+        put_button_theme(WindowHandle->WindowNodePtr, x, y, button_text, CRLid, false);
+    }
+}
+
+
 void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
