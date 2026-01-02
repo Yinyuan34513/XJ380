@@ -25,8 +25,12 @@ uint16_t *mouse_sheet_id_img;
 extern uint16_t *desktop_sheet_id;
 MouseType type;
 
+spin_t mouse_info_processing = SPIN_INIT;
+
 void process_mouse_button()
 {
+    spin_lock(mouse_info_processing);
+
     if (ms_dec.btn & 0x01)
     {
         // 左键按下
@@ -79,6 +83,25 @@ void process_mouse_button()
                 {
                     kill_thread(current_win_task);
                 }
+            }
+            else if (current_window->type == XWIN_NORMAL && 
+                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx 
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 48 &&
+                tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx
+                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 21 &&
+                tby > get_sheet(sht_img, &(current_window->w_sheet))->by + 5 &&
+                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 18 + 5
+            ) { 
+                // 最小化
+                ms_dec.sht_now = NULL;
+                ms_dec.sheet_id = NULL;
+                int bx = get_sheet(sht_img, &(current_window->w_sheet))->bx;
+                // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
+                get_sheet(sht_img, &(current_window->w_sheet))->bx = sht_img->scrx + 10;    // 扔到屏幕外面
+                refresh_part_sheet(sht_img, bx, get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                                    bx + get_sheet(sht_img, &(current_window->w_sheet))->width,
+                                    get_sheet(sht_img, &(current_window->w_sheet))->by
+                                     + get_sheet(sht_img, &(current_window->w_sheet))->height);
             }
             
         }
@@ -190,6 +213,8 @@ void process_mouse_button()
             
         }
     }
+
+    spin_unlock(mouse_info_processing);
 }
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
@@ -228,6 +253,8 @@ void handle_mouse_event(hid_mouse_event_t *mouse)
 
 void process_mouse_info()
 {
+    spin_lock(mouse_info_processing);
+    
     if (ms_dec.left)
     {
         if (!ms_dec.win_move_lock)
@@ -279,6 +306,8 @@ void process_mouse_info()
     }
 
     ms_dec.need_flush = false;
+
+    spin_unlock(mouse_info_processing);
 }
 
 bool mousedecode(uint8_t data)
