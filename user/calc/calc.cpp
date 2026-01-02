@@ -292,7 +292,7 @@ void draw_calculator_interface(HDLE handle)
 
     // 第一行：功能按钮
     draw_button(handle, 300, 20, 110, "C", COLOR_FUNCTION_BG, COLOR_TEXT_LIGHT);  // 清除
-    draw_button(handle, 301, 105, 110, "⌫", COLOR_FUNCTION_BG, COLOR_TEXT_LIGHT); // 回退
+    draw_button(handle, 301, 105, 110, "←", COLOR_FUNCTION_BG, COLOR_TEXT_LIGHT); // 回退
     draw_button(handle, 302, 190, 110, "±", COLOR_FUNCTION_BG, COLOR_TEXT_LIGHT); // 正负号
     draw_button(handle, 203, 275, 110, "÷", COLOR_OPERATOR_BG, COLOR_TEXT_LIGHT); // 除
 
