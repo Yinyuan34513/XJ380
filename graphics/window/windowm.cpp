@@ -293,7 +293,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     {
         if (front_p->number == windowls->number)
         {
-            if (!front_p2)
+            if (front_p2)
                 front_p2->next = front_p->next;
             else
                 xwmi->start = front_p->next;
