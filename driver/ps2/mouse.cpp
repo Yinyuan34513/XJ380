@@ -25,6 +25,8 @@ uint16_t *mouse_sheet_id_img;
 extern uint16_t *desktop_sheet_id;
 MouseType type;
 
+extern bool have_full_screen_app;
+
 spin_t mouse_info_processing = SPIN_INIT;
 
 void process_mouse_button()
@@ -104,6 +106,10 @@ void process_mouse_button()
                                      + get_sheet(sht_img, &(current_window->w_sheet))->height);
             }
             
+        }
+        if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
+        {
+            create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
         }
 
         ms_dec.left   = false;
