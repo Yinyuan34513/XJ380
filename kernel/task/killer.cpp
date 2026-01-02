@@ -26,7 +26,7 @@ void check_group(pcb_t group)
 
     lock_node *front_p = group->thread_queue->head;
     bool group_dead = true;
-    for (int i = 0; i < group->thread_queue->size; i++)
+    for (int i = 0; i < group->thread_queue->size && front_p != NULL; i++)
     {
         tcb_t thread = (tcb_t)front_p->data;
         if (thread->status != OUT || thread->status != DEATH)
