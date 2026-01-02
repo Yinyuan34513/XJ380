@@ -34,6 +34,7 @@
 #include <sb16.h>
 #include <fs/vfs/proc.h>
 #include <pipe.h>
+#include <graphics/window/window.h>
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
@@ -174,4 +175,143 @@ void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
 void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
 {
     PrintPicture_blend(sht, sheet_id, xi, yi, 16, 16, "/system/xingji.png");
+}
+
+TASK_DOCK_BLOCK tmp_dock_block = {
+    .mcount = 0,
+    .next = NULL
+};
+TDB_t first_dock_block = &tmp_dock_block;
+
+int task_dock_index_bx = 132;
+
+extern uint16_t dock_sheet_id;
+
+char out_focus_window_dock_ball_bitmap[4][5] = {
+    ".##.",
+    "####",
+    "####",
+    ".##.",
+};
+
+char in_focus_window_dock_ball_bitmap[4][17] = {
+    ".##############.",
+    "################",
+    "################",
+    ".##############.",
+};
+
+spin_t task_dock_lock = SPIN_INIT;
+
+void paint_task_dock_item(TDB_t tdb, int count)
+{
+    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 108 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 108 * count + 64, sht_img->scry - 1, DOCK_COL);
+
+    PrintPicture_blend(sht_img, &dock_sheet_id, 
+                        task_dock_index_bx + 108 * count, 
+                        sht_img->scry - 24 - 63, 
+                        64, 64, tdb->path);
+
+    if (tdb->in_focus)
+    {
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 16; x++)
+            {
+                if (in_focus_window_dock_ball_bitmap[y][x] == '#')
+                {
+                    draw_point(sht_img, &dock_sheet_id, 
+                        x + task_dock_index_bx + 108 * count + 24, y + sht_img->scry - 16, WIN_BLUE);
+                }
+            }
+        }
+    }
+    else
+    {
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 4; x++)
+            {
+                if (out_focus_window_dock_ball_bitmap[y][x] == '#')
+                {
+                    draw_point(sht_img, &dock_sheet_id, 
+                        x + task_dock_index_bx + 108 * count + 30, y + sht_img->scry - 16, BGRAY);
+                }
+            }
+        }
+    }
+
+    refresh_part_sheet(sht_img, task_dock_index_bx + 108 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 108 * count + 64, sht_img->scry);
+}
+
+void flush_task_dock()
+{
+    spin_lock(task_dock_lock);
+    TDB_t front_p = first_dock_block;
+    int i = 0;
+    while (true)
+    {
+        if (front_p->mcount)
+        {
+            paint_task_dock_item(front_p, i);
+            i++;
+        }
+        if (front_p->next == NULL)
+        {
+            break;
+        }
+        front_p = front_p->next;
+    }
+    spin_unlock(task_dock_lock);
+}
+
+void register_task_dock(WINDOWLSP window, tcb_t task)
+{
+    spin_lock(task_dock_lock);
+    TDB_t front_p = first_dock_block;
+    TDB_t new_win = (TDB_t)malloc(sizeof(TASK_DOCK_BLOCK));
+    memset(new_win, 0, sizeof(TASK_DOCK_BLOCK));
+    strcpy(new_win->path, "/system/icon/unknowexe.png");
+    new_win->mcount = 1;
+    new_win->windowls = window;
+    new_win->next = NULL;
+    new_win->in_focus = false;
+
+    front_p = first_dock_block;
+    while (true)
+    {
+        if (front_p->next == NULL)
+        {
+            front_p->next = new_win;
+            break;
+        }
+        front_p = front_p->next;
+    }
+
+    spin_unlock(task_dock_lock);
+    flush_task_dock();
+}
+
+void focus_window_dock(WINDOWLSP win)
+{
+    spin_lock(task_dock_lock);
+    TDB_t front_p = first_dock_block;
+    while (true)
+    {
+        front_p->in_focus = false;
+        if (front_p->windowls == win)
+        {
+            front_p->in_focus = true;
+        }
+        if (front_p->next == NULL)
+        {
+            break;
+        }
+        front_p = front_p->next;
+    }
+
+    spin_unlock(task_dock_lock);
+    flush_task_dock();
 }

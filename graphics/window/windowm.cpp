@@ -212,6 +212,9 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     free(lft);
 
     refresh_part_sheet(sht, 72, 72, width + 24 + 72, height + 52 + 72);
+
+    register_task_dock(new_window, get_current_task());
+
     WindowIsCreating = false;
 }
 

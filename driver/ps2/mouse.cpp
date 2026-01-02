@@ -309,6 +309,7 @@ void process_mouse_info()
                                ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + ms_dec.sht_now->height);
             refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width, his_y + ms_dec.sht_now->height);
         }
+        focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
     }
 
     ms_dec.need_flush = false;

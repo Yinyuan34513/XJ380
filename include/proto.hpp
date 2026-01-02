@@ -5,7 +5,7 @@
 #define KERNEL_STACK_SIZE 32768  // 任务内核栈地址
 #define BIG_USER_STACK    999424 // 用户栈大小，要对齐到页
 
-#include "./graphics/window/window.h"
+#include <graphics/window/window.h>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <stdarg.h>

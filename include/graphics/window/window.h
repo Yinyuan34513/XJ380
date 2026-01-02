@@ -1,12 +1,13 @@
 #ifndef _WINDOW_H_
 #define _WINDOW_H_
 
-#include <graphics/sheet.h>
 #include <task/pcb.h>
 
 typedef struct WINDOWLS *WINDOWLSP;
 typedef void (*MsgPrcor)(uint64_t Type, uint64_t hData,
                          uint64_t lData); // 别问为什么放在这儿 不放这儿会爆炸
+                         
+#include <graphics/sheet.h>
 
 typedef struct WINDOWLS
 {

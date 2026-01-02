@@ -66,6 +66,21 @@ typedef struct
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 
+#include <graphics/window/window.h>
+#include <task/pcb.h>
+
+typedef struct TASK_DOCK_BLOCK *TDB_t;
+
+struct TASK_DOCK_BLOCK
+{
+    char        path[256]; // icon path
+    int         mcount;
+    WINDOWLSP   windowls;
+    bool        in_focus;
+    TDB_t       next;
+};
+
+
 void      init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
 void      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                        uint16_t *sheet_id);
@@ -109,4 +124,9 @@ void init_dock(SHEET_INFO *sht, uint16_t *sheet_id);
 void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id);
 void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
+
+void flush_task_dock();
+void register_task_dock(WINDOWLSP window, tcb_t task);
+void focus_window_dock(WINDOWLSP win);
+
 #endif
