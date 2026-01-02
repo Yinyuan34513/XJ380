@@ -207,6 +207,8 @@ void paint_task_dock_item(TDB_t tdb, int count)
 {
     draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
                         task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
+    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
 
     PrintPicture_blend(sht_img, &dock_sheet_id, 
                         task_dock_index_bx + 80 * count, 
@@ -304,6 +306,29 @@ void focus_window_dock(WINDOWLSP win)
         if (front_p->windowls == win)
         {
             front_p->in_focus = true;
+        }
+        if (front_p->next == NULL)
+        {
+            break;
+        }
+        front_p = front_p->next;
+    }
+
+    spin_unlock(task_dock_lock);
+    flush_task_dock();
+}
+
+void change_task_dock_icon(WINDOWLSP win, char *path)
+{
+    spin_lock(task_dock_lock);
+    TDB_t front_p = first_dock_block;
+    while (true)
+    {
+        front_p->in_focus = false;
+        if (front_p->windowls == win)
+        {
+            memset(front_p->path, 0, 64);
+            strcpy(front_p->path, path);
         }
         if (front_p->next == NULL)
         {

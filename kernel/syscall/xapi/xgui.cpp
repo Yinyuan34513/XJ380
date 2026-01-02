@@ -77,8 +77,9 @@ int do_xapi_CloseWindow(uint64_t handle)
 int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    char          *WindowTitle  = (char *)(path);
-    // 你也给我等着
+    char          *NewPath      = (char *)(path);
+    
+    change_task_dock_icon(WindowHandle->WindowNodePtr, NewPath);
 
     return true;
 }

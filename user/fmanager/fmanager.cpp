@@ -31,6 +31,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.width  = FMR_X;
     Winfo.height = FMR_Y;
     xapi_CreateWindow(&handle, &Winfo);
+    xapi_SetIcon(handle, "/system/icon/folder.png");
     SetMsgPrcor(handle, fmanager_MessagePrcor);
     memset(file_ti_index, 0, 2048 * sizeof(FILE_TYPEINFO_INDEX));
 
