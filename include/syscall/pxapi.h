@@ -196,6 +196,7 @@ uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
 void do_xapi_Broken(char *info);
 void do_xapi_GetTimeX(uint64_t tt);
+uint64_t do_xapi_GetMemorySize();
 
 
 

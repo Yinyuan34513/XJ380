@@ -38,7 +38,7 @@ uint64_t get_memory_all_size(MEMORY_MAP map)
         EfiMemory++;
     }
 
-    return total_pages * PAGE_SIZE;
+    return total_pages * 4;
 }
 
 void init_frame(MEMORY_MAP map)

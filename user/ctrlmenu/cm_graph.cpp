@@ -91,6 +91,9 @@ void draw_setting()
         xapi_GetSystemVersion(system_version);
         char cpu_model[64];
         xapi_GetCpuModel(cpu_model);
+        char memory_size[64];
+        strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024));
+        strcat(memory_size, " GB");
 
         xapi_DrawPicture(handle, win_width / 10 * 3 + 8, 129, 302, 170, "/system/xj380_2.png");
 
@@ -101,7 +104,7 @@ void draw_setting()
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 218, cpu_model, 11, 0xffffffff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "运行内存", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, xcr_int2char((xapi_GetMemorySize() + 1023) / 1024), 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffffffff);
     }
     else if (setting_cindex == 2)
     {

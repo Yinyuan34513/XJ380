@@ -166,5 +166,5 @@ extern uint64_t memory_total_size;
 
 uint64_t do_xapi_GetMemorySize()
 {
-    return memory_total_size;
+    return memory_total_size / 1024;
 }
