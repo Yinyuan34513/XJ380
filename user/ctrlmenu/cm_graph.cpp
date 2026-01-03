@@ -95,6 +95,10 @@ void draw_setting()
         char memory_size[64];
         strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024));
         strcat(memory_size, " GB");
+        char fenbianlv[64];
+        strcat(memory_size, xcr_int2char(win_width));
+        strcat(memory_size, "x");
+        strcat(memory_size, xcr_int2char(win_height));
 
         xapi_DrawPicture(handle, win_width / 10 * 3 + 8, 129, 302, 170, "/system/xj380_2.png");
 
@@ -115,6 +119,9 @@ void draw_setting()
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 338, "系统类型", 11, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 338, "x64 操作系统，基于 x86_64 处理器", 11, 0xffffffff);
+
+        xapi_DrawText(handle, win_width / 10 * 3 + 302, 368, "分辨率", 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 402, 368, fenbianlv, 11, 0xffffffff);
     }
     else if (setting_cindex == 2)
     {
