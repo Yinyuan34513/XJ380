@@ -412,7 +412,6 @@ void message_handler(UINT64 Type, UINT64 hData, UINT64 lData)
     default:
         break;
     }
-    if (Type == MSG_LBUTTON) { process_left_b(hData, lData); }
 }
 int main(int argc, char *argv[], char *envp[])
 {
