@@ -263,10 +263,10 @@ void process_mouse_info()
     
     if (ms_dec.left)
     {
-        if (!ms_dec.win_move_lock && !have_full_screen_app)
+        if (!ms_dec.win_move_lock)
         {
             ms_dec.sheet_id = found_sheet_movable(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sheet_id == NULL)
+            if (ms_dec.sheet_id == NULL || have_full_screen_app)
             {
                 // 点在了桌面或快捷栏上
                 ms_dec.win_move_lock = false;
