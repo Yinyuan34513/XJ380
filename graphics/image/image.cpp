@@ -65,13 +65,13 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_string("PrintPic: File open failed\n");
         return;
     }
     const unsigned char *bf = (const unsigned char *)malloc(v->size);
     if (!bf)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_string("PrintPic: File allocate failed\n");
         return;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);

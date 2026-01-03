@@ -248,8 +248,12 @@ void paint_task_dock_item(TDB_t tdb, int count)
                         task_dock_index_bx + 80 * count + 64, sht_img->scry);
 }
 
+extern bool have_full_screen_app;
+
 void flush_task_dock()
 {
+    if (have_full_screen_app) return;
+
     spin_lock(task_dock_lock);
     TDB_t front_p = first_dock_block;
     int i = 0;

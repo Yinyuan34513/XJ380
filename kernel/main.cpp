@@ -297,10 +297,10 @@ void desktop_flusher()
     delay_s_hp(3);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
-    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);

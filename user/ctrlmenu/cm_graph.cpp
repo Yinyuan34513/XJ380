@@ -68,14 +68,21 @@ void draw_setting()
     xapi_DrawText(handle, 16, 128, "系统", 16, 0xffffffff);
 
     xapi_DrawRect(handle, 8, 166, win_width / 10 * 3, 196, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 166, "外观", 16, 0xffffffff);
+    xapi_DrawText(handle, 16, 166, "图形", 16, 0xffffffff);
 
     xapi_DrawRect(handle, 8, 204, win_width / 10 * 3, 234, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 204, "时间与位置", 16, 0xffffffff);
+    xapi_DrawText(handle, 16, 204, "外观", 16, 0xffffffff);
+
+    xapi_DrawRect(handle, 8, 242, win_width / 10 * 3, 272, 0x00a2e8ff, true);
+    xapi_DrawText(handle, 16, 242, "应用", 16, 0xffffffff);
+
+    xapi_DrawRect(handle, 8, 280, win_width / 10 * 3, 310, 0x00a2e8ff, true);
+    xapi_DrawText(handle, 16, 280, "时间与位置", 16, 0xffffffff);
 
     if (setting_cindex == 1)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 128, win_width / 10 * 3 + 8, 158, 0x00a2e8ff, true);
+        xapi_DrawPicture(handle, win_width / 10 * 3 + win_width / 10 * 7 / 2 - 303, 129, 605, 340, "system/xj380_2.png");
     }
     else if (setting_cindex == 2)
     {
@@ -84,5 +91,13 @@ void draw_setting()
     else if (setting_cindex == 3)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 204, win_width / 10 * 3 + 8, 234, 0x00a2e8ff, true);
+    }
+    else if (setting_cindex == 4)
+    {
+        xapi_DrawRect(handle, win_width / 10 * 3, 242, win_width / 10 * 3 + 8, 272, 0x00a2e8ff, true);
+    }
+    else if (setting_cindex == 5)
+    {
+        xapi_DrawRect(handle, win_width / 10 * 3, 280, win_width / 10 * 3 + 8, 310, 0x00a2e8ff, true);
     }
 }
