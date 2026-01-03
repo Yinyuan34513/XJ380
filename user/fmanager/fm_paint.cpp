@@ -99,7 +99,7 @@ void paint_dir(char *path)
 
     for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
     {
-        paint_item(i, fdir[i].filename, fdir[i].filetype, fdir[i].length);
+        paint_item(i - file_count_base, fdir[i].filename, fdir[i].filetype, fdir[i].length);
     }
     xapi_RefreshWindow(handle);
 }

@@ -69,6 +69,11 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
         return;
     }
     const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    if (!bf)
+    {
+        write_serial_string("PrintPic: File load failed\n");
+        return;
+    }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
     if (!b)

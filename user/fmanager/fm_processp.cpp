@@ -48,15 +48,15 @@ void register_click(int x, int y)
             if (y > 148 && y < 166 && file_count_base > 0)
             {
                 file_count_base--;
+                paint_fm_back();
+                paint_dir(current_path);
             }
-            else if (y > 170 && y < 188 && file_count_base + 13 < file_count)
+            else if (y > 170 && y < 188 && file_count_base + 13 <= file_count)
             {
                 file_count_base++;
-                xapi_OutputSerial(xcr_int2char(file_count_base));
-                xapi_OutputSerial("\n");
+                paint_fm_back();
+                paint_dir(current_path);
             }
         }
-        paint_fm_back();
-        paint_dir(current_path);
     }
 }
