@@ -77,6 +77,15 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
     int            bitmap_w = 1920; /* 位图的宽 */
     int            bitmap_h = 1080; /* 位图的高 */
     unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
+    if (!bitmap)
+    {
+        // try again
+        bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
+        if (!bitmap)
+        {
+            return NULL;
+        }
+    }
     memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
     /* "STB"的 unicode 编码 */
@@ -235,6 +244,13 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     unsigned int   width  = 0;
     unsigned int   height = 0;
     unsigned char *bitmap = TTF_Print(r, &width, &height, data->size);
+
+    if (bitmap == NULL) 
+    {
+        write_serial_fmt("TTF Print Failed. Reason: Memory Allocate Failed.\n");
+        return;
+    }
+
     *i_width = width;
 
     // 查找图层

@@ -3,6 +3,8 @@
 #include "block.h"
 
 #include <krlibc.h>
+#include <cpu/lock.h>
+#include <stdint.h>
 
 // 大于 16k 的都算作大内存块
 // 大内存块使用专门的 freelist
@@ -155,6 +157,8 @@ static inline void *freelists_aligned_match(freelists_t lists, size_t size, size
 
 #undef aligned_size_of
 
+spin_t freelist_op_lock = SPIN_INIT;
+
 /**
  *\brief 将元素放到 freelist 中
  *
@@ -163,10 +167,14 @@ static inline void *freelists_aligned_match(freelists_t lists, size_t size, size
  */
 static inline void freelist_put(freelist_t *list_p, freelist_t ptr)
 {
+    spin_lock(freelist_op_lock);
+
     ptr->next = *list_p;
     ptr->prev = NULL;
     *list_p   = ptr;
     if (ptr->next) ptr->next->prev = ptr;
+
+    spin_unlock(freelist_op_lock);
 }
 
 /**
@@ -184,9 +192,15 @@ static inline bool freelists_put(freelists_t lists, void *_ptr)
     size_t     size = blk_size(ptr);
     int        id   = freelists_size2id(size);
     if (id < 0) return false;
+
+    spin_lock(freelist_op_lock);
+
     ptr->next = lists[id];
     ptr->prev = NULL;
     lists[id] = ptr;
     if (ptr->next) ptr->next->prev = ptr;
+
+    spin_unlock(freelist_op_lock);
+    
     return true;
 }
