@@ -96,9 +96,9 @@ void draw_setting()
         strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024));
         strcat(memory_size, " GB");
         char fenbianlv[64];
-        strcat(memory_size, xcr_int2char(win_width));
-        strcat(memory_size, "x");
-        strcat(memory_size, xcr_int2char(win_height));
+        strcat(fenbianlv, xcr_int2char(win_width));
+        strcat(fenbianlv, "x");
+        strcat(fenbianlv, xcr_int2char(win_height));
 
         xapi_DrawPicture(handle, win_width / 10 * 3 + 8, 129, 302, 170, "/system/xj380_2.png");
 
