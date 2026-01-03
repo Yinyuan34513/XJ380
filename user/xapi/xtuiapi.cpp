@@ -247,6 +247,14 @@ void	xapi_GetTimeX(TimeType *tm) {
 	enter_syscall(XAPI_GET_TIME_X, (uint64_t)tm, 0, 0, 0, 0, 0);
 }
 
+void	xapi_GetCpuModel(WSTR version) {
+	enter_syscall(XAPI_GET_CPU_MODEL, (uint64_t)version, 0, 0, 0, 0, 0);
+}
+
+UINT64	xapi_GetMemorySize() {
+	return enter_syscall(XAPI_GET_MEMORY_SIZE, 0, 0, 0, 0, 0, 0);
+}
+
 // 3-6
 void	xapi_Broken(WSTR broken_info) {
 	enter_syscall(XAPI_BROKEN, (uint64_t)broken_info, 0, 0, 0, 0, 0);

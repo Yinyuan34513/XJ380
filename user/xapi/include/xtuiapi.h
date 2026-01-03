@@ -98,6 +98,8 @@ void	xapi_GetSystemVersion(WSTR version);
 UINT64	xapi_GetTime();
 void	xapi_GetCurrentUser(UserInfo *user_info);
 void	xapi_GetTimeX(TimeType *tm);
+void	xapi_GetCpuModel(WSTR version);
+UINT64	xapi_GetMemorySize();
 
 // 3-6
 void	xapi_Broken(WSTR broken_info);

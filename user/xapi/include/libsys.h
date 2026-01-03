@@ -119,6 +119,8 @@
 #define XAPI_GET_CURRENT_USER   413
 
 #define XAPI_GET_TIME_X         433
+#define XAPI_GET_CPU_MODEL      434
+#define XAPI_GET_MEMORY_SIZE    435
 
 // P3.6
 #define XAPI_BROKEN         428

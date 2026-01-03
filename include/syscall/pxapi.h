@@ -84,6 +84,8 @@ typedef struct {
 #define XAPI_GET_CURRENT_USER   413
 
 #define XAPI_GET_TIME_X         433
+#define XAPI_GET_CPU_MODEL      434
+#define XAPI_GET_MEMORY_SIZE    435
 
 // P3.6
 #define XAPI_BROKEN         428
@@ -147,7 +149,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：433
+// 当前最大号：435
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);

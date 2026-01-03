@@ -7,6 +7,7 @@
 
 FrameAllocator frame_allocator;
 uint64_t       memory_size = 0;
+uint64_t       memory_total_size = 0;
 
 uint64_t get_memory_size(MEMORY_MAP map)
 {
@@ -26,12 +27,27 @@ uint64_t get_memory_size(MEMORY_MAP map)
     return total_pages * PAGE_SIZE;
 }
 
+uint64_t get_memory_all_size(MEMORY_MAP map)
+{
+    uint64_t       total_pages = 0;
+    EfiMemoryDesc *EfiMemory   = (EfiMemoryDesc *)((uint64_t)(map.Buffer) + 0xFFFF800000000000);
+
+    for (int i = 0; i < (map.MapSize / map.DescriptorSize); i++)
+    {
+        total_pages += EfiMemory->NumberOfPages;
+        EfiMemory++;
+    }
+
+    return total_pages * PAGE_SIZE;
+}
+
 void init_frame(MEMORY_MAP map)
 {
 #if ENABLE_BUDDY
     init_frame_buddy(map);
 #else
     memory_size = get_memory_size(map);
+    memory_total_size = get_memory_all_size(map);
 
     size_t         bitmap_size    = (memory_size / 4096 + 7) / 8;
     uint64_t       bitmap_address = 0;

@@ -161,3 +161,10 @@ void do_xapi_GetTimeX(uint64_t tt)
     tm *time_s = (tm *)tt;
     time_read(time_s);
 }
+
+extern uint64_t memory_total_size;
+
+uint64_t do_xapi_GetMemorySize()
+{
+    return memory_total_size;
+}
