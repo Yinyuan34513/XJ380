@@ -40,4 +40,23 @@ void register_click(int x, int y)
             paint_dir(current_path);
         }
     }
+    
+    if (need_duopage)
+    {
+        if (x > FMR_X - 19)
+        {
+            if (y > 148 && y < 166 && file_count_base > 0)
+            {
+                file_count_base--;
+            }
+            else if (y > 170 && y < 188 && file_count_base + 13 < file_count)
+            {
+                file_count_base++;
+                xapi_OutputSerial(xcr_int2char(file_count_base));
+                xapi_OutputSerial("\n");
+            }
+        }
+        paint_fm_back();
+        paint_dir(current_path);
+    }
 }

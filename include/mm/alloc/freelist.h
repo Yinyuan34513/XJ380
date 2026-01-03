@@ -27,6 +27,8 @@ static inline int freelists_size2id(size_t size)
     return (32 - 9) - __builtin_clz(size) + 2;
 }
 
+spin_t freelist_op_lock = SPIN_INIT;
+
 /**
  *\brief 将 freelist 中的内存块分离
  *
@@ -36,9 +38,13 @@ static inline int freelists_size2id(size_t size)
  */
 static inline freelist_t freelist_detach(freelist_t list, freelist_t ptr)
 {
+    spin_lock(freelist_op_lock);
+
     if (list == ptr) return ptr->next;
     if (ptr->next) ptr->next->prev = ptr->prev;
     if (ptr->prev) ptr->prev->next = ptr->next;
+
+    spin_unlock(freelist_op_lock);
     return list;
 }
 
@@ -52,6 +58,8 @@ static inline freelist_t freelist_detach(freelist_t list, freelist_t ptr)
  */
 static inline void *freelists_detach(freelists_t lists, int id, freelist_t ptr)
 {
+    spin_lock(freelist_op_lock);
+
     if (lists[id] == ptr)
     {
         lists[id] = ptr->next;
@@ -60,6 +68,8 @@ static inline void *freelists_detach(freelists_t lists, int id, freelist_t ptr)
 
     if (ptr->next) ptr->next->prev = ptr->prev;
     if (ptr->prev) ptr->prev->next = ptr->next;
+
+    spin_unlock(freelist_op_lock);
     return ptr;
 }
 
@@ -157,8 +167,6 @@ static inline void *freelists_aligned_match(freelists_t lists, size_t size, size
 
 #undef aligned_size_of
 
-spin_t freelist_op_lock = SPIN_INIT;
-
 /**
  *\brief 将元素放到 freelist 中
  *
@@ -201,6 +209,6 @@ static inline bool freelists_put(freelists_t lists, void *_ptr)
     if (ptr->next) ptr->next->prev = ptr;
 
     spin_unlock(freelist_op_lock);
-    
+
     return true;
 }

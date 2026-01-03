@@ -6,6 +6,10 @@ char path[1024] = "/";
 
 FILE_TYPEINFO_INDEX file_ti_index[2048];
 
+bool need_duopage = false;
+int  file_count_base = 0;
+int  file_count = 0;
+
 void paint_fm_back()
 {
     xapi_DrawRect(handle, 0, 0 , FMR_X - 1, 25, 0xeaeaeaff, true);
@@ -14,6 +18,12 @@ void paint_fm_back()
     xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
     xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/icon/bright.png");
     xapi_DrawText(handle, 56, 2, current_path, 11, 0x000000ff);
+
+    if (need_duopage)
+    {
+        xapi_DrawPNG(handle, FMR_X - 19, 148, 18, 18, "/system/icon/bup.png");
+        xapi_DrawPNG(handle, FMR_X - 19, 170, 18, 18, "/system/icon/bdown.png");
+    }
     xapi_RefreshWindow(handle);
 }
 
@@ -74,7 +84,20 @@ void paint_dir(char *path)
         // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
         xapi_DrawText(handle, FMR_X / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
     }
-    for (int i = 0; i < count; i++)
+
+    if (count > 12)
+    {
+        need_duopage = true;
+        file_count = count;
+        paint_fm_back();
+    }
+    else 
+    {
+        need_duopage = false;
+        file_count_base = 0;
+    }
+
+    for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
     {
         paint_item(i, fdir[i].filename, fdir[i].filetype, fdir[i].length);
     }
