@@ -443,34 +443,147 @@ static MouseType get_mouse_type()
     return type0 == 0x3 ? OnlyScroll : (type0 == 0x4 ? FiveButton : Standard);
 }
 
-void mouse_init()
-{
-    open_interrupt;
-
+// 修正后的 mouse_init()
+void mouse_init() {
+    // 1. 禁用中断
+    asm volatile("cli");
+    
+    // 2. 启用辅助PS/2端口（鼠标）
     wait_KB_write();
-    outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
+    outb(PORT_KB_CMD, 0xA8);
 
+    // 3. 清空输出缓冲区
+    inb(PORT_KB_DATA);
+
+    // 4. 设置控制器命令字节
+    wait_KB_write();
+    outb(PORT_KB_CMD, 0x60);  // 写命令字节命令
+    wait_KB_write();
+    
+    // 启用IRQ1（键盘）和IRQ12（鼠标），保留其他位
+    uint8_t cmd_byte = 0x47;  // 0110 0111
+    // 位7: 保留
+    // 位6: 翻译键盘扫描码
+    // 位5: 禁用鼠标
+    // 位4: 禁用键盘
+    // 位3: 保留
+    // 位2: 系统标志
+    // 位1: 启用鼠标IRQ
+    // 位0: 启用键盘IRQ
+    outb(PORT_KB_DATA, cmd_byte);
+    
+    delay_ms(20);
+    
+    // 5. 重置鼠标
+    mouse_write(0xFF);  // 重置命令
     delay_ms(100);
 
-    wait_KB_write();
-    outb(PORT_KB_CMD, KB_SEND2MOUSE);
-    wait_KB_write();
-    outb(PORT_KB_DATA, MOUSE_EN);
-
-    delay_ms(100);
-
-    wait_KB_write();
-    outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
-    wait_KB_write();
-    outb(PORT_KB_DATA, KB_INIT_MODE);
-
-    mouse_x      = (get_hor() - 16) / 2;
-    mouse_y      = (get_ver() - 28 - 29) / 2;
+    // 读取ACK和自检结果
+    uint8_t ack = mouse_read();
+    if (ack != 0xFA) {
+        printk("Mouse reset ACK failed: 0x%x\n", ack);
+        return ;
+    }
+    
+    delay_ms(500);
+    uint8_t self_test = mouse_read();
+    if (self_test != 0xAA) {
+        printk("Mouse self-test failed: 0x%x\n", self_test);
+        return ;
+    }
+    
+    uint8_t mouse_id = mouse_read();
+    if (mouse_id != 0x00) {
+        printk("Mouse ID: 0x%x\n", mouse_id);
+    }
+    
+    // 6. 设置默认参数
+    mouse_write(0xF6);  // 设置默认参数
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) {
+        printk("Set defaults ACK failed: 0x%x\n", ack);
+        return ;
+    }
+    
+    // 7. 设置采样率（重要！实体机需要）
+    mouse_write(0xF3);  // 设置采样率
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    mouse_write(100);   // 100采样/秒（适合大多数鼠标）
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    // 8. 设置分辨率
+    mouse_write(0xE8);  // 设置分辨率
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    mouse_write(0x03);  // 8 counts/mm（中等分辨率）
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    // 9. 设置缩放（1:1）
+    mouse_write(0xE6);  // 设置缩放1:1
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    // 10. 启用数据报告
+    mouse_write(0xF4);
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    // 11. 识别鼠标类型（支持滚轮检测）
+    mouse_write(0xF2);  // 获取设备ID
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    uint8_t device_id = mouse_read();
+    if (device_id == 0x00) {
+        type = Standard;
+        printk("Standard PS/2 mouse detected\n");
+    } else if (device_id == 0x03) {
+        type = OnlyScroll;
+        printk("Scroll wheel mouse detected\n");
+    } else if (device_id == 0x04) {
+        type = FiveButton;
+        printk("5-button mouse detected\n");
+    } else {
+        type = Standard;
+        printk("Unknown mouse ID 0x%x, assuming standard\n", device_id);
+    }
+    
+    // 12. 重新启用数据报告（某些鼠标需要）
+    mouse_write(0xF4);
+    delay_ms(10);
+    ack = mouse_read();
+    if (ack != 0xFA) return ;
+    
+    // 13. 清空可能的数据包
+    while (inb(PORT_KB_STATUS) & 0x01) {
+        inb(PORT_KB_DATA);
+    }
+    
+    // 14. 初始化状态变量
+    mouse_x = (get_hor() - 16) / 2;
+    mouse_y = (get_ver() - 28 - 29) / 2;
     ms_dec.phase = 0;
-
     ms_dec.win_move_lock = false;
-    ms_dec.sht_now       = NULL;
-    close_interrupt;
+    ms_dec.sht_now = NULL;
+    ms_dec.need_flush = false;
+    
+    // 15. 启用中断
+    asm volatile("sti");
+    
+    printk("Mouse initialized successfully, type: %d\n", type);
 }
 // void mouse_init()
 // {

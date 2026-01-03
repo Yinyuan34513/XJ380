@@ -392,6 +392,26 @@ void process_left_b(int x, int y)
 // 消息处理函数
 void message_handler(UINT64 Type, UINT64 hData, UINT64 lData)
 {
+    switch (Type)
+    {
+    case MSG_LBUTTON:
+        process_left_b(hData, lData); 
+        break;
+    case MSG_CHAR:
+        if(lData>='0'&&lData<='9'){handle_number(lData-'0');update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        else if(lData=='+'){handle_operator('+');update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        else if(lData=='-'){handle_operator('-');update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        else if(lData=='*'){handle_operator('*');update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        else if(lData=='/'){handle_operator('/');update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        else if(lData=='='){if (calc_state.operation != '\0') { perform_calculation(); }update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        break;
+    case MSG_SPCHAR:
+        if(lData=='\b'){handle_backspace();update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        if(lData=='\n'){if (calc_state.operation != '\0') { perform_calculation(); }update_display(window_handle);xapi_RefreshWindow(window_handle);}
+        break;
+    default:
+        break;
+    }
     if (Type == MSG_LBUTTON) { process_left_b(hData, lData); }
 }
 int main(int argc, char *argv[], char *envp[])
@@ -418,7 +438,7 @@ int main(int argc, char *argv[], char *envp[])
     // 刷新窗口
     xapi_RefreshWindow(window_handle);
 
-    while (calc_state.running)
+    while (1)
     {
         __asm__ volatile("pause\n\t");
     }
