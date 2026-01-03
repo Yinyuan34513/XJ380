@@ -1,6 +1,7 @@
 #include <x3api.h>
 #include <krlibc.h>
 #include "cm_proto.h"
+#include "../../kernel/build_settings.h"
 
 int cindex = 1;
 
@@ -105,6 +106,9 @@ void draw_setting()
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "运行内存", 11, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffffffff);
+
+        xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "内核版本", 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, KN_VERSION, 11, 0xffffffff);
     }
     else if (setting_cindex == 2)
     {
