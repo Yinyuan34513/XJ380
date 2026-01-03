@@ -4,7 +4,7 @@
 
 int cindex = 1;
 
-char wdaystr_table[7][20] = {
+char wdaystr_table[8][20] = {
     "星期一",
     "星期二",
     "星期三",
@@ -12,6 +12,7 @@ char wdaystr_table[7][20] = {
     "星期五",
     "星期六",
     "星期日",
+    "星期八",
 };
 
 void draw_background()
@@ -85,7 +86,7 @@ void draw_setting()
     if (setting_cindex == 1)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 128, win_width / 10 * 3 + 8, 158, 0x00a2e8ff, true);
-        xapi_DrawPicture(handle, win_width / 10 * 3 + win_width / 10 * 7 / 2 - 303, 129, 605, 340, "system/xj380_2.png");
+        xapi_DrawPicture(handle, win_width / 10 * 3 + win_width / 10 * 7 / 2 - 303, 129, 605, 340, "/system/xj380_2.png");
     }
     else if (setting_cindex == 2)
     {
