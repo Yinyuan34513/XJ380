@@ -38,13 +38,9 @@ spin_t freelist_op_lock = SPIN_INIT;
  */
 static inline freelist_t freelist_detach(freelist_t list, freelist_t ptr)
 {
-    spin_lock(freelist_op_lock);
-
     if (list == ptr) return ptr->next;
     if (ptr->next) ptr->next->prev = ptr->prev;
     if (ptr->prev) ptr->prev->next = ptr->next;
-
-    spin_unlock(freelist_op_lock);
     return list;
 }
 
@@ -58,8 +54,6 @@ static inline freelist_t freelist_detach(freelist_t list, freelist_t ptr)
  */
 static inline void *freelists_detach(freelists_t lists, int id, freelist_t ptr)
 {
-    spin_lock(freelist_op_lock);
-
     if (lists[id] == ptr)
     {
         lists[id] = ptr->next;
@@ -68,8 +62,6 @@ static inline void *freelists_detach(freelists_t lists, int id, freelist_t ptr)
 
     if (ptr->next) ptr->next->prev = ptr->prev;
     if (ptr->prev) ptr->prev->next = ptr->next;
-
-    spin_unlock(freelist_op_lock);
     return ptr;
 }
 
