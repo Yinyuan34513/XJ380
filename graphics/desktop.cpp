@@ -321,6 +321,8 @@ void unregister_task_dock(WINDOWLSP window)
             refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
                         task_dock_index_bx + 80 * count + 64, sht_img->scry);
 
+            if (front_p2->next == NULL) break;
+
             count++;
             draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
                         task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
@@ -328,6 +330,8 @@ void unregister_task_dock(WINDOWLSP window)
                         task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
             refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
                         task_dock_index_bx + 80 * count + 64, sht_img->scry);
+
+            break;
         }
         if (front_p->next == NULL)
         {
