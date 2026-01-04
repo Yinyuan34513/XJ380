@@ -152,7 +152,13 @@ void do_xapi_Printf(char *str)
 
 void do_xapi_Sleep(uint64_t ms)
 {
-    delay_ms(ms);
+    open_interrupt;
+    uint64_t old_t = nanoTime();
+    while (nanoTime() - old_t <= ms * 1000000)
+    {
+        __asm__ volatile("pause");
+    }
+    close_interrupt;
 }
 
 void do_xapi_GetTimeX(uint64_t tt)

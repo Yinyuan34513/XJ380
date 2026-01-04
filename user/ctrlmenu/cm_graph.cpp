@@ -46,9 +46,6 @@ void draw_background()
     TimeType tm;
     xapi_GetTimeX(&tm);
 
-        xapi_OutputSerial(xcr_int2char(tm.tm_wday));
-        xapi_OutputSerial("\n");
-
     sprintf(time_str_buffer, "%d 年 %d 月 %d 日 %s %02u:%02u", tm.tm_year, tm.tm_mon, tm.tm_mday, 
                     wdaystr_table[tm.tm_wday - 1], tm.tm_hour, tm.tm_min);
     xapi_DrawText(handle, 940, 44, time_str_buffer, 16, 0xffffffff);
