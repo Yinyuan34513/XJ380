@@ -47,7 +47,7 @@ typedef struct
     int tm_mday;  // 1 个月的天数 [1，31]
     int tm_mon;   // 1 年中月份 [1，12]
     int tm_year;  // 年数
-    int tm_wday;  // 1 星期中的某天 [0，6] (星期一 =0)
+    int tm_wday;  // 1 星期中的某天 [1，7] (星期日 = 1)
     int tm_yday;  // 1 年中的某天 [0，365]
     int tm_isdst; // 夏令时标志
 } TimeType;

@@ -5,15 +5,14 @@
 
 int cindex = 1;
 
-char wdaystr_table[8][20] = {
+char wdaystr_table[7][20] = {
+    "星期日",
     "星期一",
     "星期二",
     "星期三",
     "星期四",
     "星期五",
     "星期六",
-    "星期日",
-    "星期八",
 };
 
 void draw_background()
@@ -51,7 +50,7 @@ void draw_background()
         xapi_OutputSerial("\n");
 
     sprintf(time_str_buffer, "%d 年 %d 月 %d 日 %s %02u:%02u", tm.tm_year, tm.tm_mon, tm.tm_mday, 
-                    wdaystr_table[tm.tm_wday], tm.tm_hour, tm.tm_min);
+                    wdaystr_table[tm.tm_wday - 1], tm.tm_hour, tm.tm_min);
     xapi_DrawText(handle, 940, 44, time_str_buffer, 16, 0xffffffff);
 
     xapi_RefreshWindow(handle);
