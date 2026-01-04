@@ -393,3 +393,18 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
     spin_unlock(task_dock_lock);
     flush_task_dock();
 }
+
+void draw_app_message_box(char *title, char *text)
+{
+    int scdx = fbc_addr->horizontal_resolution * 13 / 16 - 1;
+    draw_rect(sht_img, &dock_sheet_id, scdx - 300, 28, scdx, 128, DOCK_COL);
+    
+    print_box_ttf(sht_img, &dock_sheet_id, title, BLACK, scdx - 300 + 8, 28, 16);
+    print_box_ttf(sht_img, &dock_sheet_id, text, BLACK, scdx - 300 + 8, 60, 10);
+    refresh_part_sheet(sht_img, scdx - 300, 28, scdx, 128);
+
+    delay_s_hp(5);
+
+    draw_rect(sht_img, &dock_sheet_id, scdx - 300, 28, scdx, 128, {0,0,0,0});
+    refresh_part_sheet(sht_img, scdx - 300, 28, scdx, 128);
+}

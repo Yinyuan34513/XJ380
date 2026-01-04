@@ -131,4 +131,6 @@ void unregister_task_dock(WINDOWLSP window);
 void focus_window_dock(WINDOWLSP win);
 void change_task_dock_icon(WINDOWLSP win, char *path);
 
+void draw_app_message_box(char *title, char *text);
+
 #endif

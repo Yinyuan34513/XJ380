@@ -261,7 +261,7 @@ void	xapi_Broken(WSTR broken_info) {
 }
 
 void	xapi_SendAppMessage(WSTR title, WSTR text) {
-	enter_syscall(XAPI_BROKEN, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
+	enter_syscall(XAPI_SEND_APP_MSG, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
 }
 
 void 	xapi_Sleep(UINT64 ms)
