@@ -175,15 +175,8 @@ void xapi_DrawPicture(
 );
 
 // 4-4
+#include "libsys.h"
 void SetMsgPrcor(HDLE handle, MsgPrcor func);
-#define MSG_CHAR		0
-#define MSG_SPCHAR		7
-#define MSG_MOVE		1
-#define MSG_LBUTTON		2
-#define MSG_RBUTTON		3
-#define MSG_MBUTTON		4
-#define MSG_ROLLER		5
-#define MSG_CRL			6
 
 // 4-5
 void  xapi_ReadBuffer(

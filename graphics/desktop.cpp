@@ -273,7 +273,7 @@ void flush_task_dock()
     spin_unlock(task_dock_lock);
 }
 
-void register_task_dock(WINDOWLSP window, tcb_t task)
+void register_task_dock(WINDOWLSP window)
 {
     spin_lock(task_dock_lock);
     TDB_t front_p = first_dock_block;
@@ -293,6 +293,43 @@ void register_task_dock(WINDOWLSP window, tcb_t task)
             front_p->next = new_win;
             break;
         }
+        front_p = front_p->next;
+    }
+
+    spin_unlock(task_dock_lock);
+    flush_task_dock();
+}
+
+void unregister_task_dock(WINDOWLSP window)
+{
+    spin_lock(task_dock_lock);
+    int i = 0;
+    TDB_t front_p = first_dock_block;
+    TDB_t front_p2;
+    while (true)
+    {
+        if (front_p->mcount)
+        {
+            i++;
+        }
+        if (front_p->windowls == window)
+        {
+            front_p2->next = front_p->next;
+            free(front_p);
+
+            int count = i;
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
+            refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry);
+        }
+        if (front_p->next == NULL)
+        {
+            break;
+        }
+        front_p2 = front_p;
         front_p = front_p->next;
     }
 

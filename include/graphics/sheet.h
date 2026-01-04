@@ -126,7 +126,8 @@ void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
 
 void flush_task_dock();
-void register_task_dock(WINDOWLSP window, tcb_t task);
+void register_task_dock(WINDOWLSP window);
+void unregister_task_dock(WINDOWLSP window);
 void focus_window_dock(WINDOWLSP win);
 void change_task_dock_icon(WINDOWLSP win, char *path);
 

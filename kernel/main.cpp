@@ -294,13 +294,13 @@ void desktop_flusher()
     while (!xhci_done)
         cpu_relax();
 
-    delay_s_hp(3);
+    delay_s_hp(1);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);
@@ -327,11 +327,11 @@ void desktop_flusher()
             {
                 if (k_input != '\n' && k_input != '\b' && k_input < 128)
                 {
-                    do_message(0, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                    do_message(MSG_CHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
                 else
                 {
-                    do_message(7, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                    do_message(MSG_SPCHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
             }
         }

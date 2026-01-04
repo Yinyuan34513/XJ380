@@ -213,7 +213,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     refresh_part_sheet(sht, 72, 72, width + 24 + 72, height + 52 + 72);
 
-    register_task_dock(new_window, get_current_task());
+    register_task_dock(new_window);
 
     WindowIsCreating = false;
 }
@@ -272,6 +272,8 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     SHEET    *front_p3 = sht->start;
     int       bx, by, ex, ey;
 
+    unregister_task_dock(windowls);
+
     while (true)
     {
         if (front_p3->index == windowls->w_sheet)
@@ -296,10 +298,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     {
         if (front_p->number == windowls->number)
         {
-            if (front_p2)
-                front_p2->next = front_p->next;
-            else
-                xwmi->start = front_p->next;
+            front_p2->next = front_p->next;
             windowls->w_task->window_count--;
             if (windowls->type != XWIN_FULL_SCR) delete_sheet(sht, &(windowls->w_sheet));
             memset(windowls, 0, sizeof(SHEET));
