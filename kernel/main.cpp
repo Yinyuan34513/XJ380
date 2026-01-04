@@ -294,7 +294,7 @@ void desktop_flusher()
     while (!xhci_done)
         cpu_relax();
 
-    delay_s_hp(1);
+    delay_s_hp(3);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);

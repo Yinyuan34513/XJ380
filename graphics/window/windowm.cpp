@@ -267,8 +267,6 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     }
 
     WindowIsCreating  = true;
-    WINDOWLS *front_p = xwmi->start;
-    WINDOWLS *front_p2;
     SHEET    *front_p3 = sht->start;
     int       bx, by, ex, ey;
 
@@ -294,9 +292,12 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         front_p3 = front_p3->next;
     }
 
+    WINDOWLS *front_p = xwmi->start;
+    WINDOWLS *front_p2;
+
     while (true)
     {
-        if (front_p->number == windowls->number)
+        if (front_p == windowls)
         {
             front_p2->next = front_p->next;
             windowls->w_task->window_count--;
