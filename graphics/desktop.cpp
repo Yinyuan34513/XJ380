@@ -308,10 +308,6 @@ void unregister_task_dock(WINDOWLSP window)
     TDB_t front_p2;
     while (true)
     {
-        if (front_p->mcount)
-        {
-            i++;
-        }
         if (front_p->windowls == window)
         {
             front_p2->next = front_p->next;
@@ -324,10 +320,22 @@ void unregister_task_dock(WINDOWLSP window)
                         task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
             refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
                         task_dock_index_bx + 80 * count + 64, sht_img->scry);
+
+            count++;
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
+            refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
+                        task_dock_index_bx + 80 * count + 64, sht_img->scry);
         }
         if (front_p->next == NULL)
         {
             break;
+        }
+        if (front_p->mcount)
+        {
+            i++;
         }
         front_p2 = front_p;
         front_p = front_p->next;
