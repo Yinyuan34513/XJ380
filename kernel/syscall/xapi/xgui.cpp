@@ -529,3 +529,18 @@ void do_xapi_Broken(char *info)
 
     draw_rect(sht_img, &(BrokenNoticeWindow->w_sheet), 12, 70 + 27, 411, 126, GRAY);
 }
+
+void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count)
+{
+    WINDOW_HANDLE       *WindowHandle = (WINDOW_HANDLE *)(handle);
+    RightMenuItem_user  *MenuItems = (RightMenuItem_user *)(items);
+
+    register_right_rb_button_menu(WindowHandle->WindowNodePtr, MenuItems, count);
+}
+
+void do_xapi_DeleteRightButtonMenu(uint64_t handle) 
+{
+    WINDOW_HANDLE       *WindowHandle = (WINDOW_HANDLE *)(handle);
+
+    unregister_right_rb_button_menu_components(WindowHandle->WindowNodePtr);
+}

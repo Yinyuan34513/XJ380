@@ -343,6 +343,8 @@ UINT64 get_btid(int x, int y)
     if (x >= 20 && x <= 20 + 160 && y >= 390 && y <= 390 + 60) return 100; //C
 
     if (x >= 190 && x <= 190 + 75 && y >= 390 && y <= 390 + 60) return 204; //C
+
+    return 0;
 }
 void process_left_b(int x, int y)
 {

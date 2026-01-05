@@ -111,6 +111,7 @@ void process_mouse_button()
         {
             create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
         }
+        close_menu(current_window);
 
         ms_dec.left   = false;
         ms_dec.win_move_lock = false;
@@ -143,7 +144,8 @@ void process_mouse_button()
                         tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
                         current_window->WinMPf, current_window->w_task);
                 }
-                
+                close_menu(current_window);
+                process_right_button_click_event(current_window, tbx, tby);
             }
         }
 

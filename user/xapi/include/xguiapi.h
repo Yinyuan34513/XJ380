@@ -49,6 +49,12 @@ struct XCOLORA
 	UINT8	Alpha;
 };
 
+typedef struct 
+{
+	UINT64 	CRLid;
+	WSTR	text;
+} RightMenuItem;
+
 
 // 4-1
 #define XWIN_NORMAL				0
@@ -211,12 +217,6 @@ void xapi_RefreshWindow(
 );
 
 // 4-6
-typedef struct 
-{
-	UINT64 	CRLid;
-	WSTR	text;
-} RightMenuItem;
-
 void xapi_Button(
 	HDLE  	handle,
 	UINT64  CRLid,

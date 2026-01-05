@@ -1959,6 +1959,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_GET_CPU_MODEL: get_cpu_name((char *)regs->rdi); break;
     case XAPI_GET_MEMORY_SIZE: regs->rax = do_xapi_GetMemorySize(); break;
     case XAPI_SEND_APP_MSG: open_interrupt; draw_app_message_box((char *)regs->rdi, (char *)regs->rsi); close_interrupt; break;
+    case XAPI_REG_RB_MENU: do_xapi_RegisterRightButtonMenu(regs->rdi, regs->rsi, regs->rdx); break;
+    case XAPI_URG_RB_MENU: do_xapi_DeleteRightButtonMenu(regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 

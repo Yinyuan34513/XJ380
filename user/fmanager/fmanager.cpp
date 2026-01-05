@@ -48,6 +48,11 @@ int main(int argc, char *argv[], char *envp[])
 
     xapi_RefreshWindow(handle);
 
+    RightMenuItem rmi[10];
+    rmi[0].text = (char *)"114514";
+    rmi[0].CRLid = 1;
+    xapi_RegisterRightButtonMenu(handle, rmi, 1);
+
     while (1)
     {
         if (double_click)

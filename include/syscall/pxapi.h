@@ -201,6 +201,8 @@ void do_xapi_CloseFile(uint64_t ptr);
 void do_xapi_Broken(char *info);
 void do_xapi_GetTimeX(uint64_t tt);
 uint64_t do_xapi_GetMemorySize();
+void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count);
+void do_xapi_DeleteRightButtonMenu(uint64_t handle);
 
 
 
