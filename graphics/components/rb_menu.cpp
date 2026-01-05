@@ -90,7 +90,7 @@ void place_menu(rb_menu_regt_p regt)
               regt->x + 200, regt->y + 30 * regt->count - 1);
 }
 
-void close_menu(WINDOWLSP win)
+void close_menu(WINDOWLSP win, int x, int y)
 {
     rb_menu_regt_p front_p = first_rb_menu;
     while (true)
@@ -101,6 +101,17 @@ void close_menu(WINDOWLSP win)
         }
         else if (front_p->can_r)
         {
+            int px = x - front_p->x;
+            int py = y - front_p->y;
+
+            if (px >= 0 && px <= 200)
+            {
+                if (py >= 0 && py <= 30 * front_p->count)
+                {
+                    do_message(MSG_CRL, NULL, front_p->items[y / 30].CRLid, win->WinMPf, win->w_task);
+                }
+            }
+
             draw_rect(sht_img, &dock_sheet_id, 
                       front_p->x, front_p->y, 
                       front_p->x + 199, front_p->y + 30 * front_p->count - 1, 
