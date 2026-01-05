@@ -258,7 +258,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     if (windowls->type == XWIN_FULL_SCR)
     {
         have_full_screen_app = false;
-        found_sheet_byid(sht_img, &(windowls->w_sheet))->type == FixedSheetType;
+        found_sheet_byid(sht_img, &(windowls->w_sheet))->type = FixedSheetType;
         memset(found_sheet_byid(sht_img, &(windowls->w_sheet))->buffer, 
                 0, sizeof(SHEET_BUFFER) * 
                 found_sheet_byid(sht_img, &(windowls->w_sheet))->width * 
