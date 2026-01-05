@@ -217,3 +217,22 @@ void xapi_ButtonEmp(
 ) {
 	enter_syscall(XAPI_BUTTON_EMP, handle, x, y, CRLid, (UINT64)(text), 0);
 }
+
+void xapi_DeleteButton(
+	HDLE  	handle,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_DELETE_BUTTON, handle, CRLid, 0, 0, 0, 0);
+}
+
+void xapi_RegisterRightButtonMenu(
+	HDLE  			handle,
+	RightMenuItem  *items,
+	UINT64 			count
+) {
+	enter_syscall(XAPI_REG_RB_MENU, handle, (UINT64)(items), count, 0, 0, 0);
+}
+
+void xapi_DeleteRightButtonMenu(HDLE handle) {
+	enter_syscall(XAPI_URG_RB_MENU, handle, 0, 0, 0, 0, 0);
+}

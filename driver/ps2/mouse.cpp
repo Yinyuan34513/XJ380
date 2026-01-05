@@ -292,7 +292,7 @@ void process_mouse_info()
             else
             {
                 ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
-                lift_sheet(sht_img, ms_dec.sheet_id);
+                if (!have_full_screen_app) lift_sheet(sht_img, ms_dec.sheet_id);
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                    ms_dec.sht_now->bx + ms_dec.sht_now->width,
                                    ms_dec.sht_now->by + ms_dec.sht_now->height);

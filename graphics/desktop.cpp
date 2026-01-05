@@ -313,6 +313,8 @@ void unregister_task_dock(WINDOWLSP window)
             front_p2->next = front_p->next;
             free(front_p);
 
+            if (have_full_screen_app) break;
+
             int count = i;
             draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
                         task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
@@ -396,6 +398,8 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
 
 void draw_app_message_box(char *title, char *text)
 {
+    if (have_full_screen_app) return;
+
     int scdx = fbc_addr->horizontal_resolution * 13 / 16 - 1;
     draw_rect(sht_img, &dock_sheet_id, scdx - 300, 28, scdx, 128, DOCK_COL);
     

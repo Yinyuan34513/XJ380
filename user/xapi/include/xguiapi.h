@@ -211,6 +211,12 @@ void xapi_RefreshWindow(
 );
 
 // 4-6
+typedef struct 
+{
+	UINT64 	CRLid;
+	WSTR	text;
+} RightMenuItem;
+
 void xapi_Button(
 	HDLE  	handle,
 	UINT64  CRLid,
@@ -226,3 +232,16 @@ void xapi_ButtonEmp(
 	UINT64  y,
 	WSTR  	text
 );
+
+void xapi_DeleteButton(
+	HDLE  	handle,
+	UINT64  CRLid
+);
+
+void xapi_RegisterRightButtonMenu(
+	HDLE  			handle,
+	RightMenuItem  *items,
+	UINT64 			count
+);
+
+void xapi_DeleteRightButtonMenu(HDLE handle);

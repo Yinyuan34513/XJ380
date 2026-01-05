@@ -145,12 +145,15 @@ typedef struct {
 #define XAPI_BUTTON_EMP     411
 #define XAPI_DELETE_BUTTON  432
 
+#define XAPI_REG_RB_MENU    436
+#define XAPI_URG_RB_MENU    437
+
 // 4-1
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：435
+// 当前最大号：437
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);

@@ -1948,12 +1948,12 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_REFRESH_WINDOW: regs->rax = (uint64_t)do_xapi_RefreshWindow(regs->rdi); break;
     case XAPI_BUTTON: do_xapi_Button(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_BUTTON_EMP: do_xapi_ButtonEmp(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
+    case XAPI_DELETE_BUTTON: do_xapi_DeleteButton(regs->rdi, regs->rsi); break;
     case XAPI_GET_VERSION: do_xapi_GetSystemVersion(regs->rdi); break;
     case XAPI_GET_TIME: regs->rax = (uint64_t)do_xapi_GetTime(); break;
     case XAPI_GET_CURRENT_USER: do_xapi_GetCurrentUser(regs->rdi); break;
     case XAPI_SLEEP: do_xapi_Sleep(regs->rdi); break;
     case XAPI_CALC_TEXT_WIDTH: regs->rax = calc_ttf_length((char *)regs->rdi, regs->rsi); break;
-    case XAPI_DELETE_BUTTON: do_xapi_DeleteButton(regs->rdi, regs->rsi); break;
     case XAPI_BROKEN: do_xapi_Broken((char *)regs->rdi); break;
     case XAPI_GET_TIME_X: do_xapi_GetTimeX(regs->rdi); break;
     case XAPI_GET_CPU_MODEL: get_cpu_name((char *)regs->rdi); break;

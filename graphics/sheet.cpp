@@ -331,6 +331,8 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
     {
         if (front_p->next == NULL)
         {
+            front_p = front_p->front;
+            front_p = front_p->front;
             while (true)
             {
                 if (front_p->type == MovableSheetType) 
