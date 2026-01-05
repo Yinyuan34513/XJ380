@@ -73,17 +73,7 @@ void paint_dir(char *path)
     DirNode  fdir[256];
     memset(fdir, 0, sizeof(DirNode) * 256);
     xapi_DrawRect(handle, 0, 0, FMR_X - 1, FMR_Y - 1, 0xffffffff, true);
-    paint_fm_back();
-    xapi_DrawLine(handle, 0, 141, FMR_X - 1, 141, 0xc4c4c4ff);
-    xapi_DrawText(handle, 16, 120, "文件名称", 10, 0x000000ff);
-    xapi_DrawText(handle, 240, 120, "类型", 10, 0x000000ff);
-    xapi_DrawText(handle, 400, 120, "大小", 10, 0x000000ff);
     xapi_SearchFile(path, &count, fdir);
-    if (count == 0 || count == 404) 
-    {
-        // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
-        xapi_DrawText(handle, FMR_X / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
-    }
 
     if (count > 12)
     {
@@ -95,6 +85,18 @@ void paint_dir(char *path)
     {
         need_duopage = false;
         file_count_base = 0;
+    }
+
+    paint_fm_back();
+    
+    xapi_DrawLine(handle, 0, 141, FMR_X - 1, 141, 0xc4c4c4ff);
+    xapi_DrawText(handle, 16, 120, "文件名称", 10, 0x000000ff);
+    xapi_DrawText(handle, 240, 120, "类型", 10, 0x000000ff);
+    xapi_DrawText(handle, 400, 120, "大小", 10, 0x000000ff);
+    if (count == 0 || count == 404) 
+    {
+        // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
+        xapi_DrawText(handle, FMR_X / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
     }
 
     for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
