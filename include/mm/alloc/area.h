@@ -21,7 +21,10 @@ static inline void allocarea_init(void *addr, size_t size, void *pdata)
     blk_setsize(ptr, size);
     blk_setfreed(ptr, size);
     if (size_flag) { blk_set_area_2M(ptr, size); }
-    else { blk_set_area_4k(ptr, size); }
+    else
+    {
+        blk_set_area_4k(ptr, size);
+    }
 }
 
 // 对多分配区无效 (会损坏分配区)
@@ -36,7 +39,7 @@ static inline void *allocarea_reinit(void *addr, size_t oldsize, size_t newsize)
 
     if (newsize < oldsize) return NULL;
 
-    void *blk = (void *)((uint64_t)(addr) + oldsize + sizeof(size_t));
+    void *blk = (void *)((uint64_t)(addr) + oldsize);
     blk_setsize(blk, newsize - oldsize - 2 * sizeof(size_t));
     return blk;
 }

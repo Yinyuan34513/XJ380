@@ -2,8 +2,8 @@
 
 #include "block.h"
 
-#include <krlibc.h>
 #include <cpu/lock.h>
+#include <krlibc.h>
 #include <stdint.h>
 
 // 大于 16k 的都算作大内存块
@@ -190,7 +190,8 @@ static inline bool freelists_put(freelists_t lists, void *_ptr)
 {
     freelist_t ptr  = (freelist_t)(_ptr);
     size_t     size = blk_size(ptr);
-    int        id   = freelists_size2id(size);
+    if (size == 0) return true;
+    int id = freelists_size2id(size);
     if (id < 0) return false;
 
     spin_lock(freelist_op_lock);

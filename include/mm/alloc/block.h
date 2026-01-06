@@ -71,13 +71,14 @@ static inline void blk_set_area_2M(void *ptr, size_t size)
 static inline void *blk_areaptr(void *ptr)
 {
     if (blk_area_is_2M(ptr)) { return (void *)((size_t)ptr & ~(SIZE_2M - 1)); }
-    else { return (void *)((size_t)ptr & ~(SIZE_4k - 1)); }
+    else
+    {
+        return (void *)((size_t)ptr & ~(SIZE_4k - 1));
+    }
 }
 // 获取分配区结构指针，仅对多分配区有效
 static inline void *blk_poolptr(void *ptr)
-{
-    return (void *)(*(size_t *)blk_areaptr(ptr) & ~FLAG_BITS);
-}
+{ return (void *)(*(size_t *)blk_areaptr(ptr) & ~FLAG_BITS); }
 
 // 获取上一个块的指针
 static inline void *blk_prev(void *ptr)

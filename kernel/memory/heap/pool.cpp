@@ -11,7 +11,10 @@ static void _detach(mpool_t pool, freelist_t ptr)
 {
     int id = freelists_size2id(blk_size(ptr));
     if (id < 0) { pool->large_blk = freelist_detach(pool->large_blk, ptr); }
-    else { freelists_detach(pool->freed, id, ptr); }
+    else
+    {
+        freelists_detach(pool->freed, id, ptr);
+    }
 }
 
 bool mpool_init(mpool_t pool, void *ptr, size_t size)
@@ -42,14 +45,10 @@ void mpool_deinit(mpool_t pool)
 }
 
 size_t mpool_alloced_size(mpool_t pool)
-{
-    return pool ? pool->alloced_size : 0;
-}
+{ return pool ? pool->alloced_size : 0; }
 
 size_t mpool_total_size(mpool_t pool)
-{
-    return pool ? pool->size : 0;
-}
+{ return pool ? pool->size : 0; }
 
 void mpool_setcb(mpool_t pool, cb_reqmem_t reqmem, cb_delmem_t delmem)
 {
@@ -65,7 +64,7 @@ static bool mpool_reqmem(mpool_t pool, size_t size)
 
     void *mem = pool->cb_reqmem((void *)((uint64_t)(pool->ptr) + pool->size), memsize);
     if (mem == NULL) return false;
-    if (mem != pool->ptr)
+    if (mem != (void *)((uint64_t)(pool->ptr) + pool->size))
     {
         if (pool->cb_delmem) pool->cb_delmem(mem, memsize);
         return false;
@@ -124,7 +123,7 @@ void *mpool_aligned_alloc(mpool_t pool, size_t size, size_t align)
 {
     if (align & (align - 1)) return NULL;                           // 不是 2 的幂次方
     if (align < 2 * sizeof(size_t)) return mpool_alloc(pool, size); // 对齐小于 2 倍指针大小
-    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size); // 保证最小分配 2 个字长且对齐到 2 倍字长
+    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size);          // 保证最小分配 2 个字长且对齐到 2 倍字长
 
     // 优先从空闲链表中分配
     void *ptr =

@@ -4,16 +4,14 @@
 #include <proto.hpp>
 #include <stdint.h>
 
-#define KERNEL_HEAP_START   0xffff900000000000  // 内核堆起始地址
-#define KERNEL_HEAP_SIZE    256 * 1024 * 1024   // 内核堆大小 256MB
+#define KERNEL_HEAP_START 0xffff900000000000 // 内核堆起始地址
+#define KERNEL_HEAP_SIZE  256 * 1024 * 1024  // 内核堆大小 256MB
 
 static struct mpool pool;
 static spin_t       lock = SPIN_INIT;
 
 uint64_t get_all_memusage()
-{
-    return KERNEL_HEAP_SIZE;
-}
+{ return KERNEL_HEAP_SIZE; }
 
 static bool alloc_enter()
 {
@@ -69,9 +67,7 @@ void *realloc(void *ptr, size_t newsize) noexcept
 }
 
 void *reallocarray(void *ptr, size_t n, size_t size) noexcept
-{
-    return realloc(ptr, n * size);
-}
+{ return realloc(ptr, n * size); }
 
 void *aligned_alloc(size_t align, size_t size) noexcept
 {

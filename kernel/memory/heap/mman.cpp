@@ -12,7 +12,10 @@ static void _detach(mman_t man, freelist_t ptr)
 {
     int id = freelists_size2id(blk_size(ptr));
     if (id < 0) { man->large_blk = freelist_detach(man->large_blk, ptr); }
-    else { freelists_detach(man->freed, id, ptr); }
+    else
+    {
+        freelists_detach(man->freed, id, ptr);
+    }
 }
 
 bool mman_init(mman_t man, void *ptr, size_t size)
@@ -58,14 +61,10 @@ void mman_deinit(mman_t man)
 }
 
 size_t mman_alloced_size(mman_t man)
-{
-    return man ? man->alloced_size : 0;
-}
+{ return man ? man->alloced_size : 0; }
 
 size_t mman_total_size(mman_t man)
-{
-    return man ? man->size : 0;
-}
+{ return man ? man->size : 0; }
 
 void mman_setcb(mman_t man, cb_reqmem_t reqmem, cb_delmem_t delmem)
 {
@@ -174,7 +173,7 @@ void *mman_aligned_alloc(mman_t man, size_t size, size_t align)
 {
     if (align & (align - 1)) return NULL;                         // 不是 2 的幂次方
     if (align < 2 * sizeof(size_t)) return mman_alloc(man, size); // 对齐小于 2 倍指针大小
-    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size); // 保证最小分配 2 个字长且对齐到 2 倍字长
+    size = size == 0 ? 2 * sizeof(size_t) : PADDING(size);        // 保证最小分配 2 个字长且对齐到 2 倍字长
 
     if (size >= ALLOC_LARGE_BLK_SIZE || align >= ALLOC_LARGE_BLK_SIZE)
     {
@@ -256,7 +255,10 @@ void *mman_realloc(mman_t man, void *ptr, size_t newsize)
         {
             if (size - newsize >= 2 * SIZE_4k) goto L1;
         }
-        else { try_split_and_free(man, ptr, newsize); }
+        else
+        {
+            try_split_and_free(man, ptr, newsize);
+        }
         return ptr;
     }
 L1:
@@ -297,7 +299,10 @@ void *mman_aligned_realloc(mman_t man, void *ptr, size_t newsize, size_t align)
         {
             if (size - newsize >= 2 * SIZE_4k) goto L1;
         }
-        else { try_split_and_free(man, ptr, newsize); }
+        else
+        {
+            try_split_and_free(man, ptr, newsize);
+        }
         return ptr;
     }
 L1:
