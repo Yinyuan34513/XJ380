@@ -119,6 +119,12 @@ void *pvalloc(size_t size) noexcept
     return ptr;
 }
 
+void pool_print_info() noexcept
+{
+    write_serial_fmt("Memory Pool Total Size: %u bytes\n", mpool_total_size(&pool));
+    write_serial_fmt("Memory Pool Alloced Size: %u bytes\n", mpool_alloced_size(&pool));
+}
+
 void init_heap()
 {
     uint64_t base_addr = KERNEL_HEAP_START;

@@ -61,7 +61,7 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
  */
 void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path)
 {
-    int      w, h, bpp;
+    int        w, h, bpp;
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
@@ -78,7 +78,9 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
     if (!b)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_string("PrintPicture_blend: File load failed\n");
+        void pool_print_info() noexcept;
+        pool_print_info();
         return;
     }
     uint8_t *b1 = (uint8_t *)(malloc(ow * oh * 4));
@@ -117,11 +119,13 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
  */
 void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path)
 {
-    int      w, h, bpp;
+    int        w, h, bpp;
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_string("PrintPicture: File load failed\n");
+        void pool_print_info() noexcept;
+        pool_print_info();
         return;
     }
     const unsigned char *bf = (const unsigned char *)malloc(v->size);
@@ -132,7 +136,7 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
         write_serial_string("PrintPic_PNG: File load failed\n");
         return;
     }
-    uint8_t      *b1 = (uint8_t *)(malloc(ow * oh * 4));
+    uint8_t *b1 = (uint8_t *)(malloc(ow * oh * 4));
     stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
@@ -156,28 +160,38 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
 
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
 {
-    int      w, h, bpp;
+    int        w, h, bpp;
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_string("LoadPicture: File load failed\n");
+        void pool_print_info() noexcept;
+        pool_print_info();
         return;
     }
     const unsigned char *bf = (const unsigned char *)malloc(v->size);
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
-    if (!b) { write_serial_string("PrintPic: File load failed\n"); }
+    if (!b)
+    {
+        write_serial_string("LoadPicture: File load failed\n");
+        void pool_print_info() noexcept;
+        pool_print_info();
+        return;
+    }
     stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, 4);
     vfs_close(v);
 }
 
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
 {
-    int      w, h, bpp;
+    int        w, h, bpp;
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_string("LoadPictureOgM: File load failed\n");
+        void pool_print_info() noexcept;
+        pool_print_info();
         return;
     }
     const unsigned char *bf = (const unsigned char *)malloc(v->size);
