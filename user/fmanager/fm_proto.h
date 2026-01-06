@@ -28,6 +28,8 @@ extern bool need_duopage;
 extern int file_count_base;
 extern int file_count;
 
+extern int choosing_index;
+
 void paint_fm_back();
 void paint_dir(char *path);
 bool get_file_type(char *name, char *type);

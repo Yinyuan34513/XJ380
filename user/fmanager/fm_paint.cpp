@@ -27,8 +27,11 @@ void paint_fm_back()
     xapi_RefreshWindow(handle);
 }
 
-void paint_item(int index, char *name, bool is_folder, int size)
+void paint_item(int index, char *name, bool is_folder, int size, bool is_choosing)
 {
+    xapi_DrawRect(handle, 4, 148 + 24 * index - 4, FMR_X / 10 * 8, 148 + 24 * index + 24 - 4, 0xffffffff, true);
+    if (is_choosing) xapi_DrawRect(handle, 4, 148 + 24 * index - 4, FMR_X / 10 * 8, 148 + 24 * index + 24 - 4, 0xe5f3ffff, true);
+
     xapi_DrawText(handle, 28, 148 + 24 * index - 3, name, 10, 0x000000ff);
     if (is_folder)
     {
@@ -101,7 +104,7 @@ void paint_dir(char *path)
 
     for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
     {
-        paint_item(i - file_count_base, fdir[i].filename, fdir[i].filetype, fdir[i].length);
+        paint_item(i - file_count_base, fdir[i].filename, fdir[i].filetype, fdir[i].length, (choosing_index == i));
     }
     xapi_RefreshWindow(handle);
 }

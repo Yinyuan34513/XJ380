@@ -9,6 +9,8 @@ UINT64 clicktime_recorder = 0;
 int click_x = 0;
 int click_y = 0;
 
+int choosing_index = -1;
+
 void register_click(int x, int y)
 {
     click_x = x;
@@ -58,5 +60,12 @@ void register_click(int x, int y)
                 paint_dir(current_path);
             }
         }
+    }
+
+    if (y >= 148)
+    {
+        int index = (y - 148) / 24;
+        choosing_index = index;
+        paint_dir(current_path);
     }
 }
