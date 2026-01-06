@@ -84,6 +84,7 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     if (!b)
     {
         write_serial_fmt("PrintPicture_blend: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
+        write_serial_fmt("STBI Failure Reason: %s\n", stbi_failure_reason());
         pool_print_info();
         vfs_close(v);
         return;
