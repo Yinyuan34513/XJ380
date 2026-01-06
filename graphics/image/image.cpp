@@ -7,6 +7,8 @@
 
 #include <fs/vfs/vfs.h>
 
+void pool_print_info() noexcept;
+
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
@@ -65,25 +67,36 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("PrintPic: File open failed\n");
+        write_serial_fmt("PrintPic: cannot open '%s'\n", path);
         return;
     }
-    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    unsigned char *bf = (unsigned char *)malloc(v->size);
     if (!bf)
     {
-        write_serial_string("PrintPic: File allocate failed\n");
+        write_serial_fmt("PrintPic: failed to allocate %u bytes for '%s'\n", (unsigned)v->size, path);
+        vfs_close(v);
         return;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    /* source memory no longer needed after load */
+    free(bf);
     if (!b)
     {
-        write_serial_string("PrintPicture_blend: File load failed\n");
-        void pool_print_info() noexcept;
+        write_serial_fmt("PrintPicture_blend: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
         pool_print_info();
+        vfs_close(v);
         return;
     }
-    uint8_t *b1 = (uint8_t *)(malloc(ow * oh * 4));
+    uint8_t *b1 = (uint8_t *)malloc(ow * oh * 4);
+    if (!b1)
+    {
+        write_serial_fmt("PrintPic: output buffer allocate failed (%u bytes) for '%s' (ow=%d,oh=%d)\n",
+                         (unsigned)(ow * oh * 4), path, ow, oh);
+        stbi_image_free(b);
+        vfs_close(v);
+        return;
+    }
     stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
@@ -104,6 +117,8 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
         }
     }
     free(b1);
+    stbi_image_free(b);
+    vfs_close(v);
 }
 
 /**
@@ -123,20 +138,35 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("PrintPicture: File load failed\n");
-        void pool_print_info() noexcept;
+        write_serial_fmt("PrintPicture: cannot open '%s'\n", path);
         pool_print_info();
         return;
     }
-    const unsigned char *bf = (const unsigned char *)malloc(v->size);
-    vfs_read(v, (uint8_t *)bf, 0, v->size);
-    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
-    if (!b)
+    unsigned char *bf = (unsigned char *)malloc(v->size);
+    if (!bf)
     {
-        write_serial_string("PrintPic_PNG: File load failed\n");
+        write_serial_fmt("PrintPicture: failed to allocate %u bytes for '%s'\n", (unsigned)v->size, path);
+        vfs_close(v);
         return;
     }
-    uint8_t *b1 = (uint8_t *)(malloc(ow * oh * 4));
+    vfs_read(v, (uint8_t *)bf, 0, v->size);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    free(bf);
+    if (!b)
+    {
+        write_serial_fmt("PrintPic_PNG: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
+        vfs_close(v);
+        return;
+    }
+    uint8_t *b1 = (uint8_t *)malloc(ow * oh * 4);
+    if (!b1)
+    {
+        write_serial_fmt("PrintPic: output buffer allocate failed (%u bytes) for '%s' (ow=%d,oh=%d)\n",
+                         (unsigned)(ow * oh * 4), path, ow, oh);
+        stbi_image_free(b);
+        vfs_close(v);
+        return;
+    }
     stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
@@ -156,6 +186,8 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
         }
     }
     free(b1);
+    stbi_image_free(b);
+    vfs_close(v);
 }
 
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
@@ -164,22 +196,29 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("LoadPicture: File load failed\n");
-        void pool_print_info() noexcept;
+        write_serial_fmt("LoadPicture: cannot open '%s'\n", path);
         pool_print_info();
         return;
     }
-    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    unsigned char *bf = (unsigned char *)malloc(v->size);
+    if (!bf)
+    {
+        write_serial_fmt("LoadPicture: failed to allocate %u bytes for '%s'\n", (unsigned)v->size, path);
+        vfs_close(v);
+        return;
+    }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    free(bf);
     if (!b)
     {
-        write_serial_string("LoadPicture: File load failed\n");
-        void pool_print_info() noexcept;
+        write_serial_fmt("LoadPicture: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
         pool_print_info();
+        vfs_close(v);
         return;
     }
     stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, 4);
+    stbi_image_free(b);
     vfs_close(v);
 }
 
@@ -189,16 +228,38 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
-        write_serial_string("LoadPictureOgM: File load failed\n");
-        void pool_print_info() noexcept;
+        write_serial_fmt("LoadPictureOgM: cannot open '%s'\n", path);
         pool_print_info();
         return;
     }
-    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    unsigned char *bf = (unsigned char *)malloc(v->size);
+    if (!bf)
+    {
+        write_serial_fmt("LoadPictureOgM: failed to allocate %u bytes for '%s'\n", (unsigned)v->size, path);
+        vfs_close(v);
+        return;
+    }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
-    if (!b) { write_serial_string("PrintPic: File load failed\n"); }
-    *buffer = (SHEET_BUFFER *)malloc(w * h * 4);
+    if (!b)
+    {
+        write_serial_fmt("LoadPictureOgM: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
+        free(bf);
+        vfs_close(v);
+        return;
+    }
+    *buffer = (SHEET_BUFFER *)malloc((size_t)w * h * 4);
+    if (!*buffer)
+    {
+        write_serial_fmt("LoadPictureOgM: output buffer alloc failed (%u bytes) for '%s'\n",
+                         (unsigned)((size_t)w * h * 4), path);
+        stbi_image_free(b);
+        free(bf);
+        vfs_close(v);
+        return;
+    }
     stbir_resize_uint8(b, w, h, 0, (uint8_t *)(*buffer), w, h, 0, 4);
+    stbi_image_free(b);
+    free(bf);
     vfs_close(v);
 }

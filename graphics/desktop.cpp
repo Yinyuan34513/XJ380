@@ -2,39 +2,40 @@
 #include "./image/stbir.h"
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
+#include <device.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
-#include <syscall/signal.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
+#include <fs/vfs/proc.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <graphics/window/window.h>
+#include <hda/hda.h>
+#include <hda/pcspk.h>
 #include <krlibc.h>
 #include <mm/frame.h>
 #include <nvme/nvme.h>
 #include <pci/pci.h>
+#include <pipe.h>
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <rtc.h>
+#include <sb16.h>
+#include <syscall/signal.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
 #include <usb/hid.h>
 #include <xhci/xhci-hcd.h>
-#include <hda/hda.h>
-#include <hda/pcspk.h>
-#include <device.h>
-#include <sb16.h>
-#include <fs/vfs/proc.h>
-#include <pipe.h>
-#include <graphics/window/window.h>
+
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
@@ -44,18 +45,33 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     // #136dff
     // draw_rect(sht, sheet_id, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)malloc(scrx * scry * 4);
-    int      w, h, bpp;
-    vfs_node_t v = vfs_open("/system/image/BackGround.png");
+    int           w, h, bpp;
+    vfs_node_t    v = vfs_open("/system/image/BackGround.png");
     if (!v)
     {
-        write_serial_string("PrintPic: File load failed\n");
+        write_serial_fmt("init_desktop: cannot open '%s'\n", "/system/image/BackGround.png");
         return;
     }
-    const unsigned char *bf = (const unsigned char *)malloc(v->size);
+    unsigned char *bf = (unsigned char *)malloc(v->size);
+    if (!bf)
+    {
+        write_serial_fmt("init_desktop: failed to allocate %u bytes for '%s'\n", (unsigned)v->size,
+                         "/system/image/BackGround.png");
+        vfs_close(v);
+        return;
+    }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
-    if (!b) { write_serial_string("PrintPic: File load failed\n"); }
+    free(bf);
+    if (!b)
+    {
+        write_serial_fmt("init_desktop: decode failed for '%s' (%u bytes)\n", "/system/image/BackGround.png",
+                         (unsigned)v->size);
+        vfs_close(v);
+        return;
+    }
     stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buff), scrx, scry, 0, 4);
+    stbi_image_free(b);
     vfs_close(v);
 
     SHEET *front_p = sht->start;
@@ -70,7 +86,7 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
 
     // 检查内存对齐情况
     front_p->buffer = (void *)buff;
-    
+
     init_dock(sht, dock_sheet_id);
     init_shortcut_dock(sht, dock_sheet_id);
 
@@ -122,8 +138,7 @@ void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id)
     tm time;
     time_read(&time);
     draw_rect(sht, sheet_id, x2 - 40, 0, x2 - 3, 23, DOCK_COL);
-    print_fmt_box_ttf(sht, sheet_id, BLACK, x2 - 40, 1, 10, "%02u:%02u", time.tm_hour % 24,
-                           time.tm_min);
+    print_fmt_box_ttf(sht, sheet_id, BLACK, x2 - 40, 1, 10, "%02u:%02u", time.tm_hour % 24, time.tm_min);
 }
 
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
@@ -168,20 +183,13 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 }
 
 void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
-{
-    PrintPicture_blend(sht, sheet_id, xi, yi, 84, 64, "/system/xj380.png");
-}
+{ PrintPicture_blend(sht, sheet_id, xi, yi, 84, 64, "/system/xj380.png"); }
 
 void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi)
-{
-    PrintPicture_blend(sht, sheet_id, xi, yi, 16, 16, "/system/xingji.png");
-}
+{ PrintPicture_blend(sht, sheet_id, xi, yi, 16, 16, "/system/xingji.png"); }
 
-TASK_DOCK_BLOCK tmp_dock_block = {
-    .mcount = 0,
-    .next = NULL
-};
-TDB_t first_dock_block = &tmp_dock_block;
+TASK_DOCK_BLOCK tmp_dock_block   = {.mcount = 0, .next = NULL};
+TDB_t           first_dock_block = &tmp_dock_block;
 
 int task_dock_index_bx = 132;
 
@@ -205,15 +213,13 @@ spin_t task_dock_lock = SPIN_INIT;
 
 void paint_task_dock_item(TDB_t tdb, int count)
 {
-    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
-    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
+    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48,
+              task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
+    draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
+              task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0, 0, 0, 0});
 
-    PrintPicture_blend(sht_img, &dock_sheet_id, 
-                        task_dock_index_bx + 80 * count, 
-                        sht_img->scry - 24 - 63, 
-                        64, 64, tdb->path);
+    PrintPicture_blend(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 64, 64,
+                       tdb->path);
 
     if (tdb->in_focus)
     {
@@ -223,8 +229,8 @@ void paint_task_dock_item(TDB_t tdb, int count)
             {
                 if (in_focus_window_dock_ball_bitmap[y][x] == '#')
                 {
-                    draw_point(sht_img, &dock_sheet_id, 
-                        x + task_dock_index_bx + 80 * count + 24, y + sht_img->scry - 16, WIN_BLUE);
+                    draw_point(sht_img, &dock_sheet_id, x + task_dock_index_bx + 80 * count + 24,
+                               y + sht_img->scry - 16, WIN_BLUE);
                 }
             }
         }
@@ -237,15 +243,15 @@ void paint_task_dock_item(TDB_t tdb, int count)
             {
                 if (out_focus_window_dock_ball_bitmap[y][x] == '#')
                 {
-                    draw_point(sht_img, &dock_sheet_id, 
-                        x + task_dock_index_bx + 80 * count + 30, y + sht_img->scry - 16, BGRAY);
+                    draw_point(sht_img, &dock_sheet_id, x + task_dock_index_bx + 80 * count + 30,
+                               y + sht_img->scry - 16, BGRAY);
                 }
             }
         }
     }
 
-    refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry);
+    refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
+                       task_dock_index_bx + 80 * count + 64, sht_img->scry);
 }
 
 extern bool have_full_screen_app;
@@ -256,7 +262,7 @@ void flush_task_dock()
 
     spin_lock(task_dock_lock);
     TDB_t front_p = first_dock_block;
-    int i = 0;
+    int   i       = 0;
     while (true)
     {
         if (front_p->mcount)
@@ -264,10 +270,7 @@ void flush_task_dock()
             paint_task_dock_item(front_p, i);
             i++;
         }
-        if (front_p->next == NULL)
-        {
-            break;
-        }
+        if (front_p->next == NULL) { break; }
         front_p = front_p->next;
     }
     spin_unlock(task_dock_lock);
@@ -280,9 +283,9 @@ void register_task_dock(WINDOWLSP window)
     TDB_t new_win = (TDB_t)malloc(sizeof(TASK_DOCK_BLOCK));
     memset(new_win, 0, sizeof(TASK_DOCK_BLOCK));
     strcpy(new_win->path, "/system/icon/unknowexe.png");
-    new_win->mcount = 1;
+    new_win->mcount   = 1;
     new_win->windowls = window;
-    new_win->next = NULL;
+    new_win->next     = NULL;
     new_win->in_focus = false;
 
     front_p = first_dock_block;
@@ -303,7 +306,7 @@ void register_task_dock(WINDOWLSP window)
 void unregister_task_dock(WINDOWLSP window)
 {
     spin_lock(task_dock_lock);
-    int i = 0;
+    int   i       = 0;
     TDB_t front_p = first_dock_block;
     TDB_t front_p2;
     while (true)
@@ -316,35 +319,29 @@ void unregister_task_dock(WINDOWLSP window)
             if (have_full_screen_app) break;
 
             int count = i;
-            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
-            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
-            refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry);
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48,
+                      task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
+                      task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0, 0, 0, 0});
+            refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
+                               task_dock_index_bx + 80 * count + 64, sht_img->scry);
 
             if (front_p2->next == NULL) break;
 
             count++;
-            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
-            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0,0,0,0});
-            refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63, 
-                        task_dock_index_bx + 80 * count + 64, sht_img->scry);
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 48,
+                      task_dock_index_bx + 80 * count + 64, sht_img->scry - 1, DOCK_COL);
+            draw_rect(sht_img, &dock_sheet_id, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
+                      task_dock_index_bx + 80 * count + 64, sht_img->scry - 49, {0, 0, 0, 0});
+            refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
+                               task_dock_index_bx + 80 * count + 64, sht_img->scry);
 
             break;
         }
-        if (front_p->next == NULL)
-        {
-            break;
-        }
-        if (front_p->mcount)
-        {
-            i++;
-        }
+        if (front_p->next == NULL) { break; }
+        if (front_p->mcount) { i++; }
         front_p2 = front_p;
-        front_p = front_p->next;
+        front_p  = front_p->next;
     }
 
     spin_unlock(task_dock_lock);
@@ -358,14 +355,8 @@ void focus_window_dock(WINDOWLSP win)
     while (true)
     {
         front_p->in_focus = false;
-        if (front_p->windowls == win)
-        {
-            front_p->in_focus = true;
-        }
-        if (front_p->next == NULL)
-        {
-            break;
-        }
+        if (front_p->windowls == win) { front_p->in_focus = true; }
+        if (front_p->next == NULL) { break; }
         front_p = front_p->next;
     }
 
@@ -385,10 +376,7 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
             memset(front_p->path, 0, 64);
             strcpy(front_p->path, path);
         }
-        if (front_p->next == NULL)
-        {
-            break;
-        }
+        if (front_p->next == NULL) { break; }
         front_p = front_p->next;
     }
 
@@ -402,13 +390,13 @@ void draw_app_message_box(char *title, char *text)
 
     int scdx = fbc_addr->horizontal_resolution * 13 / 16 - 1;
     draw_rect(sht_img, &dock_sheet_id, scdx - 300, 28, scdx, 128, DOCK_COL);
-    
+
     print_box_ttf(sht_img, &dock_sheet_id, title, BLACK, scdx - 300 + 8, 28, 16);
     print_box_ttf(sht_img, &dock_sheet_id, text, BLACK, scdx - 300 + 8, 60, 10);
     refresh_part_sheet(sht_img, scdx - 300, 28, scdx, 128);
 
     delay_s_hp(5);
 
-    draw_rect(sht_img, &dock_sheet_id, scdx - 300, 28, scdx, 128, {0,0,0,0});
+    draw_rect(sht_img, &dock_sheet_id, scdx - 300, 28, scdx, 128, {0, 0, 0, 0});
     refresh_part_sheet(sht_img, scdx - 300, 28, scdx, 128);
 }

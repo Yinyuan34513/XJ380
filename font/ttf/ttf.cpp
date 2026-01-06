@@ -405,16 +405,23 @@ void init_ttf()
     vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
     if (!v)
     {
-        write_serial_string("Cannot find XJ380F.ttf\n");
-        // wsod_cannot_load_ttf();
+        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380F.ttf");
         return;
     }
     ttf_buffer = (char *)malloc(v->size);
+    if (!ttf_buffer)
+    {
+        write_serial_string("Cannot allocate memory for XJ380F.ttf\n");
+        vfs_close(v);
+        return;
+    }
     write_serial_string("Reading Font - XJ380F (1/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
     if (*(uint64_t *)ttf_buffer == 0)
     {
-        write_serial_string("Cannot read XJ380F.ttf\n");
+        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380F.ttf", (unsigned)v->size);
+        free(ttf_buffer);
+        vfs_close(v);
         return;
     }
     write_serial_string("Loading Font - XJ380F (1/2)...\n");
@@ -427,16 +434,23 @@ void init_ttf()
     v = vfs_open("/system/font/XJ380C.ttf");
     if (!v)
     {
-        write_serial_string("Cannot find XJ380C.ttf\n");
-        // wsod_cannot_load_ttf();
+        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380C.ttf");
         return;
     }
     ttf_buffer_c = (char *)malloc(v->size);
+    if (!ttf_buffer_c)
+    {
+        write_serial_string("Cannot allocate memory for XJ380C.ttf\n");
+        vfs_close(v);
+        return;
+    }
     write_serial_string("Reading Font - XJ380C (2/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
     if (*(uint64_t *)ttf_buffer_c == 0)
     {
-        write_serial_string("Cannot read XJ380C.ttf\n");
+        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380C.ttf", (unsigned)v->size);
+        free(ttf_buffer_c);
+        vfs_close(v);
         return;
     }
     write_serial_string("Loading Font - XJ380C (2/2)...\n");

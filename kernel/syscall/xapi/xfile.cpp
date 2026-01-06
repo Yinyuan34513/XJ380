@@ -2,6 +2,7 @@
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
+#include <errno.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
@@ -15,26 +16,37 @@
 #include <krlibc.h>
 #include <mm/frame.h>
 #include <pci/pci.h>
-#include <proto.hpp>
-#include <rtc.h>
 #include <pctable/gdt.h>
 #include <pctable/idt.h>
-#include <syscall/syscall.h>
+#include <proto.hpp>
+#include <rtc.h>
 #include <syscall/pxapi.h>
+#include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
-#include <errno.h>
+
 
 uint64_t do_xapi_OpenFile(uint64_t path)
 {
-    char    *fpath = (char *)path;
-    XFILE   *fsptr = (XFILE *)malloc(sizeof(XFILE));
+    char  *fpath = (char *)path;
+    XFILE *fsptr = (XFILE *)malloc(sizeof(XFILE));
 
     vfs_node_t f = vfs_open(fpath);
+    if (!f)
+    {
+        free(fsptr);
+        return 0;
+    }
     uint64_t length = f->size;
-    fsptr->buffer = malloc(length);
-    
+    fsptr->buffer   = malloc(length);
+    if (!fsptr->buffer)
+    {
+        vfs_close(f);
+        free(fsptr);
+        return 0;
+    }
     vfs_read(f, fsptr->buffer, 0, length);
+    vfs_close(f);
 
     return (uint64_t)fsptr;
 }
@@ -67,7 +79,7 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
             break;
         }
         void *data = node->data;
-        if (strcmp(((vfs_node_t)data)->name,"")!=0)
+        if (strcmp(((vfs_node_t)data)->name, "") != 0)
         {
             strcpy(fdir[*fcount].filename, ((vfs_node_t)data)->name);
             fdir[*fcount].length   = ((vfs_node_t)data)->size;
@@ -75,6 +87,7 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
             (*fcount)++;
         }
     }
+    vfs_close(v);
 }
 
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs)
