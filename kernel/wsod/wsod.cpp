@@ -78,6 +78,12 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
 {
     disable_scheduler();
 
+    write_serial_string("Fault Thread Name: ");
+    write_serial_string(get_current_task()->name);
+    write_serial_string(" ");
+    write_serial_hex((uint64_t)get_current_task());
+    write_serial_string("\n");
+
     if (error_code & 0x01)
         write_serial_string(
             "The exception occurred during delivery of an event external to the program,such as an interrupt "
@@ -103,7 +109,7 @@ void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
     write_serial_string("Adrress:");
     write_serial_hex(regs->rip);
     write_serial_string("\n");
-    
+
     backtrace(regs);
 
     do_wsod("GENERAL_PROTECTION", regs);

@@ -1,3 +1,4 @@
+#include "../build_settings.h"
 #include <ahci/ahci.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
@@ -24,23 +25,22 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <user/user.h>
-#include "../build_settings.h"
 
 UserInfo *current_user = NULL;
 
 char *current_user_envp[100] = {
     ENVP_SYSTEM_VERSION,
-    NULL    // 必须以NULL结尾
+    NULL // 必须以NULL结尾
 };
 
 void init_user()
 {
     current_user = (UserInfo *)malloc(sizeof(UserInfo));
     // 这里先偷个懒，之后再改
-    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish"));//内核用户
+    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish")); //内核用户
     current_user->user_type = XUT_Root;
-    current_user->envc = 2;
-    current_user->envp = current_user_envp;
+    current_user->envc      = 2;
+    current_user->envp      = current_user_envp;
     vfs_mkdir("/Users");
     vfs_mkdir(strcat("/Users/", current_user->name));
 }
@@ -74,19 +74,20 @@ void get_thread_name_from_filepath(char *path, char *name)
     }
     *q = '\0';
 }
-void* aligned_malloc(size_t size, size_t alignment) {
+void *aligned_malloc(size_t size, size_t alignment)
+{
     // 分配额外空间用于存储原始指针
-    size_t extra = alignment - 1 + sizeof(void*);
-    void* original = malloc(size + extra);
-    
+    size_t extra    = alignment - 1 + sizeof(void *);
+    void  *original = malloc(size + extra);
+
     if (!original) return nullptr;
-    
+
     // 计算对齐后的地址
-    void* aligned = (void*)(((uintptr_t)original + sizeof(void*) + alignment - 1) & ~(alignment - 1));
-    
+    void *aligned = (void *)(((uintptr_t)original + sizeof(void *) + alignment - 1) & ~(alignment - 1));
+
     // 在aligned指针前保存original指针
-    ((void**)aligned)[-1] = original;
-    
+    ((void **)aligned)[-1] = original;
+
     return aligned;
 }
 uint64_t parse_elf_file(char *path, pcb_t group)
@@ -140,7 +141,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     uint64_t entry = ehdr.e_entry;
 
-    elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16,sizeof(elf_mapping_space));
+    elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
                          (uint64_t *)&mapping_space->load_end);
 
@@ -208,8 +209,8 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     // memcpy(buffer, buf, file_size);
 
     group->load_start = mapping_space->load_start;
-    group->elf_file = buf;
-    group->elf_size = file_size;
+    group->elf_file   = buf;
+    group->elf_size   = file_size;
     // VMA
     vma_t *ld_so_vma = vma_alloc();
 
@@ -227,37 +228,44 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     return entry;
 }
 
-void getFileDirectory(const char* path, char* result) {
+void getFileDirectory(const char *path, char *result)
+{
     // 查找最后一个路径分隔符的位置
     int lastSlash = -1;
-    for (int i = 0; path[i] != '\0'; i++) {
-        if (path[i] == '/' || path[i] == '\\') {
-            lastSlash = i;
-        }
+    for (int i = 0; path[i] != '\0'; i++)
+    {
+        if (path[i] == '/' || path[i] == '\\') { lastSlash = i; }
     }
-    
+
     // 根据不同的情况处理
-    if (lastSlash == -1) {
+    if (lastSlash == -1)
+    {
         // 没有分隔符，返回空字符串
         result[0] = '\0';
-    } else if (lastSlash == 0) {
+    }
+    else if (lastSlash == 0)
+    {
         // 只有根目录，如 "/file"
         result[0] = '/';
         result[1] = '\0';
-    } else {
+    }
+    else
+    {
         // 正常路径，复制目录部分
-        for (int i = 0; i < lastSlash; i++) {
+        for (int i = 0; i < lastSlash; i++)
+        {
             result[i] = path[i];
         }
         result[lastSlash] = '\0';
     }
 }
 
-char *getCwd(char* path)
+char *getCwd(char *path)
 {
-    char result[strlen(path)+1];
-    getFileDirectory(path,result);
-    return result;
+    char result[strlen(path) + 1];
+    memset(result, 0, strlen(path) + 1);
+    getFileDirectory(path, result);
+    return strdup(result);
 }
 
 void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
@@ -279,17 +287,18 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     memset(cmdline, 0, sizeof(cmdline));
     char *cmdline_ptr = cmdline;
 
-    if (argv != NULL) 
+    if (argv != NULL)
     {
-        for (int i = 0; argv[i]; i++) {
+        for (int i = 0; argv[i]; i++)
+        {
             int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
             cmdline_ptr += len;
         }
     }
 
     char *old_cmdline = group->cmdline;
-    group->cmdline  = strdup(cmdline);
-    write_serial_fmt("CWD: %s\n",getCwd(path));
+    group->cmdline    = strdup(cmdline);
+    write_serial_fmt("CWD: %s\n", getCwd(path));
     char *cwd = getCwd(path);
     create_user_thread(entry, NULL, 1, process_name, group, strdup(cwd));
 }
@@ -303,4 +312,3 @@ void create_user_thread_from_file(char *path, pcb_t pcb)
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
     create_user_thread(entry, NULL, NULL, thread_name, pcb, getCwd(path));
 }
-

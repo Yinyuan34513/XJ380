@@ -2,8 +2,8 @@
 #define _PROTO_H_
 
 #include "fs/vfs/list.h"
-#define KERNEL_STACK_SIZE 32768  // 任务内核栈地址
-#define BIG_USER_STACK    999424 // 用户栈大小，要对齐到页
+#define KERNEL_STACK_SIZE 262144UL // 任务内核栈地址
+#define BIG_USER_STACK    999424   // 用户栈大小，要对齐到页
 
 #include <graphics/window/window.h>
 #include <ps2/keyboard.h>
@@ -26,7 +26,7 @@ extern uint16_t   *msid;
  *  driver/serial/
  * 
  */
-int snprintf(char *buf, size_t size, const char *fmt, ...);
+int    snprintf(char *buf, size_t size, const char *fmt, ...);
 // driver/serial/serial_port.cpp
 int    init_serial();
 void   write_serial(char a);
@@ -197,7 +197,7 @@ void    *virt_to_phys(uint64_t virt_addr);
 void    *driver_phys_to_virt(uint64_t phys_addr);
 void    *driver_virt_to_phys(uint64_t virt_addr);
 uint64_t page_virt_to_phys(uint64_t va);
-#define USER_MMAP_START        0x0000400000000000UL     // 用户堆映射起始地址
+#define USER_MMAP_START 0x0000400000000000UL // 用户堆映射起始地址
 // kernel/memory/page.cpp
 #include <mm/page.h>
 
@@ -254,9 +254,9 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
 void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height);
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
-                        uint32_t dst_y, uint32_t width, uint32_t height);
-void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                        uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height);
+                                     uint32_t dst_y, uint32_t width, uint32_t height);
+void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+                             uint32_t width, uint32_t height);
 
 void backtrace(struct X64_REGS *regs);
 

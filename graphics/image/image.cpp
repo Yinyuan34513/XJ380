@@ -7,8 +7,6 @@
 
 #include <fs/vfs/vfs.h>
 
-void pool_print_info() noexcept;
-
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
@@ -85,7 +83,6 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     {
         write_serial_fmt("PrintPicture_blend: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
         write_serial_fmt("STBI Failure Reason: %s\n", stbi_failure_reason());
-        pool_print_info();
         vfs_close(v);
         return;
     }
@@ -140,7 +137,6 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
     if (!v)
     {
         write_serial_fmt("PrintPicture: cannot open '%s'\n", path);
-        pool_print_info();
         return;
     }
     unsigned char *bf = (unsigned char *)malloc(v->size);
@@ -198,7 +194,6 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
     if (!v)
     {
         write_serial_fmt("LoadPicture: cannot open '%s'\n", path);
-        pool_print_info();
         return;
     }
     unsigned char *bf = (unsigned char *)malloc(v->size);
@@ -214,7 +209,6 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
     if (!b)
     {
         write_serial_fmt("LoadPicture: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
-        pool_print_info();
         vfs_close(v);
         return;
     }
@@ -230,7 +224,6 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
     if (!v)
     {
         write_serial_fmt("LoadPictureOgM: cannot open '%s'\n", path);
-        pool_print_info();
         return;
     }
     unsigned char *bf = (unsigned char *)malloc(v->size);

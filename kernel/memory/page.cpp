@@ -2,9 +2,9 @@
 #include <cpu/longm.h>
 #include <cpu/regio.h>
 #include <krlibc.h>
+#include <mm/lazyalloc.h>
 #include <mm/page.h>
 #include <proto.hpp>
-#include <mm/lazyalloc.h>
 #include <stdint.h>
 
 spin_t page_lock;
@@ -36,13 +36,15 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
                                                 : "Unknown";
 
     // 长大后在学习吧！
-    if (get_current_task() != NULL) {
+    if (get_current_task() != NULL)
+    {
         pcb_t current_proc = get_current_task()->parent_group;
-        if (current_proc->task_level == TASK_APPLICATION_LEVEL) {
+        if (current_proc->task_level == TASK_APPLICATION_LEVEL)
+        {
             errno_t status = lazy_tryalloc(current_proc, faulting_address);
-            if (status != 0) {
-                goto err;
-            } else {
+            if (status != 0) { goto err; }
+            else
+            {
                 enable_scheduler();
                 open_interrupt;
                 return;
@@ -169,7 +171,7 @@ page_table_t *page_table_create(page_table_entry_t *entry, bool user)
 {
     if (entry->value == (uint64_t)NULL)
     {
-        uint64_t frame      = alloc_frames(1);
+        uint64_t frame = alloc_frames(1);
         // write_serial_fmt("oiiaoiia 0x%x\n",(uint64_t)frame);
         entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | (user ? PTE_USER : 0);
         page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x000fffffffff000);

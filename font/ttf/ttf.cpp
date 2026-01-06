@@ -183,7 +183,9 @@ void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER 
 
 void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
                     /*unsigned bc, */ unsigned x, unsigned y, int size, uint32_t *i_width)
-{ print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf); }
+{
+    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
+}
 
 extern uint16_t
     zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
@@ -248,8 +250,6 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     if (bitmap == NULL)
     {
         write_serial_fmt("TTF Print Failed. Reason: Memory Allocate Failed.\n");
-        void pool_print_info() noexcept;
-        pool_print_info();
         return;
     }
 

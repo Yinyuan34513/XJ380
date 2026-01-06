@@ -297,12 +297,8 @@ void MapVirtToPhys(UINT64 virt, UINT64 size)
 
 int check_qemu(char *acpi_oem_id)
 {
-    if (acpi_oem_id[0] == 'B' && 
-        acpi_oem_id[1] == 'O' && 
-        acpi_oem_id[2] == 'C' && 
-        acpi_oem_id[3] == 'H' && 
-        acpi_oem_id[4] == 'S'
-        )
+    if (acpi_oem_id[0] == 'B' && acpi_oem_id[1] == 'O' && acpi_oem_id[2] == 'C' && acpi_oem_id[3] == 'H' &&
+        acpi_oem_id[4] == 'S')
     {
         return 1;
     }

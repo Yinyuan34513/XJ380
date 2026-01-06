@@ -7,11 +7,11 @@
 #include <cpu/longm.h>
 #include <elf.h>
 #include <errno.h>
-#include <fs/vfs/vfs.h>
-#include <syscall/syscall.h>
-#include <mm/lazyalloc.h>
-#include <task/ipc.h>
 #include <fs/vfs/proc.h>
+#include <fs/vfs/vfs.h>
+#include <mm/lazyalloc.h>
+#include <syscall/syscall.h>
+#include <task/ipc.h>
 
 #define SA_RPL3 3
 
@@ -33,7 +33,7 @@ extern bool no_interrupt;
 
 extern spin_t scheduler_lock;
 
-uint16_t         dock_sheet_id;
+uint16_t dock_sheet_id;
 
 pcb_t found_pcb(int pid)
 {
@@ -63,19 +63,24 @@ tcb_t found_thread(pcb_t pcb, int tid)
     return NULL;
 }
 
-void kill_proc(pcb_t pcb, int exit_code, bool is_zombie) {
+void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
+{
     if (pcb == NULL) return;
-    if (pcb->pid == kernel_group->pid) {
+    if (pcb->pid == kernel_group->pid)
+    {
         write_serial_fmt("Cannot kill System process.");
         return;
     }
 
     // if (get_current_user()->fgproc == pcb->pid) { get_current_user()->fgproc = 0; }
 
-    if (is_zombie) {
-        if (pcb->thread_queue->size > 0) {
+    if (is_zombie)
+    {
+        if (pcb->thread_queue->size > 0)
+        {
             spin_lock(pcb->thread_queue->lock);
-            queue_foreach(pcb->thread_queue, node) {
+            queue_foreach(pcb->thread_queue, node)
+            {
                 tcb_t tcb = (tcb_t)node->data;
                 kill_thread(tcb);
             }
@@ -91,25 +96,32 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie) {
         msg->data[2]      = (exit_code >> 16) & 0xFF;
         msg->data[3]      = (exit_code >> 24) & 0xFF;
         ipc_send(pcb->parent_task, msg);
-    } else {
+    }
+    else
+    {
         queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
         pcb->status = DEATH;
         kill_proc0(pcb);
     }
 }
 
-void free_envp(char **envp) {
+void free_envp(char **envp)
+{
     if (!envp) return;
-    for (size_t i = 0; envp[i] != NULL; i++) {
+    for (size_t i = 0; envp[i] != NULL; i++)
+    {
         free(envp[i]);
     }
     free(envp);
 }
 
-void kill_proc0(pcb_t pcb) {
-    do {
+void kill_proc0(pcb_t pcb)
+{
+    do
+    {
         tcb_t thread = NULL;
-        queue_foreach(pcb->thread_queue, thread0) {
+        queue_foreach(pcb->thread_queue, thread0)
+        {
             thread = (tcb_t)thread0->data;
         }
         if (thread == NULL) break;
@@ -124,7 +136,8 @@ void kill_proc0(pcb_t pcb) {
     //procfs_update_task_list();
     procfs_on_exit_task(pcb);
 
-    while(1) {
+    while (1)
+    {
         fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
         if (handle == NULL) break;
         vfs_close(handle->node);
@@ -140,14 +153,16 @@ void kill_proc0(pcb_t pcb) {
     free(pcb->elf_file);
     if (pcb->envp) free_envp(pcb->envp);
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", pcb->name, pcb->pid,
-          pcb->vfork ? "true" : "false");
+                     pcb->vfork ? "true" : "false");
     if (!pcb->vfork) free_page_directory(pcb->pagedir);
     free(pcb);
 }
 
-void kill_thread(tcb_t task) {
+void kill_thread(tcb_t task)
+{
     if (task == NULL) return;
-    if (task->task_level == TASK_IDLE_LEVEL) {
+    if (task->task_level == TASK_IDLE_LEVEL)
+    {
         write_serial_fmt("Cannot stop kernel thread.");
         return;
     }
@@ -156,7 +171,8 @@ void kill_thread(tcb_t task) {
 
 extern void remove_task(tcb_t task);
 
-void kill_thread0(tcb_t task) {
+void kill_thread0(tcb_t task)
+{
     task->status = OUT;
     free((void *)(task->syscall_stack - KERNEL_STACK_SIZE));
     page_directory_t *src_dir = get_current_directory();
@@ -189,7 +205,7 @@ static uint64_t push_slice(uint64_t ustack, uint8_t *slice, uint64_t len)
 }
 
 static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, uint64_t link_start, uint8_t *link_data,
-                                 size_t link_size, uint64_t* ep)
+                                 size_t link_size, uint64_t *ep)
 {
     uint64_t env_i  = 0;
     int      argv_i = 0;
@@ -265,9 +281,9 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     memset(tmp, 0, 2 * sizeof(uint64_t));
 
     tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
-    
+
     tmp_stack = push_slice(tmp_stack, (uint8_t *)envps, env_i * sizeof(uint64_t));
-    *ep = tmp_stack;
+    *ep       = tmp_stack;
 
     tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
     tmp_stack = push_slice(tmp_stack, (uint8_t *)argvps, argv_i * sizeof(uint64_t));
@@ -286,22 +302,22 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 void switch_to_user_mode()
 {
     close_interrupt;
-    
+
     uint64_t rsp = get_current_task()->user_stack_top;
-    
+
     // 构建用户栈并获取 argc 和 argv
     uint64_t ep;
-    rsp = build_user_stack(get_current_task(), rsp, get_current_task()->main, 0, NULL, 0,&ep);
-    
-    // 从栈中读取 argc 和 argv
-    uint64_t argc = *(uint64_t*)rsp;
-    char** argv = (char**)(rsp + 8);
-    // char** envp = (char**)ep;
-    
-    get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
-    uint64_t func = get_current_task()->main;
+    rsp = build_user_stack(get_current_task(), rsp, get_current_task()->main, 0, NULL, 0, &ep);
 
-    char             *new_path   = (char*)malloc(strlen("/dev/") + 10);
+    // 从栈中读取 argc 和 argv
+    uint64_t argc = *(uint64_t *)rsp;
+    char   **argv = (char **)(rsp + 8);
+    // char** envp = (char**)ep;
+
+    get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
+    uint64_t func                       = get_current_task()->main;
+
+    char *new_path = (char *)malloc(strlen("/dev/") + 10);
     sprintf(new_path, "/dev/stdio");
     vfs_node_t stdio        = vfs_open(new_path);
     stdio->refcount        += 3;
@@ -314,9 +330,9 @@ void switch_to_user_mode()
     fd_file_handle *stderr  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
     stderr->node            = stdio;
     stderr->offset          = 0;
-    stdin->fd  = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
-    stdout->fd = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
-    stderr->fd = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
+    stdin->fd               = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
+    stdout->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
+    stderr->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
 
     free(new_path);
 
@@ -328,19 +344,15 @@ void switch_to_user_mode()
                      "pushq %3\n"      // CS
                      "pushq %4\n"      // RIP
                      "mov %6, %%rdi\n" // argc (arg1)
-                     "mov %7, %%rsi\n" // argv (arg2)  
+                     "mov %7, %%rsi\n" // argv (arg2)
                      "mov %8, %%rdx\n" // envp (arg3)
                      "iretq\n"
                      :
-                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), 
-                       "r"(rsp), 
-                       "r"(get_current_task()->context0.rflags),
-                       "r"((uint64_t)0x23), 
-                       "r"(func), 
-                       "r"((uint64_t)0x1b),
+                     : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp), "r"(get_current_task()->context0.rflags),
+                       "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b),
                        "r"(argc),           // %6 -> rdi
-                       "r"((uint64_t)argv), // %7 -> rsi  
-                       "r"((uint64_t)ep)  // %8 -> rdx
+                       "r"((uint64_t)argv), // %7 -> rsi
+                       "r"((uint64_t)ep)    // %8 -> rdx
                      : "memory");
 }
 
@@ -370,8 +382,6 @@ void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t 
                        "r"(msg_type), "r"(data1), "r"(data2)
                      : "memory");
 }
-
-
 
 size_t envp_length(char **envp)
 {
@@ -454,12 +464,14 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         size_t old_envc = process->envc;
         process->envp   = copy_envp(envp);
         process->envc   = envp_length(envp);
-    } else {
-        process->envp   = copy_envp(current_user->envp);
-        process->envc   = current_user->envc;
+    }
+    else
+    {
+        process->envp = copy_envp(current_user->envp);
+        process->envc = current_user->envc;
     }
 
-    if(!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
+    if (!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
 
     write_serial_fmt(" process name :%s \n", process->name);
 
@@ -476,7 +488,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         switch_page_directory(old_page_dir);
         return 0;
     }
-    if (process->vfork) {
+    if (process->vfork)
+    {
         ipc_message_t message = (ipc_message_t)calloc(1, sizeof(struct ipc_message));
         message->type         = IPC_MSG_TYPE_EXEC;
         message->pid          = process->pid;
@@ -484,12 +497,13 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     if (!process->vfork) free_page_directory(old_page_dir);
     process->pagedir = get_current_directory();
-    process->vfork    = false;
+    process->vfork   = false;
 
     vfs_close(node);
 
     spin_lock(process->file_open->lock);
-    queue_foreach(process->file_open, node) {
+    queue_foreach(process->file_open, node)
+    {
         fd_file_handle *file_node = (fd_file_handle *)node->data;
         vfs_close(file_node->node);
         free(file_node);
@@ -498,7 +512,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     queue_destroy(process->file_open);
     process->file_open = queue_init();
     spin_lock(process->virt_queue->lock);
-    queue_foreach(process->virt_queue, node) {
+    queue_foreach(process->virt_queue, node)
+    {
         mm_virtual_page_t *vpage = (mm_virtual_page_t *)node->data;
         free(vpage);
     }
@@ -507,7 +522,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     process->virt_queue = queue_init();
 
     spin_lock(process->ipc_queue->lock);
-    queue_foreach(process->ipc_queue, node) {
+    queue_foreach(process->ipc_queue, node)
+    {
         ipc_message_t msg = (ipc_message_t)node->data;
         free(msg);
     }
@@ -526,16 +542,17 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     // if (!no_interrupt)
     // {
-        enable_scheduler();
-        open_interrupt;
+    enable_scheduler();
+    open_interrupt;
     // }
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }
 
-static void *file_copy(void *ptr) {
+static void *file_copy(void *ptr)
+{
     if (ptr == NULL) return NULL;
-    fd_file_handle *src = (fd_file_handle*)ptr;
+    fd_file_handle *src = (fd_file_handle *)ptr;
     return fd_dup(src);
 }
 
@@ -561,7 +578,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
 
-    if(!vma_manager_clone(&current_pcb->vma_manager,&new_pcb->vma_manager)){
+    if (!vma_manager_clone(&current_pcb->vma_manager, &new_pcb->vma_manager))
+    {
         write_serial_fmt("task: cannot clone process vma information.\n");
         free(new_pcb);
         return -ENOMEM;
@@ -573,9 +591,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->vfork        = is_vfork;
     new_pcb->child_pcb    = queue_init();
     new_pcb->child_index  = queue_enqueue(current_pcb->child_pcb, new_pcb);
-    new_pcb->virt_queue  = queue_copy(current_pcb->virt_queue, virt_copy);
-    new_pcb->file_open   = queue_copy(current_pcb->file_open, file_copy);
-    new_pcb->ipc_queue = queue_init();
+    new_pcb->virt_queue   = queue_copy(current_pcb->virt_queue, virt_copy);
+    new_pcb->file_open    = queue_copy(current_pcb->file_open, file_copy);
+    new_pcb->ipc_queue    = queue_init();
 
     new_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(new_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
@@ -595,8 +613,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->cwd            = parent_task->cwd;
     new_task->user_info      = parent_task->user_info;
     strcpy(new_task->name, parent_task->name);
-    new_task->winnum         = 0;
-    new_task->hasfscr        = false;
+    new_task->winnum  = 0;
+    new_task->hasfscr = false;
 
     new_task->context0.rip    = reg->rcx; // syscall 指令中 rcx 寄存器为 rip
     new_task->context0.rflags = reg->r11; // syscall 指令中 r11 寄存器为 rflags
@@ -629,7 +647,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->parent_group = new_pcb;
     new_task->group_index  = queue_enqueue(new_pcb->thread_queue, new_task);
     new_task->tid          = now_tid++;
-    
+
     new_task->window_count = 0;
 
     add_task(new_task);
@@ -640,12 +658,14 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     }
     procfs_on_new_task(new_pcb);
 
-    write_serial_fmt("PID: %d\n",new_pcb->pid);
+    write_serial_fmt("PID: %d\n", new_pcb->pid);
     if (!is_vfork) return new_pcb->pid;
 
-    while (true) {
+    while (true)
+    {
         ipc_message_t msg = ipc_recv_wait2(IPC_MSG_TYPE_EXEC, IPC_MSG_TYPE_EPID);
-        if (msg->pid == new_pcb->pid) {
+        if (msg->pid == new_pcb->pid)
+        {
             free(msg);
             return new_pcb->pid;
         }
@@ -653,9 +673,11 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     }
 
     int npid = new_pcb->pid;
-    do {
+    do
+    {
         ipc_message_t msg = ipc_recv_wait(IPC_MSG_TYPE_EXEC);
-        if (npid == msg->pid) {
+        if (npid == msg->pid)
+        {
             free(msg);
             return npid;
         }
@@ -706,8 +728,8 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->status           = CREATE;
     new_task->main             = (uint64_t)_start;
 
-    new_task->winnum         = 0;
-    new_task->hasfscr        = false;
+    new_task->winnum  = 0;
+    new_task->hasfscr = false;
 
     new_task->user_info            = current_user;
     new_task->user_info->user_type = XUT_Root;
@@ -777,14 +799,13 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->kernel_stack    = (uint64_t)stack_top;
     new_task->syscall_stack   = (uint64_t)aligned_alloc(PAGE_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
 
-    
-    new_task->cwd     = vfs_open(cwd);
+    new_task->cwd = vfs_open(cwd);
     new_task->cwd->refcount++;
-    write_serial_fmt("CWD %s\n",new_task->cwd->name);
+    write_serial_fmt("CWD %s\n", new_task->cwd->name);
     new_task->str_cwd = cwd;
 
-    new_task->winnum         = 0;
-    new_task->hasfscr        = false;
+    new_task->winnum  = 0;
+    new_task->hasfscr = false;
 
     new_task->argv = (char **)args;
     new_task->argc = argc;
@@ -881,7 +902,7 @@ size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uin
 
 pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline)
 {
-    pcb_t pcb        = (pcb_t)calloc(1,sizeof(struct process_control_block));
+    pcb_t pcb        = (pcb_t)calloc(1, sizeof(struct process_control_block));
     pcb->pid         = now_pid++;
     pcb->parent_task = parent == NULL ? kernel_group : parent;
     pcb->status      = START;
@@ -892,9 +913,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->pagedir      = directory ? directory : get_kernel_pagedir();
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
-    pcb->file_open   = queue_init();
-    pcb->virt_queue  = queue_init();
-    pcb->ipc_queue   = queue_init();
+    pcb->file_open    = queue_init();
+    pcb->virt_queue   = queue_init();
+    pcb->ipc_queue    = queue_init();
 
     if (parent == NULL)
     {
@@ -915,7 +936,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
     // pcb->msgprci = false;
-    
+
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
     procfs_on_new_task(pcb);
@@ -934,7 +955,7 @@ extern int scheduler_is_ready;
 void process_setup()
 {
     pcb_group_queue     = queue_init();
-    pcb_t kernel_pcb    = (pcb_t)calloc(1,sizeof(struct process_control_block));
+    pcb_t kernel_pcb    = (pcb_t)calloc(1, sizeof(struct process_control_block));
     kernel_pcb->pid     = now_pid++;
     kernel_pcb->pagedir = get_kernel_pagedir();
     strcpy(kernel_pcb->name, "XSK System");
@@ -943,13 +964,13 @@ void process_setup()
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
     kernel_pcb->child_pcb    = queue_init();
-    kernel_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
+    kernel_pcb->xtttp_stc    = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
     memset(kernel_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
-    kernel_pcb->file_open = queue_init();
-    kernel_group->virt_queue  = queue_init();
-    kernel_group->ipc_queue   = queue_init();
+    kernel_pcb->file_open    = queue_init();
+    kernel_group->virt_queue = queue_init();
+    kernel_group->ipc_queue  = queue_init();
 
-    kernel_pcb->child_index  = 0;
+    kernel_pcb->child_index = 0;
 
     kernel_group = kernel_pcb;
 

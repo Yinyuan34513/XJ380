@@ -33,8 +33,6 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
-#include <usb/hid.h>
-#include <xhci/xhci-hcd.h>
 
 
 // 初始化桌面

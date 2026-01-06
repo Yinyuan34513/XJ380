@@ -5,7 +5,6 @@
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
-#include <usb/hid.h>
 #include <syscall/syscall.h>
 #include <graphics/components/button.h>
 
@@ -234,29 +233,6 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
         process_mouse_button();
     }
     send_eoi();
-}
-
-// 去死吧!
-void handle_mouse_event(hid_mouse_event_t *mouse)
-{
-    ms_dec.x   = mouse->x;
-    ms_dec.y   = mouse->y;
-    ms_dec.btn = mouse->buttons;
-
-    ms_dec.need_flush = true;
-
-    mouse_x += ms_dec.x;
-    mouse_y += ms_dec.y;
-    if (mouse_x < 0) mouse_x = 0;
-    if (mouse_y < 0) mouse_y = 0;
-    if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
-    if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
-
-    // ms_dec.left   = false;
-    // ms_dec.center = false;
-    // ms_dec.right  = false;
-
-    process_mouse_button();
 }
 
 void process_mouse_info()

@@ -20,6 +20,7 @@ out/draw.o
 *.o
 *.xz
 *.zip
+*.a
 2.txt
 
 # will generate by Makefile

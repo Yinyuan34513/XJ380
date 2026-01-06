@@ -102,7 +102,7 @@ int64_t mktime()
 
 char *get_date_time()
 {
-    char *s    = (char *)malloc(40);
+    char *s    = (char *)malloc(80);
     int   year = get_year(), month = get_mon(), day = get_day_of_month();
     int   hour = get_hour(), min = get_min(), sec = get_sec();
     int   day_of_months[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
