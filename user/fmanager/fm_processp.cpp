@@ -13,6 +13,8 @@ int choosing_index = -1;
 
 bool register_lock = false;
 
+bool need_paint = false;
+
 void reg_lock()
 {
     while (true)
@@ -47,7 +49,7 @@ void register_click(int x, int y)
     if (x >= 5 && x <= 23 && y >= 4 && y <= 22)
     {
         revert_path(current_path);
-        paint_dir(current_path);
+        need_paint = true;
     }
     else if (x >= 29 && x <= 47 && y >= 4 && y <= 22)
     {
@@ -57,7 +59,7 @@ void register_click(int x, int y)
             else { path_p--; }
             strcpy(current_path, path_his[path_p]);
 
-            paint_dir(current_path);
+            need_paint = true;
         }
     }
     
@@ -68,14 +70,12 @@ void register_click(int x, int y)
             if (y > 148 && y < 166 && file_count_base > 0)
             {
                 file_count_base--;
-                paint_fm_back();
-                paint_dir(current_path);
+                need_paint = true;
             }
             else if (y > 170 && y < 188 && file_count_base + 13 <= file_count)
             {
                 file_count_base++;
-                paint_fm_back();
-                paint_dir(current_path);
+                need_paint = true;
             }
         }
     }
@@ -84,6 +84,7 @@ void register_click(int x, int y)
     {
         int index = (y - 148) / 24;
         choosing_index = index;
+        need_paint = true;
     }
 
     reg_unlock();

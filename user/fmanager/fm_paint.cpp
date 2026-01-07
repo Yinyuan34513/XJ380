@@ -85,7 +85,7 @@ void paint_dir(char *path)
     else 
     {
         need_duopage = false;
-        file_count_base = -1;
+        file_count_base = 0;
     }
 
     paint_fm_back();

@@ -76,5 +76,5 @@ void record_current_path()
 
     if (path_p == 20) path_p = 0;
     
-    choosing_index = 0;
+    choosing_index = -1;
 }

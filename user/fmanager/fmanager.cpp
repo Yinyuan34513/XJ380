@@ -79,6 +79,11 @@ int main(int argc, char *argv[], char *envp[])
                 paint_dir(current_path);
             }
         }
+        if (need_paint)
+        {
+            paint_dir(current_path);
+            need_paint = false;
+        }
         __asm__ __volatile__("pause");
     }
 }
