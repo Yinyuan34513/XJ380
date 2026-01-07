@@ -30,6 +30,7 @@
 #include <syscall/signal.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
+#include <dlinker.h>
 #include <ttf.h>
 
 bool        desktop_done = false;
@@ -477,6 +478,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     signal_init();
     init_syscall();
     init_message();
+
+    module_setup();
+    dlinker_init();
+    load_all_kernel_module();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 

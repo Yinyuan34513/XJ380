@@ -106,6 +106,7 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
+	@$(MAKE) -C mod
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
@@ -144,6 +145,7 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
+	@mkdir -p $(BUILD_DIR)/XJ380/lib/modules
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -173,6 +175,8 @@ vdisk: all
 	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
+
+	@cp -a ./out/test.km $(BUILD_DIR)/XJ380/lib/modules
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
