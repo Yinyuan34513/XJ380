@@ -24,7 +24,6 @@ void paint_fm_back()
         xapi_DrawPNG(handle, FMR_X - 19, 148, 18, 18, "/system/icon/bup.png");
         xapi_DrawPNG(handle, FMR_X - 19, 170, 18, 18, "/system/icon/bdown.png");
     }
-    xapi_RefreshWindow(handle);
 }
 
 void paint_item(int index, char *name, bool is_folder, int size, bool is_choosing)
@@ -82,12 +81,11 @@ void paint_dir(char *path)
     {
         need_duopage = true;
         file_count = count;
-        paint_fm_back();
     }
     else 
     {
         need_duopage = false;
-        file_count_base = 0;
+        file_count_base = -1;
     }
 
     paint_fm_back();
@@ -104,7 +102,11 @@ void paint_dir(char *path)
 
     for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
     {
-        paint_item(i - file_count_base, fdir[i].filename, fdir[i].filetype, fdir[i].length, (choosing_index == i));
+        paint_item(i - file_count_base, 
+            fdir[i].filename, 
+            fdir[i].filetype, 
+            fdir[i].length, 
+            (choosing_index == i - file_count_base));
     }
     xapi_RefreshWindow(handle);
 }

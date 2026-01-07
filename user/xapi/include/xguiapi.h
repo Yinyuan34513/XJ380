@@ -216,6 +216,14 @@ void xapi_RefreshWindow(
 	HDLE		handle
 );
 
+void xapi_RefreshPartWindow(
+	HDLE 	handle,
+	UINT32  x1,
+	UINT32  y1,
+	UINT32  x2,
+	UINT32  y2
+);
+
 // 4-6
 void xapi_Button(
 	HDLE  	handle,
