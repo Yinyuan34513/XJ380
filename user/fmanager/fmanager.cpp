@@ -35,7 +35,6 @@ int main(int argc, char *argv[], char *envp[])
     SetMsgPrcor(handle, fmanager_MessagePrcor);
     memset(file_ti_index, 0, 2048 * sizeof(FILE_TYPEINFO_INDEX));
 
-    paint_fm_back();
     paint_dir(current_path);
 
     // 初始化路径历史

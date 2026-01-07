@@ -11,11 +11,29 @@ int click_y = 0;
 
 int choosing_index = -1;
 
+bool register_lock = false;
+
+void reg_lock()
+{
+    while (true)
+    {
+        if (!register_lock) break;
+    }
+    register_lock = true;
+}
+
+void reg_unlock()
+{
+    register_lock = false;
+}
+
 void register_click(int x, int y)
 {
+    reg_lock();
+
     click_x = x;
     click_y = y;
-    if (first_click && xapi_GetTime() - clicktime_recorder < 2)
+    if (first_click && xapi_GetTime() - clicktime_recorder < 3)
     {
         double_click = true;
         first_click = false;
@@ -66,6 +84,7 @@ void register_click(int x, int y)
     {
         int index = (y - 148) / 24;
         choosing_index = index;
-        paint_dir(current_path);
     }
+
+    reg_unlock();
 }

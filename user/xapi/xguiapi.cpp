@@ -197,6 +197,16 @@ void xapi_RefreshWindow(HDLE handle) {
 	enter_syscall(XAPI_REFRESH_WINDOW, handle, 0, 0, 0, 0, 0);
 }
 
+void xapi_RefreshPartWindow(
+	HDLE 	handle,
+	UINT32  x1,
+	UINT32  y1,
+	UINT32  x2,
+	UINT32  y2
+) {
+	enter_syscall(XAPI_REFRESH_WINDOW, handle, x1, y1, x2, y2, 0);
+}
+
 // 4-6
 void xapi_Button(
 	HDLE  	handle,

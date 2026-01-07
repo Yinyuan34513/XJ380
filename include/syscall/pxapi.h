@@ -140,6 +140,8 @@ typedef struct {
 #define XAPI_WRITEBUFFERA   408
 #define XAPI_REFRESH_WINDOW 409
 
+#define XAPI_REFRESH_PART_WINDOW 438
+
 // P4.6
 #define XAPI_BUTTON         410
 #define XAPI_BUTTON_EMP     411
@@ -153,7 +155,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：437
+// 当前最大号：438
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -203,6 +205,7 @@ void do_xapi_GetTimeX(uint64_t tt);
 uint64_t do_xapi_GetMemorySize();
 void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count);
 void do_xapi_DeleteRightButtonMenu(uint64_t handle);
+int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
 
 
 
