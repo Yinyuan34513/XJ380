@@ -192,7 +192,8 @@ void desktop_flusher()
     int fontx = 8;
     int fonty = 50;
     // DEBUG
-#if BUILD_EDITION == DEBUG_VERSION
+#if 1 == 2
+// #if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40,
                 "X:", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24,

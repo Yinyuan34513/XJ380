@@ -91,7 +91,9 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
 
     /*
     文件结构：
-    每行对应一个格子，第几行就是第几个格子
+    第一行存储一个整数标记最大格子数
+    接下来每行对应一个格子，第几行就是第几个格子
+    空格子名称为xds_null
     每行开头一个路径对应指向的文件
     “系统”和“垃圾桶”图标不可删除或移动，不计入格子内
     */
@@ -105,26 +107,47 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     strcat(desktop_folder_path, "/deskset.inf");
     vfs_mkfile(desktop_folder_path);
 
+    char desktop_setting_file_buffer[256];
+    char desktop_setting_file_temp_buf[256];
+    char *desktop_setting_file_p = desktop_setting_file_buffer;
+    vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
+    if (!desktop_setting_file_v) return;
+    vfs_read(desktop_setting_file_v, desktop_setting_file_buffer, 0, desktop_setting_file_v->size);
+    uint64_t offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
+    desktop_setting_file_p += offest;
+
+    int desktop_block_count = atoi(desktop_setting_file_temp_buf) + 2;
     // 每个格是 110 * 110，从（0，25）开始
-    for (int i = 0; i < 30; i++)
+    for (int i = 0; i < desktop_block_count; i++)
     {
         if (i == 0) 
         {
             PrintPicture_blend(sht, sheet_id, 20, 30 + i * 110, 74, 74, "/system/icon/d_system.png");
-            print_box_ttf(sht, sheet_id, "系统", BLACK, 57 - calc_ttf_length("系统", 11) / 2 - 1, 104 + i * 110, 12);
             print_box_ttf(sht, sheet_id, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + i * 110, 11);
         }
         else if (i == 1) 
         {
             PrintPicture_blend(sht, sheet_id, 20, 30 + i * 110, 74, 74, "/system/icon/bin.png");
-            print_box_ttf(sht, sheet_id, "垃圾桶", BLACK, 57 - calc_ttf_length("垃圾桶", 11) / 2 - 1, 104 + i * 110, 12);
             print_box_ttf(sht, sheet_id, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + i * 110, 11);
         }
         else 
         {
+            // 读取一行并设置下一行的偏移
+            offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
+            desktop_setting_file_p += offest;
+
+            // 空的就跳过
+            if (strcmp("xds_null", desktop_setting_file_temp_buf) == 0)
+            {
+                continue;
+            }
+
             int bx = 20 + 110 * (i / ((sht->scry - 88) / 110));
             int by = 30 + (i - (i / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
             PrintPicture_blend(sht, sheet_id, bx, by, 74, 74, "/system/icon/guoqiyu.png");
+            print_box_ttf(sht, sheet_id, 
+                desktop_setting_file_temp_buf, WHITE, 
+                57 - calc_ttf_length(desktop_setting_file_temp_buf, 11) / 2, 105 + i * 110, 11);
         }
     }
 }
