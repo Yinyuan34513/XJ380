@@ -99,7 +99,11 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
     vfs_mkdir(desktop_folder_path);
-    // vfs_mkfile(strcat(strcat("/Users/", current_user->name), "/deskset.inf"));
+    memset(desktop_folder_path, 0, 256);    // 回收再利用
+    strcat(desktop_folder_path, "/Users/");
+    strcat(desktop_folder_path, current_user->name);
+    strcat(desktop_folder_path, "/deskset.inf");
+    vfs_mkfile(desktop_folder_path);
 
     // 每个格是 110 * 110，从（0，25）开始
     for (int i = 0; i < 30; i++)

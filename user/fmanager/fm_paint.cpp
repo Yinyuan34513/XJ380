@@ -63,7 +63,7 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
 type_is_found:
         char file_size_str[32];
         memset(file_size_str, 0, sizeof(char) * 32);
-        strcpy(file_size_str, xcr_int2char((size + 1024) / 1024));
+        strcpy(file_size_str, xcr_int2char((size + 1023) / 1024));
         strcat(file_size_str, " KB");
         xapi_DrawText(handle, 400, 148 + 24 * index - 3, file_size_str, 10, 0x6d6d6dff);
     }
