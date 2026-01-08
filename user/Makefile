@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf
 
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -Wno-writable-strings
 
@@ -53,11 +53,14 @@ CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
 
 CALC_SOURCES := ./calc/calc.cpp
 
+TEXTER_SOURCES := ./texter/texter.cpp
+
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
 CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
 CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
+TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 
 ../out/calc/%.o: ./calc/%.cpp
 	@mkdir -p $(@D)
@@ -102,6 +105,17 @@ ctrlmenu.elf: $(CTRLMENU_OBJECTS)
 	@$(CPP) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
+
+texter.elf: $(TEXTER_OBJECTS)
+	@$(LD) -z muldefs -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") $(TEXTER_OBJECTS) -o ../out/$@
+#	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "LINK texter objects -> ../out/$@"
+
+../out/texter/%.o: ./texter/%.cpp
+	@mkdir -p $(@D)
+	@$(CPP) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.*

@@ -22,9 +22,12 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    (void)argc;
-    (void)argv;
     (void)envp;
+
+    if (argc == 1)
+    {
+        strcpy(current_path, argv[0]);
+    }
 
     XWINDOW Winfo;
     Winfo.title  = (char *)"文件管理器";

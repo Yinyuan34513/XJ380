@@ -34,6 +34,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 
+UserInfo *current_user;
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
@@ -88,10 +89,40 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
     init_dock(sht, dock_sheet_id);
     init_shortcut_dock(sht, dock_sheet_id);
 
-    // 先糊弄观众一下子
-    PrintPicture_blend(sht, sheet_id, 20, 15, 75, 75, "/system/icon/d_system.png");
-    print_box_ttf(sht, sheet_id, "系统", BLACK, 43, 89, 12);
-    print_box_ttf(sht, sheet_id, "系统", WHITE, 44, 90, 11);
+    /*
+    文件结构：
+    每行对应一个格子，第几行就是第几个格子
+    每行开头一个路径对应指向的文件
+    “系统”和“垃圾桶”图标不可删除或移动，不计入格子内
+    */
+    char desktop_folder_path[265] = "/Users/";
+    strcat(desktop_folder_path, current_user->name);
+    strcat(desktop_folder_path, "/desktop");
+    vfs_mkdir(desktop_folder_path);
+    // vfs_mkfile(strcat(strcat("/Users/", current_user->name), "/deskset.inf"));
+
+    // 每个格是 110 * 110，从（0，25）开始
+    for (int i = 0; i < 30; i++)
+    {
+        if (i == 0) 
+        {
+            PrintPicture_blend(sht, sheet_id, 20, 30 + i * 110, 74, 74, "/system/icon/d_system.png");
+            print_box_ttf(sht, sheet_id, "系统", BLACK, 57 - calc_ttf_length("系统", 11) / 2 - 1, 104 + i * 110, 12);
+            print_box_ttf(sht, sheet_id, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + i * 110, 11);
+        }
+        else if (i == 1) 
+        {
+            PrintPicture_blend(sht, sheet_id, 20, 30 + i * 110, 74, 74, "/system/icon/bin.png");
+            print_box_ttf(sht, sheet_id, "垃圾桶", BLACK, 57 - calc_ttf_length("垃圾桶", 11) / 2 - 1, 104 + i * 110, 12);
+            print_box_ttf(sht, sheet_id, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + i * 110, 11);
+        }
+        else 
+        {
+            int bx = 20 + 110 * (i / ((sht->scry - 88) / 110));
+            int by = 30 + (i - (i / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
+            PrintPicture_blend(sht, sheet_id, bx, by, 74, 74, "/system/icon/guoqiyu.png");
+        }
+    }
 }
 
 void init_dock(SHEET_INFO *sht, uint16_t *sheet_id)

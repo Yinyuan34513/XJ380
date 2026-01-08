@@ -42,7 +42,9 @@ void init_user()
     current_user->envc      = 2;
     current_user->envp      = current_user_envp;
     vfs_mkdir("/Users");
-    vfs_mkdir(strcat("/Users/", current_user->name));
+    char user_folder_path[265] = "/Users/";
+    strcat(user_folder_path, current_user->name);
+    vfs_mkdir(user_folder_path);
 }
 
 void copy_args(char *dst[], char *src[], int n)

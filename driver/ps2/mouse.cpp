@@ -106,9 +106,14 @@ void process_mouse_button()
             }
             
         }
-        if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
+        ms_dec.sheet_id = found_sheetmb(sht_img, mouse_x, mouse_y);
+        if (ms_dec.sheet_id == NULL)
         {
-            create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+            // 点在了桌面/快捷栏上
+            if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
+            {
+                create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+            }
         }
         close_menu(current_window, tbx, tby);
 
@@ -246,7 +251,7 @@ void process_mouse_info()
             ms_dec.sheet_id = found_sheet_movable(sht_img, mouse_x, mouse_y);
             if (ms_dec.sheet_id == NULL || have_full_screen_app)
             {
-                // 点在了桌面或快捷栏上
+                // 点在了标题栏外
                 ms_dec.win_move_lock = false;
             }
             else
