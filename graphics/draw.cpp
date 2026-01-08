@@ -13,37 +13,37 @@ EFI_GUID gEfiFileInfoGuid = {
     0x5c4e2f81, 0x7b4a, 0x4d03, {0xa3, 0x9f, 0x4d, 0x56, 0x9e, 0x1a, 0x3f, 0x78}
 };
 #define NULL 0
-auto operator new(size_t size, void *ptr) -> void *
-{
-    ptr = malloc(size);
+// auto operator new(size_t size, void *ptr) -> void *
+// {
+//     ptr = malloc(size);
 
-    return ptr;
-}
+//     return ptr;
+// }
 
-auto operator new[](size_t size, void *ptr) -> void *
-{
-    ptr = malloc(size);
+// auto operator new[](size_t size, void *ptr) -> void *
+// {
+//     ptr = malloc(size);
 
-    return ptr;
-}
+//     return ptr;
+// }
 
-auto operator delete(void *ptr, size_t size) -> void
-{
+// auto operator delete(void *ptr, size_t size) -> void
+// {
 
-    free(ptr);
-}
+//     free(ptr);
+// }
 
-auto operator delete[](void *ptr, size_t size) -> void
-{
+// auto operator delete[](void *ptr, size_t size) -> void
+// {
 
-    free(ptr);
-}
+//     free(ptr);
+// }
 
-auto operator delete(void *ptr) -> void
-{
+// auto operator delete(void *ptr) -> void
+// {
 
-    free(ptr);
-}
+//     free(ptr);
+// }
 
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c)
 {

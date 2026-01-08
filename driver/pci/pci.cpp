@@ -5,7 +5,9 @@
 #include "mm/hhdm.h"
 #include "pci/mcfg.h"
 #include "proto.hpp"
-
+#include <dlinker.h>
+EXPORT_SYMBOL(malloc);
+EXPORT_SYMBOL(free);
 struct
 {
     uint32_t classcode;
@@ -590,7 +592,9 @@ pci_device_t *pci_find_class(uint32_t class_code)
     return NULL;
 }
 
-void pci_find_class(pci_device_t **result, uint32_t *n, uint32_t class_code)
+EXPORT_SYMBOL(pci_find_class);
+
+void pci_find_class_n(pci_device_t **result, uint32_t *n, uint32_t class_code)
 {
     int idx = 0;
     for (uint32_t i = 0; i < device_number; i++)

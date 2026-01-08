@@ -2,6 +2,7 @@
 #include <mm/frame.h>
 #include <mm/memory.h>
 #include <proto.hpp>
+#include <dlinker.h>
 
 #define ENABLE_BUDDY 0
 
@@ -127,6 +128,8 @@ void free_frame(uint64_t addr)
     spin_unlock(frame_op_lock);
 }
 
+EXPORT_SYMBOL(free_frame);
+
 uint64_t alloc_frames(size_t count)
 {
 #if ENABLE_BUDDY
@@ -144,6 +147,8 @@ uint64_t alloc_frames(size_t count)
     return frame_index * PAGE_SIZE;
 #endif
 }
+
+EXPORT_SYMBOL(alloc_frames);
 
 void free_frames(uint64_t addr, uint64_t size)
 {
@@ -174,3 +179,5 @@ void free_frames(uint64_t addr, uint64_t size)
 
     spin_unlock(frame_op_lock);
 }
+
+EXPORT_SYMBOL(free_frames);

@@ -84,6 +84,7 @@ size_t usable_size(void *ptr);
  */
 void *malloc(size_t size);
 
+
 /**
  * Allocates memory with specified alignment.
  * Stores metadata (size, alignment) before the returned pointer.

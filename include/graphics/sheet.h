@@ -105,11 +105,11 @@ void     *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id);
 SHEET *found_sheet_byid(SHEET_INFO *sht, uint16_t *sheet_id);
 
 // graphics/draw.cpp
-auto      operator new(size_t size, void *ptr) -> void *;
-auto      operator new[](size_t size, void *ptr) -> void *;
-auto      operator delete(void *ptr, size_t size) -> void;
-auto      operator delete[](void *ptr, size_t size) -> void;
-auto      operator delete(void *ptr) -> void;
+// auto      operator new(size_t size, void *ptr) -> void *;
+// auto      operator new[](size_t size, void *ptr) -> void *;
+// auto      operator delete(void *ptr, size_t size) -> void;
+// auto      operator delete[](void *ptr, size_t size) -> void;
+// auto      operator delete(void *ptr) -> void;
 void      rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor &c);
 void      dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
 

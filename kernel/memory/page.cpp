@@ -5,6 +5,7 @@
 #include <mm/lazyalloc.h>
 #include <mm/page.h>
 #include <proto.hpp>
+#include <dlinker.h>
 #include <stdint.h>
 
 spin_t page_lock;
@@ -198,6 +199,8 @@ page_directory_t *get_current_directory()
     return &gdc_temp_pdt;
 }
 
+EXPORT_SYMBOL(get_current_directory);
+
 static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
 {
     if (source_table == NULL) return NULL;
@@ -315,6 +318,8 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 
     flush_tlb(addr);
 }
+
+EXPORT_SYMBOL(page_map_to);
 
 void switch_process_page_directory(page_directory_t *dir)
 {

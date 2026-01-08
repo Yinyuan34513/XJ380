@@ -1,2 +1,2 @@
 all:
-	@$(MAKE) -C test
+# 	@$(MAKE) -C ahci        only test 

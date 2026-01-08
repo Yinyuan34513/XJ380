@@ -694,6 +694,8 @@ int sprintf(char *buf, const char *fmt, ...)
     va_end(args);
     return (int)result; // Why use int??
 }
+
+EXPORT_SYMBOL(sprintf);
 /**
  * 安全版本的 sprintf，限制输出字符数防止缓冲区溢出
  * 

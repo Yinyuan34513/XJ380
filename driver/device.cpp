@@ -4,6 +4,7 @@
 #include "krlibc.h"
 #include <proto.hpp>
 #include <fs/partition.h>
+#include <dlinker.h>
 
 device_t        device_ctl[256];
 id_allocator_t *dev_allocator;
@@ -22,6 +23,8 @@ int regist_device(const char *path, device_t vd) {
     }
     return i;
 }
+
+EXPORT_SYMBOL(regist_device);
 
 void delete_device(int vdiskid) {
     if (vdiskid >= 256) return;

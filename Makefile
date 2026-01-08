@@ -176,7 +176,7 @@ vdisk: all
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
-	@cp -a ./out/test.km $(BUILD_DIR)/XJ380/lib/modules
+	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
 	
 # temp test (remember to delete)
 	@mkdir -p $(BUILD_DIR)/XJ380/Users/GuoqiFish
