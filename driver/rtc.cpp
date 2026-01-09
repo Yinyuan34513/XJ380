@@ -80,19 +80,29 @@ int is_leap_year(int year)
     return year % 100 != 0;
 }
 
-int64_t mktime()
+uint64_t mktime()
 {
-    int64_t res;
-    int     year;
-    if (get_year() >= 70)
-        year = get_year() - 70;
-    else
-        year = get_year() - 70 + 100;
-    res  = YEAR * year;
-    res += DAY * ((year + 1) / 4);
+    uint64_t res;
+    int year;
+
+    // 计算从1980年开始的年份数
+    year = get_year() - 1980;
+
+    // 年份部分（包括闰日）
+    res = YEAR * year + DAY * ((year + 3) / 4);
+
+    // 月份部分
     res += month[get_mon()] * DAY;
-    if (get_mon() > 2 && ((year + 2) % 4)) res -= DAY;
-    res += DAY * (get_day_of_month() - 1);
+
+    // 如果是闰年且月份在2月之后，加一天
+    int current_year = year + 1980;
+    if (((current_year % 4 == 0 && current_year % 100 != 0) || (current_year % 400 == 0)) 
+        && get_mon() > 1) {
+        res += DAY;
+    }
+
+    // 剩余部分
+    res += (get_day_of_month() - 1) * DAY;
     res += HOUR * get_hour();
     res += MINUTE * get_min();
     res += get_sec();

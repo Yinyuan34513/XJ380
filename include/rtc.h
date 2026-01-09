@@ -51,7 +51,7 @@ uint32_t get_mon();
 uint32_t get_year();
 int      is_leap_year(int year);
 char    *get_date_time();
-int64_t  mktime();
+uint64_t mktime();
 timer_t *alloc_timer();
 uint64_t get_time(timer_t *timer1);
 void     time_read(tm *time);

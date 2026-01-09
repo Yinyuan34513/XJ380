@@ -7,6 +7,7 @@
 #include <ps2/mouse.h>
 #include <syscall/syscall.h>
 #include <graphics/components/button.h>
+#include <rtc.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -40,6 +41,19 @@ void process_mouse_button()
     else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
     {
         // 左键松开
+
+        uint64_t click_time = get_sec();
+        if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 3)
+        {
+            ms_dec.first_click = false;
+            ms_dec.double_click = true;
+        }
+        else
+        {
+            ms_dec.first_click = true;
+            ms_dec.click_time = click_time;
+        }
+
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
@@ -292,6 +306,13 @@ void process_mouse_info()
                                ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + ms_dec.sht_now->height);
             refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width, his_y + ms_dec.sht_now->height);
         }
+
+        if (ms_dec.double_click)
+        {
+            ms_dec.double_click = false;
+            write_serial_fmt("114514\n");
+        }
+
         focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
     }
 
@@ -562,6 +583,8 @@ void mouse_init() {
     ms_dec.win_move_lock = false;
     ms_dec.sht_now = NULL;
     ms_dec.need_flush = false;
+    ms_dec.first_click = false;
+    ms_dec.double_click = false;
     
     // 15. 启用中断
     asm volatile("sti");
