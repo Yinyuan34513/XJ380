@@ -310,7 +310,8 @@ void process_mouse_info()
         if (ms_dec.double_click)
         {
             ms_dec.double_click = false;
-            write_serial_fmt("114514\n");
+            write_serial_fmt("Double Click!\n");
+            process_desktop_find_block(tbx, tby);
         }
 
         focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));

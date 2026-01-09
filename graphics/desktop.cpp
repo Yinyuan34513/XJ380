@@ -150,6 +150,8 @@ void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id)
                 57 - calc_ttf_length(desktop_setting_file_temp_buf, 11) / 2, 105 + i * 110, 11);
         }
     }
+
+    vfs_close(desktop_setting_file_v);
 }
 
 void init_dock(SHEET_INFO *sht, uint16_t *sheet_id)
@@ -195,6 +197,52 @@ void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id)
     time_read(&time);
     draw_rect(sht, sheet_id, x2 - 40, 0, x2 - 3, 23, DOCK_COL);
     print_fmt_box_ttf(sht, sheet_id, BLACK, x2 - 40, 1, 10, "%02u:%02u", time.tm_hour % 24, time.tm_min);
+}
+
+void process_desktop_find_block(int x, int y)
+{
+    char desktop_folder_path[265] = "/Users/";
+    memset(desktop_folder_path, 0, 256);    // 回收再利用
+    strcat(desktop_folder_path, "/Users/");
+    strcat(desktop_folder_path, current_user->name);
+    strcat(desktop_folder_path, "/deskset.inf");
+
+    char desktop_setting_file_buffer[256];
+    char desktop_setting_file_temp_buf[256];
+    char *desktop_setting_file_p = desktop_setting_file_buffer;
+    vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
+    if (!desktop_setting_file_v) return;
+    vfs_read(desktop_setting_file_v, desktop_setting_file_buffer, 0, desktop_setting_file_v->size);
+    uint64_t offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
+    desktop_setting_file_p += offest;
+
+    int desktop_block_count = atoi(desktop_setting_file_temp_buf) + 2;
+    // 每个格是 110 * 110，从（0，25）开始
+    for (int i = 0; i < desktop_block_count; i++)
+    {
+        // 读取一行并设置下一行的偏移
+        offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
+        desktop_setting_file_p += offest;
+
+        int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
+        int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
+
+        if (x > bx && x < bx + 110 &&
+            y > by && y < by + 110)
+        {
+            // 就是他！
+            if (i == 0)
+            {
+                create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+            }
+            else
+            {
+                // todo
+            }
+        }
+    }
+
+    vfs_close(desktop_setting_file_v);
 }
 
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)

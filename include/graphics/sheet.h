@@ -133,4 +133,6 @@ void change_task_dock_icon(WINDOWLSP win, char *path);
 
 void draw_app_message_box(char *title, char *text);
 
+void process_desktop_find_block(int x, int y);
+
 #endif
