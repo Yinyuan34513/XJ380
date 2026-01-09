@@ -285,6 +285,12 @@ void process_mouse_info()
             {
                 // 点在了桌面或快捷栏上
                 // do nothing
+                if (ms_dec.double_click)
+                {
+                    ms_dec.double_click = false;
+                    write_serial_fmt("Double Click!\n");
+                    process_desktop_find_block(tbx, tby);
+                }
             }
             else
             {
@@ -305,13 +311,6 @@ void process_mouse_info()
             refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + ms_dec.sht_now->height);
             refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width, his_y + ms_dec.sht_now->height);
-        }
-
-        if (ms_dec.double_click)
-        {
-            ms_dec.double_click = false;
-            write_serial_fmt("Double Click!\n");
-            process_desktop_find_block(tbx, tby);
         }
 
         focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
