@@ -144,7 +144,7 @@ void components_flusher()
                 tw_data->need_flush = true;
             }
         }
-        if (ms_dec.need_flush) { process_mouse_info(); }
+        // if (ms_dec.need_flush) { process_mouse_info(); }
     }
 }
 
@@ -311,7 +311,7 @@ void desktop_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data->flushing) { continue; } // Sync, but bad performance
+        process_mouse_info();
         if (tw_data->need_flush)
         {
             tw_data->need_flush = false;
@@ -334,6 +334,7 @@ void desktop_flusher()
                 }
             }
         }
+        
 #if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {

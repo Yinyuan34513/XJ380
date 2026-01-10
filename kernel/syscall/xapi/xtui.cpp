@@ -34,7 +34,9 @@ void do_xapi_GetSystemVersion(uint64_t str)
 
 uint64_t do_xapi_GetTime()
 {
-    return mktime();
+    tm t;
+    time_read(&t);
+    return mktime(&t);
 }
 
 void do_xapi_GetCurrentUser(uint64_t dst)

@@ -810,7 +810,9 @@ sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
         return SYSCALL_SUCCESS;
     }
     case 0: {
-        uint64_t timestamp = mktime();
+        tm tm;
+        time_read(&tm);
+        uint64_t timestamp = mktime(&tm);
         if (ts != NULL)
         {
             ts->tv_sec  = timestamp;

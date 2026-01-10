@@ -28,11 +28,9 @@ MouseType type;
 extern bool have_full_screen_app;
 
 spin_t mouse_info_processing = SPIN_INIT;
-
 void process_mouse_button()
 {
     spin_lock(mouse_info_processing);
-
     if (ms_dec.btn & 0x01)
     {
         // 左键按下
@@ -41,8 +39,9 @@ void process_mouse_button()
     else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
     {
         // 左键松开
-
-        uint64_t click_time = get_sec();
+        tm t;
+        time_read(&t);
+        uint64_t click_time = t.tm_sec;
         if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 3)
         {
             ms_dec.first_click = false;
