@@ -296,7 +296,7 @@ void desktop_flusher()
     delay_s_hp(1);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
@@ -317,7 +317,7 @@ void desktop_flusher()
             refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
         }
 
-        k_input = kernel_getch();
+        k_input = get_keyboard_input();
         if (k_input != NULL)
         {
             WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
@@ -430,7 +430,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // hda_init();
     // sb16_init();
 
-    keyboard_setup();
+    keyboard_init();
     write_serial_fmt("KEYBOARD (PS2) \n");
     mouse_init();
     write_serial_fmt("MOUSE (PS2) \n");
