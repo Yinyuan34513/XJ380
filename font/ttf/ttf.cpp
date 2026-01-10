@@ -19,7 +19,7 @@ extern stbtt_fontinfo font_c;
 extern char          *ttf_buffer_m;
 extern stbtt_fontinfo font_m;
 
-SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
+SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
     uint8_t       text_g   = foreground_color.g;
@@ -77,6 +77,12 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
     int            bitmap_w = 1920; /* 位图的宽 */
     int            bitmap_h = 1080; /* 位图的高 */
     unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
+    if (!bitmap)
+    {
+        // try again
+        bitmap = (unsigned char *)(malloc(bitmap_w * bitmap_h));
+        if (!bitmap) { return NULL; }
+    }
     memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
     /* "STB"的 unicode 编码 */
@@ -176,20 +182,22 @@ void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER 
 }
 
 void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
-                   /*unsigned bc, */ unsigned x, unsigned y, int size, uint32_t *i_width)
+                    /*unsigned bc, */ unsigned x, unsigned y, int size, uint32_t *i_width)
 {
     print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
-extern uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
+extern uint16_t
+    zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
 uint64_t calc_ttf_length(char *str, int size)
 {
     // 懒得整了就这样吧
     uint32_t temp_i_width = 0;
-    print_fmt_box_ttf(sht_img, 
-                      &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi, 
-                      {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
+    print_fmt_box_ttf(
+        sht_img,
+        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi,
+        {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
     return temp_i_width;
 }
 
@@ -222,7 +230,10 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         r         = (Rune *)malloc((utf_len + 1) * sizeof(Rune));
         free_rune = 1;
     }
-    else { r = data->rune_buf; }
+    else
+    {
+        r = data->rune_buf;
+    }
     r[utf_len] = 0;
     int   i    = 0;
     char *p    = data->buf;
@@ -235,6 +246,13 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     unsigned int   width  = 0;
     unsigned int   height = 0;
     unsigned char *bitmap = TTF_Print(r, &width, &height, data->size);
+
+    if (bitmap == NULL)
+    {
+        write_serial_fmt("TTF Print Failed. Reason: Memory Allocate Failed.\n");
+        return;
+    }
+
     *i_width = width;
 
     // 查找图层
@@ -291,7 +309,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
 {
     uint32_t temp_i_width;
     input_width = &temp_i_width;
-    char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
+    char *buf   = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
     // char buf[TTF_BUF_SIZE];
     buf[0]         = '\0';
     Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
@@ -329,11 +347,11 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     free(rune_buf);
 }
 
-void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width, const char *fmt,
-                       ...)
+void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width,
+                       const char *fmt, ...)
 {
     input_width = i_width;
-    char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
+    char *buf   = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
     // char buf[TTF_BUF_SIZE];
     buf[0]         = '\0';
     Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
@@ -387,16 +405,23 @@ void init_ttf()
     vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
     if (!v)
     {
-        write_serial_string("Cannot find XJ380F.ttf\n");
-        // wsod_cannot_load_ttf();
+        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380F.ttf");
         return;
     }
     ttf_buffer = (char *)malloc(v->size);
+    if (!ttf_buffer)
+    {
+        write_serial_string("Cannot allocate memory for XJ380F.ttf\n");
+        vfs_close(v);
+        return;
+    }
     write_serial_string("Reading Font - XJ380F (1/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
     if (*(uint64_t *)ttf_buffer == 0)
     {
-        write_serial_string("Cannot read XJ380F.ttf\n");
+        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380F.ttf", (unsigned)v->size);
+        free(ttf_buffer);
+        vfs_close(v);
         return;
     }
     write_serial_string("Loading Font - XJ380F (1/2)...\n");
@@ -409,16 +434,23 @@ void init_ttf()
     v = vfs_open("/system/font/XJ380C.ttf");
     if (!v)
     {
-        write_serial_string("Cannot find XJ380C.ttf\n");
-        // wsod_cannot_load_ttf();
+        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380C.ttf");
         return;
     }
     ttf_buffer_c = (char *)malloc(v->size);
+    if (!ttf_buffer_c)
+    {
+        write_serial_string("Cannot allocate memory for XJ380C.ttf\n");
+        vfs_close(v);
+        return;
+    }
     write_serial_string("Reading Font - XJ380C (2/2)...\n");
     vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
     if (*(uint64_t *)ttf_buffer_c == 0)
     {
-        write_serial_string("Cannot read XJ380C.ttf\n");
+        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380C.ttf", (unsigned)v->size);
+        free(ttf_buffer_c);
+        vfs_close(v);
         return;
     }
     write_serial_string("Loading Font - XJ380C (2/2)...\n");

@@ -84,6 +84,8 @@ typedef struct {
 #define XAPI_GET_CURRENT_USER   413
 
 #define XAPI_GET_TIME_X         433
+#define XAPI_GET_CPU_MODEL      434
+#define XAPI_GET_MEMORY_SIZE    435
 
 // P3.6
 #define XAPI_BROKEN         428
@@ -127,6 +129,7 @@ typedef struct {
 #define MSG_MBUTTON 4
 #define MSG_ROLLER  5
 #define MSG_CRL     6
+#define MSG_SPCHAR  7
 
 // P4.5
 #define XAPI_READBUFFER     406
@@ -137,17 +140,22 @@ typedef struct {
 #define XAPI_WRITEBUFFERA   408
 #define XAPI_REFRESH_WINDOW 409
 
+#define XAPI_REFRESH_PART_WINDOW 438
+
 // P4.6
 #define XAPI_BUTTON         410
 #define XAPI_BUTTON_EMP     411
 #define XAPI_DELETE_BUTTON  432
+
+#define XAPI_REG_RB_MENU    436
+#define XAPI_URG_RB_MENU    437
 
 // 4-1
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：433
+// 当前最大号：438
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -194,6 +202,10 @@ uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
 void do_xapi_Broken(char *info);
 void do_xapi_GetTimeX(uint64_t tt);
+uint64_t do_xapi_GetMemorySize();
+void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count);
+void do_xapi_DeleteRightButtonMenu(uint64_t handle);
+int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
 
 
 

@@ -23,7 +23,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -device usb-kbd -device usb-mouse -serial file:serial.log -device sb16 $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -96,16 +96,21 @@ $(BUILD_DIR)/%.o: %.cpp
 	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $<.clangd_template >> $<.clangd
 	@printf "\033[1;32m[Done]\033[0m $<.clangd was generated.\n"
 
-all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
+all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) liballoc-x86_64.a
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c boot/bootlib.c
 
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
+	@$(MAKE) -C mod
+
+liballoc-x86_64.a:
+	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
+
 .PHONY: clean format check gen.clangd
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img
@@ -140,6 +145,7 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
+	@mkdir -p $(BUILD_DIR)/XJ380/lib/modules
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -150,6 +156,10 @@ vdisk: all
 	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/image
 
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/system
+
+	@cp -a $(BUILD_DIR)/calc.elf $(BUILD_DIR)/XJ380/system
+
+	@cp -a ./user/1.elf $(BUILD_DIR)/XJ380/system
 
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
@@ -167,6 +177,12 @@ vdisk: all
 	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
+
+# 	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
+	
+# temp test (remember to delete)
+	@mkdir -p $(BUILD_DIR)/XJ380/Users/GuoqiFish
+	@cp -a ./deskset.inf $(BUILD_DIR)/XJ380/Users/GuoqiFish
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

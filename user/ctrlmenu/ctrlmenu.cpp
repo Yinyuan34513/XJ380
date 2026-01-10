@@ -7,6 +7,8 @@ HDLE handle;
 UINT64 win_width;
 UINT64 win_height;
 
+bool exit_cm = false;
+
 void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
     switch (Type)
@@ -35,9 +37,25 @@ int main(int argc, char *argv[], char *envp[])
 
     xapi_RefreshWindow(handle);
 
+    int old_min = 60;
+
     while (1)
     {
+        if (exit_cm)
+            xapi_Exit(0);
+            
         __asm__ __volatile__("pause");
+
+        TimeType tm;
+        xapi_GetTimeX(&tm);
+
+        if (tm.tm_min != old_min)
+        {
+            draw_background();
+            old_min = tm.tm_min;
+        }
+        
+        xapi_Sleep(1000);
     }
 }
 

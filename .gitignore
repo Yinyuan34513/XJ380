@@ -10,6 +10,7 @@ out/draw.o
 /out
 /xlibc
 /open-vmdk-master
+/compile_commands.json
 .cache
 
 *.img

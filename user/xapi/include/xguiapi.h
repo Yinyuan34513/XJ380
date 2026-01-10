@@ -49,6 +49,12 @@ struct XCOLORA
 	UINT8	Alpha;
 };
 
+typedef struct 
+{
+	UINT64 	CRLid;
+	WSTR	text;
+} RightMenuItem;
+
 
 // 4-1
 #define XWIN_NORMAL				0
@@ -175,15 +181,8 @@ void xapi_DrawPicture(
 );
 
 // 4-4
+#include "libsys.h"
 void SetMsgPrcor(HDLE handle, MsgPrcor func);
-#define MSG_CHAR		0
-#define MSG_SPCHAR		7
-#define MSG_MOVE		1
-#define MSG_LBUTTON		2
-#define MSG_RBUTTON		3
-#define MSG_MBUTTON		4
-#define MSG_ROLLER		5
-#define MSG_CRL			6
 
 // 4-5
 void  xapi_ReadBuffer(
@@ -217,6 +216,14 @@ void xapi_RefreshWindow(
 	HDLE		handle
 );
 
+void xapi_RefreshPartWindow(
+	HDLE 	handle,
+	UINT32  x1,
+	UINT32  y1,
+	UINT32  x2,
+	UINT32  y2
+);
+
 // 4-6
 void xapi_Button(
 	HDLE  	handle,
@@ -233,3 +240,16 @@ void xapi_ButtonEmp(
 	UINT64  y,
 	WSTR  	text
 );
+
+void xapi_DeleteButton(
+	HDLE  	handle,
+	UINT64  CRLid
+);
+
+void xapi_RegisterRightButtonMenu(
+	HDLE  			handle,
+	RightMenuItem  *items,
+	UINT64 			count
+);
+
+void xapi_DeleteRightButtonMenu(HDLE handle);

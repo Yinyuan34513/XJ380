@@ -6,6 +6,7 @@
 #include <mm/heap.h>
 #include <mm/hhdm.h>
 #include <mm/memory.h>
+#include <dlinker.h>
 #include <mm/page.h>
 
 int memcmp(const void *a_, const void *b_, size_t size)
@@ -90,6 +91,8 @@ void *memset(void *dst, int val, size_t size)
     return dst;
 }
 
+EXPORT_SYMBOL(memset);
+
 char *strcpy(char *dest, const char *src)
 {
     do
@@ -99,6 +102,10 @@ char *strcpy(char *dest, const char *src)
     *dest = 0;
     return dest;
 }
+
+EXPORT_SYMBOL(strcpy);
+EXPORT_SYMBOL(memcpy);
+
 
 size_t strlen(const char *str)
 {

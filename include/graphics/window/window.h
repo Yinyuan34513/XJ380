@@ -1,12 +1,14 @@
 #ifndef _WINDOW_H_
 #define _WINDOW_H_
 
-#include <graphics/sheet.h>
 #include <task/pcb.h>
 
 typedef struct WINDOWLS *WINDOWLSP;
 typedef void (*MsgPrcor)(uint64_t Type, uint64_t hData,
                          uint64_t lData); // 别问为什么放在这儿 不放这儿会爆炸
+                         
+#include <graphics/sheet.h>
+#include <graphics/components/rb_menu.h>
 
 typedef struct WINDOWLS
 {
@@ -18,6 +20,7 @@ typedef struct WINDOWLS
     uint32_t  height;
     MsgPrcor  WinMPf;
     tcb_t     w_task;
+    rb_menu_regt_p w_menu;
     WINDOWLSP next;
     uint64_t  type;
 } WINDOWLS;

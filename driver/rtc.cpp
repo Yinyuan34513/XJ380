@@ -1,149 +1,128 @@
 #include "rtc.h"
 #include "proto.hpp"
 
-static int month[25] = {0, // 这里占位，没有 0 月，从 1 月开始
-                        0,
-                        (31),
-                        (31 + 29),
-                        (31 + 29 + 31),
-                        (31 + 29 + 31 + 30),
-                        (31 + 29 + 31 + 30 + 31),
-                        (31 + 29 + 31 + 30 + 31 + 30),
-                        (31 + 29 + 31 + 30 + 31 + 30 + 31),
-                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31),
-                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31 + 30),
-                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31),
-                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30),
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0};
 
-#define bcd2hex(n) ((n >> 4) * 10) + (n & 0xf)
+#define CMOS_ADDR 0x70 // CMOS 地址寄存器
+#define CMOS_DATA 0x71 // CMOS 数据寄存器
 
-uint8_t read_cmos(uint8_t p)
-{
-    uint8_t data;
-    outb(CMOS_INDEX, p);
-    data = inb(CMOS_DATA);
-    outb(CMOS_INDEX, 0x80);
-    return data;
+// 下面是 CMOS 信息的寄存器索引
+#define CMOS_SECOND 0x00  // (0 ~ 59)
+#define CMOS_MINUTE 0x02  // (0 ~ 59)
+#define CMOS_HOUR 0x04    // (0 ~ 23)
+#define CMOS_WEEKDAY 0x06 // (1 ~ 7) 星期天 = 1，星期六 = 7
+#define CMOS_DAY 0x07     // (1 ~ 31)
+#define CMOS_MONTH 0x08   // (1 ~ 12)
+#define CMOS_YEAR 0x09    // (0 ~ 99)
+#define CMOS_CENTURY 0x32 // 可能不存在
+#define CMOS_NMI 0x80
+
+#define MINUTE 60          // 每分钟的秒数
+#define HOUR (60 * MINUTE) // 每小时的秒数
+#define DAY (24 * HOUR)    // 每天的秒数
+#define YEAR (365 * DAY)   // 每年的秒数，以 365 天算
+
+spin_t cmos_register_lock = SPIN_INIT;
+
+// 读 cmos 寄存器的值
+uint8_t cmos_read(uint8_t addr) {
+    bool is_sti = are_interrupts_enabled();
+    close_interrupt;
+
+    spin_lock(cmos_register_lock);
+
+    if (!is_sti) open_interrupt;
+    
+    outb(CMOS_ADDR, CMOS_NMI | addr);
+    uint8_t value = inb(CMOS_DATA);
+    spin_unlock(cmos_register_lock);
+    return value;
+};
+
+// 写 cmos 寄存器的值
+void cmos_write(uint8_t addr, uint8_t value) {
+    bool is_sti = are_interrupts_enabled();
+    close_interrupt;
+
+    spin_lock(cmos_register_lock);
+
+    if (!is_sti) open_interrupt;
+    
+    outb(CMOS_ADDR, CMOS_NMI | addr);
+    outb(CMOS_DATA, value);
+    spin_unlock(cmos_register_lock);
 }
 
-uint32_t get_hour()
-{
-    return bcd2hex(read_cmos(CMOS_CUR_HOUR));
+int days_in_month[2][12] = {{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
+                            {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
+
+int century;
+
+bool is_leap_year(int year) { return ((year % 4 == 0) && (year % 100 != 0)); }
+
+int64_t mktime(tm *time) {
+    int64_t seconds = 0;
+    int leap;
+
+    // Adjust year and month for Unix time (starting from 1970)
+    int year = time->tm_year;
+    int month = time->tm_mon - 1; // Month is 0-based in this logic
+    month -= (month > 11) ? 11 : 0;
+    int day = time->tm_mday - 1; // Day is 1-based in the RTC structure
+
+    for (int y = 1970; y < year; y++) {
+        leap = is_leap_year(y);
+        seconds += (365 + leap) * 86400;
+    }
+
+    leap = is_leap_year(year);
+    for (int m = 0; m < month; m++) {
+        seconds += days_in_month[leap][m] * 86400;
+    }
+
+    seconds += day * 86400;
+
+    seconds += time->tm_hour * 3600;
+    seconds += time->tm_min * 60;
+    seconds += time->tm_sec;
+
+    return seconds;
 }
 
-uint32_t get_min()
-{
-    return bcd2hex(read_cmos(CMOS_CUR_MIN));
+void time_read_bcd(tm *time) {
+    // CMOS 的访问速度很慢。为了减小时间误差，在读取了下面循环中所有数值后，
+    // 若此时 CMOS 中秒值发生了变化，那么就重新读取所有值。
+    // 这样内核就能把与 CMOS 的时间误差控制在 1 秒之内。
+    do {
+        time->tm_sec = cmos_read(CMOS_SECOND);
+        time->tm_min = cmos_read(CMOS_MINUTE);
+        time->tm_hour = cmos_read(CMOS_HOUR);
+        time->tm_mday = cmos_read(CMOS_DAY);
+        time->tm_mon = cmos_read(CMOS_MONTH);
+        time->tm_year = cmos_read(CMOS_YEAR);
+        century = cmos_read(CMOS_CENTURY);
+    } while (time->tm_sec != cmos_read(CMOS_SECOND));
 }
 
-uint32_t get_sec()
-{
-    return bcd2hex(read_cmos(CMOS_CUR_SEC));
-}
+uint8_t bcd_to_bin(uint8_t value) { return (value & 0xf) + (value >> 4) * 10; }
 
-uint32_t get_day_of_month()
-{
-    return bcd2hex(read_cmos(CMOS_MON_DAY));
-}
+void time_read(tm *time) {
+    time_read_bcd(time);
+    uint8_t rb = cmos_read(0x0b);
+    bool need_convert = !(rb & 0x04);
 
-uint32_t get_day_of_week()
-{
-    return bcd2hex(read_cmos(CMOS_WEEK_DAY));
-}
+    if (need_convert) {
+        time->tm_sec = bcd_to_bin(time->tm_sec);
+        time->tm_min = bcd_to_bin(time->tm_min);
+        time->tm_hour = bcd_to_bin(time->tm_hour);
+        time->tm_mday = bcd_to_bin(time->tm_mday);
+        time->tm_mon = bcd_to_bin(time->tm_mon);
+        time->tm_year = bcd_to_bin(time->tm_year);
+        time->tm_isdst = -1;
+        century = bcd_to_bin(century);
+    }
 
-uint32_t get_mon()
-{
-    return bcd2hex(read_cmos(CMOS_CUR_MON));
-}
+    time->tm_year += century * 100;
 
-uint32_t get_year()
-{
-    return (bcd2hex(read_cmos(CMOS_CUR_CEN)) * 100) + bcd2hex(read_cmos(CMOS_CUR_YEAR)) + 1980;
-}
-
-int is_leap_year(int year)
-{
-    if (year % 4 != 0) return 0;
-    if (year % 400 == 0) return 1;
-    return year % 100 != 0;
-}
-
-int64_t mktime()
-{
-    int64_t res;
-    int     year;
-    if (get_year() >= 70)
-        year = get_year() - 70;
-    else
-        year = get_year() - 70 + 100;
-    res  = YEAR * year;
-    res += DAY * ((year + 1) / 4);
-    res += month[get_mon()] * DAY;
-    if (get_mon() > 2 && ((year + 2) % 4)) res -= DAY;
-    res += DAY * (get_day_of_month() - 1);
-    res += HOUR * get_hour();
-    res += MINUTE * get_min();
-    res += get_sec();
-
-    return res;
-}
-
-char *get_date_time()
-{
-    char *s    = (char *)malloc(40);
-    int   year = get_year(), month = get_mon(), day = get_day_of_month();
-    int   hour = get_hour(), min = get_min(), sec = get_sec();
-    int   day_of_months[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (is_leap_year(year)) day_of_months[2]++;
-#ifdef NEED_UTC_8
-    hour += 8;
-    if (hour >= 24) hour -= 24, day++;
-    if (day > day_of_months[month]) day = 1, month++;
-    if (month > 12) month = 1, year++;
-#endif
-    sprintf(s, "%d/%d/%d %d:%d:%d", year, month, day, hour, min, sec);
-    return s;
-}
-int get_yday(tm *time)
-{
-    int res  = month[time->tm_mon]; // 已经过去的月的天数
-    res     += time->tm_mday;       // 这个月过去的天数
-
-    int year;
-    if (time->tm_year >= 70)
-        year = time->tm_year - 70;
-    else
-        year = time->tm_year - 70 + 100;
-
-    // 如果不是闰年，并且 2 月已经过去了，则减去一天
-    // 注：1972 年是闰年，这样算不太精确，忽略了 100 年的平年
-    if ((year + 2) % 4 && time->tm_mon > 2) { res -= 1; }
-
-    return res;
-}
-int  century;
-void time_read(tm *time)
-{
-    time->tm_sec   = get_sec();
-    time->tm_min   = get_min();
-    time->tm_hour  = get_hour();
-    time->tm_wday  = get_day_of_week();
-    time->tm_mday  = get_day_of_month();
-    time->tm_mon   = get_mon();
-    time->tm_year  = get_year();
-    time->tm_yday  = get_yday(time);
-    time->tm_isdst = -1;
-    century        = bcd2hex(read_cmos(CMOS_CUR_CEN));
+    if (!(rb & 0x02) && (time->tm_hour & 0x80))
+        time->tm_hour = ((time->tm_hour & 0x7F) + 12) % 24;
 }

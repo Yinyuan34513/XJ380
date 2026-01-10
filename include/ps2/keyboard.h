@@ -1,4 +1,10 @@
 #pragma once
+#ifndef _KEYBOARD_H_
+#    define _KEYBOARD_H_
+
+#    include <graphics/GOP.hpp>
+#    include <graphics/sheet.h>
+#    include <proto.hpp>
 
 #define KB_BUF_SIZE 100
 
@@ -36,12 +42,6 @@
 #define CHARACTER_ENTER '\n'
 #define CHARACTER_BACK  '\b'
 
-#define wait_KB_write() \
-	while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
-
-#define wait_KB_read() \
-	while (inb(PORT_KB_STATUS) & KBSTATUS_OBF)
-
 enum special_key_code
 {
     KEY_ESC = 128,
@@ -68,38 +68,26 @@ enum special_key_code
     KEY_NUML,
     KEY_SCROLL
 };
+#    define wait_KB_write() while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
 
-#include "stdint.h"
+#    define wait_KB_read() while (inb(PORT_KB_STATUS) & KBSTATUS_OBF)
 
-struct keyboard_buf {
+struct keyboard_buf
+{
     uint8_t *p_head;
     uint8_t *p_tail;
-    int32_t  count;
+    int      count;
     bool     ctrl;
     bool     shift;
     bool     alt;
     bool     caps;
-    uint8_t  buf[64];
+    uint8_t  buf[KB_BUF_SIZE];
 };
-
-enum {
-    KEY_BUTTON_UP     = 0x81,
-    KEY_BUTTON_DOWN   = 0x82,
-    KEY_BUTTON_LEFT   = 0x83,
-    KEY_BUTTON_RIGHT  = 0x84,
-    KEY_BUTTON_HOME   = 0x85,
-    KEY_BUTTON_DEL    = 0x86,
-    KEY_BUTTON_END    = 0x87,
-    KEY_BUTTON_INSERT = 0x88,
-    KEY_BUTTON_PUP    = 0x89,
-    KEY_BUTTON_PDOWN  = 0x8a,
-};
-
-void keyboard_setup();
 
 void wait_ps2_write();
 void wait_ps2_read();
 
-uint8_t keyboard_scancode(uint8_t scancode, uint8_t scancode_1, uint8_t scancode_2);
-int kernel_getch();
-void keyboard_tmp_writer(const uint8_t *data);
+uint8_t get_keyboard_input();
+void keyboard_init();
+
+#endif

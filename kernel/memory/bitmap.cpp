@@ -10,6 +10,7 @@ void bitmap_init(Bitmap *bitmap, uint8_t *buffer, size_t size)
 
 bool bitmap_get(const Bitmap *bitmap, size_t index)
 {
+    if (index >= bitmap->length) return false;
     size_t word_index = index / 8;
     size_t bit_index  = index % 8;
     return (bitmap->buffer[word_index] >> bit_index) & 1;
@@ -17,10 +18,14 @@ bool bitmap_get(const Bitmap *bitmap, size_t index)
 
 void bitmap_set(Bitmap *bitmap, size_t index, bool value)
 {
+    if (index >= bitmap->length) return;
     size_t word_index = index / 8;
     size_t bit_index  = index % 8;
     if (value) { bitmap->buffer[word_index] |= ((size_t)1 << bit_index); }
-    else { bitmap->buffer[word_index] &= ~((size_t)1 << bit_index); }
+    else
+    {
+        bitmap->buffer[word_index] &= ~((size_t)1 << bit_index);
+    }
 }
 
 void bitmap_set_range(Bitmap *bitmap, size_t start, size_t end, bool value)
@@ -81,7 +86,10 @@ size_t bitmap_find_range(const Bitmap *bitmap, size_t length, bool value)
                     count++;
                     if (count == length) { return start_index; }
                 }
-                else { count = 0; }
+                else
+                {
+                    count = 0;
+                }
             }
         }
     }

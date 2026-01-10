@@ -718,7 +718,7 @@ static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) 
 
     size_t i = 0;
     for (; i < number; i++) {
-        char c = (char)kernel_getch();
+        char c = (char)get_keyboard_input();
         if (c == 0x7f) { c = '\b'; }
         if (c == 0x9) { c = '\t'; }
         if (c == '\b') {

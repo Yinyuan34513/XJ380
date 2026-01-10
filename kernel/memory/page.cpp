@@ -2,9 +2,10 @@
 #include <cpu/longm.h>
 #include <cpu/regio.h>
 #include <krlibc.h>
+#include <mm/lazyalloc.h>
 #include <mm/page.h>
 #include <proto.hpp>
-#include <mm/lazyalloc.h>
+#include <dlinker.h>
 #include <stdint.h>
 
 spin_t page_lock;
@@ -36,13 +37,15 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
                                                 : "Unknown";
 
     // 长大后在学习吧！
-    if (get_current_task() != NULL) {
+    if (get_current_task() != NULL)
+    {
         pcb_t current_proc = get_current_task()->parent_group;
-        if (current_proc->task_level == TASK_APPLICATION_LEVEL) {
+        if (current_proc->task_level == TASK_APPLICATION_LEVEL)
+        {
             errno_t status = lazy_tryalloc(current_proc, faulting_address);
-            if (status != 0) {
-                goto err;
-            } else {
+            if (status != 0) { goto err; }
+            else
+            {
                 enable_scheduler();
                 open_interrupt;
                 return;
@@ -169,7 +172,7 @@ page_table_t *page_table_create(page_table_entry_t *entry, bool user)
 {
     if (entry->value == (uint64_t)NULL)
     {
-        uint64_t frame      = alloc_frames(1);
+        uint64_t frame = alloc_frames(1);
         // write_serial_fmt("oiiaoiia 0x%x\n",(uint64_t)frame);
         entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | (user ? PTE_USER : 0);
         page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x000fffffffff000);
@@ -195,6 +198,8 @@ page_directory_t *get_current_directory()
     gdc_temp_pdt.table = (page_table_t *)phys_to_virt(get_cr3());
     return &gdc_temp_pdt;
 }
+
+EXPORT_SYMBOL(get_current_directory);
 
 static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
 {
@@ -313,6 +318,8 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 
     flush_tlb(addr);
 }
+
+EXPORT_SYMBOL(page_map_to);
 
 void switch_process_page_directory(page_directory_t *dir)
 {

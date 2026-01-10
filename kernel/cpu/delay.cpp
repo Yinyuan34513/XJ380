@@ -1,5 +1,5 @@
 #include <stdint.h>
-
+#include <dlinker.h>
 // 读取TSC
 static inline uint64_t rdtsc()
 {
@@ -44,6 +44,8 @@ void delay_ms_hp(uint64_t ms)
 {
     delay_us_hp(ms * 1000);
 }
+
+EXPORT_SYMBOL(delay_ms_hp);
 
 void delay_s_hp(uint64_t s)
 {

@@ -212,6 +212,9 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     free(lft);
 
     refresh_part_sheet(sht, 72, 72, width + 24 + 72, height + 52 + 72);
+
+    register_task_dock(new_window);
+
     WindowIsCreating = false;
 }
 
@@ -255,6 +258,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     if (windowls->type == XWIN_FULL_SCR)
     {
         have_full_screen_app = false;
+        found_sheet_byid(sht_img, &(windowls->w_sheet))->type = FixedSheetType;
         memset(found_sheet_byid(sht_img, &(windowls->w_sheet))->buffer, 
                 0, sizeof(SHEET_BUFFER) * 
                 found_sheet_byid(sht_img, &(windowls->w_sheet))->width * 
@@ -264,10 +268,10 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     }
 
     WindowIsCreating  = true;
-    WINDOWLS *front_p = xwmi->start;
-    WINDOWLS *front_p2;
     SHEET    *front_p3 = sht->start;
     int       bx, by, ex, ey;
+
+    unregister_task_dock(windowls);
 
     while (true)
     {
@@ -289,16 +293,17 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         front_p3 = front_p3->next;
     }
 
+    WINDOWLS *front_p = xwmi->start;
+    WINDOWLS *front_p2;
+
     while (true)
     {
-        if (front_p->number == windowls->number)
+        if (front_p == windowls)
         {
-            if (!front_p2)
-                front_p2->next = front_p->next;
-            else
-                xwmi->start = front_p->next;
+            front_p2->next = front_p->next;
             windowls->w_task->window_count--;
-            if (windowls->type != XWIN_FULL_SCR) delete_sheet(sht, &(windowls->w_sheet));
+            if (windowls->type != XWIN_FULL_SCR) 
+                delete_sheet(sht, &(windowls->w_sheet));
             memset(windowls, 0, sizeof(SHEET));
             free((void *)(windowls));
             // xwmi->win_num--;

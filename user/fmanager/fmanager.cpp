@@ -22,19 +22,22 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    (void)argc;
-    (void)argv;
     (void)envp;
+
+    if (argc == 1)
+    {
+        strcpy(current_path, argv[0]);
+    }
 
     XWINDOW Winfo;
     Winfo.title  = (char *)"文件管理器";
     Winfo.width  = FMR_X;
     Winfo.height = FMR_Y;
     xapi_CreateWindow(&handle, &Winfo);
+    xapi_SetIcon(handle, "/system/icon/folder.png");
     SetMsgPrcor(handle, fmanager_MessagePrcor);
     memset(file_ti_index, 0, 2048 * sizeof(FILE_TYPEINFO_INDEX));
 
-    paint_fm_back();
     paint_dir(current_path);
 
     // 初始化路径历史
@@ -46,6 +49,11 @@ int main(int argc, char *argv[], char *envp[])
     path_r = 0;  // 最早位置指针
 
     xapi_RefreshWindow(handle);
+
+    RightMenuItem rmi[10];
+    rmi[0].text = (char *)"114514";
+    rmi[0].CRLid = 1;
+    xapi_RegisterRightButtonMenu(handle, rmi, 1);
 
     while (1)
     {
@@ -73,6 +81,11 @@ int main(int argc, char *argv[], char *envp[])
                 cat_path(fdir[click_index].filename);
                 paint_dir(current_path);
             }
+        }
+        if (need_paint)
+        {
+            paint_dir(current_path);
+            need_paint = false;
         }
         __asm__ __volatile__("pause");
     }

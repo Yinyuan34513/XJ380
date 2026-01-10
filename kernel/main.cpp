@@ -1,41 +1,39 @@
 #include "build_settings.h"
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
+#include <device.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
-#include <syscall/signal.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
+#include <fs/vfs/proc.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <hda/hda.h>
+#include <hda/pcspk.h>
 #include <krlibc.h>
 #include <mm/frame.h>
 #include <nvme/nvme.h>
 #include <pci/pci.h>
+#include <pipe.h>
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <rtc.h>
+#include <sb16.h>
+#include <syscall/signal.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
+#include <dlinker.h>
 #include <ttf.h>
-#include <usb/hid.h>
-#include <xhci/xhci-hcd.h>
-#include <hda/hda.h>
-#include <hda/pcspk.h>
-#include <device.h>
-#include <sb16.h>
-#include <fs/vfs/proc.h>
-#include <pipe.h>
 
 bool        desktop_done = false;
-bool        xhci_done    = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
 uint16_t   *msid;
@@ -154,7 +152,8 @@ extern uint16_t *mouse_sheet_id_img;
 uint16_t         desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
 uint16_t         dock_sheet_id    = 1145;
 uint16_t         mouse_sheet_id   = 1145;
-uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi = 1145;
+uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi =
+    1145;
 
 void desktop_flusher()
 {
@@ -178,8 +177,9 @@ void desktop_flusher()
                  &mouse_sheet_id);
 
     // 草稿纸吗，有点意思
-    create_sheet(&shtinf, get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, -1,
-                 &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
+    create_sheet(
+        &shtinf, get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, -1,
+        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
 
@@ -192,7 +192,8 @@ void desktop_flusher()
     int fontx = 8;
     int fonty = 50;
     // DEBUG
-#if BUILD_EDITION == DEBUG_VERSION
+#if 1 == 2
+// #if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40,
                 "X:", WHITE);
     PrintString(&shtinf, &desktop_sheet_id, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24,
@@ -291,19 +292,18 @@ void desktop_flusher()
     tw_data->scdx     = scdx;
 
     desktop_done = true;
-    while (!xhci_done)
-        cpu_relax();
 
-    delay_s_hp(3);
+    delay_s_hp(1);
 
     // char *argv[10]    = {"a", "b", "c", "d"};
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);
-   
+
     while (1)
     {
         if (!no_interrupt)
@@ -311,14 +311,13 @@ void desktop_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data->flushing) { continue; } // Sync, but bad performance
         if (tw_data->need_flush)
         {
             tw_data->need_flush = false;
             refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
         }
 
-        k_input = kernel_getch();
+        k_input = get_keyboard_input();
         if (k_input != NULL)
         {
             WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
@@ -326,14 +325,15 @@ void desktop_flusher()
             {
                 if (k_input != '\n' && k_input != '\b' && k_input < 128)
                 {
-                    do_message(0, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                    do_message(MSG_CHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
                 else
                 {
-                    do_message(7, NULL, k_input, current_window->WinMPf, current_window->w_task);
+                    do_message(MSG_SPCHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
                 }
             }
         }
+        
 #if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {
@@ -362,20 +362,30 @@ void tst()
         ;
 }
 
-void judge_bigend_littleend1() {
-   int i = 48;
-   char c = *((char*)&i);
-   if (c == '0')
-       write_serial_fmt("Littleend LE\n");
-   else
-       write_serial_fmt("Bigend BE\n");
+void judge_bigend_littleend1()
+{
+    int  i = 48;
+    char c = *((char *)&i);
+    if (c == '0')
+        write_serial_fmt("Littleend LE\n");
+    else
+        write_serial_fmt("Bigend BE\n");
+}
+
+#define KERNEL_HEAP_START 0xffffc00000000000
+#define KERNEL_HEAP_SIZE  (256 * 1024 * 1024)
+
+void init_heap()
+{
+    page_map_range_to_random(get_kernel_pagedir(), KERNEL_HEAP_START, KERNEL_HEAP_SIZE, KERNEL_PTE_FLAGS);
+    memset((void *)KERNEL_HEAP_START, 0, KERNEL_HEAP_SIZE);
+    heap_init((uint8_t *)KERNEL_HEAP_START, KERNEL_HEAP_SIZE);
 }
 
 extern size_t   now_tid;
-extern void nvme_setup();
-extern int xhci_setup();
-extern void mount_root();
-extern void stdio_init();
+extern void     nvme_setup();
+extern void     mount_root();
+extern void     stdio_init();
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -415,13 +425,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     nvme_setup();
     partition_init();
     // enable_intr();
-    
+
     // disable_intr();
-    usb_init();
     // hda_init();
     // sb16_init();
 
-    keyboard_setup();
+    keyboard_init();
     write_serial_fmt("KEYBOARD (PS2) \n");
     mouse_init();
     write_serial_fmt("MOUSE (PS2) \n");
@@ -462,16 +471,18 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
-    
     mount_root();
     procfs_setup();
     pipefs_setup();
     stdio_init();
 
-
     signal_init();
     init_syscall();
     init_message();
+
+    module_setup();
+    dlinker_init();
+    load_all_kernel_module();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -483,7 +494,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    
     init_user();
     init_killer();
     write_serial_string("User & Killer is ready\n");
@@ -505,13 +515,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     while (!desktop_done)
         cpu_relax();
 
-    hid_init();
-    xhci_setup();
-
     no_interrupt = true;
     close_interrupt;
     disable_scheduler();
-    
+
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
@@ -520,12 +527,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (true)
     {
-        if(!no_interrupt)
+        if (!no_interrupt)
         {
             enable_intr();
             enable_scheduler();
         }
-        
+
         __asm__ __volatile__("pause");
     }
 }

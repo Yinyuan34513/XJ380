@@ -5,6 +5,7 @@
 #include <cpu/lock.h>
 #include <font.h>
 #include <proto.hpp>
+#include <dlinker.h>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
@@ -693,6 +694,8 @@ int sprintf(char *buf, const char *fmt, ...)
     va_end(args);
     return (int)result; // Why use int??
 }
+
+EXPORT_SYMBOL(sprintf);
 /**
  * 安全版本的 sprintf，限制输出字符数防止缓冲区溢出
  * 
@@ -777,3 +780,5 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
     spin_unlock(fmt_lock);
     if (!no_interrupt) open_interrupt;
 }
+
+EXPORT_SYMBOL(write_serial_fmt);

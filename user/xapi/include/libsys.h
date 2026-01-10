@@ -119,6 +119,8 @@
 #define XAPI_GET_CURRENT_USER   413
 
 #define XAPI_GET_TIME_X         433
+#define XAPI_GET_CPU_MODEL      434
+#define XAPI_GET_MEMORY_SIZE    435
 
 // P3.6
 #define XAPI_BROKEN         428
@@ -162,6 +164,7 @@
 #define MSG_MBUTTON 4
 #define MSG_ROLLER  5
 #define MSG_CRL     6
+#define MSG_SPCHAR  7
 
 // P4.5
 #define XAPI_READBUFFER     406
@@ -171,9 +174,14 @@
 #define XAPI_WRITEBUFFERA   408
 #define XAPI_REFRESH_WINDOW 409
 
+#define XAPI_REFRESH_PART_WINDOW 438
+
 // P4.6
-#define XAPI_BUTTON       410
-#define XAPI_BUTTON_EMP   411
+#define XAPI_BUTTON         410
+#define XAPI_BUTTON_EMP     411
 #define XAPI_DELETE_BUTTON  432
+
+#define XAPI_REG_RB_MENU    436
+#define XAPI_URG_RB_MENU    437
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

@@ -66,6 +66,21 @@ typedef struct
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
 
+#include <graphics/window/window.h>
+#include <task/pcb.h>
+
+typedef struct TASK_DOCK_BLOCK *TDB_t;
+
+struct TASK_DOCK_BLOCK
+{
+    char        path[256]; // icon path
+    int         mcount;
+    WINDOWLSP   windowls;
+    bool        in_focus;
+    TDB_t       next;
+};
+
+
 void      init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
 void      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                        uint16_t *sheet_id);
@@ -90,11 +105,11 @@ void     *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id);
 SHEET *found_sheet_byid(SHEET_INFO *sht, uint16_t *sheet_id);
 
 // graphics/draw.cpp
-auto      operator new(size_t size, void *ptr) -> void *;
-auto      operator new[](size_t size, void *ptr) -> void *;
-auto      operator delete(void *ptr, size_t size) -> void;
-auto      operator delete[](void *ptr, size_t size) -> void;
-auto      operator delete(void *ptr) -> void;
+// auto      operator new(size_t size, void *ptr) -> void *;
+// auto      operator new[](size_t size, void *ptr) -> void *;
+// auto      operator delete(void *ptr, size_t size) -> void;
+// auto      operator delete[](void *ptr, size_t size) -> void;
+// auto      operator delete(void *ptr) -> void;
 void      rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor &c);
 void      dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
 
@@ -109,4 +124,15 @@ void init_dock(SHEET_INFO *sht, uint16_t *sheet_id);
 void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id);
 void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
+
+void flush_task_dock();
+void register_task_dock(WINDOWLSP window);
+void unregister_task_dock(WINDOWLSP window);
+void focus_window_dock(WINDOWLSP win);
+void change_task_dock_icon(WINDOWLSP win, char *path);
+
+void draw_app_message_box(char *title, char *text);
+
+void process_desktop_find_block(int x, int y);
+
 #endif

@@ -12,7 +12,7 @@ struct PixelColor
     uint8_t b;
 };
 
-uint8_t *PixelAt(int x, int y, const FrameBufferConfig &config)
+inline uint8_t *PixelAt(int x, int y, const FrameBufferConfig &config)
 {
     return (uint8_t *)config.frame_buffer + 4 * (config.pixels_per_scan_line * y + x);
 }

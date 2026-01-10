@@ -146,9 +146,10 @@ static void devfs_open(void *parent, const char *name, vfs_node_t node) {
     node->fsid     = devfs_id;
     node->refcount = 1;
 }
-extern size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length);
+
 spin_t RD_lk =SPIN_INIT;
 size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
+    close_interrupt;
     spin_lock(RD_lk);
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir) 
@@ -190,6 +191,7 @@ read:
 }
 spin_t WR_lk =SPIN_INIT;
 size_t devfs_write(void *file, const void *addr, size_t offset, size_t size) {
+    close_interrupt;
     spin_lock(WR_lk);
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir)

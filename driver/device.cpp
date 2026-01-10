@@ -4,6 +4,7 @@
 #include "krlibc.h"
 #include <proto.hpp>
 #include <fs/partition.h>
+#include <dlinker.h>
 
 device_t        device_ctl[256];
 id_allocator_t *dev_allocator;
@@ -22,6 +23,8 @@ int regist_device(const char *path, device_t vd) {
     }
     return i;
 }
+
+EXPORT_SYMBOL(regist_device);
 
 void delete_device(int vdiskid) {
     if (vdiskid >= 256) return;
@@ -62,11 +65,10 @@ device_t *get_device(size_t id) {
     if (device_ctl[id].flag == 0) return NULL;
     return &device_ctl[id];
 }
-
 size_t rw_device(int drive, size_t lba, uint8_t *buffer, size_t number, int read) {
     int indx = drive;
-    if (indx >= 256) return 0;
-    if (device_ctl[indx].flag == 0) return 0;
+    if (indx >= 256){ return 0;}
+    if (device_ctl[indx].flag == 0){return 0;}
 
     size_t   sector_size = device_ctl[indx].sector_size;
     size_t   total_size  = number * sector_size;
@@ -87,7 +89,6 @@ size_t rw_device(int drive, size_t lba, uint8_t *buffer, size_t number, int read
     unmap_page_range(get_current_directory(), (uint64_t)kbuf, page_size * PAGE_SIZE);
     return ret;
 }
-
 size_t device_read(size_t lba, size_t number, void *buffer, int drive) {
     if (have_vdisk(drive)) {
         if (device_ctl[drive].type == DEVICE_STREAM) {
@@ -104,7 +105,6 @@ size_t device_read(size_t lba, size_t number, void *buffer, int drive) {
     }
     return 0;
 }
-
 size_t device_write(size_t lba, size_t number, const void *buffer, int drive) {
     if (have_vdisk(drive)) {
         size_t ret_size = 0;

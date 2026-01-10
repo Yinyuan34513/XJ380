@@ -5,27 +5,24 @@
 #define CANWRITE(flag) ((flag) & WRITE || (flag) & PLUS || (flag) & APPEND)
 
 int feof(FILE *stream)
-{
-    return stream->eof ? -1 : 0;
-}
+{ return stream->eof ? -1 : 0; }
 int ferror(FILE *stream)
-{
-    return 0;
-}
+{ return 0; }
 
 int fseek(FILE *fp, int offset, int whence)
 {
     if (whence == 0) { fp->p = offset; }
     else if (whence == 1) { fp->p += offset; }
     else if (whence == 2) { fp->p = fp->fileSize + offset; }
-    else { return -1; }
+    else
+    {
+        return -1;
+    }
     return 0;
 }
 
 long ftell(FILE *stream)
-{
-    return stream->p;
-}
+{ return stream->p; }
 
 FILE *fopen(const char *filename, const char *mode)
 {
@@ -46,11 +43,17 @@ FILE *fopen(const char *filename, const char *mode)
         }
         mode++;
     }
+    if (v == NULL)
+    {
+        free(fp);
+        return NULL;
+    }
     if (v->size <= 0)
     {
         if (flag & READ)
         {
             free(fp);
+            vfs_close(v);
             return NULL; // 找不到
         }
         // vfs似乎没有创建文件
@@ -63,7 +66,10 @@ FILE *fopen(const char *filename, const char *mode)
         // }
     }
     if (flag & WRITE) { fp->fileSize = 0; }
-    else { fp->fileSize = v->size; }
+    else
+    {
+        fp->fileSize = v->size;
+    }
     fp->bufferSize = 0;
     if (flag & READ || flag & PLUS || flag & APPEND) { fp->bufferSize = v->size; }
     if (flag & WRITE || flag & PLUS || flag & APPEND) { fp->bufferSize += 100; }
@@ -80,6 +86,7 @@ FILE *fopen(const char *filename, const char *mode)
     strcpy(fp->name, filename);
     fp->mode = flag;
     //	printf("[fopen]BufferSize=%d\n",fp->bufferSize);
+    vfs_close(v);
     return fp;
 }
 
@@ -95,11 +102,13 @@ int fclose(FILE *fp)
 int fgetc(FILE *stream)
 {
     vfs_node_t v = vfs_open(stream->name);
+    if (!v) { return EOF; }
     if (CANREAD(stream->mode))
     {
         if (stream->p >= stream->fileSize || stream->fileSize == -1)
         {
             stream->eof = 1;
+            vfs_close(v);
             return EOF;
         }
         else
@@ -109,10 +118,16 @@ int fgetc(FILE *stream)
                 vfs_read(v, stream->buffer, 0, stream->fileSize);
                 stream->read_flag = 0;
             }
-            return stream->buffer[stream->p++];
+            int ch = stream->buffer[stream->p++];
+            vfs_close(v);
+            return ch;
         }
     }
-    else { return EOF; }
+    else
+    {
+        vfs_close(v);
+        return EOF;
+    }
 }
 
 unsigned int fread(void *buffer, unsigned int size, unsigned int count, FILE *stream)
@@ -124,11 +139,17 @@ unsigned int fread(void *buffer, unsigned int size, unsigned int count, FILE *st
         {
             unsigned int ch = fgetc(stream);
             if (ch == EOF) { return i; }
-            else { c_ptr[i] = ch; }
+            else
+            {
+                c_ptr[i] = ch;
+            }
         }
         return count;
     }
-    else { return 0; }
+    else
+    {
+        return 0;
+    }
 }
 
 int ungetc(int c, FILE *fp)

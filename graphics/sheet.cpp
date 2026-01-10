@@ -8,8 +8,7 @@ void init_foxland(SHEET_INFO *sht)
 {
     sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)malloc(sht->scrx * sht->scry * 4);
     sht->foxland.peek_sign      = (uint8_t *)malloc(sht->scrx * sht->scry * sizeof(uint8_t));
-    LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, 
-                "/system/foxland/peek.png");
+    LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, "/system/foxland/peek.png");
 }
 
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
@@ -309,9 +308,9 @@ uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
             while (true)
             {
                 if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
-                    front_p->by + front_p->height >= y && ( front_p->type == MovableSheetType || 
-                                                            front_p->type == NoEdgeWindowSheetType || 
-                                                            front_p->type == TopWindowSheetType))
+                    front_p->by + front_p->height >= y &&
+                    (front_p->type == MovableSheetType || front_p->type == NoEdgeWindowSheetType ||
+                     front_p->type == TopWindowSheetType))
                 {
                     return &front_p->index;
                 }
@@ -331,9 +330,11 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
     {
         if (front_p->next == NULL)
         {
+            front_p = front_p->front;
+            front_p = front_p->front;
             while (true)
             {
-                if (front_p->type == MovableSheetType) 
+                if (front_p->type == MovableSheetType)
                 {
                     if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x && front_p->by <= y &&
                         front_p->by + 22 >= y)
@@ -345,7 +346,7 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
                         return NULL;
                     }
                 }
-                else if (front_p->type == NoEdgeWindowSheetType) 
+                else if (front_p->type == NoEdgeWindowSheetType)
                 {
                     if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
                         front_p->by + front_p->height >= y)
@@ -371,15 +372,12 @@ void change_sheet_type(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t new_type)
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) 
-        { 
-            front_p->type = new_type; 
-            return; 
+        if (front_p->index == *sheet_id)
+        {
+            front_p->type = new_type;
+            return;
         }
-        else if (front_p->next == NULL) 
-        { 
-            return; 
-        }
+        else if (front_p->next == NULL) { return; }
         front_p = front_p->next;
     }
 }
@@ -492,8 +490,7 @@ bool allow_to_flush = false;
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
-    if (!allow_to_flush)
-        return;
+    if (!allow_to_flush) return;
     SheetIsRefreshing = true;
 
     bool USERGB = true;
@@ -540,9 +537,9 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
                     // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
                     if (SheetBuffer[y * front_p->width + x].a == 255)
                     {
-                        TempBuffer[BufferOffest].r = SheetBuffer[y * front_p->width + x].r;
-                        TempBuffer[BufferOffest].g = SheetBuffer[y * front_p->width + x].g;
-                        TempBuffer[BufferOffest].b = SheetBuffer[y * front_p->width + x].b;
+                        TempBuffer[BufferOffest].r   = SheetBuffer[y * front_p->width + x].r;
+                        TempBuffer[BufferOffest].g   = SheetBuffer[y * front_p->width + x].g;
+                        TempBuffer[BufferOffest].b   = SheetBuffer[y * front_p->width + x].b;
                         temp_peek_sign[BufferOffest] = 0;
                     }
                     else if (SheetBuffer[y * front_p->width + x].a == 0)
@@ -566,7 +563,8 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
                             {
                                 if (!SheetBuffer[y * front_p->width + x].b)
                                 {
-                                    if (!SheetBuffer[y * front_p->width + x].b && SheetBuffer[y * front_p->width + x].a != 0)
+                                    if (!SheetBuffer[y * front_p->width + x].b &&
+                                        SheetBuffer[y * front_p->width + x].a != 0)
                                     {
                                         goto no_peek2;
                                     }
@@ -575,7 +573,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
                         }
                         temp_peek_sign[BufferOffest] = 1;
                     }
-no_peek2:
+                no_peek2:
                     BufferOffest++;
                 }
                 BufferOffest += sht->scrx - front_p->width + offest_x + dlo_x;
@@ -639,7 +637,7 @@ no_peek2:
 void refresh_sheet(SHEET_INFO *sht)
 {
     // 已摆烂
-    refresh_part_sheet(sht, 0, 0, sht->scrx - 1, sht->scry - 1);
+    refresh_part_sheet(sht, 0, 0, sht->scrx, sht->scry);
 }
 
 uint32_t get_hor()
@@ -652,8 +650,8 @@ uint32_t get_ver()
     return fbc_addr->vertical_resolution;
 }
 
-void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                       uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height)
+void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+                       uint32_t width, uint32_t height)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -675,8 +673,8 @@ void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *sr
     }
 }
 
-void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                                     uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height)
+void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
+                                     uint32_t dst_y, uint32_t width, uint32_t height)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -689,8 +687,7 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SH
             {
                 for (int x = 0; x < width; x++)
                 {
-                    if (src[y * width + x].a > 10)
-                        dst[(dst_y + y) * front_p->width + (dst_x + x)] = src[y * width + x];
+                    if (src[y * width + x].a > 10) dst[(dst_y + y) * front_p->width + (dst_x + x)] = src[y * width + x];
                 }
             }
         }
@@ -701,8 +698,8 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SH
 
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha);
 
-void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, 
-                                     uint32_t dst_x, uint32_t dst_y, uint32_t width, uint32_t height)
+void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+                             uint32_t width, uint32_t height)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -715,8 +712,8 @@ void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFF
             {
                 for (int x = 0; x < width; x++)
                 {
-                    dst[(dst_y + y) * front_p->width + (dst_x + x)] = 
-                        LCD_AlphaBlend(src[y * width + x], dst[(dst_y + y) * front_p->width + (dst_x + x)], src[y * width + x].a);
+                    dst[(dst_y + y) * front_p->width + (dst_x + x)] = LCD_AlphaBlend(
+                        src[y * width + x], dst[(dst_y + y) * front_p->width + (dst_x + x)], src[y * width + x].a);
                 }
             }
         }

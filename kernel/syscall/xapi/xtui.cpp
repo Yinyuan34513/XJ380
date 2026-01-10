@@ -34,7 +34,9 @@ void do_xapi_GetSystemVersion(uint64_t str)
 
 uint64_t do_xapi_GetTime()
 {
-    return mktime();
+    tm t;
+    time_read(&t);
+    return mktime(&t);
 }
 
 void do_xapi_GetCurrentUser(uint64_t dst)
@@ -152,7 +154,13 @@ void do_xapi_Printf(char *str)
 
 void do_xapi_Sleep(uint64_t ms)
 {
-    delay_ms(ms);
+    open_interrupt;
+    uint64_t old_t = nanoTime();
+    while (nanoTime() - old_t <= ms * 1000000)
+    {
+        __asm__ volatile("pause");
+    }
+    close_interrupt;
 }
 
 void do_xapi_GetTimeX(uint64_t tt)
@@ -160,4 +168,11 @@ void do_xapi_GetTimeX(uint64_t tt)
     if (!tt) { return; }
     tm *time_s = (tm *)tt;
     time_read(time_s);
+}
+
+extern uint64_t memory_total_size;
+
+uint64_t do_xapi_GetMemorySize()
+{
+    return memory_total_size / 1024;
 }

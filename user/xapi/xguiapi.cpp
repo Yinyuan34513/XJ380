@@ -105,7 +105,7 @@ void xapi_DrawSWText(
 
 UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size)
 {
-	enter_syscall(XAPI_CALC_TEXT_WIDTH, (UINT64)str, size, 0, 0, 0, 0);
+	return enter_syscall(XAPI_CALC_TEXT_WIDTH, (uint64_t)str, (uint64_t)size, 0, 0, 0, 0);
 }
 
 
@@ -197,6 +197,16 @@ void xapi_RefreshWindow(HDLE handle) {
 	enter_syscall(XAPI_REFRESH_WINDOW, handle, 0, 0, 0, 0, 0);
 }
 
+void xapi_RefreshPartWindow(
+	HDLE 	handle,
+	UINT32  x1,
+	UINT32  y1,
+	UINT32  x2,
+	UINT32  y2
+) {
+	enter_syscall(XAPI_REFRESH_WINDOW, handle, x1, y1, x2, y2, 0);
+}
+
 // 4-6
 void xapi_Button(
 	HDLE  	handle,
@@ -216,4 +226,23 @@ void xapi_ButtonEmp(
 	WSTR  	text
 ) {
 	enter_syscall(XAPI_BUTTON_EMP, handle, x, y, CRLid, (UINT64)(text), 0);
+}
+
+void xapi_DeleteButton(
+	HDLE  	handle,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_DELETE_BUTTON, handle, CRLid, 0, 0, 0, 0);
+}
+
+void xapi_RegisterRightButtonMenu(
+	HDLE  			handle,
+	RightMenuItem  *items,
+	UINT64 			count
+) {
+	enter_syscall(XAPI_REG_RB_MENU, handle, (UINT64)(items), count, 0, 0, 0);
+}
+
+void xapi_DeleteRightButtonMenu(HDLE handle) {
+	enter_syscall(XAPI_URG_RB_MENU, handle, 0, 0, 0, 0, 0);
 }

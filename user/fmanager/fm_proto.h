@@ -24,6 +24,14 @@ extern char path_his[20][1024];
 extern int path_p;
 extern int path_r;
 
+extern bool need_duopage;
+extern int file_count_base;
+extern int file_count;
+
+extern int choosing_index;
+
+extern bool need_paint;
+
 void paint_fm_back();
 void paint_dir(char *path);
 bool get_file_type(char *name, char *type);
