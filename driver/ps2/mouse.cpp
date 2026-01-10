@@ -41,7 +41,7 @@ void process_mouse_button()
         // 左键松开
         tm t;
         time_read(&t);
-        uint64_t click_time = t.tm_sec;
+        uint64_t click_time = mktime(&t);
         if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 3)
         {
             ms_dec.first_click = false;

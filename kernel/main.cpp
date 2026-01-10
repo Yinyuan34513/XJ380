@@ -144,7 +144,7 @@ void components_flusher()
                 tw_data->need_flush = true;
             }
         }
-        // if (ms_dec.need_flush) { process_mouse_info(); }
+        if (ms_dec.need_flush) { process_mouse_info(); }
     }
 }
 
@@ -311,7 +311,6 @@ void desktop_flusher()
             enable_intr();
             enable_scheduler();
         }
-        process_mouse_info();
         if (tw_data->need_flush)
         {
             tw_data->need_flush = false;
