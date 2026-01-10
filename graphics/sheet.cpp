@@ -488,149 +488,105 @@ void lift_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
 
 bool allow_to_flush = false;
 
-void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
-{
+void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2) {
     if (!allow_to_flush) return;
     SheetIsRefreshing = true;
 
-    bool USERGB = true;
-    switch (sht->fbc->pixel_format)
-    {
-    case PixelFormat::kRGBR: USERGB = true; break;
-    case PixelFormat::kBGRR: USERGB = false; break;
-    default: break;
+    // 屏幕边界裁剪
+    if (bex1 < 0) bex1 = 0;
+    if (bey1 < 0) bey1 = 0;
+    if (bex2 > (int)sht->scrx) bex2 = sht->scrx;
+    if (bey2 > (int)sht->scry) bey2 = sht->scry;
+    if (bex1 >= bex2 || bey1 >= bey2) {
+        SheetIsRefreshing = false;
+        return;
     }
 
-    if (bex1 < 0) { bex1 = 0; }
-    if (bey1 < 0) { bey1 = 0; }
-    if (bex2 > sht->scrx) { bex2 = sht->scrx; }
-    if (bey2 > sht->scry) { bey2 = sht->scry; }
-
-    SHEET        *front_p    = sht->start;
-    SHEET_BUFFER *TempBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
-
+    SHEET_BUFFER *temp_buf_base = (SHEET_BUFFER *)sht->temp_buffer;
     uint8_t *temp_peek_sign = sht->foxland.peek_sign;
 
-    for (int i = 0; i < sht->sheet_num + 1; i++)
-    {
-        if (front_p->bx > bex2 || front_p->by > bey2 /*||
-            front_p->bx + front_p->width < bex1 || front_p->by + front_p->height < bey1*/)  // 不知道为啥这段注释掉不仅bug没了，速度还变快了
-        {
-            // 不在刷新范围内，跳过
-        }
-        else
-        {
-            SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-            int           offest_x    = bex1 - front_p->bx; // 刷新区域相较于图层的偏移量
-            int           offest_y    = bey1 - front_p->by; // 同上
-            if (offest_x < 0) { offest_x = 0; }
-            if (offest_y < 0) { offest_y = 0; }
-            int dlo_x = (front_p->bx + front_p->width) - bex2;  // 图层末尾相较于刷新区域末尾的偏移量
-            int dlo_y = (front_p->by + front_p->height) - bey2; // 同上
-            if (dlo_x < 0 || dlo_x > front_p->width) { dlo_x = 0; }
-            if (dlo_y < 0 || dlo_y > front_p->height) { dlo_y = 0; }
-            uint32_t BufferOffest = sht->scrx * (front_p->by + offest_y) + front_p->bx + offest_x; // 起始位置
-            for (int y = offest_y; y < front_p->height - dlo_y; y++)
-            {
-                for (int x = offest_x; x < front_p->width - dlo_x; x++)
-                {
-                    // 显示颜色 = 源像素颜色 * alpha / 255 + 背景颜色 * (255 - alpha) / 255
-                    if (SheetBuffer[y * front_p->width + x].a == 255)
-                    {
-                        TempBuffer[BufferOffest].r   = SheetBuffer[y * front_p->width + x].r;
-                        TempBuffer[BufferOffest].g   = SheetBuffer[y * front_p->width + x].g;
-                        TempBuffer[BufferOffest].b   = SheetBuffer[y * front_p->width + x].b;
-                        temp_peek_sign[BufferOffest] = 0;
-                    }
-                    else if (SheetBuffer[y * front_p->width + x].a == 0)
-                    {
-                        // pass
-                    }
-                    else
-                    {
-                        TempBuffer[BufferOffest].r =
-                            SheetBuffer[y * front_p->width + x].r * SheetBuffer[y * front_p->width + x].a / 255 +
-                            TempBuffer[BufferOffest].r * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                        TempBuffer[BufferOffest].g =
-                            SheetBuffer[y * front_p->width + x].g * SheetBuffer[y * front_p->width + x].a / 255 +
-                            TempBuffer[BufferOffest].g * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                        TempBuffer[BufferOffest].b =
-                            SheetBuffer[y * front_p->width + x].b * SheetBuffer[y * front_p->width + x].a / 255 +
-                            TempBuffer[BufferOffest].b * (255 - SheetBuffer[y * front_p->width + x].a) / 255;
-                        if (!SheetBuffer[y * front_p->width + x].r)
-                        {
-                            if (!SheetBuffer[y * front_p->width + x].g)
-                            {
-                                if (!SheetBuffer[y * front_p->width + x].b)
-                                {
-                                    if (!SheetBuffer[y * front_p->width + x].b &&
-                                        SheetBuffer[y * front_p->width + x].a != 0)
-                                    {
-                                        goto no_peek2;
-                                    }
-                                }
-                            }
-                        }
-                        temp_peek_sign[BufferOffest] = 1;
-                    }
-                no_peek2:
-                    BufferOffest++;
+    // 遍历所有图层进行合成
+    for (SHEET *st = sht->start; st != nullptr; st = st->next) {
+        // 计算当前图层与刷新区域的交集
+        int vx0 = (bex1 > (int)st->bx) ? bex1 : (int)st->bx;
+        int vy0 = (bey1 > (int)st->by) ? bey1 : (int)st->by;
+        int vx1 = (bex2 < (int)(st->bx + st->width)) ? bex2 : (int)(st->bx + st->width);
+        int vy1 = (bey2 < (int)(st->by + st->height)) ? bey2 : (int)(st->by + st->height);
+
+        // 不在当前刷新区域内直接跳过
+        if (vx0 >= vx1 || vy0 >= vy1) continue;
+
+        SHEET_BUFFER *st_buf = (SHEET_BUFFER *)st->buffer;
+        
+        for (int y = vy0; y < vy1; y++) {
+            int screen_off = y * sht->scrx + vx0;
+            int st_off = (y - st->by) * st->width + (vx0 - st->bx);
+            
+            SHEET_BUFFER *p_dst = &temp_buf_base[screen_off];
+            SHEET_BUFFER *p_src = &st_buf[st_off];
+            uint8_t *p_sign = &temp_peek_sign[screen_off];
+
+            for (int x = vx0; x < vx1; x++) {
+                if (p_src->a == 255) {
+                    // 全透明直接覆盖，关闭Peek标志
+                    *p_dst = *p_src;
+                    *p_sign = 0;
+                } else if (p_src->a > 0) {
+                    // 快速整数Alpha混合：(src * a + dst * (255 - a)) >> 8
+                    uint32_t alpha = p_src->a;
+                    uint32_t inv_alpha = 255 - alpha;
+                    
+                    p_dst->r = (p_src->r * alpha + p_dst->r * inv_alpha) >> 8;
+                    p_dst->g = (p_src->g * alpha + p_dst->g * inv_alpha) >> 8;
+                    p_dst->b = (p_src->b * alpha + p_dst->b * inv_alpha) >> 8;
+                    
+                    // 有透明度就标记需要Peek处理
+                    *p_sign = 1;
                 }
-                BufferOffest += sht->scrx - front_p->width + offest_x + dlo_x;
-            }
-        }
-        front_p = front_p->next;
-        if (front_p == nullptr) { break; }
-    }
-
-    SHEET_BUFFER *temp_peek = sht->foxland.fl_peek_buffer;
-    for (int y = 0; y < sht->scry; y++)
-    {
-        for (int x = 0; x < sht->scrx; x++)
-        {
-            if (temp_peek_sign[y * sht->scrx + x] == 1)
-            {
-                TempBuffer[y * sht->scrx + x].r =
-                    temp_peek[y * sht->scrx + x].r * temp_peek[y * sht->scrx + x].a / 255 +
-                    TempBuffer[y * sht->scrx + x].r * (255 - temp_peek[y * sht->scrx + x].a) / 255;
-                TempBuffer[y * sht->scrx + x].g =
-                    temp_peek[y * sht->scrx + x].g * temp_peek[y * sht->scrx + x].a / 255 +
-                    TempBuffer[y * sht->scrx + x].g * (255 - temp_peek[y * sht->scrx + x].a) / 255;
-                TempBuffer[y * sht->scrx + x].b =
-                    temp_peek[y * sht->scrx + x].b * temp_peek[y * sht->scrx + x].a / 255 +
-                    TempBuffer[y * sht->scrx + x].b * (255 - temp_peek[y * sht->scrx + x].a) / 255;
+                p_dst++;
+                p_src++;
+                p_sign++;
             }
         }
     }
 
-    memset(temp_peek_sign, 0, sht->scrx * sht->scry * sizeof(uint8_t));
+    // Foxland Peek处理
+    SHEET_BUFFER *temp_peek = (SHEET_BUFFER *)sht->foxland.fl_peek_buffer;
+    for (int y = bey1; y < bey2; y++) {
+        int offset = y * sht->scrx + bex1;
+        SHEET_BUFFER *p_dst = &temp_buf_base[offset];
+        uint8_t *p_sign = &temp_peek_sign[offset];
+        SHEET_BUFFER *p_peek = &temp_peek[offset];
 
-    // 刷新
-    TempBuffer += (sht->scrx * bey1 + bex1);
-    if (USERGB)
-    {
-        for (int y = bey1; y < bey2; y++)
-        {
-            for (int x = bex1; x < bex2; x++)
-            {
-                WriteRGBR(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b}, *sht->fbc);
-                TempBuffer++;
+        for (int x = bex1; x < bex2; x++) {
+            if (*p_sign == 1) {
+                uint32_t alpha = p_peek->a;
+                uint32_t inv_alpha = 255 - alpha;
+                p_dst->r = (p_peek->r * alpha + p_dst->r * inv_alpha) >> 8;
+                p_dst->g = (p_peek->g * alpha + p_dst->g * inv_alpha) >> 8;
+                p_dst->b = (p_peek->b * alpha + p_dst->b * inv_alpha) >> 8;
+                *p_sign = 0; // 重置标志位
             }
-            TempBuffer += (sht->scrx - bex2 + bex1);
+            p_dst++;
+            p_sign++;
+            p_peek++;
         }
     }
-    else
-    {
-        for (int y = bey1; y < bey2; y++)
-        {
-            for (int x = bex1; x < bex2; x++)
-            {
-                WriteBGRR(x, y, {TempBuffer->r, TempBuffer->g, TempBuffer->b}, *sht->fbc);
-                TempBuffer++;
+
+    // 写入显存
+    bool isRGB = (sht->fbc->pixel_format == PixelFormat::kRGBR);
+    for (int y = bey1; y < bey2; y++) {
+        SHEET_BUFFER *line_ptr = &temp_buf_base[y * sht->scrx + bex1];
+        for (int x = bex1; x < bex2; x++) {
+            if (isRGB) {
+                WriteRGBR(x, y, {line_ptr->r, line_ptr->g, line_ptr->b}, *sht->fbc);
+            } else {
+                WriteBGRR(x, y, {line_ptr->r, line_ptr->g, line_ptr->b}, *sht->fbc);
             }
-            TempBuffer += (sht->scrx - bex2 + bex1);
+            line_ptr++;
         }
     }
+
     SheetIsRefreshing = false;
 }
 
