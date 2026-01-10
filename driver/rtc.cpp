@@ -25,7 +25,13 @@ spin_t cmos_register_lock = SPIN_INIT;
 
 // 读 cmos 寄存器的值
 uint8_t cmos_read(uint8_t addr) {
+    bool is_sti = are_interrupts_enabled();
+    close_interrupt;
+
     spin_lock(cmos_register_lock);
+
+    if (!is_sti) open_interrupt;
+    
     outb(CMOS_ADDR, CMOS_NMI | addr);
     uint8_t value = inb(CMOS_DATA);
     spin_unlock(cmos_register_lock);
@@ -34,7 +40,13 @@ uint8_t cmos_read(uint8_t addr) {
 
 // 写 cmos 寄存器的值
 void cmos_write(uint8_t addr, uint8_t value) {
+    bool is_sti = are_interrupts_enabled();
+    close_interrupt;
+
     spin_lock(cmos_register_lock);
+
+    if (!is_sti) open_interrupt;
+    
     outb(CMOS_ADDR, CMOS_NMI | addr);
     outb(CMOS_DATA, value);
     spin_unlock(cmos_register_lock);
