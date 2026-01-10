@@ -30,7 +30,12 @@ extern bool have_full_screen_app;
 spin_t mouse_info_processing = SPIN_INIT;
 void process_mouse_button()
 {
+    open_interrupt;
+
     spin_lock(mouse_info_processing);
+
+    close_interrupt;
+
     if (ms_dec.btn & 0x01)
     {
         // 左键按下
@@ -298,6 +303,8 @@ void process_mouse_info()
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                    ms_dec.sht_now->bx + ms_dec.sht_now->width,
                                    ms_dec.sht_now->by + ms_dec.sht_now->height);
+
+                focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
             }
         }
         else if (ms_dec.win_move_lock)
@@ -311,8 +318,6 @@ void process_mouse_info()
                                ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + ms_dec.sht_now->height);
             refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width, his_y + ms_dec.sht_now->height);
         }
-
-        focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
     }
 
     ms_dec.need_flush = false;
