@@ -441,7 +441,7 @@ void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
             free(front_p->buffer);
             memset(front_p, 0, sizeof(SHEET));
             free((void *)(front_p));
-            sht->sheet_num--;
+            // sht->sheet_num--;
             write_serial_string("Sheet Delete Success. SheetID: ");
             write_serial_dec(*sheet_id);
             write_serial_string("\n");
