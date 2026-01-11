@@ -24,8 +24,7 @@ typedef struct
     bool      first_click;
     bool      double_click;
     uint64_t  click_time;
-
-    uint16_t *sheet_id;
+    
     SHEET    *sht_now;
 
     int       scroll;

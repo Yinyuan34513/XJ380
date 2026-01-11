@@ -1,53 +1,33 @@
 #include <graphics/sheet.h>
 #include <proto.hpp>
-void draw_point(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUFFER &color)
+void draw_point(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &color)
 {
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id) { break; }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
-    }
-    SHEET_BUFFER *SheetBuffer  = (SHEET_BUFFER *)(front_p->buffer);
-    SheetBuffer               += (front_p->width * y + x);
+    SHEET_BUFFER *SheetBuffer  = (SHEET_BUFFER *)(csheet->buffer);
+    SheetBuffer               += (csheet->width * y + x);
     SheetBuffer->r             = color.r;
     SheetBuffer->g             = color.g;
     SheetBuffer->b             = color.b;
     SheetBuffer->a             = color.a;
 }
 
-void draw_rect(SHEET_INFO *sht, uint16_t *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
+void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
 {
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id) { break; }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
-    }
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
+    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(csheet->buffer);
     for (int y = y1; y <= y2; y++)
     {
         for (int x = x1; x <= x2; x++)
         {
-            SheetBuffer[front_p->width * y + x].r = color.r;
-            SheetBuffer[front_p->width * y + x].g = color.g;
-            SheetBuffer[front_p->width * y + x].b = color.b;
-            SheetBuffer[front_p->width * y + x].a = color.a;
+            SheetBuffer[csheet->width * y + x].r = color.r;
+            SheetBuffer[csheet->width * y + x].g = color.g;
+            SheetBuffer[csheet->width * y + x].b = color.b;
+            SheetBuffer[csheet->width * y + x].a = color.a;
         }
     }
 }
 
-void draw_line(SHEET_INFO *sht, uint16_t *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
+void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
 {
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id) { break; }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
-    }
+    SHEET *front_p = csheet;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
 
     int i, x, y, len, dx, dy;

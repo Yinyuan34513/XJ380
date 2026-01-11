@@ -101,17 +101,17 @@ int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27,
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        draw_point(sht_img, WindowHandle->WindowNodePtr->w_sheet, x + 12, y + 27,
                    {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                     (uint8_t)((color) & 0xFF)});
     }
     else
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        draw_point(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y,
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        draw_point(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y,
                    {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                     (uint8_t)((color) & 0xFF)});
     }
@@ -124,21 +124,21 @@ int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        x2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        y2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y2 + 27,
+        x1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        x2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        y2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1 + 12, y1 + 27, x2 + 12, y2 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
     else
     {
-        x1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        x2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        y2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y2,
+        x1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        x2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        y2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1, y1, x2, y2,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
@@ -151,21 +151,21 @@ int do_xapi_DrawRect_fill(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        x2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        y2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y2 + 27,
+        x1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        x2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        y2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        draw_rect(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1 + 12, y1 + 27, x2 + 12, y2 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
     else
     {
-        x1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        x2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        y2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        draw_rect(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y2,
+        x1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        x2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        y2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        draw_rect(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1, y1, x2, y2,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
@@ -179,41 +179,41 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        x2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        y2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x2 + 12, y1 + 27,
+        x1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        x2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        y2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1 + 12, y1 + 27, x2 + 12, y1 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y2 + 27, x2 + 12, y2 + 27,
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1 + 12, y2 + 27, x2 + 12, y2 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
 
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1 + 12, y1 + 27, x1 + 12, y2 + 27,
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1 + 12, y1 + 27, x1 + 12, y2 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x2 + 12, y1 + 27, x2 + 12, y2 + 27,
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x2 + 12, y1 + 27, x2 + 12, y2 + 27,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
     else
     {
-        x1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        x2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y1 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        y2 %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x2, y1,
+        x1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        x2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y1 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        y2 %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1, y1, x2, y1,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y2, x2, y2,
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1, y2, x2, y2,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
 
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x1, y1, x1, y2,
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x1, y1, x1, y2,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
-        draw_line(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x2, y1, x2, y2,
+        draw_line(sht_img, WindowHandle->WindowNodePtr->w_sheet, x2, y1, x2, y2,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
@@ -224,13 +224,13 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
 // int do_xapi_DrawCircle_fill(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color) {
 //     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
 
-//     draw_circle(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22, radius, true, {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF), (uint8_t)((color) & 0xFF)});
+//     draw_circle(sht_img, WindowHandle->WindowNodePtr->w_sheet, x + 5, y + 22, radius, true, {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF), (uint8_t)((color) & 0xFF)});
 // }
 
 // int do_xapi_DrawCircle(uint64_t handle, uint32_t x, uint32_t y, uint32_t radius, uint32_t color) {
 //     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
 
-//     draw_circle(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 5, y + 22, radius, false, {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF), (uint8_t)((color) & 0xFF)});
+//     draw_circle(sht_img, WindowHandle->WindowNodePtr->w_sheet, x + 5, y + 22, radius, false, {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF), (uint8_t)((color) & 0xFF)});
 // }
 
 int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint32_t size, uint32_t color)
@@ -239,16 +239,16 @@ int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint
     char          *TextString   = (char *)(str);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
         draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
     else
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
         draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
@@ -265,8 +265,8 @@ int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t si
     uint32_t       y            = place & 0x00000000ffffffff;
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
         draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
                    {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                     (uint8_t)((color) & 0xFF)},
@@ -274,8 +274,8 @@ int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t si
     }
     else
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
         draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
                    {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                     (uint8_t)((color) & 0xFF)},
@@ -290,16 +290,16 @@ int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, ui
     char          *TextString   = (char *)(str);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width - 12;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height - 27;
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
         draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
                      {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                       (uint8_t)((color) & 0xFF)});
     }
     else
     {
-        x %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->width;
-        y %= found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet))->height;
+        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
+        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
         draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
                      {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                       (uint8_t)((color) & 0xFF)});
@@ -311,9 +311,9 @@ void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width,
 {
     WINDOW_HANDLE    *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER_WOA *buf          = (SHEET_BUFFER_WOA *)buffer;
-    SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int               xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int               ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int               xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int               ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
         for (int wy = 0; wy < height; wy++)
@@ -344,9 +344,9 @@ void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
 {
     WINDOW_HANDLE    *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER_WOA *buf          = (SHEET_BUFFER_WOA *)buffer;
-    SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int               xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int               ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int               xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int               ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
         for (int wy = 0; wy < height; wy++)
@@ -379,9 +379,9 @@ void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER  *buf          = (SHEET_BUFFER *)buffer;
-    SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
         for (int wy = 0; wy < height; wy++)
@@ -408,9 +408,9 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER  *buf          = (SHEET_BUFFER *)buffer;
-    SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            xsize        = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            ysize        = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
         for (int wy = 0; wy < height; wy++)
@@ -436,10 +436,10 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
 int do_xapi_RefreshWindow(uint64_t handle)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    int            bx           = getBX(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            by           = getBY(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            ex           = bx + getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
-    int            ey           = by + getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet));
+    int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            ex           = bx + getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            ey           = by + getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
@@ -448,10 +448,10 @@ int do_xapi_RefreshWindow(uint64_t handle)
 int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    int            bx           = getBX(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)) + x1;
-    int            by           = getBY(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)) + y1;
-    int            ex           = getXsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)) + x2;
-    int            ey           = getYsize(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)) + y2;
+    int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x1;
+    int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y1;
+    int            ex           = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x2;
+    int            ey           = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y2;
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
@@ -472,11 +472,11 @@ void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+        PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x + 12, y + 27, width, height, filepath);
     }
     else
     {
-        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+        PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
 }
 
@@ -487,11 +487,11 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+        PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x + 12, y + 27, width, height, filepath);
     }
     else
     {
-        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+        PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
 }
 
@@ -502,11 +502,11 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
-        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x + 12, y + 27, width, height, filepath);
+        PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x + 12, y + 27, width, height, filepath);
     }
     else
     {
-        PrintPicture_blend(sht_img, &(WindowHandle->WindowNodePtr->w_sheet), x, y, width, height, filepath);
+        PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
 }
 
@@ -543,7 +543,7 @@ void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, 
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    unregister_button_components(found_sheet_byid(sht_img, &(WindowHandle->WindowNodePtr->w_sheet)),
+    unregister_button_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet),
                                  CRLid);
 }
 
@@ -559,11 +559,11 @@ void do_xapi_Broken(char *info)
     memset(einfo, 0, sizeof(char) * 64);
     strcat(einfo, "崩溃信息：");
     strcat(einfo, info);
-    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), title, BLACK, 20, 0 + 27, 16);
-    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), einfo, BGRAY, 20, 32 + 27, 10);
-    print_box_ttf(sht_img, &(BrokenNoticeWindow->w_sheet), "您可以尝试向应用程序开发者提供本窗口的信息进行求助。", BGRAY, 20, 48 + 27, 10);
+    print_box_ttf(sht_img, BrokenNoticeWindow->w_sheet, title, BLACK, 20, 0 + 27, 16);
+    print_box_ttf(sht_img, BrokenNoticeWindow->w_sheet, einfo, BGRAY, 20, 32 + 27, 10);
+    print_box_ttf(sht_img, BrokenNoticeWindow->w_sheet, "您可以尝试向应用程序开发者提供本窗口的信息进行求助。", BGRAY, 20, 48 + 27, 10);
 
-    draw_rect(sht_img, &(BrokenNoticeWindow->w_sheet), 12, 70 + 27, 411, 126, GRAY);
+    draw_rect(sht_img, BrokenNoticeWindow->w_sheet, 12, 70 + 27, 411, 126, GRAY);
 }
 
 void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count)

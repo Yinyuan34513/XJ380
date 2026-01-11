@@ -50,7 +50,7 @@ struct SHEET
     int      bx, by;
     uint32_t width, height;
     uint32_t type;
-    uint16_t index;
+    // uint16_t index;
     bool     is_change;
     SHEETP   next;
 };
@@ -83,26 +83,26 @@ struct TASK_DOCK_BLOCK
 
 void      init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
 void      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
-                       uint16_t *sheet_id);
-uint32_t  getBX(SHEET_INFO *sht, uint16_t *sheet_id);
-uint32_t  getBY(SHEET_INFO *sht, uint16_t *sheet_id);
-uint32_t  getXsize(SHEET_INFO *sht, uint16_t *sheet_id);
-uint32_t  getYsize(SHEET_INFO *sht, uint16_t *sheet_id);
-uint16_t *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y);
-uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y);
-uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y);
-void      change_sheet_type(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t new_type);
-SHEET    *get_sheet(SHEET_INFO *sht, uint16_t *sheet_id);
-void      setBX(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num);
-void      setBY(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num);
-void      lift_sheet(SHEET_INFO *sht, uint16_t *sheet_id);
-void      delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id);
+                       SHEET **csheet);
+uint32_t  getBX(SHEET_INFO *sht, SHEET *csheet);
+uint32_t  getBY(SHEET_INFO *sht, SHEET *csheet);
+uint32_t  getXsize(SHEET_INFO *sht, SHEET *csheet);
+uint32_t  getYsize(SHEET_INFO *sht, SHEET *csheet);
+SHEET    *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y);
+SHEET    *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y);
+SHEET    *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y);
+void      change_sheet_type(SHEET_INFO *sht, SHEET *csheet, uint32_t new_type);
+SHEET    *get_sheet(SHEET_INFO *sht, SHEET *csheet);
+void      setBX(SHEET_INFO *sht, SHEET *csheet, uint32_t num);
+void      setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num);
+void      lift_sheet(SHEET_INFO *sht, SHEET *csheet);
+void      delete_sheet(SHEET_INFO *sht, SHEET *csheet);
 void      refresh_sheet(SHEET_INFO *sht);
 void      refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 uint32_t  get_hor();
 uint32_t  get_ver();
-void     *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id);
-SHEET *found_sheet_byid(SHEET_INFO *sht, uint16_t *sheet_id);
+void     *get_sheet_buffer(SHEET_INFO *sht, SHEET *csheet);
+SHEET *found_sheet_byid(SHEET_INFO *sht, SHEET *csheet);
 
 // graphics/draw.cpp
 // auto      operator new(size_t size, void *ptr) -> void *;
@@ -114,16 +114,16 @@ void      rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, con
 void      dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c);
 
 // graphics/draw_sheet.cpp
-void draw_point(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUFFER &color);
-void draw_rect(SHEET_INFO *sht, uint16_t *sheet_id, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color);
-void draw_line(SHEET_INFO *sht, uint16_t *sheet_id, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
+void draw_point(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &color);
+void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color);
+void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
-void init_desktop(SHEET_INFO *sht, uint16_t *sheet_id, uint16_t *dock_sheet_id);
-void init_dock(SHEET_INFO *sht, uint16_t *sheet_id);
-void init_shortcut_dock(SHEET_INFO *sht, uint16_t *sheet_id);
-void draw_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
-void draw_studio_logo(SHEET_INFO *sht, uint16_t *sheet_id, int xi, int yi);
+void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_sheet_id);
+void init_dock(SHEET_INFO *sht, SHEET *csheet);
+void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet);
+void draw_logo(SHEET_INFO *sht, SHEET *csheet, int xi, int yi);
+void draw_studio_logo(SHEET_INFO *sht, SHEET *csheet, int xi, int yi);
 
 void flush_task_dock();
 void register_task_dock(WINDOWLSP window);

@@ -61,7 +61,7 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
  */
 spin_t PPlk=SPIN_INIT;
 
-void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path)
+void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path)
 {
     spin_lock(PPlk);
     int        w, h, bpp;
@@ -108,7 +108,7 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { break; }
+        if (front_p == csheet) { break; }
         else if (front_p->next == NULL) { return; spin_unlock(PPlk);}
         front_p = front_p->next;
     }
@@ -138,7 +138,7 @@ void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int o
  * @param oh 目标高度
  * @param path 路径
  */
-void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path)
+void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path)
 {
     int        w, h, bpp;
     vfs_node_t v = vfs_open(path);
@@ -178,7 +178,7 @@ void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { break; }
+        if (front_p == csheet) { break; }
         else if (front_p->next == NULL) { return; }
         front_p = front_p->next;
     }

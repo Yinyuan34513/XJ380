@@ -151,14 +151,14 @@ unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
     return bitmap;
 }
 
-void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
+void put_bitmap(SHEET_INFO *sht, SHEET *csheet, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
                 unsigned heigh, unsigned bitmap_xsize, SHEET_BUFFER fc)
 {
     // 查找图层
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { break; }
+        if (front_p == csheet) { break; }
         else if (front_p->next == NULL) { return; }
         front_p = front_p->next;
     }
@@ -174,20 +174,20 @@ void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap, unsi
     }
 }
 
-void print_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
+void print_box_ttf(SHEET_INFO *sht, SHEET *csheet, char *buf, SHEET_BUFFER fc,
                    /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
     uint32_t temp_i_width;
-    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, &temp_i_width, "%s", buf);
+    print_fmt_box_ttf(sht, csheet, fc, (int)x, (int)y, size, &temp_i_width, "%s", buf);
 }
 
-void print_box_ttfl(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
+void print_box_ttfl(SHEET_INFO *sht, SHEET *csheet, char *buf, SHEET_BUFFER fc,
                     /*unsigned bc, */ unsigned x, unsigned y, int size, uint32_t *i_width)
 {
-    print_fmt_box_ttf(sht, sheet_id, fc, (int)x, (int)y, size, i_width, "%s", buf);
+    print_fmt_box_ttf(sht, csheet, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
-extern uint16_t
+extern SHEET *
     zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
 uint64_t calc_ttf_length(char *str, int size)
@@ -196,7 +196,7 @@ uint64_t calc_ttf_length(char *str, int size)
     uint32_t temp_i_width = 0;
     print_fmt_box_ttf(
         sht_img,
-        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi,
+        zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi,
         {0, 0, 0, 0}, 0, 0, size, &temp_i_width, "%s", str);
     return temp_i_width;
 }
@@ -259,7 +259,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     SHEET *front_p = data->sht->start;
     while (front_p != NULL)
     {
-        if (front_p->index == *data->sheet_id) break;
+        if (front_p == data->sheet_id) break;
         front_p = front_p->next;
     }
     if (front_p == NULL)
@@ -304,7 +304,7 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
     return 1;
 }
 
-void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
+void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
                        ...)
 {
     uint32_t temp_i_width;
@@ -318,7 +318,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
         .sht           = sht,
-        .sheet_id      = sheet_id,
+        .sheet_id      = csheet,
         .color         = fc,
         .start_x       = x,
         .start_y       = y,
@@ -347,7 +347,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     free(rune_buf);
 }
 
-void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width,
+void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width,
                        const char *fmt, ...)
 {
     input_width = i_width;
@@ -360,7 +360,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
         .sht           = sht,
-        .sheet_id      = sheet_id,
+        .sheet_id      = csheet,
         .color         = fc,
         .start_x       = x,
         .start_y       = y,

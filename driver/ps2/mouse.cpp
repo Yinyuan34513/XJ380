@@ -21,8 +21,8 @@ bool        win_c_bt_isl = false;
 bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
-uint16_t *mouse_sheet_id_img;
-extern uint16_t *desktop_sheet_id;
+SHEET *mouse_sheet_id_img;
+extern SHEET *desktop_sheet_id;
 MouseType type;
 
 extern bool have_full_screen_app;
@@ -61,41 +61,40 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
-            if (tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx + 12 ||
-                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 27 ||
-                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 ||
-                tby > get_sheet(sht_img, &(current_window->w_sheet))->by
-                     + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
+            if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
+                tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
+                tbx > get_sheet(sht_img, current_window->w_sheet)->bx
+                     + get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
+                tby > get_sheet(sht_img, current_window->w_sheet)->by
+                     + get_sheet(sht_img, current_window->w_sheet)->height - 20
             ) { /* do nothing */ } else {
                 if (current_window->type == XWIN_NORMAL)
                 {
                     do_message(MSG_LBUTTON, 
-                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
-                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                        tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12, 
+                        tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, 
                         current_window->WinMPf, current_window->w_task);
                 } else {
                     do_message(MSG_LBUTTON, 
-                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
-                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        tbx - get_sheet(sht_img, current_window->w_sheet)->bx, 
+                        tby - get_sheet(sht_img, current_window->w_sheet)->by, 
                         current_window->WinMPf, current_window->w_task);
                 }
 
-                process_click_event(found_sheet_byid(sht_img, &(current_window->w_sheet)), 
-                    tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
-                    tby - get_sheet(sht_img, &(current_window->w_sheet))->by);
+                process_click_event(found_sheet_byid(sht_img, current_window->w_sheet), 
+                    tbx - get_sheet(sht_img, current_window->w_sheet)->bx, 
+                    tby - get_sheet(sht_img, current_window->w_sheet)->by);
             }
             if (current_window->type == XWIN_NORMAL && 
-                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx 
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 21 &&
-                tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width + 18 &&
-                tby > get_sheet(sht_img, &(current_window->w_sheet))->by + 5 &&
-                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 18 + 5
+                tbx > get_sheet(sht_img, current_window->w_sheet)->bx 
+                     + get_sheet(sht_img, current_window->w_sheet)->width - 12 - 21 &&
+                tbx < get_sheet(sht_img, current_window->w_sheet)->bx
+                     + get_sheet(sht_img, current_window->w_sheet)->width + 18 &&
+                tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
+                tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5
             ) { 
                 // 关闭窗口
                 ms_dec.sht_now = NULL;
-                ms_dec.sheet_id = NULL;
                 tcb_t current_win_task = current_window->w_task;
                 delete_window(xwmii, sht_img, current_window);
                 if (current_win_task->window_count == 0)
@@ -104,28 +103,27 @@ void process_mouse_button()
                 }
             }
             else if (current_window->type == XWIN_NORMAL && 
-                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx 
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 48 &&
-                tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 - 21 &&
-                tby > get_sheet(sht_img, &(current_window->w_sheet))->by + 5 &&
-                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 18 + 5
+                tbx > get_sheet(sht_img, current_window->w_sheet)->bx 
+                     + get_sheet(sht_img, current_window->w_sheet)->width - 12 - 48 &&
+                tbx < get_sheet(sht_img, current_window->w_sheet)->bx
+                     + get_sheet(sht_img, current_window->w_sheet)->width - 12 - 21 &&
+                tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
+                tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5
             ) { 
                 // 最小化
                 ms_dec.sht_now = NULL;
-                ms_dec.sheet_id = NULL;
-                int bx = get_sheet(sht_img, &(current_window->w_sheet))->bx;
+                int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
                 // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
-                get_sheet(sht_img, &(current_window->w_sheet))->bx = sht_img->scrx + 10;    // 扔到屏幕外面
-                refresh_part_sheet(sht_img, bx, get_sheet(sht_img, &(current_window->w_sheet))->by, 
-                                    bx + get_sheet(sht_img, &(current_window->w_sheet))->width,
-                                    get_sheet(sht_img, &(current_window->w_sheet))->by
-                                     + get_sheet(sht_img, &(current_window->w_sheet))->height);
+                get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10;    // 扔到屏幕外面
+                refresh_part_sheet(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by, 
+                                    bx + get_sheet(sht_img, current_window->w_sheet)->width,
+                                    get_sheet(sht_img, current_window->w_sheet)->by
+                                     + get_sheet(sht_img, current_window->w_sheet)->height);
             }
             
         }
-        ms_dec.sheet_id = found_sheetmb(sht_img, mouse_x, mouse_y);
-        if (ms_dec.sheet_id == NULL)
+        ms_dec.sht_now = found_sheetmb(sht_img, mouse_x, mouse_y);
+        if (ms_dec.sht_now == NULL)
         {
             // 点在了桌面/快捷栏上
             if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
@@ -147,23 +145,23 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
-            if (tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx + 12 ||
-                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 27 ||
-                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 ||
-                tby > get_sheet(sht_img, &(current_window->w_sheet))->by
-                     + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
+            if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
+                tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
+                tbx > get_sheet(sht_img, current_window->w_sheet)->bx
+                     + get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
+                tby > get_sheet(sht_img, current_window->w_sheet)->by
+                     + get_sheet(sht_img, current_window->w_sheet)->height - 20
             ) { /* do nothing */ } else {
                 if (current_window->type == XWIN_NORMAL)
                 {
                     do_message(MSG_RBUTTON, 
-                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
-                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                        tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12, 
+                        tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, 
                         current_window->WinMPf, current_window->w_task);
                 } else {
                     do_message(MSG_RBUTTON, 
-                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
-                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        tbx - get_sheet(sht_img, current_window->w_sheet)->bx, 
+                        tby - get_sheet(sht_img, current_window->w_sheet)->by, 
                         current_window->WinMPf, current_window->w_task);
                 }
                 close_menu(current_window, tbx, tby);
@@ -182,23 +180,23 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
-            if (tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx + 12 ||
-                tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 27 ||
-                tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx
-                     + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 ||
-                tby > get_sheet(sht_img, &(current_window->w_sheet))->by
-                     + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
+            if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
+                tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
+                tbx > get_sheet(sht_img, current_window->w_sheet)->bx
+                     + get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
+                tby > get_sheet(sht_img, current_window->w_sheet)->by
+                     + get_sheet(sht_img, current_window->w_sheet)->height - 20
             ) { /* do nothing */ } else {
                 if (current_window->type == XWIN_NORMAL)
                 {
                     do_message(MSG_MBUTTON, 
-                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
-                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                        tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12, 
+                        tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, 
                         current_window->WinMPf, current_window->w_task);
                 } else {
                     do_message(MSG_MBUTTON, 
-                        tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
-                        tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                        tbx - get_sheet(sht_img, current_window->w_sheet)->bx, 
+                        tby - get_sheet(sht_img, current_window->w_sheet)->by, 
                         current_window->WinMPf, current_window->w_task);
                 }
             }
@@ -221,23 +219,23 @@ void process_mouse_button()
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)
     {
-        if (tbx < get_sheet(sht_img, &(current_window->w_sheet))->bx + 12 ||
-            tby < get_sheet(sht_img, &(current_window->w_sheet))->by + 27 ||
-            tbx > get_sheet(sht_img, &(current_window->w_sheet))->bx
-                 + get_sheet(sht_img, &(current_window->w_sheet))->width - 12 ||
-            tby > get_sheet(sht_img, &(current_window->w_sheet))->by
-                 + get_sheet(sht_img, &(current_window->w_sheet))->height - 20
+        if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
+            tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
+            tbx > get_sheet(sht_img, current_window->w_sheet)->bx
+                 + get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
+            tby > get_sheet(sht_img, current_window->w_sheet)->by
+                 + get_sheet(sht_img, current_window->w_sheet)->height - 20
         ) { /* do nothing */ } else {
             if (current_window->type == XWIN_NORMAL)
             {
                 do_message(MSG_MOVE, 
-                    tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx - 12, 
-                    tby - get_sheet(sht_img, &(current_window->w_sheet))->by - 27, 
+                    tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12, 
+                    tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, 
                     current_window->WinMPf, current_window->w_task);
             } else {
                 do_message(MSG_MOVE, 
-                    tbx - get_sheet(sht_img, &(current_window->w_sheet))->bx, 
-                    tby - get_sheet(sht_img, &(current_window->w_sheet))->by, 
+                    tbx - get_sheet(sht_img, current_window->w_sheet)->bx, 
+                    tby - get_sheet(sht_img, current_window->w_sheet)->by, 
                     current_window->WinMPf, current_window->w_task);
             }
             
@@ -266,8 +264,8 @@ void process_mouse_info()
     {
         if (!ms_dec.win_move_lock)
         {
-            ms_dec.sheet_id = found_sheet_movable(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sheet_id == NULL || have_full_screen_app)
+            ms_dec.sht_now = found_sheet_movable(sht_img, mouse_x, mouse_y);
+            if (ms_dec.sht_now == NULL || have_full_screen_app)
             {
                 // 点在了标题栏外
                 ms_dec.win_move_lock = false;
@@ -276,16 +274,16 @@ void process_mouse_info()
             {
                 // 点在了窗口上
                 ms_dec.win_move_lock = true;
-                ms_dec.sht_now       = get_sheet(sht_img, ms_dec.sheet_id);
-                lift_sheet(sht_img, ms_dec.sheet_id);
+                ms_dec.sht_now       = get_sheet(sht_img, ms_dec.sht_now);
+                lift_sheet(sht_img, ms_dec.sht_now);
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                    ms_dec.sht_now->bx + ms_dec.sht_now->width,
                                    ms_dec.sht_now->by + ms_dec.sht_now->height);
                 ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
                 ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
             }
-            ms_dec.sheet_id = found_sheetmb(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sheet_id == NULL)
+            ms_dec.sht_now = found_sheetmb(sht_img, mouse_x, mouse_y);
+            if (ms_dec.sht_now == NULL)
             {
                 // 点在了桌面或快捷栏上
                 // do nothing
@@ -298,8 +296,8 @@ void process_mouse_info()
             }
             else
             {
-                ms_dec.sht_now = get_sheet(sht_img, ms_dec.sheet_id);
-                if (!have_full_screen_app) lift_sheet(sht_img, ms_dec.sheet_id);
+                ms_dec.sht_now = get_sheet(sht_img, ms_dec.sht_now);
+                if (!have_full_screen_app) lift_sheet(sht_img, ms_dec.sht_now);
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                    ms_dec.sht_now->bx + ms_dec.sht_now->width,
                                    ms_dec.sht_now->by + ms_dec.sht_now->height);
@@ -617,21 +615,21 @@ void mouse_init() {
 //     delay_s(3);
 // }
 
-void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id)
+void draw_mouse(SHEET_INFO *sht, SHEET *csheet)
 {
     for (int y = 0; y < 21; y++)
     {
         for (int x = 0; x < 10; x++)
         {
-            if (mouse[y][x] == '.') { draw_point(sht, sheet_id, x, y, {0, 0, 0, 0}); }
-            else if (mouse[y][x] == 'w') { draw_point(sht, sheet_id, x, y, WHITE); }
-            else if (mouse[y][x] == '@') { draw_point(sht, sheet_id, x, y, BLACK); }
+            if (mouse[y][x] == '.') { draw_point(sht, csheet, x, y, {0, 0, 0, 0}); }
+            else if (mouse[y][x] == 'w') { draw_point(sht, csheet, x, y, WHITE); }
+            else if (mouse[y][x] == '@') { draw_point(sht, csheet, x, y, BLACK); }
         }
     }
 }
 
-void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py)
+void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py)
 {
-    setBX(sht, sheet_id, px);
-    setBY(sht, sheet_id, py);
+    setBX(sht, csheet, px);
+    setBY(sht, csheet, py);
 }

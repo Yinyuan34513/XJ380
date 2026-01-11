@@ -57,7 +57,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 }
 
 void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
-                  uint16_t *sheet_id)
+                  SHEET **sheet)
 {
     while (true)
     {
@@ -75,10 +75,12 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
         if (front_p != NULL)
         {
             SHEET *record = front_p;
+            int count = -1;
             while (true)
             {
+                count++;
                 if (front_p->next == NULL) { break; }
-                else if (front_p->next->index >= index) { break; }
+                else if (count + 1 >= index) { break; }
                 else if (record == front_p->next || front_p == front_p->next)
                 {
                     front_p->next = NULL;
@@ -96,23 +98,22 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 front_p->next        = new_sheet;       // 把自己的上一个的下一个标记为自己
                 front_p              = new_sheet->next; // 指针指向自己的下一个（曾经的）
                 record               = front_p;
-                // 给后面的全++
-                while (true)
-                {
-                    front_p->index++;
-                    if (front_p->next == NULL) { break; }
-                    else if (record == front_p->next || front_p == front_p->next)
-                    {
-                        front_p->next = NULL;
-                        break;
-                    }
-                    front_p = front_p->next;
-                }
+                // // 给后面的全++
+                // while (true)
+                // {
+                //     front_p->index++;
+                //     if (front_p->next == NULL) { break; }
+                //     else if (record == front_p->next || front_p == front_p->next)
+                //     {
+                //         front_p->next = NULL;
+                //         break;
+                //     }
+                //     front_p = front_p->next;
+                // }
 
                 // 分配
-                *sheet_id = index;
+                *sheet = new_sheet;
 
-                new_sheet->index     = index;
                 new_sheet->bx        = bx;
                 new_sheet->by        = by;
                 new_sheet->width     = x;
@@ -132,9 +133,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 front_p->next    = new_sheet;
 
                 // 分配
-                *sheet_id = index;
+                *sheet = new_sheet;
 
-                new_sheet->index     = index;
                 new_sheet->bx        = bx;
                 new_sheet->by        = by;
                 new_sheet->width     = x;
@@ -152,9 +152,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
         {
             sht->start = new_sheet;
 
-            *sheet_id = 0;
+            *sheet = new_sheet;
 
-            new_sheet->index     = 0;
             new_sheet->bx        = bx;
             new_sheet->by        = by;
             new_sheet->width     = x;
@@ -192,9 +191,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->front     = front_p;
             }
 
-            *sheet_id = sht->sht_numed - 1;
+            *sheet = new_sheet;
 
-            new_sheet->index     = front_p->index + 1;
             new_sheet->bx        = bx;
             new_sheet->by        = by;
             new_sheet->width     = x;
@@ -211,9 +209,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
         {
             sht->start = new_sheet;
 
-            *sheet_id = 0;
+            *sheet = new_sheet;
 
-            new_sheet->index     = 0;
             new_sheet->bx        = bx;
             new_sheet->by        = by;
             new_sheet->width     = x;
@@ -231,51 +228,51 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     SheetIsCreating = false;
 }
 
-uint32_t getBX(SHEET_INFO *sht, uint16_t *sheet_id)
+uint32_t getBX(SHEET_INFO *sht, SHEET *csheet)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { return front_p->bx; }
+        if (front_p == csheet) { return front_p->bx; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }
 
-uint32_t getBY(SHEET_INFO *sht, uint16_t *sheet_id)
+uint32_t getBY(SHEET_INFO *sht, SHEET *csheet)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { return front_p->by; }
+        if (front_p == csheet) { return front_p->by; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }
 
-uint32_t getXsize(SHEET_INFO *sht, uint16_t *sheet_id)
+uint32_t getXsize(SHEET_INFO *sht, SHEET *csheet)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { return front_p->width; }
+        if (front_p == csheet) { return front_p->width; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }
 
-uint32_t getYsize(SHEET_INFO *sht, uint16_t *sheet_id)
+uint32_t getYsize(SHEET_INFO *sht, SHEET *csheet)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { return front_p->height; }
+        if (front_p == csheet) { return front_p->height; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }
 
-uint16_t *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
+SHEET *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -287,7 +284,7 @@ uint16_t *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
                 if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
                     front_p->by + front_p->height >= y)
                 {
-                    return &front_p->index;
+                    return front_p;
                 }
                 else if (front_p->front == NULL) { return NULL; }
                 front_p = front_p->front;
@@ -298,7 +295,7 @@ uint16_t *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
     }
 }
 
-uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
+SHEET *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -312,7 +309,7 @@ uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
                     (front_p->type == MovableSheetType || front_p->type == NoEdgeWindowSheetType ||
                      front_p->type == TopWindowSheetType))
                 {
-                    return &front_p->index;
+                    return front_p;
                 }
                 else if (front_p->front == NULL) { return NULL; }
                 front_p = front_p->front;
@@ -323,7 +320,7 @@ uint16_t *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
     }
 }
 
-uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
+SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
     SHEET *front_p = sht->start;
     while (true)
@@ -339,7 +336,7 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
                     if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x && front_p->by <= y &&
                         front_p->by + 22 >= y)
                     {
-                        return &front_p->index;
+                        return front_p;
                     }
                     else
                     {
@@ -351,7 +348,7 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
                     if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
                         front_p->by + front_p->height >= y)
                     {
-                        return &front_p->index;
+                        return front_p;
                     }
                     else
                     {
@@ -367,12 +364,12 @@ uint16_t *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
     }
 }
 
-void change_sheet_type(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t new_type)
+void change_sheet_type(SHEET_INFO *sht, SHEET *csheet, uint32_t new_type)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id)
+        if (front_p == csheet)
         {
             front_p->type = new_type;
             return;
@@ -382,23 +379,17 @@ void change_sheet_type(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t new_type)
     }
 }
 
-SHEET *get_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
+SHEET *get_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id) { return front_p; }
-        else if (front_p->next == NULL) { return NULL; }
-        front_p = front_p->next;
-    }
+    return csheet;
 }
 
-void setBX(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num)
+void setBX(SHEET_INFO *sht, SHEET *csheet, uint32_t num)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id)
+        if (front_p == csheet)
         {
             front_p->bx = num;
             return;
@@ -408,12 +399,12 @@ void setBX(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num)
     }
 }
 
-void setBY(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num)
+void setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id)
+        if (front_p == csheet)
         {
             front_p->by = num;
             return;
@@ -423,7 +414,7 @@ void setBY(SHEET_INFO *sht, uint16_t *sheet_id, uint32_t num)
     }
 }
 
-void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
+void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     while (true)
     {
@@ -434,7 +425,7 @@ void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
     SHEET *front_p  = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id)
+        if (front_p == csheet)
         {
             front_p->front->next = front_p->next;
             front_p->next->front = front_p->front;
@@ -442,16 +433,12 @@ void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
             memset(front_p, 0, sizeof(SHEET));
             free((void *)(front_p));
             // sht->sheet_num--;
-            write_serial_string("Sheet Delete Success. SheetID: ");
-            write_serial_dec(*sheet_id);
-            write_serial_string("\n");
+            write_serial_fmt("Sheet Delete Success. SheetAddress: 0x%x\n", (uint64_t)front_p);
             break;
         }
         else if (front_p->next == NULL)
         {
-            write_serial_string("Sheet Delete Faild. SheetID: ");
-            write_serial_dec(*sheet_id);
-            write_serial_string("\n");
+            write_serial_fmt("Sheet Delete Faild. SheetAddress: 0x%x\n", (uint64_t)front_p);
             return;
         }
         front_p = front_p->next;
@@ -460,12 +447,12 @@ void delete_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
     SheetIsCreating = false;
 }
 
-void lift_sheet(SHEET_INFO *sht, uint16_t *sheet_id)
+void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id)
+        if (front_p == csheet)
         {
             front_p->next->front = front_p->front;
             front_p->front->next = front_p->next;
@@ -606,13 +593,13 @@ uint32_t get_ver()
     return fbc_addr->vertical_resolution;
 }
 
-void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *dst_sheet_id)
+        if (front_p == dst_sheet)
         {
             // 找到啦！
             SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
@@ -629,13 +616,13 @@ void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *sr
     }
 }
 
-void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
+void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x,
                                      uint32_t dst_y, uint32_t width, uint32_t height)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *dst_sheet_id)
+        if (front_p == dst_sheet)
         {
             // 找到啦！
             SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
@@ -654,13 +641,13 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SH
 
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha);
 
-void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+void copy_buffer_blend_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                              uint32_t width, uint32_t height)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *dst_sheet_id)
+        if (front_p == dst_sheet)
         {
             // 找到啦！
             SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
@@ -678,24 +665,18 @@ void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFF
     }
 }
 
-void *get_sheet_buffer(SHEET_INFO *sht, uint16_t *sheet_id)
+void *get_sheet_buffer(SHEET_INFO *sht, SHEET *csheet)
 {
     SHEET *front_p = sht->start;
     while (true)
     {
-        if (front_p->index == *sheet_id) { return front_p->buffer; }
+        if (front_p == csheet) { return front_p->buffer; }
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
 }
 
-SHEET *found_sheet_byid(SHEET_INFO *sht, uint16_t *sheet_id)
+SHEET *found_sheet_byid(SHEET_INFO *sht, SHEET *csheet)
 {
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->index == *sheet_id) { return front_p; }
-        else if (front_p->next == NULL) { return NULL; }
-        front_p = front_p->next;
-    }
+    return csheet;
 }

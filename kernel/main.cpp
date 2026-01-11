@@ -36,7 +36,7 @@
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
-uint16_t   *msid;
+SHEET   *msid;
 
 extern mouse_dec     ms_dec;
 extern bool          winRD_lock;
@@ -96,7 +96,7 @@ void init_cpu()
 typedef struct TimerWidgetsData
 {
     SHEET_INFO *sht;
-    uint16_t   *sheet_id;
+    SHEET      *sheet_id;
     tm          time;
     tm          old_time;
     int         scdx;
@@ -127,7 +127,7 @@ void components_flusher()
             tm         *time          = &tw_data->time;
             tm         *old_time      = &tw_data->old_time;
             SHEET_INFO *shtinf        = tw_data->sht;
-            uint16_t   *dock_sheet_id = tw_data->sheet_id;
+            SHEET      *dock_sheet_id = tw_data->sheet_id;
             int         scdx          = tw_data->scdx;
             time_read(time);
 
@@ -148,12 +148,11 @@ void components_flusher()
     }
 }
 
-extern uint16_t *mouse_sheet_id_img;
-uint16_t         desktop_sheet_id = 1145; // 如果SheetTest那行输出的是1145的话那么绝对有问题
-uint16_t         dock_sheet_id    = 1145;
-uint16_t         mouse_sheet_id   = 1145;
-uint16_t zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi =
-    1145;
+extern SHEET *mouse_sheet_id_img;
+SHEET        *desktop_sheet_id; // 如果SheetTest那行输出的是1145的话那么绝对有问题
+SHEET        *dock_sheet_id;
+SHEET        *mouse_sheet_id;
+SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
 void desktop_flusher()
 {
@@ -167,7 +166,7 @@ void desktop_flusher()
     init_sheet(*fbc_addr, &shtinf);
 
     sht_img = &shtinf;
-    msid    = &mouse_sheet_id;
+    msid    = mouse_sheet_id;
 
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
                  &desktop_sheet_id);
@@ -185,7 +184,7 @@ void desktop_flusher()
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
-    init_desktop(&shtinf, &desktop_sheet_id, &dock_sheet_id);
+    init_desktop(&shtinf, desktop_sheet_id, dock_sheet_id);
 
     write_serial_string("desktop initialized.\n");
 
@@ -257,7 +256,7 @@ void desktop_flusher()
     // print_box_ttf(&shtinf, &desktop_sheet_id, (char *)"MAKE XJ380 GREAT AGAIN! 实现XJ380的伟大复兴！", WHITE, 64, 64,
     //               16);
 
-    draw_mouse(&shtinf, &mouse_sheet_id);
+    draw_mouse(&shtinf, mouse_sheet_id);
     XWM_INFO  xwmi;
     WINDOWLS *test_win;
     WINDOWLS *test_win2;
@@ -266,7 +265,7 @@ void desktop_flusher()
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 10, 7, {0x00, 0xa2, 0xe8}); // 全都好了来一下
 
-    mouse_sheet_id_img = &mouse_sheet_id;
+    mouse_sheet_id_img = mouse_sheet_id;
 
     no_interrupt = false;
     enable_intr();
@@ -288,7 +287,7 @@ void desktop_flusher()
 
     tw_data           = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
     tw_data->sht      = &shtinf;
-    tw_data->sheet_id = &dock_sheet_id;
+    tw_data->sheet_id = dock_sheet_id;
     tw_data->scdx     = scdx;
 
     desktop_done = true;
@@ -337,7 +336,7 @@ void desktop_flusher()
 #if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {
-            PrintFont(&shtinf, &desktop_sheet_id, fontx, fonty, k_input, WHITE);
+            PrintFont(&shtinf, desktop_sheet_id, fontx, fonty, k_input, WHITE);
             refresh_part_sheet(&shtinf, fontx, fonty, fontx + 8, fonty + 16); // 刷新
             fontx += 8;
         }

@@ -14,9 +14,9 @@ char          *ttf_buffer_c;
 stbtt_fontinfo font_c;
 
 SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha);
-void put_bitmap(SHEET_INFO *sht, uint16_t *sheet_id, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
+void put_bitmap(SHEET_INFO *sht, SHEET *csheet, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
                 unsigned heigh, unsigned bitmap_xsize, SHEET_BUFFER fc);
-void print_fmt_box_ttf_c(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
+void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
                        ...);
 
 unsigned char *TTF_Print_c(int *buf, unsigned *width, unsigned *heigh, int size)
@@ -93,10 +93,10 @@ unsigned char *TTF_Print_c(int *buf, unsigned *width, unsigned *heigh, int size)
     return bitmap;
 }
 
-void print_box_ttf_c(SHEET_INFO *sht, uint16_t *sheet_id, char *buf, SHEET_BUFFER fc,
+void print_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, char *buf, SHEET_BUFFER fc,
                    /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
-    print_fmt_box_ttf_c(sht, sheet_id, fc, (int)x, (int)y, size, "%s", buf);
+    print_fmt_box_ttf_c(sht, csheet, fc, (int)x, (int)y, size, "%s", buf);
 }
 
 #define TTF_BUF_SIZE 128
@@ -138,17 +138,7 @@ static void flush_ttf_buffer_c(FbTTFWriterData *data)
     }
 
     // 查找图层
-    SHEET *front_p = data->sht->start;
-    while (front_p != NULL)
-    {
-        if (front_p->index == *data->sheet_id) break;
-        front_p = front_p->next;
-    }
-    if (front_p == NULL)
-    {
-        free(r);
-        return;
-    }
+    SHEET *front_p = data->sheet_id;
 
     // 渲染文本
     unsigned int   width  = 0;
@@ -186,7 +176,7 @@ uint8_t fb_ttf_writer_handler_c(Writer *writer, char ch)
     return 1;
 }
 
-void print_fmt_box_ttf_c(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
+void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
                        ...)
 {
     char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
@@ -198,7 +188,7 @@ void print_fmt_box_ttf_c(SHEET_INFO *sht, uint16_t *sheet_id, SHEET_BUFFER fc, i
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
         .sht           = sht,
-        .sheet_id      = sheet_id,
+        .sheet_id      = csheet,
         .color         = fc,
         .start_x       = x,
         .start_y       = y,
