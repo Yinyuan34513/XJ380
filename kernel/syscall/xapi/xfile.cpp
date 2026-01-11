@@ -34,7 +34,7 @@ uint64_t do_xapi_OpenFile(uint64_t path)
     vfs_node_t f = vfs_open(fpath);
     if (!f)
     {
-        free(fsptr);
+        unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
         return 0;
     }
     uint64_t length = f->size;
@@ -42,7 +42,7 @@ uint64_t do_xapi_OpenFile(uint64_t path)
     if (!fsptr->buffer)
     {
         vfs_close(f);
-        free(fsptr);
+        unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
         return 0;
     }
     vfs_read(f, fsptr->buffer, 0, length);
