@@ -55,6 +55,32 @@ void cmos_write(uint8_t addr, uint8_t value) {
 int days_in_month[2][12] = {{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
                             {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}};
 
+static int month_day_countable[25] = {0, // 这里占位，没有 0 月，从 1 月开始
+                        0,
+                        (31),
+                        (31 + 29),
+                        (31 + 29 + 31),
+                        (31 + 29 + 31 + 30),
+                        (31 + 29 + 31 + 30 + 31),
+                        (31 + 29 + 31 + 30 + 31 + 30),
+                        (31 + 29 + 31 + 30 + 31 + 30 + 31),
+                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31),
+                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31 + 30),
+                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31),
+                        (31 + 29 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0};
+
 int century;
 
 bool is_leap_year(int year) { return ((year % 4 == 0) && (year % 100 != 0)); }
@@ -99,6 +125,7 @@ void time_read_bcd(tm *time) {
         time->tm_mday = cmos_read(CMOS_DAY);
         time->tm_mon = cmos_read(CMOS_MONTH);
         time->tm_year = cmos_read(CMOS_YEAR);
+        time->tm_wday = cmos_read(CMOS_WEEKDAY);
         century = cmos_read(CMOS_CENTURY);
     } while (time->tm_sec != cmos_read(CMOS_SECOND));
 }
@@ -117,6 +144,8 @@ void time_read(tm *time) {
         time->tm_mday = bcd_to_bin(time->tm_mday);
         time->tm_mon = bcd_to_bin(time->tm_mon);
         time->tm_year = bcd_to_bin(time->tm_year);
+        time->tm_wday = bcd_to_bin(time->tm_wday);
+        time->tm_yday = month_day_countable[time->tm_mon] + time->tm_mday;
         time->tm_isdst = -1;
         century = bcd_to_bin(century);
     }
