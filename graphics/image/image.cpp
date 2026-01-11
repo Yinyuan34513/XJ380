@@ -52,7 +52,7 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
  * @brief 显示图片（并进行混色）
  * 
  * @param sht 图层信息结构
- * @param sheet_id 图层编号
+ * @param ct_sheet 图层编号
  * @param x 放置位置
  * @param y 放置位置
  * @param ow 目标宽度
@@ -131,7 +131,7 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
  * @brief 显示图片
  * 
  * @param sht 图层信息结构
- * @param sheet_id 图层编号
+ * @param ct_sheet 图层编号
  * @param x 放置位置
  * @param y 放置位置
  * @param ow 目标宽度

@@ -33,7 +33,7 @@ void init_xwm(XWM_INFO *xwmi)
     write_serial_string("XWM Initializing Success.\n");
 }
 
-extern SHEET   *dock_sheet_id;
+extern SHEET   *dock_ct_sheet;
 extern bool have_full_screen_app;
 
 void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
@@ -80,7 +80,7 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 
     // create_sheet(sht, 0, 0, 
     //              sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, FixedSheetType, -1, new_window->w_sheet);
-    new_window->w_sheet = dock_sheet_id;
+    new_window->w_sheet = dock_ct_sheet;
     change_sheet_type(sht, new_window->w_sheet, TopWindowSheetType);
     draw_rect(sht, new_window->w_sheet, 0, 0, sht_img->fbc->horizontal_resolution - 1, sht_img->fbc->vertical_resolution - 1, {0xff, 0xff, 0xff, 0xff});
 

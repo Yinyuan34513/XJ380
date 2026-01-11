@@ -138,13 +138,13 @@ static void flush_ttf_buffer_c(FbTTFWriterData *data)
     }
 
     // 查找图层
-    SHEET *front_p = data->sheet_id;
+    SHEET *front_p = data->ct_sheet;
 
     // 渲染文本
     unsigned int   width  = 0;
     unsigned int   height = 0;
     unsigned char *bitmap = TTF_Print_c(r, &width, &height, data->size);
-    put_bitmap(data->sht, data->sheet_id, bitmap, data->x, data->y, width, height, 1920, data->color);
+    put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 1920, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
     // 更新光标位置
@@ -188,7 +188,7 @@ void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x,
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
         .sht           = sht,
-        .sheet_id      = csheet,
+        .ct_sheet      = csheet,
         .color         = fc,
         .start_x       = x,
         .start_y       = y,

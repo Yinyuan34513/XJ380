@@ -21,8 +21,8 @@ bool        win_c_bt_isl = false;
 bool        win_m_bt_isl = false;
 #define WINDOW_ALPHA_VALUE 0xaa
 
-SHEET *mouse_sheet_id_img;
-extern SHEET *desktop_sheet_id;
+SHEET *mouse_ct_sheet_img;
+extern SHEET *desktop_ct_sheet;
 MouseType type;
 
 extern bool have_full_screen_app;
@@ -205,16 +205,16 @@ void process_mouse_button()
         ms_dec.center = false; 
     }
 
-    tbx         = getBX(sht_img, mouse_sheet_id_img);
-    tby         = getBY(sht_img, mouse_sheet_id_img);
+    tbx         = getBX(sht_img, mouse_ct_sheet_img);
+    tby         = getBY(sht_img, mouse_ct_sheet_img);
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
-    move_mouse(sht_img, mouse_sheet_id_img, mouse_x, mouse_y);
-    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_sheet_id_img),
-                       tby + getYsize(sht_img, mouse_sheet_id_img));
-    refresh_part_sheet(sht_img, getBX(sht_img, mouse_sheet_id_img), getBY(sht_img, mouse_sheet_id_img),
-                       getBX(sht_img, mouse_sheet_id_img) + getXsize(sht_img, mouse_sheet_id_img),
-                       getBY(sht_img, mouse_sheet_id_img) + getYsize(sht_img, mouse_sheet_id_img));
+    move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
+    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_ct_sheet_img),
+                       tby + getYsize(sht_img, mouse_ct_sheet_img));
+    refresh_part_sheet(sht_img, getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                       getBX(sht_img, mouse_ct_sheet_img) + getXsize(sht_img, mouse_ct_sheet_img),
+                       getBY(sht_img, mouse_ct_sheet_img) + getYsize(sht_img, mouse_ct_sheet_img));
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)

@@ -20,7 +20,7 @@ uint64_t calc_ttf_length(char *str, int size);
 typedef struct FbTTFWriterData
 {
     SHEET_INFO  *sht;
-    SHEET    *sheet_id;
+    SHEET    *ct_sheet;
     SHEET_BUFFER color;
     int          start_x;
     int          start_y;

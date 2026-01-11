@@ -259,7 +259,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     SHEET *front_p = data->sht->start;
     while (front_p != NULL)
     {
-        if (front_p == data->sheet_id) break;
+        if (front_p == data->ct_sheet) break;
         front_p = front_p->next;
     }
     if (front_p == NULL)
@@ -268,7 +268,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         return;
     }
 
-    put_bitmap(data->sht, data->sheet_id, bitmap, data->x, data->y, width, height, 1920, data->color);
+    put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 1920, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
     *i_width = width;
@@ -318,7 +318,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
         .sht           = sht,
-        .sheet_id      = csheet,
+        .ct_sheet      = csheet,
         .color         = fc,
         .start_x       = x,
         .start_y       = y,
@@ -360,7 +360,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
         .sht           = sht,
-        .sheet_id      = csheet,
+        .ct_sheet      = csheet,
         .color         = fc,
         .start_x       = x,
         .start_y       = y,

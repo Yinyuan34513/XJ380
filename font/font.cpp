@@ -149,7 +149,7 @@ void PrintFont(SHEET_INFO *sht, SHEET *csheet, int x, int y, char ch, const SHEE
 typedef struct FbFontWriterData
 {
     SHEET_INFO  *sht;
-    SHEET    *sheet_id;
+    SHEET    *ct_sheet;
     SHEET_BUFFER color;
     int          x;
     int          y;
@@ -168,7 +168,7 @@ uint8_t FbFontWriter(Writer *writer, char ch)
         char *s = data->buf;
         while (*s)
         {
-            PrintFont(data->sht, data->sheet_id, data->x, data->y, *s,
+            PrintFont(data->sht, data->ct_sheet, data->x, data->y, *s,
                       data->color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
             data->x += 8;
             s++;
@@ -193,7 +193,7 @@ void PrintFmt(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &
 
     FbFontWriterData fb_font_writer_data = {
         .sht      = sht,
-        .sheet_id = csheet,
+        .ct_sheet = csheet,
         .color    = color,
         .x        = x,
         .y        = y,

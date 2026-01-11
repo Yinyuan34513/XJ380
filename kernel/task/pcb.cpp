@@ -33,7 +33,7 @@ extern bool no_interrupt;
 
 extern spin_t scheduler_lock;
 
-uint16_t dock_sheet_id;
+uint16_t dock_ct_sheet;
 
 pcb_t found_pcb(int pid)
 {

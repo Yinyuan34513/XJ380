@@ -119,7 +119,7 @@ void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, c
 void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
 // graphics/desktop.cpp
-void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_sheet_id);
+void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet);
 void init_dock(SHEET_INFO *sht, SHEET *csheet);
 void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet);
 void draw_logo(SHEET_INFO *sht, SHEET *csheet, int xi, int yi);
