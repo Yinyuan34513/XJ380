@@ -31,6 +31,8 @@ void process_left_key(int x, int y)
             if (y > 128 && y < 158) { setting_cindex = 1; }
             if (y > 158 && y < 196) { setting_cindex = 2; }
             if (y > 196 && y < 234) { setting_cindex = 3; }
+            if (y > 242 && y < 272) { setting_cindex = 4; }
+            if (y > 280 && y < 310) { setting_cindex = 5; }
             draw_background();
         }
     }
