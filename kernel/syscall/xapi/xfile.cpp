@@ -29,7 +29,7 @@
 uint64_t do_xapi_OpenFile(uint64_t path)
 {
     char  *fpath = (char *)path;
-    XFILE *fsptr = (XFILE *)malloc(sizeof(XFILE));
+    XFILE *fsptr = (XFILE *)page_alloc_random(get_current_task()->parent_group->pagedir, sizeof(XFILE),  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
 
     vfs_node_t f = vfs_open(fpath);
     if (!f)
@@ -38,7 +38,7 @@ uint64_t do_xapi_OpenFile(uint64_t path)
         return 0;
     }
     uint64_t length = f->size;
-    fsptr->buffer   = malloc(length);
+    fsptr->buffer   = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, length,  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     if (!fsptr->buffer)
     {
         vfs_close(f);
@@ -54,8 +54,8 @@ uint64_t do_xapi_OpenFile(uint64_t path)
 void do_xapi_CloseFile(uint64_t ptr)
 {
     XFILE *fsptr = (XFILE *)ptr;
-    free(fsptr->buffer);
-    free(fsptr);
+    unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr->buffer, fsptr->length);
+    unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
 }
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
