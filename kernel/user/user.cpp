@@ -151,6 +151,8 @@ uint64_t parse_elf_file(char *path, pcb_t group)
                              mapping_space->load_end - mapping_space->load_start,
                              PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
 
+    page_directory_t *current_pagedir = get_current_directory();
+
     switch_page_directory(group->pagedir);
 
     memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
@@ -226,6 +228,8 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
+    switch_page_directory(current_pagedir); // 恢复页表
+
     // 设置程序入口点
     return entry;
 }
@@ -264,7 +268,8 @@ void getFileDirectory(const char *path, char *result)
 
 char *getCwd(char *path)
 {
-    char result[1024];
+    write_serial_fmt("0x%x\n", (uint64_t)path);
+    char result[strlen(path) + 1];
     memset(result, 0, strlen(path) + 1);
     getFileDirectory(path, result);
     return strdup(result);
