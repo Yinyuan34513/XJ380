@@ -42,13 +42,18 @@ void init_runfile()
     char  settings_file_buffer[sizeof(RunfileSettings_Item) * 1024];
     vfs_node_t settings_file_v = vfs_open(runfile_setfile_path);
     if (!settings_file_v) return;
-    vfs_read(settings_file_v, settings_file_buffer, 0, settings_file_v->size);
 
     RunfileSettings_Format *file_format = (RunfileSettings_Format *)settings_file_buffer;
 
     strcpy(file_format->items[0].exname,   "txt");
     strcpy(file_format->items[0].describe, "文本文件");
     strcpy(file_format->items[0].runpath,  "/system/texter.elf");
+
+    strcpy(file_format->items[1].exname,   "inf");
+    strcpy(file_format->items[1].describe, "配置文件");
+    strcpy(file_format->items[1].runpath,  "/system/texter.elf");
+
+    vfs_write(settings_file_v, settings_file_buffer, 0, sizeof(RunfileSettings_Item) * 1024);
 }
 
 void runfile(char *path)

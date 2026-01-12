@@ -151,5 +151,14 @@ void draw_setting_apps()
     if (!f) return;
     RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
     xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "默认应用", 16, 0xffffffff);
-    xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, xcr_hex2char((uint64_t)f->buffer), 11, 0xffffffff);
+
+    for (int i = 0; rff->items[i].exname[0] != '\0'; i++)
+    {
+        char temp_exname[11] = ".";
+        strcat(temp_exname, rff->items[i].exname);
+        xapi_DrawText(handle, win_width / 10 * 3 + 24 , 168 + i * 32, temp_exname, 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 124, 168 + i * 32, rff->items[i].describe, 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 274, 168 + i * 32, rff->items[i].runpath, 11, 0xffffffff);
+        xapi_Button(handle, i, win_width - 100, 168 + i * 32, "更改");
+    }
 }
