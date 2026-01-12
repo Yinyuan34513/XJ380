@@ -268,7 +268,6 @@ void getFileDirectory(const char *path, char *result)
 
 char *getCwd(char *path)
 {
-    write_serial_fmt("0x%x\n", (uint64_t)path);
     char result[strlen(path) + 1];
     memset(result, 0, strlen(path) + 1);
     getFileDirectory(path, result);
