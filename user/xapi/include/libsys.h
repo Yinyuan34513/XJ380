@@ -127,6 +127,8 @@
 #define XAPI_SEND_APP_MSG   429
 #define XAPI_SLEEP          430
 
+#define XAPI_RUN            439
+
 // P4.1
 #define XAPI_CREATE_WINDOW    392
 #define XAPI_SET_WINDOW_TITLE 393

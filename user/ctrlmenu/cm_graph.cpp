@@ -130,9 +130,26 @@ void draw_setting()
     else if (setting_cindex == 4)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 242, win_width / 10 * 3 + 8, 272, 0x00a2e8ff, true);
+        draw_setting_apps();
     }
     else if (setting_cindex == 5)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 280, win_width / 10 * 3 + 8, 310, 0x00a2e8ff, true);
     }
+}
+
+void draw_setting_apps()
+{
+    UserInfo usif;
+    xapi_GetCurrentUser(&usif);
+    char runfile_path[256];
+    memset((void *)runfile_path, 0, 256);
+    strcat(runfile_path, "/Users");
+    strcat(runfile_path, usif.name);
+    strcat(runfile_path, "/runfile.dat");
+    XFILE *f = xapi_OpenFile(runfile_path);
+    if (!f) return;
+    RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
+    xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "默认应用", 16, 0xffffffff);
+    xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, rff->items[0].describe, 11, 0xffffffff);
 }

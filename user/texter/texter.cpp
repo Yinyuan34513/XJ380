@@ -38,6 +38,7 @@ int main(int argc, char *argv[], char *envp[])
     SetMsgPrcor(handle, texter_MessagePrcor);
 
     XFILE *f = xapi_OpenFile(file_path);
+    if (!f) return -1;
 
 flush:
 

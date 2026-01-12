@@ -34,7 +34,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 
-UserInfo *current_user;
+extern UserInfo *current_user;
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
@@ -97,7 +97,7 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     每行开头一个路径对应指向的文件
     “系统”和“垃圾桶”图标不可删除或移动，不计入格子内
     */
-    char desktop_folder_path[265] = "/Users/";
+    char desktop_folder_path[256] = "/Users/";
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
     vfs_mkdir(desktop_folder_path);
@@ -207,8 +207,8 @@ void process_desktop_find_block(int x, int y)
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/deskset.inf");
 
-    char desktop_setting_file_buffer[256];
-    char desktop_setting_file_temp_buf[256];
+    char desktop_setting_file_buffer[65536];
+    char desktop_setting_file_temp_buf[65536];
     char *desktop_setting_file_p = desktop_setting_file_buffer;
     vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
     if (!desktop_setting_file_v) return;

@@ -176,3 +176,8 @@ uint64_t do_xapi_GetMemorySize()
 {
     return memory_total_size / 1024;
 }
+
+void do_xapi_Run(char *path)
+{
+    // todo
+}

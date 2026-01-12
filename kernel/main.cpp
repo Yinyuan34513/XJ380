@@ -32,6 +32,7 @@
 #include <task/pcb.h>
 #include <dlinker.h>
 #include <ttf.h>
+#include <user/runfile.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -303,6 +304,9 @@ void desktop_flusher()
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);
+
+    // 之后应该挪到OOBE里的部分
+    init_runfile();
 
     while (1)
     {

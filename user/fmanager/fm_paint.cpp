@@ -43,17 +43,24 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
         memset(file_type, 0, sizeof(char) * 32);
         if (get_file_type(name, file_type))
         {
-            for (int i = 0; file_ti_index[i].file_type[0] != '\0'; i++)
+            if (strcmp("elf", file_type) == 0 || strcmp("epf", file_type) == 0)
             {
-                if (strcmp(file_type, file_ti_index[i].file_type) == 0)
-                {
-                    // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
-                    xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_ti_index[i].file_type_name, 10, 0x6d6d6dff);
-                    goto type_is_found;
-                }
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "可执行文件", 10, 0x6d6d6dff);
             }
-            strcat(file_type, " 文件");
-            xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
+            else
+            {
+                for (int i = 0; file_ti_index[i].file_type[0] != '\0'; i++)
+                {
+                    if (strcmp(file_type, file_ti_index[i].file_type) == 0)
+                    {
+                        // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
+                        xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_ti_index[i].file_type_name, 10, 0x6d6d6dff);
+                        goto type_is_found;
+                    }
+                }
+                strcat(file_type, " 文件");
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
+            }
         }
         else 
         {
