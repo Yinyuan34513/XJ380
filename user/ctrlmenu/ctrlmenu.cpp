@@ -17,8 +17,15 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         process_left_key(hData, lData);
         break;
     case MSG_CRL:
-        if (lData < 2000) { create_input_box((char *)lData); } // cm_graph.cpp:145
+        if (hData < 2000) { change_setting_apps(hData); } // cm_graph.cpp:145
+        else if (hData == 114514) { delete_input_box(); charbox_input_complete = -1; }
+        else if (hData == 114515) { delete_input_box(); charbox_input_complete = 1; }
         break;
+    case MSG_CHAR:
+        put_char((char)lData);
+        break;
+    case MSG_SPCHAR:
+        if (lData == '\b') { backspace(); }
     }
     return;
 }

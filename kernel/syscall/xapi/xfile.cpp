@@ -30,6 +30,7 @@ uint64_t do_xapi_OpenFile(uint64_t path)
 {
     char  *fpath = (char *)path;
     XFILE *fsptr = (XFILE *)page_alloc_random(get_current_task()->parent_group->pagedir, sizeof(XFILE),  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    strcpy(fsptr->path, fpath);
 
     vfs_node_t f = vfs_open(fpath);
     if (!f)
@@ -54,6 +55,10 @@ uint64_t do_xapi_OpenFile(uint64_t path)
 void do_xapi_CloseFile(uint64_t ptr)
 {
     XFILE *fsptr = (XFILE *)ptr;
+    vfs_node_t f = vfs_open(fsptr->path);
+    if (!fsptr) return;
+    else if (!fsptr->buffer) return;
+    vfs_write(f, fsptr->buffer, 0, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr->buffer, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
 }

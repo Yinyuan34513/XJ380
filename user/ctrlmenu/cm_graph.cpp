@@ -142,6 +142,8 @@ void draw_setting()
     }
 }
 
+char setting_apps_change_char_buffer[256];
+
 void draw_setting_apps()
 {
     UserInfo usif;
@@ -165,15 +167,88 @@ void draw_setting_apps()
         xapi_DrawText(handle, win_width / 10 * 3 + 274, 168 + i * 32, rff->items[i].runpath, 11, 0xffffffff);
         xapi_Button(handle, i, win_width - 100, 168 + i * 32, "更改");
     }
+
+    xapi_CloseFile(f);
 }
+
+int charbox_count = 0;
+char *charbox_buf = NULL;
+int charbox_input_complete = 0;
 
 void create_input_box(char *buf)
 {
     dont_refresh = true;
     xapi_DrawRect(handle, win_width / 2 - 300, win_height / 2 - 50, win_width / 2 + 300, win_height / 2 + 50, 0x007accff, true);
     xapi_DrawText(handle, win_width / 2 - 300 + 8, win_height / 2 - 50 + 4, "输入新的值：", 11, 0xffffffff);
-    xapi_DrawRect(handle, win_width / 2 - 300 + 8, win_height / 2 - 10, win_width / 2 + 300 - 8, win_height / 2 + 10, 0xfffffffff, true);
+    xapi_DrawRect(handle, win_width / 2 - 300 + 8, win_height / 2 - 10, win_width / 2 + 300 - 8, win_height / 2 + 10, 0xffffffff, true);
     xapi_Button(handle, 114514, win_width / 2 + 300 - 58, win_height / 2 + 50 - 32, "取消");
     xapi_Button(handle, 114515, win_width / 2 + 300 - 116, win_height / 2 + 50 - 32, "确定");
     xapi_RefreshPartWindow(handle, win_width / 2 - 300, win_height / 2 - 50, win_width / 2 + 300, win_height / 2 + 50);
+
+    charbox_count = 0;
+    charbox_buf = buf;
+}
+
+void put_char(char ch)
+{
+    if (!charbox_buf) return;
+
+    char temp_char_buf[2] = {ch, '\0'};
+    xapi_DrawSWText(handle, win_width / 2 - 300 + 12 + charbox_count * 9, win_height / 2 - 10, temp_char_buf, 0x000000ff);
+    charbox_buf[charbox_count] = ch;
+    charbox_count++;
+}
+
+void backspace()
+{
+    if (charbox_count <= 0) return;
+
+    charbox_count--;
+    charbox_buf[charbox_count] = '\0';
+    xapi_DrawRect(handle, 
+        win_width / 2 - 300 + 12 + charbox_count * 9, 
+        win_height / 2 - 10, 
+        win_width / 2 - 300 + 12 + charbox_count * 9 + 9, 
+        win_height / 2 + 10, 0xffffffff, true);
+    xapi_RefreshPartWindow(handle, 
+        win_width / 2 - 300 + 12 + charbox_count * 9, 
+        win_height / 2 - 10, 
+        win_width / 2 - 300 + 12 + charbox_count * 9 + 9, 
+        win_height / 2 + 10);
+}
+
+void delete_input_box()
+{
+    charbox_buf[charbox_count] = '\0';
+    charbox_input_complete = true;
+    dont_refresh = false;
+    draw_background();
+}
+
+void change_setting_apps(int id)
+{
+    create_input_box(setting_apps_change_char_buffer);
+    while (true)
+    {
+        if (charbox_input_complete != 0) break;
+    }
+
+    if (charbox_input_complete == -1) return;
+
+    UserInfo usif;
+    xapi_GetCurrentUser(&usif);
+    char runfile_path[256];
+    memset((void *)runfile_path, 0, 256);
+    strcat(runfile_path, "/Users/");
+    strcat(runfile_path, usif.name);
+    strcat(runfile_path, "/runfile.dat");
+    XFILE *f = xapi_OpenFile(runfile_path);
+    if (!f) return;
+    RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
+
+    strcpy(rff->items[id].runpath, charbox_buf);
+
+    // xapi_CloseFile(f);
+
+    draw_background();
 }

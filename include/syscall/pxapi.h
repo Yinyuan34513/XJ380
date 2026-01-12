@@ -24,6 +24,8 @@ typedef  struct {
 typedef struct {
 	uint64_t    length;
 	void*	    buffer;
+    // 以下成员隐藏
+    char path[256];
 } XFILE;
 
 
