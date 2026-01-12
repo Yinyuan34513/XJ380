@@ -22,6 +22,7 @@
 #include <ttf.h>
 #include <syscall/syscall.h>
 #include "../../build_settings.h"
+#include <user/runfile.h>
 
 extern UserInfo *current_user;
 
@@ -179,5 +180,5 @@ uint64_t do_xapi_GetMemorySize()
 
 void do_xapi_Run(char *path)
 {
-    // todo
+    runfile(path);
 }

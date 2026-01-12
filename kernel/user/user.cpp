@@ -264,7 +264,7 @@ void getFileDirectory(const char *path, char *result)
 
 char *getCwd(char *path)
 {
-    char result[strlen(path) + 1];
+    char result[1024];
     memset(result, 0, strlen(path) + 1);
     getFileDirectory(path, result);
     return strdup(result);
@@ -279,7 +279,7 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
-    page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
+    page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), true);
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);

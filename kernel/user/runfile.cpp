@@ -60,7 +60,8 @@ void runfile(char *path)
 {
     // 获取扩展名
     char exname[10];
-    if (get_file_exname(path, exname))
+    memset(exname, 0, 10);
+    if (!get_file_exname(path, exname))
     {
         return;
     }

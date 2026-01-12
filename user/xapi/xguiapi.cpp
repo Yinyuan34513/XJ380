@@ -110,7 +110,7 @@ UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size)
 
 
 // 4-3
-void xapi_DrawBMP (
+void xapi_DrawBMP(
 	HDLE  	handle,
 	UINT32 	x,
 	UINT32 	y,

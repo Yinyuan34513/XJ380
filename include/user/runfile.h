@@ -15,4 +15,6 @@ struct RunfileSettings_Format
 };
 
 void init_runfile();
+
+void runfile(char *path);
 bool get_file_exname(char *name, char *exname);

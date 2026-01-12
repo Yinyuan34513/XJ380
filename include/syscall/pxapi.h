@@ -208,6 +208,7 @@ uint64_t do_xapi_GetMemorySize();
 void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count);
 void do_xapi_DeleteRightButtonMenu(uint64_t handle);
 int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
+void do_xapi_Run(char *path);
 
 
 

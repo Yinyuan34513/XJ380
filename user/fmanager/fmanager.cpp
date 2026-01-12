@@ -77,9 +77,18 @@ int main(int argc, char *argv[], char *envp[])
             {
                 // 是文件夹
                 record_current_path();
-                char new_path[1024];
                 cat_path(fdir[click_index].filename);
                 paint_dir(current_path);
+            }
+            else
+            {
+                // 是文件
+                char file_path[1024];
+                memset(file_path, 0, 1024);
+                strcat(file_path, current_path);
+                strcat(file_path, "/");
+                strcat(file_path, fdir[click_index].filename);
+                xapi_Run(file_path);
             }
         }
         if (need_paint)

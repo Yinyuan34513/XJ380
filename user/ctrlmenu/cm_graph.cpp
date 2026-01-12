@@ -162,3 +162,8 @@ void draw_setting_apps()
         xapi_Button(handle, i, win_width - 100, 168 + i * 32, "更改");
     }
 }
+
+void create_input_box(char *buf)
+{
+    xapi_DrawRect(handle, win_width / 2 - 300, win_height / 2 - 30, win_width / 2 + 300, win_height / 2 + 30, 0x00a2e8ff, true);
+}
