@@ -16,6 +16,9 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         process_left_key(hData, lData);
         break;
+    case MSG_CRL:
+        if (lData < 2000) { create_input_box((char *)lData); } // cm_graph.cpp:145
+        break;
     }
     return;
 }

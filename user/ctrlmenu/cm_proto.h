@@ -29,5 +29,7 @@ void draw_background();
 void process_left_key(int x, int y);
 void draw_mainpage();
 void draw_setting();
+void create_input_box(char *buf);
 
 void draw_setting_apps();
+

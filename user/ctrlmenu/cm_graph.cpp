@@ -5,6 +5,8 @@
 
 int cindex = 1;
 
+bool dont_refresh = false;
+
 char wdaystr_table[7][20] = {
     "星期日",
     "星期一",
@@ -17,6 +19,8 @@ char wdaystr_table[7][20] = {
 
 void draw_background()
 {
+    if (dont_refresh) return;
+
     xapi_DrawRect(handle, 0, 0, win_width - 1, win_height - 1, 0x4d4d4dea, true);
     xapi_DrawText(handle, 30, 18, "控制中心", 40, 0xffffffff);
     xapi_DrawRect(handle, 0, 116, win_width - 1, 120, 0x00a2e8ff, true);
@@ -165,5 +169,11 @@ void draw_setting_apps()
 
 void create_input_box(char *buf)
 {
-    xapi_DrawRect(handle, win_width / 2 - 300, win_height / 2 - 30, win_width / 2 + 300, win_height / 2 + 30, 0x00a2e8ff, true);
+    dont_refresh = true;
+    xapi_DrawRect(handle, win_width / 2 - 300, win_height / 2 - 50, win_width / 2 + 300, win_height / 2 + 50, 0x007accff, true);
+    xapi_DrawText(handle, win_width / 2 - 300 + 8, win_height / 2 - 50 + 4, "输入新的值：", 11, 0xffffffff);
+    xapi_DrawRect(handle, win_width / 2 - 300 + 8, win_height / 2 - 10, win_width / 2 + 300 - 8, win_height / 2 + 10, 0xfffffffff, true);
+    xapi_Button(handle, 114514, win_width / 2 + 300 - 58, win_height / 2 + 50 - 32, "取消");
+    xapi_Button(handle, 114515, win_width / 2 + 300 - 116, win_height / 2 + 50 - 32, "确定");
+    xapi_RefreshPartWindow(handle, win_width / 2 - 300, win_height / 2 - 50, win_width / 2 + 300, win_height / 2 + 50);
 }
