@@ -39,7 +39,7 @@ uint64_t do_xapi_OpenFile(uint64_t path)
     }
     uint64_t length = f->size;
     fsptr->buffer   = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, length,  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    if (!fsptr->buffer)
+    if ((int64_t)fsptr->buffer == -1)
     {
         vfs_close(f);
         unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));

@@ -144,12 +144,12 @@ void draw_setting_apps()
     xapi_GetCurrentUser(&usif);
     char runfile_path[256];
     memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/Users");
+    strcat(runfile_path, "/Users/");
     strcat(runfile_path, usif.name);
     strcat(runfile_path, "/runfile.dat");
     XFILE *f = xapi_OpenFile(runfile_path);
     if (!f) return;
     RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
     xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "默认应用", 16, 0xffffffff);
-    xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, rff->items[0].describe, 11, 0xffffffff);
+    xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, xcr_hex2char((uint64_t)f->buffer), 11, 0xffffffff);
 }
