@@ -27,6 +27,11 @@ struct RunfileSettings_Format
     RunfileSettings_Item items[1024];
 };
 
+struct SettingsDataFileFormat
+{
+    char BackgroundFilePath[256];
+};
+
 void draw_background();
 void process_left_key(int x, int y);
 void draw_mainpage();
@@ -39,3 +44,4 @@ void delete_input_box();
 void draw_setting_apps();
 void change_setting_apps(int id);
 
+void change_setting_background();

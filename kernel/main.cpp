@@ -161,6 +161,13 @@ void desktop_flusher()
     disable_intr();
     disable_scheduler();
 
+
+
+    // 之后应该挪到OOBE里的部分
+    init_runfile();
+
+
+    
     write_serial_string("desktop flusher is running\n");
 
     SHEET_INFO shtinf;
@@ -293,14 +300,11 @@ void desktop_flusher()
 
     desktop_done = true;
 
-    // 之后应该挪到OOBE里的部分
-    init_runfile();
-
     delay_s_hp(1);
 
     char *argv[2]    = {"/Users/GuoqiFish/runfile.dat", NULL};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/texter.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);

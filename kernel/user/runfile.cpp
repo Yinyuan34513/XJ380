@@ -54,6 +54,29 @@ void init_runfile()
     strcpy(file_format->items[1].runpath,  "/system/texter.elf");
 
     vfs_write(settings_file_v, settings_file_buffer, 0, sizeof(RunfileSettings_Item) * 1024);
+
+    vfs_close(settings_file_v);
+
+
+
+    // 回收再利用
+    memset(runfile_setfile_path, 0, 256);
+    strcat(runfile_setfile_path, "/Users/");
+    strcat(runfile_setfile_path, current_user->name);
+    strcat(runfile_setfile_path, "/settings.dat");
+    vfs_mkfile(runfile_setfile_path);
+
+    char  settings_data_buffer[sizeof(SettingsDataFileFormat)];
+    settings_file_v = vfs_open(runfile_setfile_path);
+    if (!settings_file_v) return;
+
+    SettingsDataFileFormat *file_data = (SettingsDataFileFormat *)settings_data_buffer;
+
+    strcpy(file_data->BackgroundFilePath, "/system/image/BackGround.png");
+
+    vfs_write(settings_file_v, settings_data_buffer, 0, sizeof(SettingsDataFileFormat));
+
+    vfs_close(settings_file_v);
 }
 
 void runfile(char *path)

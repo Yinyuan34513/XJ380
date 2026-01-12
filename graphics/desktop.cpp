@@ -43,19 +43,36 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     int           scry = sht->scry;
     // #136dff
     // draw_rect(sht, ct_sheet, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
+
+    // 获取路径
+    char runfile_setfile_path[256];
+    memset(runfile_setfile_path, 0, 256);
+    strcat(runfile_setfile_path, "/Users/");
+    strcat(runfile_setfile_path, current_user->name);
+    strcat(runfile_setfile_path, "/settings.dat");
+    vfs_mkfile(runfile_setfile_path);
+
+    char  settings_file_buffer[sizeof(SettingsDataFileFormat)];
+    vfs_node_t settings_file_v = vfs_open(runfile_setfile_path);
+    if (!settings_file_v) return;
+    vfs_read(settings_file_v, settings_file_buffer, 0, sizeof(SettingsDataFileFormat));
+
+    SettingsDataFileFormat *file_format = (SettingsDataFileFormat *)settings_file_buffer;
+
+    // 渲染
     SHEET_BUFFER *buff = (SHEET_BUFFER *)malloc(scrx * scry * 4);
     int           w, h, bpp;
-    vfs_node_t    v = vfs_open("/system/image/BackGround.png");
+    vfs_node_t    v = vfs_open(file_format->BackgroundFilePath);
     if (!v)
     {
-        write_serial_fmt("init_desktop: cannot open '%s'\n", "/system/image/BackGround.png");
+        write_serial_fmt("init_desktop: cannot open '%s'\n", file_format->BackgroundFilePath);
         return;
     }
     unsigned char *bf = (unsigned char *)malloc(v->size);
     if (!bf)
     {
         write_serial_fmt("init_desktop: failed to allocate %u bytes for '%s'\n", (unsigned)v->size,
-                         "/system/image/BackGround.png");
+                         file_format->BackgroundFilePath);
         vfs_close(v);
         return;
     }
@@ -64,7 +81,7 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     free(bf);
     if (!b)
     {
-        write_serial_fmt("init_desktop: decode failed for '%s' (%u bytes)\n", "/system/image/BackGround.png",
+        write_serial_fmt("init_desktop: decode failed for '%s' (%u bytes)\n", file_format->BackgroundFilePath,
                          (unsigned)v->size);
         vfs_close(v);
         return;
