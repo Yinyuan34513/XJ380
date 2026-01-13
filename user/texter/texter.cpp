@@ -35,6 +35,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.height = TXR_Y;
     Winfo.sets   = XWIN_NORMAL;
     xapi_CreateWindow(&handle, &Winfo);
+    xapi_SetIcon(handle, "/system/icon/texter.png");
     SetMsgPrcor(handle, texter_MessagePrcor);
 
     XFILE *f = xapi_OpenFile(file_path);

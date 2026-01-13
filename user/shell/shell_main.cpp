@@ -50,6 +50,7 @@ int main(int argc, char *argv[], char *envp[])
     Winfo.height = TML_Y;
     Winfo.sets   = XWIN_NORMAL;
     xapi_CreateWindow(&handle, &Winfo);
+    xapi_SetIcon(handle, "/system/icon/terminal.png");
     SetMsgPrcor(handle, shell_MessagePrcor);
 
     mark_terminal();
