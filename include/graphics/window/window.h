@@ -13,8 +13,7 @@ typedef void (*MsgPrcor)(uint64_t Type, uint64_t hData,
 typedef struct WINDOWLS
 {
     SHEET  *w_sheet;
-    uint8_t   title_length;
-    CHAR8    *title;
+    CHAR8     title[256];
     uint16_t  number;
     uint32_t  width;
     uint32_t  height;

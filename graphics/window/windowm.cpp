@@ -177,6 +177,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->width  = width;
     new_window->height = height;
 
+    strcpy(new_window->title, title);
+
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
