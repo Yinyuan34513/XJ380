@@ -174,7 +174,7 @@ extern void remove_task(tcb_t task);
 void kill_thread0(tcb_t task)
 {
     task->status = OUT;
-    free((void *)(task->syscall_stack - KERNEL_STACK_SIZE));
+    free_frames((uint64_t)virt_to_phys((task->syscall_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
     page_directory_t *src_dir = get_current_directory();
     switch_process_page_directory(task->parent_group->pagedir);
     switch_process_page_directory(src_dir);
@@ -600,7 +600,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     tcb_t parent_task = get_current_task();
 
-    tcb_t new_task = (tcb_t)malloc(KERNEL_STACK_SIZE);
+    tcb_t new_task = (tcb_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
     if (new_task == NULL) return (uint64_t)-(ENOMEM);
     memset(new_task, 0, sizeof(struct thread_control_block));
     new_task->task_level     = TASK_APPLICATION_LEVEL;
@@ -692,7 +692,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
-    tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
+    tcb_t new_task = (tcb_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
 
@@ -768,7 +768,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
         return (size_t)-(EINVAL);
     }
-    tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
+    tcb_t new_task = (tcb_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
 
@@ -796,8 +796,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)switch_to_user_mode;
     new_task->context0.rsp    = (uint64_t)stack_top;
-    new_task->kernel_stack    = (uint64_t)stack_top;
-    new_task->syscall_stack   = (uint64_t)aligned_alloc(PAGE_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
+    new_task->kernel_stack    = (uint64_t)new_task + KERNEL_STACK_SIZE;
+    new_task->syscall_stack   = (uint64_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
 
     new_task->cwd = vfs_open(cwd);
     new_task->cwd->refcount++;
@@ -839,7 +839,7 @@ size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uin
     spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
-    tcb_t new_task = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
+    tcb_t new_task = (tcb_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
 
@@ -868,6 +868,7 @@ size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uin
     new_task->context0.rip     = (uint64_t)jump_to_signal;
     new_task->context0.rsp     = (uint64_t)stack_top;                        // 设置上下文
     new_task->kernel_stack     = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
+    new_task->syscall_stack    = (uint64_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
     new_task->context0.cs      = 0x8;
     new_task->context0.ss      = 0x10;
     new_task->context0.es      = 0x10;
@@ -946,7 +947,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
 
 extern "C" uint64_t switch_to_kernel_stack()
 {
-    return get_current_task()->kernel_stack;
+    return get_current_task()->syscall_stack;
 }
 
 bool       smp_scheduler_lock = true;
