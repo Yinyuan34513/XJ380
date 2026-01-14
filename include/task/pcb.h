@@ -161,6 +161,7 @@ struct thread_control_block
 
     uint64_t winnum;
     bool     hasfscr;
+    lock_queue *message_queue;  // message消息队列
 
     uint64_t window_count;
 };
@@ -179,10 +180,8 @@ void     process_setup();
 void     switch_to_user_mode();
 void get_thread_name_from_filepath(char *path, char *name);
 
-size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func,
-                            pcb_t pcb);
+size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb);
 
-void addque_killer(pcb_t group);
 void init_killer();
 
 typedef void (*elf_start)(int, char **, char **);

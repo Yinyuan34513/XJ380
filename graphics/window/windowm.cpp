@@ -349,3 +349,17 @@ WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread)
         front_p = front_p->next;
     }
 }
+
+WINDOWLS *mpf_found_win(MsgPrcor mpf)
+{
+    if (mpf == NULL) { return NULL; }
+
+    WINDOWLS *front_p = xwmii->start;
+    if (front_p == NULL) { return NULL; }
+    while (true)
+    {
+        if (front_p->WinMPf == mpf) { return front_p; }
+        else if (front_p->next == NULL) { return NULL; }
+        front_p = front_p->next;
+    }
+}

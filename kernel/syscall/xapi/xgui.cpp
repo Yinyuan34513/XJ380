@@ -460,7 +460,7 @@ int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func)
 {
     WINDOW_HANDLE *WindowHandle         = (WINDOW_HANDLE *)(handle);
-    WindowHandle->WindowNodePtr->WinMPf = (MsgPrcor)(func);
+    init_window_message(WindowHandle->WindowNodePtr, (MsgPrcor)(func));
 
     return true;
 }

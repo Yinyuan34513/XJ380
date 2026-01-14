@@ -356,12 +356,11 @@ void switch_to_user_mode()
                      : "memory");
 }
 
-void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t rf)
+void jump_to_message(uint64_t tcb)
 {
     close_interrupt;
     uint64_t *rsp = (uint64_t *)get_current_task()->user_stack_top;
-    PUSH_STACK(rsp, 0);  // 对齐
-    PUSH_STACK(rsp, rf); // 返回程序
+    
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
 
@@ -373,13 +372,11 @@ void jump_to_signal(uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t 
                      "pushq %3\n"      // CS
                      "pushq %4\n"      // RIP
                      "mov %6, %%rdi\n" // arg1
-                     "mov %7, %%rsi\n" // arg2
-                     "mov %8, %%rdx\n" // arg3
                      "iretq\n"
                      :
                      : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"((uint64_t)rsp),
                        "r"(get_current_task()->context0.rflags), "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b),
-                       "r"(msg_type), "r"(data1), "r"(data2)
+                       "r"(tcb)
                      : "memory");
 }
 
@@ -833,12 +830,16 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     return new_task->tid;
 }
 
-size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uint64_t data2, uint64_t revert_func,
-                            pcb_t pcb)
+size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb)
 {
     spin_lock(create_thread_lock);
     close_interrupt;
     disable_scheduler();
+    if (!cwd)
+    {
+        write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
+        return (size_t)-(EINVAL);
+    }
     tcb_t new_task = (tcb_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
 
     memset(new_task, 0, KERNEL_STACK_SIZE);
@@ -858,39 +859,41 @@ size_t create_signal_thread(void *_start, uint64_t msg_type, uint64_t data1, uin
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
     new_task->cpu_id     = get_current_cpu()->processor_id;
-    memcpy(new_task->name, "Window Message Thread", strlen("Window Message Thread") + 1);
+    memcpy(new_task->name, name, strlen(name) + 1);
+    
+    new_task->context0.rdi = (uint64_t)tcb;
 
-    ptr_cast_t cast;
-    cast.ptr                   = new_task;
-    cast.val                  += KERNEL_STACK_SIZE;
-    uint64_t *stack_top        = (uint64_t *)(cast.ptr);
-    new_task->context0.rflags  = 0x202;
-    new_task->context0.rip     = (uint64_t)jump_to_signal;
-    new_task->context0.rsp     = (uint64_t)stack_top;                        // 设置上下文
-    new_task->kernel_stack     = (new_task->context0.rsp &= ~(uint64_t)0xF); // 栈16字节对齐
-    new_task->syscall_stack    = (uint64_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
-    new_task->context0.cs      = 0x8;
-    new_task->context0.ss      = 0x10;
-    new_task->context0.es      = 0x10;
-    new_task->context0.ds      = 0x10;
-    new_task->status           = CREATE;
-    new_task->main             = (uint64_t)_start;
+    uint64_t *stack_top       = (uint64_t *)((uint64_t)new_task + KERNEL_STACK_SIZE);
+    *(--stack_top)            = 0;
+    *(--stack_top)            = 0;
+    *(--stack_top)            = (uint64_t)jump_to_message;
+    new_task->context0.rflags = 0x202;
+    new_task->context0.rip    = (uint64_t)jump_to_message;
+    new_task->context0.rsp    = (uint64_t)stack_top;
+    new_task->kernel_stack    = (uint64_t)new_task + KERNEL_STACK_SIZE;
+    new_task->syscall_stack   = (uint64_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
 
-    new_task->context0.rdi = msg_type;
-    new_task->context0.rsi = data1;
-    new_task->context0.rdx = data2;
-    new_task->context0.rcx = revert_func;
+    new_task->cwd = vfs_open(cwd);
+    new_task->cwd->refcount++;
+    write_serial_fmt("CWD %s\n", new_task->cwd->name);
+    new_task->str_cwd = cwd;
 
-    stack_top = (uint64_t *)new_task->kernel_stack;
-    PUSH_STACK(stack_top, (uint64_t)_start);
-    PUSH_STACK(stack_top, (uint64_t)jump_to_signal);
-    new_task->context0.rsp = (uint64_t)stack_top;
-    new_task->kernel_stack = (new_task->context0.rsp);
+    new_task->winnum  = 0;
+    new_task->hasfscr = false;
+
+    new_task->user_info = current_user;
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+    new_task->main           = (uint64_t)_start;
+    new_task->context0.cs    = 0x8;
+    new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
+    new_task->status                                                      = CREATE;
 
     new_task->fs_base = (uint64_t)new_task;
+
+    new_task->window_count = 0;
+
     add_task(new_task);
     if (!no_interrupt)
     {

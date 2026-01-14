@@ -8,11 +8,64 @@
 #include <task/pcb.h>
 #include <mm/frame.h>
 
-// 信号恢复函数
-void message_revert()
+void init_window_message(WINDOWLSP window, MsgPrcor func)
 {
-    // 通过系统调用返回
-    __asm__ __volatile__("syscall" : : "a"(SXAH_SYSCALL_RETURN) : "rcx", "r11", "memory");
+    tcb_t current = window->w_task;
+    window->WinMPf = func;
+
+    current->message_queue = queue_init();
+    create_message_thread((void *)(XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST), 
+                        "Window Message Thread", current->parent_group, 
+                        strdup(current->str_cwd), current);
+}
+
+// Message 线程
+void message_thread(tcb_t task)
+{
+    // 自旋等待输入内容
+    uint64_t msg_type, hData, lData;
+    MsgPrcor func;
+    while (true)
+    {
+        uint64_t      ret = 0;
+        register long r10 __asm__("r10") = (uint64_t)&func;
+        register long r8 __asm__("r8")   = (uint64_t)task;
+        __asm__ __volatile__("syscall"
+                            : "=a"(ret)
+                            : "a"(SXAH_MESSAGE_ASK), "D"((uint64_t)&msg_type), "S"((uint64_t)&hData), "d"((uint64_t)&lData), "r"(r10), "r"(r8)
+                            : "rcx", "r11", "memory");
+        if (ret)
+        {
+            // 发送message
+            func(msg_type, hData, lData);
+        }
+        __asm__ volatile("pause\n\t");
+    }
+}
+
+uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp)
+{
+    uint64_t *msg_type  = (uint64_t *)msg_type_p;
+    uint64_t *hData     = (uint64_t *)hdatap;
+    uint64_t *lData     = (uint64_t *)ldatap;
+    MsgPrcor *func      = (MsgPrcor *)funcp;
+    tcb_t     current   = (tcb_t)taskp;
+
+    if (current->message_queue->size > 0)
+    {
+        // 有待发送的消息，寻找第一个
+        lock_node *qc = current->message_queue->head;
+        MessageInfoFormat *mif = (MessageInfoFormat *)qc->data;
+        *func     = mif->WinMpf;
+        *msg_type = mif->msg_type;
+        *hData    = mif->hData;
+        *lData    = mif->lData;
+        // 从队列中去掉，释放资源
+        free(mif);
+        queue_remove_at(current->message_queue, qc->index);
+        return 1;
+    }
+    return 0;
 }
 
 void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask)
@@ -27,26 +80,17 @@ void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinM
     }
 
     // 检查是否有注册的信号处理函数
-    if (WinMpf != NULL)
+    if (WinMpf != NULL && ftask->message_queue != NULL)
     {
-        // current->parent_group->msgprci = true;
-        // 准备信号处理栈
-        create_signal_thread((void *)WinMpf, msg_type, hData, lData, 
-                             XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST, 
-                             current->parent_group);
+        // 将内容加入队列
+        MessageInfoFormat *mif = (MessageInfoFormat *)malloc(sizeof(MessageInfoFormat));
+        mif->WinMpf = WinMpf;
+        mif->msg_type = msg_type;
+        mif->hData = hData;
+        mif->lData = lData;
+        queue_enqueue(ftask->message_queue, mif);
     }
     // 空的就不用管了
-}
-
-void message_end() 
-{
-    // get_current_task()->parent_group->msgprci = false;
-    kill_thread(get_current_task()); // 他紫砂了
-    while (true)
-    {
-        scheduler_yield();
-        __asm__ volatile("pause\n\t");
-    }
 }
 
 void init_message()
@@ -56,7 +100,7 @@ void init_message()
                              PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
                              
     memcpy((void *)(XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST), 
-           (void *)message_revert, 0xff);   // 我也不知道这个会有多大，就这样吧先
+           (void *)message_thread, 0xff);   // 我也不知道这个会有多大，就这样吧先
 
     write_serial_fmt("XJ380 Message Initialize Success.\n");
 }
