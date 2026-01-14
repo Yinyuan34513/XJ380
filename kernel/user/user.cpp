@@ -151,6 +151,8 @@ uint64_t parse_elf_file(char *path, pcb_t group)
                              mapping_space->load_end - mapping_space->load_start,
                              PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
 
+    page_directory_t *current_pagedir = get_current_directory();
+
     switch_page_directory(group->pagedir);
 
     memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
@@ -226,6 +228,8 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
+    switch_page_directory(current_pagedir); // 恢复页表
+
     // 设置程序入口点
     return entry;
 }
@@ -279,7 +283,7 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
-    page_directory_t *new_directory = clone_page_directory(get_current_directory(), true);
+    page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), true);
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);

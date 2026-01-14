@@ -130,7 +130,7 @@ void WriteHex(const FrameBufferConfig &fbc, int x, int y, unsigned long long hex
 }
 
 // 下面是图层专属
-void PrintFont(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, char ch, const SHEET_BUFFER &color)
+void PrintFont(SHEET_INFO *sht, SHEET *csheet, int x, int y, char ch, const SHEET_BUFFER &color)
 {
     const uint8_t *font = GetFont(ch); // 获取字体
     if (font == nullptr) return;       // 不存在字体，直接退出
@@ -140,7 +140,7 @@ void PrintFont(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, char ch, const
         { // 第几列
             if ((font[dy] << dx) & 0x80u)
             {                                                     // 判断第dx位是否为1
-                draw_point(sht, sheet_id, x + dx, y + dy, color); // 在x和y的基础上，偏移dx,dy绘制像素
+                draw_point(sht, csheet, x + dx, y + dy, color); // 在x和y的基础上，偏移dx,dy绘制像素
             }
         }
     }
@@ -149,7 +149,7 @@ void PrintFont(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, char ch, const
 typedef struct FbFontWriterData
 {
     SHEET_INFO  *sht;
-    uint16_t    *sheet_id;
+    SHEET    *ct_sheet;
     SHEET_BUFFER color;
     int          x;
     int          y;
@@ -168,7 +168,7 @@ uint8_t FbFontWriter(Writer *writer, char ch)
         char *s = data->buf;
         while (*s)
         {
-            PrintFont(data->sht, data->sheet_id, data->x, data->y, *s,
+            PrintFont(data->sht, data->ct_sheet, data->x, data->y, *s,
                       data->color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
             data->x += 8;
             s++;
@@ -183,7 +183,7 @@ uint8_t FbFontWriter(Writer *writer, char ch)
     return 1;
 }
 
-void PrintFmt(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUFFER &color, const char *fmt, ...)
+void PrintFmt(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &color, const char *fmt, ...)
 {
     spin_lock(fb_print_lock);
     va_list args;
@@ -193,7 +193,7 @@ void PrintFmt(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUF
 
     FbFontWriterData fb_font_writer_data = {
         .sht      = sht,
-        .sheet_id = sheet_id,
+        .ct_sheet = csheet,
         .color    = color,
         .x        = x,
         .y        = y,
@@ -217,18 +217,18 @@ void PrintFmt(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const SHEET_BUF
     spin_unlock(fb_print_lock);
 }
 
-void PrintString(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, const char *s, const SHEET_BUFFER &color)
+void PrintString(SHEET_INFO *sht, SHEET *csheet, int x, int y, const char *s, const SHEET_BUFFER &color)
 {
     spin_lock(fb_print_lock);
     for (int i = 0; s[i]; i++)
     { // 遍历字符串每一个字符，看看是不是空字符
-        PrintFont(sht, sheet_id, x + 8 * i, y, s[i],
+        PrintFont(sht, csheet, x + 8 * i, y, s[i],
                   color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
     }
     spin_unlock(fb_print_lock);
 }
 
-void PrintHex(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)
+void PrintHex(SHEET_INFO *sht, SHEET *csheet, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)
 {
     // 输出16进制
     char  buf[32];
@@ -260,10 +260,10 @@ void PrintHex(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
         }
     }
     *p = '\0';                                    // 结束符
-    PrintString(sht, sheet_id, x, y, buf, color); // 打印
+    PrintString(sht, csheet, x, y, buf, color); // 打印
 }
 
-void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long long dec, const SHEET_BUFFER &color)
+void PrintDec(SHEET_INFO *sht, SHEET *csheet, int x, int y, unsigned long long dec, const SHEET_BUFFER &color)
 {
     char     str[255];
     int      radix   = 10;
@@ -304,5 +304,5 @@ void PrintDec(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, unsigned long l
         str[j]             = str[i - 1 + k - j]; // 尾部赋值给头部
         str[i - 1 + k - j] = temp;               // 将临时变量的值(其实就是之前的头部值)赋给尾部
     }
-    PrintString(sht, sheet_id, x, y, str, color);
+    PrintString(sht, csheet, x, y, str, color);
 }

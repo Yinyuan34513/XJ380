@@ -24,6 +24,8 @@ typedef  struct {
 typedef struct {
 	uint64_t    length;
 	void*	    buffer;
+    // 以下成员隐藏
+    char path[256];
 } XFILE;
 
 
@@ -39,8 +41,18 @@ typedef struct {
 #define SXAH_READ_OUTPUT_BUFFER     128956723895689206      // 读取XTTTP输出缓冲区
 #define SXAH_CHECK_INPUT_BUFFER     128956723895689207      // 检查是否需要输入
 #define SXAH_UNLOCK_OUTPUT_LOCK     128956723895689208      // 完成输出，关闭输出锁
+#define SXAH_MESSAGE_ASK            128956723895689209      // message查询
 
 #define SXAH_CHECK_TERMINAL_INIT_STATUS  3801    // 查询终端初始化状态
+
+typedef struct
+{
+    MsgPrcor WinMpf;
+    uint64_t msg_type;
+    uint64_t lData;
+    uint64_t hData;
+} MessageInfoFormat;
+
 
 // define
 typedef struct {
@@ -91,6 +103,8 @@ typedef struct {
 #define XAPI_BROKEN         428
 #define XAPI_SEND_APP_MSG   429
 #define XAPI_SLEEP          430
+
+#define XAPI_RUN            439
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -155,7 +169,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：438
+// 当前最大号：439
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -206,6 +220,7 @@ uint64_t do_xapi_GetMemorySize();
 void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t count);
 void do_xapi_DeleteRightButtonMenu(uint64_t handle);
 int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
+void do_xapi_Run(char *path);
 
 
 
@@ -214,5 +229,6 @@ void init_syscall();
 // Proto (XAPI Edition)
 void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask);
 void init_message();
-void message_revert();
-void message_end();
+void init_window_message(WINDOWLSP window, MsgPrcor func);
+void message_thread(tcb_t task);
+uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);

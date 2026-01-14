@@ -268,3 +268,8 @@ void 	xapi_Sleep(UINT64 ms)
 {
 	enter_syscall(XAPI_SLEEP, ms, 0, 0, 0, 0, 0);
 }
+
+void 	xapi_Run(WSTR path)
+{
+	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
+}

@@ -31,7 +31,11 @@ void check_group(pcb_t group)
         tcb_t thread = (tcb_t)front_p->data;
         if (thread->status != OUT || thread->status != DEATH)
         {
-            group_dead = false;
+            if (strcmp(thread->name, "Window Message Thread") != 0)
+            {
+                // 不是消息线程才算
+                group_dead = false;
+            }
         }
         front_p = front_p->next;
     }

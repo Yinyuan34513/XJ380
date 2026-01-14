@@ -68,7 +68,7 @@ void process_click_event(SHEET *current_sht, int x, int y)
         {
             break;
         }
-        else if (front_p->obj_sheet->index == current_sht->index)
+        else if (front_p->obj_sheet == current_sht)
         {
             WINDOWLSP current_window = sht_found_win(xwmii, sht_img, current_sht);
             if (x >= front_p->x1 && x <= front_p->x2 
@@ -93,12 +93,12 @@ void put_button_theme(WINDOWLS *windowls, int x, int y, char *str, int CRLid, bo
     if (!underline) { LoadPictureOgM(&mtl, "/system/icon/button.png"); }
     else { LoadPictureOgM(&mtl, "/system/icon/buttonemp.png"); }
     resize_theme_width(dst, mtl, width + 22, 52, 24);
-    copy_buffer_blend_by_id(sht_img, &(windowls->w_sheet), dst, x, y, width + 22, 24);
-    register_button_components(found_sheet_byid(sht_img, &(windowls->w_sheet)), 
+    copy_buffer_blend_by_id(sht_img, windowls->w_sheet, dst, x, y, width + 22, 24);
+    register_button_components(found_sheet_byid(sht_img, windowls->w_sheet), 
                                x, y, x + width + 22, y + 24, CRLid);
 
-    if (!underline) { print_box_ttf(sht_img, &(windowls->w_sheet), str, {0x00, 0x00, 0x00, 0xff}, x + 12, y + 2, 10); }
-    else { print_box_ttf(sht_img, &(windowls->w_sheet), str, {0xff, 0xff, 0xff, 0xff}, x + 12, y + 2, 10); }
+    if (!underline) { print_box_ttf(sht_img, windowls->w_sheet, str, {0x00, 0x00, 0x00, 0xff}, x + 12, y + 2, 10); }
+    else { print_box_ttf(sht_img, windowls->w_sheet, str, {0xff, 0xff, 0xff, 0xff}, x + 12, y + 2, 10); }
     
     free(mtl);
     free(dst);

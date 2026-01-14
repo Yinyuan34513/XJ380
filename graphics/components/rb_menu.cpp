@@ -71,18 +71,18 @@ void unregister_right_rb_button_menu_components(WINDOWLSP win)
     }
 }
 
-extern uint16_t dock_sheet_id;
+extern SHEET *dock_ct_sheet;
 
 void place_menu(rb_menu_regt_p regt)
 {
-    draw_rect(sht_img, &dock_sheet_id, 
+    draw_rect(sht_img, dock_ct_sheet, 
               regt->x, regt->y, 
               regt->x + 199, regt->y + 30 * regt->count - 1, 
               {0xed, 0xed, 0xed, 0xff});
 
     for (int i = 0; i < regt->count; i++)
     {
-        print_box_ttf(sht_img, &dock_sheet_id, regt->items[i].text, {0,0,0,255}, 
+        print_box_ttf(sht_img, dock_ct_sheet, regt->items[i].text, {0,0,0,255}, 
                       regt->x + 8, regt->y + 30 * i + 4, 11);
     }
 
@@ -112,14 +112,14 @@ void close_menu(WINDOWLSP win, int x, int y)
                 }
             }
 
-            draw_rect(sht_img, &dock_sheet_id, 
+            draw_rect(sht_img, dock_ct_sheet, 
                       front_p->x, front_p->y, 
                       front_p->x + 199, front_p->y + 30 * front_p->count - 1, 
                       {0,0,0,0});
             refresh_part_sheet(sht_img, front_p->x, front_p->y, 
                       front_p->x + 200, front_p->y + 30 * front_p->count);
-            init_dock(sht_img, &dock_sheet_id);
-            init_shortcut_dock(sht_img, &dock_sheet_id);
+            init_dock(sht_img, dock_ct_sheet);
+            init_shortcut_dock(sht_img, dock_ct_sheet);
             front_p->x = 0;
             front_p->y = 0;
             front_p->can_r = false;

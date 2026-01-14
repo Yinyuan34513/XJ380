@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "./settings.h"
+
 typedef enum
 {
     XUT_Root,

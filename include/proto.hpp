@@ -12,7 +12,7 @@
 #include <stdint.h>
 extern SHEET_INFO *sht_img;
 extern XWM_INFO   *xwmii;
-extern uint16_t   *msid;
+extern SHEET   *msid;
 
 #define close_interrupt disable_intr()
 #define open_interrupt  enable_intr()
@@ -235,8 +235,8 @@ void process_mouse_info();
 bool mousedecode(uint8_t data);
 int  get_mouse_x();
 int  get_mouse_y();
-void draw_mouse(SHEET_INFO *sht, uint16_t *sheet_id);
-void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
+void draw_mouse(SHEET_INFO *sht, SHEET *csheet);
+void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py);
 
 /*
  *
@@ -247,15 +247,15 @@ void move_mouse(SHEET_INFO *sht, uint16_t *sheet_id, int px, int py);
 // kernel/task/user.cpp
 void create_user_thread_from_file(char *path, pcb_t pcb);
 void create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
-void PrintPicture(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
-void PrintPicture_blend(SHEET_INFO *sht, uint16_t *sheet_id, int x, int y, int ow, int oh, char *path);
+void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
+void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
-void copy_buffer_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height);
-void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x,
+void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x,
                                      uint32_t dst_y, uint32_t width, uint32_t height);
-void copy_buffer_blend_by_id(SHEET_INFO *sht, uint16_t *dst_sheet_id, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
+void copy_buffer_blend_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                              uint32_t width, uint32_t height);
 
 void backtrace(struct X64_REGS *regs);
