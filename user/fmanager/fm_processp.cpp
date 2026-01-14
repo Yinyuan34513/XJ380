@@ -35,7 +35,7 @@ void register_click(int x, int y)
 
     click_x = x;
     click_y = y;
-    if (first_click && xapi_GetTime() - clicktime_recorder < 3)
+    if (first_click && xapi_GetTime() - clicktime_recorder < 2)
     {
         double_click = true;
         first_click = false;

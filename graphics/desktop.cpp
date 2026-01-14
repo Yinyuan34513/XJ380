@@ -505,6 +505,18 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
     flush_task_dock();
 }
 
+TDB_t find_dock_icon(int index)
+{
+    TDB_t front_p = first_dock_block;
+    for (int i = 0; i < index + 1; i++)
+    {
+        if (front_p->next == NULL) { return NULL; }
+        front_p = front_p->next;
+    }
+
+    return front_p;
+}
+
 void draw_app_message_box(char *title, char *text)
 {
     if (have_full_screen_app) return;

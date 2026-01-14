@@ -47,7 +47,7 @@ void process_mouse_button()
         tm t;
         time_read(&t);
         uint64_t click_time = mktime(&t);
-        if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 3)
+        if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 2)
         {
             ms_dec.first_click = false;
             ms_dec.double_click = true;
@@ -129,6 +129,18 @@ void process_mouse_button()
             if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
             {
                 create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+            }
+            else if (tbx > 132 && tby > sht_img->scry - 24 - 63 && !have_full_screen_app)
+            {
+                TDB_t tdb = find_dock_icon((tbx - 132) / 80);
+                if (tdb)
+                {
+                    lift_sheet(sht_img, tdb->windowls->w_sheet);
+                    focus_window_dock(tdb->windowls);
+                    refresh_part_sheet(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
+                                   tdb->windowls->w_sheet->bx + tdb->windowls->w_sheet->width,
+                                   tdb->windowls->w_sheet->by + tdb->windowls->w_sheet->height);
+                }
             }
         }
         close_menu(current_window, tbx, tby);
@@ -290,7 +302,6 @@ void process_mouse_info()
                 if (ms_dec.double_click)
                 {
                     ms_dec.double_click = false;
-                    write_serial_fmt("Double Click!\n");
                     process_desktop_find_block(tbx, tby);
                 }
             }
