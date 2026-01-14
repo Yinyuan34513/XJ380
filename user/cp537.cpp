@@ -31,6 +31,17 @@ void draw_uparrow(HDLE handle, int x, int y)
     }
 }
 
+void cp537_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
+{
+    switch (Type)
+    {
+    case MSG_CRL:
+        xapi_OutputSerial("114514\n");
+        break;
+    }
+    return;
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
     (void)argc;
@@ -44,6 +55,9 @@ int main(int argc, char *argv[], char *envp[])
     // window.sets = NORMAL;
     HDLE handle;
     xapi_CreateWindow(&handle, &window);
+    SetMsgPrcor(handle, cp537_MessagePrcor);
+
+    xapi_Button(handle, 0, 0, 0, "测试");
 
     // 以下颜色用的都是ARGB，不知道用不用调
     xapi_DrawText(handle, 10, 27, (char *)"山地奥斯卡537 2023/8/14 20:35:14", 10, 0x45459eff);
@@ -54,7 +68,7 @@ int main(int argc, char *argv[], char *envp[])
     xapi_DrawRect(handle, 26, 107, 76, 126, 0x92bbffff, true); // @Hmtc长度5*8=40，此处沿用旧设定，如果不对需要改
     xapi_DrawText(handle, 28, 106, (char *)"@Hmtc", 10, 0x000000ff);
     xapi_DrawText(handle, 80, 106, (char *)"老兄，中文不支持UTF-8，因为中文是双字符", 10, 0x000000ff);
-    draw_uparrow(handle, 365, 75);
+    draw_uparrow(handle, 365, 50);
     xapi_RefreshWindow(handle);
     // xapi_CloseWindow(handle);
     execve((char *)"/shell.elf", NULL, NULL);

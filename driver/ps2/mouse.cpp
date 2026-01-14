@@ -30,11 +30,9 @@ extern bool have_full_screen_app;
 spin_t mouse_info_processing = SPIN_INIT;
 void process_mouse_button()
 {
-    open_interrupt;
+    close_interrupt;
 
     spin_lock(mouse_info_processing);
-
-    close_interrupt;
 
     if (ms_dec.btn & 0x01)
     {
