@@ -53,6 +53,18 @@ void init_runfile()
     strcpy(file_format->items[1].describe, "配置文件");
     strcpy(file_format->items[1].runpath,  "/system/texter.elf");
 
+    strcpy(file_format->items[2].exname,   "png");
+    strcpy(file_format->items[2].describe, "PNG 图片文件");
+    strcpy(file_format->items[2].runpath,  "/system/picturer.elf");
+
+    strcpy(file_format->items[3].exname,   "jpg");
+    strcpy(file_format->items[3].describe, "JPEG 图片文件");
+    strcpy(file_format->items[3].runpath,  "/system/picturer.elf");
+
+    strcpy(file_format->items[4].exname,   "bmp");
+    strcpy(file_format->items[4].describe, "位图文件");
+    strcpy(file_format->items[4].runpath,  "/system/picturer.elf");
+
     vfs_write(settings_file_v, settings_file_buffer, 0, sizeof(RunfileSettings_Item) * 1024);
 
     vfs_close(settings_file_v);

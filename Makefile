@@ -161,6 +161,8 @@ vdisk: all
 
 	@cp -a $(BUILD_DIR)/texter.elf $(BUILD_DIR)/XJ380/system
 
+	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/system
+
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps

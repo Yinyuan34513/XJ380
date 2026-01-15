@@ -302,10 +302,10 @@ void desktop_flusher()
 
     delay_s_hp(1);
 
-    char *argv[2]    = {"/Users/GuoqiFish/runfile.dat", NULL};
+    char *argv[2]    = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/texter.elf", NULL, argv);
+    // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
