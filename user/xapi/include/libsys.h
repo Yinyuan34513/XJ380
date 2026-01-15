@@ -156,6 +156,8 @@
 
 #define XAPI_DRAW_PICTURE   419
 
+#define XAPI_GET_PIC_SIZE   440
+
 // P4.4
 #define XAPI_SET_MSH_PROCOR 405
 

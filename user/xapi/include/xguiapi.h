@@ -180,6 +180,12 @@ void xapi_DrawPicture(
 	WSTR  	path
 );
 
+void xapi_GetPicSize(
+	UINT32	*width,
+	UINT32	*height,
+	WSTR  	 path
+);
+
 // 4-4
 #include "libsys.h"
 void SetMsgPrcor(HDLE handle, MsgPrcor func);

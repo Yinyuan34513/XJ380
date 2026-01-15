@@ -251,6 +251,7 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
 void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
+void GetPictureSize(int *w, int *h, char *path);
 void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height);
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x,

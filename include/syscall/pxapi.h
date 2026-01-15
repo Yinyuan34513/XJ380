@@ -133,6 +133,8 @@ typedef struct {
 
 #define XAPI_DRAW_PICTURE   419
 
+#define XAPI_GET_PIC_SIZE   440
+
 // P4.4
 #define XAPI_SET_MSH_PROCOR 405
 
@@ -169,7 +171,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：439
+// 当前最大号：440
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);

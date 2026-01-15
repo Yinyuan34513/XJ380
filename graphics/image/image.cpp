@@ -265,3 +265,31 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
     free(bf);
     vfs_close(v);
 }
+
+void GetPictureSize(int *w, int *h, char *path)
+{
+    spin_lock(PPlk);
+    int        bpp;
+    vfs_node_t v = vfs_open(path);
+    if (!v)
+    {
+        write_serial_fmt("GetPictureSize: cannot open '%s'\n", path);
+        spin_unlock(PPlk);
+        return;
+    }
+    unsigned char *bf = (unsigned char *)malloc(v->size);
+    if (!bf)
+    {
+        write_serial_fmt("GetPictureSize: failed to allocate %u bytes for '%s'\n", (unsigned)v->size, path);
+        vfs_close(v);
+        spin_unlock(PPlk);
+        return;
+    }
+    vfs_read(v, (uint8_t *)bf, 0, v->size);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, w, h, &bpp, 0);
+    /* source memory no longer needed after load */
+    free(bf);
+    stbi_image_free(b);
+    vfs_close(v);
+    spin_unlock(PPlk);
+}
