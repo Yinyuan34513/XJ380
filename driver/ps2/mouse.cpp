@@ -26,6 +26,7 @@ extern SHEET *desktop_ct_sheet;
 MouseType type;
 
 extern bool have_full_screen_app;
+extern bool logo_menu_just_born;
 
 spin_t mouse_info_processing = SPIN_INIT;
 void process_mouse_button()
@@ -140,8 +141,51 @@ void process_mouse_button()
                                    tdb->windowls->w_sheet->by + tdb->windowls->w_sheet->height);
                 }
             }
+            else if (tby < 24 && !have_full_screen_app)
+            {
+                // 快捷栏
+                int x1 = sht_img->scrx * 0.1875;
+                if (tbx > x1 && tbx < x1 + 32)
+                {
+                    // logo 徽标
+                    draw_logo_menu();
+                }
+                else if (tbx > x1 + 32 && tbx < x1 + 32 + 25 + 8)
+                {
+                    // 文件
+                    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+                }
+                else if (tbx > x1 + 32 + 25 + 8 && tbx < x1 + 32 + 25 + 8 + 25 + 9)
+                {
+                    // 设置
+                    char *argv[2] = {"shortdock-open-settings", NULL};
+                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                }
+                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
+                {
+                    // 终端
+                    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+                }
+                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
+                {
+                    // 图形
+                    char *argv[2] = {"shortdock-open-graphics", NULL};
+                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                }
+                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
+                {
+                    // 关于
+                    char *argv[2] = {"shortdock-open-about", NULL};
+                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                }
+            }
+            else if (tbx > sht_img->scrx * 0.1875 && tby > 28 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 50 && logo_menu_just_born)
+            {
+                // 关机
+            }
         }
         close_menu(current_window, tbx, tby);
+        delete_logo_menu();
 
         ms_dec.left   = false;
         ms_dec.win_move_lock = false;
@@ -175,6 +219,7 @@ void process_mouse_button()
                         current_window->WinMPf, current_window->w_task);
                 }
                 close_menu(current_window, tbx, tby);
+                delete_logo_menu();
                 process_right_button_click_event(current_window, tbx, tby);
             }
         }

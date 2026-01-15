@@ -533,3 +533,29 @@ void draw_app_message_box(char *title, char *text)
     draw_rect(sht_img, dock_ct_sheet, scdx - 300, 28, scdx, 128, {0, 0, 0, 0});
     refresh_part_sheet(sht_img, scdx - 300, 28, scdx, 128);
 }
+
+bool logo_menu_just_born = false;
+
+void draw_logo_menu()
+{
+    if (have_full_screen_app) return;
+    int x1 = sht_img->scrx * 0.1875;
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 49, DOCK_COL);
+    print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 28, 10);
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 50);
+    logo_menu_just_born = true;
+}
+
+void delete_logo_menu()
+{
+    if (have_full_screen_app) { return; }
+    if (logo_menu_just_born)
+    {
+        logo_menu_just_born = false;
+        return;
+    }
+
+    int x1 = sht_img->scrx * 0.1875;
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 49, {0, 0, 0, 0});
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 50);
+}

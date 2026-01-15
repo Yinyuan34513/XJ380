@@ -134,6 +134,9 @@ TDB_t find_dock_icon(int index);
 
 void draw_app_message_box(char *title, char *text);
 
+void draw_logo_menu();
+void delete_logo_menu();
+
 void process_desktop_find_block(int x, int y);
 
 #endif

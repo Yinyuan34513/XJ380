@@ -32,9 +32,24 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    (void)argc;
-    (void)argv;
     (void)envp;
+
+    if (argc == 1)
+    {
+        if (strcmp(argv[0], "shortdock-open-settings") == 0)
+        {
+            cindex = 3;
+        }
+        else if (strcmp(argv[0], "shortdock-open-about") == 0)
+        {
+            cindex = 3;
+        }
+        else if (strcmp(argv[0], "shortdock-open-graphics") == 0)
+        {
+            cindex = 3;
+            setting_cindex = 3;
+        }
+    }
 
     XWINDOW Winfo;
     Winfo.title = (char *)"控制中心";
