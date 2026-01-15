@@ -37,6 +37,8 @@
 
 extern UserInfo *current_user;
 
+void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet);
+
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
 {
@@ -106,7 +108,11 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
 
     init_dock(sht, dock_ct_sheet);
     init_shortcut_dock(sht, dock_ct_sheet);
+    init_desktop_icon(sht, csheet);
+}
 
+void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
+{
     char desktop_folder_path[256] = "/Users/";
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
