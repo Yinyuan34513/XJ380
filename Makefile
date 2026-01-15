@@ -183,8 +183,8 @@ vdisk: all
 # 	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
 	
 # temp test (remember to delete)
-	@mkdir -p $(BUILD_DIR)/XJ380/Users/GuoqiFish
-	@cp -a ./deskset.inf $(BUILD_DIR)/XJ380/Users/GuoqiFish
+	@mkdir -p $(BUILD_DIR)/XJ380/Users/GuoqiFish/desktop
+	@cp -a ./test.txt $(BUILD_DIR)/XJ380/Users/GuoqiFish/desktop
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 

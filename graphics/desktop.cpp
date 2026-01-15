@@ -33,6 +33,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <user/runfile.h>
 
 extern UserInfo *current_user;
 
@@ -106,66 +107,44 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     init_dock(sht, dock_ct_sheet);
     init_shortcut_dock(sht, dock_ct_sheet);
 
-    /*
-    文件结构：
-    第一行存储一个整数标记最大格子数
-    接下来每行对应一个格子，第几行就是第几个格子
-    空格子名称为xds_null
-    每行开头一个路径对应指向的文件
-    “系统”和“垃圾桶”图标不可删除或移动，不计入格子内
-    */
     char desktop_folder_path[256] = "/Users/";
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
     vfs_mkdir(desktop_folder_path);
-    memset(desktop_folder_path, 0, 256);    // 回收再利用
-    strcat(desktop_folder_path, "/Users/");
-    strcat(desktop_folder_path, current_user->name);
-    strcat(desktop_folder_path, "/deskset.inf");
-    vfs_mkfile(desktop_folder_path);
 
-    char desktop_setting_file_buffer[256];
-    char desktop_setting_file_temp_buf[256];
-    char *desktop_setting_file_p = desktop_setting_file_buffer;
     vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
     if (!desktop_setting_file_v) return;
-    vfs_read(desktop_setting_file_v, desktop_setting_file_buffer, 0, desktop_setting_file_v->size);
-    uint64_t offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-    desktop_setting_file_p += offest;
 
-    int desktop_block_count = atoi(desktop_setting_file_temp_buf) + 2;
+    strcat(desktop_folder_path, "/testfolder");
+    vfs_mkdir(desktop_folder_path);
+
+    PrintPicture_blend(sht, csheet, 20, 30 + 0 * 110, 74, 74, "/system/icon/d_system.png");
+    print_box_ttf(sht, csheet, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + 0 * 110, 11);
+
+    PrintPicture_blend(sht, csheet, 20, 30 + 1 * 110, 74, 74, "/system/icon/bin.png");
+    print_box_ttf(sht, csheet, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110, 11);
+
     // 每个格是 110 * 110，从（0，25）开始
-    for (int i = 0; i < desktop_block_count; i++)
+    int nindex = 2;
+    for (list_t node = desktop_setting_file_v->child; node != NULL; node = node->next)
     {
-        if (i == 0) 
+        vfs_node_t data = (vfs_node_t)node->data;
+        int bx = 20 + 110 * (nindex / ((sht->scry - 88) / 110));
+        int by = 30 + (nindex - (nindex / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
+        if (data->type == file_dir)
         {
-            PrintPicture_blend(sht, csheet, 20, 30 + i * 110, 74, 74, "/system/icon/d_system.png");
-            print_box_ttf(sht, csheet, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + i * 110, 11);
+            // 是文件夹
+            PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/folder.png");
         }
-        else if (i == 1) 
+        else
         {
-            PrintPicture_blend(sht, csheet, 20, 30 + i * 110, 74, 74, "/system/icon/bin.png");
-            print_box_ttf(sht, csheet, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + i * 110, 11);
+            // 是文件
+            PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/texter.png");
         }
-        else 
-        {
-            // 读取一行并设置下一行的偏移
-            offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-            desktop_setting_file_p += offest;
-
-            // 空的就跳过
-            if (strcmp("xds_null", desktop_setting_file_temp_buf) == 0)
-            {
-                continue;
-            }
-
-            int bx = 20 + 110 * (i / ((sht->scry - 88) / 110));
-            int by = 30 + (i - (i / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
-            PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/guoqiyu.png");
-            print_box_ttf(sht, csheet, 
-                desktop_setting_file_temp_buf, WHITE, 
-                57 - calc_ttf_length(desktop_setting_file_temp_buf, 11) / 2, 105 + i * 110, 11);
-        }
+        print_box_ttf(sht, csheet, 
+            data->name, WHITE, 
+            57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110, 11);
+        nindex++;
     }
 
     vfs_close(desktop_setting_file_v);
@@ -222,25 +201,15 @@ void process_desktop_find_block(int x, int y)
     memset(desktop_folder_path, 0, 256);    // 回收再利用
     strcat(desktop_folder_path, "/Users/");
     strcat(desktop_folder_path, current_user->name);
-    strcat(desktop_folder_path, "/deskset.inf");
+    strcat(desktop_folder_path, "/desktop");
 
-    char desktop_setting_file_buffer[65536];
-    char desktop_setting_file_temp_buf[65536];
-    char *desktop_setting_file_p = desktop_setting_file_buffer;
     vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
     if (!desktop_setting_file_v) return;
-    vfs_read(desktop_setting_file_v, desktop_setting_file_buffer, 0, desktop_setting_file_v->size);
-    uint64_t offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-    desktop_setting_file_p += offest;
 
-    int desktop_block_count = atoi(desktop_setting_file_temp_buf) + 2;
     // 每个格是 110 * 110，从（0，25）开始
-    for (int i = 0; i < desktop_block_count; i++)
+    int i;
+    for (i = 0; i < 2; i++)
     {
-        // 读取一行并设置下一行的偏移
-        offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-        desktop_setting_file_p += offest;
-
         int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
         int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
 
@@ -252,11 +221,35 @@ void process_desktop_find_block(int x, int y)
             {
                 create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
             }
+        }
+    }
+    for (list_t node = desktop_setting_file_v->child; node != NULL; node = node->next)
+    {
+        int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
+        int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
+
+        if (x > bx && x < bx + 110 &&
+            y > by && y < by + 110)
+        {
+            // 就是他！
+            vfs_node_t data = (vfs_node_t)node->data;
+            char runfile_path[256] = "\0";
+            strcat(runfile_path, "/Users/");
+            strcat(runfile_path, current_user->name);
+            strcat(runfile_path, "/desktop/");
+            strcat(runfile_path, data->name);
+            if (data->type == file_dir)
+            {
+                // 是文件夹
+                char *argv[2] = {runfile_path, NULL};
+                create_user_process_from_file((char *)"/system/fmanager.elf", NULL, argv);
+            }
             else
             {
-                // todo
+                runfile(runfile_path);
             }
         }
+        i++;
     }
 
     vfs_close(desktop_setting_file_v);
