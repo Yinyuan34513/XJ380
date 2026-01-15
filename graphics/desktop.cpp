@@ -408,6 +408,7 @@ void register_task_dock(WINDOWLSP window)
     new_win->windowls = window;
     new_win->next     = NULL;
     new_win->in_focus = false;
+    new_win->min_mode = false;
 
     front_p = first_dock_block;
     while (true)
@@ -496,6 +497,28 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
         {
             memset(front_p->path, 0, 64);
             strcpy(front_p->path, path);
+        }
+        if (front_p->next == NULL) { break; }
+        front_p = front_p->next;
+    }
+
+    spin_unlock(task_dock_lock);
+    flush_task_dock();
+}
+
+void save_window_xy(WINDOWLSP win)
+{
+    spin_lock(task_dock_lock);
+    TDB_t front_p = first_dock_block;
+    while (true)
+    {
+        front_p->in_focus = false;
+        if (front_p->windowls == win)
+        {
+            front_p->bmx = win->w_sheet->bx;
+            front_p->bmy = win->w_sheet->by;
+            front_p->in_focus = false;
+            front_p->min_mode = true;
         }
         if (front_p->next == NULL) { break; }
         front_p = front_p->next;

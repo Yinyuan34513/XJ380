@@ -111,6 +111,7 @@ void process_mouse_button()
             ) { 
                 // 最小化
                 ms_dec.sht_now = NULL;
+                save_window_xy(current_window);
                 int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
                 // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
                 get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10;    // 扔到屏幕外面
@@ -134,6 +135,12 @@ void process_mouse_button()
                 TDB_t tdb = find_dock_icon((tbx - 132) / 80);
                 if (tdb)
                 {
+                    if (tdb->min_mode)
+                    {
+                        tdb->windowls->w_sheet->bx = tdb->bmx;
+                        tdb->windowls->w_sheet->by = tdb->bmy;
+                        tdb->min_mode = false;
+                    }
                     lift_sheet(sht_img, tdb->windowls->w_sheet);
                     focus_window_dock(tdb->windowls);
                     refresh_part_sheet(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
