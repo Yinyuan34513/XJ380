@@ -3,7 +3,7 @@
  *      XINGJI XJ380 Application Compile Tools (XACT) 
  *      XACT C\C++ Header
  *      XJ380API XAPI Edition TUI Part
- *      Release Version 1.0.0 - 2025/5/10
+ *      Release Version 1.2.0 - 2026/1/16
  *      Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
@@ -106,3 +106,7 @@ void	xapi_Broken(WSTR broken_info);
 void	xapi_SendAppMessage(WSTR title, WSTR text);
 void 	xapi_Sleep(UINT64 ms);
 void 	xapi_Run(WSTR path);
+
+// 3-7
+void   *xapi_AllocateMemory(UINT64 size);
+void    xapi_FreeMemory(void *ptr);

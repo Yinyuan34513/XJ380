@@ -106,6 +106,10 @@ typedef struct {
 
 #define XAPI_RUN            439
 
+// P3.7
+#define XAPI_MALLOC         441
+#define XAPI_FREE           442
+
 // P4.1
 #define XAPI_CREATE_WINDOW    392
 #define XAPI_SET_WINDOW_TITLE 393
@@ -171,7 +175,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：440
+// 当前最大号：442
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);

@@ -273,3 +273,14 @@ void 	xapi_Run(WSTR path)
 {
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
 }
+
+// 3-7
+void   *xapi_AllocateMemory(UINT64 size)
+{
+	return (void *)enter_syscall(XAPI_MALLOC, size, 0, 0, 0, 0, 0);
+}
+
+void    xapi_FreeMemory(void *ptr)
+{
+	enter_syscall(XAPI_FREE, (uint64_t)ptr, 0, 0, 0, 0, 0);
+}
