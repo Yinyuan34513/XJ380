@@ -129,10 +129,11 @@ sys_(close, int fd)
 sys_(write, int fd, uint8_t *buffer, size_t size)
 {
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
-    if (unlikely(size == 0 && fd == 1)) 
+    if (unlikely(size == 0)) return SYSCALL_SUCCESS;
+    if (fd == 1 || fd == 2)
     {
         write_serial_fmt("%s", (char *)buffer);
-        return SYSCALL_SUCCESS;
+        return strlen((char *)buffer);
     }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
