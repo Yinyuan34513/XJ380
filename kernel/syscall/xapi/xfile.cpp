@@ -84,7 +84,7 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
             break;
         }
         void *data = node->data;
-        if (strcmp(((vfs_node_t)data)->name, "") != 0)
+        if (strcmp(((vfs_node_t)data)->name, "") != 0 && ((vfs_node_t)data)->type != file_delete)
         {
             strcpy(fdir[*fcount].filename, ((vfs_node_t)data)->name);
             fdir[*fcount].length   = ((vfs_node_t)data)->size;

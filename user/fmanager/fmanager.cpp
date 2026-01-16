@@ -16,6 +16,15 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         register_click(hData, lData);
         break;
+    case MSG_CRL:
+        process_crl(hData);
+        break;
+    case MSG_CHAR:
+        process_key((char)lData);
+        break;
+    case MSG_SPCHAR:
+        if ((char)(lData) == '\b') { backspace(); }
+        else if ((char)(lData) == '\n') { delete_typebox(); }
     }
     return;
 }
@@ -50,14 +59,18 @@ int main(int argc, char *argv[], char *envp[])
 
     xapi_RefreshWindow(handle);
 
-    RightMenuItem rmi[10];
-    rmi[0].text = (char *)"114514";
+    RightMenuItem rmi[3];
+    rmi[0].text = (char *)"新建文件夹";
     rmi[0].CRLid = 1;
-    xapi_RegisterRightButtonMenu(handle, rmi, 1);
+    rmi[1].text = (char *)"重命名";
+    rmi[1].CRLid = 2;
+    rmi[2].text = (char *)"删除";
+    rmi[2].CRLid = 3;
+    xapi_RegisterRightButtonMenu(handle, rmi, 3);
 
     while (1)
     {
-        if (double_click)
+        if (double_click && !register_lock)
         {
             double_click = false;
             // Double Click!
@@ -91,13 +104,94 @@ int main(int argc, char *argv[], char *envp[])
                 xapi_Run(file_path);
             }
         }
-        if (need_paint)
+        if (need_paint && !register_lock)
         {
             paint_dir(current_path);
             need_paint = false;
         }
         __asm__ __volatile__("pause");
     }
+}
+
+void process_crl(int CRLid)
+{
+    /*
+    1. 新建文件夹
+    2. 重命名
+    3. 删除
+    */
+    
+    xapi_OutputSerial(xcr_int2char(CRLid));
+    xapi_OutputSerial("\n");
+    if (CRLid != 3) { draw_typebox(); }
+    else 
+    {
+        uint32_t count = 0;
+        DirNode  fdir[256];
+        memset(fdir, 0, sizeof(DirNode) * 256);
+        xapi_SearchFile(current_path, &count, fdir);
+        if (count == 0 || count == 404)
+        {
+            return;
+        }
+        char filepath[256];
+        memset(filepath, 0, 256);
+        strcat(filepath, current_path);
+        strcat(filepath, "/");
+        strcat(filepath, fdir[choosing_index + file_count_base].filename);
+        xapi_DeleteFile(filepath);
+        paint_dir(current_path);
+    }
+}
+
+char typebox_buffer[256];
+int  typebox_offset = 0;
+
+void draw_typebox()
+{
+    memset(typebox_buffer, 0, 256);
+    typebox_offset = 0;
+    reg_lock();
+    xapi_DrawRect(handle, FMR_X / 2 - 100, FMR_Y / 2 - 25, FMR_X / 2 + 100, FMR_Y / 2 + 25, 0x007accff, true);
+    xapi_DrawRect(handle, FMR_X / 2 - 100 + 4, FMR_Y / 2 + 25 - 20 - 4, FMR_X / 2 + 100 - 4, FMR_Y / 2 + 25 - 4, 0xffffffff, true);
+    xapi_DrawText(handle, FMR_X / 2 - 100 + 4, FMR_Y / 2 - 25, "请输入文本（回车确定）：", 11, 0xffffffff);
+    xapi_RefreshWindow(handle);
+}
+
+void process_key(char ch)
+{
+    if (!register_lock || typebox_offset >= 189) return;
+
+    char temp[2] = {ch, '\0'};
+    xapi_DrawSWText(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4, temp, 0x000000ff);
+    xapi_RefreshPartWindow(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4,
+                            FMR_X / 2 - 100 + 8 + typebox_offset + 9, FMR_Y / 2 + 25 - 20 - 4 + 16);
+
+    typebox_buffer[typebox_offset / 9] = ch;
+
+    typebox_offset += 9;
+}
+
+void backspace()
+{
+    if (!register_lock || typebox_offset <= 0) return;
+
+    typebox_offset -= 9;
+
+    typebox_buffer[typebox_offset / 9] = '\0';
+
+    xapi_DrawRect(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4, 
+        FMR_X / 2 - 100 + 8 + typebox_offset + 9, FMR_Y / 2 + 25 - 20 - 4 + 16, 0xffffffff, true);
+    xapi_RefreshPartWindow(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4,
+        FMR_X / 2 - 100 + 8 + typebox_offset + 9, FMR_Y / 2 + 25 - 20 - 4 + 16);
+}
+
+void delete_typebox()
+{
+    if (!register_lock) return;
+
+    reg_unlock();
+    paint_dir(current_path);
 }
 
 
