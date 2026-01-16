@@ -8,7 +8,9 @@
  * 
  */
 
-#include "./include/xposix.h"
+#include "./include/x3api.h"
+#include "./include/libsys.h"
+#include "./include/liballoc/alloc.h"
 
 extern int main(int argc, char *argv[], char *envp[]);
 // extern void _init();
@@ -18,6 +20,7 @@ extern int main(int argc, char *argv[], char *envp[]);
 // extern void __init_array_end();
 // extern void __fini_array_start();
 // extern void __fini_array_end();
+
 
 extern "C" void xapi_start(int argc, char *argv[], char *envp[])
 {
@@ -40,6 +43,10 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
     //        fn++;
     //    }
     //}
+
+    void *heap_memory = xapi_MapMemory(NULL, 256 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    memset(heap_memory, 0, 256 * 1024 * 1024);
+    heap_init((uint8_t *)heap_memory, 256 * 1024 * 1024);
 
     exit(main(argc, argv, envp));
 }

@@ -13,8 +13,16 @@
 #pragma once
 
 #include "stdint.h"
+#include "./liballoc/alloc.h"
 
 // define
+#define PTE_PRESENT    (0x1 << 0)
+#define PTE_WRITEABLE  (0x1 << 1)
+#define PTE_USER       (0x1 << 2)
+#define PTE_FLAG_U     (0x1 << 3)
+#define PTE_HUGE       (0x1 << 7)
+#define PTE_NO_EXECUTE (((uint64_t)0x1) << 63)
+
 typedef enum {
     XUT_Root,
     XUT_System,
@@ -110,3 +118,4 @@ void 	xapi_Run(WSTR path);
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size);
 void    xapi_FreeMemory(void *ptr);
+void   *xapi_MapMemory(void *ptr, uint64_t size, uint32_t flags);

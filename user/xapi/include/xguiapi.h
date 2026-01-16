@@ -13,6 +13,7 @@
 #pragma once
 
 #include "stdint.h"
+#include "./liballoc/alloc.h"
 
 // define
 typedef UINT64 		HDLE;

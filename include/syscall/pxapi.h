@@ -109,6 +109,7 @@ typedef struct {
 // P3.7
 #define XAPI_MALLOC         441
 #define XAPI_FREE           442
+#define XAPI_MAP_MEMORY     443
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -175,7 +176,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：442
+// 当前最大号：443
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -227,6 +228,7 @@ void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t c
 void do_xapi_DeleteRightButtonMenu(uint64_t handle);
 int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
 void do_xapi_Run(char *path);
+uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 
 
 

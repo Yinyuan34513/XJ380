@@ -14,6 +14,7 @@ compile_headcon:
 all: $(OBJ_FILES)
 
 build_all_api: all compile_head compile_headcon
+	@cp -a ../../liballoc-x86_64.a ../../out/xapi
 
 ../../out/xapi/%.S.o: ./%.S
 	@mkdir -p $(@D)
