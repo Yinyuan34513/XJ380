@@ -130,6 +130,11 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
 {
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return SYSCALL_SUCCESS;
+    if (fd == 1 || fd == 2)
+    {
+        write_serial_fmt("%s", (char *)buffer);
+        return strlen((char *)buffer);
+    }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
     size_t ret = vfs_write(handle->node, buffer, handle->offset, size);
@@ -1966,6 +1971,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_REFRESH_PART_WINDOW: do_xapi_RefreshPartWindow(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_RUN: do_xapi_Run((char *)regs->rdi); break;
     case XAPI_GET_PIC_SIZE: GetPictureSize((int *)regs->rdi, (int *)regs->rsi, (char *)regs->rdx); break;
+    case XAPI_MAP_MEMORY: regs->rax = do_xapi_MapMemory(regs->rdi, regs->rsi, regs->rdx); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 

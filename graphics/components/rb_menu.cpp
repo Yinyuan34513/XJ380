@@ -13,6 +13,7 @@ void copy_rb_menu_items(RightMenuItem **dst, RightMenuItem_user *src, uint64_t c
     for (int i = 0; i < cnt; i++)
     {
         strcpy(dest[i].text, src[i].text);
+        dest[i].CRLid = src[i].CRLid;
     }
 }
 
@@ -92,6 +93,7 @@ void place_menu(rb_menu_regt_p regt)
 
 void close_menu(WINDOWLSP win, int x, int y)
 {
+    if (win == NULL) return;
     rb_menu_regt_p front_p = first_rb_menu;
     while (true)
     {
@@ -108,7 +110,7 @@ void close_menu(WINDOWLSP win, int x, int y)
             {
                 if (py >= 0 && py <= 30 * front_p->count)
                 {
-                    do_message(MSG_CRL, NULL, front_p->items[y / 30].CRLid, win->WinMPf, win->w_task);
+                    do_message(MSG_CRL, front_p->items[py / 30].CRLid, NULL, win->WinMPf, win->w_task);
                 }
             }
 

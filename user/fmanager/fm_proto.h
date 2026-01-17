@@ -32,6 +32,8 @@ extern int choosing_index;
 
 extern bool need_paint;
 
+extern volatile bool register_lock;
+
 void paint_fm_back();
 void paint_dir(char *path);
 bool get_file_type(char *name, char *type);
@@ -39,3 +41,11 @@ void register_click(int x, int y);
 void cat_path(char *folder_name);
 void revert_path(char *path);
 void record_current_path();
+void process_crl(int CRLid);
+void draw_typebox();
+void process_key(char ch);
+void backspace();
+void delete_typebox();
+
+void reg_lock();
+void reg_unlock();

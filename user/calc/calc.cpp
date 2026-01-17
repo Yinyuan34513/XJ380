@@ -424,7 +424,7 @@ int main(int argc, char *argv[], char *envp[])
     XWINDOW window;
     window.width  = 380;
     window.height = 480;
-    window.title  = "Soft Calculator";
+    window.title  = "计算器";
     window.sets   = XWIN_NORMAL;
 
     xapi_CreateWindow(&window_handle, &window);

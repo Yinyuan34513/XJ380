@@ -10,18 +10,17 @@ int click_x = 0;
 int click_y = 0;
 
 int choosing_index = -1;
+int choosing_history = -1;
 
-bool register_lock = false;
+volatile bool register_lock = false;
 
 bool need_paint = false;
 
 void reg_lock()
 {
-    while (true)
-    {
-        if (!register_lock) break;
-    }
+    while (register_lock);
     register_lock = true;
+    need_paint = false;
 }
 
 void reg_unlock()
@@ -31,11 +30,11 @@ void reg_unlock()
 
 void register_click(int x, int y)
 {
-    reg_lock();
-
+    if (register_lock) return;
+    
     click_x = x;
     click_y = y;
-    if (first_click && xapi_GetTime() - clicktime_recorder < 2)
+    if (first_click && xapi_GetTime() - clicktime_recorder < 2 && choosing_index == choosing_history)
     {
         double_click = true;
         first_click = false;
@@ -83,9 +82,8 @@ void register_click(int x, int y)
     if (y >= 148)
     {
         int index = (y - 148) / 24;
+        choosing_history = choosing_index;
         choosing_index = index;
         need_paint = true;
     }
-
-    reg_unlock();
 }

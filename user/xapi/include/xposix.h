@@ -15,3 +15,4 @@
 #include "./xposix/unistd.h"
 #include "./xposix/stdio.h"
 #include "./xposix/stdlib.h"
+#include "./liballoc/alloc.h"

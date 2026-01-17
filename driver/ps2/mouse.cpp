@@ -120,7 +120,6 @@ void process_mouse_button()
                                     get_sheet(sht_img, current_window->w_sheet)->by
                                      + get_sheet(sht_img, current_window->w_sheet)->height);
             }
-            
         }
         ms_dec.sht_now = found_sheetmb(sht_img, mouse_x, mouse_y);
         if (ms_dec.sht_now == NULL)

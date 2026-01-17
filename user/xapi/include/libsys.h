@@ -2,6 +2,7 @@
 
 #include "./stdint.h"
 #include "./krlibc.h"
+#include "./liballoc/alloc.h"
 
 // XJ380API POSIX Edition
 #define SYS_READ 0
@@ -128,6 +129,11 @@
 #define XAPI_SLEEP          430
 
 #define XAPI_RUN            439
+
+// P3.7
+#define XAPI_MALLOC         441
+#define XAPI_FREE           442
+#define XAPI_MAP_MEMORY     443
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
