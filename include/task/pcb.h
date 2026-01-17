@@ -112,12 +112,17 @@ struct process_control_block
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点
+    uint64_t brk_start;
+    uint64_t brk_end;
+    uint64_t brk_current ;
 
     xtttp_dtt   *xtttp_stc;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);
 uint64_t process_execve(char *path, char **argv, char **envp);
+#define USER_BRK_START 0x0000700000000000
+#define USER_BRK_END 0x00007ffff0000000
 
 struct thread_control_block
 {
@@ -143,8 +148,7 @@ struct thread_control_block
     
 
     uint64_t syscall_stack;
-    uint64_t brk_start;
-    uint64_t brk_end;
+    
     uint64_t load_start;
     uint64_t load_end;
 

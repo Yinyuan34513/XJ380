@@ -389,6 +389,206 @@ sys_(readv, int fd, struct iovec *iov, int iovcnt0)
     free(buf);
     return status;
 }
+spin_t mm_op_lock=SPIN_INIT;
+
+uint64_t sys_brk(uint64_t brk) {
+    brk = (brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+    if (!brk) {
+        return get_current_task()->parent_group->brk_start;
+    }
+
+    if (brk < get_current_task()->parent_group->brk_start) {
+        return get_current_task()->parent_group->brk_current;
+    }
+
+    if (brk == get_current_task()->parent_group->brk_current) {
+        return get_current_task()->parent_group->brk_current;
+    }
+
+    spin_lock(mm_op_lock);
+
+    if (brk > get_current_task()->parent_group->brk_current) {
+        page_map_range_to_random(get_current_directory(),
+                       get_current_task()->parent_group->brk_current,
+                       brk - get_current_task()->parent_group->brk_current,
+                       PTE_FLAG_U | PTE_PRESENT | PTE_WRITEABLE);
+
+        vma_t *vma = vma_alloc();
+        if (!vma) {
+            spin_unlock(mm_op_lock);
+            return (uint64_t)-ENOMEM;
+        }
+
+        vma->vm_start = get_current_task()->parent_group->brk_current;
+        vma->vm_end = brk;
+        vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
+        vma->vm_type = VMA_TYPE_ANON;
+        vma->vm_name = strdup("[heap]");
+        if (!vma->vm_name) {
+            vma_free(vma);
+            spin_unlock(mm_op_lock);
+            return (uint64_t)-ENOMEM;
+        }
+
+        vma_t *region =
+            vma_find_intersection(&get_current_task()->parent_group->vma_manager,
+                                  get_current_task()->parent_group->brk_start,
+                                  get_current_task()->parent_group->brk_end);
+
+        if (region) {
+            vma_remove(&get_current_task()->parent_group->vma_manager, region);
+            vma_free(region);
+        }
+
+        if (vma_insert(&get_current_task()->parent_group->vma_manager, vma)) {
+            vma_free(vma);
+            spin_unlock(mm_op_lock);
+            return (uint64_t)-ENOMEM;
+        }
+
+        get_current_task()->parent_group->brk_current = brk;
+    } else {
+        unmap_page_range(get_current_directory(), brk,
+                         get_current_task()->parent_group->brk_current - brk);
+
+        vma_t *region =
+            vma_find_intersection(&get_current_task()->parent_group->vma_manager,
+                                  get_current_task()->parent_group->brk_start,
+                                  get_current_task()->parent_group->brk_end);
+
+        if (region) {
+            vma_remove(&get_current_task()->parent_group->vma_manager, region);
+            vma_free(region);
+        }
+
+        if (brk > get_current_task()->parent_group->brk_start) {
+            vma_t *vma = vma_alloc();
+            if (!vma) {
+                get_current_task()->parent_group->brk_current = brk;
+                return get_current_task()->parent_group->brk_current;
+            }
+
+            vma->vm_start = get_current_task()->parent_group->brk_start;
+            vma->vm_end = brk;
+            vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
+            vma->vm_type = VMA_TYPE_ANON;
+            vma->vm_name = strdup("[heap]");
+
+            if (vma_insert(&get_current_task()->parent_group->vma_manager,
+                           vma) != 0) {
+                vma_free(vma);
+                // 继续执行，即使VMA插入失败
+            }
+        }
+
+        get_current_task()->parent_group->brk_current = brk;
+    }
+
+    spin_unlock(mm_op_lock);
+
+    return get_current_task()->parent_group->brk_current;
+}
+
+sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
+         uint64_t offset) {
+
+    addr = addr & (~(PAGE_SIZE - 1));
+
+    uint64_t aligned_len = (length + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+
+    if (check_user_overflow(addr, aligned_len)) { return -EFAULT; }
+
+    if (aligned_len == 0) { return SYSCALL_FAULT_(EINVAL); }
+    pcb_t process = get_current_task()->parent_group;
+
+    vma_manager_t *mgr        = &process->vma_manager;
+    uint64_t       start_addr = 0;
+    if (flags & MAP_FIXED) {
+        if (!addr) return SYSCALL_FAULT_(EINVAL);
+
+        start_addr = addr;
+        // 检查地址是否可用
+        if (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+            vma_unmap_range(mgr, start_addr, start_addr + aligned_len);
+        }
+    } else {
+        if (addr) {
+            start_addr = addr;
+            // 检查地址是否可用
+            if (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+        } else {
+            start_addr = USER_MMAP_START;
+            while (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+                start_addr += PAGE_SIZE;
+                if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
+            }
+        }
+    }
+
+    if (!(flags & MAP_ANONYMOUS)) {
+        if (queue_get(process->file_open, fd) == NULL) return SYSCALL_FAULT_(EBADF);
+    }
+
+    spin_lock(mm_op_lock);
+
+    vma_t *vma = vma_alloc();
+    if (!vma) return SYSCALL_FAULT_(ENOMEM);
+
+    vma->vm_start = start_addr;
+    vma->vm_end   = start_addr + aligned_len;
+    vma->vm_flags = 0;
+
+    if (prot & PROT_READ) vma->vm_flags |= VMA_READ;
+    if (prot & PROT_WRITE) vma->vm_flags |= VMA_WRITE;
+    if (prot & PROT_EXEC) vma->vm_flags |= VMA_EXEC;
+    if (flags & MAP_SHARED) vma->vm_flags |= VMA_SHARED;
+
+    if (flags & MAP_ANONYMOUS) {
+        vma->vm_type   = VMA_TYPE_ANON;
+        vma->vm_flags |= VMA_ANON;
+        vma->vm_fd     = -1;
+    } else {
+        vma->vm_type   = VMA_TYPE_FILE;
+        vma->vm_fd     = fd;
+        vma->vm_offset = (int64_t)offset;
+    }
+
+    vma_t *region = vma_find_intersection(mgr, start_addr, start_addr + aligned_len);
+    if (region) {
+        vma_remove(mgr, region);
+        vma_free(region);
+    }
+
+    if (vma_insert(mgr, vma) != 0) {
+        vma_free(vma);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    if (!(flags & MAP_ANONYMOUS)) {
+        uint64_t ret = (uint64_t)vfs_map((vfs_node_t)queue_get(process->file_open, fd), start_addr, aligned_len,
+                                         prot, flags, offset);
+        spin_unlock(mm_op_lock);
+        return ret;
+    }
+
+    uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
+
+    if (prot != PROT_NONE) {
+        if (prot & PROT_READ) pt_flags |= PTE_PRESENT;
+        if (prot & PROT_WRITE) pt_flags |= PTE_WRITEABLE;
+        if (!(prot & PROT_EXEC)) pt_flags |= PTE_NO_EXECUTE;
+    }
+
+    lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags);
+    spin_unlock(mm_op_lock);
+
+    return start_addr;
+
+    return addr;
+}
 
 sys_(munmap, uint64_t addr, size_t size) {
     if (size == 0) return SYSCALL_SUCCESS;
@@ -613,7 +813,7 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
             i++;
         }
 
-        // sigexit = signals_pending_quick(current_task);
+        // sigexit = signals_pending_quick(get_current_task());
 
         if (ready > 0 || sigexit) break;
 
@@ -1852,21 +2052,21 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         // case SYS_EXIT_GROUP:
         //     regs->rax = (uint64_t)sys_exit(regs->rdi);
         //     break;
-        // case SYS_GETPID:
-        //     regs->rax = get_current_task()->parent_group->pid;
-        //     break;
-        // case SYS_GETTID:
-        //     regs->rax = get_current_task()->parent_group->pid;
-        //     break;
+        case SYS_GETPID:
+            regs->rax = get_current_task()->parent_group->pid;
+            break;
+        case SYS_GETTID:
+            regs->rax = get_current_task()->parent_group->pid;
+            break;
         // case SYS_WAIT4:
         //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
         //     break;
-        // case SYS_BRK:
-        //     regs->rax = (uint64_t)sys_brk(regs->rdi);
-        //     break;
-        // case SYS_MMAP:
-        //     regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
-        //     break;
+        case SYS_BRK:
+            regs->rax = (uint64_t)sys_brk(regs->rdi);
+            break;
+        case SYS_MMAP:
+            regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9,regs);
+            break;
 
         // case SYS_ARCH_PRCTL:
         //     regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);

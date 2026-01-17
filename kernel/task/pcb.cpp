@@ -745,6 +745,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->cwd     = rootdir;
     new_task->cwd->refcount++;
     new_task->window_count = 0;
+
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -893,6 +894,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     new_task->fs_base = (uint64_t)new_task;
 
     new_task->window_count = 0;
+    
 
     add_task(new_task);
     if (!no_interrupt)
@@ -939,6 +941,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->cmdline     = (char *)malloc(strlen(cmdline));
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
+    pcb->brk_start = USER_BRK_START;
+    pcb->brk_end   = USER_BRK_END;
+    pcb->brk_current = pcb->brk_start;
     // pcb->msgprci = false;
 
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
