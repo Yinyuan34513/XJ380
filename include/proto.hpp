@@ -185,9 +185,13 @@ void init_heap();
 
 // kernel/memory/frame.cpp
 void     init_frame(MEMORY_MAP map);
-void     free_frame(uint64_t addr);
+void     free_frames(uint64_t addr, size_t size);
+void     free_frame(uint64_t addr)
+{
+    free_frames(addr,1);
+}
 uint64_t alloc_frames(size_t count);
-void     free_frames(uint64_t addr, uint64_t size);
+
 
 // kernel/memory/hhdm.cpp
 void     init_hhdm();
