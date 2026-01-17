@@ -876,7 +876,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
 
     new_task->cwd = vfs_open(cwd);
     new_task->cwd->refcount++;
-    write_serial_fmt("CWD %s\n", new_task->cwd->name);
+    // write_serial_fmt("CWD %s\n", new_task->cwd->name);
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;
