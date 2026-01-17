@@ -362,24 +362,6 @@ void desktop_flusher()
 #endif
     }
 }
-
-void tst()
-{
-    write_serial_fmt("Stack Test\n");
-    while (1)
-        ;
-}
-
-void judge_bigend_littleend1()
-{
-    int  i = 48;
-    char c = *((char *)&i);
-    if (c == '0')
-        write_serial_fmt("Littleend LE\n");
-    else
-        write_serial_fmt("Bigend BE\n");
-}
-
 #define KERNEL_HEAP_START 0xffffc00000000000
 #define KERNEL_HEAP_SIZE  (256 * 1024 * 1024)
 
@@ -409,18 +391,15 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_gdt();
     init_hpet(BootConfig.HPET);
     init_apic(BootConfig.MADT);
-    judge_bigend_littleend1();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 1, 7, {0x00, 0xa2, 0xe8}); // CPU好了来一下
 
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
-    page_setup();
     init_heap();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 
-    serial_wprintf("Output by Serial Writer!!\n");
 
     device_manager_init();
     vfs_init();
@@ -439,9 +418,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // sb16_init();
 
     keyboard_init();
-    write_serial_fmt("KEYBOARD (PS2) \n");
     mouse_init();
-    write_serial_fmt("MOUSE (PS2) \n");
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 

@@ -80,7 +80,7 @@ static void process_memory_region(uintptr_t start, uintptr_t end)
             size_t frame = region_current / PAGE_SIZE;
 
             // 跳过不可用的帧
-            while (region_current < zone_end && !bitmap_get(&usable_regions, region_current / PAGE_SIZE))
+            while (region_current < zone_end && !bitmap_get(&frame_allocator.bitmap, region_current / PAGE_SIZE))
             {
                 region_current += PAGE_SIZE;
             }
@@ -91,7 +91,7 @@ static void process_memory_region(uintptr_t start, uintptr_t end)
             uintptr_t usable_start = region_current;
 
             // 找到连续可用区域的结束
-            while (region_current < zone_end && bitmap_get(&usable_regions, region_current / PAGE_SIZE))
+            while (region_current < zone_end && bitmap_get(&frame_allocator.bitmap, region_current / PAGE_SIZE))
             {
                 region_current += PAGE_SIZE;
             }
@@ -167,6 +167,7 @@ void init_frame(MEMORY_MAP map)
     write_serial_dec((origin_frames / 256));
     write_serial_string(" MiB\n");
 
+    page_setup();
     page_init();
     buddy_init();
 
@@ -201,22 +202,27 @@ void init_frame(MEMORY_MAP map)
 }
 
 spin_t        frame_op_lock        = SPIN_INIT;
-static size_t early_last_alloc_pos = 0;
-extern size_t bitmap_find_range_from(const Bitmap *bitmap, size_t length, bool value, size_t start_from);
-uint64_t      alloc_frames_early(size_t count)
-{
-    spin_lock(frame_op_lock);
-    Bitmap *bitmap      = &usable_regions;
-    size_t  frame_index = bitmap_find_range_from(bitmap, count, true, early_last_alloc_pos);
-    bitmap_set_range(bitmap, frame_index, frame_index + count, false);
-    early_last_alloc_pos = frame_index + count - 1;
-    spin_unlock(frame_op_lock);
-    return frame_index * PAGE_SIZE;
-}
 
+uint64_t alloc_frames_l(size_t count)
+{
+#if ENABLE_BUDDY
+    frame_allocator.usable_frames -= count;
+    return buddy_alloc_pages(count);
+#else
+    Bitmap *bitmap      = &frame_allocator.bitmap;
+    size_t  frame_index = bitmap_find_range(bitmap, count, true);
+
+    if (frame_index == (size_t)-1) return 0;
+    bitmap_set_range(bitmap, frame_index, frame_index + count, false);
+
+    frame_allocator.usable_frames -= count;
+
+    return frame_index * PAGE_SIZE;
+#endif
+}
 void *early_alloc(size_t size)
 {
-    void *ptr = (void *)phys_to_virt(alloc_frames_early((size + PAGE_SIZE - 1) / PAGE_SIZE));
+    void *ptr = (void *)phys_to_virt(alloc_frames_l((size + PAGE_SIZE - 1) / PAGE_SIZE));
     memset(ptr, 0, (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
     return ptr;
 }
@@ -247,23 +253,7 @@ void *early_alloc(size_t size)
 
 // EXPORT_SYMBOL(free_frame);
 
-// uint64_t alloc_frames(size_t count)
-// {
-// #if ENABLE_BUDDY
-//     frame_allocator.usable_frames -= count;
-//     return buddy_alloc_pages(count);
-// #else
-//     Bitmap *bitmap      = &frame_allocator.bitmap;
-//     size_t  frame_index = bitmap_find_range(bitmap, count, true);
 
-//     if (frame_index == (size_t)-1) return 0;
-//     bitmap_set_range(bitmap, frame_index, frame_index + count, false);
-
-//     frame_allocator.usable_frames -= count;
-
-//     return frame_index * PAGE_SIZE;
-// #endif
-// }
 
 // EXPORT_SYMBOL(alloc_frames);
 

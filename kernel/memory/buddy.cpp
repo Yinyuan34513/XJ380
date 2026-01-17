@@ -1,8 +1,9 @@
 #include <mm/bitmap.h>
+#include <mm/frame.h>
 #include <proto.hpp>
 #include <mm/buddy.h>
+extern FrameAllocator frame_allocator;;
 
-extern Bitmap usable_regions;
 
 Bitmap using_regions;
 
@@ -109,7 +110,10 @@ static uint64_t pop_front(buddy_allocator_t *alloc, size_t order) {
     size_t index = order_to_index(order);
     uint64_t page_list_paddr = alloc->free_area[index];
 
-    page_list_t page_list={0,0};
+    page_list_t page_list={
+        .entry_num=0,
+        .next_page=0
+    };
     if (page_list_paddr == 0)
         goto try_split;
 
@@ -322,7 +326,10 @@ void buddy_free_zone(zone_t *zone, uint64_t base, size_t order) {
         }
 
         memset((void *)phys_to_virt(new_page_paddr), 0, PAGE_SIZE);
-        page_list_t new_list = {0, 0};
+        page_list_t new_list = {
+            .entry_num=0,
+            .next_page=0
+        };
         write_page_list(new_page_paddr, new_list);
         alloc->free_area[index] = new_page_paddr;
 
@@ -355,7 +362,10 @@ void buddy_free_zone(zone_t *zone, uint64_t base, size_t order) {
         }
 
         memset((void *)phys_to_virt(new_page_paddr), 0, PAGE_SIZE);
-        page_list_t new_list = {0, first_page_list_paddr};
+        page_list_t new_list = {
+            .entry_num=0,
+            .next_page=first_page_list_paddr
+        };
         write_page_list(new_page_paddr, new_list);
         alloc->free_area[index] = new_page_paddr;
 
@@ -414,7 +424,7 @@ uint64_t buddy_alloc_zone(zone_t *zone, size_t count) {
 
     return addr;
 }
-
+extern uint64_t alloc_frames_l(size_t count);
 static void init_zone_allocator(zone_t *zone) {
     buddy_allocator_t *alloc = &zone->allocator;
 
@@ -422,16 +432,19 @@ static void init_zone_allocator(zone_t *zone) {
 
     for (size_t i = 0; i < ORDER_COUNT; i++) {
         // 为每个 order 分配一个初始页面列表
-        uint64_t page_paddr = (uint64_t)early_alloc(PAGE_SIZE);
+        uint64_t page_paddr = alloc_frames_l(1);
         if (page_paddr == 0) {
             alloc->free_area[i] = 0;
             continue;
         }
 
-        memset((void *)phys_to_virt(page_paddr), 0, PAGE_SIZE);
-        page_list_t list = {0, 0};
-        write_page_list(page_paddr, list);
-        alloc->free_area[i] = page_paddr;
+        memset((void *)phys_to_virt((uint64_t)page_paddr), 0, PAGE_SIZE);
+        page_list_t list = {
+            .entry_num=0,
+            .next_page=0
+        };
+        write_page_list((uint64_t)page_paddr, list);
+        alloc->free_area[i] = (uint64_t)page_paddr;
     }
 }
 
@@ -612,7 +625,7 @@ void free_frames(uint64_t addr, size_t count) {
     for (size_t off = 0; off < count; off++) {
         if (bitmap_get(&using_regions, idx + off) == false)
             return;
-        if (bitmap_get(&usable_regions, idx + off) == false)
+        if (bitmap_get(&frame_allocator.bitmap, idx + off) == false)
             return;
     }
 
@@ -668,7 +681,7 @@ uint64_t alloc_frames_dma32(size_t count) {
 #endif
 
 ret:
-    bitmap_set(&usable_regions, addr / PAGE_SIZE, true);
+    bitmap_set(&frame_allocator.bitmap, addr / PAGE_SIZE, true);
     for (uint64_t a = addr; a < (addr + count * PAGE_SIZE);
          a += PAGE_SIZE) {
         page_t *p = get_page(a);
