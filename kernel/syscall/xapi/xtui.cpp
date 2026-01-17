@@ -199,6 +199,7 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
         page_map_range_to_random(get_current_directory(), ptr, size, flags);
         ret = ptr;
     }
+    write_serial_fmt("ret: 0x%x, size: 0x%x\n", ret, size);
     
     spin_unlock(mapmemory_lock);
     return ret;
