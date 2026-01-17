@@ -192,14 +192,13 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
     uint64_t ret = -1;
     if (ptr == NULL)
     {
-        ret = page_alloc_random(get_current_directory(), size, flags);
+        ret = page_alloc_random(get_current_task()->parent_group->pagedir, size, flags);
     }
     else
     {
-        page_map_range_to_random(get_current_directory(), ptr, size, flags);
+        page_map_range_to_random(get_current_task()->parent_group->pagedir, ptr, size, flags);
         ret = ptr;
     }
-    write_serial_fmt("ret: 0x%x, size: 0x%x\n", ret, size);
     
     spin_unlock(mapmemory_lock);
     return ret;
