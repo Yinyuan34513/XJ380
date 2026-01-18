@@ -1,2 +1,2 @@
 all:
-# 	@$(MAKE) -C ahci        only test 
+	@$(MAKE) -C e1000

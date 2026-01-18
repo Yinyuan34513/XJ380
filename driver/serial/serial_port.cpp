@@ -526,6 +526,8 @@ int printk(const char *fmt, ...)
     return 0;
 }
 
+EXPORT_SYMBOL(printk);
+
 // 用于输出调试消息
 int pr_debug(const char *fmt, ...)
 {

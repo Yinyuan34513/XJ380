@@ -293,7 +293,7 @@ void dlinker_load(kernel_mode_t *kmod,cp_module_t *module) {
             return;
         }
     }
-    write_serial_fmt("kmod: loaded module %s at %#018lx\n", module->module_name, KERNEL_MOD_SPACE_START + kernel_modules_load_offset);
+    write_serial_fmt("kmod: loaded module %s at 0x%x\n", module->module_name, KERNEL_MOD_SPACE_START + kernel_modules_load_offset);
     kmod->entry_exit_code = dlinit();
 
     kernel_modules_load_offset += (load_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);

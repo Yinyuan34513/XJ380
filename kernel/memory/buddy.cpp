@@ -1,5 +1,6 @@
 #include <mm/bitmap.h>
 #include <mm/frame.h>
+#include <dlinker.h>
 #include <proto.hpp>
 #include <mm/buddy.h>
 extern FrameAllocator frame_allocator;;
@@ -617,6 +618,8 @@ ret:
     return addr;
 }
 
+EXPORT_SYMBOL(alloc_frames);
+
 void free_frames(uint64_t addr, size_t count) {
     if (addr == 0 || count == 0)
         return;
@@ -658,6 +661,8 @@ void free_frames(uint64_t addr, size_t count) {
     spin_unlock(zone->allocator.lock);
 }
 
+EXPORT_SYMBOL(free_frames);
+
 uint64_t alloc_frames_dma32(size_t count) {
     if (count == 0)
         return 0;
@@ -690,6 +695,10 @@ ret:
     return addr;
 }
 
+EXPORT_SYMBOL(alloc_frames_dma32);
+
 void free_frames_dma32(uint64_t addr, size_t count) {
     free_frames(addr, count); // 自动识别 zone
 }
+
+EXPORT_SYMBOL(free_frames_dma32);

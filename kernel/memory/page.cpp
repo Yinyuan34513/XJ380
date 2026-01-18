@@ -510,3 +510,7 @@ void page_setup()
     double_fault_page               = get_cr3();
     current_directory               = &kernel_page_dir;
 }
+
+EXPORT_SYMBOL(page_map_range);
+EXPORT_SYMBOL(page_map_range_to);
+EXPORT_SYMBOL(page_map_range_to_random);
