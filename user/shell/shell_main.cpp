@@ -4,6 +4,14 @@
 #include "gh_sign.h"
 #include "st_proto.h"
 
+char* user_type_convert_table[5] = {
+    "root",
+    "system",
+    "admin",
+    "visitor",
+    "~"
+};
+
 // 全局变量定义
 int  cur_x  = 0;
 int  cur_y  = 0;
