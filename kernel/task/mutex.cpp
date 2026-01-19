@@ -19,7 +19,7 @@ void mutex_init_system() {
 
 // 创建互斥锁
 mutex_t *mutex_create(bool recursive) {
-    mutex_init_system();
+    mutex_init_system();//en. 懒得放了
     
     mutex_t *mutex = (mutex_t *)malloc(sizeof(mutex_t));
     if (mutex == NULL) {
@@ -69,7 +69,7 @@ int mutex_lock(mutex_t *mutex) {
     
     // 锁被占用，加入等待队列并阻塞
     queue_enqueue(mutex->wait_queue, current);
-    current->status = WAIT;  // 阻塞线程
+    current->status = WAIT;  // 阻塞线程,我记得
     
     spin_unlock(&mutex->lock);
     
@@ -83,9 +83,9 @@ int mutex_lock(mutex_t *mutex) {
 int mutex_trylock(mutex_t *mutex) {
     if (mutex == NULL || mutex->state == MUTEX_DESTROYED) {
         return -EINVAL;
-    }
+    }//锁没了
     
-    tcb_t current = get_current_task();
+    tcb_t current = get_current_task();//如果task动了? ..应该不可能
     
     spin_lock(&mutex->lock);
     
@@ -173,7 +173,7 @@ void mutex_destroy(mutex_t *mutex) {
     // 从全局队列中移除
     spin_lock(&global_mutex_lock);
     queue_foreach(global_mutex_queue, node) {
-        if (node->data == mutex) {
+        if (node->data == mutex) {//匹配上了
             queue_remove_at(global_mutex_queue, node->index);
             break;
         }
