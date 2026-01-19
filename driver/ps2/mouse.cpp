@@ -28,13 +28,8 @@ MouseType type;
 extern bool have_full_screen_app;
 extern bool logo_menu_just_born;
 
-spin_t mouse_info_processing = SPIN_INIT;
 void process_mouse_button()
 {
-    close_interrupt;
-
-    spin_lock(&mouse_info_processing);
-
     if (ms_dec.btn & 0x01)
     {
         // 左键按下
@@ -42,8 +37,10 @@ void process_mouse_button()
     }
     else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
     {
-        uint64_t click_time = nanoTime();
-        if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 300000000)
+        tm time;
+        time_read(&time);
+        uint64_t click_time = mktime(&time);
+        if (ms_dec.first_click && click_time - ms_dec.click_time < 2)
         {
             ms_dec.first_click = false;
             ms_dec.double_click = true;
@@ -299,8 +296,6 @@ void process_mouse_button()
             
         }
     }
-
-    spin_unlock(&mouse_info_processing);
 }
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
@@ -316,8 +311,6 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 
 void process_mouse_info()
 {
-    spin_lock(&mouse_info_processing);
-    
     if (ms_dec.left)
     {
         if (!ms_dec.win_move_lock)
@@ -376,8 +369,6 @@ void process_mouse_info()
     }
 
     ms_dec.need_flush = false;
-
-    spin_unlock(&mouse_info_processing);
 }
 
 bool mousedecode(uint8_t data)

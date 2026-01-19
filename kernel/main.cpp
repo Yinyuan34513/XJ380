@@ -504,7 +504,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     close_interrupt;
     disable_scheduler();
 
-    // create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
     open_interrupt;
