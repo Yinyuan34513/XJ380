@@ -187,7 +187,7 @@ spin_t mapmemory_lock = SPIN_INIT;
 
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
 {
-    spin_lock(mapmemory_lock);
+    spin_lock(&mapmemory_lock);
 
     uint64_t ret = -1;
     if (ptr == NULL)
@@ -200,6 +200,6 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
         ret = ptr;
     }
     
-    spin_unlock(mapmemory_lock);
+    spin_unlock(&mapmemory_lock);
     return ret;
 }

@@ -380,7 +380,7 @@ void flush_task_dock()
 {
     if (have_full_screen_app) return;
 
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     int   i       = 0;
     while (true)
@@ -393,12 +393,12 @@ void flush_task_dock()
         if (front_p->next == NULL) { break; }
         front_p = front_p->next;
     }
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
 }
 
 void register_task_dock(WINDOWLSP window)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     TDB_t new_win = (TDB_t)malloc(sizeof(TASK_DOCK_BLOCK));
     memset(new_win, 0, sizeof(TASK_DOCK_BLOCK));
@@ -420,13 +420,13 @@ void register_task_dock(WINDOWLSP window)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void unregister_task_dock(WINDOWLSP window)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     int   i       = 0;
     TDB_t front_p = first_dock_block;
     TDB_t front_p2;
@@ -465,13 +465,13 @@ void unregister_task_dock(WINDOWLSP window)
         front_p  = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void focus_window_dock(WINDOWLSP win)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
     {
@@ -481,13 +481,13 @@ void focus_window_dock(WINDOWLSP win)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void change_task_dock_icon(WINDOWLSP win, char *path)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
     {
@@ -501,13 +501,13 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void save_window_xy(WINDOWLSP win)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
     {
@@ -523,7 +523,7 @@ void save_window_xy(WINDOWLSP win)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 

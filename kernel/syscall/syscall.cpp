@@ -104,7 +104,7 @@ next:
     fd_handle->node   = node;
     int index         = (int)lock_queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
     fd_handle->fd     = index;
-    spin_unlock(get_current_task()->parent_group->file_open->lock);
+    spin_unlock(&get_current_task()->parent_group->file_open->lock);
     if (index == -1)
     {
         write_serial_fmt("sys_open: open %s failed.\n", normalized_path);
@@ -406,7 +406,7 @@ uint64_t sys_brk(uint64_t brk) {
         return get_current_task()->parent_group->brk_current;
     }
 
-    spin_lock(mm_op_lock);
+    spin_lock(&mm_op_lock);
 
     if (brk > get_current_task()->parent_group->brk_current) {
         page_map_range_to_random(get_current_directory(),
@@ -416,7 +416,7 @@ uint64_t sys_brk(uint64_t brk) {
 
         vma_t *vma = vma_alloc();
         if (!vma) {
-            spin_unlock(mm_op_lock);
+            spin_unlock(&mm_op_lock);
             return (uint64_t)-ENOMEM;
         }
 
@@ -427,7 +427,7 @@ uint64_t sys_brk(uint64_t brk) {
         vma->vm_name = strdup("[heap]");
         if (!vma->vm_name) {
             vma_free(vma);
-            spin_unlock(mm_op_lock);
+            spin_unlock(&mm_op_lock);
             return (uint64_t)-ENOMEM;
         }
 
@@ -443,7 +443,7 @@ uint64_t sys_brk(uint64_t brk) {
 
         if (vma_insert(&get_current_task()->parent_group->vma_manager, vma)) {
             vma_free(vma);
-            spin_unlock(mm_op_lock);
+            spin_unlock(&mm_op_lock);
             return (uint64_t)-ENOMEM;
         }
 
@@ -485,7 +485,7 @@ uint64_t sys_brk(uint64_t brk) {
         get_current_task()->parent_group->brk_current = brk;
     }
 
-    spin_unlock(mm_op_lock);
+    spin_unlock(&mm_op_lock);
 
     return get_current_task()->parent_group->brk_current;
 }
@@ -532,7 +532,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
         if (queue_get(process->file_open, fd) == NULL) return SYSCALL_FAULT_(EBADF);
     }
 
-    spin_lock(mm_op_lock);
+    spin_lock(&mm_op_lock);
 
     vma_t *vma = vma_alloc();
     if (!vma) return SYSCALL_FAULT_(ENOMEM);
@@ -570,7 +570,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
     if (!(flags & MAP_ANONYMOUS)) {
         uint64_t ret = (uint64_t)vfs_map((vfs_node_t)queue_get(process->file_open, fd), start_addr, aligned_len,
                                          prot, flags, offset);
-        spin_unlock(mm_op_lock);
+        spin_unlock(&mm_op_lock);
         return ret;
     }
 
@@ -583,7 +583,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
     }
 
     lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags);
-    spin_unlock(mm_op_lock);
+    spin_unlock(&mm_op_lock);
 
     return start_addr;
 
@@ -1833,7 +1833,7 @@ sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 
     // if (check_user_overflow(vec, num_pages)) { return SYSCALL_FAULT_(EFAULT); }
 
-    // spin_lock(mm_op_lock);
+    // spin_lock(&mm_op_lock);
     uint64_t current_addr = start_page;
 
     for (uint64_t i = 0; i < num_pages; i++)
@@ -1847,7 +1847,7 @@ sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
         current_addr += PAGE_SIZE;
     }
 
-    // spin_unlock(mm_op_lock);
+    // spin_unlock(&mm_op_lock);
     return SYSCALL_SUCCESS;
 }
 

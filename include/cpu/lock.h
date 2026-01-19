@@ -2,44 +2,78 @@
 
 #include <stdint.h>
 #include <task/scheduler.h>
+#include <krlibc.h>
 
-typedef _Atomic volatile bool spin_t;
+typedef struct spinlock {
+    volatile long lock;
+    long rflags;
+} spin_t;
 
-#define SPIN_INIT false
+#define SPIN_INIT (spin_t){0, 0}
 
-#define spin_trylock(_spin_) (!__atomic_test_and_set(&(_spin_), __ATOMIC_SEQ_CST))
-#define spin_lock(_spin_)                                                                                              \
-    ({                                                                                                                 \
-        while (__atomic_test_and_set(&(_spin_), __ATOMIC_SEQ_CST)) {}                                                  \
-    })
-#define spin_unlock(_spin_) __atomic_clear(&(_spin_), __ATOMIC_SEQ_CST)
 
-#define spin_lockall(...)                                                                                              \
-    ({                                                                                                                 \
-        const spin_t _spins_[] = {__VA_ARGS__};                                                                        \
-        loop                                                                                                           \
-        {                                                                                                              \
-            usize _i_ = 0;                                                                                             \
-            for (; _i_ < COUNT(_spins_); _i_++)                                                                        \
-            {                                                                                                          \
-                if (!spin_trylock(_spins_[_i_])) break;                                                                \
-            }                                                                                                          \
-            if (_i_ == COUNT(_spins_)) break;                                                                          \
-            for (; _i_ > 0; _i_--)                                                                                     \
-            {                                                                                                          \
-                spin_unlock(_spins_[_i_ - 1]);                                                                         \
-            }                                                                                                          \
-        }                                                                                                              \
-    })
+static inline void spin_init(spin_t *lock) {
+    memset(lock, 0, sizeof(spin_t));
+}
 
-#define spin_unlockall(...)                                                                                            \
-    ({                                                                                                                 \
-        const spin_t _spins_[] = {__VA_ARGS__};                                                                        \
-        for (usize _i_ = COUNT(_spins_); _i_ > 0; _i_--)                                                               \
-        {                                                                                                              \
-            spin_unlock(_spins_[_i_ - 1]);                                                                             \
-        }                                                                                                              \
-    })
+static inline void spin_lock(spin_t *lock) {
+    asm volatile("1:\n\t"
+                 "lock btsq $0, %0\n\t" // 测试并设置
+                 "jc 1b\n\t"            // 如果已锁定则重试
+                 : "+m"(lock->lock)
+                 :
+                 : "memory", "cc");
+
+    asm volatile("mfence" ::: "memory");
+
+    long flags;
+    asm volatile("pushfq\n\t" // 保存RFLAGS
+                 "pop %0\n\t" // 存储到flags变量
+                 : "=r"(flags)
+                 :
+                 : "memory");
+
+    asm volatile("cli\n\t");
+
+    lock->rflags = flags; // 保存原始中断状态
+}
+
+static inline void spin_lock_no_irqsave(spin_t *lock) {
+    asm volatile("1:\n\t"
+                 "lock btsq $0, %0\n\t" // 测试并设置
+                 "jc 1b\n\t"            // 如果已锁定则重试
+                 : "+m"(lock->lock)
+                 :
+                 : "memory", "cc");
+
+    asm volatile("mfence" ::: "memory");
+}
+
+static inline void spin_unlock(spin_t *lock) {
+    asm volatile("lock btrq $0, %0\n\t" // 清除锁标志
+                 : "+m"(lock->lock)
+                 :
+                 : "memory", "cc");
+
+    long flags = lock->rflags;
+    asm volatile("push %0\n\t" // 恢复原始RFLAGS
+                 "popfq"
+                 :
+                 : "r"(flags)
+                 : "memory");
+
+    asm volatile("sfence" ::: "memory");
+}
+
+static inline void spin_unlock_no_irqstore(spin_t *lock) {
+    asm volatile("lock btrq $0, %0\n\t" // 清除锁标志
+                 : "+m"(lock->lock)
+                 :
+                 : "memory", "cc");
+
+    asm volatile("sfence" ::: "memory");
+}
+
 
 #define barrier() __asm__ volatile("" : : : "memory")
 

@@ -296,21 +296,21 @@ static void free_page_table_recursive(page_table_t *table, int level)
 
 page_directory_t *clone_page_directory(page_directory_t *dir, bool all_copy)
 {
-    spin_lock(page_lock);
+    spin_lock(&page_lock);
     page_directory_t *new_directory = (page_directory_t *)(malloc(sizeof(page_directory_t)));
     if (new_directory == NULL) return NULL;
     new_directory->table = copy_page_table_recursive(dir->table, 4, all_copy, false);
     if (!all_copy) memcpy((uint64_t *)new_directory->table + 256, (uint64_t *)dir->table + 256, PAGE_SIZE / 2);
-    spin_unlock(page_lock);
+    spin_unlock(&page_lock);
     return new_directory;
 }
 
 void free_page_directory(page_directory_t *dir)
 {
-    spin_lock(page_lock);
+    spin_lock(&page_lock);
     free_page_table_recursive(dir->table, 4);
     free(dir);
-    spin_unlock(page_lock);
+    spin_unlock(&page_lock);
 }
 
 void unmap_page(page_directory_t *directory, uint64_t vaddr)

@@ -38,7 +38,7 @@ uint16_t dock_ct_sheet;
 pcb_t found_pcb(int pid)
 {
     pcb_t ret = NULL;
-    spin_lock(pcb_group_queue->lock);
+    spin_lock(&pcb_group_queue->lock);
     queue_foreach(pcb_group_queue, node)
     {
         pcb_t pcb = (pcb_t)node->data;
@@ -48,7 +48,7 @@ pcb_t found_pcb(int pid)
             break;
         }
     }
-    spin_unlock(pcb_group_queue->lock);
+    spin_unlock(&pcb_group_queue->lock);
     return ret;
 }
 
@@ -78,13 +78,13 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
     {
         if (pcb->thread_queue->size > 0)
         {
-            spin_lock(pcb->thread_queue->lock);
+            spin_lock(&pcb->thread_queue->lock);
             queue_foreach(pcb->thread_queue, node)
             {
                 tcb_t tcb = (tcb_t)node->data;
                 kill_thread(tcb);
             }
-            spin_unlock(pcb->thread_queue->lock);
+            spin_unlock(&pcb->thread_queue->lock);
         }
 
         pcb->status       = ZOMBIE;
@@ -498,33 +498,33 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     vfs_close(node);
 
-    spin_lock(process->file_open->lock);
+    spin_lock(&process->file_open->lock);
     queue_foreach(process->file_open, node)
     {
         fd_file_handle *file_node = (fd_file_handle *)node->data;
         vfs_close(file_node->node);
         free(file_node);
     }
-    spin_unlock(process->file_open->lock);
+    spin_unlock(&process->file_open->lock);
     queue_destroy(process->file_open);
     process->file_open = queue_init();
-    spin_lock(process->virt_queue->lock);
+    spin_lock(&process->virt_queue->lock);
     queue_foreach(process->virt_queue, node)
     {
         mm_virtual_page_t *vpage = (mm_virtual_page_t *)node->data;
         free(vpage);
     }
-    spin_unlock(process->virt_queue->lock);
+    spin_unlock(&process->virt_queue->lock);
     queue_destroy(process->virt_queue);
     process->virt_queue = queue_init();
 
-    spin_lock(process->ipc_queue->lock);
+    spin_lock(&process->ipc_queue->lock);
     queue_foreach(process->ipc_queue, node)
     {
         ipc_message_t msg = (ipc_message_t)node->data;
         free(msg);
     }
-    spin_unlock(process->ipc_queue->lock);
+    spin_unlock(&process->ipc_queue->lock);
     queue_destroy(process->ipc_queue);
     process->ipc_queue = queue_init();
 
@@ -686,7 +686,7 @@ spin_t create_thread_lock = SPIN_INIT;
 
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
-    spin_lock(create_thread_lock);
+    spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
     tcb_t new_task = (tcb_t)aligned_alloc(KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
@@ -752,13 +752,13 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
         enable_scheduler();
         open_interrupt;
     }
-    spin_unlock(create_thread_lock);
+    spin_unlock(&create_thread_lock);
     return new_task->tid;
 }
 
 size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd)
 {
-    spin_lock(create_thread_lock);
+    spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
     if (!cwd)
@@ -827,13 +827,13 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         enable_scheduler();
         open_interrupt;
     }
-    spin_unlock(create_thread_lock);
+    spin_unlock(&create_thread_lock);
     return new_task->tid;
 }
 
 size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb)
 {
-    spin_lock(create_thread_lock);
+    spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
     if (!cwd)
@@ -902,7 +902,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
         enable_scheduler();
         open_interrupt;
     }
-    spin_unlock(create_thread_lock);
+    spin_unlock(&create_thread_lock);
     return new_task->tid;
 }
 

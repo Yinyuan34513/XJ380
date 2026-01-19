@@ -486,7 +486,7 @@ void procfs_on_new_task(pcb_t task) {
 
 void procfs_on_exit_task(pcb_t task) {
     if (procfs_root == NULL) return;
-    spin_lock(procfs_oplock);
+    spin_lock(&procfs_oplock);
 
     char *root_path = vfs_get_fullpath(procfs_root);
     char  name[strlen(root_path) + 1 + MAX_PID_NAME_LEN];
@@ -499,5 +499,5 @@ void procfs_on_exit_task(pcb_t task) {
         vfs_free(node);
     }
 
-    spin_unlock(procfs_oplock);
+    spin_unlock(&procfs_oplock);
 }

@@ -577,7 +577,7 @@ spin_t get_path_lock = SPIN_INIT;
 char *vfs_get_fullpath(vfs_node_t node) {
     if (node == NULL) return NULL;
     int inital = 32;
-    spin_lock(get_path_lock);
+    spin_lock(&get_path_lock);
     vfs_node_t *nodes = (vfs_node_t *)malloc(sizeof(vfs_node_t) * inital);
     // not_null_assets(nodes, "vfs_get_fullpath: null alloc.");
     int count = 0;
@@ -597,7 +597,7 @@ char *vfs_get_fullpath(vfs_node_t node) {
         if (j != 0) strcat(buff, "/");
     }
     free(nodes);
-    spin_unlock(get_path_lock);
+    spin_unlock(&get_path_lock);
     return buff;
 }
 

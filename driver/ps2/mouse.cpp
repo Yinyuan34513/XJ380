@@ -33,7 +33,7 @@ void process_mouse_button()
 {
     close_interrupt;
 
-    spin_lock(mouse_info_processing);
+    spin_lock(&mouse_info_processing);
 
     if (ms_dec.btn & 0x01)
     {
@@ -42,11 +42,8 @@ void process_mouse_button()
     }
     else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
     {
-        // 左键松开
-        tm t;
-        time_read(&t);
-        uint64_t click_time = mktime(&t);
-        if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 2)
+        uint64_t click_time = nanoTime();
+        if (ms_dec.first_click && ABS(click_time - ms_dec.click_time) < 300000000)
         {
             ms_dec.first_click = false;
             ms_dec.double_click = true;
@@ -303,23 +300,23 @@ void process_mouse_button()
         }
     }
 
-    spin_unlock(mouse_info_processing);
+    spin_unlock(&mouse_info_processing);
 }
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
+    send_eoi();
     uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
     {
         ms_dec.need_flush = true;
         process_mouse_button();
     }
-    send_eoi();
 }
 
 void process_mouse_info()
 {
-    spin_lock(mouse_info_processing);
+    spin_lock(&mouse_info_processing);
     
     if (ms_dec.left)
     {
@@ -380,7 +377,7 @@ void process_mouse_info()
 
     ms_dec.need_flush = false;
 
-    spin_unlock(mouse_info_processing);
+    spin_unlock(&mouse_info_processing);
 }
 
 bool mousedecode(uint8_t data)

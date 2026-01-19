@@ -62,7 +62,7 @@ extern vfs_node_t rootdir;
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
     disable_intr();
-    spin_lock(apu_lock);
+    spin_lock(&apu_lock);
 
     uint64_t ia32_apic_base  = rdmsr(0x1b);
     ia32_apic_base          |= 1 << 11;
@@ -156,7 +156,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     get_current_cpu()->current_task = apu_idle;
 
     scheduler_is_ready++;
-    spin_unlock(apu_lock);
+    spin_unlock(&apu_lock);
     enable_intr();
 
     while (true)

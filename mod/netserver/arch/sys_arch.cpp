@@ -26,8 +26,8 @@ void sys_init(void) {
     // boo!
 }
 
-void sys_mutex_lock(spin_t *spinlock) { spin_lock(spinlock); }
-void sys_mutex_unlock(spin_t *spinlock) { spin_unlock(spinlock); }
+void sys_mutex_lock(spin_t *spinlock) { spin_lock(&spinlock); }
+void sys_mutex_unlock(spin_t *spinlock) { spin_unlock(&spinlock); }
 
 err_t sys_mutex_new(spin_t *spinlock) {
     *spinlock=SPIN_INIT;
@@ -42,28 +42,28 @@ err_t sys_sem_new(sys_sem_t *sem, uint8_t cnt) {
 }
 
 void sys_sem_signal(sys_sem_t *sem) {
-    spin_lock(sem->lock);
+    spin_lock(&sem->lock);
     sem->cnt++;
-    spin_unlock(sem->lock);
+    spin_unlock(&sem->lock);
 }
 
 uint32_t sys_arch_sem_wait(sys_sem_t *sem, uint32_t timeout) {
     bool ret = false;
 
     while (true) {
-        spin_lock(sem->lock);
+        spin_lock(&sem->lock);
         if (sem->cnt > 0) {
             sem->cnt--;
             ret = true;
             goto cleanup;
         }
-        spin_unlock(sem->lock);
+        spin_unlock(&sem->lock);
 
         scheduler_yield();
     }
 
 cleanup:
-    spin_unlock(sem->lock);
+    spin_unlock(&sem->lock);
 just_return:
     return ret ? 0 : SYS_ARCH_TIMEOUT;
 }
@@ -104,7 +104,7 @@ err_t sys_mbox_new(sys_mbox_t *mbox, int size) {
 }
 
 void sys_mbox_free(sys_mbox_t *mbox) {
-    spin_lock(mbox->lock);
+    spin_lock(&mbox->lock);
 
     // 释放所有待处理的mboxBlock
     mboxBlock *browse = mbox->firstBlock;
@@ -117,19 +117,19 @@ void sys_mbox_free(sys_mbox_t *mbox) {
 
     free(mbox->msges);
     mbox->msges = NULL;
-    spin_unlock(mbox->lock); // for set_invalid()!
+    spin_unlock(&mbox->lock); // for set_invalid()!
 }
 
 void sys_mbox_set_invalid(sys_mbox_t *mbox) {
-    spin_lock(mbox->lock);
+    spin_lock(&mbox->lock);
     mbox->invalid = true;
-    spin_unlock(mbox->lock);
+    spin_unlock(&mbox->lock);
 }
 
 int sys_mbox_valid(sys_mbox_t *mbox) {
-    spin_lock(mbox->lock);
+    spin_lock(&mbox->lock);
     int ret = !mbox->invalid;
-    spin_unlock(mbox->lock);
+    spin_unlock(&mbox->lock);
     return ret;
 }
 
@@ -150,27 +150,27 @@ void sys_mbox_post_unsafe(sys_mbox_t *q, void *msg) {
 
 void sys_mbox_post(sys_mbox_t *q, void *msg) {
     while (true) {
-        spin_lock(q->lock);
+        spin_lock(&q->lock);
         if ((q->ptrWrite + 1) % q->size != q->ptrRead)
             break;
-        spin_unlock(q->lock);
+        spin_unlock(&q->lock);
 
         scheduler_yield();
     }
 
     sys_mbox_post_unsafe(q, msg);
-    spin_unlock(q->lock); // sys_mbox_post_unsafe不再解锁
+    spin_unlock(&q->lock); // sys_mbox_post_unsafe不再解锁
 }
 
 err_t sys_mbox_trypost(sys_mbox_t *q, void *msg) {
-    spin_lock(q->lock);
+    spin_lock(&q->lock);
     if ((q->ptrWrite + 1) % q->size == q->ptrRead) {
-        spin_unlock(q->lock);
+        spin_unlock(&q->lock);
         return ERR_MEM;
     }
 
     sys_mbox_post_unsafe(q, msg);
-    spin_unlock(q->lock); // sys_mbox_post_unsafe不再解锁
+    spin_unlock(&q->lock); // sys_mbox_post_unsafe不再解锁
     return ERR_OK;
 }
 
@@ -182,7 +182,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *q, void **msg, u32_t timeout) {
     mboxBlock *myBlock = NULL;
 
     while (true) {
-        spin_lock(q->lock);
+        spin_lock(&q->lock);
         if (q->ptrRead != q->ptrWrite) {
             // 如果之前分配过block，需要先清理
             if (myBlock) {
@@ -200,29 +200,29 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *q, void **msg, u32_t timeout) {
             myBlock->task = get_current_task();
             myBlock->write = false;
         }
-        spin_unlock(q->lock);
+        spin_unlock(&q->lock);
 
         scheduler_yield();
     }
 
     *msg = q->msges[q->ptrRead];
     q->ptrRead = (q->ptrRead + 1) % q->size;
-    spin_unlock(q->lock);
+    spin_unlock(&q->lock);
 
     return 0;
 }
 
 u32_t sys_arch_mbox_tryfetch(sys_mbox_t *q, void **msg) {
-    spin_lock(q->lock);
+    spin_lock(&q->lock);
     if (q->ptrRead == q->ptrWrite) {
-        spin_unlock(q->lock);
+        spin_unlock(&q->lock);
         return SYS_MBOX_EMPTY;
     }
 
-    // spin_lock(q->lock);
+    // spin_lock(&q->lock);
     *msg = q->msges[q->ptrRead];
     q->ptrRead = (q->ptrRead + 1) % q->size;
-    spin_unlock(q->lock);
+    spin_unlock(&q->lock);
 
     return ERR_OK;
 }

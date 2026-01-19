@@ -185,7 +185,7 @@ uint8_t FbFontWriter(Writer *writer, char ch)
 
 void PrintFmt(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &color, const char *fmt, ...)
 {
-    spin_lock(fb_print_lock);
+    spin_lock(&fb_print_lock);
     va_list args;
     va_start(args, fmt);
     char buf[256];
@@ -214,18 +214,18 @@ void PrintFmt(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &
     FbFontWriter(&fb_font_writer, '\0'); // Trigger flush
 
     va_end(args);
-    spin_unlock(fb_print_lock);
+    spin_unlock(&fb_print_lock);
 }
 
 void PrintString(SHEET_INFO *sht, SHEET *csheet, int x, int y, const char *s, const SHEET_BUFFER &color)
 {
-    spin_lock(fb_print_lock);
+    spin_lock(&fb_print_lock);
     for (int i = 0; s[i]; i++)
     { // 遍历字符串每一个字符，看看是不是空字符
         PrintFont(sht, csheet, x + 8 * i, y, s[i],
                   color); // 以(x,y)为基础，偏移i个字符（字体8*16，即i*8个像素）画字符
     }
-    spin_unlock(fb_print_lock);
+    spin_unlock(&fb_print_lock);
 }
 
 void PrintHex(SHEET_INFO *sht, SHEET *csheet, int x, int y, unsigned long long hex, const SHEET_BUFFER &color)

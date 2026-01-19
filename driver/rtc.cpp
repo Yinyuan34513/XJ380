@@ -28,13 +28,13 @@ uint8_t cmos_read(uint8_t addr) {
     bool is_sti = are_interrupts_enabled();
     open_interrupt;
 
-    spin_lock(cmos_register_lock);
+    spin_lock(&cmos_register_lock);
 
     if (is_sti) close_interrupt;
     
     outb(CMOS_ADDR, CMOS_NMI | addr);
     uint8_t value = inb(CMOS_DATA);
-    spin_unlock(cmos_register_lock);
+    spin_unlock(&cmos_register_lock);
     return value;
 };
 
@@ -43,13 +43,13 @@ void cmos_write(uint8_t addr, uint8_t value) {
     bool is_sti = are_interrupts_enabled();
     open_interrupt;
 
-    spin_lock(cmos_register_lock);
+    spin_lock(&cmos_register_lock);
 
     if (is_sti) close_interrupt;
     
     outb(CMOS_ADDR, CMOS_NMI | addr);
     outb(CMOS_DATA, value);
-    spin_unlock(cmos_register_lock);
+    spin_unlock(&cmos_register_lock);
 }
 
 int days_in_month[2][12] = {{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},

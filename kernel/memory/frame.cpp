@@ -229,26 +229,26 @@ void *early_alloc(size_t size)
 
 // void free_frame(uint64_t addr)
 // {
-//     spin_lock(frame_op_lock);
+//     spin_lock(&frame_op_lock);
 // #if ENABLE_BUDDY
 //     buddy_free_pages(addr, 1);
 // #else
 //     if (addr == 0)
 //     {
-//         spin_unlock(frame_op_lock);
+//         spin_unlock(&frame_op_lock);
 //         return;
 //     }
 //     size_t frame_index = addr / PAGE_SIZE;
 //     if (bitmap_get(&usable_regions, frame_index) == false)
 //     {
-//         spin_unlock(frame_op_lock);
+//         spin_unlock(&frame_op_lock);
 //         return;
 //     }
 //     Bitmap *bitmap = &frame_allocator.bitmap;
 //     bitmap_set(bitmap, frame_index, true);
 // #endif
 //     frame_allocator.usable_frames++;
-//     spin_unlock(frame_op_lock);
+//     spin_unlock(&frame_op_lock);
 // }
 
 // EXPORT_SYMBOL(free_frame);
@@ -259,14 +259,14 @@ void *early_alloc(size_t size)
 
 // void free_frames(uint64_t addr, uint64_t size)
 // {
-//     spin_lock(frame_op_lock);
+//     spin_lock(&frame_op_lock);
 // #if ENABLE_BUDDY
 //     buddy_free_pages(addr, size);
 // #else
 
 //     if (addr == 0)
 //     {
-//         spin_unlock(frame_op_lock);
+//         spin_unlock(&frame_op_lock);
 //         return;
 //     }
 
@@ -275,7 +275,7 @@ void *early_alloc(size_t size)
 //     {
 //         if (bitmap_get(&usable_regions, i) == false)
 //         {
-//             spin_unlock(frame_op_lock);
+//             spin_unlock(&frame_op_lock);
 //             return;
 //         }
 //     }
@@ -284,7 +284,7 @@ void *early_alloc(size_t size)
 // #endif
 //     frame_allocator.usable_frames += size;
 
-//     spin_unlock(frame_op_lock);
+//     spin_unlock(&frame_op_lock);
 // }
 
 // EXPORT_SYMBOL(free_frames);

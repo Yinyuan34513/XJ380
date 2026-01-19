@@ -304,9 +304,9 @@ void desktop_flusher()
 
     char *argv[2]    = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -465,9 +465,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_message();
 
-    module_setup();
-    dlinker_init();
-    load_all_kernel_module();
+    // module_setup();
+    // dlinker_init();
+    // load_all_kernel_module();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -504,7 +504,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     close_interrupt;
     disable_scheduler();
 
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    // create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
 
     enable_scheduler();
     open_interrupt;

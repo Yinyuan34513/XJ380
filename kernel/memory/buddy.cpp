@@ -416,12 +416,12 @@ uint64_t buddy_alloc_zone(zone_t *zone, size_t count) {
     if (order >= MAX_ORDER)
         return 0;
 
-    spin_lock(zone->allocator.lock);
+    spin_lock(&zone->allocator.lock);
     uint64_t addr = pop_front(&zone->allocator, order);
     if (addr != 0) {
         zone->free_pages -= required_pages;
     }
-    spin_unlock(zone->allocator.lock);
+    spin_unlock(&zone->allocator.lock);
 
     return addr;
 }
@@ -529,7 +529,7 @@ void add_memory_region(uint64_t start, uint64_t end, enum zone_type type) {
     if (start >= end)
         return;
 
-    spin_lock(zone->allocator.lock);
+    spin_lock(&zone->allocator.lock);
 
     uint64_t paddr = start;
     size_t remain_bytes = end - start;
@@ -575,7 +575,7 @@ void add_memory_region(uint64_t start, uint64_t end, enum zone_type type) {
         }
     }
 
-    spin_unlock(zone->allocator.lock);
+    spin_unlock(&zone->allocator.lock);
 }
 
 uint64_t alloc_frames(size_t count) {
@@ -655,10 +655,10 @@ void free_frames(uint64_t addr, size_t count) {
     if (order >= MAX_ORDER)
         order = MAX_ORDER - 1;
 
-    spin_lock(zone->allocator.lock);
+    spin_lock(&zone->allocator.lock);
     buddy_free_zone(zone, addr, order);
     bitmap_set_range(&using_regions, idx, idx + count, false);
-    spin_unlock(zone->allocator.lock);
+    spin_unlock(&zone->allocator.lock);
 }
 
 EXPORT_SYMBOL(free_frames);
