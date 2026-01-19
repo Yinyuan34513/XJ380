@@ -108,9 +108,6 @@ static void process_memory_region(uintptr_t start, uintptr_t end)
 
 void init_frame(MEMORY_MAP map)
 {
-#if ENABLE_BUDDY
-    init_frame_buddy(map);
-#else
     memory_size       = get_memory_size(map);
     memory_total_size = get_memory_all_size(map);
 
@@ -198,17 +195,12 @@ void init_frame(MEMORY_MAP map)
         }
         EfiMemory++;
     }
-#endif
 }
 
-spin_t        frame_op_lock        = SPIN_INIT;
+spin_t frame_op_lock = SPIN_INIT;
 
 uint64_t alloc_frames_l(size_t count)
 {
-#if ENABLE_BUDDY
-    frame_allocator.usable_frames -= count;
-    return buddy_alloc_pages(count);
-#else
     Bitmap *bitmap      = &frame_allocator.bitmap;
     size_t  frame_index = bitmap_find_range(bitmap, count, true);
 
@@ -218,7 +210,6 @@ uint64_t alloc_frames_l(size_t count)
     frame_allocator.usable_frames -= count;
 
     return frame_index * PAGE_SIZE;
-#endif
 }
 void *early_alloc(size_t size)
 {
@@ -252,8 +243,6 @@ void *early_alloc(size_t size)
 // }
 
 // EXPORT_SYMBOL(free_frame);
-
-
 
 // EXPORT_SYMBOL(alloc_frames);
 

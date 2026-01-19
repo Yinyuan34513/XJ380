@@ -16,12 +16,12 @@ page_directory_t *current_directory = NULL;
 extern bool     no_interrupt;
 extern uint64_t memory_size;
 uint64_t        double_fault_page = 0;
-page_t *page_maps;
-void *early_alloc(size_t size);
+page_t         *page_maps;
+void           *early_alloc(size_t size);
 void            page_init()
 {
     uint64_t page_maps_size = memory_size / PAGE_SIZE * sizeof(page_t);
-    page_maps               = (page_t*)early_alloc(page_maps_size);
+    page_maps               = (page_t *)early_alloc(page_maps_size);
     if (page_maps) memset(page_maps, 0, page_maps_size);
 }
 
@@ -328,7 +328,8 @@ void unmap_page(page_directory_t *directory, uint64_t vaddr)
     page_table_t *l1_table =
         (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x00007fffffff000));
 
-    free_frame(l1_table->entries[l1_index].value & 0x00007fffffff000);
+    if (l1_table->entries[l1_index].value & PTE_FRAME_ALLOCATED)
+        free_frame(l1_table->entries[l1_index].value & 0x00007fffffff000);
     l1_table->entries[l1_index].value = 0;
     flush_tlb(vaddr);
 }
@@ -400,7 +401,7 @@ uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, var, flags);
+        page_map_to(directory, var, var, flags | PTE_FRAME_ALLOCATED);
     }
     return addr;
 }
@@ -410,7 +411,7 @@ void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, alloc_frames(1), flags);
+        page_map_to(directory, var, alloc_frames(1), flags | PTE_FRAME_ALLOCATED);
     }
 }
 

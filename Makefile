@@ -18,12 +18,14 @@ SUDO_CMD = sudo
 endif
 
 ifeq ($(KVM), 1)
-KVM_FLAG = --enable-kvm
+KVM_FLAG = --enable-kvm -cpu host
+else
+KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
 
 COMPILER_PREFIX ?= 
 

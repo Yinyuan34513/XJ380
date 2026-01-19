@@ -1,17 +1,18 @@
 #pragma once
 
-#define PTE_PRESENT    (0x1 << 0)
-#define PTE_WRITEABLE  (0x1 << 1)
-#define PTE_USER       (0x1 << 2)
-#define PTE_FLAG_U     (0x1 << 3)
-#define PTE_HUGE       (0x1 << 7)
-#define PTE_NO_EXECUTE (((uint64_t)0x1) << 63)
+#define PTE_PRESENT         (0x1 << 0)
+#define PTE_WRITEABLE       (0x1 << 1)
+#define PTE_USER            (0x1 << 2)
+#define PTE_FLAG_U          (0x1 << 3)
+#define PTE_HUGE            (0x1 << 7)
+#define PTE_FRAME_ALLOCATED (((uint64_t)0x1) << 62)
+#define PTE_NO_EXECUTE      (((uint64_t)0x1) << 63)
 
 #define ARCH_PT_IS_TABLE(x) (((x) & (PTE_PRESENT | PTE_WRITEABLE)) == (PTE_PRESENT | PTE_WRITEABLE))
 #define ARCH_PT_IS_LARGE(x) (((x) & (PTE_PRESENT | PTE_HUGE)) == (PTE_PRESENT | PTE_HUGE))
 
-#define MAP_ANONYMOUS 32
-#define MAP_FIXED     16
+#define MAP_ANONYMOUS    32
+#define MAP_FIXED        16
 #define MREMAP_MAYMOVE   1
 #define MREMAP_FIXED     2
 #define MREMAP_DONTUNMAP 4
@@ -27,7 +28,8 @@
 #define ENTRY_MASK 0x1FF
 
 #include <stdint.h>
-typedef struct page {
+typedef struct page
+{
     int refcount;
     // TODO
 } page_t;
@@ -60,7 +62,6 @@ typedef struct page_directory
 {
     page_table_t *table;
 } page_directory_t;
-
 
 /**
  * 获取内核用页表

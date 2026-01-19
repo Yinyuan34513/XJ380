@@ -1,9 +1,9 @@
-#include "task/pcb.h"
 #include "cpu/regio.h"
 #include "krlibc.h"
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.hpp"
+#include "task/pcb.h"
 #include <cpu/longm.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
@@ -24,8 +24,8 @@ void check_group(pcb_t group)
         }
     }
 
-    lock_node *front_p = group->thread_queue->head;
-    bool group_dead = true;
+    lock_node *front_p    = group->thread_queue->head;
+    bool       group_dead = true;
     for (int i = 0; i < group->thread_queue->size && front_p != NULL; i++)
     {
         tcb_t thread = (tcb_t)front_p->data;
@@ -47,21 +47,21 @@ void check_group(pcb_t group)
     }
 }
 
-void killer_thread()
-{
-    while (true)
-    {
-        if (!no_interrupt)
-        {
-            open_interrupt;
-            enable_scheduler();
-        }
-        check_group(kernel_group);
-        __asm__ volatile("pause\n\t");
-    }
-}
+// void killer_thread()
+// {
+//     while (true)
+//     {
+//         if (!no_interrupt)
+//         {
+//             open_interrupt;
+//             enable_scheduler();
+//         }
+//         check_group(kernel_group);
+//         cpu_relax();
+//     }
+// }
 
 void init_killer()
 {
-    create_kernel_thread((void *)killer_thread, NULL, "Process Killer", NULL);
+    // create_kernel_thread((void *)killer_thread, NULL, "Process Killer", NULL);
 }

@@ -2,6 +2,7 @@
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
 #include <device.h>
+#include <dlinker.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
@@ -9,7 +10,6 @@
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
-#include <fs/vfs/proc.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -30,14 +30,13 @@
 #include <syscall/signal.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
-#include <dlinker.h>
 #include <ttf.h>
 #include <user/runfile.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
-SHEET   *msid;
+SHEET      *msid;
 
 extern mouse_dec     ms_dec;
 extern bool          winRD_lock;
@@ -161,13 +160,9 @@ void desktop_flusher()
     disable_intr();
     disable_scheduler();
 
-
-
     // 之后应该挪到OOBE里的部分
     init_runfile();
 
-
-    
     write_serial_string("desktop flusher is running\n");
 
     SHEET_INFO shtinf;
@@ -200,7 +195,7 @@ void desktop_flusher()
     int fonty = 50;
     // DEBUG
 #if 1 == 2
-// #if BUILD_EDITION == DEBUG_VERSION
+    // #if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_ct_sheet, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40,
                 "X:", WHITE);
     PrintString(&shtinf, &desktop_ct_sheet, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24,
@@ -302,7 +297,7 @@ void desktop_flusher()
 
     delay_s_hp(1);
 
-    char *argv[2]    = {"/system/icon/folder.png", NULL};
+    char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
@@ -341,7 +336,7 @@ void desktop_flusher()
                 }
             }
         }
-        
+
 #if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {
@@ -363,7 +358,7 @@ void desktop_flusher()
     }
 }
 #define KERNEL_HEAP_START 0xffffc00000000000
-#define KERNEL_HEAP_SIZE  (256 * 1024 * 1024)
+#define KERNEL_HEAP_SIZE  (64 * 1024 * 1024)
 
 void init_heap()
 {
@@ -400,7 +395,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 
-
     device_manager_init();
     vfs_init();
     fatfs_init();
@@ -433,7 +427,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_smp(BootConfig.MADT);
 
-    tcb_t idle_thread         = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
+    tcb_t idle_thread         = (tcb_t)malloc(sizeof(struct thread_control_block));
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
@@ -457,7 +451,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
-    procfs_setup();
     pipefs_setup();
     stdio_init();
 
