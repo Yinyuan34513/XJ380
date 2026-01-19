@@ -161,7 +161,7 @@ void mutex_destroy(mutex_t *mutex) {
     // 标记为已销毁
     mutex->state = MUTEX_DESTROYED;
     
-    // 唤醒所有等待的线程（返回错误）
+    // 唤醒所有等待的线程
     while (mutex->wait_queue->size > 0) {
         tcb_t thread = (tcb_t)queue_dequeue(mutex->wait_queue);
         if (thread != NULL) {
@@ -213,7 +213,7 @@ tcb_t mutex_get_owner(mutex_t *mutex) {
     return owner;
 }
 
-// 根据ID查找互斥锁
+// 根据ID查找互斥锁, 有点没用
 mutex_t *mutex_find_by_id(int id) {
     if (global_mutex_queue == NULL) {
         return NULL;
