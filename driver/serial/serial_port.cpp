@@ -784,3 +784,4 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
 }
 
 EXPORT_SYMBOL(write_serial_fmt);
+EXPORT_SYMBOL(write_serial_string);

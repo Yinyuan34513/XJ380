@@ -458,9 +458,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_message();
 
-    // module_setup();
-    // dlinker_init();
-    // load_all_kernel_module();
+    module_setup();
+    dlinker_init();
+    load_all_kernel_module();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -475,6 +475,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_user();
     init_killer();
     write_serial_string("User & Killer is ready\n");
+    
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
@@ -485,6 +486,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
+
 
     enable_scheduler();
     open_interrupt;
