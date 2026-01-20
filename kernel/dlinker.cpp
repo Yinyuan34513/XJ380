@@ -259,45 +259,45 @@ elf_start load_executor_elf(uint8_t *data, page_directory_t *dir, uint64_t offse
 #define KERNEL_MOD_SPACE_START 0xffffffffb0000000       // 内核模块加载起始地址
 #define KERNEL_MOD_SPACE_END   0xffffffffc0000000       // 内核模块加载结束地址
 
-void dlinker_load(kernel_mode_t *kmod,cp_module_t *module) {
-    if (module == NULL) return;
+// void dlinker_load(kernel_mode_t *kmod,cp_module_t *module) {
+//     if (module == NULL) return;
 
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)module->data;
+//     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)module->data;
 
-    Elf64_Phdr phdr[12];
-    if (ehdr->e_phnum > sizeof(phdr) / sizeof(phdr[0]) || ehdr->e_phnum < 1) {
-        write_serial_fmt("ELF file has wrong number of program headers");
-        return;
-    }
+//     Elf64_Phdr phdr[12];
+//     if (ehdr->e_phnum > sizeof(phdr) / sizeof(phdr[0]) || ehdr->e_phnum < 1) {
+//         write_serial_fmt("ELF file has wrong number of program headers");
+//         return;
+//     }
 
-    if (ehdr->e_type != ET_DYN) {
-        write_serial_fmt("ELF file is not a dynamic library.\n");
-        return;
-    }
+//     if (ehdr->e_type != ET_DYN) {
+//         write_serial_fmt("ELF file is not a dynamic library.\n");
+//         return;
+//     }
 
-    uint64_t load_size = 0;
+//     uint64_t load_size = 0;
 
-    Elf64_Phdr *phdrs = (Elf64_Phdr *)((char *)ehdr + ehdr->e_phoff);
-    if (!mmap_phdr_segment(ehdr, phdrs, get_current_directory(), false,
-                           KERNEL_MOD_SPACE_START + kernel_modules_load_offset, NULL, &load_size)) {
-        write_serial_fmt("Cannot mmap elf segment.\n");
-        return;
-    }
+//     Elf64_Phdr *phdrs = (Elf64_Phdr *)((char *)ehdr + ehdr->e_phoff);
+//     if (!mmap_phdr_segment(ehdr, phdrs, get_current_directory(), false,
+//                            KERNEL_MOD_SPACE_START + kernel_modules_load_offset, NULL, &load_size)) {
+//         write_serial_fmt("Cannot mmap elf segment.\n");
+//         return;
+//     }
 
-    dlinit_t dlinit =
-        load_dynamic(kmod,phdrs, ehdr, KERNEL_MOD_SPACE_START + kernel_modules_load_offset);
-    if (dlinit == NULL) {
-        dlinit = (dlinit_t)ehdr->e_entry;
-        if (dlinit == NULL) {
-            write_serial_fmt("Cannot find dlinit function.\n");
-            return;
-        }
-    }
-    write_serial_fmt("kmod: loaded module %s at 0x%x\n", module->module_name, KERNEL_MOD_SPACE_START + kernel_modules_load_offset);
-    kmod->entry_exit_code = dlinit();
+//     dlinit_t dlinit =
+//         load_dynamic(kmod,phdrs, ehdr, KERNEL_MOD_SPACE_START + kernel_modules_load_offset);
+//     if (dlinit == NULL) {
+//         dlinit = (dlinit_t)ehdr->e_entry;
+//         if (dlinit == NULL) {
+//             write_serial_fmt("Cannot find dlinit function.\n");
+//             return;
+//         }
+//     }
+//     write_serial_fmt("kmod: loaded module %s at 0x%x\n", module->module_name, KERNEL_MOD_SPACE_START + kernel_modules_load_offset);
+//     kmod->entry_exit_code = dlinit();
 
-    kernel_modules_load_offset += (load_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-}
+//     kernel_modules_load_offset += (load_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+// }
 
 dlfunc_t *find_func(const char *name) {
     for (size_t i = 0; i < dlfunc_count; i++) {
@@ -313,11 +313,6 @@ void find_kernel_symbol() {
         dlfunc_t *entry = &__ksymtab_start[i];
     }
 }
-
-void dlinker_init() {
-    find_kernel_symbol();
-}
-
 
 cp_module_t module_ls[256];
 size_t      module_count = 0;
@@ -365,7 +360,7 @@ void module_setup() {
     vfs_node_t mr = vfs_open("/lib/modules");
     list_foreach(mr->child,i) {
         vfs_node_t ch = (vfs_node_t)i->data;
-        char* buf = strdup(strcat("/lib/modules",ch->name));
+        char* buf = strdup(strcat("/lib/modules/",ch->name));
         extract_name(buf, module_ls[module_count].module_name, sizeof(char) * 20);
         module_ls[module_count].path = buf;
         uint8_t *data=(uint8_t*)malloc(ch->size+128);
@@ -418,4 +413,588 @@ void load_all_kernel_module() {
             }
         }
     }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 全局符号表（所有已加载动态库的符号）
+typedef struct {
+    const char*     name;
+    void*           addr;
+    dlhandle_t*     owner;
+} global_symbol_entry_t;
+
+#define MAX_GLOBAL_SYMBOLS 4096
+global_symbol_entry_t global_symbol_table[MAX_GLOBAL_SYMBOLS];
+size_t global_symbol_count = 0;
+
+// 动态库句柄链表
+static dlhandle_t* dlhandle_list = NULL;
+static size_t dlhandle_count = 0;
+
+extern dlfunc_t __ksymtab_start[]; // .ksymtab section
+extern dlfunc_t __ksymtab_end[];
+
+// 用户态动态库加载地址范围
+#define USER_SO_BASE_START  0x40000000  // 用户态 SO 起始地址
+#define USER_SO_BASE_END    0x80000000  // 用户态 SO 结束地址
+static uint64_t user_so_next_addr = USER_SO_BASE_START;
+
+// ==================== 辅助函数 ====================
+
+// 查找符号（支持全局查找）
+static void* find_symbol_internal(const char* name, dlhandle_t* exclude) {
+    // 1. 先在全局符号表中查找
+    write_serial_fmt("FIND name %s\n",name);
+    for (size_t i = 0; i < global_symbol_count; i++) {
+        if (strcmp(global_symbol_table[i].name, name) == 0) {
+            // 确保不是来自排除的句柄
+            if (exclude == NULL || global_symbol_table[i].owner != exclude) {
+                return global_symbol_table[i].addr;
+            }
+        }
+    }
+    
+    // 2. 在内核符号表中查找
+    for (size_t i = 0; i < dlfunc_count; i++) {
+        dlfunc_t* entry = &__ksymtab_start[i];
+        write_serial_fmt("sym name %s\n",name);
+        if (strcmp(entry->name, name) == 0) {
+            return entry->addr;
+        }
+    }
+    
+    // 3. 在指定的动态库中查找（如果提供了句柄）
+    if (exclude != NULL) {
+        for (size_t i = 0; i < exclude->export_count; i++) {
+            if (strcmp(exclude->exports[i].name, name) == 0) {
+                return exclude->exports[i].addr;
+            }
+        }
+    }
+    
+    return NULL;
+}
+
+// 添加符号到全局符号表
+static bool add_global_symbol(const char* name, void* addr, dlhandle_t* owner) {
+    if (global_symbol_count >= MAX_GLOBAL_SYMBOLS) {
+        write_serial_fmt("Global symbol table full\n");
+        return false;
+    }
+    
+    // 检查是否已存在
+    for (size_t i = 0; i < global_symbol_count; i++) {
+        if (strcmp(global_symbol_table[i].name, name) == 0) {
+            // 如果已存在，更新地址（后加载的覆盖先加载的）
+            global_symbol_table[i].addr = addr;
+            global_symbol_table[i].owner = owner;
+            return true;
+        }
+    }
+    
+    // 添加新符号
+    global_symbol_table[global_symbol_count].name = name;
+    global_symbol_table[global_symbol_count].addr = addr;
+    global_symbol_table[global_symbol_count].owner = owner;
+    global_symbol_count++;
+    
+    return true;
+}
+
+// 从动态库提取导出符号
+static void extract_exports_from_dynamic(dlhandle_t* handle, Elf64_Dyn* dyn) {
+    Elf64_Dyn* entry = dyn;
+    while (entry->d_tag != DT_NULL) {
+        if (entry->d_tag == DT_SYMTAB) {
+            handle->symtab = (Elf64_Sym*)(entry->d_un.d_ptr + handle->base_addr);
+        } else if (entry->d_tag == DT_STRTAB) {
+            handle->strtab = (char*)(entry->d_un.d_ptr + handle->base_addr);
+        } else if (entry->d_tag == DT_SYMENT) {
+            handle->symtabsz = entry->d_un.d_val;
+        }
+        entry++;
+    }
+    
+    if (handle->symtab && handle->strtab && handle->symtabsz) {
+        size_t num_symbols = handle->symtabsz / sizeof(Elf64_Sym);
+        
+        // 计算导出符号数量
+        size_t export_count = 0;
+        for (size_t i = 0; i < num_symbols; i++) {
+            Elf64_Sym* sym = &handle->symtab[i];
+            if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
+                sym->st_shndx != SHN_UNDEF) {
+                export_count++;
+            }
+        }
+        
+        // 分配并填充导出表
+        handle->exports = (dlfunc_t*)calloc(export_count, sizeof(dlfunc_t));
+        handle->export_count = 0;
+        
+        for (size_t i = 0; i < num_symbols; i++) {
+            Elf64_Sym* sym = &handle->symtab[i];
+            if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
+                sym->st_shndx != SHN_UNDEF) {
+                char* sym_name = &handle->strtab[sym->st_name];
+                
+                handle->exports[handle->export_count].name = strdup(sym_name);
+                handle->exports[handle->export_count].addr = 
+                    (void*)(handle->base_addr + sym->st_value);
+                handle->export_count++;
+                
+                // 添加到全局符号表
+                add_global_symbol(sym_name, 
+                    handle->exports[handle->export_count - 1].addr, handle);
+            }
+        }
+    }
+}
+
+// 解析依赖项
+static bool resolve_dependencies(dlhandle_t* handle, Elf64_Dyn* dyn) {
+    Elf64_Dyn* entry = dyn;
+    
+    // 先计算依赖项数量
+    size_t dep_count = 0;
+    while (entry->d_tag != DT_NULL) {
+        if (entry->d_tag == DT_NEEDED) {
+            dep_count++;
+        }
+        entry++;
+    }
+    
+    if (dep_count == 0) return true;
+    
+    // 分配依赖项数组
+    handle->dependencies = (dlhandle_t**)calloc(dep_count, sizeof(dlhandle_t*));
+    handle->dep_count = 0;
+    
+    // 重新遍历，加载依赖项
+    entry = dyn;
+    while (entry->d_tag != DT_NULL) {
+        if (entry->d_tag == DT_NEEDED) {
+            const char* lib_name = (char*)(handle->strtab + entry->d_un.d_val);
+            write_serial_fmt("Loading dependency: %s for %s\n", lib_name, handle->path);
+            
+            // 查找是否已加载
+            dlhandle_t* dep_handle = NULL;
+            dlhandle_t* current = dlhandle_list;
+            while (current) {
+                if (strstr(current->path, lib_name)) {
+                    dep_handle = current;
+                    break;
+                }
+                current = current->next;
+            }
+            
+            // 如果未加载，则加载
+            if (!dep_handle) {
+                // 构建完整路径
+                char full_path[256];
+                if (handle->is_kernel) {
+                    snprintf(full_path, sizeof(full_path), "/lib/modules/%s", lib_name);
+                } else {
+                    // 用户态：在当前目录或系统库目录查找
+                    snprintf(full_path, sizeof(full_path), "/lib/%s", lib_name);
+                }
+                
+                dep_handle = load_shared_object_internal(full_path, 
+                    handle->is_kernel ? RTLD_KERNEL : 0, handle->pd);
+                if (!dep_handle) {
+                    write_serial_fmt("Failed to load dependency: %s\n", lib_name);
+                    return false;
+                }
+            }
+            
+            handle->dependencies[handle->dep_count++] = dep_handle;
+        }
+        entry++;
+    }
+    
+    return true;
+}
+
+// 内部加载函数
+dlhandle_t* load_shared_object_internal(const char* path, int flags, 
+                                               page_directory_t* pd) {
+    if (!path) return NULL;
+    
+    // 1. 打开文件
+    vfs_node_t file = vfs_open(path);
+    if (!file) {
+        write_serial_fmt("Failed to open: %s\n", path);
+        return NULL;
+    }
+    
+    // 2. 读取文件到内存
+    uint8_t* file_data = (uint8_t*)malloc(file->size);
+    if (!file_data) {
+        vfs_close(file);
+        return NULL;
+    }
+    
+    vfs_read(file, file_data, 0, file->size);
+    vfs_close(file);
+    
+    // 3. 解析 ELF 头
+    Elf64_Ehdr* ehdr = (Elf64_Ehdr*)file_data;
+    if (!elf_test_head(ehdr)) {
+        write_serial_fmt("Invalid ELF file: %s\n", path);
+        free(file_data);
+        return NULL;
+    }
+    
+    // 4. 检查是否为动态库
+    if (ehdr->e_type != ET_DYN) {
+        write_serial_fmt("Not a shared object: %s\n", path);
+        free(file_data);
+        return NULL;
+    }
+    
+    // 5. 确定加载地址
+    uint64_t base_addr = 0;
+    bool is_kernel = (flags & RTLD_KERNEL) != 0;
+    
+    if (is_kernel) {
+        // 内核模块：使用固定地址空间
+        if (kernel_modules_load_offset >= (0xffffffffc0000000 - 0xffffffffb0000000)) {
+            write_serial_fmt("Kernel module space exhausted\n");
+            free(file_data);
+            return NULL;
+        }
+        base_addr = 0xffffffffb0000000 + kernel_modules_load_offset;
+    } else {
+        // 用户态动态库：分配地址空间
+        if (user_so_next_addr >= USER_SO_BASE_END) {
+            write_serial_fmt("User SO space exhausted\n");
+            free(file_data);
+            return NULL;
+        }
+        base_addr = user_so_next_addr;
+    }
+    
+    // 6. 创建句柄
+    dlhandle_t* handle = (dlhandle_t*)calloc(1, sizeof(dlhandle_t));
+    handle->path = strdup(path);
+    handle->base_addr = base_addr;
+    handle->ehdr = file_data; // 保留文件数据指针
+    handle->size = file->size;
+    handle->is_kernel = is_kernel;
+    handle->pd = pd;
+    
+    // 7. 映射段
+    Elf64_Phdr* phdrs = (Elf64_Phdr*)((char*)ehdr + ehdr->e_phoff);
+    uint64_t load_size = 0;
+    
+    if (!mmap_phdr_segment(ehdr, phdrs, pd ? pd : get_current_directory(), 
+                          !is_kernel, base_addr, NULL, &load_size)) {
+        write_serial_fmt("Failed to map segments: %s\n", path);
+        free(handle->path);
+        free(handle);
+        free(file_data);
+        return NULL;
+    }
+    
+    // 8. 更新地址空间
+    if (is_kernel) {
+        kernel_modules_load_offset += (load_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    } else {
+        user_so_next_addr += (load_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    }
+    
+    // 9. 处理动态段
+    Elf64_Phdr* dynamic_phdr = NULL;
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        if (phdrs[i].p_type == PT_DYNAMIC) {
+            dynamic_phdr = &phdrs[i];
+            break;
+        }
+    }
+    
+    if (dynamic_phdr) {
+        Elf64_Dyn* dyn = (Elf64_Dyn*)(base_addr + dynamic_phdr->p_vaddr);
+        
+        // 提取符号信息
+        extract_exports_from_dynamic(handle, dyn);
+        
+        // 解析依赖项
+        if (!resolve_dependencies(handle, dyn)) {
+            write_serial_fmt("Failed to resolve dependencies: %s\n", path);
+            // 清理部分加载的资源
+            return NULL;
+        }
+        
+        // 处理重定位
+        if (!process_dynamic_relocations(dyn, handle)) {
+            write_serial_fmt("Failed to process relocations: %s\n", path);
+            return NULL;
+        }
+    }
+    
+    // 10. 执行初始化函数（如果有）
+    void* init_func = find_symbol_address("_init", ehdr, base_addr);
+    if (init_func) {
+        write_serial_fmt("Calling init function for %s\n", path);
+        ((void (*)())init_func)();
+    }
+    
+    // 11. 添加到句柄链表
+    if (!dlhandle_list) {
+        dlhandle_list = handle;
+    } else {
+        handle->next = dlhandle_list;
+        dlhandle_list->prev = handle;
+        dlhandle_list = handle;
+    }
+    dlhandle_count++;
+    
+    write_serial_fmt("Loaded shared object: %s at 0x%llx\n", path, base_addr);
+    return handle;
+}
+
+// 处理动态重定位
+bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle) {
+    Elf64_Rela* rela = NULL;
+    size_t relasz = 0;
+    Elf64_Rela* jmprel = NULL;
+    size_t pltrelsz = 0;
+    
+    Elf64_Dyn* entry = dyn;
+    while (entry->d_tag != DT_NULL) {
+        switch (entry->d_tag) {
+        case DT_RELA:
+            rela = (Elf64_Rela*)(entry->d_un.d_ptr + handle->base_addr);
+            break;
+        case DT_RELASZ:
+            relasz = entry->d_un.d_val;
+            break;
+        case DT_JMPREL:
+            jmprel = (Elf64_Rela*)(entry->d_un.d_ptr + handle->base_addr);
+            break;
+        case DT_PLTRELSZ:
+            pltrelsz = entry->d_un.d_val;
+            break;
+        }
+        entry++;
+    }
+    
+    // 处理普通重定位
+    if (rela && relasz) {
+        size_t rela_count = relasz / sizeof(Elf64_Rela);
+        for (size_t i = 0; i < rela_count; i++) {
+            Elf64_Rela* r = &rela[i];
+            uint32_t type = ELF64_R_TYPE(r->r_info);
+            uint32_t sym_idx = ELF64_R_SYM(r->r_info);
+            uint64_t* target = (uint64_t*)(handle->base_addr + r->r_offset);
+            
+            Elf64_Sym* sym = NULL;
+            if (sym_idx && handle->symtab) {
+                sym = &handle->symtab[sym_idx];
+            }
+            
+            switch (type) {
+            case R_X86_64_GLOB_DAT:
+            case R_X86_64_JUMP_SLOT: {
+                if (sym) {
+                    char* sym_name = &handle->strtab[sym->st_name];
+                    void* addr = find_symbol_internal(sym_name, handle);
+                    if (!addr) {
+                        write_serial_fmt("Undefined symbol: %s\n", sym_name);
+                        return false;
+                    }
+                    *target = (uint64_t)addr;
+                }
+                break;
+            }
+            case R_X86_64_RELATIVE:
+                *target = handle->base_addr + r->r_addend;
+                break;
+            case R_X86_64_64:
+                if (sym) {
+                    *target = handle->base_addr + sym->st_value + r->r_addend;
+                }
+                break;
+            default:
+                write_serial_fmt("Unhandled relocation type: %u\n", type);
+                break;
+            }
+        }
+    }
+    
+    // 处理 PLT 重定位
+    if (jmprel && pltrelsz) {
+        size_t jmprel_count = pltrelsz / sizeof(Elf64_Rela);
+        for (size_t i = 0; i < jmprel_count; i++) {
+            Elf64_Rela* r = &jmprel[i];
+            uint32_t sym_idx = ELF64_R_SYM(r->r_info);
+            uint64_t* target = (uint64_t*)(handle->base_addr + r->r_offset);
+            
+            if (sym_idx && handle->symtab) {
+                Elf64_Sym* sym = &handle->symtab[sym_idx];
+                char* sym_name = &handle->strtab[sym->st_name];
+                void* addr = find_symbol_internal(sym_name, handle);
+                if (!addr) {
+                    write_serial_fmt("Undefined PLT symbol: %s\n", sym_name);
+                    return false;
+                }
+                *target = (uint64_t)addr;
+            }
+        }
+    }
+    
+    return true;
+}
+
+
+void* dlopen(const char* filename, int flags) {
+    if (!filename) {
+        // 返回全局句柄
+        return (void*)0x1;
+    }
+    
+    // 检查是否已加载
+    dlhandle_t* current = dlhandle_list;
+    while (current) {
+        if (strcmp(current->path, filename) == 0) {
+            // 已加载，增加引用计数（TODO）
+            return current;
+        }
+        current = current->next;
+    }
+    
+    // 判断是否是内核模块
+    bool is_kernel = false;
+    if (strstr(filename, ".km") || strstr(filename, "/lib/modules/")) {
+        is_kernel = true;
+        flags |= RTLD_KERNEL;
+    }
+    
+    // 加载动态库
+    page_directory_t* pd = NULL;
+    if (!is_kernel) {
+        pd = get_current_directory(); // 当前进程页表
+    }
+    
+    dlhandle_t* handle = load_shared_object_internal(filename, flags, pd);
+    return (void*)handle;
+}
+
+void* dlsym(void* handle, const char* symbol) {
+    if (!symbol) return NULL;
+    
+    if (handle == (void*)0x1) {
+        // 全局查找
+        return find_symbol_internal(symbol, NULL);
+    }
+    
+    dlhandle_t* dlhandle = (dlhandle_t*)handle;
+    
+    // 1. 先在当前动态库中查找
+    for (size_t i = 0; i < dlhandle->export_count; i++) {
+        if (strcmp(dlhandle->exports[i].name, symbol) == 0) {
+            return dlhandle->exports[i].addr;
+        }
+    }
+    
+    // 2. 在依赖项中查找
+    for (size_t i = 0; i < dlhandle->dep_count; i++) {
+        dlhandle_t* dep = dlhandle->dependencies[i];
+        for (size_t j = 0; j < dep->export_count; j++) {
+            if (strcmp(dep->exports[j].name, symbol) == 0) {
+                return dep->exports[j].addr;
+            }
+        }
+    }
+    
+    // 3. 全局查找
+    return find_symbol_internal(symbol, dlhandle);
+}
+
+int dlclose(void* handle) {
+    if (!handle || handle == (void*)0x1) return -1;
+    
+    dlhandle_t* dlhandle = (dlhandle_t*)handle;
+    
+    // TODO: 实现引用计数和实际卸载
+    
+    write_serial_fmt("dlclose: %s \n", dlhandle->path);
+    return 0;
+}
+
+// 错误信息缓冲区
+static char dlerror_buf[256];
+static char* dlerror_ptr = NULL;
+
+// 标准 dlerror 实现
+char* dlerror() {
+    char* result = dlerror_ptr;
+    dlerror_ptr = NULL;
+    return result;
+}
+
+// 设置错误信息
+static void set_dlerror(const char* msg) {
+    strncpy(dlerror_buf, msg, sizeof(dlerror_buf) - 1);
+    dlerror_buf[sizeof(dlerror_buf) - 1] = '\0';
+    dlerror_ptr = dlerror_buf;
+}
+
+void dlinker_load(kernel_mode_t* kmod, cp_module_t* module) {
+    if (!module) return;
+    
+    
+    dlhandle_t* handle = load_shared_object_internal(strdup(module->path), RTLD_KERNEL, NULL);
+    if (!handle) {
+        write_serial_fmt("Failed to load kernel module: %s\n", module->module_name);
+        return;
+    }
+    
+    // 查找初始化函数
+    Elf64_Ehdr* ehdr = (Elf64_Ehdr*)handle->ehdr;
+    void* entry = find_symbol_address("dlmain", ehdr, handle->base_addr);
+    if (!entry) entry = find_symbol_address("_dlmain", ehdr, handle->base_addr);
+    
+    kmod->entry = (dlinit_t)entry;
+    kmod->task_entry = NULL; // 由模块决定
+    
+    // 执行初始化
+    if (kmod->entry) {
+        write_serial_fmt("find dlmain \n");
+        kmod->entry_exit_code = kmod->entry();
+    }
+    
+    kmod->module = module;
+    write_serial_fmt("Loaded kernel module: %s at 0x%llx\n", 
+                     module->module_name, handle->base_addr);
+}
+
+void dlinker_init() {
+    // 初始化内核符号表
+    dlfunc_count = __ksymtab_end - __ksymtab_start;
+    write_serial_fmt("Found %lu kernel symbols\n", dlfunc_count);
+    
+    // 将内核符号添加到全局符号表
+    for (size_t i = 0; i < dlfunc_count; i++) {
+        dlfunc_t* entry = &__ksymtab_start[i];
+        add_global_symbol(entry->name, entry->addr, NULL); // NULL 表示内核
+    }
+    
+    write_serial_fmt("Dynamic linker initialized\n");
 }

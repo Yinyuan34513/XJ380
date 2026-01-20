@@ -6,39 +6,32 @@
 #include <proto.hpp>
 
 // 当前系统已创建的互斥锁队列
-static lock_queue *global_mutex_queue = NULL;
-static spin_t global_mutex_lock = SPIN_INIT;
+// static lock_queue *global_mutex_queue = NULL;
+// static spin_t global_mutex_lock = SPIN_INIT;
 static size_t next_mutex_id = 1;
 
 // 初始化互斥锁子系统
-void mutex_init_system() {
-    if (global_mutex_queue == NULL) {
-        global_mutex_queue = queue_init();
-    }
-}
+// void mutex_init_system() {
+//     if (global_mutex_queue == NULL) {
+//         global_mutex_queue = queue_init();
+//     }
+// }
 
 // 创建互斥锁
-mutex_t *mutex_create(bool recursive) {
-    mutex_init_system();//en. 懒得放了
+void mutex_create(mutex_t* mtx,bool recursive) {
+    // mutex_init_system();//en. 懒得放了
     
-    mutex_t *mutex = (mutex_t *)malloc(sizeof(mutex_t));
-    if (mutex == NULL) {
-        return NULL;
-    }
-    
-    mutex->lock = SPIN_INIT;
-    mutex->state = MUTEX_UNLOCKED;
-    mutex->owner = NULL;
-    mutex->wait_queue = queue_init();
-    mutex->rcc = 0;
-    mutex->rec = recursive;
+    mtx->lock = SPIN_INIT;
+    mtx->state = MUTEX_UNLOCKED;
+    mtx->owner = NULL;
+    mtx->wait_queue = queue_init();
+    mtx->rcc = 0;
+    mtx->rec = recursive;
     
     // 添加到全局队列
-    spin_lock(&global_mutex_lock);
-    queue_enqueue_id(global_mutex_queue, mutex, next_mutex_id++);
-    spin_unlock(&global_mutex_lock);
-    
-    return mutex;
+    // spin_lock(&global_mutex_lock);
+    // queue_enqueue_id(global_mutex_queue, mutex, next_mutex_id++);
+    // spin_unlock(&global_mutex_lock);
 }
 
 // 获取互斥锁（阻塞）
@@ -151,34 +144,29 @@ int mutex_unlock(mutex_t *mutex) {
 }
 
 // 销毁互斥锁
-void mutex_destroy(mutex_t *mutex) {
+int mutex_destroy(mutex_t *mutex) {
     if (mutex == NULL) {
-        return;
+        return -1;
     }
     
     spin_lock(&mutex->lock);
+    if(mutex->wait_queue->size >0)
+    {
+        return -EOPNOTSUPP;
+    }
     
     // 标记为已销毁
     mutex->state = MUTEX_DESTROYED;
     
-    // 唤醒所有等待的线程
-    while (mutex->wait_queue->size > 0) {
-        tcb_t thread = (tcb_t)queue_dequeue(mutex->wait_queue);
-        if (thread != NULL) {
-            thread->status = START;
-            add_task(thread);
-        }
-    }
-    
     // 从全局队列中移除
-    spin_lock(&global_mutex_lock);
-    queue_foreach(global_mutex_queue, node) {
-        if (node->data == mutex) {//匹配上了
-            queue_remove_at(global_mutex_queue, node->index);
-            break;
-        }
-    }
-    spin_unlock(&global_mutex_lock);
+    // spin_lock(&global_mutex_lock);
+    // queue_foreach(global_mutex_queue, node) {
+    //     if (node->data == mutex) {//匹配上了
+    //         queue_remove_at(global_mutex_queue, node->index);
+    //         break;
+    //     }
+    // }
+    // spin_unlock(&global_mutex_lock);
     
     // 释放资源
     queue_destroy(mutex->wait_queue);
@@ -211,17 +199,4 @@ tcb_t mutex_get_owner(mutex_t *mutex) {
     spin_unlock(&mutex->lock);
     
     return owner;
-}
-
-// 根据ID查找互斥锁, 有点没用
-mutex_t *mutex_find_by_id(int id) {
-    if (global_mutex_queue == NULL) {
-        return NULL;
-    }
-    
-    spin_lock(&global_mutex_lock);
-    mutex_t *mutex = (mutex_t *)queue_get(global_mutex_queue, id);
-    spin_unlock(&global_mutex_lock);
-    
-    return mutex;
 }

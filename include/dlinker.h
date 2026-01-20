@@ -4,7 +4,7 @@
 
 #include "krlibc.h"
 #include <proto.hpp>
-
+#include <elf.h>
 typedef struct {
     bool     is_use;
     char     module_name[64];
@@ -33,6 +33,25 @@ typedef struct {
     void *addr;
 } dlfunc_t;
 
+#define RTLD_LAZY       0x00001     // 延迟绑定（懒加载）
+#define RTLD_NOW        0x00002     // 立即绑定
+#define RTLD_BINDING_MASK 0x00003   // 绑定模式掩码
+
+// GNU 扩展标志
+#define RTLD_GLOBAL     0x00100     // 符号全局可见
+#define RTLD_LOCAL      0x00000     // 符号局部可见（默认）
+#define RTLD_NODELETE   0x01000     // 不卸载库
+#define RTLD_NOLOAD     0x00004     // 不加载，仅检查是否已加载
+#define RTLD_DEEPBIND   0x00008     // 优先在自身查找符号
+
+// 内核特定标志
+#define RTLD_KERNEL     0x10000     // 加载为内核模块
+#define RTLD_USER       0x20000     // 加载为用户态库
+
+// 组合标志
+#define RTLD_DEFAULT    ((void*)0)  // 默认查找顺序
+#define RTLD_NEXT       ((void*)-1) // 查找下一个出现的符号
+
 typedef struct kernel_mode {
     cp_module_t *module;
     dlinit_t     entry;
@@ -58,3 +77,45 @@ void load_all_kernel_module();
 void start_all_kernel_module();
 
 void module_setup();
+// 动态库句柄
+typedef struct dlhandle {
+    char*           path;           // 动态库路径
+    uint64_t        base_addr;      // 加载基地址
+    void*           ehdr;           // ELF 头指针
+    size_t          size;           // 动态库大小
+    struct dlhandle* next;          // 链表下一个
+    struct dlhandle* prev;          // 链表上一个
+    bool            is_kernel;      // 是否是内核模块
+    page_directory_t* pd;           // 所属页目录（用户态）
+    
+    // 动态段信息
+    Elf64_Sym*      symtab;
+    char*           strtab;
+    size_t          symtabsz;
+    
+    // 导出符号表
+    dlfunc_t*       exports;
+    size_t          export_count;
+    
+    // 依赖项
+    struct dlhandle** dependencies;
+    size_t           dep_count;
+} dlhandle_t;
+dlhandle_t* load_shared_object_internal(const char* path, int flags, 
+                                               page_directory_t* pd);
+
+bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// 标准动态链接接口
+void* dlopen(const char* filename, int flags);
+void* dlsym(void* handle, const char* symbol);
+int dlclose(void* handle);
+char* dlerror(void);
+
+#ifdef __cplusplus
+}
+#endif

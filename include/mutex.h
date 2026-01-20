@@ -20,10 +20,10 @@ typedef struct mutex {
     bool rec;    // 是否为递归锁
 } mutex_t;
 
-mutex_t *mutex_create(bool recursive);
+void mutex_create(mutex_t* mtx,bool recursive);
 int mutex_lock(mutex_t *mutex);
 int mutex_trylock(mutex_t *mutex);
 int mutex_unlock(mutex_t *mutex);
-void mutex_destroy(mutex_t *mutex);
+int mutex_destroy(mutex_t *mutex);
 bool mutex_is_locked(mutex_t *mutex);
 tcb_t mutex_get_owner(mutex_t *mutex);
