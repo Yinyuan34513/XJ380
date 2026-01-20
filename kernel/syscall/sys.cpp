@@ -4,9 +4,10 @@
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
 #include <mm/lazyalloc.h>
-#include <build_settings.h>
+#include "../build_settings.h"
 #include <pipe.h>
 #include <rtc.h>
+#include <math.hpp>
 sys_(exit, int exit_code)
 {
     tcb_t exit_thread = get_current_task();
