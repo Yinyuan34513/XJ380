@@ -45,9 +45,9 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
     //    }
     //}
 
-    void *heap_memory = xapi_MapMemory(NULL, 256 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    memset(heap_memory, 0, 256 * 1024 * 1024);
-    heap_init((uint8_t *)heap_memory, 256 * 1024 * 1024);
+    void *heap_memory = xapi_MapMemory(NULL, 16 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    memset(heap_memory, 0, 16 * 1024 * 1024);
+    heap_init((uint8_t *)heap_memory, 16 * 1024 * 1024);
 
     uint64_t pid  = xapi_Fork();
 
