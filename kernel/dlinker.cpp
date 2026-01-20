@@ -862,12 +862,10 @@ bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle) {
     return true;
 }
 
-// ==================== 公共 API ====================
 
-// 标准 dlopen 实现
 void* dlopen(const char* filename, int flags) {
     if (!filename) {
-        // 返回全局句柄（用于查找主程序符号）
+        // 返回全局句柄
         return (void*)0x1;
     }
     
@@ -898,7 +896,6 @@ void* dlopen(const char* filename, int flags) {
     return (void*)handle;
 }
 
-// 标准 dlsym 实现
 void* dlsym(void* handle, const char* symbol) {
     if (!symbol) return NULL;
     
@@ -930,7 +927,6 @@ void* dlsym(void* handle, const char* symbol) {
     return find_symbol_internal(symbol, dlhandle);
 }
 
-// 标准 dlclose 实现（简化版）
 int dlclose(void* handle) {
     if (!handle || handle == (void*)0x1) return -1;
     
@@ -938,7 +934,7 @@ int dlclose(void* handle) {
     
     // TODO: 实现引用计数和实际卸载
     
-    write_serial_fmt("dlclose: %s (unload not fully implemented)\n", dlhandle->path);
+    write_serial_fmt("dlclose: %s \n", dlhandle->path);
     return 0;
 }
 
@@ -960,9 +956,6 @@ static void set_dlerror(const char* msg) {
     dlerror_ptr = dlerror_buf;
 }
 
-// ==================== 内核模块兼容性 ====================
-
-// 保持原有内核模块加载函数，但基于新架构重构
 void dlinker_load(kernel_mode_t* kmod, cp_module_t* module) {
     if (!module) return;
     

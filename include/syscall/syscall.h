@@ -469,3 +469,80 @@ uint64_t sys_brk(uint64_t addr);
 
 // uint64_t sys_arch_prctl(uint64_t cmd, uint64_t arg);
 
+sys_(exit, int exit_code);
+sys_(open, char *path0, uint64_t flags, uint64_t mode);
+sys_(close, int fd);
+sys_(write, int fd, uint8_t *buffer, size_t size);
+sys_(read, int fd, uint8_t *buffer, size_t size);
+sys_(sigret);
+sys_(getpid);
+sys_(stat, char *fn, struct stat *buf);
+sys_(arch_prctl, uint64_t code, uint64_t addr);
+sys_(yield);
+sys_(uname, struct utsname *utsname);
+sys_(nano_sleep, void *time_handle);
+sys_(ioctl, int fd, int options, void *arg2);
+sys_(writev, int fd, struct iovec *iov, int iovcnt);
+sys_(readv, int fd, struct iovec *iov, int iovcnt0);
+uint64_t sys_brk(uint64_t brk);//SB
+sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
+         uint64_t offset);//sb
+sys_(munmap, uint64_t addr, size_t size);//fuck
+
+sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t flags,
+         uint64_t new_addr);//g
+
+sys_(getcwd, char *buffer, size_t length);//nm
+
+sys_(chdir, char *s);
+
+sys_(exit_group, int exit_code);
+sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
+sys_(sched_getaffinity);//不支持
+sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
+sys_(dup2, int fd, int newfd);
+sys_(dup, int fd);
+sys_(fcntl, int fd, int cmd, uint64_t arg);
+sys_(fork);
+sys_(get_tid);
+sys_(vfork);
+sys_(execve, char *path, char **argv, char **envp);
+sys_(fstat, int fd, struct stat *buf);
+sys_(clock_gettime, uint64_t arg0, struct timespec *ts);
+sys_(sendfile, int out_fd, int in_fd, uint64_t *offset_ptr, size_t count);
+sys_(statfs, char *path, struct statfs *buf);
+sys_(pivot_root, char *new_root, char *put_old);
+sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec);
+sys_(getppid);
+sys_(fsopen, char *fsname, uint32_t flags);
+sys_(getgid);
+sys_(readlink);
+sys_(umount2);
+sys_(link, char *name, char *nw);
+sys_(symlink, char *name, char *nw);
+sys_(rename, char *oldpath, char *newpath);
+sys_(getgroups, int count, int *gid_list);
+sys_(getpgid);
+sys_(setpgid, int pid, int pgid);
+sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *data);
+sys_(pwrite, int fd, uint8_t *buffer);
+sys_(pread, int fd, uint8_t *buffer);
+sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags);
+sys_(openat);
+sys_(faccessat2);
+sys_(faccessat);
+sys_(access, char *filename);
+sys_(unlinkat);
+sys_(rmdir);
+sys_(unlink);
+sys_(pipe, int *pipefd);
+sys_(pipe2, int *pipefd, uint64_t flags);
+sys_(statx, int dirfd, char *pathname, uint64_t flags, uint64_t mask, struct statx *buff);
+sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags);
+sys_(getdents, int fd, struct dirent *dents, size_t size);
+sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timespec *timeout,
+     WeirdPselect6 *weirdPselect6);
+sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct timeval *timeout);
+sys_(lseek, int fd, size_t offset, size_t whence);
+sys_(mkdir, char *name, uint64_t mode);
+sys_(clock_getres);
