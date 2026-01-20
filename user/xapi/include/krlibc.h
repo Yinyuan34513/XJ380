@@ -201,6 +201,4 @@ size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type);
 void uint64_to_string(uint64_t num, char *buffer, int buffer_size);
 void int_to_string(int num, char *buffer, int buffer_size);
 
-void merge_string(char *dst, char *src);
-
 // static inline void *memmove(void *dest, const void *src, size_t n);
