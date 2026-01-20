@@ -215,8 +215,8 @@ void check_command()
         }
         else if (check_dir_com(input_buf) == 2)
         {
-            merge_string(current_path, "/");
-            merge_string(current_path, input_buf);
+            strcat(current_path, "/");
+            strcat(current_path, input_buf);
         }
         else if (p_inbuf > 0)
         {

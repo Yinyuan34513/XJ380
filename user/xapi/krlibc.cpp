@@ -920,27 +920,3 @@ void int_to_string(int num, char *buffer, int buffer_size)
 
 //     return dest;
 // }
-
-void merge_string(char *dst, char *src)
-{
-    char *s1 = dst;
-    char *s2 = src;
-
-    while (*s1)
-        s1++;
-
-    while (*s2)
-    {
-        if (*(s1 - 1) == '/' && *s2 == '/')
-        {
-            s1++;
-            s2++;
-            continue;
-        }
-        *s1 = *s2;
-        s1++;
-        s2++;
-    }
-
-    *s1 = '\0';
-}
