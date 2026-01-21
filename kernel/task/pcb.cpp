@@ -71,7 +71,6 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
         return;
     }
 
-    // if (get_current_user()->fgproc == pcb->pid) { get_current_user()->fgproc = 0; }
 
     if (is_zombie)
     {
@@ -163,6 +162,7 @@ void kill_thread(tcb_t task)
         return;
     }
     task->status = DEATH;
+    // kill_thread0(task); 要用的解掉 但可能要加锁
 }
 
 extern void remove_task(tcb_t task);
@@ -187,7 +187,6 @@ void kill_thread0(tcb_t task)
     write_serial_string("\n");
     kill_thread(get_current_task());
     open_interrupt;
-    //    kill_thread(get_current_task()->tid);
     while (true)
         __asm__ volatile("hlt");
 }
@@ -229,7 +228,6 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
         {
             if (envp[env_i] != NULL)
             {
-                // write_serial_fmt("envp[%d]: %s\n",env_i,envp[env_i]);
                 tmp_stack    = push_slice(tmp_stack, (uint8_t *)envp[env_i], strlen(envp[env_i]) + 1);
                 envps[env_i] = tmp_stack;
             }
@@ -250,15 +248,6 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     uint8_t *tmp = (uint8_t *)malloc(2 * sizeof(uint64_t));
     memset(tmp, 0, 2 * sizeof(uint64_t));
     tmp_stack = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
-
-    // page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, get_current_task()->parent_group->elf_size,
-    //                          PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    // memcpy((void *)EHDR_START_ADDR, get_current_task()->parent_group->elf_file,
-    //        get_current_task()->parent_group->elf_size);
-
-    // Elf64_Ehdr *ehdr = (Elf64_Ehdr *)EHDR_START_ADDR;
-    // // CP_Kernel 将用户程序本体从 0 地址加载故不加phdrs的偏移
-    // Elf64_Phdr *phdrs = (Elf64_Phdr *)(ehdr->e_phoff + get_current_task()->parent_group->load_start);
 
     ((uint64_t *)tmp)[0] = AT_NULL;
     ((uint64_t *)tmp)[1] = 0;
@@ -314,6 +303,7 @@ void switch_to_user_mode()
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
 
+    //目前看还不太好, 应该是init的问题
     char *new_path = (char *)malloc(strlen("/dev/") + 10);
     sprintf(new_path, "/dev/stdio");
     vfs_node_t stdio        = vfs_open(new_path);
@@ -423,7 +413,6 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         if (is_scheduler) break;
     }
 
-    write_serial_fmt("path in execve %s\n", path);
     char      *norm_path = strdup(path);
     vfs_node_t node      = vfs_open(norm_path);
     if (node == NULL) { return (uint64_t)-ENOENT; }
@@ -437,7 +426,6 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     memset(cmdline, 0, sizeof(cmdline));
     char *cmdline_ptr = cmdline;
 
-    write_serial_fmt("norm path %s\n", norm_path);
     if (argv != NULL)
     {
         for (int i = 0; argv[i]; i++)
@@ -468,7 +456,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     if (!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
 
-    write_serial_fmt(" process name :%s \n", process->name);
+    write_serial_fmt("execve process name :%s \n", process->name);
 
     page_directory_t *old_page_dir = process->pagedir;
     switch_process_page_directory(clone_page_directory(get_current_directory(), false));
@@ -489,7 +477,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         ipc_send(process->parent_task, message);
     }
     if (!process->vfork) free_page_directory(old_page_dir);
-    process->pagedir = get_current_directory();
+    // process->pagedir = get_current_directory();
     process->vfork   = false;
 
     vfs_close(node);
@@ -533,11 +521,11 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->hasfscr        = false;
     get_current_task()->winnum         = 0;
 
-    // if (!no_interrupt)
-    // {
+    if (!no_interrupt)
+    {
     enable_scheduler();
     open_interrupt;
-    // }
+    }
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }
@@ -571,7 +559,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
 
-    if (!vma_manager_clone(&current_pcb->vma_manager, &new_pcb->vma_manager))
+    if (!vma_manager_clone(&current_pcb->vma_manager, &new_pcb->vma_manager))//calloc就我狗命
     {
         write_serial_fmt("task: cannot clone process vma information.\n");
         free(new_pcb);
@@ -651,7 +639,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         open_interrupt;
     }
 
-    write_serial_fmt("PID: %d\n", new_pcb->pid);
+    write_serial_fmt("FORK PID: %d\n", new_pcb->pid);
     if (!is_vfork) return new_pcb->pid;
 
     while (true)
@@ -792,7 +780,6 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
 
     new_task->cwd = vfs_open(cwd);
     new_task->cwd->refcount++;
-    write_serial_fmt("CWD %s\n", new_task->cwd->name);
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;
@@ -831,7 +818,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     disable_scheduler();
     if (!cwd)
     {
-        write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
+        write_serial_fmt("You can't create an message thread WITHOUT A CWD \n");
         return (size_t)-(EINVAL);
     }
     tcb_t new_task = (tcb_t)malloc(sizeof(struct thread_control_block));
@@ -869,7 +856,6 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
 
     new_task->cwd = vfs_open(cwd);
     new_task->cwd->refcount++;
-    // write_serial_fmt("CWD %s\n", new_task->cwd->name);
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;
@@ -964,8 +950,7 @@ void process_setup()
     kernel_pcb->queue_index  = queue_enqueue(pcb_group_queue, kernel_pcb);
     kernel_pcb->thread_queue = queue_init();
     kernel_pcb->child_pcb    = queue_init();
-    kernel_pcb->xtttp_stc    = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
-    memset(kernel_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
+    kernel_pcb->xtttp_stc    = (xtttp_dtt *)calloc(1,sizeof(xtttp_dtt));
     kernel_pcb->file_open    = queue_init();
     kernel_group->virt_queue = queue_init();
     kernel_group->ipc_queue  = queue_init();
