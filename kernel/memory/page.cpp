@@ -104,11 +104,8 @@ err:;
     write_serial_string(error_msg);
     write_serial_string("\n");
 
-    write_serial_string("Fault Thread Name: ");
-    write_serial_string(get_current_task()->name);
-    write_serial_string(" ");
-    write_serial_hex((uint64_t)get_current_task());
-    write_serial_string("\n");
+    write_serial_fmt("Fault Thread Name: %s 0x%x\n", get_current_task()->name, (uint64_t)get_current_task());
+    write_serial_fmt("TID: %d\n", get_current_task()->tid);
 
     backtrace(frame);
 
