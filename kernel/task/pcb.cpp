@@ -450,6 +450,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->cmdline  = strdup(cmdline);
     }
 
+    get_thread_name_from_filepath(norm_path, get_current_task()->name);
     get_thread_name_from_filepath(norm_path, process->name);
 
     if (envp != NULL)
