@@ -15,6 +15,12 @@ extern bool exit_cm;
 extern char setting_apps_change_char_buffer[256];
 extern int charbox_input_complete;
 
+extern bool waiting_change_setting_apps;
+extern int change_setting_apps_id;
+
+extern int charbox_count;
+extern char *charbox_buf;
+
 struct RunfileSettings_Item
 {
     char exname[10];

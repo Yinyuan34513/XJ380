@@ -186,6 +186,8 @@ int charbox_count = 0;
 char *charbox_buf = NULL;
 int charbox_input_complete = 0;
 
+int change_setting_apps_id = -1;
+
 void create_input_box(char *buf)
 {
     dont_refresh = true;
@@ -236,32 +238,13 @@ void delete_input_box()
     draw_background();
 }
 
+bool waiting_change_setting_apps = false;
+
 void change_setting_apps(int id)
 {
     create_input_box(setting_apps_change_char_buffer);
-    while (true)
-    {
-        if (charbox_input_complete != 0) break;
-    }
-
-    if (charbox_input_complete == -1) return;
-
-    UserInfo usif;
-    xapi_GetCurrentUser(&usif);
-    char runfile_path[256];
-    memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/Users/");
-    strcat(runfile_path, usif.name);
-    strcat(runfile_path, "/runfile.dat");
-    XFILE *f = xapi_OpenFile(runfile_path);
-    if (!f) return;
-    RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
-
-    strcpy(rff->items[id].runpath, charbox_buf);
-
-    xapi_CloseFile(f);
-
-    draw_background();
+    change_setting_apps_id = id;
+    waiting_change_setting_apps = true;
 }
 
 void change_setting_background()

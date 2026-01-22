@@ -79,6 +79,37 @@ int main(int argc, char *argv[], char *envp[])
             draw_background();
             old_min = tm.tm_min;
         }
+
+        if (waiting_change_setting_apps)
+        {
+            while (true)
+            {
+                if (charbox_input_complete != 0) break;
+            }
+
+            if (charbox_input_complete != -1)
+            {
+                UserInfo usif;
+                xapi_GetCurrentUser(&usif);
+                char runfile_path[256];
+                memset((void *)runfile_path, 0, 256);
+                strcat(runfile_path, "/Users/");
+                strcat(runfile_path, usif.name);
+                strcat(runfile_path, "/runfile.dat");
+                XFILE *f = xapi_OpenFile(runfile_path);
+                if (f) 
+                {
+                    RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
+
+                    strcpy(rff->items[change_setting_apps_id].runpath, charbox_buf);
+
+                    xapi_CloseFile(f);
+
+                    draw_background();
+                }
+            }
+            waiting_change_setting_apps = false;
+        }
         
         xapi_Sleep(1000);
     }
