@@ -24,7 +24,7 @@ vfs_node_t fatfs_get_node_by_number(int number) {
     if (number < 0 || number >= 10) return NULL;
     return drive_number_mapping[number];
 }
-
+ 
 spin_t fatfs_operate_lock = SPIN_INIT;
 
 int fatfs_mkdir(void *parent, const char *name, vfs_node_t node) {
