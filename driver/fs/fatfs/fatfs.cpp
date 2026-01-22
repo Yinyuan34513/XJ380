@@ -25,17 +25,28 @@ vfs_node_t fatfs_get_node_by_number(int number) {
     return drive_number_mapping[number];
 }
 
+spin_t fatfs_operate_lock = SPIN_INIT;
+
 int fatfs_mkdir(void *parent, const char *name, vfs_node_t node) {
+    spin_lock(&fatfs_operate_lock);
+
     file_t p        = (file_t)parent;
     char  *new_path = (char*)malloc(strlen(p->path) + strlen((char *)name) + 1 + 1);
     sprintf(new_path, "%s/%s", p->path, name);
     FRESULT res = f_mkdir(new_path);
     free(new_path);
-    if (res != FR_OK) { return -1; }
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
+    spin_unlock(&fatfs_operate_lock);
     return 0;
 }
 
 int fatfs_mkfile(void *parent, const char *name, vfs_node_t node) {
+    spin_lock(&fatfs_operate_lock);
+
     file_t p        = (file_t)parent;
     char  *new_path = (char*)malloc(strlen(p->path) + strlen((char *)name) + 1 + 1);
     sprintf(new_path, "%s/%s", p->path, name);
@@ -43,36 +54,74 @@ int fatfs_mkfile(void *parent, const char *name, vfs_node_t node) {
     FRESULT res = f_open(&fp, new_path, FA_CREATE_NEW);
     f_close(&fp);
     free(new_path);
-    if (res != FR_OK) { return -1; }
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
+    spin_unlock(&fatfs_operate_lock);
     return 0;
 }
 
 size_t fatfs_readfile(file_t file, void *addr, size_t offset, size_t size) {
-    if (file == NULL || addr == NULL) return -1;
+    spin_lock(&fatfs_operate_lock);
+    
+    if (file == NULL || addr == NULL) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
     FRESULT res;
     res = f_lseek((FIL*)file->handle, offset);
-    if (res != FR_OK) return -1;
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
     uint32_t n;
     res = f_read((FIL*)file->handle, addr, size, &n);
-    if (res != FR_OK) return -1;
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
+    spin_unlock(&fatfs_operate_lock);
     return n;
 }
 
 size_t fatfs_writefile(file_t file, const void *addr, size_t offset, size_t size) {
-    if (file == NULL || addr == NULL) return -1;
+    spin_lock(&fatfs_operate_lock);
+    
+    if (file == NULL || addr == NULL) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
     FRESULT res;
     res = f_lseek((FIL*)file->handle, offset);
-    if (res != FR_OK) return -1;
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
     uint32_t n;
     res = f_write((FIL*)file->handle, addr, size, &n);
-    if (res != FR_OK) return -1;
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
     f_sync((FIL*)file->handle);
+    
+    spin_unlock(&fatfs_operate_lock);
     return n;
 }
 
 static uint64_t ino = 2;
 
 void fatfs_open(void *parent, const char *name, vfs_node_t node) {
+    spin_lock(&fatfs_operate_lock);
+    
     file_t p        = (file_t)parent;
     char  *new_path = (char*)malloc(strlen(p->path) + strlen((char *)name) + 1 + 1);
     file_t nw      = (file_t)malloc(sizeof(struct file));
@@ -119,9 +168,13 @@ void fatfs_open(void *parent, const char *name, vfs_node_t node) {
     nw->handle  = fp;
     nw->path    = new_path;
     node->handle = nw;
+
+    spin_unlock(&fatfs_operate_lock);
 }
 
 bool fatfs_close(file_t handle) {
+    spin_lock(&fatfs_operate_lock);
+    
     FILINFO fno;
     FRESULT res = f_stat(handle->path, &fno);
     if (fno.fattrib & AM_DIR) {
@@ -129,21 +182,36 @@ bool fatfs_close(file_t handle) {
     } else {
         res = f_close((FIL*)handle->handle);
     }
-    if (res != FR_OK) return false;
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return false;
+    }
     free(handle->path);
     free(handle->handle);
     free(handle);
 
+    spin_unlock(&fatfs_operate_lock);
     return true;
 }
 
 errno_t fatfs_mount(const char *src, vfs_node_t node) {
+    spin_lock(&fatfs_operate_lock);
+    
     // if (node == rootdir) return -1; // 不支持fatfs作为rootfs
-    if (is_virtual_fs(src)) return VFS_STATUS_FAILED;
+    if (is_virtual_fs(src)) 
+    {   
+        spin_unlock(&fatfs_operate_lock);
+        return VFS_STATUS_FAILED;
+    }
 
     int drive                   = alloc_number();
     drive_number_mapping[drive] = vfs_open(src);
-    if (drive_number_mapping[drive] == NULL) return VFS_STATUS_FAILED;
+    if (drive_number_mapping[drive] == NULL) 
+    {   
+        spin_unlock(&fatfs_operate_lock);
+        return VFS_STATUS_FAILED;
+    }
     node->dev  = drive_number_mapping[drive]->rdev;
     char *path = (char*)malloc(3);
     sprintf(path, "%d:", drive);
@@ -152,6 +220,7 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
         vfs_close(drive_number_mapping[drive]);
         drive_number_mapping[drive] = NULL;
         free(path);
+        spin_unlock(&fatfs_operate_lock);
         return -1;
     }
     file_t f = (file_t)malloc(sizeof(struct file));
@@ -192,10 +261,14 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
     // node->inode  = ino++;
     node->handle = f;
     // node->blksz  = DEFAULT_PAGE_SIZE;
+    
+    spin_unlock(&fatfs_operate_lock);
     return VFS_STATUS_SUCCESS;
 }
 
 void fatfs_unmount(void *root) {
+    spin_lock(&fatfs_operate_lock);
+    
     file_t f                     = (file_t)root;
     int    number                = f->path[0] - '0';
     drive_number_mapping[number] = NULL;
@@ -204,13 +277,21 @@ void fatfs_unmount(void *root) {
     free(f->path);
     free(f->handle);
     free(f);
+
+    spin_unlock(&fatfs_operate_lock);
 }
 
 int fatfs_stat(void *handle, vfs_node_t node) {
+    spin_lock(&fatfs_operate_lock);
+    
     file_t  f = (file_t)handle;
     FILINFO fno;
     FRESULT res = f_stat(f->path, &fno);
-    if (res != FR_OK) return -1;
+    if (res != FR_OK) 
+    {
+        spin_unlock(&fatfs_operate_lock);
+        return -1;
+    }
     node->dev = node->root->dev;
     if (fno.fattrib & AM_DIR) {
         node->type = file_dir;
@@ -264,20 +345,32 @@ int fatfs_stat(void *handle, vfs_node_t node) {
         node->size = fno.fsize;
         // node->createtime = fno.ftime
     }
+    
+    spin_unlock(&fatfs_operate_lock);
     return 0;
 }
 
 int fatfs_delete(file_t parent, vfs_node_t node) {
+    spin_lock(&fatfs_operate_lock);
+    
     file_t file = (file_t)node->handle;
 
     FRESULT res = f_unlink(file->path);
+    
+    spin_unlock(&fatfs_operate_lock);
+
     if (res == FR_DENIED) return -ENOTEMPTY;
     if (res != FR_OK) return -ENOENT;
     return VFS_STATUS_SUCCESS;
 }
 
 int fatfs_rename(file_t file, const char *nw) {
+    spin_lock(&fatfs_operate_lock);
+    
     FRESULT res = f_rename((const char *)file->path, nw);
+
+    spin_unlock(&fatfs_operate_lock);
+
     if (res != FR_OK) return -1;
     return 0;
 }
