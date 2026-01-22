@@ -65,6 +65,8 @@ void init_runfile()
     strcpy(file_format->items[4].describe, "位图文件");
     strcpy(file_format->items[4].runpath,  "/system/picturer.elf");
 
+    strcpy(file_format->items[5].exname,   "");
+
     vfs_write(settings_file_v, settings_file_buffer, 0, sizeof(RunfileSettings_Item) * 1024);
 
     vfs_close(settings_file_v);
