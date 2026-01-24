@@ -13,6 +13,7 @@ int choosing_index = -1;
 int choosing_history = -1;
 
 volatile bool register_lock = false;
+bool yicixing_lock = false;
 
 bool need_paint = false;
 
@@ -31,6 +32,12 @@ void reg_unlock()
 void register_click(int x, int y)
 {
     if (register_lock) return;
+
+    if (yicixing_lock)
+    {
+        yicixing_lock = false;
+        return;
+    }
     
     click_x = x;
     click_y = y;

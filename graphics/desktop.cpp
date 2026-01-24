@@ -172,6 +172,7 @@ void init_dock(SHEET_INFO *sht, SHEET *csheet)
     }
 
     draw_logo(sht, csheet, 24, scry - 24 - 63);
+    flush_task_dock();
 }
 
 void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
@@ -556,15 +557,18 @@ void draw_app_message_box(char *title, char *text)
 }
 
 bool logo_menu_just_born = false;
+bool logo_menu_is_open = false;
 
 void draw_logo_menu()
 {
     if (have_full_screen_app) return;
     int x1 = sht_img->scrx * 0.1875;
-    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 49, DOCK_COL);
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, DOCK_COL);
     print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 28, 10);
-    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 50);
+    print_box_ttf(sht_img, dock_ct_sheet, "刷新", {0,0,0,255}, x1 + 8, 50, 10);
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
     logo_menu_just_born = true;
+    logo_menu_is_open = true;
 }
 
 void delete_logo_menu()
@@ -577,6 +581,7 @@ void delete_logo_menu()
     }
 
     int x1 = sht_img->scrx * 0.1875;
-    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 49, {0, 0, 0, 0});
-    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 50);
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, {0, 0, 0, 0});
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    logo_menu_is_open = false;
 }

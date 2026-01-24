@@ -58,6 +58,7 @@ void do_xapi_CloseFile(uint64_t ptr)
     vfs_node_t f = vfs_open(fsptr->path);
     if (!fsptr) return;
     else if (!fsptr->buffer) return;
+    if (!f) return;
     vfs_write(f, fsptr->buffer, 0, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr->buffer, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));

@@ -33,6 +33,7 @@ extern int choosing_index;
 extern bool need_paint;
 
 extern volatile bool register_lock;
+extern bool yicixing_lock;
 
 void paint_fm_back();
 void paint_dir(char *path);

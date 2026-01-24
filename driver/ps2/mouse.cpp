@@ -23,10 +23,12 @@ bool        win_m_bt_isl = false;
 
 SHEET        *mouse_ct_sheet_img;
 extern SHEET *desktop_ct_sheet;
+extern SHEET *dock_ct_sheet;
 MouseType     type;
 
 extern bool have_full_screen_app;
 extern bool logo_menu_just_born;
+extern bool logo_menu_is_open;
 
 void process_mouse_button()
 {
@@ -181,9 +183,16 @@ void process_mouse_button()
                 }
             }
             else if (tbx > sht_img->scrx * 0.1875 && tby > 28 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 50 &&
-                     logo_menu_just_born)
+                     logo_menu_is_open)
             {
                 // 关机
+            }
+            else if (tbx > sht_img->scrx * 0.1875 && tby > 50 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 72 &&
+                     logo_menu_is_open)
+            {
+                // 刷新
+                init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
+                refresh_sheet(sht_img);
             }
         }
         close_menu(current_window, tbx, tby);
