@@ -296,15 +296,17 @@ void desktop_flusher()
     desktop_done = true;
 
     delay_s_hp(1);
+    
+    
 
     char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
     // calc_ttf_length("114514 测试", 10);
 
     while (1)
@@ -413,6 +415,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     keyboard_init();
     mouse_init();
+
+    write_serial_fmt("1. %s 2. %s 3. %s",normalize_path("////1/2//3"),normalize_path("//.././1/2//3"),normalize_path("/./././1/2/./3"));
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
