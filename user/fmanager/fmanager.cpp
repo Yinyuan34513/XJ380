@@ -16,6 +16,9 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         register_click(hData, lData);
         break;
+    case MSG_RBUTTON:
+        yicixing_lock = true;
+        break;
     case MSG_CRL:
         process_crl(hData);
         break;
@@ -77,7 +80,7 @@ int main(int argc, char *argv[], char *envp[])
             // Double Click!
             // 搜索点到了哪个文件夹/文件
             // y_begin = 148 + 24 * index
-            int click_index = (click_y - 148) / 24;
+            int click_index = (click_y - 148) / 24 + file_count_base;
             uint32_t count = 0;
             DirNode  fdir[256];
             memset(fdir, 0, sizeof(DirNode) * 256);
@@ -114,6 +117,8 @@ int main(int argc, char *argv[], char *envp[])
     }
 }
 
+int  tb_cop = -1;
+
 void process_crl(int CRLid)
 {
     /*
@@ -122,9 +127,11 @@ void process_crl(int CRLid)
     3. 删除
     */
     
-    xapi_OutputSerial(xcr_int2char(CRLid));
-    xapi_OutputSerial("\n");
-    if (CRLid != 3) { draw_typebox(); }
+    if (CRLid != 3) 
+    { 
+        tb_cop = CRLid; 
+        draw_typebox(); 
+    }
     else 
     {
         uint32_t count = 0;
@@ -191,6 +198,41 @@ void delete_typebox()
 {
     if (!register_lock) return;
 
+    typebox_buffer[typebox_offset / 9] = '\0';
+
+    if (tb_cop == 1)
+    {
+        char path_name[256];
+        memset(path_name, 0, 256);
+        strcat(path_name, current_path);
+        strcat(path_name, "/");
+        strcat(path_name, typebox_buffer);
+        xapi_Mkdir(path_name);
+    }
+    else if (tb_cop == 2)
+    {
+        uint32_t count = 0;
+        DirNode  fdir[256];
+        memset(fdir, 0, sizeof(DirNode) * 256);
+        xapi_SearchFile(current_path, &count, fdir);
+        if (count == 0 || count == 404)
+        {
+            return;
+        }
+        char old_path[256];
+        memset(old_path, 0, 256);
+        strcat(old_path, current_path);
+        strcat(old_path, "/");
+        strcat(old_path, fdir[choosing_index + file_count_base].filename);
+        char new_path[256];
+        memset(new_path, 0, 256);
+        strcat(new_path, current_path);
+        strcat(new_path, "/");
+        strcat(new_path, typebox_buffer);
+        xapi_RenameFile(old_path, new_path);
+    }
+
+    tb_cop = -1;
     reg_unlock();
     paint_dir(current_path);
 }
