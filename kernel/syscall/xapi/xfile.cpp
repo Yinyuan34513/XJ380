@@ -62,6 +62,7 @@ void do_xapi_CloseFile(uint64_t ptr)
     vfs_write(f, fsptr->buffer, 0, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr->buffer, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
+    vfs_close(f);
 }
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
