@@ -1227,7 +1227,7 @@ sys_(unlink)
 {
     char *name = (char *)arg0;
     if (name == NULL) return SYSCALL_FAULT_(EINVAL);
-    char      *npath = strdup(name);
+    char      *npath = vfs_cwd_path_build(name);
     vfs_node_t node  = vfs_open(npath);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
     if (node->type != file_none && node->type != file_symlink)
@@ -1236,7 +1236,6 @@ sys_(unlink)
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret;
-    write_serial_fmt("node->refcount %d\n",node->refcount);
     if (node->refcount > 1)
     {
         node->refcount--;
@@ -1265,7 +1264,7 @@ sys_(rmdir)
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret;
-    if (node->refcount > 0)
+    if (node->refcount > 1)
     {
         node->refcount--;
         ret = 0;

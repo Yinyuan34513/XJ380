@@ -147,7 +147,12 @@ void process_crl(int CRLid)
         strcat(filepath, current_path);
         strcat(filepath, "/");
         strcat(filepath, fdir[choosing_index + file_count_base].filename);
-        xapi_DeleteFile(filepath);
+
+        if (fdir[choosing_index + file_count_base].filetype == 0)
+            xapi_DeleteFile(filepath);
+        else
+            xapi_Rmdir(filepath);
+
         paint_dir(current_path);
     }
 }
