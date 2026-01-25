@@ -22,9 +22,8 @@ sys_(open, char *path0, uint64_t flags, uint64_t mode)
 {
     if (unlikely(path0 == NULL)) return SYSCALL_FAULT_(EINVAL);
 
-    char *normalized_path = path0;
+    char *normalized_path = strdup(path0);
 
-    write_serial_fmt("sys_open: open %s path0 %s\n", normalized_path,path0);
 
     vfs_node_t node = vfs_open(path0);
     if (node == NULL)
@@ -61,7 +60,7 @@ next:
         free(normalized_path);
         return SYSCALL_FAULT_(ENOENT);
     }
-    // free(normalized_path);
+    free(normalized_path);
     return index;
 }
 
@@ -1237,15 +1236,16 @@ sys_(unlink)
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret;
-    if (node->refcount > 0)
+    write_serial_fmt("node->refcount %d\n",node->refcount);
+    if (node->refcount > 1)
     {
         node->refcount--;
         return 0;
     }
     else
-        {
-            ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
-        }
+    {
+        ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    }
     vfs_close(node);
     free(npath);
     return ret;

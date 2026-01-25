@@ -71,6 +71,7 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
     XAPIT_DirNode *fdir   = (XAPIT_DirNode *)dir;
 
     vfs_node_t v = vfs_open(fpath);
+    v->refcount++;
     if (!v)
     {
         *fcount = 404;

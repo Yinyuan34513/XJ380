@@ -593,6 +593,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->syscall_stack = ((uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE))) + KERNEL_STACK_SIZE;
     new_task->main          = parent_task->main;
     new_task->cwd           = parent_task->cwd;
+    new_task->cwd->refcount++;
     new_task->user_info     = parent_task->user_info;
     strcpy(new_task->name, parent_task->name);
     new_task->winnum  = 0;

@@ -426,7 +426,7 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
     node->fsid     = parent ? parent->fsid : 0;
     node->root     = parent ? parent->root : node;
     node->dev      = parent ? parent->dev : 0;
-    node->refcount = 0;
+    node->refcount = 1;
     node->blksz    = PAGE_SIZE;
     node->mode     = 0777;
     node->linkto   = NULL;
@@ -439,12 +439,16 @@ errno_t vfs_close(vfs_node_t node) {
     if (node == rootdir) return VFS_STATUS_SUCCESS;
     if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
-    node->refcount--;
+    if(node->refcount>0) node->refcount--;
 
-    if (node->type & file_proxy) return VFS_STATUS_SUCCESS;
-    if (node->type & file_dir) return VFS_STATUS_SUCCESS;
-    if (node->refcount != 0) return VFS_STATUS_SUCCESS;
-    if (node->type & file_delete) {
+    if (node->type & file_proxy){
+         return VFS_STATUS_SUCCESS;
+    }
+    if (node->type & file_dir)
+    {
+        return VFS_STATUS_SUCCESS;
+    } 
+    if (node->type & file_delete && node->refcount<=0) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;
         list_delete(node->parent->child, node);
