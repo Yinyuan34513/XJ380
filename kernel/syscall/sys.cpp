@@ -1228,7 +1228,7 @@ sys_(unlink)
 {
     char *name = (char *)arg0;
     if (name == NULL) return SYSCALL_FAULT_(EINVAL);
-    char      *npath = strdup(name);
+    char      *npath = vfs_cwd_path_build(name);
     vfs_node_t node  = vfs_open(npath);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
     if (node->type != file_none && node->type != file_symlink)
@@ -1243,9 +1243,9 @@ sys_(unlink)
         return 0;
     }
     else
-        {
-            ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
-        }
+    {
+        ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    }
     vfs_close(node);
     free(npath);
     return ret;

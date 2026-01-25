@@ -416,8 +416,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     keyboard_init();
     mouse_init();
 
-    write_serial_fmt("1. %s 2. %s 3. %s",normalize_path("////1/2//3"),normalize_path("//.././1/2//3"),normalize_path("/./././1/2/./3"));
-
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     disable_intr();
