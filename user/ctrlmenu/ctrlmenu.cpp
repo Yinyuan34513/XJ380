@@ -17,7 +17,10 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         process_left_key(hData, lData);
         break;
     case MSG_CRL:
-        if (hData < 2000) { change_setting_apps(hData); } // cm_graph.cpp:145
+        if (hData <= 1999) { change_setting_apps(hData); } // cm_graph.cpp:145
+        else if (hData == 2001) { change_clock_hour_offset(+1); }
+        else if (hData == 2002) { change_clock_hour_offset(-1); }
+        else if (hData == 3000) { change_setting_background(); }
         else if (hData == 114514) { delete_input_box(); charbox_input_complete = -1; }
         else if (hData == 114515) { delete_input_box(); charbox_input_complete = 1; }
         break;
@@ -109,6 +112,37 @@ int main(int argc, char *argv[], char *envp[])
                 }
             }
             waiting_change_setting_apps = false;
+        }
+        if (waiting_change_setting_background)
+        {
+            
+            while (true)
+            {
+                if (charbox_input_complete != 0) break;
+            }
+
+            if (charbox_input_complete != -1)
+            {
+                UserInfo usif;
+                xapi_GetCurrentUser(&usif);
+                char runfile_path[256];
+                memset((void *)runfile_path, 0, 256);
+                strcat(runfile_path, "/Users/");
+                strcat(runfile_path, usif.name);
+                strcat(runfile_path, "/settings.dat");
+                XFILE *f = xapi_OpenFile(runfile_path);
+                if (f) 
+                {
+                    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
+
+                    strcpy(sdff->BackgroundFilePath, charbox_buf);
+
+                    xapi_CloseFile(f);
+
+                    draw_background();
+                }
+            }
+            waiting_change_setting_background = false;
         }
         
         xapi_Sleep(1000);

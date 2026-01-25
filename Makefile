@@ -199,3 +199,6 @@ vmdk: vdisk
 
 run: vdisk
 	@$(QEMU_CMD)
+
+justrun:
+	@$(QEMU_CMD)

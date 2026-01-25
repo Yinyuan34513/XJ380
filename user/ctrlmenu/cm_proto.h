@@ -16,6 +16,7 @@ extern char setting_apps_change_char_buffer[256];
 extern int charbox_input_complete;
 
 extern bool waiting_change_setting_apps;
+extern bool waiting_change_setting_background;
 extern int change_setting_apps_id;
 
 extern int charbox_count;
@@ -35,7 +36,8 @@ struct RunfileSettings_Format
 
 struct SettingsDataFileFormat
 {
-    char BackgroundFilePath[256];
+    char    BackgroundFilePath[256];
+    int     ClockHourOffset;
 };
 
 void draw_background();
@@ -51,3 +53,7 @@ void draw_setting_apps();
 void change_setting_apps(int id);
 
 void change_setting_background();
+
+void read_settings_file(SettingsDataFileFormat *sdff);
+void change_clock_hour_offset(int value);
+char *get_background_file_path();

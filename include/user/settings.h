@@ -4,5 +4,6 @@
 
 struct SettingsDataFileFormat
 {
-    char BackgroundFilePath[256];
+    char    BackgroundFilePath[256];
+    int     ClockHourOffset;
 };

@@ -108,6 +108,27 @@ TimerWidgetsData *tw_data = NULL;
 
 bool have_full_screen_app = false;
 
+int clock_hour_offset = 0;
+
+void init_time()
+{
+    char setfile_path[256];
+    memset(setfile_path, 0, 256);
+    strcat(setfile_path, "/Users/");
+    strcat(setfile_path, current_user->name);
+    strcat(setfile_path, "/settings.dat");
+    vfs_node_t v = vfs_open(setfile_path);
+    if (!v) return;
+    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)malloc(v->size);
+    if (!sdff) return;
+    vfs_read(v, sdff, 0, v->size);
+
+    clock_hour_offset = sdff->ClockHourOffset;
+
+    vfs_close(v);
+    free(sdff);
+}
+
 void components_flusher()
 {
     while (true)
@@ -164,6 +185,8 @@ void desktop_flusher()
     init_runfile();
 
     write_serial_string("desktop flusher is running\n");
+
+    init_time();
 
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
