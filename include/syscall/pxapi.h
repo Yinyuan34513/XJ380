@@ -85,6 +85,8 @@ typedef struct {
 #define XAPI_READ_FILE      423
 #define XAPI_WRITE_FILE     424
 
+#define XAPI_REMOVEDIR      444
+
 // P3.4
 #define XAPI_FORK   389
 #define XAPI_EXECVE 390
@@ -176,7 +178,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：443
+// 当前最大号：444
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);

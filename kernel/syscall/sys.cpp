@@ -1237,7 +1237,7 @@ sys_(unlink)
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret;
-    if (node->refcount > 0)
+    if (node->refcount > 1)
     {
         node->refcount--;
         return 0;
@@ -1265,7 +1265,7 @@ sys_(rmdir)
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret;
-    if (node->refcount > 0)
+    if (node->refcount > 1)
     {
         node->refcount--;
         ret = 0;

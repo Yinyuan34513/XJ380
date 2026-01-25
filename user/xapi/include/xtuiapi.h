@@ -88,6 +88,7 @@ UINT64 xapi_DeleteFile(WSTR path);
 UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path);
 UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
 UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
+UINT64 xapi_Rmdir(WSTR path);
 
 // 3-3
 UINT64 	xcr_char2int(WSTR str);

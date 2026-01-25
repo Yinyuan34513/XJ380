@@ -109,6 +109,8 @@
 #define XAPI_READ_FILE      423
 #define XAPI_WRITE_FILE     424
 
+#define XAPI_REMOVEDIR      444
+
 // P3.4
 #define XAPI_FORK   389
 #define XAPI_EXECVE 390
