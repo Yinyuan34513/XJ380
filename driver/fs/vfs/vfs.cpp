@@ -439,7 +439,7 @@ errno_t vfs_close(vfs_node_t node) {
     if (node == rootdir) return VFS_STATUS_SUCCESS;
     if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
-    if(node->refcount>0) node->refcount--;
+    if(node->refcount > 0) node->refcount--;
 
     if (node->type & file_proxy){
          return VFS_STATUS_SUCCESS;
@@ -448,7 +448,7 @@ errno_t vfs_close(vfs_node_t node) {
     {
         return VFS_STATUS_SUCCESS;
     } 
-    if (node->type & file_delete && node->refcount<=0) {
+    if (node->type & file_delete && node->refcount <= 0) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;
         list_delete(node->parent->child, node);
