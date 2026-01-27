@@ -77,9 +77,11 @@ int do_xapi_CloseWindow(uint64_t handle)
 int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    char          *NewPath      = (char *)(path);
+    char          *NewPath      = vfs_cwd_path_build((char *)path);
     
     change_task_dock_icon(WindowHandle->WindowNodePtr, NewPath);
+
+    free(NewPath);
 
     return true;
 }
@@ -468,7 +470,7 @@ int do_xapi_SetMsgProc(uint64_t handle, uint64_t func)
 void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    char          *filepath     = (char *)(path);
+    char          *filepath     = vfs_cwd_path_build((char *)path);
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
@@ -478,12 +480,14 @@ void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
     {
         PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
+
+    free(filepath);
 }
 
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    char          *filepath     = (char *)(path);
+    char          *filepath     = vfs_cwd_path_build((char *)path);
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
@@ -493,12 +497,14 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
     {
         PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
+
+    free(filepath);
 }
 
 void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
-    char          *filepath     = (char *)(path);
+    char          *filepath     = vfs_cwd_path_build((char *)path);
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
@@ -508,6 +514,8 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     {
         PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
+
+    free(filepath);
 }
 
 void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)

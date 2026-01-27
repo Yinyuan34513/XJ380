@@ -44,7 +44,7 @@ typedef double float64_t;
 // 检查是否定义
 #ifndef __SIZE_T
 #define __SIZE_T
-typedef unsigned long int size_t;
+typedef unsigned long long int size_t;
 #endif
 
 #endif
