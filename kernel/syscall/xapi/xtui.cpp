@@ -180,7 +180,9 @@ uint64_t do_xapi_GetMemorySize()
 
 void do_xapi_Run(char *path)
 {
-    runfile(path);
+    char  *fpath = vfs_cwd_path_build((char *)path);
+    runfile(fpath);
+    free(fpath);
 }
 
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
