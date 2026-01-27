@@ -132,6 +132,8 @@
 
 #define XAPI_RUN            439
 
+#define XAPI_FLUSH_TIME     445
+
 // P3.7
 #define XAPI_MALLOC         441
 #define XAPI_FREE           442

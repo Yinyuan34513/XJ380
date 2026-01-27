@@ -19,7 +19,7 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_CRL:
         if (hData <= 1999) { change_setting_apps(hData); } // cm_graph.cpp:145
         else if (hData == 2001) { change_clock_hour_offset(+1); }
-        else if (hData == 2002) { change_clock_hour_offset(-1); }
+        else if (hData == 2002) { change_clock_hour_offset(23); }
         else if (hData == 3000) { change_setting_background(); }
         else if (hData == 114514) { delete_input_box(); charbox_input_complete = -1; }
         else if (hData == 114515) { delete_input_box(); charbox_input_complete = 1; }

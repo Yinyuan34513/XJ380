@@ -125,6 +125,9 @@ void init_time()
 
     clock_hour_offset = sdff->ClockHourOffset;
 
+    if (clock_hour_offset < 0)
+        clock_hour_offset = 0;
+
     vfs_close(v);
     free(sdff);
 }

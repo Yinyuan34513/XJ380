@@ -54,6 +54,6 @@ void change_setting_apps(int id);
 
 void change_setting_background();
 
-void read_settings_file(SettingsDataFileFormat *sdff);
+int read_settings_time_offset();
 void change_clock_hour_offset(int value);
 char *get_background_file_path();

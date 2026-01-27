@@ -153,7 +153,7 @@ void draw_setting()
         sprintf(current_time_title, "当前时间：%d 年 %d 月 %d 日 %02u : %02u", tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min);
         xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, current_time_title, 16, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 24, 158, "当前偏移：", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 85, 158, "0", 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 85, 158, xcr_int2char(read_settings_time_offset()), 11, 0xffffffff);
         xapi_Button(handle, 2001, win_width / 10 * 3 + 400, 132, "调整 (+1)");
         xapi_Button(handle, 2002, win_width / 10 * 3 + 490, 132, "调整 (-1)");
     }
@@ -261,8 +261,9 @@ void change_setting_background()
     waiting_change_setting_background = true;
 }
 
-void read_settings_file(SettingsDataFileFormat *sdff)
+int read_settings_time_offset()
 {
+    int ret = 0;
     UserInfo usif;
     xapi_GetCurrentUser(&usif);
     char runfile_path[256];
@@ -272,9 +273,12 @@ void read_settings_file(SettingsDataFileFormat *sdff)
     strcat(runfile_path, "/settings.dat");
     XFILE *f = xapi_OpenFile(runfile_path);
     if (!f) return;
-    sdff = (SettingsDataFileFormat *)f->buffer;
+    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
+    ret = sdff->ClockHourOffset;
 
     xapi_CloseFile(f);
+
+    return ret;
 }
 
 void change_clock_hour_offset(int value)
@@ -292,6 +296,9 @@ void change_clock_hour_offset(int value)
     sdff->ClockHourOffset += value;
 
     xapi_CloseFile(f);
+
+    xapi_FlushTime();
+    draw_background();
 }
 
 char *get_background_file_path()

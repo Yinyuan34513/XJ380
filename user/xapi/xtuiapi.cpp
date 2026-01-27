@@ -279,6 +279,11 @@ void 	xapi_Run(WSTR path)
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
 }
 
+void 	xapi_FlushTime()
+{
+	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);
+}
+
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size)
 {

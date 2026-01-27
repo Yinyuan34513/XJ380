@@ -115,6 +115,7 @@ void	xapi_Broken(WSTR broken_info);
 void	xapi_SendAppMessage(WSTR title, WSTR text);
 void 	xapi_Sleep(UINT64 ms);
 void 	xapi_Run(WSTR path);
+void 	xapi_FlushTime();
 
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size);
