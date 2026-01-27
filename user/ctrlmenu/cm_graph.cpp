@@ -272,7 +272,7 @@ int read_settings_time_offset()
     strcat(runfile_path, usif.name);
     strcat(runfile_path, "/settings.dat");
     XFILE *f = xapi_OpenFile(runfile_path);
-    if (!f) return;
+    if (!f) return 0;
     SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
     ret = sdff->ClockHourOffset;
 
