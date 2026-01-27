@@ -102,6 +102,12 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     vfs_node_t file;
     file               = vfs_open(path);
+
+    if (file == NULL)
+    {
+        return NULL;
+    }
+
     uint64_t file_size = file->size;
 
     if (group == NULL)
@@ -287,6 +293,12 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);
+
+    if (entry == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
+        return;
+    }
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
     char cmdline[PAGE_SIZE];
