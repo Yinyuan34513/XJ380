@@ -87,6 +87,7 @@ void init_runfile()
     SettingsDataFileFormat *file_data = (SettingsDataFileFormat *)settings_data_buffer;
 
     strcpy(file_data->BackgroundFilePath, "/system/image/BackGround.png");
+    file_data->ClockHourOffset = 8;
 
     vfs_write(settings_file_v, settings_data_buffer, 0, sizeof(SettingsDataFileFormat));
 
