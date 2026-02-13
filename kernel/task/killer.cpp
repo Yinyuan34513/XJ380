@@ -47,19 +47,19 @@ void check_group(pcb_t group)
     }
 }
 
-// void killer_thread()
-// {
-//     while (true)
-//     {
-//         if (!no_interrupt)
-//         {
-//             open_interrupt;
-//             enable_scheduler();
-//         }
-//         check_group(kernel_group);
-//         cpu_relax();
-//     }
-// }
+void killer_thread()
+{
+    while (true)
+    {
+        if (!no_interrupt)
+        {
+            open_interrupt;
+            enable_scheduler();
+        }
+        check_group(kernel_group);
+        cpu_relax();
+    }
+}
 
 void init_killer()
 {
