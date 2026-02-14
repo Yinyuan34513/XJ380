@@ -270,4 +270,7 @@ uint32_t get_freq();
 char     getch_from_file(void *buffer);
 uint64_t getline_from_file(void *buffer, char *str);
 
+// ulog.cpp
+void write_ulog(char *str);
+
 #endif

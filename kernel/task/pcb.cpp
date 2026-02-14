@@ -671,6 +671,9 @@ spin_t create_thread_lock = SPIN_INIT;
 
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
     spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
@@ -728,17 +731,16 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->window_count = 0;
 
     add_task(new_task);
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
+    if (!is_sti) close_interrupt;
     spin_unlock(&create_thread_lock);
     return new_task->tid;
 }
 
 size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd)
 {
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
     spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
@@ -803,17 +805,16 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->window_count = 0;
 
     add_task(new_task);
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
+    if (!is_sti) close_interrupt;
     spin_unlock(&create_thread_lock);
     return new_task->tid;
 }
 
 size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb)
 {
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
     spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
@@ -876,11 +877,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     new_task->window_count = 0;
 
     add_task(new_task);
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
+    if (!is_sti) close_interrupt;
     spin_unlock(&create_thread_lock);
     return new_task->tid;
 }

@@ -28,9 +28,10 @@ typedef struct
     char            name[64];   // 用户名
     UserType        user_type;  // 用户等级
     UserPermisson   user_prms;  // 用户权限（仅等级为Custom时可用）
-    char   **envp;              // 环境变量指针
-    size_t   envc;              // 环境变量数量
-    int      fgproc;//前台进程
+    char          **envp;       // 环境变量指针
+    size_t          envc;       // 环境变量数量
+    int             fgproc;     // 前台进程
+    char           *password;   // 用户密码
 } UserInfo;
 
 void init_user();
