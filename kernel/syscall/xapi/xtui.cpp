@@ -30,7 +30,7 @@ void do_xapi_GetSystemVersion(uint64_t str)
 {
     char *dst = (char *)str;
     if (dst != NULL)
-        memcpy(dst, OS_VERSION, strlen(OS_VERSION));
+        memcpy(dst, OS_VERSION, strlen(OS_VERSION) + 1);
 }
 
 uint64_t do_xapi_GetTime()
