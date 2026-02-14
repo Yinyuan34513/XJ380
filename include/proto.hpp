@@ -271,6 +271,8 @@ char     getch_from_file(void *buffer);
 uint64_t getline_from_file(void *buffer, char *str);
 
 // ulog.cpp
+void init_xuls();
 void write_ulog(char *str);
+void ulog_err(char *err_type);
 
 #endif

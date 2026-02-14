@@ -65,7 +65,7 @@ static bool is_huge_page(page_table_entry_t *entry)
 
 extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
-    disable_intr();
+    close_interrupt;
     disable_scheduler();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
@@ -108,6 +108,14 @@ err:;
     write_serial_fmt("TID: %d\n", get_current_task()->tid);
 
     backtrace(frame);
+
+    if (error_code & 0x4)
+    {
+        ulog_err("Page Fault (0x0000000e)");
+        enable_scheduler();
+        open_interrupt;
+        return;
+    }
 
     while (1)
     {

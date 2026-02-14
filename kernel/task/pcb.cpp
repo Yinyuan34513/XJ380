@@ -408,10 +408,12 @@ extern bool is_scheduler;
 
 uint64_t process_execve(char *path, char **argv, char **envp)
 {
-    while (true)
-    {
-        if (is_scheduler) break;
-    }
+    // while (true)
+    // {
+    //     if (is_scheduler) break;
+    // }
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
 
     char      *norm_path = strdup(path);
     vfs_node_t node      = vfs_open(norm_path);
@@ -521,11 +523,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->hasfscr        = false;
     get_current_task()->winnum         = 0;
 
-    if (!no_interrupt)
-    {
-    enable_scheduler();
-    open_interrupt;
-    }
+    if (!is_sti) close_interrupt;
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }

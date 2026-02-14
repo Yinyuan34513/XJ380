@@ -32,9 +32,19 @@ void write_ulog(char *str)
     vfs_write(v, str, v->size, strlen(str) * sizeof(char));
 }
 
+void ulog_err(char *err_type)
+{
+    write_ulog("[XULS][Error] Task \"");
+    write_ulog(get_current_task()->name);
+    write_ulog("\" Was Broken. Error Type: ");
+    write_ulog(err_type);
+    write_ulog("\n");
+
+}
+
 // 启动日志系统
 void init_xuls()
 {
     vfs_mkfile("/system/oslog.log");
-    write_ulog("[Notice] XINGJI User Log System ");
+    write_ulog("[XULS][Notice] XJ380 User Log System Initialize Success.\n");
 }

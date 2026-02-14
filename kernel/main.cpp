@@ -296,6 +296,8 @@ void desktop_flusher()
 
     mouse_ct_sheet_img = mouse_ct_sheet;
 
+    init_xuls();
+
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
