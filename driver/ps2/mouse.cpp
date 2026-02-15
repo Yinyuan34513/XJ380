@@ -29,9 +29,12 @@ MouseType     type;
 extern bool have_full_screen_app;
 extern bool logo_menu_just_born;
 extern bool logo_menu_is_open;
+extern bool allow_to_flush;
 
 void process_mouse_button()
 {
+    if (!allow_to_flush) return;
+
     if (ms_dec.btn & 0x01)
     {
         // 左键按下

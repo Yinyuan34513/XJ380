@@ -293,9 +293,10 @@ void desktop_flusher()
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
+    allow_to_flush = true;
 
     init_user();
-    
+
     init_xuls();
     init_time();
 
@@ -306,13 +307,9 @@ void desktop_flusher()
     write_serial_string("desktop initialized.\n");
 
     winRD_lock = true;
-    // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
-    // delete_window(&xwmi, &shtinf, test_win);
-
-    allow_to_flush = true;
     refresh_sheet(&shtinf); // 刷新
-    // delete_sheet(&shtinf, &dock_ct_sheet);
+
     uint8_t k_input;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));

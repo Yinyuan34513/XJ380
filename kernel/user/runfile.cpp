@@ -106,7 +106,7 @@ void init_runfile()
 
     UserRegisterList *urf_data = (UserRegisterList *)urf_buffer;
 
-    urf_data->user_count = 2;
+    urf_data->user_count = 3;
 
     strcpy(urf_data->uinf[0].password, "114514");
 
@@ -117,6 +117,14 @@ void init_runfile()
     char user_folder_path[265] = "/users/";
     strcat(user_folder_path, "GuoqiFish");
     vfs_mkdir(user_folder_path);
+    
+    strcpy(urf_data->uinf[2].password, "114514");
+    strcpy(urf_data->uinf[2].name, "Another User");
+    urf_data->uinf[2].user_type = XUT_Admin;
+    vfs_mkdir("/users");
+    char user_folder_path1[265] = "/users/";
+    strcat(user_folder_path1, "Another User");
+    vfs_mkdir(user_folder_path1);
 
     vfs_write(settings_file_v, urf_buffer, 0, sizeof(UserRegisterList));
 
