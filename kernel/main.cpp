@@ -114,7 +114,7 @@ void init_time()
 {
     char setfile_path[256];
     memset(setfile_path, 0, 256);
-    strcat(setfile_path, "/Users/");
+    strcat(setfile_path, "/users/");
     strcat(setfile_path, current_user->name);
     strcat(setfile_path, "/settings.dat");
     vfs_node_t v = vfs_open(setfile_path);
@@ -189,8 +189,6 @@ void desktop_flusher()
 
     write_serial_string("desktop flusher is running\n");
 
-    init_time();
-
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);
 
@@ -212,10 +210,6 @@ void desktop_flusher()
     init_ttf();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
-
-    init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
-
-    write_serial_string("desktop initialized.\n");
 
     int fontx = 8;
     int fonty = 50;
@@ -296,11 +290,20 @@ void desktop_flusher()
 
     mouse_ct_sheet_img = mouse_ct_sheet;
 
-    init_xuls();
-
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
+
+    init_user();
+    
+    init_xuls();
+    init_time();
+
+    write_serial_string("user & settings initialized.\n");
+
+    init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
+
+    write_serial_string("desktop initialized.\n");
 
     winRD_lock = true;
     // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
@@ -502,9 +505,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    init_user();
     init_killer();
-    write_serial_string("User & Killer is ready\n");
+    write_serial_string("Process Killer is ready\n");
     
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");

@@ -31,8 +31,14 @@ typedef struct
     char          **envp;       // 环境变量指针
     size_t          envc;       // 环境变量数量
     int             fgproc;     // 前台进程
-    char           *password;   // 用户密码
+    char            password[64];   // 用户密码
 } UserInfo;
+
+typedef struct
+{
+    int         user_count; // 用户数量
+    UserInfo    uinf[128];  // 用户信息
+} UserRegisterList;
 
 void init_user();
 void copy_args(char *dst[], char *src[], int n);

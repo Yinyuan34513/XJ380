@@ -34,8 +34,8 @@ void init_runfile()
 {
     char runfile_setfile_path[256];
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/Users/");
-    strcat(runfile_setfile_path, current_user->name);
+    strcat(runfile_setfile_path, "/users/");
+    strcat(runfile_setfile_path, "GuoqiFish");
     strcat(runfile_setfile_path, "/runfile.dat");
     vfs_mkfile(runfile_setfile_path);
 
@@ -75,8 +75,8 @@ void init_runfile()
 
     // 回收再利用
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/Users/");
-    strcat(runfile_setfile_path, current_user->name);
+    strcat(runfile_setfile_path, "/users/");
+    strcat(runfile_setfile_path, "GuoqiFish");
     strcat(runfile_setfile_path, "/settings.dat");
     vfs_mkfile(runfile_setfile_path);
 
@@ -90,6 +90,35 @@ void init_runfile()
     file_data->ClockHourOffset = 8;
 
     vfs_write(settings_file_v, settings_data_buffer, 0, sizeof(SettingsDataFileFormat));
+
+    vfs_close(settings_file_v);
+
+
+
+    // 回收再利用
+    memset(runfile_setfile_path, 0, 256);
+    strcat(runfile_setfile_path, "/system/usereg.dat");
+    vfs_mkfile(runfile_setfile_path);
+
+    char  urf_buffer[sizeof(UserRegisterList)];
+    settings_file_v = vfs_open(runfile_setfile_path);
+    if (!settings_file_v) return;
+
+    UserRegisterList *urf_data = (UserRegisterList *)urf_buffer;
+
+    urf_data->user_count = 2;
+
+    strcpy(urf_data->uinf[0].password, "114514");
+
+    strcpy(urf_data->uinf[1].password, "114514");
+    strcpy(urf_data->uinf[1].name, "GuoqiFish");
+    urf_data->uinf[1].user_type = XUT_Admin;
+    vfs_mkdir("/users");
+    char user_folder_path[265] = "/users/";
+    strcat(user_folder_path, "GuoqiFish");
+    vfs_mkdir(user_folder_path);
+
+    vfs_write(settings_file_v, urf_buffer, 0, sizeof(UserRegisterList));
 
     vfs_close(settings_file_v);
 }
@@ -114,7 +143,7 @@ void runfile(char *path)
     // 搜索扩展名
     char runfile_setfile_path[256];
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/Users/");
+    strcat(runfile_setfile_path, "/users/");
     strcat(runfile_setfile_path, current_user->name);
     strcat(runfile_setfile_path, "/runfile.dat");
     vfs_mkfile(runfile_setfile_path);

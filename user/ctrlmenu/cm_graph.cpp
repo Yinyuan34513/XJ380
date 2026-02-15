@@ -167,7 +167,7 @@ void draw_setting_apps()
     xapi_GetCurrentUser(&usif);
     char runfile_path[256];
     memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/Users/");
+    strcat(runfile_path, "/users/");
     strcat(runfile_path, usif.name);
     strcat(runfile_path, "/runfile.dat");
     XFILE *f = xapi_OpenFile(runfile_path);
@@ -268,7 +268,7 @@ int read_settings_time_offset()
     xapi_GetCurrentUser(&usif);
     char runfile_path[256];
     memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/Users/");
+    strcat(runfile_path, "/users/");
     strcat(runfile_path, usif.name);
     strcat(runfile_path, "/settings.dat");
     XFILE *f = xapi_OpenFile(runfile_path);
@@ -287,7 +287,7 @@ void change_clock_hour_offset(int value)
     xapi_GetCurrentUser(&usif);
     char runfile_path[256];
     memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/Users/");
+    strcat(runfile_path, "/users/");
     strcat(runfile_path, usif.name);
     strcat(runfile_path, "/settings.dat");
     XFILE *f = xapi_OpenFile(runfile_path);
@@ -307,7 +307,7 @@ char *get_background_file_path()
     xapi_GetCurrentUser(&usif);
     char runfile_path[256];
     memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/Users/");
+    strcat(runfile_path, "/users/");
     strcat(runfile_path, usif.name);
     strcat(runfile_path, "/settings.dat");
     XFILE *f = xapi_OpenFile(runfile_path);

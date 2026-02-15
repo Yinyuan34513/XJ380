@@ -49,7 +49,7 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     // 获取路径
     char runfile_setfile_path[256];
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/Users/");
+    strcat(runfile_setfile_path, "/users/");
     strcat(runfile_setfile_path, current_user->name);
     strcat(runfile_setfile_path, "/settings.dat");
     vfs_mkfile(runfile_setfile_path);
@@ -112,7 +112,7 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
 {
-    char desktop_folder_path[256] = "/Users/";
+    char desktop_folder_path[256] = "/users/";
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
     vfs_mkdir(desktop_folder_path);
@@ -203,9 +203,9 @@ void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
 
 void process_desktop_find_block(int x, int y)
 {
-    char desktop_folder_path[265] = "/Users/";
+    char desktop_folder_path[265] = "/users/";
     memset(desktop_folder_path, 0, 256);    // 回收再利用
-    strcat(desktop_folder_path, "/Users/");
+    strcat(desktop_folder_path, "/users/");
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
 
@@ -240,7 +240,7 @@ void process_desktop_find_block(int x, int y)
             // 就是他！
             vfs_node_t data = (vfs_node_t)node->data;
             char runfile_path[256] = "\0";
-            strcat(runfile_path, "/Users/");
+            strcat(runfile_path, "/users/");
             strcat(runfile_path, current_user->name);
             strcat(runfile_path, "/desktop/");
             strcat(runfile_path, data->name);

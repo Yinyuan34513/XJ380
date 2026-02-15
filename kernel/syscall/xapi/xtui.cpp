@@ -206,7 +206,7 @@ void do_xapi_FlushTime()
 {
     char setfile_path[256];
     memset(setfile_path, 0, 256);
-    strcat(setfile_path, "/Users/");
+    strcat(setfile_path, "/users/");
     strcat(setfile_path, current_user->name);
     strcat(setfile_path, "/settings.dat");
     vfs_node_t v = vfs_open(setfile_path);

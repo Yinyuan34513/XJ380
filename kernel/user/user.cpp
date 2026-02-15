@@ -26,23 +26,46 @@
 #include <task/pcb.h>
 #include <user/user.h>
 
-UserInfo *current_user = NULL;
-
 char *current_user_envp[100] = {
     ENVP_SYSTEM_VERSION,
     NULL // 必须以NULL结尾
 };
 
+UserInfo *current_user = NULL;
+
+UserInfo root_user = {
+    .name = "Root",
+    .user_type = XUT_Root,
+    .envc = 2,
+    .envp = current_user_envp,
+};
+
 void init_user()
 {
+    char user_reg_data_path[256];
+    memset(user_reg_data_path, 0, 256);
+    strcat(user_reg_data_path, "/system/usereg.dat");
+    vfs_mkfile(user_reg_data_path);
+
+    char  urf_buffer[sizeof(UserRegisterList)];
+    vfs_node_t urd_v = vfs_open(user_reg_data_path);
+    if (!urd_v) return;
+
+    vfs_read(urd_v, urf_buffer, 0, sizeof(UserRegisterList));
+
+    UserRegisterList *urf_data = (UserRegisterList *)urf_buffer;
+    int current_user_number = 1;
+
+    // todo: 选择用户
+
     current_user = (UserInfo *)malloc(sizeof(UserInfo));
-    // 这里先偷个懒，之后再改
-    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish")); //内核用户
-    current_user->user_type = XUT_Root;
+    strcpy(current_user->name, urf_data->uinf[current_user_number].name);
+    current_user->user_type = urf_data->uinf[current_user_number].user_type;
     current_user->envc      = 2;
     current_user->envp      = current_user_envp;
-    vfs_mkdir("/Users");
-    char user_folder_path[265] = "/Users/";
+
+    vfs_mkdir("/users");
+    char user_folder_path[265] = "/users/";
     strcat(user_folder_path, current_user->name);
     vfs_mkdir(user_folder_path);
 }

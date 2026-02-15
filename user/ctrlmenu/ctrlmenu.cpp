@@ -96,7 +96,7 @@ int main(int argc, char *argv[], char *envp[])
                 xapi_GetCurrentUser(&usif);
                 char runfile_path[256];
                 memset((void *)runfile_path, 0, 256);
-                strcat(runfile_path, "/Users/");
+                strcat(runfile_path, "/users/");
                 strcat(runfile_path, usif.name);
                 strcat(runfile_path, "/runfile.dat");
                 XFILE *f = xapi_OpenFile(runfile_path);
@@ -127,7 +127,7 @@ int main(int argc, char *argv[], char *envp[])
                 xapi_GetCurrentUser(&usif);
                 char runfile_path[256];
                 memset((void *)runfile_path, 0, 256);
-                strcat(runfile_path, "/Users/");
+                strcat(runfile_path, "/users/");
                 strcat(runfile_path, usif.name);
                 strcat(runfile_path, "/settings.dat");
                 XFILE *f = xapi_OpenFile(runfile_path);

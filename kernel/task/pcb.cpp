@@ -26,6 +26,8 @@ pcb_t         kernel_group    = NULL;
 
 extern UserInfo *current_user;
 
+extern UserInfo root_user;
+
 extern bool no_interrupt;
 // pcb.cpp
 #include "task/scheduler.h"
@@ -711,8 +713,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->winnum  = 0;
     new_task->hasfscr = false;
 
-    new_task->user_info            = current_user;
-    new_task->user_info->user_type = XUT_Root;
+    new_task->user_info = &root_user;
 
     uint64_t *stack_top = (uint64_t *)new_task->kernel_stack;
     PUSH_STACK(stack_top, 0);
