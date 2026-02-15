@@ -130,6 +130,8 @@ void init_user()
         }
         else if (k_input == '\b')
         {
+            if (input_count <= 0) return;
+            
             input_count--;
             input_password[input_count] = '\0';
             for (int y = 0; y < 8; y++)
