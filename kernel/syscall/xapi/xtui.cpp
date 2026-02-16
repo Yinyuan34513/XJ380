@@ -30,7 +30,7 @@ void do_xapi_GetSystemVersion(uint64_t str)
 {
     char *dst = (char *)str;
     if (dst != NULL)
-        memcpy(dst, OS_VERSION, strlen(OS_VERSION));
+        memcpy(dst, OS_VERSION, strlen(OS_VERSION) + 1);
 }
 
 uint64_t do_xapi_GetTime()
@@ -180,5 +180,46 @@ uint64_t do_xapi_GetMemorySize()
 
 void do_xapi_Run(char *path)
 {
-    runfile(path);
+    char  *fpath = vfs_cwd_path_build((char *)path);
+    runfile(fpath);
+    free(fpath);
+}
+
+uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
+{
+    uint64_t ret = -1;
+    if (ptr == NULL)
+    {
+        ret = page_alloc_random(get_current_task()->parent_group->pagedir, size, flags);
+    }
+    else
+    {
+        page_map_range_to_random(get_current_task()->parent_group->pagedir, ptr, size, flags);
+        ret = ptr;
+    }
+    return ret;
+}
+
+extern int clock_hour_offset;
+
+void do_xapi_FlushTime()
+{
+    char setfile_path[256];
+    memset(setfile_path, 0, 256);
+    strcat(setfile_path, "/users/");
+    strcat(setfile_path, current_user->name);
+    strcat(setfile_path, "/settings.dat");
+    vfs_node_t v = vfs_open(setfile_path);
+    if (!v) return;
+    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)malloc(v->size);
+    if (!sdff) return;
+    vfs_read(v, sdff, 0, v->size);
+
+    clock_hour_offset = sdff->ClockHourOffset;
+
+    if (clock_hour_offset < 0)
+        clock_hour_offset = 0;
+
+    vfs_close(v);
+    free(sdff);
 }

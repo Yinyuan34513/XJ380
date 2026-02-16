@@ -17,7 +17,10 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         process_left_key(hData, lData);
         break;
     case MSG_CRL:
-        if (hData < 2000) { change_setting_apps(hData); } // cm_graph.cpp:145
+        if (hData <= 1999) { change_setting_apps(hData); } // cm_graph.cpp:145
+        else if (hData == 2001) { change_clock_hour_offset(+1); }
+        else if (hData == 2002) { change_clock_hour_offset(23); }
+        else if (hData == 3000) { change_setting_background(); }
         else if (hData == 114514) { delete_input_box(); charbox_input_complete = -1; }
         else if (hData == 114515) { delete_input_box(); charbox_input_complete = 1; }
         break;
@@ -32,9 +35,24 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 
 int main(int argc, char *argv[], char *envp[])
 {
-    (void)argc;
-    (void)argv;
     (void)envp;
+
+    if (argc == 1)
+    {
+        if (strcmp(argv[0], "shortdock-open-settings") == 0)
+        {
+            cindex = 3;
+        }
+        else if (strcmp(argv[0], "shortdock-open-about") == 0)
+        {
+            cindex = 3;
+        }
+        else if (strcmp(argv[0], "shortdock-open-graphics") == 0)
+        {
+            cindex = 3;
+            setting_cindex = 3;
+        }
+    }
 
     XWINDOW Winfo;
     Winfo.title = (char *)"控制中心";
@@ -63,6 +81,68 @@ int main(int argc, char *argv[], char *envp[])
         {
             draw_background();
             old_min = tm.tm_min;
+        }
+
+        if (waiting_change_setting_apps)
+        {
+            while (true)
+            {
+                if (charbox_input_complete != 0) break;
+            }
+
+            if (charbox_input_complete != -1)
+            {
+                UserInfo usif;
+                xapi_GetCurrentUser(&usif);
+                char runfile_path[256];
+                memset((void *)runfile_path, 0, 256);
+                strcat(runfile_path, "/users/");
+                strcat(runfile_path, usif.name);
+                strcat(runfile_path, "/runfile.dat");
+                XFILE *f = xapi_OpenFile(runfile_path);
+                if (f) 
+                {
+                    RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
+
+                    strcpy(rff->items[change_setting_apps_id].runpath, charbox_buf);
+
+                    xapi_CloseFile(f);
+
+                    draw_background();
+                }
+            }
+            waiting_change_setting_apps = false;
+        }
+        if (waiting_change_setting_background)
+        {
+            
+            while (true)
+            {
+                if (charbox_input_complete != 0) break;
+            }
+
+            if (charbox_input_complete != -1)
+            {
+                UserInfo usif;
+                xapi_GetCurrentUser(&usif);
+                char runfile_path[256];
+                memset((void *)runfile_path, 0, 256);
+                strcat(runfile_path, "/users/");
+                strcat(runfile_path, usif.name);
+                strcat(runfile_path, "/settings.dat");
+                XFILE *f = xapi_OpenFile(runfile_path);
+                if (f) 
+                {
+                    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
+
+                    strcpy(sdff->BackgroundFilePath, charbox_buf);
+
+                    xapi_CloseFile(f);
+
+                    draw_background();
+                }
+            }
+            waiting_change_setting_background = false;
         }
         
         xapi_Sleep(1000);

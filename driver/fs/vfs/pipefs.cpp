@@ -34,14 +34,14 @@ size_t pipefs_read(void *file, void *addr, size_t offset, size_t size) {
 
     if (to_read == 0) { return 0; }
 
-    spin_lock(pipe->lock);
+    spin_lock(&pipe->lock);
 
     memcpy(addr, pipe->buf, to_read);
     memmove(pipe->buf, &pipe->buf[pipe->ptr], pipe->ptr - to_read);
 
     pipe->ptr -= to_read;
 
-    spin_unlock(pipe->lock);
+    spin_unlock(&pipe->lock);
 
     return to_read;
 }
@@ -55,10 +55,10 @@ size_t pipe_write_inner(void *file, const void *addr, size_t size) {
         scheduler_yield();
     }
 
-    spin_lock(pipe->lock);
+    spin_lock(&pipe->lock);
     memcpy(&pipe->buf[pipe->ptr], addr, size);
     pipe->ptr += size;
-    spin_unlock(pipe->lock);
+    spin_unlock(&pipe->lock);
 
     return size;
 }
@@ -95,7 +95,7 @@ bool pipefs_close(void *current) {
     pipe_specific_t *spec = (pipe_specific_t *)current;
     pipe_info_t     *pipe = spec->info;
 
-    spin_lock(pipe->lock);
+    spin_lock(&pipe->lock);
     if (spec->write) {
         pipe->write_fds--;
     } else {
@@ -106,13 +106,13 @@ bool pipefs_close(void *current) {
     if ((spec->write && pipe->write_fds == 0) || pipe->read_fds == 0) free(spec);
 
     if (pipe->write_fds == 0 && pipe->read_fds == 0) {
-        spin_unlock(pipe->lock);
+        spin_unlock(&pipe->lock);
         free(pipe->buf);
         free(pipe);
         return true;
     }
 
-    spin_unlock(pipe->lock);
+    spin_unlock(&pipe->lock);
 
     return true;
 }
@@ -123,7 +123,7 @@ int pipefs_poll(void *file, size_t events) {
 
     int out = 0;
 
-    spin_lock(pipe->lock);
+    spin_lock(&pipe->lock);
     if (events & EPOLLIN) {
         if (!pipe->write_fds) out |= EPOLLHUP;
         if (pipe->assigned > 0) out |= EPOLLIN;
@@ -133,7 +133,7 @@ int pipefs_poll(void *file, size_t events) {
         if (!pipe->read_fds) out |= EPOLLHUP;
         if (pipe->assigned < PIPE_BUFF) out |= EPOLLOUT;
     }
-    spin_unlock(pipe->lock);
+    spin_unlock(&pipe->lock);
     return out;
 }
 

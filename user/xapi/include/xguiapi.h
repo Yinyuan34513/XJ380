@@ -3,7 +3,7 @@
  *      XINGJI XJ380 Application Compile Tools (XACT) 
  *      XACT C\C++ Header
  *      XJ380API XAPI Edition GUI Part
- *      Release Version 1.0.0 - 2025/5/10
+ *      Release Version 1.2.0 - 2026/1/16
  *      Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
@@ -13,6 +13,7 @@
 #pragma once
 
 #include "stdint.h"
+#include "./liballoc/alloc.h"
 
 // define
 typedef UINT64 		HDLE;
@@ -178,6 +179,12 @@ void xapi_DrawPicture(
 	UINT32	width,
 	UINT32	height,
 	WSTR  	path
+);
+
+void xapi_GetPicSize(
+	UINT32	*width,
+	UINT32	*height,
+	WSTR  	 path
 );
 
 // 4-4

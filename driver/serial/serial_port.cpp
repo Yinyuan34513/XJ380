@@ -69,8 +69,10 @@ extern bool no_interrupt;
 
 void write_serial_string(const char *str)
 {
-    close_interrupt; // Avoid deadlock
-    spin_lock(serial_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&serial_lock);
     while (*str)
     {
 #if BUILD_EDITION == DEBUG_VERSION  // 串口那么可爱为什么要谋害他（哭
@@ -96,8 +98,8 @@ void write_serial_string(const char *str)
 #endif
         write_serial(*str++);
     }
-    spin_unlock(serial_lock);
-    if (!no_interrupt) open_interrupt;
+    if (is_sti) close_interrupt;
+    spin_unlock(&serial_lock);
 }
 
 void write_serial_dec(unsigned long long dec)
@@ -454,8 +456,10 @@ Writer SerialWriter = {
 
 void serial_wprintf(const char *fmt, ...)
 {
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
     vwprintf(&SerialWriter, fmt, args);
@@ -466,8 +470,8 @@ void serial_wprintf(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) open_interrupt;
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
 }
 
 /**
@@ -475,9 +479,10 @@ void serial_wprintf(const char *fmt, ...)
  */
 int write_serial_fmt(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
     vwprintf(&SerialWriter, fmt, args);
@@ -488,11 +493,8 @@ int write_serial_fmt(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
 
@@ -502,9 +504,10 @@ int write_serial_fmt(const char *fmt, ...)
 // 用于输出消息
 int printk(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][MESSAGE] ");
 
@@ -518,20 +521,20 @@ int printk(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
+
+EXPORT_SYMBOL(printk);
 
 // 用于输出调试消息
 int pr_debug(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][DEBUG] ");
 
@@ -545,20 +548,18 @@ int pr_debug(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
 
 // 用于输出警告消息
 int pr_warn(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][WARNING] ");
 
@@ -572,20 +573,18 @@ int pr_warn(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
 
 // 用于输出调试信息消息
 int pr_info(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][INFO] ");
 
@@ -599,20 +598,18 @@ int pr_info(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
 
 // 用于输出提示消息
 int pr_notice(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][NOTICE] ");
 
@@ -626,20 +623,18 @@ int pr_notice(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
 
 // 用于输出错误消息
 int pr_err(const char *fmt, ...)
 {
-    // disable_scheduler();
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][ERROR] ");
 
@@ -653,11 +648,8 @@ int pr_err(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) { 
-        open_interrupt; 
-        // enable_scheduler();
-    }
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
     return 0;
 }
 
@@ -765,8 +757,10 @@ int snprintf(char *buf, size_t size, const char *fmt, ...)
  */
 void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
 {
-    close_interrupt; // Avoid deadlock
-    spin_lock(fmt_lock);
+    bool is_sti = are_interrupts_enabled();
+    if (!no_interrupt) open_interrupt;
+
+    spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
     vwprintf(&SerialWriter, fmt, args);
@@ -777,8 +771,9 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    spin_unlock(fmt_lock);
-    if (!no_interrupt) open_interrupt;
+    if (is_sti) close_interrupt;
+    spin_unlock(&fmt_lock);
 }
 
 EXPORT_SYMBOL(write_serial_fmt);
+EXPORT_SYMBOL(write_serial_string);

@@ -74,15 +74,11 @@ int roundf(double n)
 unsigned char *TTF_Print(int *buf, unsigned *width, unsigned *heigh, int size)
 {
     /* 创建位图 */
-    int            bitmap_w = 1920; /* 位图的宽 */
-    int            bitmap_h = 1080; /* 位图的高 */
-    unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
-    if (!bitmap)
-    {
-        // try again
-        bitmap = (unsigned char *)(malloc(bitmap_w * bitmap_h));
-        if (!bitmap) { return NULL; }
-    }
+    int            bitmap_w = 2560; /* 位图的宽 */
+    int            bitmap_h = 1440; /* 位图的高 */
+    unsigned char *bitmap =
+        (unsigned char *)(phys_to_virt(alloc_frames((bitmap_w * bitmap_h + PAGE_SIZE - 1) / PAGE_SIZE)));
+    if (!bitmap) { return NULL; }
     memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
     /* "STB"的 unicode 编码 */
@@ -187,8 +183,8 @@ void print_box_ttfl(SHEET_INFO *sht, SHEET *csheet, char *buf, SHEET_BUFFER fc,
     print_fmt_box_ttf(sht, csheet, fc, (int)x, (int)y, size, i_width, "%s", buf);
 }
 
-extern SHEET *
-    zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
+extern SHEET
+    *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
 uint64_t calc_ttf_length(char *str, int size)
 {
@@ -268,7 +264,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
         return;
     }
 
-    put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 1920, data->color);
+    put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 2560, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
     *i_width = width;
@@ -276,7 +272,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     // 更新光标位置
     data->x += (int)width;
 
-    free(bitmap);
+    free_frames((uint64_t)virt_to_phys((uint64_t)bitmap), (2560 * 1440 + PAGE_SIZE - 1) / PAGE_SIZE);
     if (free_rune) { free(r); }
     data->idx = 0; // 重置缓冲区
 }
@@ -304,8 +300,7 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
     return 1;
 }
 
-void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
-                       ...)
+void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt, ...)
 {
     uint32_t temp_i_width;
     input_width = &temp_i_width;

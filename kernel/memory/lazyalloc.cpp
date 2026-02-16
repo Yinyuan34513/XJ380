@@ -17,7 +17,7 @@ void *virt_copy(void *ptr) {
 
 errno_t lazy_tryalloc(pcb_t pcb, uint64_t address) {
     mm_virtual_page_t *virt_page = NULL;
-    spin_lock(pcb->virt_queue->lock);
+    spin_lock(&pcb->virt_queue->lock);
     queue_foreach(pcb->virt_queue, node) {
         mm_virtual_page_t *vpage = (mm_virtual_page_t *)node->data;
         if (address >= vpage->start && address < vpage->start + vpage->count * PAGE_SIZE) {
@@ -25,7 +25,7 @@ errno_t lazy_tryalloc(pcb_t pcb, uint64_t address) {
             break;
         }
     }
-    spin_unlock(pcb->virt_queue->lock);
+    spin_unlock(&pcb->virt_queue->lock);
 
     if (virt_page == NULL) {
         return -1;
@@ -72,7 +72,7 @@ void unmap_virtual_page(pcb_t process, uint64_t vaddr, size_t length) {
     uint64_t vaddr_end = vaddr + length;
     do {
         mm_virtual_page_t *vpage = NULL;
-        spin_lock(process->virt_queue->lock);
+        spin_lock(&process->virt_queue->lock);
         queue_foreach(process->virt_queue, node) {
             mm_virtual_page_t *virtual_page = (mm_virtual_page_t *)node->data;
             uint64_t           start        = virtual_page->start;
@@ -83,7 +83,7 @@ void unmap_virtual_page(pcb_t process, uint64_t vaddr, size_t length) {
                 break;
             }
         }
-        spin_unlock(process->virt_queue->lock);
+        spin_unlock(&process->virt_queue->lock);
         if (vpage == NULL) break;
         uint64_t start = vpage->start;
         uint64_t end   = vpage->start + vpage->count * PAGE_SIZE;

@@ -3,7 +3,7 @@
  *      XINGJI XJ380 Application Compile Tools (XACT) 
  *      XACT C\C++ Header
  *      XJ380API Define Header
- *      Release Version 1.0.0 - 2025/5/9
+ *      Release Version 1.2.0 - 2026/1/16
  *      Copyright(C) XINGJI Interactive Software 2017 - 2026 All rights reserved.
  * 
  *      A XINGJI Interactive Software Production
@@ -44,7 +44,7 @@ typedef double float64_t;
 // 检查是否定义
 #ifndef __SIZE_T
 #define __SIZE_T
-typedef unsigned long int size_t;
+typedef unsigned long long int size_t;
 #endif
 
 #endif

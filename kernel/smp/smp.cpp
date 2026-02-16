@@ -62,7 +62,7 @@ extern vfs_node_t rootdir;
 extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
 {
     disable_intr();
-    spin_lock(apu_lock);
+    spin_lock(&apu_lock);
 
     uint64_t ia32_apic_base  = rdmsr(0x1b);
     ia32_apic_base          |= 1 << 11;
@@ -137,7 +137,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
         if (!smp_scheduler_lock) break;
     }
 
-    tcb_t apu_idle         = (tcb_t)phys_to_virt(alloc_frames(STACK_SIZE / PAGE_SIZE));
+    tcb_t apu_idle         = (tcb_t)malloc(sizeof(struct thread_control_block));
     apu_idle->task_level   = TASK_IDLE_LEVEL;
     apu_idle->tid          = now_tid++;
     apu_idle->kernel_stack = apu_idle->context0.rsp = get_rsp();
@@ -156,7 +156,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     get_current_cpu()->current_task = apu_idle;
 
     scheduler_is_ready++;
-    spin_unlock(apu_lock);
+    spin_unlock(&apu_lock);
     enable_intr();
 
     while (true)
@@ -204,7 +204,7 @@ bool start_ap(uint32_t cs_number, uint32_t lapic_id, PROCESSOR_INFO *cpuinf)
     }
     //一群250
     for (int i = 0; i < 250; i++)
-        cpu_relax();//睡吧宝贝
+        cpu_relax(); //睡吧宝贝
 
     // Send the Startup IPI
     if (ApicInfo.x2Apic)
@@ -425,5 +425,5 @@ void init_smp(uint64_t MADT0)
         }
         current += (uint64_t)header->length;
     }
-    write_serial_fmt("SMP init with %d cpus\n",xsi->cpu_count);
+    write_serial_fmt("SMP init with %d cpus\n", xsi->cpu_count);
 }

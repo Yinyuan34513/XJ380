@@ -10,7 +10,6 @@
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
-#include <fs/vfs/proc.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -33,8 +32,11 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <ttf.h>
+#include <user/runfile.h>
 
 extern UserInfo *current_user;
+
+void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet);
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
@@ -47,7 +49,7 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     // 获取路径
     char runfile_setfile_path[256];
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/Users/");
+    strcat(runfile_setfile_path, "/users/");
     strcat(runfile_setfile_path, current_user->name);
     strcat(runfile_setfile_path, "/settings.dat");
     vfs_mkfile(runfile_setfile_path);
@@ -105,67 +107,54 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
 
     init_dock(sht, dock_ct_sheet);
     init_shortcut_dock(sht, dock_ct_sheet);
+    init_desktop_icon(sht, csheet);
+}
 
-    /*
-    文件结构：
-    第一行存储一个整数标记最大格子数
-    接下来每行对应一个格子，第几行就是第几个格子
-    空格子名称为xds_null
-    每行开头一个路径对应指向的文件
-    “系统”和“垃圾桶”图标不可删除或移动，不计入格子内
-    */
-    char desktop_folder_path[256] = "/Users/";
+void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
+{
+    char desktop_folder_path[256] = "/users/";
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
     vfs_mkdir(desktop_folder_path);
-    memset(desktop_folder_path, 0, 256);    // 回收再利用
-    strcat(desktop_folder_path, "/Users/");
-    strcat(desktop_folder_path, current_user->name);
-    strcat(desktop_folder_path, "/deskset.inf");
-    vfs_mkfile(desktop_folder_path);
 
-    char desktop_setting_file_buffer[256];
-    char desktop_setting_file_temp_buf[256];
-    char *desktop_setting_file_p = desktop_setting_file_buffer;
     vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
     if (!desktop_setting_file_v) return;
-    vfs_read(desktop_setting_file_v, desktop_setting_file_buffer, 0, desktop_setting_file_v->size);
-    uint64_t offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-    desktop_setting_file_p += offest;
 
-    int desktop_block_count = atoi(desktop_setting_file_temp_buf) + 2;
+    strcat(desktop_folder_path, "/testfolder");
+    vfs_mkdir(desktop_folder_path);
+
+    PrintPicture_blend(sht, csheet, 20, 30 + 0 * 110, 74, 74, "/system/icon/d_system.png");
+    print_box_ttf(sht, csheet, "系统", BLACK, 57 - calc_ttf_length("系统", 11) / 2, 105 + 1 * 110 + 1, 11);
+    print_box_ttf(sht, csheet, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + 0 * 110, 11);
+
+    PrintPicture_blend(sht, csheet, 20, 30 + 1 * 110, 74, 74, "/system/icon/bin.png");
+    print_box_ttf(sht, csheet, "垃圾桶", BLACK, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110 + 1, 11);
+    print_box_ttf(sht, csheet, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110, 11);
+
     // 每个格是 110 * 110，从（0，25）开始
-    for (int i = 0; i < desktop_block_count; i++)
+    int nindex = 2;
+    for (list_t node = desktop_setting_file_v->child; node != NULL; node = node->next)
     {
-        if (i == 0) 
+        vfs_node_t data = (vfs_node_t)node->data;
+        int bx = 20 + 110 * (nindex / ((sht->scry - 88) / 110));
+        int by = 30 + (nindex - (nindex / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
+        if (data->type == file_dir)
         {
-            PrintPicture_blend(sht, csheet, 20, 30 + i * 110, 74, 74, "/system/icon/d_system.png");
-            print_box_ttf(sht, csheet, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + i * 110, 11);
+            // 是文件夹
+            PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/folder.png");
         }
-        else if (i == 1) 
+        else
         {
-            PrintPicture_blend(sht, csheet, 20, 30 + i * 110, 74, 74, "/system/icon/bin.png");
-            print_box_ttf(sht, csheet, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + i * 110, 11);
+            // 是文件
+            PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/texter.png");
         }
-        else 
-        {
-            // 读取一行并设置下一行的偏移
-            offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-            desktop_setting_file_p += offest;
-
-            // 空的就跳过
-            if (strcmp("xds_null", desktop_setting_file_temp_buf) == 0)
-            {
-                continue;
-            }
-
-            int bx = 20 + 110 * (i / ((sht->scry - 88) / 110));
-            int by = 30 + (i - (i / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
-            PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/guoqiyu.png");
-            print_box_ttf(sht, csheet, 
-                desktop_setting_file_temp_buf, WHITE, 
-                57 - calc_ttf_length(desktop_setting_file_temp_buf, 11) / 2, 105 + i * 110, 11);
-        }
+        print_box_ttf(sht, csheet, 
+            data->name, BLACK, 
+            57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110 + 1, 11);
+        print_box_ttf(sht, csheet, 
+            data->name, WHITE, 
+            57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110, 11);
+        nindex++;
     }
 
     vfs_close(desktop_setting_file_v);
@@ -188,6 +177,7 @@ void init_dock(SHEET_INFO *sht, SHEET *csheet)
     }
 
     draw_logo(sht, csheet, 24, scry - 24 - 63);
+    flush_task_dock();
 }
 
 void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
@@ -218,29 +208,19 @@ void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
 
 void process_desktop_find_block(int x, int y)
 {
-    char desktop_folder_path[265] = "/Users/";
+    char desktop_folder_path[265] = "/users/";
     memset(desktop_folder_path, 0, 256);    // 回收再利用
-    strcat(desktop_folder_path, "/Users/");
+    strcat(desktop_folder_path, "/users/");
     strcat(desktop_folder_path, current_user->name);
-    strcat(desktop_folder_path, "/deskset.inf");
+    strcat(desktop_folder_path, "/desktop");
 
-    char desktop_setting_file_buffer[65536];
-    char desktop_setting_file_temp_buf[65536];
-    char *desktop_setting_file_p = desktop_setting_file_buffer;
     vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
     if (!desktop_setting_file_v) return;
-    vfs_read(desktop_setting_file_v, desktop_setting_file_buffer, 0, desktop_setting_file_v->size);
-    uint64_t offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-    desktop_setting_file_p += offest;
 
-    int desktop_block_count = atoi(desktop_setting_file_temp_buf) + 2;
     // 每个格是 110 * 110，从（0，25）开始
-    for (int i = 0; i < desktop_block_count; i++)
+    int i;
+    for (i = 0; i < 2; i++)
     {
-        // 读取一行并设置下一行的偏移
-        offest = getline_from_file(desktop_setting_file_p, desktop_setting_file_temp_buf);
-        desktop_setting_file_p += offest;
-
         int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
         int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
 
@@ -252,11 +232,35 @@ void process_desktop_find_block(int x, int y)
             {
                 create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
             }
+        }
+    }
+    for (list_t node = desktop_setting_file_v->child; node != NULL; node = node->next)
+    {
+        int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
+        int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
+
+        if (x > bx && x < bx + 110 &&
+            y > by && y < by + 110)
+        {
+            // 就是他！
+            vfs_node_t data = (vfs_node_t)node->data;
+            char runfile_path[256] = "\0";
+            strcat(runfile_path, "/users/");
+            strcat(runfile_path, current_user->name);
+            strcat(runfile_path, "/desktop/");
+            strcat(runfile_path, data->name);
+            if (data->type == file_dir)
+            {
+                // 是文件夹
+                char *argv[2] = {runfile_path, NULL};
+                create_user_process_from_file((char *)"/system/fmanager.elf", NULL, argv);
+            }
             else
             {
-                // todo
+                runfile(runfile_path);
             }
         }
+        i++;
     }
 
     vfs_close(desktop_setting_file_v);
@@ -381,7 +385,7 @@ void flush_task_dock()
 {
     if (have_full_screen_app) return;
 
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     int   i       = 0;
     while (true)
@@ -394,12 +398,12 @@ void flush_task_dock()
         if (front_p->next == NULL) { break; }
         front_p = front_p->next;
     }
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
 }
 
 void register_task_dock(WINDOWLSP window)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     TDB_t new_win = (TDB_t)malloc(sizeof(TASK_DOCK_BLOCK));
     memset(new_win, 0, sizeof(TASK_DOCK_BLOCK));
@@ -408,6 +412,7 @@ void register_task_dock(WINDOWLSP window)
     new_win->windowls = window;
     new_win->next     = NULL;
     new_win->in_focus = false;
+    new_win->min_mode = false;
 
     front_p = first_dock_block;
     while (true)
@@ -420,13 +425,13 @@ void register_task_dock(WINDOWLSP window)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void unregister_task_dock(WINDOWLSP window)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     int   i       = 0;
     TDB_t front_p = first_dock_block;
     TDB_t front_p2;
@@ -465,13 +470,13 @@ void unregister_task_dock(WINDOWLSP window)
         front_p  = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void focus_window_dock(WINDOWLSP win)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
     {
@@ -481,13 +486,13 @@ void focus_window_dock(WINDOWLSP win)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
 }
 
 void change_task_dock_icon(WINDOWLSP win, char *path)
 {
-    spin_lock(task_dock_lock);
+    spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
     {
@@ -501,8 +506,42 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
         front_p = front_p->next;
     }
 
-    spin_unlock(task_dock_lock);
+    spin_unlock(&task_dock_lock);
     flush_task_dock();
+}
+
+void save_window_xy(WINDOWLSP win)
+{
+    spin_lock(&task_dock_lock);
+    TDB_t front_p = first_dock_block;
+    while (true)
+    {
+        front_p->in_focus = false;
+        if (front_p->windowls == win)
+        {
+            front_p->bmx = win->w_sheet->bx;
+            front_p->bmy = win->w_sheet->by;
+            front_p->in_focus = false;
+            front_p->min_mode = true;
+        }
+        if (front_p->next == NULL) { break; }
+        front_p = front_p->next;
+    }
+
+    spin_unlock(&task_dock_lock);
+    flush_task_dock();
+}
+
+TDB_t find_dock_icon(int index)
+{
+    TDB_t front_p = first_dock_block;
+    for (int i = 0; i < index + 1; i++)
+    {
+        if (front_p->next == NULL) { return NULL; }
+        front_p = front_p->next;
+    }
+
+    return front_p;
 }
 
 void draw_app_message_box(char *title, char *text)
@@ -520,4 +559,34 @@ void draw_app_message_box(char *title, char *text)
 
     draw_rect(sht_img, dock_ct_sheet, scdx - 300, 28, scdx, 128, {0, 0, 0, 0});
     refresh_part_sheet(sht_img, scdx - 300, 28, scdx, 128);
+}
+
+bool logo_menu_just_born = false;
+bool logo_menu_is_open = false;
+
+void draw_logo_menu()
+{
+    if (have_full_screen_app) return;
+    int x1 = sht_img->scrx * 0.1875;
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, DOCK_COL);
+    print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 28, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, "刷新", {0,0,0,255}, x1 + 8, 50, 10);
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    logo_menu_just_born = true;
+    logo_menu_is_open = true;
+}
+
+void delete_logo_menu()
+{
+    if (have_full_screen_app) { return; }
+    if (logo_menu_just_born)
+    {
+        logo_menu_just_born = false;
+        return;
+    }
+
+    int x1 = sht_img->scrx * 0.1875;
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, {0, 0, 0, 0});
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    logo_menu_is_open = false;
 }

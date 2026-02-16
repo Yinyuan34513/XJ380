@@ -10,6 +10,7 @@
 
 #include "./include/x3api.h"
 #include "./include/libsys.h"
+#include "./include/liballoc/alloc.h"
 
 extern int main(int argc, char *argv[], char *envp[]);
 // extern void _init();
@@ -43,6 +44,10 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
     //        fn++;
     //    }
     //}
+
+    void *heap_memory = xapi_MapMemory(NULL, 16 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    memset(heap_memory, 0, 16 * 1024 * 1024);
+    heap_init((uint8_t *)heap_memory, 16 * 1024 * 1024);
 
     uint64_t pid  = xapi_Fork();
 

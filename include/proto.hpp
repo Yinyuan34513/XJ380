@@ -2,8 +2,8 @@
 #define _PROTO_H_
 
 #include "fs/vfs/list.h"
-#define KERNEL_STACK_SIZE 262144UL // 任务内核栈地址
-#define BIG_USER_STACK    999424   // 用户栈大小，要对齐到页
+#define KERNEL_STACK_SIZE 1048576UL            // 任务内核栈地址
+#define BIG_USER_STACK    (16UL * 1024 * 1024) // 用户栈大小，要对齐到页
 
 #include <graphics/window/window.h>
 #include <ps2/keyboard.h>
@@ -12,7 +12,7 @@
 #include <stdint.h>
 extern SHEET_INFO *sht_img;
 extern XWM_INFO   *xwmii;
-extern SHEET   *msid;
+extern SHEET      *msid;
 
 #define close_interrupt disable_intr()
 #define open_interrupt  enable_intr()
@@ -184,10 +184,13 @@ void init_heap();
 #include <mm/bitmap.h>
 
 // kernel/memory/frame.cpp
-void     init_frame(MEMORY_MAP map);
-void     free_frame(uint64_t addr);
+void init_frame(MEMORY_MAP map);
+void free_frames(uint64_t addr, size_t size);
+void free_frame(uint64_t addr)
+{
+    free_frames(addr, 1);
+}
 uint64_t alloc_frames(size_t count);
-void     free_frames(uint64_t addr, uint64_t size);
 
 // kernel/memory/hhdm.cpp
 void     init_hhdm();
@@ -251,6 +254,7 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
 void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
+void GetPictureSize(int *w, int *h, char *path);
 void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height);
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x,
@@ -263,9 +267,12 @@ void backtrace(struct X64_REGS *regs);
 uint64_t get_counter();
 uint32_t get_freq();
 
-
-
-char getch_from_file(void *buffer);
+char     getch_from_file(void *buffer);
 uint64_t getline_from_file(void *buffer, char *str);
+
+// ulog.cpp
+void init_xuls();
+void write_ulog(char *str);
+void ulog_err(char *err_type);
 
 #endif

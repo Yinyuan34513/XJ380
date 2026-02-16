@@ -2,6 +2,7 @@
 
 #include "./stdint.h"
 #include "./krlibc.h"
+#include "./liballoc/alloc.h"
 
 // XJ380API POSIX Edition
 #define SYS_READ 0
@@ -108,6 +109,8 @@
 #define XAPI_READ_FILE      423
 #define XAPI_WRITE_FILE     424
 
+#define XAPI_REMOVEDIR      444
+
 // P3.4
 #define XAPI_FORK   389
 #define XAPI_EXECVE 390
@@ -128,6 +131,13 @@
 #define XAPI_SLEEP          430
 
 #define XAPI_RUN            439
+
+#define XAPI_FLUSH_TIME     445
+
+// P3.7
+#define XAPI_MALLOC         441
+#define XAPI_FREE           442
+#define XAPI_MAP_MEMORY     443
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -155,6 +165,8 @@
 #define XAPI_DRAW_PNG       404
 
 #define XAPI_DRAW_PICTURE   419
+
+#define XAPI_GET_PIC_SIZE   440
 
 // P4.4
 #define XAPI_SET_MSH_PROCOR 405

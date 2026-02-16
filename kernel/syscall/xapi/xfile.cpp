@@ -28,13 +28,14 @@
 
 uint64_t do_xapi_OpenFile(uint64_t path)
 {
-    char  *fpath = (char *)path;
+    char  *fpath = vfs_cwd_path_build((char *)path);
     XFILE *fsptr = (XFILE *)page_alloc_random(get_current_task()->parent_group->pagedir, sizeof(XFILE),  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     strcpy(fsptr->path, fpath);
 
     vfs_node_t f = vfs_open(fpath);
     if (!f)
     {
+        free(fpath);
         unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
         return 0;
     }
@@ -43,11 +44,13 @@ uint64_t do_xapi_OpenFile(uint64_t path)
     if ((int64_t)fsptr->buffer == -1)
     {
         vfs_close(f);
+        free(fpath);
         unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
         return 0;
     }
     vfs_read(f, fsptr->buffer, 0, length);
     vfs_close(f);
+    free(fpath);
 
     return (uint64_t)fsptr;
 }
@@ -55,24 +58,42 @@ uint64_t do_xapi_OpenFile(uint64_t path)
 void do_xapi_CloseFile(uint64_t ptr)
 {
     XFILE *fsptr = (XFILE *)ptr;
-    vfs_node_t f = vfs_open(fsptr->path);
-    if (!fsptr) return;
-    else if (!fsptr->buffer) return;
+    char  *fpath = vfs_cwd_path_build(fsptr->path);
+    vfs_node_t f = vfs_open(fpath);
+    if (!fsptr) 
+    {
+        free(fpath);
+        return;
+    }
+    else if (!fsptr->buffer) 
+    {
+        free(fpath);
+        return;
+    }
+    if (!f)
+    {
+        free(fpath);
+        return;
+    }
     vfs_write(f, fsptr->buffer, 0, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr->buffer, fsptr->length);
     unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
+    free(fpath);
+    vfs_close(f);
 }
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
 {
-    char          *fpath  = (char *)path;
+    char          *fpath  = vfs_cwd_path_build((char *)path);
     uint32_t      *fcount = (uint32_t *)count;
     XAPIT_DirNode *fdir   = (XAPIT_DirNode *)dir;
 
     vfs_node_t v = vfs_open(fpath);
+    v->refcount++;
     if (!v)
     {
         *fcount = 404;
+        free(fpath);
         return;
     }
 
@@ -81,10 +102,11 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
         if (*fcount >= 255)
         {
             (*fcount)++;
+            free(fpath);
             break;
         }
         void *data = node->data;
-        if (strcmp(((vfs_node_t)data)->name, "") != 0)
+        if (strcmp(((vfs_node_t)data)->name, "") != 0 && ((vfs_node_t)data)->type != file_delete)
         {
             strcpy(fdir[*fcount].filename, ((vfs_node_t)data)->name);
             fdir[*fcount].length   = ((vfs_node_t)data)->size;
@@ -93,32 +115,38 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
         }
     }
     vfs_close(v);
+    free(fpath);
 }
 
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs)
 {
-    vfs_node_t node = vfs_open((const char *)regs->rdi);
+    char *fpath  = vfs_cwd_path_build((char *)regs->rdi);
+    vfs_node_t node = vfs_open(fpath);
     if (!node)
     {
         regs->rax = (uint64_t)-ENOENT;
+        free(fpath);
         return 0;
     }
 
     if (node->type & file_dir)
     {
         vfs_close(node);
+        free(fpath);
         regs->rax = (uint64_t)-EISDIR;
         return 0;
     }
 
     ssize_t ret = vfs_read(node, (void *)regs->rsi, regs->r9, regs->rdx);
     vfs_close(node);
+    free(fpath);
     return ret;
 }
 
 uint64_t do_xapi_WriteFile(struct X64_REGS *regs)
 {
-    vfs_node_t node = vfs_open((const char *)regs->rdi);
+    char *fpath  = vfs_cwd_path_build((char *)regs->rdi);
+    vfs_node_t node = vfs_open(fpath);
     if (!node)
     {
         // 文件不存在，创建它
@@ -126,12 +154,14 @@ uint64_t do_xapi_WriteFile(struct X64_REGS *regs)
         if (create_ret < 0)
         {
             regs->rax = (uint64_t)-ENOENT;
+            free(fpath);
             return 0;
         }
         node = vfs_open((const char *)regs->rdi);
         if (!node)
         {
             regs->rax = (uint64_t)-ENOENT;
+            free(fpath);
             return 0;
         }
     }
@@ -140,10 +170,12 @@ uint64_t do_xapi_WriteFile(struct X64_REGS *regs)
     {
         vfs_close(node);
         regs->rax = (uint64_t)-EISDIR;
+        free(fpath);
         return 0;
     }
 
     ssize_t ret = vfs_write(node, (void *)regs->rsi, regs->r9, regs->rdx);
     vfs_close(node);
+    free(fpath);
     return ret;
 }

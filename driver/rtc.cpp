@@ -28,13 +28,13 @@ uint8_t cmos_read(uint8_t addr) {
     bool is_sti = are_interrupts_enabled();
     open_interrupt;
 
-    spin_lock(cmos_register_lock);
+    spin_lock(&cmos_register_lock);
 
     if (is_sti) close_interrupt;
     
     outb(CMOS_ADDR, CMOS_NMI | addr);
     uint8_t value = inb(CMOS_DATA);
-    spin_unlock(cmos_register_lock);
+    spin_unlock(&cmos_register_lock);
     return value;
 };
 
@@ -43,13 +43,13 @@ void cmos_write(uint8_t addr, uint8_t value) {
     bool is_sti = are_interrupts_enabled();
     open_interrupt;
 
-    spin_lock(cmos_register_lock);
+    spin_lock(&cmos_register_lock);
 
     if (is_sti) close_interrupt;
     
     outb(CMOS_ADDR, CMOS_NMI | addr);
     outb(CMOS_DATA, value);
-    spin_unlock(cmos_register_lock);
+    spin_unlock(&cmos_register_lock);
 }
 
 int days_in_month[2][12] = {{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
@@ -132,6 +132,8 @@ void time_read_bcd(tm *time) {
 
 uint8_t bcd_to_bin(uint8_t value) { return (value & 0xf) + (value >> 4) * 10; }
 
+extern int clock_hour_offset;
+
 void time_read(tm *time) {
     time_read_bcd(time);
     uint8_t rb = cmos_read(0x0b);
@@ -140,7 +142,7 @@ void time_read(tm *time) {
     if (need_convert) {
         time->tm_sec = bcd_to_bin(time->tm_sec);
         time->tm_min = bcd_to_bin(time->tm_min);
-        time->tm_hour = bcd_to_bin(time->tm_hour);
+        time->tm_hour = (bcd_to_bin(time->tm_hour) + clock_hour_offset) % 24;
         time->tm_mday = bcd_to_bin(time->tm_mday);
         time->tm_mon = bcd_to_bin(time->tm_mon);
         time->tm_year = bcd_to_bin(time->tm_year);

@@ -211,12 +211,17 @@ void check_command()
     {
         if (check_dir_com(input_buf) == 1)
         {
-            print_to_console("Executing files is not yet implemented");
+            char runfile_path[256];
+            strcat(runfile_path, current_path);
+            strcat(runfile_path, "/");
+            strcat(runfile_path, input_buf);
+            normalize_path(runfile_path);
+            xapi_Run(runfile_path);
         }
         else if (check_dir_com(input_buf) == 2)
         {
-            merge_string(current_path, "/");
-            merge_string(current_path, input_buf);
+            strcat(current_path, "/");
+            strcat(current_path, input_buf);
         }
         else if (p_inbuf > 0)
         {

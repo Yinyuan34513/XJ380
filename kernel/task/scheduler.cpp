@@ -140,20 +140,20 @@ spin_t scheduler_lock = SPIN_INIT;
 
 tcb_t select_next_task_safe()
 {
-    spin_lock(scheduler_lock);
+    spin_lock(&scheduler_lock);
     
     struct PROCESSOR_INFO *cpu = get_current_cpu();
     lock_queue *queue = cpu->scheduler_queue;
     
     if (queue == NULL || queue->size == 0) {
-        spin_unlock(scheduler_lock);
+        spin_unlock(&scheduler_lock);
         return NULL;
     }
     
     // 如果只有一个任务，直接返回
     if (queue->size == 1) {
         tcb_t only_task = (tcb_t)queue->head->data;
-        spin_unlock(scheduler_lock);
+        spin_unlock(&scheduler_lock);
         
         // 检查任务状态
         if (only_task->status == RUNNING || only_task->status == START) {
@@ -201,7 +201,7 @@ tcb_t select_next_task_safe()
                 candidate->parent_group->status != DEATH && 
                 candidate->parent_group->status != FUTEX) {
                 
-                spin_unlock(scheduler_lock);
+                spin_unlock(&scheduler_lock);
                 return candidate;
             }
         }
@@ -218,7 +218,7 @@ tcb_t select_next_task_safe()
     
     // 没找到其他任务，返回当前任务或NULL
     tcb_t result = (current->status == RUNNING || current->status == START) ? current : NULL;
-    spin_unlock(scheduler_lock);
+    spin_unlock(&scheduler_lock);
     return result;
 }
 
@@ -309,7 +309,7 @@ void scheduler_yield()
 void debug_sched_queue(lock_queue *q)
 {
     if (q == NULL) return;
-    spin_lock(q->lock);
+    spin_lock(&q->lock);
     lock_node *current = q->head;
     write_serial_fmt("Process %d Scheduler Queue: ", get_current_cpu()->lapic_id);
     while (current != NULL)
@@ -318,14 +318,14 @@ void debug_sched_queue(lock_queue *q)
         current = current->next;
     }
     write_serial_string("\n");
-    spin_unlock(q->lock);
+    spin_unlock(&q->lock);
 }
 
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
     
-    // spin_lock(scheduler_lock);
+    // spin_lock(&scheduler_lock);
     
     // 确保任务有基本设置
     if (new_task->status == CREATE) {
@@ -346,15 +346,15 @@ size_t add_task(tcb_t new_task)
 
     // debug_sched_queue(min_cpu->scheduler_queue);
     
-    // spin_unlock(scheduler_lock);
+    // spin_unlock(&scheduler_lock);
     return new_task->queue_index;
 }
 
 void remove_task(tcb_t task) {
     if (task == NULL) return;
-    // spin_lock(scheduler_lock);
+    // spin_lock(&scheduler_lock);
 
     PROCESSOR_INFO *smp = get_cpu(task->cpu_id);
     queue_remove_at(smp->scheduler_queue, task->queue_index);
-    // spin_unlock(scheduler_lock);
+    // spin_unlock(&scheduler_lock);
 }

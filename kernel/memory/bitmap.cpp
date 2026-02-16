@@ -96,3 +96,47 @@ size_t bitmap_find_range(const Bitmap *bitmap, size_t length, bool value)
 
     return (size_t)-1;
 }
+
+size_t bitmap_find_range_from(const Bitmap *bitmap, size_t length, bool value,
+                              size_t start_from) {
+
+    size_t count = 0, start_index = 0;
+    uint8_t byte_match = value ? (uint8_t)-1 : 0;
+
+    for (size_t byte_idx = start_from / 8; byte_idx < bitmap->length / 8;
+         byte_idx++) {
+        size_t byte = bitmap->buffer[byte_idx];
+
+        if (byte == !byte_match) {
+            count = 0;
+        } else if (byte == byte_match) {
+            if (length < 8) {
+                return byte_idx * 8;
+            }
+            if (count == 0) {
+                start_index = byte_idx * 8;
+            }
+            count += 8;
+            if (count >= length) {
+                return start_index;
+            }
+        } else {
+            for (size_t bit = 0; bit < 8; bit++) {
+                bool bit_value = (byte >> bit) & 1;
+                if (bit_value == value) {
+                    if (count == 0) {
+                        start_index = byte_idx * 8 + bit;
+                    }
+                    count++;
+                    if (count == length) {
+                        return start_index;
+                    }
+                } else {
+                    count = 0;
+                }
+            }
+        }
+    }
+
+    return (size_t)-1;
+}

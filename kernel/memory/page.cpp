@@ -13,9 +13,50 @@ spin_t page_lock;
 page_directory_t  kernel_page_dir;
 page_directory_t *current_directory = NULL;
 
-extern bool no_interrupt;
+extern bool     no_interrupt;
+extern uint64_t memory_size;
+uint64_t        double_fault_page = 0;
+page_t         *page_maps;
+void           *early_alloc(size_t size);
+void            page_init()
+{
+    uint64_t page_maps_size = memory_size / PAGE_SIZE * sizeof(page_t);
+    page_maps               = (page_t *)early_alloc(page_maps_size);
+    if (page_maps) memset(page_maps, 0, page_maps_size);
+}
 
-uint64_t double_fault_page = 0;
+page_t *get_page(uint64_t addr)
+{
+    return page_maps ? page_maps + (addr / PAGE_SIZE) : NULL;
+}
+
+void page_ref(page_t *page)
+{
+    if (page) page->refcount++;
+}
+void page_unref(page_t *page)
+{
+    if (page) page->refcount--;
+}
+
+bool page_can_free(page_t *page)
+{
+    return page ? page->refcount <= 0 : true;
+}
+
+void address_ref(uint64_t addr)
+{
+    page_ref(get_page(addr));
+}
+void address_unref(uint64_t addr)
+{
+    page_unref(get_page(addr));
+}
+
+bool address_can_free(uint64_t addr)
+{
+    return page_can_free(get_page(addr));
+}
 
 static bool is_huge_page(page_table_entry_t *entry)
 {
@@ -24,7 +65,7 @@ static bool is_huge_page(page_table_entry_t *entry)
 
 extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
-    disable_intr();
+    close_interrupt;
     disable_scheduler();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
@@ -63,13 +104,18 @@ err:;
     write_serial_string(error_msg);
     write_serial_string("\n");
 
-    write_serial_string("Fault Thread Name: ");
-    write_serial_string(get_current_task()->name);
-    write_serial_string(" ");
-    write_serial_hex((uint64_t)get_current_task());
-    write_serial_string("\n");
+    write_serial_fmt("Fault Thread Name: %s 0x%x\n", get_current_task()->name, (uint64_t)get_current_task());
+    write_serial_fmt("TID: %d\n", get_current_task()->tid);
 
     backtrace(frame);
+
+    if (error_code & 0x4)
+    {
+        ulog_err("Page Fault (0x0000000e)");
+        enable_scheduler();
+        open_interrupt;
+        return;
+    }
 
     while (1)
     {
@@ -255,21 +301,21 @@ static void free_page_table_recursive(page_table_t *table, int level)
 
 page_directory_t *clone_page_directory(page_directory_t *dir, bool all_copy)
 {
-    spin_lock(page_lock);
+    spin_lock(&page_lock);
     page_directory_t *new_directory = (page_directory_t *)(malloc(sizeof(page_directory_t)));
     if (new_directory == NULL) return NULL;
     new_directory->table = copy_page_table_recursive(dir->table, 4, all_copy, false);
     if (!all_copy) memcpy((uint64_t *)new_directory->table + 256, (uint64_t *)dir->table + 256, PAGE_SIZE / 2);
-    spin_unlock(page_lock);
+    spin_unlock(&page_lock);
     return new_directory;
 }
 
 void free_page_directory(page_directory_t *dir)
 {
-    spin_lock(page_lock);
+    spin_lock(&page_lock);
     free_page_table_recursive(dir->table, 4);
     free(dir);
-    spin_unlock(page_lock);
+    spin_unlock(&page_lock);
 }
 
 void unmap_page(page_directory_t *directory, uint64_t vaddr)
@@ -287,7 +333,8 @@ void unmap_page(page_directory_t *directory, uint64_t vaddr)
     page_table_t *l1_table =
         (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x00007fffffff000));
 
-    free_frame(l1_table->entries[l1_index].value & 0x00007fffffff000);
+    if (l1_table->entries[l1_index].value & PTE_FRAME_ALLOCATED)
+        free_frame(l1_table->entries[l1_index].value & 0x00007fffffff000);
     l1_table->entries[l1_index].value = 0;
     flush_tlb(vaddr);
 }
@@ -359,7 +406,7 @@ uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, var, flags);
+        page_map_to(directory, var, var, flags | PTE_FRAME_ALLOCATED);
     }
     return addr;
 }
@@ -369,7 +416,7 @@ void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, alloc_frames(1), flags);
+        page_map_to(directory, var, alloc_frames(1), flags | PTE_FRAME_ALLOCATED);
     }
 }
 
@@ -469,3 +516,7 @@ void page_setup()
     double_fault_page               = get_cr3();
     current_directory               = &kernel_page_dir;
 }
+
+EXPORT_SYMBOL(page_map_range);
+EXPORT_SYMBOL(page_map_range_to);
+EXPORT_SYMBOL(page_map_range_to_random);

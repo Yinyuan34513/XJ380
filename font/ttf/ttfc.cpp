@@ -13,25 +13,25 @@
 char          *ttf_buffer_c;
 stbtt_fontinfo font_c;
 
-SHEET_BUFFER   LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha);
-void put_bitmap(SHEET_INFO *sht, SHEET *csheet, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
-                unsigned heigh, unsigned bitmap_xsize, SHEET_BUFFER fc);
-void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
-                       ...);
+SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha);
+void         put_bitmap(SHEET_INFO *sht, SHEET *csheet, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
+                        unsigned heigh, unsigned bitmap_xsize, SHEET_BUFFER fc);
+void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt, ...);
 
 unsigned char *TTF_Print_c(int *buf, unsigned *width, unsigned *heigh, int size)
 {
     /* 创建位图 */
-    int            bitmap_w = 1920; /* 位图的宽 */
-    int            bitmap_h = 1080; /* 位图的高 */
-    unsigned char *bitmap   = (unsigned char *)(malloc(bitmap_w * bitmap_h));
+    int            bitmap_w = 2560; /* 位图的宽 */
+    int            bitmap_h = 1440; /* 位图的高 */
+    unsigned char *bitmap =
+        (unsigned char *)(phys_to_virt(alloc_frames((bitmap_w * bitmap_h + PAGE_SIZE - 1) / PAGE_SIZE)));
     memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
 
     /* "STB"的 unicode 编码 */
     int *word = buf;
 
     /* 计算字体缩放 */
-    float pixels = size * 2;                                 /* 字体大小（字号） */
+    float pixels = size * 2;                                   /* 字体大小（字号） */
     float scale  = stbtt_ScaleForPixelHeight(&font_c, pixels); /* scale = pixels / (ascent - descent) */
 
     /**
@@ -94,7 +94,7 @@ unsigned char *TTF_Print_c(int *buf, unsigned *width, unsigned *heigh, int size)
 }
 
 void print_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, char *buf, SHEET_BUFFER fc,
-                   /*unsigned bc, */ unsigned x, unsigned y, int size)
+                     /*unsigned bc, */ unsigned x, unsigned y, int size)
 {
     print_fmt_box_ttf_c(sht, csheet, fc, (int)x, (int)y, size, "%s", buf);
 }
@@ -128,7 +128,10 @@ static void flush_ttf_buffer_c(FbTTFWriterData *data)
         r         = (Rune *)malloc((utf_len + 1) * sizeof(Rune));
         free_rune = 1;
     }
-    else { r = data->rune_buf; }
+    else
+    {
+        r = data->rune_buf;
+    }
     r[utf_len] = 0;
     int   i    = 0;
     char *p    = data->buf;
@@ -144,13 +147,13 @@ static void flush_ttf_buffer_c(FbTTFWriterData *data)
     unsigned int   width  = 0;
     unsigned int   height = 0;
     unsigned char *bitmap = TTF_Print_c(r, &width, &height, data->size);
-    put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 1920, data->color);
+    put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 2560, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
     // 更新光标位置
     data->x += (int)width;
 
-    free(bitmap);
+    free_frames((uint64_t)virt_to_phys((uint64_t)bitmap), (2560 * 1440 + PAGE_SIZE - 1) / PAGE_SIZE);
     if (free_rune) { free(r); }
     data->idx = 0; // 重置缓冲区
 }
@@ -176,8 +179,7 @@ uint8_t fb_ttf_writer_handler_c(Writer *writer, char ch)
     return 1;
 }
 
-void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt,
-                       ...)
+void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt, ...)
 {
     char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
     // char buf[TTF_BUF_SIZE];

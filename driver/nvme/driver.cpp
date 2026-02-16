@@ -275,15 +275,20 @@ void failed_namespace(NVME_IDENTIFY_NAMESPACE *identifyNS)
     free_frames((uint64_t)virt_to_phys((uint64_t)identifyNS), 1);
 }
 NVME_NAMESPACE * NV_MAP[256];
+spin_t nvme_operate_lock = SPIN_INIT;
 size_t nvme_read(int data, void *buffer, uint64_t bytes,uint64_t lba)
 {
+    spin_lock(&nvme_operate_lock);
     size_t ret = NVMETransfer((NVME_NAMESPACE *)NV_MAP[data], buffer, lba, bytes, false);
+    spin_unlock(&nvme_operate_lock);
     return ret;
 }
 
 size_t nvme_write(int data, void *buffer, uint64_t bytes,uint64_t lba)
 {
+    spin_lock(&nvme_operate_lock);
     size_t ret = NVMETransfer((NVME_NAMESPACE *)NV_MAP[data], buffer, lba, bytes, true);
+    spin_unlock(&nvme_operate_lock);
     return ret;
 }
 

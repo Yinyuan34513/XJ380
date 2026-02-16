@@ -274,19 +274,25 @@ fail_cleanup:
     return 0;
 }
 
+spin_t ahci_operate_lock = SPIN_INIT;
+
 size_t ahci_read(int drive, uint8_t *buffer, size_t size, size_t lba) {
+    spin_lock(&ahci_operate_lock);
     struct hba_device *dev = (struct hba_device *)hbaDevice[drive];
     struct blkio_req   req = {
           .buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = 0};
     dev->ops.submit(dev, &req);
+    spin_unlock(&ahci_operate_lock);
     return size;
 }
 
 size_t ahci_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
+    spin_lock(&ahci_operate_lock);
     struct hba_device *dev = (struct hba_device *)hbaDevice[drive];
     struct blkio_req   req = {
           .buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = BLKIO_WRITE};
     dev->ops.submit(dev, &req);
+    spin_unlock(&ahci_operate_lock);
     return size;
 }
 

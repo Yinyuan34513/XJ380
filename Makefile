@@ -18,12 +18,14 @@ SUDO_CMD = sudo
 endif
 
 ifeq ($(KVM), 1)
-KVM_FLAG = --enable-kvm
+KVM_FLAG = --enable-kvm -cpu host
+else
+KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -cpu host -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG)
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
 
 COMPILER_PREFIX ?= 
 
@@ -161,6 +163,8 @@ vdisk: all
 
 	@cp -a $(BUILD_DIR)/texter.elf $(BUILD_DIR)/XJ380/system
 
+	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/system
+
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
@@ -168,7 +172,7 @@ vdisk: all
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
 
-	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/system/image
+	@cp -a ./image/*.* $(BUILD_DIR)/XJ380/system/image
 
 	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
 
@@ -178,11 +182,11 @@ vdisk: all
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
-# 	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
+	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
 	
 # temp test (remember to delete)
-	@mkdir -p $(BUILD_DIR)/XJ380/Users/GuoqiFish
-	@cp -a ./deskset.inf $(BUILD_DIR)/XJ380/Users/GuoqiFish
+	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
+	@cp -a ./test.txt $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
 
 	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
@@ -194,4 +198,7 @@ vmdk: vdisk
 	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
 
 run: vdisk
+	@$(QEMU_CMD)
+
+justrun:
 	@$(QEMU_CMD)

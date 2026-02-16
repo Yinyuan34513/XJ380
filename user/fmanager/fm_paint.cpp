@@ -46,6 +46,27 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
             if (strcmp("elf", file_type) == 0 || strcmp("epf", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "可执行文件", 10, 0x6d6d6dff);
+                xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowexe.png");
+            }
+            else if (strcmp("txt", file_type) == 0)
+            {
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "文本文件", 10, 0x6d6d6dff);
+                xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/texter.png");
+            }
+            else if (strcmp("png", file_type) == 0)
+            {
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "PNG 图片文件", 10, 0x6d6d6dff);
+                xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
+            }
+            else if (strcmp("jpg", file_type) == 0)
+            {
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "JPEG 图片文件", 10, 0x6d6d6dff);
+                xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
+            }
+            else if (strcmp("bmp", file_type) == 0)
+            {
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "位图文件", 10, 0x6d6d6dff);
+                xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
             }
             else
             {
@@ -60,13 +81,14 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
                 }
                 strcat(file_type, " 文件");
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
+                xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
             }
         }
         else 
         {
             xapi_DrawText(handle, 240, 148 + 24 * index - 3, "未知类型文件", 10, 0x6d6d6dff);
+            xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
         }
-        xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
 type_is_found:
         char file_size_str[32];
         memset(file_size_str, 0, sizeof(char) * 32);
@@ -78,6 +100,9 @@ type_is_found:
 
 void paint_dir(char *path)
 {
+    if (register_lock) return;
+    reg_lock();
+
     uint32_t count = 0;
     DirNode  fdir[256];
     memset(fdir, 0, sizeof(DirNode) * 256);
@@ -116,4 +141,6 @@ void paint_dir(char *path)
             (choosing_index == i - file_count_base));
     }
     xapi_RefreshWindow(handle);
+
+    reg_unlock();
 }

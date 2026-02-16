@@ -85,6 +85,8 @@ typedef struct {
 #define XAPI_READ_FILE      423
 #define XAPI_WRITE_FILE     424
 
+#define XAPI_REMOVEDIR      444
+
 // P3.4
 #define XAPI_FORK   389
 #define XAPI_EXECVE 390
@@ -105,6 +107,13 @@ typedef struct {
 #define XAPI_SLEEP          430
 
 #define XAPI_RUN            439
+
+#define XAPI_FLUSH_TIME     445
+
+// P3.7
+#define XAPI_MALLOC         441
+#define XAPI_FREE           442
+#define XAPI_MAP_MEMORY     443
 
 // P4.1
 #define XAPI_CREATE_WINDOW    392
@@ -132,6 +141,8 @@ typedef struct {
 #define XAPI_DRAW_PNG       404
 
 #define XAPI_DRAW_PICTURE   419
+
+#define XAPI_GET_PIC_SIZE   440
 
 // P4.4
 #define XAPI_SET_MSH_PROCOR 405
@@ -169,7 +180,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：439
+// 当前最大号：445
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -221,6 +232,8 @@ void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t c
 void do_xapi_DeleteRightButtonMenu(uint64_t handle);
 int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
 void do_xapi_Run(char *path);
+uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
+void do_xapi_FlushTime();
 
 
 

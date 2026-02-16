@@ -25,24 +25,165 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <user/user.h>
-
-UserInfo *current_user = NULL;
+#include <ttf.h>
 
 char *current_user_envp[100] = {
     ENVP_SYSTEM_VERSION,
     NULL // 必须以NULL结尾
 };
 
+UserInfo *current_user = NULL;
+
+UserInfo root_user = {
+    .name = "Root",
+    .user_type = XUT_Root,
+    .envc = 2,
+    .envp = current_user_envp,
+};
+
+extern SHEET *desktop_ct_sheet;
+extern mouse_dec ms_dec;
+
+char password_layout_ball_bitmap[8][9] = {
+    "..####..",
+    ".######.",
+    "########",
+    "########",
+    "########",
+    "########",
+    ".######.",
+    "..####..",
+};
+
 void init_user()
 {
+    char user_reg_data_path[256];
+    memset(user_reg_data_path, 0, 256);
+    strcat(user_reg_data_path, "/system/usereg.dat");
+    vfs_mkfile(user_reg_data_path);
+
+    char  urf_buffer[sizeof(UserRegisterList)];
+    vfs_node_t urd_v = vfs_open(user_reg_data_path);
+    if (!urd_v) return;
+
+    vfs_read(urd_v, urf_buffer, 0, sizeof(UserRegisterList));
+
+    UserRegisterList *urf_data = (UserRegisterList *)urf_buffer;
+    int current_user_number = 1;
+
+    // 选择用户
+    draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x3f, 0x48, 0xcc, 0xff});
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background2.png");
+    print_box_ttf(sht_img, desktop_ct_sheet, "选择一个用户", WHITE, 64, 44, 40);
+
+    for (int i = 1; i < urf_data->user_count; i++)
+    {
+        PrintPicture_blend(sht_img, desktop_ct_sheet, 64, 130 + (i - 1) * 50, 50, 50, "/system/icon/user.png");
+        print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[i].name, WHITE, 122, 138 + (i - 1) * 50, 16);
+    }
+
+    refresh_sheet(sht_img);
+
+    while (1)
+    {
+        if (ms_dec.left)
+        {
+            if (get_mouse_x() > 64 && get_mouse_y() > 130 && get_mouse_y() < 130 + (urf_data->user_count) * 50)
+            {
+                current_user_number = (get_mouse_y() - 130) / 50 + 1;
+                break;
+            }
+        }
+    }
+
+    // 登录
+    draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x3f, 0x48, 0xcc, 0xff});
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background2.png");
+    print_box_ttf(sht_img, desktop_ct_sheet, "登录", WHITE, 64, 44, 40);
+    print_box_ttf(sht_img, desktop_ct_sheet, "用户：", WHITE, 64, 130, 16);
+    print_box_ttf(sht_img, desktop_ct_sheet, "密码：", WHITE, 64, 164, 16);
+
+    draw_rect(sht_img, desktop_ct_sheet, 128, 168, 128 + 300, 168 + 24, WHITE);
+    print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[current_user_number].name, WHITE, 128, 130, 16);
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 128 + 300 + 8, 168, 24, 24, "/system/icon/nextstep.png");
+
+    refresh_sheet(sht_img);
+
+    int input_count = 0;
+    char input_password[64];
+    while (1)
+    {
+        uint8_t k_input = get_keyboard_input();
+        if (k_input != '\b' && k_input != '\n' && k_input != NULL && k_input < 128 && input_count < 18)
+        {
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    if (password_layout_ball_bitmap[y][x] == '#')
+                    {
+                        draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, BLACK);
+                        input_password[input_count] = k_input;
+                        refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
+                    }
+                }
+            }
+            input_count++;
+        }
+        else if (k_input == '\b')
+        {
+            if (input_count <= 0) return;
+            
+            input_count--;
+            input_password[input_count] = '\0';
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    if (password_layout_ball_bitmap[y][x] == '#')
+                    {
+                        draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, WHITE);
+                        input_password[input_count] = k_input;
+                        refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
+                    }
+                }
+            }
+        }
+        else if (k_input == '\n')
+        {
+            goto check_password;
+        }
+
+        if (ms_dec.left)
+        {
+            if (get_mouse_x() > 128 + 300 + 8 && get_mouse_y() > 168 && 
+                get_mouse_x() < 128 + 300 + 8 + 24 && get_mouse_y() < 168 + 24)
+            {
+                // 检查密码
+check_password:
+                input_password[input_count] = '\0';
+                if (strcmp(input_password, urf_data->uinf[current_user_number].password) == 0)
+                {
+                    break;
+                }
+                else
+                {
+                    print_box_ttf(sht_img, desktop_ct_sheet, "密码错误，请重试。", RED, 64, 200, 12);
+                    delay_ms(200);
+                }
+            }
+        }
+    }
+
     current_user = (UserInfo *)malloc(sizeof(UserInfo));
-    // 这里先偷个懒，之后再改
-    memcpy(current_user->name, "GuoqiFish", strlen("GuoqiFish")); //内核用户
-    current_user->user_type = XUT_Root;
+    strcpy(current_user->name, urf_data->uinf[current_user_number].name);
+    strcpy(current_user->password, urf_data->uinf[current_user_number].password);
+    current_user->user_type = urf_data->uinf[current_user_number].user_type;
     current_user->envc      = 2;
     current_user->envp      = current_user_envp;
-    vfs_mkdir("/Users");
-    char user_folder_path[265] = "/Users/";
+
+    vfs_mkdir("/users");
+    char user_folder_path[265] = "/users/";
     strcat(user_folder_path, current_user->name);
     vfs_mkdir(user_folder_path);
 }
@@ -102,6 +243,12 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     vfs_node_t file;
     file               = vfs_open(path);
+
+    if (file == NULL)
+    {
+        return NULL;
+    }
+
     uint64_t file_size = file->size;
 
     if (group == NULL)
@@ -287,6 +434,12 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);
+
+    if (entry == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
+        return;
+    }
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
     char cmdline[PAGE_SIZE];

@@ -77,6 +77,9 @@ struct TASK_DOCK_BLOCK
     int         mcount;
     WINDOWLSP   windowls;
     bool        in_focus;
+    bool        min_mode;
+    int         bmx;
+    int         bmy;
     TDB_t       next;
 };
 
@@ -130,8 +133,13 @@ void register_task_dock(WINDOWLSP window);
 void unregister_task_dock(WINDOWLSP window);
 void focus_window_dock(WINDOWLSP win);
 void change_task_dock_icon(WINDOWLSP win, char *path);
+void save_window_xy(WINDOWLSP win);
+TDB_t find_dock_icon(int index);
 
 void draw_app_message_box(char *title, char *text);
+
+void draw_logo_menu();
+void delete_logo_menu();
 
 void process_desktop_find_block(int x, int y);
 

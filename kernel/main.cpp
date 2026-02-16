@@ -2,6 +2,7 @@
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
 #include <device.h>
+#include <dlinker.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
 #include <efi/fbc.h>
@@ -9,7 +10,6 @@
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
-#include <fs/vfs/proc.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -30,14 +30,13 @@
 #include <syscall/signal.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
-#include <dlinker.h>
 #include <ttf.h>
 #include <user/runfile.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
 XWM_INFO   *xwmii;
-SHEET   *msid;
+SHEET      *msid;
 
 extern mouse_dec     ms_dec;
 extern bool          winRD_lock;
@@ -109,6 +108,30 @@ TimerWidgetsData *tw_data = NULL;
 
 bool have_full_screen_app = false;
 
+int clock_hour_offset = 0;
+
+void init_time()
+{
+    char setfile_path[256];
+    memset(setfile_path, 0, 256);
+    strcat(setfile_path, "/users/");
+    strcat(setfile_path, current_user->name);
+    strcat(setfile_path, "/settings.dat");
+    vfs_node_t v = vfs_open(setfile_path);
+    if (!v) return;
+    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)malloc(v->size);
+    if (!sdff) return;
+    vfs_read(v, sdff, 0, v->size);
+
+    clock_hour_offset = sdff->ClockHourOffset;
+
+    if (clock_hour_offset < 0)
+        clock_hour_offset = 0;
+
+    vfs_close(v);
+    free(sdff);
+}
+
 void components_flusher()
 {
     while (true)
@@ -161,13 +184,9 @@ void desktop_flusher()
     disable_intr();
     disable_scheduler();
 
-
-
     // 之后应该挪到OOBE里的部分
     init_runfile();
 
-
-    
     write_serial_string("desktop flusher is running\n");
 
     SHEET_INFO shtinf;
@@ -192,15 +211,11 @@ void desktop_flusher()
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
-    init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
-
-    write_serial_string("desktop initialized.\n");
-
     int fontx = 8;
     int fonty = 50;
     // DEBUG
 #if 1 == 2
-// #if BUILD_EDITION == DEBUG_VERSION
+    // #if BUILD_EDITION == DEBUG_VERSION
     PrintString(&shtinf, &desktop_ct_sheet, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 40,
                 "X:", WHITE);
     PrintString(&shtinf, &desktop_ct_sheet, fbc_addr->horizontal_resolution - 64, fbc_addr->vertical_resolution - 24,
@@ -278,15 +293,23 @@ void desktop_flusher()
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
+    allow_to_flush = true;
+
+    init_user();
+
+    init_xuls();
+    init_time();
+
+    write_serial_string("user & settings initialized.\n");
+
+    init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
+
+    write_serial_string("desktop initialized.\n");
 
     winRD_lock = true;
-    // create_window(&xwmi, &shtinf, &test_win2, (char *)"窗口", 800, 600);
 
-    // delete_window(&xwmi, &shtinf, test_win);
-
-    allow_to_flush = true;
     refresh_sheet(&shtinf); // 刷新
-    // delete_sheet(&shtinf, &dock_ct_sheet);
+
     uint8_t k_input;
 
     // struct EFI_RUNTIME_SERVICES *RuntimeServices = (struct EFI_RUNTIME_SERVICES *)convert_physical_to_virtual((uint64_t)(ST->RuntimeServices));
@@ -301,12 +324,14 @@ void desktop_flusher()
     desktop_done = true;
 
     delay_s_hp(1);
+    
+    
 
-    char *argv[2]    = {"/Users/GuoqiFish/runfile.dat", NULL};
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    // char *argv[2] = {"/system/icon/folder.png", NULL};
+    // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/system/texter.elf", NULL, argv);
-    create_user_process_from_file((char *)"/system/calc.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
+    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -341,7 +366,7 @@ void desktop_flusher()
                 }
             }
         }
-        
+
 #if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {
@@ -362,24 +387,6 @@ void desktop_flusher()
 #endif
     }
 }
-
-void tst()
-{
-    write_serial_fmt("Stack Test\n");
-    while (1)
-        ;
-}
-
-void judge_bigend_littleend1()
-{
-    int  i = 48;
-    char c = *((char *)&i);
-    if (c == '0')
-        write_serial_fmt("Littleend LE\n");
-    else
-        write_serial_fmt("Bigend BE\n");
-}
-
 #define KERNEL_HEAP_START 0xffffc00000000000
 #define KERNEL_HEAP_SIZE  (256 * 1024 * 1024)
 
@@ -409,18 +416,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_gdt();
     init_hpet(BootConfig.HPET);
     init_apic(BootConfig.MADT);
-    judge_bigend_littleend1();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 1, 7, {0x00, 0xa2, 0xe8}); // CPU好了来一下
 
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
-    page_setup();
     init_heap();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
-
-    serial_wprintf("Output by Serial Writer!!\n");
 
     device_manager_init();
     vfs_init();
@@ -439,9 +442,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // sb16_init();
 
     keyboard_init();
-    write_serial_fmt("KEYBOARD (PS2) \n");
     mouse_init();
-    write_serial_fmt("MOUSE (PS2) \n");
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -456,7 +457,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_smp(BootConfig.MADT);
 
-    tcb_t idle_thread         = (tcb_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
+    tcb_t idle_thread         = (tcb_t)malloc(sizeof(struct thread_control_block));
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
@@ -480,7 +481,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
-    procfs_setup();
     pipefs_setup();
     stdio_init();
 
@@ -502,9 +502,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    init_user();
     init_killer();
-    write_serial_string("User & Killer is ready\n");
+    write_serial_string("Process Killer is ready\n");
+    
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
@@ -515,6 +515,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
+
 
     enable_scheduler();
     open_interrupt;

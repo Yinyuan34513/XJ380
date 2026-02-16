@@ -109,6 +109,11 @@ UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset)
     return enter_syscall(XAPI_WRITE_FILE, (uint64_t)filename, (uint64_t)buffer, size, offset, 0, 0);
 }
 
+UINT64 xapi_Rmdir(WSTR path)
+{
+	return enter_syscall(XAPI_REMOVEDIR, (uint64_t)path, 0, 0, 0, 0, 0);
+}
+
 // 3-3
 UINT64 xcr_char2int(WSTR str) {
     char *p = str;
@@ -272,4 +277,33 @@ void 	xapi_Sleep(UINT64 ms)
 void 	xapi_Run(WSTR path)
 {
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
+}
+
+void 	xapi_FlushTime()
+{
+	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);
+}
+
+// 3-7
+void   *xapi_AllocateMemory(UINT64 size)
+{
+	void *ret = malloc(size);
+	if (ret == nullptr && size != 0)
+	{
+		void *heap_memory = xapi_MapMemory(NULL, 16 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    	memset(heap_memory, 0, 16 * 1024 * 1024);
+		heap_extend((uint8_t *)heap_memory, 16 * 1024 * 1024);
+		ret = malloc(size);
+	}
+	return ret;
+}
+
+void    xapi_FreeMemory(void *ptr)
+{
+	free(ptr);
+}
+
+void   *xapi_MapMemory(void *ptr, uint64_t size, uint32_t flags)
+{
+	return (void *)enter_syscall(XAPI_MAP_MEMORY, (uint64_t)ptr, size, flags, 0, 0, 0);
 }
