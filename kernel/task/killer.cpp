@@ -63,5 +63,5 @@ void killer_thread()
 
 void init_killer()
 {
-    // create_kernel_thread((void *)killer_thread, NULL, "Process Killer", NULL);
+    create_kernel_thread((void *)killer_thread, NULL, "Process Killer", NULL);
 }
