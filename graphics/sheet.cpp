@@ -6,8 +6,10 @@ bool SheetIsCreating   = false;
 
 void init_foxland(SHEET_INFO *sht)
 {
-    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)malloc(sht->scrx * sht->scry * 4);
-    sht->foxland.peek_sign      = (uint8_t *)malloc(sht->scrx * sht->scry * sizeof(uint8_t));
+    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)page_alloc_random(get_current_task()->parent_group->pagedir, 
+                                                                    sht->scrx * sht->scry * 4, KERNEL_PTE_FLAGS);
+    sht->foxland.peek_sign = (uint8_t *)page_alloc_random(get_current_task()->parent_group->pagedir, 
+                                                            sht->scrx * sht->scry * sizeof(uint8_t), KERNEL_PTE_FLAGS);
     LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, "/system/foxland/peek.png");
 }
 
@@ -65,7 +67,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     }
 
     SheetIsCreating  = true;
-    SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
+    SHEET *new_sheet = (SHEET *)page_alloc_random(get_current_task()->parent_group->pagedir, sizeof(SHEET), KERNEL_PTE_FLAGS);
     memset(new_sheet, 0, sizeof(SHEET));
 
     SHEET *front_p = sht->start;
@@ -119,7 +121,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->width     = x;
                 new_sheet->height    = y;
                 new_sheet->type      = type;
-                new_sheet->buffer    = malloc((x * y * 4));
+                new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
                 new_sheet->is_change = true;
                 memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -140,7 +142,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->width     = x;
                 new_sheet->height    = y;
                 new_sheet->type      = type;
-                new_sheet->buffer    = malloc((x * y * 4));
+                new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
                 new_sheet->is_change = true;
                 memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -159,7 +161,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = malloc((x * y * 4));
+            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
             new_sheet->is_change = true;
             memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -198,7 +200,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = malloc((x * y * 4));
+            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
             new_sheet->is_change = true;
             memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -216,7 +218,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = malloc((x * y * 4));
+            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
             new_sheet->is_change = true;
             memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -429,9 +431,10 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
         {
             front_p->front->next = front_p->next;
             front_p->next->front = front_p->front;
-            free(front_p->buffer);
+            unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)front_p->buffer, 
+                                front_p->width * front_p->height * 4);
             memset(front_p, 0, sizeof(SHEET));
-            free((void *)(front_p));
+            unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)front_p, sizeof(SHEET));
             // sht->sheet_num--;
             write_serial_fmt("Sheet Delete Success. SheetAddress: 0x%x\n", (uint64_t)front_p);
             break;
