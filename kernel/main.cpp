@@ -388,7 +388,7 @@ void desktop_flusher()
     }
 }
 #define KERNEL_HEAP_START 0xffffc00000000000
-#define KERNEL_HEAP_SIZE  (64 * 1024 * 1024)
+#define KERNEL_HEAP_SIZE  (256 * 1024 * 1024)
 
 void init_heap()
 {
