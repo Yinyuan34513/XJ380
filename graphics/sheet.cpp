@@ -18,7 +18,7 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     sht->scrx        = fbc.horizontal_resolution;
     sht->scry        = fbc.vertical_resolution;
     sht->start       = NULL;
-    sht->temp_buffer = malloc((sht->scrx * sht->scry * 4) + 4); // 多分配4字节防止溢出啥的
+    sht->temp_buffer = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, sht->scrx * sht->scry * 4, KERNEL_PTE_FLAGS);
     if (sht->temp_buffer == NULL)
     {
         // 没分配成，去世。
