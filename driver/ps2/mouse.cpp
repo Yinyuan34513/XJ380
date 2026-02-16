@@ -673,26 +673,32 @@ void mouse_init()
 
     printk("Mouse initialized successfully, type: %d\n", type);
 }
+
 // void mouse_init()
 // {
-//     wait_ps2_write();
-//     outb(PS2_CMD_PORT, KB_EN_MOUSE_INTFACE);
+//     wait_KB_write();
+//     outb(PORT_KB_CMD, KB_EN_MOUSE_INTFACE);
 
 //     delay_ms(100);
 
-//     wait_ps2_write();
-//     outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-//     wait_ps2_write();
-//     outb(PS2_DATA_PORT, MOUSE_EN);
+//     wait_KB_write();
+//     outb(PORT_KB_CMD, KB_SEND2MOUSE);
+//     wait_KB_write();
+//     outb(PORT_KB_DATA, MOUSE_EN);
 
 //     delay_ms(100);
 
-//     wait_ps2_write();
-//     outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
-//     wait_ps2_write();
-//     outb(PS2_DATA_PORT, KB_INIT_MODE);
+//     wait_KB_write();
+//     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
+//     wait_KB_write();
+//     outb(PORT_KB_DATA, KB_INIT_MODE);
 
-//     delay_s(3);
+//     mouse_x      = (get_hor() - 16) / 2;
+//     mouse_y      = (get_ver() - 28 - 29) / 2;
+//     ms_dec.phase = 0;
+
+//     ms_dec.win_move_lock = false;
+//     ms_dec.sht_now       = NULL;
 // }
 
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet)
