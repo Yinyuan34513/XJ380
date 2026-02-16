@@ -124,9 +124,11 @@ void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
     vfs_mkdir(desktop_folder_path);
 
     PrintPicture_blend(sht, csheet, 20, 30 + 0 * 110, 74, 74, "/system/icon/d_system.png");
+    print_box_ttf(sht, csheet, "系统", BLACK, 57 - calc_ttf_length("系统", 11) / 2, 105 + 1 * 110 + 1, 11);
     print_box_ttf(sht, csheet, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + 0 * 110, 11);
 
     PrintPicture_blend(sht, csheet, 20, 30 + 1 * 110, 74, 74, "/system/icon/bin.png");
+    print_box_ttf(sht, csheet, "垃圾桶", BLACK, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110 + 1, 11);
     print_box_ttf(sht, csheet, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110, 11);
 
     // 每个格是 110 * 110，从（0，25）开始
@@ -146,6 +148,9 @@ void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
             // 是文件
             PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/texter.png");
         }
+        print_box_ttf(sht, csheet, 
+            data->name, BLACK, 
+            57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110 + 1, 11);
         print_box_ttf(sht, csheet, 
             data->name, WHITE, 
             57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110, 11);
