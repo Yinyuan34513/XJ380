@@ -439,7 +439,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
         else if (front_p->next == NULL)
         {
             write_serial_fmt("Sheet Delete Faild. SheetAddress: 0x%x\n", (uint64_t)front_p);
-            return;
+            break;
         }
         front_p = front_p->next;
     }
@@ -449,6 +449,12 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
+    while (true)
+    {
+        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
+    }
+
+    SheetIsCreating  = true;
     SHEET *front_p = sht->start;
     while (true)
     {
@@ -466,11 +472,13 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
             front_p->next->front = front_p;
             front_p2->next       = front_p;
             front_p->front       = front_p2;
-            return;
+            break;
         }
-        else if (front_p->next == NULL) { return; }
+        else if (front_p->next == NULL) { break; }
         front_p = front_p->next;
     }
+
+    SheetIsCreating = false;
 }
 
 bool allow_to_flush = false;
