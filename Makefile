@@ -172,7 +172,7 @@ vdisk: all
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
 
-	@cp -a ./BackGround.png $(BUILD_DIR)/XJ380/system/image
+	@cp -a ./image/*.* $(BUILD_DIR)/XJ380/system/image
 
 	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
 

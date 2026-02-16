@@ -92,7 +92,7 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
         spin_unlock(&PPlk);
         return;
     }
-    uint8_t *b1 = (uint8_t *)malloc(ow * oh * 4);
+    uint8_t *b1 = (uint8_t *)malloc(ow * oh * bpp);
     if (!b1)
     {
         write_serial_fmt("PrintPic: output buffer allocate failed (%u bytes) for '%s' (ow=%d,oh=%d)\n",
@@ -102,7 +102,7 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
         spin_unlock(&PPlk);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
+    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, bpp);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
     SHEET *front_p = sht->start;
@@ -163,7 +163,7 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
         vfs_close(v);
         return;
     }
-    uint8_t *b1 = (uint8_t *)malloc(ow * oh * 4);
+    uint8_t *b1 = (uint8_t *)malloc(ow * oh * bpp);
     if (!b1)
     {
         write_serial_fmt("PrintPic: output buffer allocate failed (%u bytes) for '%s' (ow=%d,oh=%d)\n",
@@ -172,7 +172,7 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
         vfs_close(v);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
+    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, bpp);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
     SHEET *front_p = sht->start;
@@ -220,7 +220,7 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
         vfs_close(v);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, 4);
+    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, bpp);
     stbi_image_free(b);
     vfs_close(v);
 }
@@ -250,17 +250,17 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
         vfs_close(v);
         return;
     }
-    *buffer = (SHEET_BUFFER *)malloc((size_t)w * h * 4);
+    *buffer = (SHEET_BUFFER *)malloc((size_t)w * h * bpp);
     if (!*buffer)
     {
         write_serial_fmt("LoadPictureOgM: output buffer alloc failed (%u bytes) for '%s'\n",
-                         (unsigned)((size_t)w * h * 4), path);
+                         (unsigned)((size_t)w * h * bpp), path);
         stbi_image_free(b);
         free(bf);
         vfs_close(v);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(*buffer), w, h, 0, 4);
+    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(*buffer), w, h, 0, bpp);
     stbi_image_free(b);
     free(bf);
     vfs_close(v);
