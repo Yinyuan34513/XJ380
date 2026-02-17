@@ -140,6 +140,7 @@ void process_mouse_button()
                         tdb->min_mode              = false;
                     }
                     lift_sheet(sht_img, tdb->windowls->w_sheet);
+                    ms_dec.sht_now = tdb->windowls->w_sheet;
                     focus_window_dock(tdb->windowls);
                     refresh_part_sheet(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
                                        tdb->windowls->w_sheet->bx + tdb->windowls->w_sheet->width,
