@@ -604,46 +604,28 @@ uint32_t get_ver()
 void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height)
 {
-    SHEET *front_p = sht->start;
-    while (true)
+    if (!dst_sheet) return;
+    SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
+    for (int y = 0; y < height; y++)
     {
-        if (front_p == dst_sheet)
+        for (int x = 0; x < width; x++)
         {
-            // 找到啦！
-            SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    dst[(dst_y + y) * front_p->width + (dst_x + x)] = src[y * width + x];
-                }
-            }
+            dst[(dst_y + y) * dst_sheet->width + (dst_x + x)] = src[y * width + x];
         }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
     }
 }
 
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x,
                                      uint32_t dst_y, uint32_t width, uint32_t height)
 {
-    SHEET *front_p = sht->start;
-    while (true)
+    if (!dst_sheet) return;
+    SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
+    for (int y = 0; y < height; y++)
     {
-        if (front_p == dst_sheet)
+        for (int x = 0; x < width; x++)
         {
-            // 找到啦！
-            SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    if (src[y * width + x].a > 10) dst[(dst_y + y) * front_p->width + (dst_x + x)] = src[y * width + x];
-                }
-            }
+            if (src[y * width + x].a > 10) dst[(dst_y + y) * dst_sheet->width + (dst_x + x)] = src[y * width + x];
         }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
     }
 }
 
@@ -652,24 +634,15 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 void copy_buffer_blend_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                              uint32_t width, uint32_t height)
 {
-    SHEET *front_p = sht->start;
-    while (true)
+    if (!dst_sheet) return;
+    SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
+    for (int y = 0; y < height; y++)
     {
-        if (front_p == dst_sheet)
+        for (int x = 0; x < width; x++)
         {
-            // 找到啦！
-            SHEET_BUFFER *dst = (SHEET_BUFFER *)front_p->buffer;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    dst[(dst_y + y) * front_p->width + (dst_x + x)] = LCD_AlphaBlend(
-                        src[y * width + x], dst[(dst_y + y) * front_p->width + (dst_x + x)], src[y * width + x].a);
-                }
-            }
+            dst[(dst_y + y) * dst_sheet->width + (dst_x + x)] = LCD_AlphaBlend(
+                src[y * width + x], dst[(dst_y + y) * dst_sheet->width + (dst_x + x)], src[y * width + x].a);
         }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
     }
 }
 
