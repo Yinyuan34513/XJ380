@@ -35,6 +35,7 @@ void sata_submit(struct hba_device *dev, struct blkio_req *io_req)
 
     // The async way...
     struct hba_cmd_state *cmds = (hba_cmd_state *)malloc(sizeof(struct hba_cmd_state));
+    memset(cmds,0,sizeof(struct hba_cmd_state));
     *cmds                      = (struct hba_cmd_state){.cmd_table = table, .state_ctx = io_req};
     ahci_post(port, cmds, slot);
 

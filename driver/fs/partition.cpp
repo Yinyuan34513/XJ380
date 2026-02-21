@@ -56,6 +56,7 @@ static bool parse_gpt_partitions(vfs_node_t device, struct GPT_DPT *gpt, device_
 
     size_t           dptes_size = (size_t)gpt->num_partition_entries * gpt->size_of_partition_entry;
     struct GPT_DPTE *dptes      = (struct GPT_DPTE *)malloc(dptes_size);
+    memset(dptes,0,dptes_size);
     if (!dptes) return false;
 
     if (vfs_read(device, (uint8_t *)dptes, gpt->partition_entry_lba * disk.sector_size, dptes_size) == (size_t)-1)
@@ -94,6 +95,7 @@ static bool parse_gpt_partitions(vfs_node_t device, struct GPT_DPT *gpt, device_
 static bool try_gpt_at_lba1(vfs_node_t device, device_t disk, size_t vdisk_id)
 {
     struct GPT_DPT *gpt = (struct GPT_DPT *)malloc(disk.sector_size);
+    memset(gpt,0,disk.sector_size);
     if (!gpt) return false;
 
     if (vfs_read(device, (uint8_t *)gpt, disk.sector_size, disk.sector_size) == VFS_STATUS_FAILED)
@@ -117,6 +119,7 @@ static bool try_gpt_at_lba1(vfs_node_t device, device_t disk, size_t vdisk_id)
 bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
 {
     uint8_t *mbr = (uint8_t *)malloc(disk.sector_size * 4);
+    memset(mbr,0,disk.sector_size*4);
     write_serial_fmt("Y\n");
     if (vfs_read(device, mbr, 0, disk.sector_size * 4) == (size_t)VFS_STATUS_FAILED) return false;
     // for(int i=0;i<disk.sector_size*4;i++)
@@ -135,6 +138,7 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
         if (part_type == 0xEE)
         {
             struct GPT_DPT *gpt = (struct GPT_DPT *)malloc(disk.sector_size);
+            memset(gpt,0,disk.sector_size);
             if (vfs_read(device, gpt, 1 * disk.sector_size, disk.sector_size) == (size_t)VFS_STATUS_FAILED)
             {
                 free(gpt);
@@ -152,6 +156,7 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
 
             size_t           dptes_size = gpt->num_partition_entries * gpt->size_of_partition_entry;
             struct GPT_DPTE *dptes      = (struct GPT_DPTE *)malloc(dptes_size);
+            memset(dptes,0,dptes_size);
             vfs_read(device, dptes, gpt->partition_entry_lba * disk.sector_size, dptes_size);
             for (size_t j = 0; j < gpt->num_partition_entries; j++)
             {

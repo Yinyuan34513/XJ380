@@ -8,6 +8,7 @@
 #include <elf.h>
 #include <fbc.h>
 #include <msr.h>
+#include "memory.h"
 
 #define NULL 0
 struct EFI_SYSTEM_TABLE                *ST;   // 系统表
@@ -181,6 +182,7 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap)
 
     // 获取内存表
     MemoryMap->Buffer = malloc(MemoryMap->MapSize);
+    xmemset(MemoryMap->Buffer,0,MemoryMap->MapSize);
 
     // 获取内存表
     while (BS->GetMemoryMap(&MemoryMap->MapSize, (EFI_MEMORY_DESCRIPTOR *)MemoryMap->Buffer, &MemoryMap->MapKey,
@@ -194,6 +196,7 @@ EFI_STATUS GetMMP(MEMORY_MAP *MemoryMap)
 
         // 重新分配更大的缓冲区
         MemoryMap->Buffer = malloc(MemoryMap->MapSize);
+        xmemset(MemoryMap->Buffer,0,MemoryMap->MapSize);
     }
 
     // 检查是否成功分配了内存
@@ -334,6 +337,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     struct EFI_FILE_PROTOCOL *root, *kernel_file;
     UINTN                     kernel_size   = 4194304;
     void                     *kernel_buffer = malloc(kernel_size);
+    xmemset(kernel_buffer,0,kernel_size);
 
     // 引导内核
     status = SFSP->OpenVolume(SFSP, &root);
@@ -531,11 +535,19 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
                                               + 1                 /* 1 default type MTRR */
                                               ) *
                                              sizeof(UINT64));
+            xmemset(BootConfig->saved_mtrrs,0,((var_reg_count * 2) /* variable MTRRs, 2 MSRs each */
+                                              + 11                /* 11 fixed MTRRs */
+                                              + 1                 /* 1 default type MTRR */
+                                              ) *
+                                             sizeof(UINT64));
         }
     }
 
     for (int i = 0; i < 256; i++)
+    {
         BootConfig->temp_stack[i] = malloc(STACK_SIZE) + 0xFFFF800000000000;
+        xmemset(BootConfig->temp_stack[i],0,STACK_SIZE);
+    }
 
     __asm__ volatile("mfence" ::: "memory");
     __asm__ volatile("mov %0, %%rsp \n\t" : : "r"(new_stack + STACK_SIZE + 0xFFFF800000000000) : "memory");
