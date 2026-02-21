@@ -62,6 +62,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
+        __asm__ volatile("pause");
     }
 
     SheetIsCreating  = true;
@@ -224,6 +225,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             sht->sht_numed++;
         }
     }
+    memset(new_sheet->buffer, 0, x * y * 4);
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
     SheetIsCreating = false;
 }
@@ -373,6 +375,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     while (true)
     {
         if (!SheetIsCreating && !SheetIsRefreshing) { break; }
+        __asm__ volatile("pause");
     }
 
     SheetIsCreating = true;
@@ -392,6 +395,7 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
+        __asm__ volatile("pause");
     }
 
     SheetIsCreating  = true;
