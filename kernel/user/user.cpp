@@ -132,19 +132,20 @@ void init_user()
         }
         else if (k_input == '\b')
         {
-            if (input_count <= 0) return;
-            
-            input_count--;
-            input_password[input_count] = '\0';
-            for (int y = 0; y < 8; y++)
+            if (input_count > 0)
             {
-                for (int x = 0; x < 8; x++)
+                input_count--;
+                input_password[input_count] = '\0';
+                for (int y = 0; y < 8; y++)
                 {
-                    if (password_layout_ball_bitmap[y][x] == '#')
+                    for (int x = 0; x < 8; x++)
                     {
-                        draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, WHITE);
-                        input_password[input_count] = k_input;
-                        refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
+                        if (password_layout_ball_bitmap[y][x] == '#')
+                        {
+                            draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, WHITE);
+                            input_password[input_count] = k_input;
+                            refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
+                        }
                     }
                 }
             }

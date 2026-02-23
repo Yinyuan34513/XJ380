@@ -22,6 +22,7 @@ void draw_background()
     if (dont_refresh) return;
 
     xapi_DrawRect(handle, 0, 0, win_width - 1, win_height - 1, 0x4d4d4dea, true);
+    xapi_DrawPicture(handle, 0, 0, win_width, win_height, "/system/image/background3.png");
     xapi_DrawText(handle, 30, 18, "控制中心", 40, 0xffffffff);
     xapi_DrawRect(handle, 0, 116, win_width - 1, 120, 0x00a2e8ff, true);
 
