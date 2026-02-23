@@ -73,7 +73,7 @@ void init_user()
 
     // 选择用户
     draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x3f, 0x48, 0xcc, 0xff});
-    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background2.png");
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background3.png");
     print_box_ttf(sht_img, desktop_ct_sheet, "选择一个用户", WHITE, 64, 44, 40);
 
     for (int i = 1; i < urf_data->user_count; i++)
@@ -98,7 +98,7 @@ void init_user()
 
     // 登录
     draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x3f, 0x48, 0xcc, 0xff});
-    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background2.png");
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background3.png");
     print_box_ttf(sht_img, desktop_ct_sheet, "登录", WHITE, 64, 44, 40);
     print_box_ttf(sht_img, desktop_ct_sheet, "用户：", WHITE, 64, 130, 16);
     print_box_ttf(sht_img, desktop_ct_sheet, "密码：", WHITE, 64, 164, 16);
