@@ -30,7 +30,6 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
         }
     }
     sht->sheet_num            = -1;
-    sht->sht_numed            = -1;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
     for (int y = 0; y < sht->scry; y++)
     {
@@ -124,7 +123,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 memset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
-                sht->sht_numed++;
             }
             else
             {
@@ -145,7 +143,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 memset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
-                sht->sht_numed++;
             }
         }
         else
@@ -164,7 +161,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             memset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
-            sht->sht_numed++;
         }
     }
     else
@@ -203,7 +199,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             memset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
-            sht->sht_numed++;
         }
         else
         {
@@ -221,7 +216,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             memset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
-            sht->sht_numed++;
         }
     }
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
@@ -382,6 +376,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     free(front_p->buffer);
     memset(front_p, 0, sizeof(SHEET));
     free((void *)(front_p));
+    sht->sheet_num--;
 
     SheetIsCreating = false;
 }
