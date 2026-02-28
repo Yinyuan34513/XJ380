@@ -2,34 +2,40 @@
 #include <proto.hpp>
 void draw_point(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &color)
 {
-    SHEET_BUFFER *SheetBuffer  = (SHEET_BUFFER *)(csheet->buffer);
-    SheetBuffer               += (csheet->width * y + x);
-    SheetBuffer->r             = color.r;
-    SheetBuffer->g             = color.g;
-    SheetBuffer->b             = color.b;
-    SheetBuffer->a             = color.a;
+    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(csheet->buffer);
+    uint32_t *pixel = (uint32_t *)&SheetBuffer[csheet->width * y + x];
+    *pixel = *(uint32_t*)&color;  // 一次性写入 4 字节
 }
 
 void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
 {
+    if (x1 > x2) { int tmp = x1; x1 = x2; x2 = tmp; }
+    if (y1 > y2) { int tmp = y1; y1 = y2; y2 = tmp; }
+    
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(csheet->buffer);
+    int width = x2 - x1 + 1;
+    
+    // 预组合颜色值（如果 SHEET_BUFFER 是 4 字节结构）
+    uint32_t color_value = *(uint32_t*)&color;
+    
     for (int y = y1; y <= y2; y++)
     {
-        for (int x = x1; x <= x2; x++)
+        SHEET_BUFFER *row_start = &SheetBuffer[csheet->width * y + x1];
+        
+        // 使用 32 位批量写入
+        uint32_t *row_ptr = (uint32_t *)row_start;
+        for (int x = 0; x < width; x++)
         {
-            SheetBuffer[csheet->width * y + x].r = color.r;
-            SheetBuffer[csheet->width * y + x].g = color.g;
-            SheetBuffer[csheet->width * y + x].b = color.b;
-            SheetBuffer[csheet->width * y + x].a = color.a;
+            row_ptr[x] = color_value;
         }
     }
 }
 
 void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color)
 {
-    SHEET *front_p = csheet;
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-
+    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(csheet->buffer);
+    uint32_t color_value = *(uint32_t*)&color;  // 预组合颜色值
+    
     int i, x, y, len, dx, dy;
 
     dx = x1 - x0;
@@ -55,13 +61,13 @@ void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, c
         else { dx = ((x1 - x0 - 1) << 10) / len; }
     }
 
+    uint32_t *pixels = (uint32_t *)SheetBuffer;
     for (i = 0; i < len; i++)
     {
-        SheetBuffer[front_p->width * (y >> 10) + (x >> 10)].r  = color.r;
-        SheetBuffer[front_p->width * (y >> 10) + (x >> 10)].g  = color.g;
-        SheetBuffer[front_p->width * (y >> 10) + (x >> 10)].b  = color.b;
-        SheetBuffer[front_p->width * (y >> 10) + (x >> 10)].a  = color.a;
-        x                                                     += dx;
-        y                                                     += dy;
+        int pixel_y = y >> 10;
+        int pixel_x = x >> 10;
+        pixels[csheet->width * pixel_y + pixel_x] = color_value;
+        x += dx;
+        y += dy;
     }
 }

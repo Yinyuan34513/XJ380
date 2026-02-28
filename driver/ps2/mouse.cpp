@@ -280,6 +280,7 @@ void process_mouse_button()
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
+    //lift_sheet(sht_img, mouse_ct_sheet_img);//保证鼠标置顶，但好像会导致鼠标定时炸掉
     refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_ct_sheet_img),
                        tby + getYsize(sht_img, mouse_ct_sheet_img));
     refresh_part_sheet(sht_img, getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
@@ -445,6 +446,13 @@ bool mousedecode(uint8_t data)
         if (wheel_delta >= 255) wheel_delta = -1;
 
         ms_dec.scroll = -wheel_delta;
+        // 更新鼠标位置
+        mouse_x += ms_dec.x;
+        mouse_y += ms_dec.y;
+        if (mouse_x < 0) mouse_x = 0;
+        if (mouse_y < 0) mouse_y = 0;
+        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
         return true;
     }
     return false;

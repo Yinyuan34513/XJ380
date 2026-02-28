@@ -434,6 +434,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     ahci_setup();
     nvme_setup();
+    
+    extern void ide_setup(void);
+    ide_setup();
     partition_init();
     // enable_intr();
 
