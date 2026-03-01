@@ -25,6 +25,8 @@ out/draw.o
 out.txt
 nvme.txt
 ide.txt
+SATA.txt
+scsi.txt
 
 # will generate by Makefile
 .clangd

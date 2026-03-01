@@ -314,6 +314,15 @@ void process_mouse_button()
             }
         }
     }
+    
+    // 处理滚轮事件
+    int scroll = get_mouse_scroll();
+    if (scroll != 0 && current_window != NULL)
+    {
+        // 发送滚轮消息到当前窗口
+        // MSG_ROLLER 消息格式：参数1 = 滚轮方向（正=向上，负=向下）
+        do_message(MSG_ROLLER, scroll, 0, current_window->WinMPf, current_window->w_task);
+    }
 }
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
@@ -466,6 +475,13 @@ int get_mouse_x()
 int get_mouse_y()
 {
     return mouse_y;
+}
+
+int get_mouse_scroll()
+{
+    int scroll = ms_dec.scroll;
+    ms_dec.scroll = 0;  // 读取后重置
+    return scroll;
 }
 
 static bool send_command(uint8_t value)
