@@ -338,7 +338,10 @@ void __hba_reset_port_13(hba_reg_t *port_reg, uint32_t major, uint32_t minor) {
 // 修改 ahci_setup 函数，添加版本检测和1.3特定处理
 void ahci_setup() {
     pci_device_t *device = pci_find_class(0x010601);
-    if (device == NULL) return;
+    if (device == NULL) {
+        write_serial_fmt("AHCI: No AHCI controller found\n");
+        return;
+    }
     
     // 读取PCI配置空间获取BAR5
     pci_bar_base_address bar5 = device->bars[5];

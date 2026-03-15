@@ -4,6 +4,7 @@ esp
 serial.log
 .vs
 .idea/
+.trae
 out/draw.o
 /esp
 /mnt
@@ -21,6 +22,11 @@ out/draw.o
 *.xz
 *.zip
 2.txt
+out.txt
+nvme.txt
+ide.txt
+SATA.txt
+scsi.txt
 
 # will generate by Makefile
 .clangd

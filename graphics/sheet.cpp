@@ -30,25 +30,8 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
         }
     }
     sht->sheet_num            = -1;
-    SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(sht->temp_buffer);
-    for (int y = 0; y < sht->scry; y++)
-    {
-        for (int x = 0; x < sht->scrx; x++)
-        {
-            SheetBuffer->r = 0x00;
-            SheetBuffer->g = 0x00;
-            SheetBuffer->b = 0x00;
-            SheetBuffer->a = 0xff;
-            if ((sht->scrx * y + x) % 2 != 0)
-            {
-                SheetBuffer->r = 0xff;
-                SheetBuffer->g = 0xff;
-                SheetBuffer->b = 0xff;
-                SheetBuffer->a = 0xff;
-            }
-            SheetBuffer++;
-        }
-    }
+    // 清零 temp_buffer，避免色块问题
+    memset(sht->temp_buffer, 0, sht->scrx * sht->scry * 4);
 
     init_foxland(sht);
 
@@ -118,7 +101,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->width     = x;
                 new_sheet->height    = y;
                 new_sheet->type      = type;
-                new_sheet->buffer    = malloc((x * y * 4));
+                new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
                 new_sheet->is_change = true;
                 memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -138,7 +121,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->width     = x;
                 new_sheet->height    = y;
                 new_sheet->type      = type;
-                new_sheet->buffer    = malloc((x * y * 4));
+                new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
                 new_sheet->is_change = true;
                 memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -156,7 +139,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = malloc((x * y * 4));
+            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
             new_sheet->is_change = true;
             memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -194,7 +177,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = malloc((x * y * 4));
+            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
             new_sheet->is_change = true;
             memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -211,7 +194,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = malloc((x * y * 4));
+            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
             new_sheet->is_change = true;
             memset(new_sheet->buffer, 0, x * y * 4);
 
@@ -370,12 +353,23 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     }
 
     SheetIsCreating = true;
-    SHEET *front_p  = csheet;
-    front_p->front->next = front_p->next;
-    front_p->next->front = front_p->front;
-    free(front_p->buffer);
-    memset(front_p, 0, sizeof(SHEET));
-    free((void *)(front_p));
+    
+    if (csheet->front == NULL) {
+        sht->start = csheet->next;
+        if (csheet->next) {
+            csheet->next->front = NULL;
+        }
+    } else if (csheet->next == NULL) {
+        csheet->front->next = NULL;
+    } else {
+        csheet->front->next = csheet->next;
+        csheet->next->front = csheet->front;
+    }
+    
+    // 释放内存
+    free_frame((uint64_t)csheet->buffer);
+    memset(csheet, 0, sizeof(SHEET));
+    free((void *)(csheet));
     sht->sheet_num--;
 
     SheetIsCreating = false;
@@ -390,19 +384,29 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
     }
 
     SheetIsCreating  = true;
-    SHEET *front_p = csheet;
-    front_p->next->front = front_p->front;
-    front_p->front->next = front_p->next;
-    SHEET *front_p2      = sht->start;
-    for (int i = 0; i < sht->sheet_num - 3; i++)
-    {
-        front_p2 = front_p2->next; // 寻找最后一个
+    
+    if (csheet->next == NULL) {
+        SheetIsCreating = false;
+        return;
     }
+    
+    if (csheet->front == NULL) {
 
-    front_p->next        = front_p2->next;
-    front_p->next->front = front_p;
-    front_p2->next       = front_p;
-    front_p->front       = front_p2;
+        sht->start = csheet->next;
+        csheet->next->front = NULL;
+    } else {
+        csheet->front->next = csheet->next;
+        csheet->next->front = csheet->front;
+    }
+    
+    SHEET *last_sheet = sht->start;
+    while (last_sheet->next != NULL) {
+        last_sheet = last_sheet->next;
+    }
+    
+    last_sheet->next = csheet;
+    csheet->front = last_sheet;
+    csheet->next = NULL;
 
     SheetIsCreating = false;
 }
@@ -426,7 +430,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
     SHEET_BUFFER *temp_buf_base = (SHEET_BUFFER *)sht->temp_buffer;
     uint8_t *temp_peek_sign = sht->foxland.peek_sign;
 
-    // 遍历所有图层进行合成
+    // 遍历所有图层进行合成 - 优化：减少分支判断
     for (SHEET *st = sht->start; st != nullptr; st = st->next) {
         // 计算当前图层与刷新区域的交集
         int vx0 = (bex1 > (int)st->bx) ? bex1 : (int)st->bx;
@@ -438,6 +442,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         if (vx0 >= vx1 || vy0 >= vy1) continue;
 
         SHEET_BUFFER *st_buf = (SHEET_BUFFER *)st->buffer;
+        int width = vx1 - vx0; // 计算一次，避免重复计算
         
         for (int y = vy0; y < vy1; y++) {
             int screen_off = y * sht->scrx + vx0;
@@ -447,64 +452,82 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
             SHEET_BUFFER *p_src = &st_buf[st_off];
             uint8_t *p_sign = &temp_peek_sign[screen_off];
 
-            for (int x = vx0; x < vx1; x++) {
-                if (p_src->a == 255) {
-                    // 全透明直接覆盖，关闭Peek标志
-                    *p_dst = *p_src;
-                    *p_sign = 0;
-                } else if (p_src->a > 0) {
-                    // 快速整数Alpha混合：(src * a + dst * (255 - a)) >> 8
-                    uint32_t alpha = p_src->a;
+            // 展开循环，减少分支预测失败
+            for (int x = 0; x < width; x++) {
+                uint8_t alpha = p_src[x].a;
+                
+                if (alpha == 255) {
+                    // 全不透明，直接复制
+                    p_dst[x] = p_src[x];
+                    p_sign[x] = 0;
+                } else if (alpha > 0) {
+                    // Alpha 混合
                     uint32_t inv_alpha = 255 - alpha;
                     
-                    p_dst->r = (p_src->r * alpha + p_dst->r * inv_alpha) >> 8;
-                    p_dst->g = (p_src->g * alpha + p_dst->g * inv_alpha) >> 8;
-                    p_dst->b = (p_src->b * alpha + p_dst->b * inv_alpha) >> 8;
+                    p_dst[x].r = (p_src[x].r * alpha + p_dst[x].r * inv_alpha) >> 8;
+                    p_dst[x].g = (p_src[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
+                    p_dst[x].b = (p_src[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
                     
-                    // 有透明度就标记需要Peek处理
-                    *p_sign = 1;
+                    p_sign[x] = 1;
                 }
-                p_dst++;
-                p_src++;
-                p_sign++;
             }
         }
     }
 
-    // Foxland Peek处理
+    // Foxland Peek 处理 - 优化：减少指针计算
     SHEET_BUFFER *temp_peek = (SHEET_BUFFER *)sht->foxland.fl_peek_buffer;
+    int peek_width = bex2 - bex1;
+    
     for (int y = bey1; y < bey2; y++) {
         int offset = y * sht->scrx + bex1;
         SHEET_BUFFER *p_dst = &temp_buf_base[offset];
         uint8_t *p_sign = &temp_peek_sign[offset];
         SHEET_BUFFER *p_peek = &temp_peek[offset];
 
-        for (int x = bex1; x < bex2; x++) {
-            if (*p_sign == 1) {
-                uint32_t alpha = p_peek->a;
+        for (int x = 0; x < peek_width; x++) {
+            if (p_sign[x] == 1) {
+                uint32_t alpha = p_peek[x].a;
                 uint32_t inv_alpha = 255 - alpha;
-                p_dst->r = (p_peek->r * alpha + p_dst->r * inv_alpha) >> 8;
-                p_dst->g = (p_peek->g * alpha + p_dst->g * inv_alpha) >> 8;
-                p_dst->b = (p_peek->b * alpha + p_dst->b * inv_alpha) >> 8;
-                *p_sign = 0; // 重置标志位
+                p_dst[x].r = (p_peek[x].r * alpha + p_dst[x].r * inv_alpha) >> 8;
+                p_dst[x].g = (p_peek[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
+                p_dst[x].b = (p_peek[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
+                p_sign[x] = 0; // 重置标志位
             }
-            p_dst++;
-            p_sign++;
-            p_peek++;
         }
     }
 
-    // 写入显存
-    bool isRGB = (sht->fbc->pixel_format == PixelFormat::kRGBR);
-    for (int y = bey1; y < bey2; y++) {
-        SHEET_BUFFER *line_ptr = &temp_buf_base[y * sht->scrx + bex1];
-        for (int x = bex1; x < bex2; x++) {
-            if (isRGB) {
-                WriteRGBR(x, y, {line_ptr->r, line_ptr->g, line_ptr->b}, *sht->fbc);
-            } else {
-                WriteBGRR(x, y, {line_ptr->r, line_ptr->g, line_ptr->b}, *sht->fbc);
+    // 写入显存 - 优化：使用 memcpy 批量复制
+    uint8_t *frame_buffer = (uint8_t *)sht->fbc->frame_buffer;
+    uint32_t pixels_per_scan_line = sht->fbc->pixels_per_scan_line;
+    size_t row_bytes = (bex2 - bex1) * 4; // 每行的字节数
+    
+    if (sht->fbc->pixel_format == PixelFormat::kRGBR) {
+        // RGB 格式
+        for (int y = bey1; y < bey2; y++) {
+            SHEET_BUFFER *src_line = &temp_buf_base[y * sht->scrx + bex1];
+            uint8_t *dst_line = frame_buffer + (y * pixels_per_scan_line + bex1) * 4;
+            
+            // 转换并复制整行
+            for (int x = 0; x < (bex2 - bex1); x++) {
+                dst_line[x * 4 + 0] = src_line[x].r;
+                dst_line[x * 4 + 1] = src_line[x].g;
+                dst_line[x * 4 + 2] = src_line[x].b;
+                dst_line[x * 4 + 3] = 0;
             }
-            line_ptr++;
+        }
+    } else {
+        // BGR 格式
+        for (int y = bey1; y < bey2; y++) {
+            SHEET_BUFFER *src_line = &temp_buf_base[y * sht->scrx + bex1];
+            uint8_t *dst_line = frame_buffer + (y * pixels_per_scan_line + bex1) * 4;
+            
+            // 转换并复制整行
+            for (int x = 0; x < (bex2 - bex1); x++) {
+                dst_line[x * 4 + 0] = src_line[x].b;
+                dst_line[x * 4 + 1] = src_line[x].g;
+                dst_line[x * 4 + 2] = src_line[x].r;
+                dst_line[x * 4 + 3] = 0;
+            }
         }
     }
 

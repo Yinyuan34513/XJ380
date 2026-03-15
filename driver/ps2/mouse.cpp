@@ -280,6 +280,7 @@ void process_mouse_button()
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
+    //lift_sheet(sht_img, mouse_ct_sheet_img);//保证鼠标置顶，但好像会导致鼠标定时炸掉
     refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_ct_sheet_img),
                        tby + getYsize(sht_img, mouse_ct_sheet_img));
     refresh_part_sheet(sht_img, getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
@@ -312,6 +313,15 @@ void process_mouse_button()
                            current_window->w_task);
             }
         }
+    }
+    
+    // 处理滚轮事件
+    int scroll = get_mouse_scroll();
+    if (scroll != 0 && current_window != NULL)
+    {
+        // 发送滚轮消息到当前窗口
+        // MSG_ROLLER 消息格式：参数1 = 滚轮方向（正=向上，负=向下）
+        do_message(MSG_ROLLER, scroll, 0, current_window->WinMPf, current_window->w_task);
     }
 }
 
@@ -445,6 +455,13 @@ bool mousedecode(uint8_t data)
         if (wheel_delta >= 255) wheel_delta = -1;
 
         ms_dec.scroll = -wheel_delta;
+        // 更新鼠标位置
+        mouse_x += ms_dec.x;
+        mouse_y += ms_dec.y;
+        if (mouse_x < 0) mouse_x = 0;
+        if (mouse_y < 0) mouse_y = 0;
+        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
         return true;
     }
     return false;
@@ -458,6 +475,13 @@ int get_mouse_x()
 int get_mouse_y()
 {
     return mouse_y;
+}
+
+int get_mouse_scroll()
+{
+    int scroll = ms_dec.scroll;
+    ms_dec.scroll = 0;  // 读取后重置
+    return scroll;
 }
 
 static bool send_command(uint8_t value)

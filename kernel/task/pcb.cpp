@@ -39,6 +39,7 @@ uint16_t dock_ct_sheet;
 
 pcb_t found_pcb(int pid)
 {
+    if (pcb_group_queue == NULL) return NULL;
     pcb_t ret = NULL;
     spin_lock(&pcb_group_queue->lock);
     queue_foreach(pcb_group_queue, node)
@@ -142,17 +143,37 @@ void kill_proc0(pcb_t pcb)
         free(handle);
     }
 
+    // 保存需要在free之后访问的字段
+    char *cmdline = pcb->cmdline;
+    void *elf_file = pcb->elf_file;
+    char **envp = pcb->envp;
+    const char *name = pcb->name;
+    int pid = pcb->pid;
+    bool vfork = pcb->vfork;
+    page_directory_t *pagedir = pcb->vfork ? NULL : pcb->pagedir;
+
+    // 先销毁队列，因为它们需要访问pcb中的指针
+    lock_queue *file_open = pcb->file_open;
+    lock_queue *ipc_queue = pcb->ipc_queue;
+    lock_queue *virt_queue = pcb->virt_queue;
+
+    pcb->file_open = NULL;
+    pcb->ipc_queue = NULL;
+    pcb->virt_queue = NULL;
+
     lazy_free(pcb);
 
-    queue_destroy(pcb->file_open);
-    queue_destroy(pcb->ipc_queue);
-    queue_destroy(pcb->virt_queue);
-    free(pcb->cmdline);
-    free(pcb->elf_file);
-    if (pcb->envp) free_envp(pcb->envp);
-    write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", pcb->name, pcb->pid,
-                     pcb->vfork ? "true" : "false");
-    if (!pcb->vfork) free_page_directory(pcb->pagedir);
+    // 现在销毁队列
+    if (file_open) queue_destroy(file_open);
+    if (ipc_queue) queue_destroy(ipc_queue);
+    if (virt_queue) queue_destroy(virt_queue);
+
+    free(cmdline);
+    free(elf_file);
+    if (envp) free_envp(envp);
+    write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", name, pid,
+                     vfork ? "true" : "false");
+    if (pagedir) free_page_directory(pagedir);
     free(pcb);
 }
 

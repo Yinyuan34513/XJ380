@@ -22,7 +22,10 @@ size_t lock_queue_enqueue(lock_queue *q, void *data)
     if (q == NULL) return -1;
     spin_lock(&q->lock);
     lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
-    if (!new_node) return -1;
+    if (!new_node) {
+        spin_unlock(&q->lock);
+        return -1;
+    }
     new_node->data  = data;
     new_node->next  = NULL;
     new_node->index = q->next_index++;
@@ -43,6 +46,7 @@ size_t lock_queue_enqueue(lock_queue *q, void *data)
     }
     q->tail = new_node;
     q->size++;
+    spin_unlock(&q->lock);
 
     return new_node->index;
 }
@@ -198,6 +202,7 @@ lock_queue *queue_copy(lock_queue *src, void *(*data_copy)(void *))
         if (!new_node)
         {
             spin_unlock(&src->lock);
+            queue_destroy(new_q);
             return NULL;
         }
         new_node->data  = data_copy != NULL ? data_copy(current->data) : current->data;
@@ -245,6 +250,5 @@ void queue_destroy(lock_queue *q)
     }
     q->head = q->tail = NULL;
     spin_unlock(&q->lock);
-    spin_unlock(&q->iter_lock);
     free(q);
 }

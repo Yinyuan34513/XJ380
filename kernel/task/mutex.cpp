@@ -130,9 +130,7 @@ int mutex_unlock(mutex_t *mutex) {
             mutex->owner = next_thread;
             mutex->rcc = 1;
             next_thread->status = START;  // 设置为可运行
-            
-            // 重新加入调度队列
-            add_task(next_thread);
+            // 注意：任务应该已经在调度队列中，不需要重复调用add_task
         } else {
             mutex->state = MUTEX_UNLOCKED;
             mutex->owner = NULL;
@@ -152,27 +150,25 @@ int mutex_destroy(mutex_t *mutex) {
     spin_lock(&mutex->lock);
     if(mutex->wait_queue->size >0)
     {
+        spin_unlock(&mutex->lock);
         return -EOPNOTSUPP;
     }
     
     // 标记为已销毁
     mutex->state = MUTEX_DESTROYED;
     
-    // 从全局队列中移除
-    // spin_lock(&global_mutex_lock);
-    // queue_foreach(global_mutex_queue, node) {
-    //     if (node->data == mutex) {//匹配上了
-    //         queue_remove_at(global_mutex_queue, node->index);
-    //         break;
-    //     }
-    // }
-    // spin_unlock(&global_mutex_lock);
-    
-    // 释放资源
-    queue_destroy(mutex->wait_queue);
+    // 保存等待队列指针以便释放
+    lock_queue *wait_queue = mutex->wait_queue;
+    mutex->wait_queue = NULL;
     
     spin_unlock(&mutex->lock);
+    
+    // 释放资源
+    if (wait_queue != NULL) {
+        queue_destroy(wait_queue);
+    }
     free(mutex);
+    return 0;
 }
 
 // 检查锁是否被锁定

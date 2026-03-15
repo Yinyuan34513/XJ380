@@ -238,6 +238,7 @@ void process_mouse_info();
 bool mousedecode(uint8_t data);
 int  get_mouse_x();
 int  get_mouse_y();
+int  get_mouse_scroll();
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet);
 void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py);
 
