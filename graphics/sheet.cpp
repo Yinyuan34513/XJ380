@@ -6,11 +6,10 @@ bool SheetIsCreating   = false;
 
 void init_foxland(SHEET_INFO *sht)
 {
-    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)page_alloc_random(get_current_task()->parent_group->pagedir, sht->scrx * sht->scry * 4, KERNEL_PTE_FLAGS);
-    sht->foxland.peek_sign      = (uint8_t *)page_alloc_random(get_current_task()->parent_group->pagedir, sht->scrx * sht->scry * sizeof(uint8_t), KERNEL_PTE_FLAGS);
+    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)malloc(sht->scrx * sht->scry * 4);//不要乱用pagealloc
+    sht->foxland.peek_sign      = (uint8_t *)malloc(sht->scrx * sht->scry * sizeof(uint8_t));
     LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, "/system/foxland/peek.png");
 }
-
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 {
     write_serial_string("Initializing Sheet Manager...\n");
