@@ -323,7 +323,7 @@ void desktop_flusher()
 
     desktop_done = true;
 
-    delay_s_hp(1);
+    delay_s_hp(10);
     
     
 

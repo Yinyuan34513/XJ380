@@ -256,6 +256,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     {
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   ? Where is your parent group?\n");
+        vfs_close(file);
         return NULL;
     }
 
@@ -265,14 +266,17 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     {
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Cannot Alloc Memory.\n");
+        vfs_close(file);
         return NULL;
     }
     memset(buf, 0, file_size);
 
     if (vfs_read(file, buf, 0, file->size) == -1)
     {
+        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Cannot Read File.\n");
+        vfs_close(file);
         return NULL;
     }
 
@@ -286,6 +290,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
         free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Bad Format.\n");
+        vfs_close(file);
         return NULL;
     }
 
@@ -309,11 +314,11 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
 
     // 呃，目前看起来好像没什么用？
-    uint64_t start_code, end_code;
-    uint64_t start_data, end_data;
-    uint64_t start_rodata, end_rodata;
-    uint64_t start_brk, end_brk;
-    uint64_t start_stack;
+    uint64_t start_code   = ~0ULL, end_code = 0;
+    uint64_t start_data   = ~0ULL, end_data = 0;
+    uint64_t start_rodata = ~0ULL, end_rodata = 0;
+    uint64_t start_brk    = 0, end_brk = 0;
+    uint64_t start_stack  = 0;
 
     // 遍历并加载程序段
     for (int i = 0; i < ehdr.e_phnum; i++)
@@ -361,7 +366,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     // memcpy(buffer, buf, file_size);
 
     group->load_start = mapping_space->load_start;
-    group->elf_file   = buf;
+    group->elf_file   = NULL;
     group->elf_size   = file_size;
     // VMA
     vma_t *ld_so_vma = vma_alloc();
@@ -375,6 +380,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     vma_insert(&group->vma_manager, ld_so_vma);
 
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+    vfs_close(file);
 
     switch_page_directory(current_pagedir); // 恢复页表
 
@@ -426,12 +432,13 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
     char  process_name[50];
     void *entry;
+    int   argc = 0;
     // if (entry == NULL) return;   // ???????????????????????????????????????????
 
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
-    page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), true);
+    page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), false);
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);
@@ -453,14 +460,16 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         {
             int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
             cmdline_ptr += len;
+            argc++;
         }
     }
 
     char *old_cmdline = group->cmdline;
     group->cmdline    = strdup(cmdline);
-    write_serial_fmt("CWD: %s\n", getCwd(path));
+    if (old_cmdline != NULL) free(old_cmdline);
     char *cwd = getCwd(path);
-    create_user_thread(entry, NULL, 1, process_name, group, strdup(cwd));
+    write_serial_fmt("CWD: %s\n", cwd);
+    create_user_thread(entry, NULL, argc, process_name, group, cwd);
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

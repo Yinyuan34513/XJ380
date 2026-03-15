@@ -67,6 +67,7 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
     close_interrupt;
     disable_scheduler();
+    tcb_t current_task = get_current_task();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
 
@@ -78,10 +79,10 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
                                                 : "Unknown";
 
     // 长大后在学习吧！
-    if (get_current_task() != NULL)
+    if (current_task != NULL)
     {
-        pcb_t current_proc = get_current_task()->parent_group;
-        if (current_proc->task_level == TASK_APPLICATION_LEVEL)
+        pcb_t current_proc = current_task->parent_group;
+        if (current_proc != NULL && current_proc->task_level == TASK_APPLICATION_LEVEL)
         {
             errno_t status = lazy_tryalloc(current_proc, faulting_address);
             if (status != 0) { goto err; }
@@ -104,8 +105,16 @@ err:;
     write_serial_string(error_msg);
     write_serial_string("\n");
 
-    write_serial_fmt("Fault Thread Name: %s 0x%x\n", get_current_task()->name, (uint64_t)get_current_task());
-    write_serial_fmt("TID: %d\n", get_current_task()->tid);
+    if (current_task != NULL)
+    {
+        write_serial_fmt("Fault Thread Name: %s 0x%x\n", current_task->name, (uint64_t)current_task);
+        write_serial_fmt("TID: %d\n", current_task->tid);
+    }
+    else
+    {
+        write_serial_string("Fault Thread Name: <none>\n");
+        write_serial_string("TID: <none>\n");
+    }
 
     backtrace(frame);
 
@@ -262,8 +271,14 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 
     uint64_t      phy_frame = alloc_frames(1);
     page_table_t *new_table = (page_table_t *)(phys_to_virt(phy_frame));
+    page_table_clear(new_table);
     for (uint64_t i = 0; i < (all_copy ? 512 : (level == 4 ? 256 : 512)); i++)
     {
+        if (!(source_table->entries[i].value & PTE_PRESENT))
+        {
+            new_table->entries[i].value = 0;
+            continue;
+        }
         if (source_table->entries[i].value & PTE_HUGE)
         {
             // 指向一块2M的页

@@ -29,6 +29,7 @@ extern UserInfo *current_user;
 extern UserInfo root_user;
 
 extern bool no_interrupt;
+extern bool is_scheduler;
 // pcb.cpp
 #include "task/scheduler.h"
 
@@ -127,7 +128,7 @@ void kill_proc0(pcb_t pcb)
         if (thread == NULL) break;
         queue_remove_at(pcb->thread_queue, thread->group_index);
         kill_thread0(thread);
-        free_frames((uint64_t)virt_to_phys((uint64_t)thread), KERNEL_STACK_SIZE);
+        free(thread);
     } while (true);
 
     queue_destroy(pcb->thread_queue);
@@ -164,7 +165,7 @@ void kill_thread(tcb_t task)
         return;
     }
     task->status = DEATH;
-    // kill_thread0(task); 要用的解掉 但可能要加锁
+    // kill_thread0(task); 瑕佺敤鐨勮В鎺?浣嗗彲鑳借鍔犻攣
 }
 
 extern void remove_task(tcb_t task);
@@ -293,11 +294,11 @@ void switch_to_user_mode()
 
     uint64_t rsp = get_current_task()->user_stack_top;
 
-    // 构建用户栈并获取 argc 和 argv
+    // 鏋勫缓鐢ㄦ埛鏍堝苟鑾峰彇 argc 鍜?argv
     uint64_t ep;
     rsp = build_user_stack(get_current_task(), rsp, get_current_task()->main, 0, NULL, 0, &ep);
 
-    // 从栈中读取 argc 和 argv
+    // 浠庢爤涓鍙?argc 鍜?argv
     uint64_t argc = *(uint64_t *)rsp;
     char   **argv = (char **)(rsp + 8);
     // char** envp = (char**)ep;
@@ -305,23 +306,30 @@ void switch_to_user_mode()
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
 
-    //目前看还不太好, 应该是init的问题
+    //鐩墠鐪嬭繕涓嶅お濂? 搴旇鏄痠nit鐨勯棶棰?
     char *new_path = (char *)malloc(strlen("/dev/") + 10);
     sprintf(new_path, "/dev/stdio");
     vfs_node_t stdio        = vfs_open(new_path);
-    stdio->refcount        += 3;
-    fd_file_handle *stdout  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
-    stdout->node            = stdio;
-    stdout->offset          = 0;
-    fd_file_handle *stdin   = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
-    stdin->node             = stdio;
-    stdin->offset           = 0;
-    fd_file_handle *stderr  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
-    stderr->node            = stdio;
-    stderr->offset          = 0;
-    stdin->fd               = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
-    stdout->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
-    stderr->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
+    if (stdio != NULL)
+    {
+        stdio->refcount       += 3;
+        fd_file_handle *stdout = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+        stdout->node           = stdio;
+        stdout->offset         = 0;
+        fd_file_handle *stdin  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+        stdin->node            = stdio;
+        stdin->offset          = 0;
+        fd_file_handle *stderr = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+        stderr->node           = stdio;
+        stderr->offset         = 0;
+        stdin->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
+        stdout->fd             = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
+        stderr->fd             = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
+    }
+    else
+    {
+        write_serial_string("Warning: /dev/stdio not available for user task bootstrap.\n");
+    }
 
     free(new_path);
 
@@ -405,22 +413,25 @@ char **copy_envp(char **envp)
     return new_envp;
 }
 
-extern bool no_interrupt;
-extern bool is_scheduler;
-
 uint64_t process_execve(char *path, char **argv, char **envp)
 {
     // while (true)
     // {
     //     if (is_scheduler) break;
     // }
-    bool is_sti = are_interrupts_enabled();
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) open_interrupt;
 
     char      *norm_path = strdup(path);
     vfs_node_t node      = vfs_open(norm_path);
-    if (node == NULL) { return (uint64_t)-ENOENT; }
-    uint64_t buf_len = (node->size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    if (node == NULL)
+    {
+        free(norm_path);
+        if (is_sti && !no_interrupt) open_interrupt;
+        else close_interrupt;
+        return (uint64_t)-ENOENT;
+    }
 
     pcb_t process = get_current_task()->parent_group;
 
@@ -430,6 +441,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     memset(cmdline, 0, sizeof(cmdline));
     char *cmdline_ptr = cmdline;
 
+    char *old_cmdline = process->cmdline;
     if (argv != NULL)
     {
         for (int i = 0; argv[i]; i++)
@@ -437,18 +449,20 @@ uint64_t process_execve(char *path, char **argv, char **envp)
             int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
             cmdline_ptr += len;
         }
-
-        char *old_cmdline = process->cmdline;
-        process->cmdline  = strdup(cmdline);
+        process->cmdline = strdup(cmdline);
     }
+    else
+    {
+        process->cmdline = strdup("");
+    }
+    if (old_cmdline != NULL) free(old_cmdline);
 
     get_thread_name_from_filepath(norm_path, get_current_task()->name);
     get_thread_name_from_filepath(norm_path, process->name);
 
+    char **old_envp = process->envp;
     if (envp != NULL)
     {
-        char **old_envp = process->envp;
-        size_t old_envc = process->envc;
         process->envp   = copy_envp(envp);
         process->envc   = envp_length(envp);
     }
@@ -457,20 +471,29 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->envp = copy_envp(current_user->envp);
         process->envc = current_user->envc;
     }
+    if (old_envp != NULL) free_envp(old_envp);
 
     if (!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
 
     write_serial_fmt("execve process name :%s \n", process->name);
 
     page_directory_t *old_page_dir = process->pagedir;
-    switch_process_page_directory(clone_page_directory(get_current_directory(), false));
+    page_directory_t *new_page_dir = clone_page_directory(get_current_directory(), false);
+    switch_process_page_directory(new_page_dir);
 
     uint64_t e_entry    = 0;
     uint64_t load_start = 0;
     e_entry             = (uint64_t)parse_elf_file(path, process);
     if (e_entry == NULL)
     {
+        process->pagedir = old_page_dir;
         switch_page_directory(old_page_dir);
+        free_page_directory(new_page_dir);
+        vfs_close(node);
+        free(norm_path);
+        if (was_scheduler_enabled) enable_scheduler();
+        if (is_sti && !no_interrupt) open_interrupt;
+        else close_interrupt;
         return 0;
     }
     if (process->vfork)
@@ -525,7 +548,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->hasfscr        = false;
     get_current_task()->winnum         = 0;
 
-    if (!is_sti) close_interrupt;
+    if (was_scheduler_enabled) enable_scheduler();
     switch_to_user_mode();
     return (uint64_t)-(EAGAIN);
 }
@@ -559,7 +582,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
 
-    if (!vma_manager_clone(&current_pcb->vma_manager, &new_pcb->vma_manager))//calloc就我狗命
+    if (!vma_manager_clone(&current_pcb->vma_manager, &new_pcb->vma_manager))//calloc灏辨垜鐙楀懡
     {
         write_serial_fmt("task: cannot clone process vma information.\n");
         free(new_pcb);
@@ -599,13 +622,13 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->winnum  = 0;
     new_task->hasfscr = false;
 
-    new_task->context0.rip    = reg->rcx; // syscall 指令中 rcx 寄存器为 rip
-    new_task->context0.rflags = reg->r11; // syscall 指令中 r11 寄存器为 rflags
+    new_task->context0.rip    = reg->rcx; // syscall 鎸囦护涓?rcx 瀵勫瓨鍣ㄤ负 rip
+    new_task->context0.rflags = reg->r11; // syscall 鎸囦护涓?r11 瀵勫瓨鍣ㄤ负 rflags
     new_task->context0.cs     = reg->cs;
     new_task->context0.ss     = reg->ss;
     new_task->context0.es     = reg->es;
     new_task->context0.ds     = reg->ds;
-    new_task->context0.rax    = 0; // 子线程返回 0
+    new_task->context0.rax    = 0; // 瀛愮嚎绋嬭繑鍥?0
     new_task->context0.rdi    = reg->rdi;
     new_task->context0.rsi    = reg->rsi;
     new_task->context0.rdx    = reg->rdx;
@@ -671,7 +694,8 @@ spin_t create_thread_lock = SPIN_INIT;
 
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
-    bool is_sti = are_interrupts_enabled();
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) open_interrupt;
 
     spin_lock(&create_thread_lock);
@@ -689,7 +713,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     }
     else
     {
-        queue_enqueue(pcb->thread_queue, new_task);
+        new_task->group_index  = queue_enqueue(pcb->thread_queue, new_task);
         new_task->tid          = now_tid++;
         new_task->parent_group = pcb;
     }
@@ -701,8 +725,8 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     uint64_t kernel_stack     = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE));
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)_start;
-    new_task->context0.rsp    = kernel_stack + KERNEL_STACK_SIZE; // 设置上下文
-    new_task->kernel_stack    = kernel_stack + KERNEL_STACK_SIZE; // 栈16字节对齐
+    new_task->context0.rsp    = kernel_stack + KERNEL_STACK_SIZE; // 璁剧疆涓婁笅鏂?
+    new_task->kernel_stack    = kernel_stack + KERNEL_STACK_SIZE; // 鏍?6瀛楄妭瀵归綈
     new_task->context0.cs     = 0x8;
     new_task->context0.ss     = 0x10;
     new_task->context0.es     = 0x10;
@@ -730,14 +754,17 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->window_count = 0;
 
     add_task(new_task);
-    if (!is_sti) close_interrupt;
+    if (was_scheduler_enabled) enable_scheduler();
     spin_unlock(&create_thread_lock);
+    if (is_sti && !no_interrupt) open_interrupt;
+    else close_interrupt;
     return new_task->tid;
 }
 
 size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd)
 {
-    bool is_sti = are_interrupts_enabled();
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) open_interrupt;
 
     spin_lock(&create_thread_lock);
@@ -746,6 +773,10 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     if (!cwd)
     {
         write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
+        if (was_scheduler_enabled) enable_scheduler();
+        spin_unlock(&create_thread_lock);
+        if (is_sti && !no_interrupt) open_interrupt;
+        else close_interrupt;
         return (size_t)-(EINVAL);
     }
     tcb_t new_task = (tcb_t)malloc(sizeof(struct thread_control_block));
@@ -760,7 +791,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     }
     else
     {
-        queue_enqueue(pcb->thread_queue, new_task);
+        new_task->group_index  = queue_enqueue(pcb->thread_queue, new_task);
         new_task->tid          = now_tid++;
         new_task->parent_group = pcb;
     }
@@ -769,14 +800,15 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->cpu_id     = get_current_cpu()->processor_id;
     memcpy(new_task->name, name, strlen(name) + 1);
 
-    uint64_t *stack_top       = (uint64_t *)((uint64_t)new_task + KERNEL_STACK_SIZE);
+    uint64_t kernel_stack     = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE)) + KERNEL_STACK_SIZE;
+    uint64_t *stack_top       = (uint64_t *)kernel_stack;
     *(--stack_top)            = 0;
     *(--stack_top)            = 0;
     *(--stack_top)            = (uint64_t)switch_to_user_mode;
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)switch_to_user_mode;
     new_task->context0.rsp    = (uint64_t)stack_top;
-    new_task->kernel_stack    = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE)) + KERNEL_STACK_SIZE;
+    new_task->kernel_stack    = kernel_stack;
 
     new_task->syscall_stack = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE)) + KERNEL_STACK_SIZE;
 
@@ -804,14 +836,17 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->window_count = 0;
 
     add_task(new_task);
-    if (!is_sti) close_interrupt;
+    if (was_scheduler_enabled) enable_scheduler();
     spin_unlock(&create_thread_lock);
+    if (is_sti && !no_interrupt) open_interrupt;
+    else close_interrupt;
     return new_task->tid;
 }
 
 size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb)
 {
-    bool is_sti = are_interrupts_enabled();
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) open_interrupt;
 
     spin_lock(&create_thread_lock);
@@ -820,6 +855,10 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     if (!cwd)
     {
         write_serial_fmt("You can't create an message thread WITHOUT A CWD \n");
+        if (was_scheduler_enabled) enable_scheduler();
+        spin_unlock(&create_thread_lock);
+        if (is_sti && !no_interrupt) open_interrupt;
+        else close_interrupt;
         return (size_t)-(EINVAL);
     }
     tcb_t new_task = (tcb_t)malloc(sizeof(struct thread_control_block));
@@ -834,7 +873,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     }
     else
     {
-        queue_enqueue(pcb->thread_queue, new_task);
+        new_task->group_index  = queue_enqueue(pcb->thread_queue, new_task);
         new_task->tid          = now_tid++;
         new_task->parent_group = pcb;
     }
@@ -845,14 +884,15 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
 
     new_task->context0.rdi = (uint64_t)tcb;
 
-    uint64_t *stack_top       = (uint64_t *)((uint64_t)new_task + KERNEL_STACK_SIZE);
+    uint64_t kernel_stack     = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE)) + KERNEL_STACK_SIZE;
+    uint64_t *stack_top       = (uint64_t *)kernel_stack;
     *(--stack_top)            = 0;
     *(--stack_top)            = 0;
     *(--stack_top)            = (uint64_t)jump_to_message;
     new_task->context0.rflags = 0x202;
     new_task->context0.rip    = (uint64_t)jump_to_message;
     new_task->context0.rsp    = (uint64_t)stack_top;
-    new_task->kernel_stack    = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE)) + KERNEL_STACK_SIZE;
+    new_task->kernel_stack    = kernel_stack;
     new_task->syscall_stack   = (uint64_t)phys_to_virt(alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE)) + KERNEL_STACK_SIZE;
 
     new_task->cwd = vfs_open(cwd);
@@ -876,8 +916,10 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     new_task->window_count = 0;
 
     add_task(new_task);
-    if (!is_sti) close_interrupt;
+    if (was_scheduler_enabled) enable_scheduler();
     spin_unlock(&create_thread_lock);
+    if (is_sti && !no_interrupt) open_interrupt;
+    else close_interrupt;
     return new_task->tid;
 }
 
@@ -913,7 +955,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
 
     pcb->file_open = queue_init();
 
-    pcb->cmdline     = (char *)malloc(strlen(cmdline));
+    pcb->cmdline     = strdup(cmdline != NULL ? cmdline : "");
     pcb->child_index = queue_enqueue(pcb->parent_task->child_pcb, pcb);
 
     pcb->brk_start   = USER_BRK_START;
@@ -949,8 +991,8 @@ void process_setup()
     kernel_pcb->child_pcb    = queue_init();
     kernel_pcb->xtttp_stc    = (xtttp_dtt *)calloc(1,sizeof(xtttp_dtt));
     kernel_pcb->file_open    = queue_init();
-    kernel_group->virt_queue = queue_init();
-    kernel_group->ipc_queue  = queue_init();
+    kernel_pcb->virt_queue   = queue_init();
+    kernel_pcb->ipc_queue    = queue_init();
 
     kernel_pcb->child_index = 0;
 

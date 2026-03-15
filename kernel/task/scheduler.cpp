@@ -260,7 +260,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     }
 
     // 保存当前FSBASE
-    write_fsbase((uint64_t)current);
+    write_fsbase(current->fs_base);
 
     // 任务寻父处理
     if (best->parent_group && 

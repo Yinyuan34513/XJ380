@@ -137,7 +137,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
             regs->rax = get_current_task()->parent_group->pid;
             break;
         case SYS_GETTID:
-            regs->rax = get_current_task()->parent_group->pid;
+            regs->rax = get_current_task()->tid;
             break;
         // case SYS_WAIT4:
         //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
@@ -253,7 +253,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_RUN: do_xapi_Run((char *)regs->rdi); break;
     case XAPI_GET_PIC_SIZE: GetPictureSize((int *)regs->rdi, (int *)regs->rsi, (char *)regs->rdx); break;
     case XAPI_MAP_MEMORY: regs->rax = do_xapi_MapMemory(regs->rdi, regs->rsi, regs->rdx); break;
-    case XAPI_REMOVEDIR: sys_rmdir(regs->rdi,0,0,0,0,0,regs);
+    case XAPI_REMOVEDIR: sys_rmdir(regs->rdi,0,0,0,0,0,regs); break;
     case XAPI_FLUSH_TIME: do_xapi_FlushTime();
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
