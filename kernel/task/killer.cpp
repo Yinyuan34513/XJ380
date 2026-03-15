@@ -29,13 +29,10 @@ void check_group(pcb_t group)
     for (int i = 0; i < group->thread_queue->size && front_p != NULL; i++)
     {
         tcb_t thread = (tcb_t)front_p->data;
-        if (thread->status != OUT || thread->status != DEATH)
+        if (thread->status != OUT && thread->status != DEATH)
         {
-            if (strcmp(thread->name, "Window Message Thread") != 0)
-            {
-                // 不是消息线程才算
-                group_dead = false;
-            }
+            // 简化：只要有任何非死亡线程，就认为组还活着
+            group_dead = false;
         }
         front_p = front_p->next;
     }
@@ -43,7 +40,6 @@ void check_group(pcb_t group)
     if (group_dead)
     {
         kill_proc(group, 0, false);
-        kill_proc0(group);
     }
 }
 
