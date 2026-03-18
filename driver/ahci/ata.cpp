@@ -27,7 +27,7 @@ void sata_submit(struct hba_device *dev, struct blkio_req *io_req)
 
     if ((port->device->flags & HBA_DEV_FEXTLBA))
     {
-        // 如果该设备支持48位LBA寻址
+        // 如果该设备支�?8位LBA寻址
         sata_create_fis(fis, write ? ATA_WRITE_DMA_EXT : ATA_READ_DMA_EXT, io_req->lba, count);
     }
     else { sata_create_fis(fis, write ? ATA_WRITE_DMA : ATA_READ_DMA, io_req->lba, count); }
@@ -40,5 +40,5 @@ void sata_submit(struct hba_device *dev, struct blkio_req *io_req)
     ahci_post(port, cmds, slot);
 
     free(cmds);
-    free_frames((uint64_t)virt_to_phys((uint64_t)table), 1);
+    free_frames((uint64_t)driver_virt_to_phys((uint64_t)table), 1);
 }

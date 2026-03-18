@@ -20,6 +20,19 @@ XINGJI 工作室 A 级机密 | 保密编号 XSEC202212011-11-A
 - qemu
 - 剩下对着 makefile 装吧反正 linux 简单（bushi
 
+## Source Layout
+
+- `boot/`: UEFI bootloader code
+- `kernel/`: core kernel subsystems
+- `driver/`: built-in drivers linked into `kernel.elf`
+- `kmod/`: loadable kernel modules built as `.km`
+- `user/`: user-space programs and XAPI runtime
+
+Notes:
+
+- The build still installs kernel modules into `/lib/modules` inside the image.
+- `mod/Makefile` is kept as a compatibility wrapper for older build habits.
+
 ## 更新日志
 
 ### BuildVersion 1 【已实机测试】

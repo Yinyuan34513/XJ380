@@ -65,8 +65,7 @@ void scsi_submit(struct hba_device *dev, struct blkio_req *io_req)
     }
 
     // field: cdb->misc1
-    *((uint8_t *)cdb + 1) = 3 << 5; // RPROTECT=011b 禁用保护检查
-
+    *((uint8_t *)cdb + 1) = 3 << 5; // RPROTECT=011b 禁用保护检�?
     // The async way...
     struct hba_cmd_state *cmds = (hba_cmd_state *)malloc(sizeof(struct hba_cmd_state));
     memset(cmds,0,sizeof(struct hba_cmd_state));
@@ -74,5 +73,5 @@ void scsi_submit(struct hba_device *dev, struct blkio_req *io_req)
     ahci_post(port, cmds, slot);
 
     free(cmds);
-    free_frames((uint64_t)virt_to_phys((uint64_t)table), 1);
+    free_frames((uint64_t)driver_virt_to_phys((uint64_t)table), 1);
 }

@@ -24,6 +24,7 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+KMOD_DIR := kmod
 
 QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
 
@@ -108,7 +109,7 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
-	@$(MAKE) -C mod
+	@$(MAKE) -C $(KMOD_DIR)
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
