@@ -98,6 +98,7 @@ void process_mouse_button()
                 ms_dec.sht_now         = NULL;
                 tcb_t current_win_task = current_window->w_task;
                 delete_window(xwmii, sht_img, current_window);
+                current_window = NULL;
                 if (current_win_task->window_count == 0) { kill_thread(current_win_task); }
             }
             else if (current_window->type == XWIN_NORMAL &&

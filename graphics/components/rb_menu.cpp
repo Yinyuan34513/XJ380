@@ -6,19 +6,35 @@
 
 rb_menu_regt_p first_rb_menu;
 
+static void copy_menu_text(char *dst, size_t dst_size, const char *src)
+{
+    if (dst_size == 0) return;
+    if (src == NULL)
+    {
+        dst[0] = '\0';
+        return;
+    }
+
+    strncpy(dst, src, dst_size - 1);
+    dst[dst_size - 1] = '\0';
+}
+
 void copy_rb_menu_items(RightMenuItem **dst, RightMenuItem_user *src, uint64_t cnt)
 {
     *dst = (RightMenuItem *)malloc(sizeof(RightMenuItem) * cnt);
     RightMenuItem *dest = *dst;
     for (int i = 0; i < cnt; i++)
     {
-        strcpy(dest[i].text, src[i].text);
+        copy_menu_text(dest[i].text, sizeof(dest[i].text), src[i].text);
         dest[i].CRLid = src[i].CRLid;
     }
 }
 
 void register_right_rb_button_menu(WINDOWLSP window, RightMenuItem_user *items, uint64_t count)
 {
+    if (window == NULL || items == NULL || count == 0) return;
+    if (window->w_menu != NULL) unregister_right_rb_button_menu_components(window);
+
     rb_menu_regt_p new_rb_menu = (rb_menu_regt_p)malloc(sizeof(rb_menu_regt));
     new_rb_menu->count = count;
     copy_rb_menu_items(&new_rb_menu->items, items, count);
@@ -52,6 +68,8 @@ void register_right_rb_button_menu(WINDOWLSP window, RightMenuItem_user *items, 
 
 void unregister_right_rb_button_menu_components(WINDOWLSP win)
 {
+    if (win == NULL) return;
+
     rb_menu_regt_p front_p = first_rb_menu;
     while (true)
     {
@@ -61,6 +79,7 @@ void unregister_right_rb_button_menu_components(WINDOWLSP win)
         }
         else if (front_p == win->w_menu)
         {
+            if (front_p->prev == NULL) first_rb_menu = front_p->next;
             if (front_p->prev != NULL) front_p->prev->next = front_p->next;
             if (front_p->next != NULL) front_p->next->prev = front_p->prev;
             free(front_p->items);
@@ -133,6 +152,8 @@ void close_menu(WINDOWLSP win, int x, int y)
 
 void process_right_button_click_event(WINDOWLSP win, int x, int y)
 {
+    if (win == NULL || win->w_menu == NULL) return;
+
     rb_menu_regt_p front_p = first_rb_menu;
     while (true)
     {

@@ -4,6 +4,73 @@
 bool SheetIsRefreshing = false;
 bool SheetIsCreating   = false;
 
+static size_t sheet_buffer_bytes(uint32_t width, uint32_t height)
+{
+    return (size_t)width * (size_t)height * sizeof(SHEET_BUFFER);
+}
+
+static void *alloc_shared_sheet_buffer(size_t bytes)
+{
+    // Sheet buffers are shared by the desktop flusher and syscall paths across
+    // different CR3 contexts, so they must live in the shared kernel heap.
+    void *buffer = calloc(1, bytes);
+    if (buffer != NULL) return buffer;
+
+    write_serial_string("Cannot allocate memory for shared sheet buffer. System halted.\n");
+    while (1)
+    {
+        __asm__ __volatile__("hlt");
+    }
+}
+
+static bool is_valid_sheet_buffer(const void *buffer)
+{
+    return buffer != NULL && (uint64_t)buffer >= get_physical_memory_offset();
+}
+
+static bool clip_sheet_copy_region(const SHEET *dst_sheet, int *dst_x, int *dst_y,
+                                   int *src_x, int *src_y, int *width, int *height)
+{
+    if (!dst_sheet || !is_valid_sheet_buffer(dst_sheet->buffer)) return false;
+
+    int dx = *dst_x;
+    int dy = *dst_y;
+    int sx = *src_x;
+    int sy = *src_y;
+    int w  = *width;
+    int h  = *height;
+
+    if (w <= 0 || h <= 0) return false;
+
+    if (dx < 0)
+    {
+        sx += -dx;
+        w += dx;
+        dx = 0;
+    }
+    if (dy < 0)
+    {
+        sy += -dy;
+        h += dy;
+        dy = 0;
+    }
+
+    if (dx >= (int)dst_sheet->width || dy >= (int)dst_sheet->height) return false;
+
+    if (dx + w > (int)dst_sheet->width) w = (int)dst_sheet->width - dx;
+    if (dy + h > (int)dst_sheet->height) h = (int)dst_sheet->height - dy;
+
+    if (sx < 0 || sy < 0 || w <= 0 || h <= 0) return false;
+
+    *dst_x  = dx;
+    *dst_y  = dy;
+    *src_x  = sx;
+    *src_y  = sy;
+    *width  = w;
+    *height = h;
+    return true;
+}
+
 void init_foxland(SHEET_INFO *sht)
 {
     sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)malloc(sht->scrx * sht->scry * 4);//不要乱用pagealloc
@@ -17,20 +84,9 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     sht->scrx        = fbc.horizontal_resolution;
     sht->scry        = fbc.vertical_resolution;
     sht->start       = NULL;
-    sht->temp_buffer = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, sht->scrx * sht->scry * 4, KERNEL_PTE_FLAGS);
-    if (sht->temp_buffer == NULL)
-    {
-        // 没分配成，去世。
-        // WSOD_Cannot_Alloc_Memory(fbc);  // 死了啦，都是你害的啦
-        write_serial_string("Cannot allocate memory for Sheet Manager. System halted.\n");
-        while (1)
-        {
-            __asm__ __volatile__("hlt");
-        }
-    }
+    size_t temp_buffer_bytes = sheet_buffer_bytes(sht->scrx, sht->scry);
+    sht->temp_buffer = alloc_shared_sheet_buffer(temp_buffer_bytes);
     sht->sheet_num            = -1;
-    // 清零 temp_buffer，避免色块问题
-    memset(sht->temp_buffer, 0, sht->scrx * sht->scry * 4);
 
     init_foxland(sht);
 
@@ -48,6 +104,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     SheetIsCreating  = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     memset(new_sheet, 0, sizeof(SHEET));
+    size_t buffer_bytes = sheet_buffer_bytes(x, y);
 
     SHEET *front_p = sht->start;
     if (index > 0)
@@ -100,9 +157,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->width     = x;
                 new_sheet->height    = y;
                 new_sheet->type      = type;
-                new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
+                new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
                 new_sheet->is_change = true;
-                memset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
             }
@@ -120,9 +176,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->width     = x;
                 new_sheet->height    = y;
                 new_sheet->type      = type;
-                new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
+                new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
                 new_sheet->is_change = true;
-                memset(new_sheet->buffer, 0, x * y * 4);
 
                 sht->sheet_num++;
             }
@@ -138,9 +193,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
+            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
             new_sheet->is_change = true;
-            memset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
         }
@@ -176,9 +230,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
+            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
             new_sheet->is_change = true;
-            memset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
         }
@@ -193,9 +246,8 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             new_sheet->width     = x;
             new_sheet->height    = y;
             new_sheet->type      = type;
-            new_sheet->buffer    = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, x * y * 4, KERNEL_PTE_FLAGS);
+            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
             new_sheet->is_change = true;
-            memset(new_sheet->buffer, 0, x * y * 4);
 
             sht->sheet_num++;
         }
@@ -366,7 +418,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     }
     
     // 释放内存
-    free_frame((uint64_t)csheet->buffer);
+    free(csheet->buffer);
     memset(csheet, 0, sizeof(SHEET));
     free((void *)(csheet));
     sht->sheet_num--;
@@ -439,6 +491,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 
         // 不在当前刷新区域内直接跳过
         if (vx0 >= vx1 || vy0 >= vy1) continue;
+        if (!is_valid_sheet_buffer(st->buffer)) continue;
 
         SHEET_BUFFER *st_buf = (SHEET_BUFFER *)st->buffer;
         int width = vx1 - vx0; // 计算一次，避免重复计算
@@ -552,13 +605,24 @@ uint32_t get_ver()
 void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                        uint32_t width, uint32_t height)
 {
-    if (!dst_sheet) return;
+    if (!dst_sheet || src == NULL) return;
+
+    int dst_x_i = (int)dst_x;
+    int dst_y_i = (int)dst_y;
+    int src_x_i = 0;
+    int src_y_i = 0;
+    int width_i = (int)width;
+    int height_i = (int)height;
+    int src_stride = (int)width;
+    if (!clip_sheet_copy_region(dst_sheet, &dst_x_i, &dst_y_i, &src_x_i, &src_y_i, &width_i, &height_i)) return;
+
     SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
-    for (int y = 0; y < height; y++)
+    for (int y = 0; y < height_i; y++)
     {
-        for (int x = 0; x < width; x++)
+        for (int x = 0; x < width_i; x++)
         {
-            dst[(dst_y + y) * dst_sheet->width + (dst_x + x)] = src[y * width + x];
+            dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)] =
+                src[(src_y_i + y) * src_stride + (src_x_i + x)];
         }
     }
 }
@@ -566,13 +630,24 @@ void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uin
 void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x,
                                      uint32_t dst_y, uint32_t width, uint32_t height)
 {
-    if (!dst_sheet) return;
+    if (!dst_sheet || src == NULL) return;
+
+    int dst_x_i = (int)dst_x;
+    int dst_y_i = (int)dst_y;
+    int src_x_i = 0;
+    int src_y_i = 0;
+    int width_i = (int)width;
+    int height_i = (int)height;
+    int src_stride = (int)width;
+    if (!clip_sheet_copy_region(dst_sheet, &dst_x_i, &dst_y_i, &src_x_i, &src_y_i, &width_i, &height_i)) return;
+
     SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
-    for (int y = 0; y < height; y++)
+    for (int y = 0; y < height_i; y++)
     {
-        for (int x = 0; x < width; x++)
+        for (int x = 0; x < width_i; x++)
         {
-            if (src[y * width + x].a > 10) dst[(dst_y + y) * dst_sheet->width + (dst_x + x)] = src[y * width + x];
+            SHEET_BUFFER pixel = src[(src_y_i + y) * src_stride + (src_x_i + x)];
+            if (pixel.a > 10) dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)] = pixel;
         }
     }
 }
@@ -582,14 +657,25 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 void copy_buffer_blend_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,
                              uint32_t width, uint32_t height)
 {
-    if (!dst_sheet) return;
+    if (!dst_sheet || src == NULL) return;
+
+    int dst_x_i = (int)dst_x;
+    int dst_y_i = (int)dst_y;
+    int src_x_i = 0;
+    int src_y_i = 0;
+    int width_i = (int)width;
+    int height_i = (int)height;
+    int src_stride = (int)width;
+    if (!clip_sheet_copy_region(dst_sheet, &dst_x_i, &dst_y_i, &src_x_i, &src_y_i, &width_i, &height_i)) return;
+
     SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
-    for (int y = 0; y < height; y++)
+    for (int y = 0; y < height_i; y++)
     {
-        for (int x = 0; x < width; x++)
+        for (int x = 0; x < width_i; x++)
         {
-            dst[(dst_y + y) * dst_sheet->width + (dst_x + x)] = LCD_AlphaBlend(
-                src[y * width + x], dst[(dst_y + y) * dst_sheet->width + (dst_x + x)], src[y * width + x].a);
+            SHEET_BUFFER pixel = src[(src_y_i + y) * src_stride + (src_x_i + x)];
+            dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)] =
+                LCD_AlphaBlend(pixel, dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)], pixel.a);
         }
     }
 }

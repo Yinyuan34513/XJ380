@@ -25,6 +25,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <user/user.h>
+
 #include <ttf.h>
 
 char *current_user_envp[100] = {
@@ -430,10 +431,10 @@ char *getCwd(char *path)
 
 void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
-    char  process_name[50];
+    char  *process_name = (char*)malloc(strlen(path) + 1);
     void *entry;
     int   argc = 0;
-    // if (entry == NULL) return;   // ???????????????????????????????????????????
+    // if (entry == NULL) return;   // ))???????????????????????????????????????????
 
     get_thread_name_from_filepath(path, process_name);
 
@@ -446,6 +447,7 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     if (entry == NULL)
     {
         write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
+        free(process_name);
         return;
     }
 
@@ -470,6 +472,7 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     char *cwd = getCwd(path);
     write_serial_fmt("CWD: %s\n", cwd);
     create_user_thread(entry, NULL, argc, process_name, group, cwd);
+    free(process_name);
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

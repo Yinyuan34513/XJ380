@@ -111,8 +111,11 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
     {
         for (int j = 0; j < ow; j++)
         {
-            SheetBuffer[(i + y) * front_p->width + (j + x)] =
-                LCD_AlphaBlend(buff[i * ow + j], SheetBuffer[(i + y) * front_p->width + (j + x)], buff[i * ow + j].a);
+            int dst_y = i + y;
+            int dst_x = j + x;
+            if (dst_x < 0 || dst_y < 0 || dst_x >= (int)front_p->width || dst_y >= (int)front_p->height) continue;
+            SheetBuffer[dst_y * front_p->width + dst_x] =
+                LCD_AlphaBlend(buff[i * ow + j], SheetBuffer[dst_y * front_p->width + dst_x], buff[i * ow + j].a);
         }
     }
     free(b1);
@@ -175,7 +178,10 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
     {
         for (int j = 0; j < ow; j++)
         {
-            SheetBuffer[(i + y) * front_p->width + (j + x)] = buff[i * ow + j];
+            int dst_y = i + y;
+            int dst_x = j + x;
+            if (dst_x < 0 || dst_y < 0 || dst_x >= (int)front_p->width || dst_y >= (int)front_p->height) continue;
+            SheetBuffer[dst_y * front_p->width + dst_x] = buff[i * ow + j];
         }
     }
     free(b1);
