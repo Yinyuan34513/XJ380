@@ -56,6 +56,48 @@ char password_layout_ball_bitmap[8][9] = {
     "..####..",
 };
 
+static const int PASSWORD_BOX_X      = 128;
+static const int PASSWORD_BOX_Y      = 168;
+static const int PASSWORD_BOX_WIDTH  = 300;
+static const int PASSWORD_BOX_HEIGHT = 24;
+static const int PASSWORD_TEXT_X     = 136;
+static const int PASSWORD_TEXT_Y     = 176;
+static const int PASSWORD_SLOT_WIDTH = 16;
+static const int PASSWORD_MAX_INPUT  = 18;
+static const uint64_t PASSWORD_CURSOR_BLINK_NS = 500000000ULL;
+
+static void render_password_input(const char *input_password, int input_count, bool show_cursor)
+{
+    (void)input_password;
+
+    draw_rect(sht_img, desktop_ct_sheet, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+              PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT, WHITE);
+
+    for (int i = 0; i < input_count; i++)
+    {
+        for (int y = 0; y < 8; y++)
+        {
+            for (int x = 0; x < 8; x++)
+            {
+                if (password_layout_ball_bitmap[y][x] == '#')
+                {
+                    draw_point(sht_img, desktop_ct_sheet, PASSWORD_TEXT_X + PASSWORD_SLOT_WIDTH * i + x,
+                               PASSWORD_TEXT_Y + y, BLACK);
+                }
+            }
+        }
+    }
+
+    if (show_cursor)
+    {
+        int cursor_x = PASSWORD_TEXT_X + PASSWORD_SLOT_WIDTH * input_count;
+        draw_rect(sht_img, desktop_ct_sheet, cursor_x, PASSWORD_BOX_Y + 4, cursor_x + 1, PASSWORD_BOX_Y + 20, BLACK);
+    }
+
+    refresh_part_sheet(sht_img, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+                       PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
+}
+
 void init_user()
 {
     char user_reg_data_path[256];
@@ -104,7 +146,8 @@ void init_user()
     print_box_ttf(sht_img, desktop_ct_sheet, "用户：", WHITE, 64, 130, 16);
     print_box_ttf(sht_img, desktop_ct_sheet, "密码：", WHITE, 64, 164, 16);
 
-    draw_rect(sht_img, desktop_ct_sheet, 128, 168, 128 + 300, 168 + 24, WHITE);
+    draw_rect(sht_img, desktop_ct_sheet, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+              PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT, WHITE);
     print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[current_user_number].name, WHITE, 128, 130, 16);
     PrintPicture_blend(sht_img, desktop_ct_sheet, 128 + 300 + 8, 168, 24, 24, "/system/icon/nextstep.png");
 
@@ -112,24 +155,28 @@ void init_user()
 
     int input_count = 0;
     char input_password[64];
+    memset(input_password, 0, sizeof(input_password));
+    bool cursor_visible = true;
+    uint64_t last_cursor_toggle = nanoTime();
+    render_password_input(input_password, input_count, cursor_visible);
     while (1)
     {
-        uint8_t k_input = get_keyboard_input();
-        if (k_input != '\b' && k_input != '\n' && k_input != NULL && k_input < 128 && input_count < 18)
+        uint64_t now = nanoTime();
+        if (now - last_cursor_toggle >= PASSWORD_CURSOR_BLINK_NS)
         {
-            for (int y = 0; y < 8; y++)
-            {
-                for (int x = 0; x < 8; x++)
-                {
-                    if (password_layout_ball_bitmap[y][x] == '#')
-                    {
-                        draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, BLACK);
-                        input_password[input_count] = k_input;
-                        refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
-                    }
-                }
-            }
+            cursor_visible = !cursor_visible;
+            last_cursor_toggle = now;
+            render_password_input(input_password, input_count, cursor_visible);
+        }
+
+        uint8_t k_input = get_keyboard_input();
+        if (k_input != '\b' && k_input != '\n' && k_input != NULL && k_input < 128 && input_count < PASSWORD_MAX_INPUT)
+        {
+            input_password[input_count] = k_input;
             input_count++;
+            cursor_visible = true;
+            last_cursor_toggle = nanoTime();
+            render_password_input(input_password, input_count, cursor_visible);
         }
         else if (k_input == '\b')
         {
@@ -137,18 +184,9 @@ void init_user()
             {
                 input_count--;
                 input_password[input_count] = '\0';
-                for (int y = 0; y < 8; y++)
-                {
-                    for (int x = 0; x < 8; x++)
-                    {
-                        if (password_layout_ball_bitmap[y][x] == '#')
-                        {
-                            draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, WHITE);
-                            input_password[input_count] = k_input;
-                            refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
-                        }
-                    }
-                }
+                cursor_visible = true;
+                last_cursor_toggle = nanoTime();
+                render_password_input(input_password, input_count, cursor_visible);
             }
         }
         else if (k_input == '\n')
