@@ -38,10 +38,20 @@ void scsi_submit(struct hba_device *dev, struct blkio_req *io_req)
     struct hba_port *port = dev->port;
     struct hba_cmdh *header;
     struct hba_cmdt *table;
+    io_req->status        = -1;
 
     int write = !!(io_req->flags & BLKIO_WRITE);
     int slot  = hba_prepare_cmd(port, &table, &header);
-    hba_bind_sbuf(header, table, (void *)io_req->buf, io_req->len);
+    if (slot < 0) {
+        write_serial_fmt("AHCI: No free command slot for ATAPI %s lba=%llu len=%llu\n", write ? "write" : "read",
+                         io_req->lba, io_req->len);
+        return;
+    }
+    if (hba_bind_sbuf(header, table, (void *)io_req->buf, io_req->len) != 0) {
+        write_serial_fmt("AHCI: Failed to bind ATAPI %s buffer lba=%llu len=%llu\n", write ? "write" : "read",
+                         io_req->lba, io_req->len);
+        return;
+    }
 
     header->options |= HBA_CMDH_ATAPI | (HBA_CMDH_WRITE * write);
 
@@ -65,14 +75,8 @@ void scsi_submit(struct hba_device *dev, struct blkio_req *io_req)
     }
 
     // field: cdb->misc1
-    *((uint8_t *)cdb + 1) = 3 << 5; // RPROTECT=011b 禁用保护检查
-
-    // The async way...
-    struct hba_cmd_state *cmds = (hba_cmd_state *)malloc(sizeof(struct hba_cmd_state));
-    memset(cmds,0,sizeof(struct hba_cmd_state));
-    *cmds                      = (struct hba_cmd_state){.cmd_table = table, .state_ctx = io_req};
-    ahci_post(port, cmds, slot);
-
-    free(cmds);
-    free_frames((uint64_t)virt_to_phys((uint64_t)table), 1);
+    *((uint8_t *)cdb + 1) = 3 << 5; // RPROTECT=011b 禁用保护检�?
+    if (ahci_try_send(port, slot)) {
+        io_req->status = 0;
+    }
 }

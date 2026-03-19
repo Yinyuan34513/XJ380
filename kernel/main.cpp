@@ -432,6 +432,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pci_setup(BootConfig.MCFG);
     pci_init();
+    write_serial_fmt("VM hint: %s\n", BootConfig.is_qemu == 1 ? "QEMU/BOCHS" : "generic/VMware/real hardware");
+    ahci_set_environment(BootConfig.is_qemu == 1);
     ahci_setup();
     nvme_setup();
     
