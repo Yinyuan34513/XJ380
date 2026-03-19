@@ -94,7 +94,7 @@ void draw_setting()
         char cpu_model[64];
         xapi_GetCpuModel(cpu_model);
         char memory_size[64];
-        strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024));
+        strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024 / 1024));
         strcat(memory_size, " GB");
         char fenbianlv[64];
         strcat(fenbianlv, xcr_int2char(win_width));

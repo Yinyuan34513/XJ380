@@ -80,7 +80,7 @@ int main(int argc, char *argv[], char *envp[])
         }
     }
 
-    strcpy(current_path, "/");
+    if (getcwd(current_path, sizeof(current_path)) == NULL) { strcpy(current_path, "/"); }
     print_to_console("XINGJI SpaceTerminal for XJ380");
     print_to_console("Copyright(C) XINGJI Interactive Software 2017-2026 All rights reserved.");
     paint_arrow_sign(2, 40);

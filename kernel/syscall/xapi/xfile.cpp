@@ -84,26 +84,43 @@ void do_xapi_CloseFile(uint64_t ptr)
 
 void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
 {
-    char          *fpath  = vfs_cwd_path_build((char *)path);
     uint32_t      *fcount = (uint32_t *)count;
     XAPIT_DirNode *fdir   = (XAPIT_DirNode *)dir;
+    if (fcount == NULL || fdir == NULL || path == 0) return;
+
+    *fcount = 0;
+
+    char *fpath = vfs_cwd_path_build((char *)path);
+    if (fpath == NULL)
+    {
+        *fcount = 404;
+        return;
+    }
 
     vfs_node_t v = vfs_open(fpath);
-    v->refcount++;
     if (!v)
     {
         *fcount = 404;
         free(fpath);
         return;
     }
+    if (!(v->type & file_dir))
+    {
+        *fcount = 404;
+        vfs_close(v);
+        free(fpath);
+        return;
+    }
+    v->refcount++;
 
     for (list_t node = v->child; node != NULL; node = node->next)
     {
         if (*fcount >= 255)
         {
             (*fcount)++;
+            vfs_close(v);
             free(fpath);
-            break;
+            return;
         }
         void *data = node->data;
         if (strcmp(((vfs_node_t)data)->name, "") != 0 && ((vfs_node_t)data)->type != file_delete)
