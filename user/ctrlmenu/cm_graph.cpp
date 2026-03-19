@@ -6,6 +6,7 @@
 int cindex = 1;
 
 bool dont_refresh = false;
+bool about_memory_show_mb = false;
 
 char wdaystr_table[7][20] = {
     "星期日",
@@ -93,10 +94,21 @@ void draw_setting()
         xapi_GetSystemVersion(system_version);
         char cpu_model[64];
         xapi_GetCpuModel(cpu_model);
+        uint64_t memory_kib = xapi_GetMemorySize();
         char memory_size[64];
-        strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024 / 1024));
-        strcat(memory_size, " GB");
+        memset(memory_size, 0, sizeof(memory_size));
+        if (about_memory_show_mb)
+        {
+            strcat(memory_size, xcr_int2char(memory_kib / 1024));
+            strcat(memory_size, " MB");
+        }
+        else
+        {
+            strcat(memory_size, xcr_int2char(memory_kib / 1024 / 1024));
+            strcat(memory_size, " GB");
+        }
         char fenbianlv[64];
+        memset(fenbianlv, 0, sizeof(fenbianlv));
         strcat(fenbianlv, xcr_int2char(win_width));
         strcat(fenbianlv, "x");
         strcat(fenbianlv, xcr_int2char(win_height));
@@ -110,7 +122,7 @@ void draw_setting()
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 218, cpu_model, 11, 0xffffffff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "运行内存", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffc8f7ff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 278, "内核版本", 11, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 278, KN_VERSION, 11, 0xffffffff);
