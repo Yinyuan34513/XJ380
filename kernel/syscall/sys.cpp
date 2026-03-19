@@ -656,24 +656,35 @@ sys_(getcwd, char *buffer, size_t length)
     if (unlikely(length == 0)) return 0;
     tcb_t  process  = get_current_task();
     char  *cwd      = vfs_get_fullpath(process->cwd);
+    if (unlikely(cwd == NULL)) return SYSCALL_FAULT_(ENOENT);
+
     size_t cwd_leng = strlen(cwd);
-    if (length > cwd_leng) length = cwd_leng;
-    memcpy(buffer, cwd, length);
-    return length;
+    size_t copy_len = cwd_leng;
+    if (copy_len >= length) copy_len = length - 1;
+    memcpy(buffer, cwd, copy_len);
+    buffer[copy_len] = '\0';
+    free(cwd);
+    return copy_len;
 }
 
 sys_(chdir, char *s)
 {
     if (unlikely(s == NULL)) return SYSCALL_FAULT_(EINVAL);
-    pcb_t process = get_current_task()->parent_group;
+    tcb_t current = get_current_task();
 
     char *path;
     char *bpath = NULL;
     if (s[0] == '/') { path = strdup(s); }
     else
     {
-        bpath = vfs_get_fullpath(get_current_task()->cwd);
+        bpath = vfs_get_fullpath(current->cwd);
         path  = pathacat(bpath, s);
+    }
+
+    if (unlikely(path == NULL))
+    {
+        free(bpath);
+        return SYSCALL_FAULT_(ENOMEM);
     }
 
     char *normalized_path = normalize_path(path);
@@ -689,13 +700,20 @@ sys_(chdir, char *s)
         return SYSCALL_FAULT_(ENOENT);
     }
 
-    if (node->type == file_dir) { get_current_task()->cwd = node; }
-    else
+    if (!(node->type & file_dir))
     {
+        vfs_close(node);
+        free(normalized_path);
         return SYSCALL_FAULT_(ENOTDIR);
     }
 
-    free(normalized_path);
+    if (current->cwd != NULL) vfs_close(current->cwd);
+    current->cwd = node;
+    current->cwd->refcount++;
+
+    if (current->str_cwd != NULL) free(current->str_cwd);
+    current->str_cwd = normalized_path;
+
     return 0;
 }
 

@@ -62,7 +62,7 @@ void check_command()
     }
     else if (strncmp("cd", cmd, 2) == 0)
     {
-        if (args == NULL || *args == '\0') { strcpy(current_path, "/"); }
+        if (args == NULL || *args == '\0') { change_directory((char *)"/"); }
         else
         {
             change_directory(args);
@@ -182,7 +182,7 @@ void check_command()
         print_to_console("  help        - Show this help");
         print_to_console("  edit        - Edit file");
     }
-    else if (strncmp("../", input_buf, 3) == 0) { revert_path(current_path); }
+    else if (strncmp("../", input_buf, 3) == 0) { change_directory(input_buf); }
     else if (strncmp("edit", cmd, 4) == 0)
     {
         // xapi_Execve("/system/shell.elf",NULL,NULL);

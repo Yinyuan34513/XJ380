@@ -1,4 +1,5 @@
 #include "st_proto.h"
+#include <xposix/errno.h>
 
 void revert_path(char *path)
 {
@@ -152,40 +153,33 @@ bool create_directory_recursive(char *path)
 void change_directory(char *path)
 {
     char new_path[512];
-    char temp_path[512];
+
+    if (path == NULL || *path == '\0') path = (char *)"/";
 
     if (path[0] == '/')
     {
-        strcpy(new_path, path);
+        snprintf(new_path, sizeof(new_path), "%s", path);
     }
     else
     {
-        strcpy(new_path, current_path);
-        if (new_path[strlen(new_path) - 1] != '/') { strcat(new_path, "/"); }
-        strcat(new_path, path);
+        snprintf(new_path, sizeof(new_path), "%s%s%s", current_path,
+                 current_path[strlen(current_path) - 1] == '/' ? "" : "/", path);
     }
 
     normalize_path(new_path);
 
-    strcpy(temp_path, new_path);
-    if (strcmp(temp_path, "/") != 0 && temp_path[strlen(temp_path) - 1] == '/')
-    {
-        temp_path[strlen(temp_path) - 1] = '\0';
-    }
-
-    uint32_t count;
-    DirNode  fdir[256];
-    xapi_SearchFile(temp_path, &count, fdir);
-    if (count == 404)
+    int ret = chdir(new_path);
+    if (ret < 0)
     {
         char error_msg[256];
-        strcpy(error_msg, "cd: no such directory: ");
-        strcat(error_msg, path);
+        if (-ret == ENOTDIR) { snprintf(error_msg, sizeof(error_msg), "cd: not a directory: %s", path); }
+        else if (-ret == ENOENT) { snprintf(error_msg, sizeof(error_msg), "cd: no such directory: %s", path); }
+        else { snprintf(error_msg, sizeof(error_msg), "cd: failed to change directory: %s", path); }
         print_to_console(error_msg);
         return;
     }
 
-    strcpy(current_path, temp_path);
+    if (getcwd(current_path, sizeof(current_path)) == NULL) { strcpy(current_path, new_path); }
 }
 
 void normalize_path(char *path)
