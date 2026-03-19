@@ -110,9 +110,19 @@ int hba_prepare_cmd(struct hba_port *port, struct hba_cmdt **cmdt, struct hba_cm
     if (slot < 0) return -1;
     struct hba_cmdh *cmd_header = (struct hba_cmdh*)phys_to_virt((uint64_t)&port->cmdlst[slot]);
     memset(cmd_header, 0, sizeof(struct hba_cmdh));
-    uint64_t         phys      = alloc_frames(1);
-    struct hba_cmdt *cmd_table = (struct hba_cmdt *)driver_phys_to_virt(phys);
-    page_map_to(get_current_directory(), (uint64_t)cmd_table, phys, KERNEL_PTE_FLAGS);
+
+    if (port->cmd_tables[slot] == NULL) {
+        uint64_t phys = alloc_frames(1);
+        if (phys == 0) return -1;
+        struct hba_cmdt *cmd_table = (struct hba_cmdt *)driver_phys_to_virt(phys);
+        page_map_to(get_current_directory(), (uint64_t)cmd_table, phys, KERNEL_PTE_FLAGS);
+        memset(cmd_table, 0, PAGE_SIZE);
+        port->cmd_tables[slot]    = cmd_table;
+        port->cmd_table_phys[slot] = phys;
+    }
+
+    struct hba_cmdt *cmd_table = port->cmd_tables[slot];
+    uint64_t         phys      = port->cmd_table_phys[slot];
     memset(cmd_table, 0, PAGE_SIZE);
     cmd_header->cmd_table_base       = (uint32_t)(phys & 0xFFFFFFFF);
     cmd_header->cmd_table_base_upper = (uint32_t)(phys >> 32);
@@ -160,10 +170,24 @@ int hba_bind_sbuf(struct hba_cmdh *cmdh, struct hba_cmdt *cmdt, void *buf, uint3
         return -1;
     }
 
-    uint64_t buf_phys = (uint64_t)driver_virt_to_phys((uint64_t)buf);
+    uint64_t buf_phys_drv  = (uint64_t)driver_virt_to_phys((uint64_t)buf);
+    uint64_t cmdt_phys_drv = (uint64_t)driver_virt_to_phys((uint64_t)cmdt);
+    uint64_t buf_phys      = page_virt_to_phys((uint64_t)buf);
+    uint64_t cmdt_phys     = page_virt_to_phys((uint64_t)cmdt);
     if (buf_phys == 0) {
-        write_serial_fmt("AHCI buffer not mapped\n");
+        write_serial_fmt("AHCI buffer not mapped buf=0x%llx buf_drv=0x%llx cmdt=0x%llx cmdt_drv=0x%llx\n",
+                         (uint64_t)buf, buf_phys_drv, (uint64_t)cmdt, cmdt_phys_drv);
         return -1;
+    }
+
+    if (buf_phys != buf_phys_drv || cmdt_phys != cmdt_phys_drv) {
+        write_serial_fmt("AHCI TRACE: phys mismatch buf=0x%llx drv=0x%llx walk=0x%llx cmdt=0x%llx drv=0x%llx walk=0x%llx\n",
+                         (uint64_t)buf, buf_phys_drv, buf_phys, (uint64_t)cmdt, cmdt_phys_drv, cmdt_phys);
+    }
+
+    if (buf_phys == cmdt_phys) {
+        write_serial_fmt("AHCI: buffer/cmd_table physical collision buf=0x%llx phys=0x%llx len=0x%x\n",
+                         (uint64_t)buf, buf_phys, len);
     }
 
     cmdh->prdt_len                   = 1;
@@ -219,7 +243,6 @@ int ahci_init_device(struct hba_port *port) {
     if (hba_bind_sbuf(cmd_header, cmd_table, data, 512) != 0) {
         write_serial_fmt("AHCI: Failed to bind buffer\n");
         free_frame((uint64_t)data_in);
-        free_frame((uint64_t)driver_virt_to_phys((uint64_t)cmd_table));
         return 0;
     }
 
@@ -309,7 +332,6 @@ int ahci_init_device(struct hba_port *port) {
 
     // 清理资源
     free_frame((uint64_t)data_in);
-    free_frame((uint64_t)driver_virt_to_phys((uint64_t)cmd_table));
     return 1;
 
 fail_cleanup:
@@ -318,7 +340,6 @@ fail_cleanup:
         port->device = NULL;
     }
     free_frame((uint64_t)data_in);
-    free_frame((uint64_t)driver_virt_to_phys((uint64_t)cmd_table));
     return 0;
 }
 
@@ -327,20 +348,38 @@ spin_t ahci_operate_lock = SPIN_INIT;
 size_t ahci_read(int drive, uint8_t *buffer, size_t size, size_t lba) {
     spin_lock(&ahci_operate_lock);
     struct hba_device *dev = (struct hba_device *)hbaDevice[drive];
+    if (dev == NULL) {
+        write_serial_fmt("AHCI: read on missing device drive=%d lba=%llu sectors=%llu\n", drive, lba, size);
+        spin_unlock(&ahci_operate_lock);
+        return 0;
+    }
     struct blkio_req   req = {
-          .buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = 0};
+          .buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = 0, .status = -1};
     dev->ops.submit(dev, &req);
     spin_unlock(&ahci_operate_lock);
+    if (req.status != 0) {
+        write_serial_fmt("AHCI: read failed drive=%d lba=%llu sectors=%llu bytes=%llu\n", drive, lba, size, req.len);
+        return 0;
+    }
     return size;
 }
 
 size_t ahci_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     spin_lock(&ahci_operate_lock);
     struct hba_device *dev = (struct hba_device *)hbaDevice[drive];
+    if (dev == NULL) {
+        write_serial_fmt("AHCI: write on missing device drive=%d lba=%llu sectors=%llu\n", drive, lba, size);
+        spin_unlock(&ahci_operate_lock);
+        return 0;
+    }
     struct blkio_req   req = {
-          .buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = BLKIO_WRITE};
+          .buf = (uint64_t)buffer, .lba = lba, .len = size * dev->block_size, .flags = BLKIO_WRITE, .status = -1};
     dev->ops.submit(dev, &req);
     spin_unlock(&ahci_operate_lock);
+    if (req.status != 0) {
+        write_serial_fmt("AHCI: write failed drive=%d lba=%llu sectors=%llu bytes=%llu\n", drive, lba, size, req.len);
+        return 0;
+    }
     return size;
 }
 

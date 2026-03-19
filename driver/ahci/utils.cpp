@@ -41,6 +41,14 @@ int ahci_try_send(struct hba_port *port, int slot)
             sata_read_error(port);
             ahci_log_cmd_failure(port, slot, "task file error");
         } else {
+            uint64_t settle = 100000;
+            while (settle-- > 0) {
+                uint32_t is = port->regs[HBA_RPxIS];
+                if (is & (HBA_PxINTR_DPS | HBA_PxINTR_DHR | HBA_FATAL)) break;
+                asm volatile("pause");
+            }
+            io_mfence();
+            delay_us_hp(10);
             hba_clear_reg(port->regs[HBA_RPxIS]);
             return 1;
         }

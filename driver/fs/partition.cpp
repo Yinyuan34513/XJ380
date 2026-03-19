@@ -10,6 +10,37 @@ partition_t     partitions[MAX_PARTITIONS_NUM];
 size_t          partition_num = 0;
 partition_t    *device_lists[MAX_PARTITIONS_NUM];
 
+static size_t partition_expected_sectors(size_t bytes, size_t sector_size)
+{
+    return PADDING_UP(bytes, sector_size) / sector_size;
+}
+
+static void partition_dump_prefix(const char *name, const uint8_t *buf, size_t bytes)
+{
+    size_t dump_len = bytes > 64 ? 64 : bytes;
+    write_serial_fmt("PART: first %zu bytes of %s:", dump_len, name);
+    for (size_t i = 0; i < dump_len; ++i)
+    {
+        if ((i % 16) == 0) write_serial_string("\nPART:   ");
+        write_serial_fmt("%02x ", buf[i]);
+    }
+    write_serial_string("\n");
+}
+
+static bool partition_read_exact(vfs_node_t device, device_t disk, void *buf, size_t offset, size_t bytes,
+                                 const char *tag)
+{
+    size_t expected = partition_expected_sectors(bytes, disk.sector_size);
+    size_t got      = vfs_read(device, buf, offset, bytes);
+    if (got != expected)
+    {
+        write_serial_fmt("PART: %s short read offset=0x%zx bytes=0x%zx expected_sectors=%zu got=%zu\n", tag, offset,
+                         bytes, expected, got);
+        return false;
+    }
+    return true;
+}
+
 size_t partition_read(int part, uint8_t *buf, size_t number, size_t lba)
 {
     partition_t *partition = device_lists[part];
@@ -38,7 +69,7 @@ bool is_partition_used(struct GPT_DPTE *entry)
 {
     if (entry->starting_lba == 0 || entry->ending_lba == 0) return false;
 
-    const uint8_t *partition_type_guid = entry->unique_partition_guid;
+    const uint8_t *partition_type_guid = entry->partition_type_guid;
     for (int i = 0; i < 16; ++i)
     {
         if (partition_type_guid[i] != 0) return true;
@@ -59,7 +90,8 @@ static bool parse_gpt_partitions(vfs_node_t device, struct GPT_DPT *gpt, device_
     memset(dptes,0,dptes_size);
     if (!dptes) return false;
 
-    if (vfs_read(device, (uint8_t *)dptes, gpt->partition_entry_lba * disk.sector_size, dptes_size) == (size_t)-1)
+    if (!partition_read_exact(device, disk, (uint8_t *)dptes, gpt->partition_entry_lba * disk.sector_size, dptes_size,
+                              "GPT entries"))
     {
         free(dptes);
         return false;
@@ -91,14 +123,14 @@ static bool parse_gpt_partitions(vfs_node_t device, struct GPT_DPT *gpt, device_
     free(dptes);
     return true;
 }
-// 直接尝试从 LBA1 读取 GPT（用于 ISO / raw GPT 映像）
+// Try GPT header directly at LBA1.
 static bool try_gpt_at_lba1(vfs_node_t device, device_t disk, size_t vdisk_id)
 {
     struct GPT_DPT *gpt = (struct GPT_DPT *)malloc(disk.sector_size);
     memset(gpt,0,disk.sector_size);
     if (!gpt) return false;
 
-    if (vfs_read(device, (uint8_t *)gpt, disk.sector_size, disk.sector_size) == VFS_STATUS_FAILED)
+    if (!partition_read_exact(device, disk, (uint8_t *)gpt, disk.sector_size, disk.sector_size, "GPT header"))
     {
         free(gpt);
         return false;
@@ -120,8 +152,25 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
 {
     uint8_t *mbr = (uint8_t *)malloc(disk.sector_size * 4);
     memset(mbr,0,disk.sector_size*4);
-    write_serial_fmt("Y\n");
-    if (vfs_read(device, mbr, 0, disk.sector_size * 4) == (size_t)VFS_STATUS_FAILED) return false;
+    write_serial_fmt("PART: read %s sector_size=%zu size=0x%zx\n", disk.drive_name, disk.sector_size, disk.size);
+    bool read_ok = false;
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        memset(mbr, 0, disk.sector_size * 4);
+        if (partition_read_exact(device, disk, mbr, 0, disk.sector_size * 4, "MBR"))
+        {
+            read_ok = true;
+            write_serial_fmt("PART: MBR read attempt=%d signature=%02x%02x type0=%02x\n", attempt + 1, mbr[0x1FE],
+                             mbr[0x1FF], mbr[0x1BE + 4]);
+            if (mbr[0x1FE] == 0x55 && mbr[0x1FF] == 0xAA) break;
+        }
+        else
+        {
+            write_serial_fmt("PART: retrying %s after failed read attempt=%d\n", disk.drive_name, attempt + 1);
+        }
+        delay_ms_hp(10);
+    }
+    if (!read_ok) return false;
     // for(int i=0;i<disk.sector_size*4;i++)
     // {
     //     if(i%32==0 && i!=0)
@@ -132,6 +181,10 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
     //     write_serial_fmt("0x%x ", mbr[i]);
     // }
     // write_serial_fmt("\n");
+    write_serial_fmt("PART: MBR signature=%02x%02x type0=%02x\n", mbr[0x1FE], mbr[0x1FF], mbr[0x1BE + 4]);
+    if (mbr[0x1FE] != 0x55 || mbr[0x1FF] != 0xAA) {
+        partition_dump_prefix(disk.drive_name, mbr, disk.sector_size);
+    }
     if (mbr[0x1FE] == 0x55 && mbr[0x1FF] == 0xAA)
     {
         uint8_t part_type = mbr[0x1BE + 4];
@@ -139,12 +192,15 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
         {
             struct GPT_DPT *gpt = (struct GPT_DPT *)malloc(disk.sector_size);
             memset(gpt,0,disk.sector_size);
-            if (vfs_read(device, gpt, 1 * disk.sector_size, disk.sector_size) == (size_t)VFS_STATUS_FAILED)
+            if (!partition_read_exact(device, disk, gpt, 1 * disk.sector_size, disk.sector_size, "GPT header"))
             {
                 free(gpt);
                 free(mbr);
                 return false;
             }
+            write_serial_fmt("PART: GPT sig=%.8s rev=0x%x hdr=%u pe_lba=%llu entries=%u entry_size=%u\n",
+                             gpt->signature, gpt->revision, gpt->header_size, gpt->partition_entry_lba,
+                             gpt->num_partition_entries, gpt->size_of_partition_entry);
             if (memcmp(gpt->signature, GPT_HEADER_SIGNATURE, 8) || gpt->num_partition_entries == 0 ||
                 gpt->partition_entry_lba == 0)
             {
@@ -157,7 +213,14 @@ bool parser_block_device(vfs_node_t device, device_t disk, size_t vdisk_id)
             size_t           dptes_size = gpt->num_partition_entries * gpt->size_of_partition_entry;
             struct GPT_DPTE *dptes      = (struct GPT_DPTE *)malloc(dptes_size);
             memset(dptes,0,dptes_size);
-            vfs_read(device, dptes, gpt->partition_entry_lba * disk.sector_size, dptes_size);
+            if (!partition_read_exact(device, disk, dptes, gpt->partition_entry_lba * disk.sector_size, dptes_size,
+                                      "GPT entries"))
+            {
+                free(dptes);
+                free(gpt);
+                free(mbr);
+                return false;
+            }
             for (size_t j = 0; j < gpt->num_partition_entries; j++)
             {
                 struct GPT_DPTE *entry = (struct GPT_DPTE *)((uint8_t *)dptes + j * gpt->size_of_partition_entry);

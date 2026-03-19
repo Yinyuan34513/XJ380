@@ -98,19 +98,19 @@
 #define ATA_WRITE_DMA_EXT          0x35
 #define ATA_WRITE_DMA              0xca
 
-// ATA 状态寄存器 (STS) 位定义
+// ATA 状态寄存器 (STS) 位定�?
 #define ATA_STS_ERR (1 << 0) // Error
 #define ATA_STS_DRQ (1 << 3) // Data Request
 #define ATA_STS_BSY (1 << 7) // Busy
 
-// ATA 错误寄存器 (ERR) 位定义
+// ATA 错误寄存�?(ERR) 位定�?
 #define ATA_ERR_AMNF  (1 << 0) // Address Mark Not Found
 #define ATA_ERR_TKZNF (1 << 1) // Track Zero Not Found
 #define ATA_ERR_ABRT  (1 << 2) // Command Aborted
 #define ATA_ERR_IDNF  (1 << 4) // ID Not Found (LBA out of range)
 #define ATA_ERR_UNC   (1 << 6) // Uncorrectable Data Error
 
-// AHCI 命令寄存器 (PxCMD) 位定义
+// AHCI 命令寄存�?(PxCMD) 位定�?
 #define AHCI_CMD_FR (1 << 14) // FIS Receive Running
 #define AHCI_CMD_CR (1 << 15) // Command Running
 
@@ -126,22 +126,18 @@
 #define IDDEV_OFFLPP          106
 #define IDDEV_OFFCAPABILITIES 49
 
-#define HBA_FIS_SIZE 256
-#define HBA_CLB_SIZE 1024
-
 #define MAX_RETRY        10086
 #define AHCI_MAX_DEVICES 20
 
 #define HBA_PRDTE_BYTE_CNT(cnt) ((cnt & 0x3FFFFF) | 0x1)
 
-// AHCI 能力位
+// AHCI 能力�?
 #define HBA_CAP_NP   0x1f
 #define HBA_CAP_SXS  (1 << 5)
 #define HBA_CAP_SNTF (1 << 29)
 #define HBA_CAP_NCS  (0x1f << 8)
 #define HBA_CAP_SSS  (1 << 27)
 #define HBA_CAP_S64A (1u << 31)
-
 // AHCI 扩展能力 / BIOS-OS handoff
 #define HBA_CAP2_BOH (1 << 0)
 #define HBA_BOHC_BOS  (1 << 0)
@@ -203,6 +199,7 @@ struct blkio_req {
     uint64_t lba;
     uint64_t len;
     uint64_t flags;
+    int32_t  status;
 };
 
 struct hba_cmdh {
@@ -276,6 +273,8 @@ struct hba_port {
     uint32_t               ssts;
     struct hba_cmdh       *cmdlst;
     struct hba_cmd_context cmdctx;
+    struct hba_cmdt       *cmd_tables[32];
+    uint64_t               cmd_table_phys[32];
     void                  *fis;
     struct hba_device     *device;
     struct ahci_hba       *hba;
