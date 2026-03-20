@@ -84,12 +84,16 @@ int main(int argc, char *argv[], char *envp[])
     print_to_console("XINGJI SpaceTerminal for XJ380");
     print_to_console("Copyright(C) XINGJI Interactive Software 2017-2026 All rights reserved.");
     paint_arrow_sign(2, 40);
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(true);
     xapi_RefreshWindow(handle);
 
     while (1)
     {
         // 主循环中检查并刷新缓冲区
         if (p_chbuffer) { flush_buffer(); }
+        update_terminal_cursor_blink(16);
+        xapi_Sleep(16);
         __asm__ __volatile__("pause");
     }
 }
