@@ -147,7 +147,9 @@ void kill_proc0(pcb_t pcb)
     char *cmdline = pcb->cmdline;
     void *elf_file = pcb->elf_file;
     char **envp = pcb->envp;
-    const char *name = pcb->name;
+    char name[sizeof(pcb->name)];
+    memset(name, 0, sizeof(name));
+    strncpy(name, pcb->name, sizeof(name) - 1);
     int pid = pcb->pid;
     bool vfork = pcb->vfork;
     page_directory_t *pagedir = pcb->vfork ? NULL : pcb->pagedir;
@@ -157,11 +159,11 @@ void kill_proc0(pcb_t pcb)
     lock_queue *ipc_queue = pcb->ipc_queue;
     lock_queue *virt_queue = pcb->virt_queue;
 
+    lazy_free(pcb);
+
     pcb->file_open = NULL;
     pcb->ipc_queue = NULL;
     pcb->virt_queue = NULL;
-
-    lazy_free(pcb);
 
     // 现在销毁队列
     if (file_open) queue_destroy(file_open);
@@ -171,10 +173,10 @@ void kill_proc0(pcb_t pcb)
     free(cmdline);
     free(elf_file);
     if (envp) free_envp(envp);
+    free(pcb);
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", name, pid,
                      vfork ? "true" : "false");
     if (pagedir) free_page_directory(pagedir);
-    free(pcb);
 }
 
 void kill_thread(tcb_t task)
