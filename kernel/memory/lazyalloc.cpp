@@ -159,6 +159,7 @@ void lazy_infoalloc(pcb_t process, uint64_t vaddr, size_t length, uint64_t page_
 }
 
 void lazy_free(pcb_t process) {
+    if (process == NULL || process->virt_queue == NULL) return;
     if (process->virt_queue->size > 0) {
     refree_virt:
         mm_virtual_page_t *virt_page = NULL;
