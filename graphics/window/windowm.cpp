@@ -138,12 +138,13 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
                  width + 24, height + 47, NoEdgeWindowSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+    int refresh_bx = getBX(sht, new_window->w_sheet);
+    int refresh_by = getBY(sht, new_window->w_sheet);
 
     window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
     window_create_offest_xy += 32;
 
-    refresh_part_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
-        width + 24 + window_create_offest_xy, height + 52 + window_create_offest_xy);
+    refresh_part_sheet(sht, refresh_bx, refresh_by, refresh_bx + width + 24, refresh_by + height + 47);
     WindowIsCreating = false;
 }
 
@@ -193,6 +194,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
                  width + 24, height + 47, MovableSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+    int refresh_bx = getBX(sht, new_window->w_sheet);
+    int refresh_by = getBY(sht, new_window->w_sheet);
 
     window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
     window_create_offest_xy += 32;
@@ -222,8 +225,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     free(top);
     free(lft);
 
-    refresh_part_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
-        width + 24 + window_create_offest_xy, height + 52 + window_create_offest_xy);
+    refresh_part_sheet(sht, refresh_bx, refresh_by, refresh_bx + width + 24, refresh_by + height + 47);
 
     register_task_dock(new_window);
 

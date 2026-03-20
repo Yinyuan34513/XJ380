@@ -438,8 +438,8 @@ int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x1;
     int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y1;
-    int            ex           = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x2;
-    int            ey           = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y2;
+    int            ex           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x2;
+    int            ey           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y2;
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
