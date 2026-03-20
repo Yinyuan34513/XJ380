@@ -427,6 +427,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 }
 
 // 这个lift_sheet是将图层提升到倒数第三个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
+// don't touch this
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (!csheet) return;
