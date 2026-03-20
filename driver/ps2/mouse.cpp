@@ -281,7 +281,6 @@ void process_mouse_button()
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    //lift_sheet(sht_img, mouse_ct_sheet_img);//保证鼠标置顶，但好像会导致鼠标定时炸掉
     refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_ct_sheet_img),
                        tby + getYsize(sht_img, mouse_ct_sheet_img));
     refresh_part_sheet(sht_img, getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),

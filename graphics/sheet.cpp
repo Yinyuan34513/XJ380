@@ -426,6 +426,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     SheetIsCreating = false;
 }
 
+// 这个lift_sheet是将图层提升到倒数第三个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (!csheet) return;
@@ -435,29 +436,19 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
     }
 
     SheetIsCreating  = true;
-    
-    if (csheet->next == NULL) {
-        SheetIsCreating = false;
-        return;
+    SHEET *front_p = csheet;
+    front_p->next->front = front_p->front;
+    front_p->front->next = front_p->next;
+    SHEET *front_p2      = sht->start;
+    for (int i = 0; i < sht->sheet_num - 3; i++)
+    {
+        front_p2 = front_p2->next; // 寻找最后一个
     }
-    
-    if (csheet->front == NULL) {
 
-        sht->start = csheet->next;
-        csheet->next->front = NULL;
-    } else {
-        csheet->front->next = csheet->next;
-        csheet->next->front = csheet->front;
-    }
-    
-    SHEET *last_sheet = sht->start;
-    while (last_sheet->next != NULL) {
-        last_sheet = last_sheet->next;
-    }
-    
-    last_sheet->next = csheet;
-    csheet->front = last_sheet;
-    csheet->next = NULL;
+    front_p->next        = front_p2->next;
+    front_p->next->front = front_p;
+    front_p2->next       = front_p;
+    front_p->front       = front_p2;
 
     SheetIsCreating = false;
 }
