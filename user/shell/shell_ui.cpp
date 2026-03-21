@@ -3,8 +3,8 @@
 #include "gh_sign.h"
 
 #define CALC_FONT_WIDTH(str) ((strlen(str) - 1) * 10)
-#define TERMINAL_CURSOR_WIDTH 2
-#define TERMINAL_CURSOR_HEIGHT 14
+#define TERMINAL_CURSOR_WIDTH 8
+#define TERMINAL_CURSOR_HEIGHT 16
 #define TERMINAL_CURSOR_BLINK_MS 500
 
 char arrow_head[19][12] = {
