@@ -8,6 +8,7 @@ typedef struct
 {
     MEMORY_MAP MemoryMap;
 
+    uint64_t FADT;
     uint64_t MADT;
     uint64_t HPET;
     uint64_t MCFG;

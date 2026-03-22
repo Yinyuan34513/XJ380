@@ -22,6 +22,7 @@
 #include <nvme/nvme.h>
 #include <pci/pci.h>
 #include <pipe.h>
+#include <power.h>
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
@@ -45,8 +46,6 @@ extern XSK_SMP_INFO *xsi;
 size_t               tid;
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
-EFI_SYSTEM_TABLE        *ST;
-BOOT_CONFIG             *BC;
 uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
@@ -55,31 +54,6 @@ extern spin_t            fb_print_lock;
 extern bool allow_to_flush;
 
 extern UserInfo *current_user;
-
-void test_task()
-{
-    uint64_t ret;
-    uint64_t syscall_number = 1145;
-    uint64_t arg1;
-    uint64_t arg2;
-    uint64_t arg3;
-    uint64_t arg4;
-    uint64_t arg5;
-    uint64_t arg6;
-    __asm__ __volatile__("movq %2, %%rdi\n\t"
-                         "movq %3, %%rsi\n\t"
-                         "movq %4, %%rdx\n\t"
-                         "movq %5, %%r10\n\t"
-                         "movq %6, %%r8\n\t"
-                         "movq %7, %%r9\n\t"
-                         "syscall\n\t"
-                         : "=a"(ret)
-                         : "a"(syscall_number), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5), "r"(arg6)
-                         : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
-
-    while (1)
-        ;
-}
 
 void init_cpu()
 {
@@ -401,13 +375,19 @@ extern size_t   now_tid;
 extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
+
+EFI_SYSTEM_TABLE *EFI_ST;
+BOOT_CONFIG *EFI_BC;
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
-    (void)SystemTable; // 暂时不用
     no_interrupt = true;
     disable_intr();
     disable_scheduler();
+
+    EFI_ST = &SystemTable;
+    EFI_BC = &BootConfig;
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution), 7, {0xe6, 0xe6, 0xe6}); // 开机进度条
 

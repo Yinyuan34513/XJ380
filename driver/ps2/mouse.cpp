@@ -8,6 +8,8 @@
 #include <ps2/mouse.h>
 #include <rtc.h>
 #include <syscall/syscall.h>
+#include <efi/boot.h>
+#include <power.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -32,6 +34,9 @@ extern bool logo_menu_is_open;
 extern bool allow_to_flush;
 
 static volatile bool desktop_refresh_pending = false;
+
+extern EFI_SYSTEM_TABLE *EFI_ST;
+extern BOOT_CONFIG *EFI_BC;
 
 void process_mouse_button()
 {
@@ -193,6 +198,7 @@ void process_mouse_button()
                      logo_menu_is_open)
             {
                 // 关机
+                power_shutdown(EFI_ST, EFI_BC);
             }
             else if (tbx > sht_img->scrx * 0.1875 && tby > 50 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 72 &&
                      logo_menu_is_open)
