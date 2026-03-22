@@ -139,6 +139,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         case SYS_GETTID:
             regs->rax = get_current_task()->tid;
             break;
+        case SYS_CLOCK_GETTIME:
+            regs->rax = (uint64_t)sys_clock_gettime(regs->rdi, (struct timespec *)regs->rsi, 0, 0, 0, 0, regs);
+            break;
         // case SYS_WAIT4:
         //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
         //     break;
