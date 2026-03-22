@@ -314,6 +314,8 @@ void change_clock_hour_offset(int value)
     draw_background();
 }
 
+char background_file_path[256];
+
 char *get_background_file_path()
 {
     UserInfo usif;
@@ -326,8 +328,9 @@ char *get_background_file_path()
     XFILE *f = xapi_OpenFile(runfile_path);
     if (!f) return NULL;
     SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
+    strcpy(background_file_path, sdff->BackgroundFilePath);
 
     xapi_CloseFile(f);
 
-    return sdff->BackgroundFilePath;
+    return background_file_path;
 }

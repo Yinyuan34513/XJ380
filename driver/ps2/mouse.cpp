@@ -31,6 +31,8 @@ extern bool logo_menu_just_born;
 extern bool logo_menu_is_open;
 extern bool allow_to_flush;
 
+static volatile bool desktop_refresh_pending = false;
+
 void process_mouse_button()
 {
     if (!allow_to_flush) return;
@@ -196,8 +198,7 @@ void process_mouse_button()
                      logo_menu_is_open)
             {
                 // 刷新
-                init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
-                refresh_sheet(sht_img);
+                desktop_refresh_pending = true;
             }
         }
         close_menu(current_window, tbx, tby);
@@ -338,6 +339,13 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 
 void process_mouse_info()
 {
+    if (desktop_refresh_pending)
+    {
+        desktop_refresh_pending = false;
+        init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
+        refresh_sheet(sht_img);
+    }
+
     if (ms_dec.left)
     {
         if (!ms_dec.win_move_lock)
