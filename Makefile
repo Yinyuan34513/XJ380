@@ -14,7 +14,7 @@ DEBUG_FLAG = -s -S
 endif
 
 ifeq ($(SUDO), 1)
-SUDO_CMD = sudo -E env DISPLAY=$DISPLAY XAUTHORITY=$XAUTHORITY
+SUDO_CMD = sudo -E env DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY)
 endif
 
 ifeq ($(KVM), 1)
@@ -26,7 +26,12 @@ endif
 BUILD_DIR := out
 KMOD_DIR := kmod
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
+# QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
+# not an X11 DISPLAY string like ":0".
+# Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
+# via SUDO_CMD when needed.
+DISPLAY_BACKEND ?= gtk
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 

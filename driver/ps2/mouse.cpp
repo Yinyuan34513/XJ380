@@ -700,12 +700,18 @@ void mouse_init()
     // 14. 初始化状态变量
     mouse_x              = (get_hor() - 16) / 2;
     mouse_y              = (get_ver() - 28 - 29) / 2;
-    ms_dec.phase         = 0;
+    // 所有初始化命令的 ACK 都已经在 mouse_init() 内同步读走了，
+    // 这里应当直接进入首字节等待状态，否则运行期数据包会被一直丢掉。
+    ms_dec.phase         = 1;
     ms_dec.win_move_lock = false;
     ms_dec.sht_now       = NULL;
     ms_dec.need_flush    = false;
     ms_dec.first_click   = false;
     ms_dec.double_click  = false;
+    ms_dec.left          = false;
+    ms_dec.right         = false;
+    ms_dec.center        = false;
+    ms_dec.scroll        = 0;
 
     // 15. 启用中断
     enable_intr();
