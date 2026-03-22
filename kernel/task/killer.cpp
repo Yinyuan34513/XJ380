@@ -29,11 +29,18 @@ void check_group(pcb_t group)
         }
     }
 
-    if (group->thread_queue == NULL || group->thread_queue->size == 0) return;
+    if (group->thread_queue == NULL) return;
+
+    spin_lock(&group->thread_queue->lock);
+    if (group->thread_queue->size == 0)
+    {
+        spin_unlock(&group->thread_queue->lock);
+        return;
+    }
 
     lock_node *front_p    = group->thread_queue->head;
     bool       group_dead = true;
-    for (int i = 0; i < group->thread_queue->size && front_p != NULL; i++)
+    for (; front_p != NULL; front_p = front_p->next)
     {
         tcb_t thread = (tcb_t)front_p->data;
         if (!is_thread_dead(thread))
@@ -44,8 +51,8 @@ void check_group(pcb_t group)
                 group_dead = false;
             }
         }
-        front_p = front_p->next;
     }
+    spin_unlock(&group->thread_queue->lock);
 
     if (group_dead)
     {

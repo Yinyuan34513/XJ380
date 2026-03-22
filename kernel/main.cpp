@@ -316,12 +316,23 @@ void desktop_flusher()
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 13 / 16;
 
-    tw_data           = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    tw_data = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    if (tw_data == NULL)
+    {
+        write_serial_string("timer widget allocation failed\n");
+        desktop_done = true;
+        goto skip_timer_widget_init;
+    }
+    memset(tw_data, 0, sizeof(TimerWidgetsData));
     tw_data->sht      = &shtinf;
     tw_data->ct_sheet = dock_ct_sheet;
     tw_data->scdx     = scdx;
+    time_read(&tw_data->time);
+    tw_data->old_time = tw_data->time;
 
     desktop_done = true;
+
+skip_timer_widget_init:
 
     delay_s_hp(1);
     
