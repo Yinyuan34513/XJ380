@@ -4,6 +4,7 @@
 
 bool first_click = false;
 bool double_click = false;
+int double_click_file_index = -1;
 UINT64 clicktime_recorder = 0;
 int last_click_file_index = -1;
 
@@ -75,11 +76,13 @@ void register_click(int x, int y)
     if (click_on_file && first_click && current_time - clicktime_recorder < 2 && current_file_index == last_click_file_index)
     {
         double_click = true;
+        double_click_file_index = current_file_index;
         first_click = false;
     }
     else
     {
         double_click = false;
+        double_click_file_index = -1;
         first_click = click_on_file;
         clicktime_recorder = click_on_file ? current_time : 0;
     }
@@ -122,8 +125,18 @@ void register_click(int x, int y)
 
     if (click_on_file)
     {
+        if (double_click)
+        {
+            choosing_history = choosing_index;
+            choosing_index = current_visible_index;
+            return;
+        }
+
         choosing_history = choosing_index;
         choosing_index = current_visible_index;
-        need_paint = true;
+        if (choosing_history != choosing_index)
+        {
+            refresh_choose_change(choosing_history, choosing_index);
+        }
     }
 }

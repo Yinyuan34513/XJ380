@@ -16,6 +16,7 @@ extern char current_path[1024];
 extern FILE_TYPEINFO_INDEX file_ti_index[2048];
 
 extern bool double_click;
+extern int double_click_file_index;
 
 extern int click_x;
 extern int click_y;
@@ -27,6 +28,7 @@ extern int path_r;
 extern bool need_duopage;
 extern int file_count_base;
 extern int file_count;
+extern DirNode file_dir_cache[256];
 
 extern int choosing_index;
 
@@ -37,6 +39,8 @@ extern bool yicixing_lock;
 
 void paint_fm_back();
 void paint_dir(char *path);
+void refresh_fm_part(int x1, int y1, int x2, int y2);
+void refresh_choose_change(int old_visible_index, int new_visible_index);
 bool get_file_type(char *name, char *type);
 void register_click(int x, int y);
 void cat_path(char *folder_name);
