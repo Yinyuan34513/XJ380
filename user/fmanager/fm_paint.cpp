@@ -108,11 +108,11 @@ void paint_dir(char *path)
     memset(fdir, 0, sizeof(DirNode) * 256);
     xapi_DrawRect(handle, 0, 0, FMR_X - 1, FMR_Y - 1, 0xffffffff, true);
     xapi_SearchFile(path, &count, fdir);
+    file_count = (count == 404) ? 0 : (int)count;
 
     if (count > 12)
     {
         need_duopage = true;
-        file_count = count;
     }
     else 
     {

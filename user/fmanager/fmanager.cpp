@@ -77,15 +77,18 @@ int main(int argc, char *argv[], char *envp[])
         if (double_click && !register_lock)
         {
             double_click = false;
-            // Double Click!
-            // 搜索点到了哪个文件夹/文件
-            // y_begin = 148 + 24 * index
+
             int click_index = (click_y - 148) / 24 + file_count_base;
             uint32_t count = 0;
             DirNode  fdir[256];
             memset(fdir, 0, sizeof(DirNode) * 256);
             xapi_SearchFile(current_path, &count, fdir);
             if (count == 0 || count == 404)
+            {
+                paint_dir(current_path);
+                continue;
+            }
+            if (click_y < 148 || click_index < 0 || click_index >= (int)count)
             {
                 paint_dir(current_path);
                 continue;

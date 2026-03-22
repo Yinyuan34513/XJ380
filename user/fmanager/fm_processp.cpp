@@ -5,6 +5,7 @@
 bool first_click = false;
 bool double_click = false;
 UINT64 clicktime_recorder = 0;
+int last_click_file_index = -1;
 
 int click_x = 0;
 int click_y = 0;
@@ -16,6 +17,30 @@ volatile bool register_lock = false;
 bool yicixing_lock = false;
 
 bool need_paint = false;
+
+static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_index)
+{
+    if (x < 4 || x > FMR_X / 10 * 8 || y < 148)
+    {
+        return false;
+    }
+
+    int current_visible_index = (y - 148) / 24;
+    int visible_count = file_count - file_count_base;
+    if (visible_count > 12)
+    {
+        visible_count = 12;
+    }
+
+    if (visible_count <= 0 || current_visible_index < 0 || current_visible_index >= visible_count)
+    {
+        return false;
+    }
+
+    *visible_index = current_visible_index;
+    *file_index = file_count_base + current_visible_index;
+    return true;
+}
 
 void reg_lock()
 {
@@ -41,16 +66,25 @@ void register_click(int x, int y)
     
     click_x = x;
     click_y = y;
-    if (first_click && xapi_GetTime() - clicktime_recorder < 2 && choosing_index == choosing_history)
+
+    int  current_file_index = -1;
+    int  current_visible_index = -1;
+    bool click_on_file = get_clicked_file_index(x, y, &current_file_index, &current_visible_index);
+    UINT64 current_time = xapi_GetTime();
+
+    if (click_on_file && first_click && current_time - clicktime_recorder < 2 && current_file_index == last_click_file_index)
     {
         double_click = true;
         first_click = false;
     }
     else
     {
-        first_click = true;
-        clicktime_recorder = xapi_GetTime();
+        double_click = false;
+        first_click = click_on_file;
+        clicktime_recorder = click_on_file ? current_time : 0;
     }
+
+    last_click_file_index = click_on_file ? current_file_index : -1;
 
     if (x >= 5 && x <= 23 && y >= 4 && y <= 22)
     {
@@ -86,11 +120,10 @@ void register_click(int x, int y)
         }
     }
 
-    if (y >= 148)
+    if (click_on_file)
     {
-        int index = (y - 148) / 24;
         choosing_history = choosing_index;
-        choosing_index = index;
+        choosing_index = current_visible_index;
         need_paint = true;
     }
 }
