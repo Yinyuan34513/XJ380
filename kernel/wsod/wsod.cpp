@@ -123,5 +123,6 @@ void wsod_debug(struct X64_REGS *regs, uint64_t error_code)
 
 void default_isr(struct X64_REGS *regs, uint64_t error_code)
 {
-    // 啥也没有。
+    // 啥也没有。(*最好是)
+    send_eoi();
 }

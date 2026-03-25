@@ -220,6 +220,7 @@ void init_apic(uint64_t MADT0)
         {
             MadtIOApic *ioapic  = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
             ApicInfo.ioApicAddr = (uint64_t)ioapic->address + 0xffff800000000000;
+            break;
         }
         current += (uint64_t)header->length;
     }
