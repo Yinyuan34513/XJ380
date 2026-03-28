@@ -143,7 +143,7 @@ vdisk: all
 # You must execute the following command with sudo privileges, that's not good...
 	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system

@@ -60,21 +60,25 @@ uint64_t page_virt_to_phys(uint64_t va)
 
     uint64_t pml4e = pml4[pml4_idx];
     if (!(pml4e & PTE_PRESENT)) return 0; // not mapped
-    uint64_t *pdpt = (uint64_t *)phys_to_virt(pml4e & PAGE_MASK);
+    uint64_t *pdpt = (uint64_t *)phys_to_virt(pml4e & PTE_ADDR_MASK);
 
     uint64_t pdpte = pdpt[pdpt_idx];
     if (!(pdpte & PTE_PRESENT)) return 0;
-    if (pdpte & PTE_HUGE) { return (pdpte & ~((1ULL << 30) - 1)) + (va & ((1ULL << 30) - 1)); }
-    uint64_t *pd = (uint64_t *)phys_to_virt(pdpte & PAGE_MASK);
+    if (pdpte & PTE_HUGE) {
+        return (pdpte & (PTE_ADDR_MASK & ~((1ULL << 30) - 1))) + (va & ((1ULL << 30) - 1));
+    }
+    uint64_t *pd = (uint64_t *)phys_to_virt(pdpte & PTE_ADDR_MASK);
 
     uint64_t pde = pd[pd_idx];
     if (!(pde & PTE_PRESENT)) return 0;
-    if (pde & PTE_HUGE) { return (pde & ~((1ULL << 21) - 1)) + (va & ((1ULL << 21) - 1)); }
-    uint64_t *pt = (uint64_t *)phys_to_virt(pde & PAGE_MASK);
+    if (pde & PTE_HUGE) {
+        return (pde & (PTE_ADDR_MASK & ~((1ULL << 21) - 1))) + (va & ((1ULL << 21) - 1));
+    }
+    uint64_t *pt = (uint64_t *)phys_to_virt(pde & PTE_ADDR_MASK);
 
     uint64_t pte = pt[pt_idx];
     if (!(pte & PTE_PRESENT)) return 0;
 
-    uint64_t pa = (pte & PAGE_MASK) + offset;
+    uint64_t pa = (pte & PTE_ADDR_MASK) + offset;
     return pa;
 }

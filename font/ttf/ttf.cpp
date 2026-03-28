@@ -19,6 +19,73 @@ extern stbtt_fontinfo font_c;
 extern char          *ttf_buffer_m;
 extern stbtt_fontinfo font_m;
 
+static char *ttf_alloc_file_buffer(size_t bytes)
+{
+    size_t pages = PADDING_UP(bytes, PAGE_SIZE) / PAGE_SIZE;
+    uint64_t phys = alloc_frames(pages);
+    if (phys == 0) {
+        return NULL;
+    }
+    return (char *)phys_to_virt(phys);
+}
+
+static void ttf_free_file_buffer(char *buffer, size_t bytes)
+{
+    if (buffer == NULL || bytes == 0) {
+        return;
+    }
+    free_frames((uint64_t)virt_to_phys((uint64_t)buffer), PADDING_UP(bytes, PAGE_SIZE) / PAGE_SIZE);
+}
+
+static bool ttf_load_font_file(const char *path, char **buffer_out, stbtt_fontinfo *font_out)
+{
+    vfs_node_t v = vfs_open(path);
+    if (!v)
+    {
+        write_serial_fmt("init_ttf: cannot open '%s'\n", path);
+        return false;
+    }
+
+    size_t size = v->size;
+    char  *buffer = ttf_alloc_file_buffer(size);
+    uint64_t read_begin = nanoTime();
+    if (!buffer)
+    {
+        write_serial_fmt("init_ttf: cannot allocate '%s' (%u bytes)\n", path, (unsigned)size);
+        vfs_close(v);
+        return false;
+    }
+
+    size_t got = vfs_read(v, (uint8_t *)buffer, 0, size);
+    uint64_t read_end = nanoTime();
+    vfs_close(v);
+    if (got != size)
+    {
+        write_serial_fmt("init_ttf: short read '%s' expected=%u got=%u\n", path, (unsigned)size, (unsigned)got);
+        ttf_free_file_buffer(buffer, size);
+        return false;
+    }
+
+    int      font_offset = stbtt_GetFontOffsetForIndex((uint8_t *)buffer, 0);
+    uint64_t init_begin  = nanoTime();
+    bool     ok          = stbtt_InitFont(font_out, (uint8_t *)buffer, font_offset);
+    uint64_t init_end    = nanoTime();
+    if (!ok)
+    {
+        write_serial_fmt("init_ttf: invalid font '%s' magic=%02x%02x%02x%02x\n", path, (uint8_t)buffer[0],
+                         (uint8_t)buffer[1], (uint8_t)buffer[2], (uint8_t)buffer[3]);
+        ttf_free_file_buffer(buffer, size);
+        return false;
+    }
+
+    write_serial_fmt("TTF: loaded '%s' size=%u read=%llums init=%llums magic=%02x%02x%02x%02x\n", path,
+                     (unsigned)size, (read_end - read_begin) / 1000000ULL, (init_end - init_begin) / 1000000ULL,
+                     (uint8_t)buffer[0], (uint8_t)buffer[1], (uint8_t)buffer[2], (uint8_t)buffer[3]);
+
+    *buffer_out = buffer;
+    return true;
+}
+
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
@@ -405,65 +472,14 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
 void init_ttf()
 {
     write_serial_string("Initializing Font...\n");
-    // delay_s(10);
-
-    // 不等宽字体
-    vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
-    if (!v)
-    {
-        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380F.ttf");
+    if (!ttf_load_font_file("/system/font/XJ380F.ttf", &ttf_buffer, &font)) {
         return;
     }
-    ttf_buffer = (char *)malloc(v->size);
-    if (!ttf_buffer)
-    {
-        write_serial_string("Cannot allocate memory for XJ380F.ttf\n");
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Reading Font - XJ380F (1/2)...\n");
-    vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
-    if (*(uint64_t *)ttf_buffer == 0)
-    {
-        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380F.ttf", (unsigned)v->size);
-        free(ttf_buffer);
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Loading Font - XJ380F (1/2)...\n");
-    stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
     set_size(16);
-
-    vfs_close(v);
-
-    // 等宽字体
-    v = vfs_open("/system/font/XJ380C.ttf");
-    if (!v)
-    {
-        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380C.ttf");
+    if (!ttf_load_font_file("/system/font/XJ380C.ttf", &ttf_buffer_c, &font_c)) {
         return;
     }
-    ttf_buffer_c = (char *)malloc(v->size);
-    if (!ttf_buffer_c)
-    {
-        write_serial_string("Cannot allocate memory for XJ380C.ttf\n");
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Reading Font - XJ380C (2/2)...\n");
-    vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
-    if (*(uint64_t *)ttf_buffer_c == 0)
-    {
-        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380C.ttf", (unsigned)v->size);
-        free(ttf_buffer_c);
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Loading Font - XJ380C (2/2)...\n");
-    stbtt_InitFont(&font_c, (uint8_t *)ttf_buffer_c, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer_c, 0));
     set_size(16);
-
-    vfs_close(v);
 
     write_serial_string("TTF Initialize Success.\n");
 }

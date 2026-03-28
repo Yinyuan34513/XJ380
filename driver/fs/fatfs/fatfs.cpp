@@ -7,6 +7,8 @@
 
 static FATFS volume[10];
 static int   fatfs_id = 0;
+static const size_t FATFS_FASTSEEK_MIN_BYTES = 0x9000UL;
+extern bool ahci_is_qemu_environment();
 typedef struct file {
     char *path;
     void *handle;
@@ -35,6 +37,43 @@ static inline void fatfs_lock() {
 
 static inline void fatfs_unlock() {
     mutex_unlock(&fatfs_operate_lock);
+}
+
+static u32 *fatfs_try_build_clmt(FIL *fp, size_t request_size) {
+    if (!ahci_is_qemu_environment()) {
+        return NULL;
+    }
+
+    if (fp == NULL || fp->obj.fs == NULL || fp->obj.sclust < 2 || request_size < FATFS_FASTSEEK_MIN_BYTES) {
+        return NULL;
+    }
+
+    size_t bytes_per_cluster = (size_t)fp->obj.fs->csize * FF_MAX_SS;
+    if (bytes_per_cluster == 0) {
+        return NULL;
+    }
+
+    size_t cluster_count = ((size_t)fp->obj.objsize + bytes_per_cluster - 1) / bytes_per_cluster;
+    if (cluster_count == 0) {
+        cluster_count = 1;
+    }
+
+    if (cluster_count > (((size_t)-1) - 4) / 2) {
+        return NULL;
+    }
+
+    size_t table_items = cluster_count * 2 + 4;
+    if (table_items > 0xFFFFFFFFu) {
+        return NULL;
+    }
+
+    u32 *clmt = (u32 *)malloc(table_items * sizeof(u32));
+    if (clmt == NULL) {
+        return NULL;
+    }
+
+    clmt[0] = (u32)table_items;
+    return clmt;
 }
 
 int fatfs_mkdir(void *parent, const char *name, vfs_node_t node) {
@@ -81,15 +120,46 @@ size_t fatfs_readfile(file_t file, void *addr, size_t offset, size_t size) {
         fatfs_unlock();
         return -1;
     }
-    FRESULT res;
-    res = f_lseek((FIL*)file->handle, offset);
-    if (res != FR_OK) 
+    FIL    *fp        = (FIL *)file->handle;
+    FRESULT res       = FR_OK;
+    u32    *temp_clmt = NULL;
+
+    if (fp == NULL) 
     {
         fatfs_unlock();
         return -1;
     }
+
+    if (fp->cltbl == NULL) {
+        temp_clmt = fatfs_try_build_clmt(fp, size);
+        if (temp_clmt != NULL) {
+            fp->cltbl = temp_clmt;
+            res       = f_lseek(fp, CREATE_LINKMAP);
+            if (res != FR_OK) {
+                fp->cltbl = NULL;
+                free(temp_clmt);
+                temp_clmt = NULL;
+                res       = FR_OK;
+            }
+        }
+    }
+
+    res = f_lseek(fp, offset);
+    if (res != FR_OK) 
+    {
+        if (temp_clmt != NULL) {
+            fp->cltbl = NULL;
+            free(temp_clmt);
+        }
+        fatfs_unlock();
+        return -1;
+    }
     uint32_t n;
-    res = f_read((FIL*)file->handle, addr, size, &n);
+    res = f_read(fp, addr, size, &n);
+    if (temp_clmt != NULL) {
+        fp->cltbl = NULL;
+        free(temp_clmt);
+    }
     if (res != FR_OK) 
     {
         fatfs_unlock();

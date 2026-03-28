@@ -476,7 +476,7 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     }
 
     // 获取PDPT表
-    page_table_t      *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PAGE_MASK);
+    page_table_t      *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pdpt_entry = pdpt_table->entries[pdp_index];
 
     // 检查PDPT条目是否存在
@@ -485,12 +485,12 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     // 如果PDPT条目指向的是1GB大页
     if (ARCH_PT_IS_LARGE(pdpt_entry.value))
     {
-        uint64_t base_addr = pdpt_entry.value & ~((1UL << 30) - 1);
+        uint64_t base_addr = pdpt_entry.value & (PTE_ADDR_MASK & ~((1ULL << 30) - 1));
         return base_addr + (virtual_address & ((1UL << 30) - 1));
     }
 
     // 获取PD表
-    page_table_t      *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PAGE_MASK);
+    page_table_t      *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pd_entry = pd_table->entries[pd_index];
 
     // 检查PD条目是否存在
@@ -499,19 +499,19 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     // 如果PD条目指向的是2MB大页
     if (ARCH_PT_IS_LARGE(pd_entry.value))
     {
-        uint64_t base_addr = pd_entry.value & ~((1UL << 21) - 1);
+        uint64_t base_addr = pd_entry.value & (PTE_ADDR_MASK & ~((1ULL << 21) - 1));
         return base_addr + (virtual_address & ((1UL << 21) - 1));
     }
 
     // 获取PT表
-    page_table_t      *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PAGE_MASK);
+    page_table_t      *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pt_entry = pt_table->entries[pt_index];
 
     // 检查PT条目是否存在
     if (!(pt_entry.value & PTE_PRESENT)) { return 0; }
 
     // 返回4KB页的物理地址
-    return (pt_entry.value & PAGE_MASK) + (virtual_address & ~PAGE_MASK);
+    return (pt_entry.value & PTE_ADDR_MASK) + (virtual_address & ~PAGE_MASK);
 }
 
 void switch_xsk_page_directory()

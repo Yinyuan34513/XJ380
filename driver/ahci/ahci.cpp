@@ -7,6 +7,7 @@ void              *op_buffer;
 static uint32_t    cdb_size[] = {SCSI_CDB12, SCSI_CDB16, 0, 0};
 struct hba_device *hbaDevice[AHCI_MAX_DEVICES];
 static bool        ahci_running_on_qemu = false;
+static bool        ahci_accel_enabled   = false;
 
 static bool ahci_port_link_ready(uint32_t ssts) {
     return HBA_PXSSTS_DET(ssts) == 0x3 && HBA_PXSSTS_IPM(ssts) == 0x1;
@@ -55,6 +56,19 @@ static void ahci_bios_handoff(struct ahci_hba *hba) {
 
 void ahci_set_environment(bool is_qemu) {
     ahci_running_on_qemu = is_qemu;
+}
+
+bool ahci_is_qemu_environment() {
+    return ahci_running_on_qemu;
+}
+
+void ahci_set_accel(bool enabled) {
+    ahci_accel_enabled = enabled;
+    write_serial_fmt("AHCI: acceleration %s\n", enabled ? "enabled" : "disabled");
+}
+
+bool ahci_get_accel() {
+    return ahci_accel_enabled;
 }
 
 void achi_register_ops(struct hba_port *port) {
@@ -181,8 +195,8 @@ int hba_bind_sbuf(struct hba_cmdh *cmdh, struct hba_cmdt *cmdt, void *buf, uint3
     }
 
     if (buf_phys != buf_phys_drv || cmdt_phys != cmdt_phys_drv) {
-        write_serial_fmt("AHCI TRACE: phys mismatch buf=0x%llx drv=0x%llx walk=0x%llx cmdt=0x%llx drv=0x%llx walk=0x%llx\n",
-                         (uint64_t)buf, buf_phys_drv, buf_phys, (uint64_t)cmdt, cmdt_phys_drv, cmdt_phys);
+        // write_serial_fmt("AHCI TRACE: phys mismatch buf=0x%llx drv=0x%llx walk=0x%llx cmdt=0x%llx drv=0x%llx walk=0x%llx\n",
+        //                  (uint64_t)buf, buf_phys_drv, buf_phys, (uint64_t)cmdt, cmdt_phys_drv, cmdt_phys);
     }
 
     if (buf_phys == cmdt_phys) {
@@ -222,7 +236,7 @@ int ahci_init_device(struct hba_port *port) {
     struct hba_cmdt *cmd_table;
     struct hba_cmdh *cmd_header;
 
-    // 分配并映射IDENTIFY数据缓冲�?
+    // 分配并映射IDENTIFY数据缓冲�?
     uint16_t *data_in = (uint16_t *)alloc_frames(1);
     if (!data_in) {
         write_serial_fmt("AHCI: Failed to allocate buffer for IDENTIFY\n");
@@ -230,7 +244,7 @@ int ahci_init_device(struct hba_port *port) {
     }
     uint16_t *data = (uint16_t*)driver_phys_to_virt((uint64_t)data_in);
     page_map_to(get_current_directory(), (uint64_t)data, (uint64_t)data_in, KERNEL_PTE_FLAGS);
-    memset(data, 0, 512); // 清零缓冲�?
+    memset(data, 0, 512); // 清零缓冲�?
 
     // 准备命令结构
     int slot = hba_prepare_cmd(port, &cmd_table, &cmd_header);
@@ -286,12 +300,12 @@ int ahci_init_device(struct hba_port *port) {
     // 解析IDENTIFY数据
     ahci_parse_dev_info(port->device, data);
 
-    // 如果是ATAPI设备，需要获取容量信�?
+    // 如果是ATAPI设备，需要获取容量信�?
     if (port->device->flags & HBA_DEV_FATAPI) {
         write_serial_fmt("AHCI: Initializing ATAPI device\n");
         
         // 准备READ CAPACITY命令
-        memset(cmd_table, 0, sizeof(struct hba_cmdt)); // 清空命令�?
+        memset(cmd_table, 0, sizeof(struct hba_cmdt)); // 清空命令�?
         sata_create_fis(cmd_fis, ATA_PACKET, 0, 0); // 设置PACKET FIS
         
         // 根据CDB大小创建SCSI命令
@@ -304,7 +318,7 @@ int ahci_init_device(struct hba_port *port) {
             cdb16->misc1 = 0x10; // service action for READ CAPACITY(16)
         }
 
-        // 重新绑定数据缓冲�?
+        // 重新绑定数据缓冲�?
         memset(data, 0, 512);
         if (hba_bind_sbuf(cmd_header, cmd_table, data, 512) != 0) {
             write_serial_fmt("AHCI: Failed to bind buffer for READ CAPACITY\n");
@@ -383,7 +397,7 @@ size_t ahci_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     return size;
 }
 
-// �?utils.cpp 中添�?
+// �?utils.cpp 中添�?
 void ahci_setup() {
     pci_device_t *device = pci_find_class(0x010601);
     if (device == NULL) {
@@ -441,7 +455,7 @@ void ahci_setup() {
         port->regs = port_regs;
         port->hba  = hba;
         hba->ports[i] = port;
-        ahci_log_port_state(i, port_regs, "before-reset");
+        // ahci_log_port_state(i, port_regs, "before-reset");
         __hba_reset_port((hba_reg_t *)port_regs);
         uint64_t clb_pa = alloc_frames(1);
         uint64_t fis_pa = alloc_frames(1);
@@ -466,10 +480,10 @@ void ahci_setup() {
         port_regs[HBA_RPxCMD] |= HBA_PxCMD_ST;
         delay_ms_hp(1);
         port->ssts = port_regs[HBA_RPxSSTS];
-        ahci_log_port_state(i, port_regs, "after-start");
+        // ahci_log_port_state(i, port_regs, "after-start");
         if (!ahci_port_link_ready(port->ssts)) {
-            write_serial_fmt("AHCI[%d] skip: link not ready det=%d ipm=%d spd=%d\n", i,
-                             HBA_PXSSTS_DET(port->ssts), HBA_PXSSTS_IPM(port->ssts), HBA_PXSSTS_SPD(port->ssts));
+            // write_serial_fmt("AHCI[%d] skip: link not ready det=%d ipm=%d spd=%d\n", i,
+                            //  HBA_PXSSTS_DET(port->ssts), HBA_PXSSTS_IPM(port->ssts), HBA_PXSSTS_SPD(port->ssts));
             continue;
         }
         online_ports++;
