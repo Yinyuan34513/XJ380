@@ -6,6 +6,7 @@ and copied into `/lib/modules` in the disk image.
 Current layout:
 
 - `kmod/e1000/`: loadable Intel E1000 network driver
+- `kmod/xhci/`: loadable xHCI host controller driver foundation
 - `kmod/netserver/`: networking module sources and third-party stack code
 
 Boundary rule:

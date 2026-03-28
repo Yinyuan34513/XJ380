@@ -4,6 +4,7 @@
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.hpp"
+#include <dlinker.h>
 #include <cpu/longm.h>
 #include <elf.h>
 #include <errno.h>
@@ -783,6 +784,8 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     else close_interrupt;
     return new_task->tid;
 }
+
+EXPORT_SYMBOL(create_kernel_thread);
 
 size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd)
 {
