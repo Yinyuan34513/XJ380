@@ -18,7 +18,7 @@ static constexpr int SERIAL_CHAR_WIDTH  = 8;
 static constexpr int SERIAL_CHAR_HEIGHT = 16;
 
 static constexpr PixelColor SERIAL_SCREEN_WHITE  = {0xff, 0xff, 0xff};
-static constexpr PixelColor SERIAL_SCREEN_GRAY   = {0xe0, 0xe6, 0xf0};
+static constexpr PixelColor SERIAL_SCREEN_GRAY   = {0x80, 0x80, 0x80};
 static constexpr PixelColor SERIAL_SCREEN_BLUE   = {0x31, 0x56, 0xd6};
 static constexpr PixelColor SERIAL_SCREEN_YELLOW = {0xff, 0xf1, 0x22};
 static constexpr PixelColor SERIAL_SCREEN_CYAN   = {0x43, 0xd7, 0xff};
@@ -594,8 +594,8 @@ int pr_debug(const char *fmt, ...)
     va_start(args, fmt);
     int rc = serial_log_vprint("[XS Kernel][DEBUG] ",
 #if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_CYAN,
                                SERIAL_SCREEN_GRAY,
-                               SERIAL_SCREEN_WHITE,
 #else
                                {0xff, 0xff, 0xff},
                                {0xff, 0xff, 0xff},
