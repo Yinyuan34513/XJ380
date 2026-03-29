@@ -4,6 +4,8 @@ extern "C" {
 
 static xhci_controller *g_xhci = NULL;
 static const uint32_t XHCI_INVALID_INDEX = (uint32_t)-1;
+static xhci_msc_state *g_xhci_msc_by_drive[256];
+static uint32_t g_xhci_msc_count = 0;
 
 static void xhci_process_events(xhci_controller *xhci);
 
@@ -18,6 +20,16 @@ static void *xhci_zero_alloc(size_t bytes) {
 
 static inline void xhci_cpu_relax(void) {
     __asm__ volatile("pause");
+}
+
+static inline void xhci_lock_u32(volatile uint32_t *lock) {
+    while (__sync_lock_test_and_set(lock, 1U) != 0U) {
+        xhci_cpu_relax();
+    }
+}
+
+static inline void xhci_unlock_u32(volatile uint32_t *lock) {
+    __sync_lock_release(lock);
 }
 
 static inline uint32_t xhci_read32(volatile const uint32_t *reg) {
@@ -62,6 +74,39 @@ static inline uint32_t xhci_trb_status_field(uint32_t transfer_len,
 static inline uint32_t xhci_field(uint32_t value, uint32_t shift,
                                   uint32_t mask) {
     return (value >> shift) & mask;
+}
+
+static inline uint16_t xhci_get_be16(const void *ptr) {
+    uint16_t value = 0;
+    memcpy(&value, ptr, sizeof(value));
+    return __builtin_bswap16(value);
+}
+
+static inline uint32_t xhci_get_be32(const void *ptr) {
+    uint32_t value = 0;
+    memcpy(&value, ptr, sizeof(value));
+    return __builtin_bswap32(value);
+}
+
+static inline uint64_t xhci_get_be64(const void *ptr) {
+    uint64_t value = 0;
+    memcpy(&value, ptr, sizeof(value));
+    return __builtin_bswap64(value);
+}
+
+static inline void xhci_put_be16(void *ptr, uint16_t value) {
+    value = __builtin_bswap16(value);
+    memcpy(ptr, &value, sizeof(value));
+}
+
+static inline void xhci_put_be32(void *ptr, uint32_t value) {
+    value = __builtin_bswap32(value);
+    memcpy(ptr, &value, sizeof(value));
+}
+
+static inline void xhci_put_be64(void *ptr, uint64_t value) {
+    value = __builtin_bswap64(value);
+    memcpy(ptr, &value, sizeof(value));
 }
 
 static const char *xhci_speed_name(uint8_t speed) {
@@ -139,6 +184,26 @@ static const char *xhci_hid_kind_name(uint8_t kind) {
     case XHCI_HID_KEYBOARD: return "keyboard";
     case XHCI_HID_MOUSE: return "mouse";
     default: return "unknown";
+    }
+}
+
+static void xhci_ascii_field(char *dst, size_t dst_len, const uint8_t *src,
+                             size_t src_len) {
+    if (!dst || dst_len == 0) {
+        return;
+    }
+
+    size_t copy_len = (src_len < (dst_len - 1)) ? src_len : (dst_len - 1);
+    memcpy(dst, src, copy_len);
+    dst[copy_len] = '\0';
+
+    while (copy_len != 0) {
+        char ch = dst[copy_len - 1];
+        if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+            break;
+        }
+        dst[copy_len - 1] = '\0';
+        copy_len--;
     }
 }
 
@@ -473,6 +538,11 @@ static void xhci_event_ring_commit(xhci_controller *xhci) {
 }
 
 static void xhci_process_events(xhci_controller *xhci) {
+    if (!xhci) {
+        return;
+    }
+
+    xhci_lock_u32(&xhci->event_lock);
     bool processed = false;
 
     for (;;) {
@@ -526,6 +596,22 @@ static void xhci_process_events(xhci_controller *xhci) {
                                    evt->status, evt->control);
                         }
                     }
+                } else if (slot->msc.ready &&
+                           epid == slot->msc.bulk_in_epid) {
+                    uint32_t index = xhci_ring_index_from_phys(
+                        &slot->msc.bulk_in_ring, xhci_trb_ptr(evt));
+                    if (index != XHCI_INVALID_INDEX) {
+                        xhci_ring_complete(&slot->msc.bulk_in_ring, index,
+                                           evt);
+                    }
+                } else if (slot->msc.ready &&
+                           epid == slot->msc.bulk_out_epid) {
+                    uint32_t index = xhci_ring_index_from_phys(
+                        &slot->msc.bulk_out_ring, xhci_trb_ptr(evt));
+                    if (index != XHCI_INVALID_INDEX) {
+                        xhci_ring_complete(&slot->msc.bulk_out_ring, index,
+                                           evt);
+                    }
                 }
             }
             break;
@@ -542,6 +628,9 @@ static void xhci_process_events(xhci_controller *xhci) {
             uint32_t port = ((evt->ptr_low >> 24) & 0xFFU);
             if (port > 0 && port <= xhci->num_ports) {
                 xhci_clear_port_change_bits(xhci, port - 1);
+                if (xhci->root_port_pending) {
+                    xhci->root_port_pending[port] = 1;
+                }
             }
             break;
         }
@@ -566,6 +655,7 @@ static void xhci_process_events(xhci_controller *xhci) {
     if (processed) {
         xhci_event_ring_commit(xhci);
     }
+    xhci_unlock_u32(&xhci->event_lock);
 }
 
 static int xhci_wait_for_ring(xhci_controller *xhci, xhci_ring *ring,
@@ -729,6 +819,28 @@ static void xhci_fill_interrupt_ep_ctx(xhci_slot_state *slot,
     ep_ctx->tx_info =
         (uint32_t)hid->max_packet |
         ((uint32_t)hid->report_buffer_len << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+}
+
+static void xhci_fill_bulk_ep_ctx(xhci_msc_state *msc, bool in_dir,
+                                  xhci_ep_ctx *ep_ctx) {
+    memset(ep_ctx, 0, sizeof(*ep_ctx));
+
+    uint8_t type = in_dir ? XHCI_EP_TYPE_BULK_IN : XHCI_EP_TYPE_BULK_OUT;
+    uint8_t max_burst =
+        in_dir ? msc->bulk_in_max_burst : msc->bulk_out_max_burst;
+    uint16_t max_packet =
+        in_dir ? msc->bulk_in_max_packet : msc->bulk_out_max_packet;
+    xhci_ring *ring = in_dir ? &msc->bulk_in_ring : &msc->bulk_out_ring;
+
+    ep_ctx->ctx[1] = (3U << XHCI_EP_CTX_CERR_SHIFT) |
+                     ((uint32_t)type << XHCI_EP_CTX_TYPE_SHIFT) |
+                     ((uint32_t)max_burst << XHCI_EP_CTX_MAX_BURST_SHIFT) |
+                     ((uint32_t)max_packet << XHCI_EP_CTX_MAX_PACKET_SHIFT);
+    ep_ctx->deq_low = (uint32_t)(ring->phys | 1U);
+    ep_ctx->deq_high = (uint32_t)(ring->phys >> 32);
+    ep_ctx->tx_info =
+        (uint32_t)max_packet |
+        ((uint32_t)max_packet << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
 }
 
 static int xhci_update_ep0_packet(xhci_controller *xhci, xhci_slot_state *slot,
@@ -947,12 +1059,17 @@ static void xhci_parse_config(xhci_slot_state *slot) {
     memcpy(&slot->config_desc, slot->config_buffer, sizeof(slot->config_desc));
     slot->config_value = slot->config_desc.bConfigurationValue;
     memset(&slot->hid, 0, sizeof(slot->hid));
+    memset(&slot->msc, 0, sizeof(slot->msc));
+    slot->msc.device_id = -1;
 
     uint8_t *ptr = (uint8_t *)slot->config_buffer;
     uint8_t *end = ptr + slot->config_length;
     bool hid_candidate = false;
     uint8_t hid_kind = XHCI_HID_NONE;
     uint8_t hid_interface = 0;
+    bool msc_candidate = false;
+    uint8_t msc_interface = 0;
+    uint8_t msc_last_bulk = 0;
     while (ptr + sizeof(usb_descriptor_header) <= end) {
         usb_descriptor_header *hdr = (usb_descriptor_header *)ptr;
         if (hdr->bLength == 0 || ptr + hdr->bLength > end) {
@@ -972,6 +1089,9 @@ static void xhci_parse_config(xhci_slot_state *slot) {
             hid_candidate = false;
             hid_kind = XHCI_HID_NONE;
             hid_interface = iface->bInterfaceNumber;
+            msc_candidate = false;
+            msc_interface = iface->bInterfaceNumber;
+            msc_last_bulk = 0;
             if (!slot->hid.supported && iface->bAlternateSetting == 0 &&
                 iface->bInterfaceClass == USB_CLASS_HID &&
                 iface->bInterfaceSubClass == USB_INTERFACE_SUBCLASS_BOOT) {
@@ -984,6 +1104,13 @@ static void xhci_parse_config(xhci_slot_state *slot) {
                     hid_kind = XHCI_HID_MOUSE;
                     hid_candidate = true;
                 }
+            }
+            if (!slot->msc.supported && iface->bAlternateSetting == 0 &&
+                iface->bInterfaceClass == USB_CLASS_MASS_STORAGE &&
+                iface->bInterfaceSubClass == USB_MSC_SUBCLASS_SCSI &&
+                iface->bInterfaceProtocol == USB_MSC_PROTOCOL_BBB) {
+                msc_candidate = true;
+                slot->msc.interface_number = iface->bInterfaceNumber;
             }
         } else if (hid_candidate && hdr->bDescriptorType == USB_DT_ENDPOINT &&
                    hdr->bLength >= sizeof(usb_endpoint_descriptor)) {
@@ -1009,6 +1136,57 @@ static void xhci_parse_config(xhci_slot_state *slot) {
                     xhci_interrupt_interval_reg(slot->speed_id, ep->bInterval);
                 hid_candidate = false;
             }
+        } else if (msc_candidate && hdr->bDescriptorType == USB_DT_ENDPOINT &&
+                   hdr->bLength >= sizeof(usb_endpoint_descriptor)) {
+            usb_endpoint_descriptor *ep = (usb_endpoint_descriptor *)ptr;
+            uint16_t max_packet = ep->wMaxPacketSize & 0x07FFU;
+            if ((ep->bmAttributes & 0x03U) == USB_ENDPOINT_XFER_BULK &&
+                max_packet != 0) {
+                if ((ep->bEndpointAddress & USB_DIR_IN) != 0 &&
+                    slot->msc.bulk_in_epid == 0) {
+                    slot->msc.bulk_in_address = ep->bEndpointAddress;
+                    slot->msc.bulk_in_epid =
+                        xhci_epid_from_address(ep->bEndpointAddress);
+                    slot->msc.bulk_in_max_packet = max_packet;
+                    if (slot->speed_id == XHCI_SPEED_HIGH) {
+                        slot->msc.bulk_in_max_burst =
+                            (uint8_t)((ep->wMaxPacketSize >> 11) & 0x03U);
+                    }
+                    msc_last_bulk = USB_DIR_IN;
+                } else if ((ep->bEndpointAddress & USB_DIR_IN) == 0 &&
+                           slot->msc.bulk_out_epid == 0) {
+                    slot->msc.bulk_out_address = ep->bEndpointAddress;
+                    slot->msc.bulk_out_epid =
+                        xhci_epid_from_address(ep->bEndpointAddress);
+                    slot->msc.bulk_out_max_packet = max_packet;
+                    if (slot->speed_id == XHCI_SPEED_HIGH) {
+                        slot->msc.bulk_out_max_burst =
+                            (uint8_t)((ep->wMaxPacketSize >> 11) & 0x03U);
+                    }
+                    msc_last_bulk = USB_DIR_OUT;
+                } else {
+                    msc_last_bulk = 0;
+                }
+
+                if (slot->msc.bulk_in_epid != 0 &&
+                    slot->msc.bulk_out_epid != 0) {
+                    slot->msc.supported = true;
+                    slot->msc.interface_number = msc_interface;
+                }
+            }
+        } else if (msc_candidate &&
+                   hdr->bDescriptorType == USB_DT_SS_ENDPOINT_COMPANION &&
+                   hdr->bLength >= sizeof(usb_ss_ep_comp_descriptor)) {
+            usb_ss_ep_comp_descriptor *comp =
+                (usb_ss_ep_comp_descriptor *)ptr;
+            if (msc_last_bulk == USB_DIR_IN) {
+                slot->msc.bulk_in_max_burst = comp->bMaxBurst;
+            } else if (msc_last_bulk == USB_DIR_OUT) {
+                slot->msc.bulk_out_max_burst = comp->bMaxBurst;
+            }
+            msc_last_bulk = 0;
+        } else {
+            msc_last_bulk = 0;
         }
 
         ptr += hdr->bLength;
@@ -1017,6 +1195,13 @@ static void xhci_parse_config(xhci_slot_state *slot) {
     if (slot->hid.supported &&
         (slot->hid.endpoint_epid == 0 || slot->hid.report_buffer_len == 0)) {
         memset(&slot->hid, 0, sizeof(slot->hid));
+    }
+    if (slot->msc.supported &&
+        (slot->msc.bulk_in_epid == 0 || slot->msc.bulk_out_epid == 0 ||
+         slot->msc.bulk_in_max_packet == 0 ||
+         slot->msc.bulk_out_max_packet == 0)) {
+        memset(&slot->msc, 0, sizeof(slot->msc));
+        slot->msc.device_id = -1;
     }
 
     slot->is_hub = (slot->device_desc.bDeviceClass == USB_CLASS_HUB) ||
@@ -1034,6 +1219,22 @@ static void xhci_release_hid(xhci_slot_state *slot) {
     }
     xhci_ring_free(&slot->hid.ring);
     memset(&slot->hid, 0, sizeof(slot->hid));
+}
+
+static void xhci_release_msc(xhci_slot_state *slot) {
+    if (!slot) {
+        return;
+    }
+
+    xhci_lock_u32(&slot->msc.io_lock);
+    if (slot->msc.device_id >= 0 && slot->msc.device_id < 256) {
+        g_xhci_msc_by_drive[slot->msc.device_id] = NULL;
+        delete_device(slot->msc.device_id);
+    }
+    xhci_ring_free(&slot->msc.bulk_in_ring);
+    xhci_ring_free(&slot->msc.bulk_out_ring);
+    memset(&slot->msc, 0, sizeof(slot->msc));
+    slot->msc.device_id = -1;
 }
 
 static int xhci_configure_hid_endpoint(xhci_controller *xhci,
@@ -1096,6 +1297,73 @@ static int xhci_configure_hid_endpoint(xhci_controller *xhci,
     return 0;
 }
 
+static int xhci_configure_msc_endpoints(xhci_controller *xhci,
+                                        xhci_slot_state *slot) {
+    if (!slot->configured || !slot->msc.supported || slot->msc.ready) {
+        return 0;
+    }
+
+    xhci_msc_state *msc = &slot->msc;
+    if (msc->bulk_in_epid <= 1 || msc->bulk_in_epid >= XHCI_CONTEXTS ||
+        msc->bulk_out_epid <= 1 || msc->bulk_out_epid >= XHCI_CONTEXTS ||
+        msc->bulk_in_max_packet == 0 || msc->bulk_out_max_packet == 0) {
+        return -EINVAL;
+    }
+
+    int rc = xhci_ring_alloc(&msc->bulk_in_ring, true);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = xhci_ring_alloc(&msc->bulk_out_ring, true);
+    if (rc != 0) {
+        xhci_ring_free(&msc->bulk_in_ring);
+        return rc;
+    }
+
+    uint64_t input_ctx_phys = 0;
+    void *input_ctx = xhci_alloc_input_ctx(xhci, &input_ctx_phys);
+    if (!input_ctx) {
+        xhci_release_msc(slot);
+        return -ENOMEM;
+    }
+
+    xhci_input_control_ctx *ctrl_ctx = xhci_input_ctrl_ctx(input_ctx);
+    ctrl_ctx->add_flags = XHCI_INPUT_ADD_SLOT | (1U << msc->bulk_in_epid) |
+                          (1U << msc->bulk_out_epid);
+
+    uint8_t last_ctx = xhci_last_ctx_entry(
+        (msc->bulk_in_epid > msc->bulk_out_epid) ? msc->bulk_in_epid
+                                                 : msc->bulk_out_epid);
+    xhci_fill_slot_ctx(xhci_input_slot_ctx(xhci, input_ctx), slot, last_ctx);
+
+    xhci_ep_ctx *in_ctx = xhci_input_ep_ctx(xhci, input_ctx, msc->bulk_in_epid);
+    xhci_ep_ctx *out_ctx =
+        xhci_input_ep_ctx(xhci, input_ctx, msc->bulk_out_epid);
+    if (!in_ctx || !out_ctx) {
+        xhci_free_input_ctx(xhci, input_ctx, input_ctx_phys);
+        xhci_release_msc(slot);
+        return -EINVAL;
+    }
+
+    xhci_fill_bulk_ep_ctx(msc, true, in_ctx);
+    xhci_fill_bulk_ep_ctx(msc, false, out_ctx);
+
+    rc = xhci_cmd_configure_endpoint(xhci, slot->slot_id, input_ctx_phys);
+    xhci_free_input_ctx(xhci, input_ctx, input_ctx_phys);
+    if (rc != 0) {
+        xhci_release_msc(slot);
+        return rc;
+    }
+
+    msc->ready = true;
+    msc->slot = slot;
+    msc->controller = xhci;
+    msc->tag = 1;
+    msc->io_lock = 0;
+    return 0;
+}
+
 static int xhci_submit_hid_transfer(xhci_controller *xhci,
                                     xhci_slot_state *slot) {
     xhci_hid_state *hid = &slot->hid;
@@ -1110,6 +1378,434 @@ static int xhci_submit_hid_transfer(xhci_controller *xhci,
         (XHCI_TRB_TYPE_NORMAL << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_IOC);
     hid->pending = true;
     xhci_doorbell(xhci, slot->slot_id, hid->endpoint_epid);
+    return 0;
+}
+
+static int xhci_submit_bulk_transfer(xhci_controller *xhci,
+                                     xhci_slot_state *slot, bool in_dir,
+                                     uint64_t phys, uint32_t len,
+                                     uint32_t *actual_len) {
+    xhci_msc_state *msc = &slot->msc;
+    xhci_ring *ring = in_dir ? &msc->bulk_in_ring : &msc->bulk_out_ring;
+    uint8_t epid = in_dir ? msc->bulk_in_epid : msc->bulk_out_epid;
+
+    if (!msc->ready || epid <= 1 || epid >= XHCI_CONTEXTS) {
+        return -ENODEV;
+    }
+    if (len > 0x1FFFFU) {
+        return -E2BIG;
+    }
+
+    xhci_ring_enqueue_ptr(
+        ring, phys, xhci_trb_status_field(len, 0),
+        (XHCI_TRB_TYPE_NORMAL << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_IOC);
+    xhci_doorbell(xhci, slot->slot_id, epid);
+
+    int cc = xhci_wait_for_ring(xhci, ring, 1000);
+    if (cc != XHCI_CC_SUCCESS && cc != XHCI_CC_SHORT_PACKET) {
+        return -EIO;
+    }
+
+    uint32_t residue = ring->event.status & 0x00FFFFFFU;
+    if (actual_len) {
+        *actual_len = (len >= residue) ? (len - residue) : 0;
+    }
+    return 0;
+}
+
+static int xhci_msc_reset_recovery(xhci_controller *xhci, xhci_slot_state *slot) {
+    int rc = xhci_control_request(
+        xhci, slot, USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+        USB_MSC_REQ_RESET, 0, slot->msc.interface_number, NULL, 0, NULL);
+    if (rc != 0) {
+        return rc;
+    }
+
+    (void)xhci_control_request(
+        xhci, slot, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_ENDPOINT,
+        USB_REQ_CLEAR_FEATURE, USB_FEATURE_ENDPOINT_HALT,
+        slot->msc.bulk_in_address, NULL, 0, NULL);
+    (void)xhci_control_request(
+        xhci, slot, USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_ENDPOINT,
+        USB_REQ_CLEAR_FEATURE, USB_FEATURE_ENDPOINT_HALT,
+        slot->msc.bulk_out_address, NULL, 0, NULL);
+    return 0;
+}
+
+static int xhci_msc_prepare_data_buffer(void *data, uint32_t data_len,
+                                        bool in_dir, bool direct_data,
+                                        void **dma_buf_out,
+                                        uint64_t *dma_phys_out,
+                                        bool *allocated_out) {
+    *dma_buf_out = NULL;
+    *dma_phys_out = 0;
+    *allocated_out = false;
+
+    if (data_len == 0) {
+        return 0;
+    }
+    if (!data) {
+        return -EINVAL;
+    }
+
+    if (direct_data) {
+        uint64_t phys = (uint64_t)driver_virt_to_phys((uint64_t)data);
+        if (phys == 0) {
+            return -EFAULT;
+        }
+        *dma_buf_out = data;
+        *dma_phys_out = phys;
+        return 0;
+    }
+
+    int rc = xhci_dma_alloc(data_len, dma_buf_out, dma_phys_out);
+    if (rc != 0) {
+        return rc;
+    }
+    if (!in_dir) {
+        memcpy(*dma_buf_out, data, data_len);
+    }
+    *allocated_out = true;
+    return 0;
+}
+
+static void xhci_msc_finish_data_buffer(void *data, uint32_t data_len,
+                                        bool in_dir, void *dma_buf,
+                                        uint64_t dma_phys, bool allocated,
+                                        uint32_t actual_len) {
+    if (allocated) {
+        if (in_dir && data && actual_len != 0) {
+            uint32_t copy_len = (actual_len < data_len) ? actual_len : data_len;
+            memcpy(data, dma_buf, copy_len);
+        }
+        xhci_dma_free(dma_buf, dma_phys, data_len);
+    }
+}
+
+static int xhci_msc_bot_command(xhci_controller *xhci, xhci_slot_state *slot,
+                                const void *cdb, uint8_t cdb_len, void *data,
+                                uint32_t data_len, bool in_dir,
+                                bool direct_data, uint32_t *actual_len) {
+    if (!xhci || !slot || !slot->msc.ready || !cdb || cdb_len == 0 ||
+        cdb_len > sizeof(((xhci_msc_cbw *)0)->cdb)) {
+        return -EINVAL;
+    }
+
+    xhci_msc_cbw *cbw = NULL;
+    xhci_msc_csw *csw = NULL;
+    uint64_t cbw_phys = 0;
+    uint64_t csw_phys = 0;
+    void *dma_buf = NULL;
+    uint64_t dma_phys = 0;
+    bool allocated = false;
+    uint32_t data_actual = 0;
+    uint32_t csw_actual = 0;
+
+    int rc = xhci_dma_alloc(sizeof(*cbw), (void **)&cbw, &cbw_phys);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = xhci_dma_alloc(sizeof(*csw), (void **)&csw, &csw_phys);
+    if (rc != 0) {
+        xhci_dma_free(cbw, cbw_phys, sizeof(*cbw));
+        return rc;
+    }
+
+    rc = xhci_msc_prepare_data_buffer(data, data_len, in_dir, direct_data,
+                                      &dma_buf, &dma_phys, &allocated);
+    if (rc != 0) {
+        xhci_dma_free(csw, csw_phys, sizeof(*csw));
+        xhci_dma_free(cbw, cbw_phys, sizeof(*cbw));
+        return rc;
+    }
+
+    memset(cbw, 0, sizeof(*cbw));
+    memset(csw, 0, sizeof(*csw));
+
+    uint32_t tag = slot->msc.tag++;
+    if (tag == 0) {
+        tag = slot->msc.tag++;
+    }
+
+    cbw->signature = XHCI_MSC_CBW_SIGNATURE;
+    cbw->tag = tag;
+    cbw->data_transfer_length = data_len;
+    cbw->flags = in_dir ? USB_DIR_IN : USB_DIR_OUT;
+    cbw->lun = 0;
+    cbw->cb_length = cdb_len;
+    memcpy(cbw->cdb, cdb, cdb_len);
+
+    rc = xhci_submit_bulk_transfer(xhci, slot, false, cbw_phys, sizeof(*cbw),
+                                   NULL);
+    if (rc == 0 && data_len != 0) {
+        rc = xhci_submit_bulk_transfer(xhci, slot, in_dir, dma_phys, data_len,
+                                       &data_actual);
+    }
+    if (rc == 0) {
+        rc = xhci_submit_bulk_transfer(xhci, slot, true, csw_phys, sizeof(*csw),
+                                       &csw_actual);
+    }
+
+    if (rc != 0) {
+        (void)xhci_msc_reset_recovery(xhci, slot);
+        xhci_msc_finish_data_buffer(data, data_len, in_dir, dma_buf, dma_phys,
+                                    allocated, data_actual);
+        xhci_dma_free(csw, csw_phys, sizeof(*csw));
+        xhci_dma_free(cbw, cbw_phys, sizeof(*cbw));
+        return rc;
+    }
+
+    if (csw_actual < sizeof(*csw) || csw->signature != XHCI_MSC_CSW_SIGNATURE ||
+        csw->tag != tag || csw->status != 0) {
+        (void)xhci_msc_reset_recovery(xhci, slot);
+        xhci_msc_finish_data_buffer(data, data_len, in_dir, dma_buf, dma_phys,
+                                    allocated, data_actual);
+        xhci_dma_free(csw, csw_phys, sizeof(*csw));
+        xhci_dma_free(cbw, cbw_phys, sizeof(*cbw));
+        return -EIO;
+    }
+
+    xhci_msc_finish_data_buffer(data, data_len, in_dir, dma_buf, dma_phys,
+                                allocated, data_actual);
+    xhci_dma_free(csw, csw_phys, sizeof(*csw));
+    xhci_dma_free(cbw, cbw_phys, sizeof(*cbw));
+    if (actual_len) {
+        *actual_len = data_actual;
+    }
+    return 0;
+}
+
+static int xhci_msc_scsi_test_unit_ready(xhci_controller *xhci,
+                                         xhci_slot_state *slot) {
+    uint8_t cdb[6];
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = SCSI_TEST_UNIT_READY;
+    return xhci_msc_bot_command(xhci, slot, cdb, sizeof(cdb), NULL, 0, true,
+                                false, NULL);
+}
+
+static int xhci_msc_scsi_request_sense(xhci_controller *xhci,
+                                       xhci_slot_state *slot, void *data,
+                                       uint8_t alloc_len) {
+    uint8_t cdb[6];
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = SCSI_REQUEST_SENSE;
+    cdb[4] = alloc_len;
+    return xhci_msc_bot_command(xhci, slot, cdb, sizeof(cdb), data, alloc_len,
+                                true, false, NULL);
+}
+
+static int xhci_msc_scsi_inquiry(xhci_controller *xhci, xhci_slot_state *slot,
+                                 void *data, uint8_t alloc_len) {
+    uint8_t cdb[6];
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = SCSI_INQUIRY;
+    cdb[4] = alloc_len;
+    return xhci_msc_bot_command(xhci, slot, cdb, sizeof(cdb), data, alloc_len,
+                                true, false, NULL);
+}
+
+static int xhci_msc_scsi_read_capacity10(xhci_controller *xhci,
+                                         xhci_slot_state *slot, void *data) {
+    uint8_t cdb[10];
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = SCSI_READ_CAPACITY_10;
+    return xhci_msc_bot_command(xhci, slot, cdb, sizeof(cdb), data, 8, true,
+                                false, NULL);
+}
+
+static int xhci_msc_scsi_read_capacity16(xhci_controller *xhci,
+                                         xhci_slot_state *slot, void *data) {
+    uint8_t cdb[16];
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = SCSI_SERVICE_ACTION_IN_16;
+    cdb[1] = 0x10;
+    xhci_put_be32(&cdb[10], 32);
+    return xhci_msc_bot_command(xhci, slot, cdb, sizeof(cdb), data, 32, true,
+                                false, NULL);
+}
+
+static int xhci_msc_scsi_rw(xhci_controller *xhci, xhci_slot_state *slot,
+                            void *buffer, uint64_t lba, uint32_t blocks,
+                            bool write) {
+    if (blocks == 0) {
+        return 0;
+    }
+
+    bool use16 = slot->msc.use_read16 || lba > 0xFFFFFFFFULL ||
+                 blocks > 0xFFFFU;
+    if (use16) {
+        uint8_t cdb[16];
+        memset(cdb, 0, sizeof(cdb));
+        cdb[0] = write ? SCSI_WRITE_16 : SCSI_READ_16;
+        xhci_put_be64(&cdb[2], lba);
+        xhci_put_be32(&cdb[10], blocks);
+        return xhci_msc_bot_command(
+            xhci, slot, cdb, sizeof(cdb), buffer,
+            blocks * slot->msc.block_size, !write, true, NULL);
+    }
+
+    uint8_t cdb[10];
+    memset(cdb, 0, sizeof(cdb));
+    cdb[0] = write ? SCSI_WRITE_10 : SCSI_READ_10;
+    xhci_put_be32(&cdb[2], (uint32_t)lba);
+    xhci_put_be16(&cdb[7], (uint16_t)blocks);
+    return xhci_msc_bot_command(xhci, slot, cdb, sizeof(cdb), buffer,
+                                blocks * slot->msc.block_size, !write, true,
+                                NULL);
+}
+
+static size_t xhci_msc_device_rw(int drive, uint8_t *buffer, size_t number,
+                                 size_t lba, bool write) {
+    if (drive < 0 || drive >= 256 || !buffer || number == 0) {
+        return 0;
+    }
+
+    xhci_msc_state *msc = g_xhci_msc_by_drive[drive];
+    if (!msc || !msc->ready || !msc->slot || !msc->controller ||
+        msc->block_size == 0) {
+        return 0;
+    }
+
+    while (__sync_lock_test_and_set(&msc->io_lock, 1U) != 0U) {
+        xhci_cpu_relax();
+    }
+
+    size_t transferred = 0;
+    uint8_t *ptr = buffer;
+    uint64_t cur_lba = lba;
+    size_t remaining = number;
+
+    while (remaining != 0) {
+        uint32_t chunk = (remaining > 0xFFFFU) ? 0xFFFFU : (uint32_t)remaining;
+        if (cur_lba + chunk > msc->block_count) {
+            break;
+        }
+
+        if (xhci_msc_scsi_rw(msc->controller, msc->slot, ptr, cur_lba, chunk,
+                             write) != 0) {
+            break;
+        }
+
+        transferred += chunk;
+        remaining -= chunk;
+        cur_lba += chunk;
+        ptr += (uint64_t)chunk * msc->block_size;
+    }
+
+    __sync_lock_release(&msc->io_lock);
+    return transferred;
+}
+
+static size_t xhci_msc_device_read(int drive, uint8_t *buffer, size_t number,
+                                   size_t lba) {
+    return xhci_msc_device_rw(drive, buffer, number, lba, false);
+}
+
+static size_t xhci_msc_device_write(int drive, uint8_t *buffer, size_t number,
+                                    size_t lba) {
+    return xhci_msc_device_rw(drive, buffer, number, lba, true);
+}
+
+static int xhci_probe_msc_device(xhci_controller *xhci, xhci_slot_state *slot) {
+    xhci_msc_state *msc = &slot->msc;
+    if (!msc->ready) {
+        return -ENODEV;
+    }
+
+    uint8_t max_lun = 0;
+    if (xhci_control_request(
+            xhci, slot, USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+            USB_MSC_REQ_GET_MAX_LUN, 0, msc->interface_number, &max_lun, 1,
+            NULL) == 0) {
+        msc->max_lun = max_lun;
+    }
+
+    uint8_t inquiry[36];
+    memset(inquiry, 0, sizeof(inquiry));
+    (void)xhci_msc_scsi_inquiry(xhci, slot, inquiry, sizeof(inquiry));
+
+    int rc = -EIO;
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        rc = xhci_msc_scsi_test_unit_ready(xhci, slot);
+        if (rc == 0) {
+            break;
+        }
+        uint8_t sense[18];
+        memset(sense, 0, sizeof(sense));
+        (void)xhci_msc_scsi_request_sense(xhci, slot, sense, sizeof(sense));
+        delay_ms_hp(100);
+    }
+    if (rc != 0) {
+        return rc;
+    }
+
+    uint8_t cap10[8];
+    memset(cap10, 0, sizeof(cap10));
+    rc = xhci_msc_scsi_read_capacity10(xhci, slot, cap10);
+    if (rc != 0) {
+        return rc;
+    }
+
+    uint64_t last_lba = xhci_get_be32(&cap10[0]);
+    uint32_t block_size = xhci_get_be32(&cap10[4]);
+    if (last_lba == 0xFFFFFFFFULL) {
+        uint8_t cap16[32];
+        memset(cap16, 0, sizeof(cap16));
+        rc = xhci_msc_scsi_read_capacity16(xhci, slot, cap16);
+        if (rc != 0) {
+            return rc;
+        }
+        last_lba = xhci_get_be64(&cap16[0]);
+        block_size = xhci_get_be32(&cap16[8]);
+        msc->use_read16 = true;
+    }
+
+    if (block_size == 0) {
+        return -EIO;
+    }
+
+    msc->block_size = block_size;
+    msc->block_count = last_lba + 1ULL;
+
+    uint64_t max_io = (0x1FFFFU / block_size) * (uint64_t)block_size;
+    if (max_io == 0) {
+        max_io = block_size;
+    }
+
+    device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    dev.size = msc->block_count * block_size;
+    dev.sector_size = block_size;
+    dev.type = DEVICE_BLOCK;
+    dev.read = xhci_msc_device_read;
+    dev.write = xhci_msc_device_write;
+    dev.flag = 1;
+    dev.ioctl = (ioctlf)empty;
+    dev.poll = (pollf)empty;
+    dev.map = (mapf)empty;
+    dev.read_vbuf = NULL;
+    dev.write_vbuf = NULL;
+    dev.max_size = max_io;
+    sprintf(dev.drive_name, "udisk%u", g_xhci_msc_count++);
+
+    int device_id = regist_device(NULL, dev);
+    if (device_id < 0 || device_id >= 256) {
+        return -ENOSPC;
+    }
+
+    g_xhci_msc_by_drive[device_id] = msc;
+    msc->device_id = device_id;
+
+    char vendor[9];
+    char product[17];
+    xhci_ascii_field(vendor, sizeof(vendor), &inquiry[8], 8);
+    xhci_ascii_field(product, sizeof(product), &inquiry[16], 16);
+
+    printk("xhci: slot %u BOT storage ready %s blocks=%llu block_size=%u max_lun=%u vendor='%s' product='%s'\n",
+           slot->slot_id, dev.drive_name, msc->block_count, msc->block_size,
+           msc->max_lun, vendor, product);
     return 0;
 }
 
@@ -1423,6 +2119,7 @@ static void xhci_release_slot(xhci_controller *xhci, xhci_slot_state *slot) {
     }
 
     xhci_release_hid(slot);
+    xhci_release_msc(slot);
 
     if (slot->config_buffer) {
         free(slot->config_buffer);
@@ -1439,6 +2136,40 @@ static void xhci_release_slot(xhci_controller *xhci, xhci_slot_state *slot) {
     xhci_dma_free(slot->output_ctx, slot->output_ctx_phys,
                   xhci->context_size * XHCI_CONTEXTS);
     memset(slot, 0, sizeof(*slot));
+}
+
+static xhci_slot_state *xhci_find_root_slot_by_port(xhci_controller *xhci,
+                                                    uint8_t port_id) {
+    if (!xhci || !xhci->slots || port_id == 0) {
+        return NULL;
+    }
+
+    for (uint32_t i = 1; i <= xhci->num_slots; ++i) {
+        xhci_slot_state *slot = &xhci->slots[i];
+        if (!slot->used || slot->parent_slot_id != 0) {
+            continue;
+        }
+        if (slot->port_id == port_id) {
+            return slot;
+        }
+    }
+    return NULL;
+}
+
+static void xhci_release_slot_tree(xhci_controller *xhci, uint32_t slot_id) {
+    if (!xhci || !xhci->slots || slot_id == 0 || slot_id > xhci->num_slots) {
+        return;
+    }
+
+    for (uint32_t i = 1; i <= xhci->num_slots; ++i) {
+        if (xhci->slots[i].used && xhci->slots[i].parent_slot_id == slot_id) {
+            xhci_release_slot_tree(xhci, i);
+        }
+    }
+
+    if (xhci->slots[slot_id].used) {
+        xhci_release_slot(xhci, &xhci->slots[slot_id]);
+    }
 }
 
 static int xhci_reset_port(xhci_controller *xhci, uint32_t port_idx,
@@ -1593,6 +2324,23 @@ static int xhci_enumerate_device(xhci_controller *xhci,
         }
     }
 
+    if (slot->configured && slot->msc.supported) {
+        rc = xhci_configure_msc_endpoints(xhci, slot);
+        if (rc != 0) {
+            printk("xhci: slot %u BOT endpoint configure failed in=0x%02x out=0x%02x rc=%d\n",
+                   slot->slot_id, slot->msc.bulk_in_address,
+                   slot->msc.bulk_out_address, rc);
+            xhci_release_msc(slot);
+        } else {
+            rc = xhci_probe_msc_device(xhci, slot);
+            if (rc != 0) {
+                printk("xhci: slot %u BOT probe failed iface=%u rc=%d\n",
+                       slot->slot_id, slot->msc.interface_number, rc);
+                xhci_release_msc(slot);
+            }
+        }
+    }
+
     uint16_t max_packet =
         xhci_descriptor_ep0_packet(speed_id, &slot->device_desc);
     if (max_packet == 0) {
@@ -1624,6 +2372,14 @@ static int xhci_enumerate_device(xhci_controller *xhci,
                slot->hid.endpoint_epid, slot->hid.max_packet,
                slot->hid.endpoint_interval);
         xhci->hid_devices_present = true;
+    }
+
+    if (slot->msc.ready) {
+        printk("xhci: slot %u BOT iface=%u bulk-in=0x%02x/%u bulk-out=0x%02x/%u block_size=%u blocks=%llu\n",
+               slot->slot_id, slot->msc.interface_number,
+               slot->msc.bulk_in_address, slot->msc.bulk_in_epid,
+               slot->msc.bulk_out_address, slot->msc.bulk_out_epid,
+               slot->msc.block_size, slot->msc.block_count);
     }
 
     if (slot->is_hub && slot->configured) {
@@ -1676,6 +2432,70 @@ static int xhci_enumerate_port(xhci_controller *xhci, uint32_t port_idx) {
         return rc;
     }
     return xhci_enumerate_device(xhci, NULL, (uint8_t)(port_idx + 1), speed_id);
+}
+
+static void xhci_handle_root_port_hotplug(xhci_controller *xhci,
+                                          uint32_t port_idx) {
+    if (!xhci || !xhci->slots || port_idx >= xhci->num_ports) {
+        return;
+    }
+
+    uint8_t port_id = (uint8_t)(port_idx + 1);
+    uint32_t portsc = xhci_read32(&xhci->ports[port_idx].portsc);
+    xhci_slot_state *slot = xhci_find_root_slot_by_port(xhci, port_id);
+
+    if ((portsc & XHCI_PORTSC_CCS) == 0) {
+        if (slot) {
+            printk("xhci: root port %u disconnect slot=%u\n", port_id,
+                   slot->slot_id);
+            xhci_release_slot_tree(xhci, slot->slot_id);
+        }
+        return;
+    }
+
+    if (slot) {
+        return;
+    }
+
+    int rc = xhci_enumerate_port(xhci, port_idx);
+    if (rc != 0 && rc != -ENODEV) {
+        printk("xhci: hotplug enumerate failed on port %u (%d)\n", port_id,
+               rc);
+    } else if (rc == 0) {
+        printk("xhci: root port %u hotplug enumerate complete\n", port_id);
+    }
+}
+
+static void xhci_service_worker(void *arg) {
+    xhci_controller *xhci = (xhci_controller *)arg;
+    for (;;) {
+        if (!xhci || xhci != g_xhci) {
+            delay_ms_hp(10);
+            continue;
+        }
+
+        xhci_process_events(xhci);
+
+        if (xhci->root_port_pending) {
+            for (uint32_t port = 1; port <= xhci->num_ports; ++port) {
+                if (!xhci->root_port_pending[port]) {
+                    continue;
+                }
+                xhci->root_port_pending[port] = 0;
+                xhci_handle_root_port_hotplug(xhci, port - 1);
+            }
+        }
+
+        for (uint32_t i = 1; i <= xhci->num_slots; ++i) {
+            xhci_slot_state *slot = &xhci->slots[i];
+            if (!slot->used || !slot->hid.ready) {
+                continue;
+            }
+            (void)xhci_submit_hid_transfer(xhci, slot);
+        }
+
+        delay_ms_hp(1);
+    }
 }
 
 static void xhci_parse_protocol_caps(xhci_controller *xhci) {
@@ -1828,6 +2648,14 @@ static int xhci_runtime_alloc(xhci_controller *xhci) {
         return -ENOMEM;
     }
 
+    xhci->root_port_pending =
+        (uint8_t *)xhci_zero_alloc((size_t)xhci->num_ports + 1);
+    if (!xhci->root_port_pending) {
+        free(xhci->slots);
+        xhci->slots = NULL;
+        return -ENOMEM;
+    }
+
     xhci->erst[0].ptr_low = (uint32_t)xhci->event_ring.phys;
     xhci->erst[0].ptr_high = (uint32_t)(xhci->event_ring.phys >> 32);
     xhci->erst[0].size = xhci->event_ring.count;
@@ -1848,6 +2676,11 @@ static void xhci_runtime_free(xhci_controller *xhci) {
         }
         free(xhci->slots);
         xhci->slots = NULL;
+    }
+
+    if (xhci->root_port_pending) {
+        free(xhci->root_port_pending);
+        xhci->root_port_pending = NULL;
     }
 
     if (xhci->scratchpad_pages) {
@@ -2079,12 +2912,14 @@ static int xhci_probe(pci_device_t *pci_dev) {
     }
 
     g_xhci = xhci;
-    if (xhci_has_active_hid(xhci) && !xhci->hid_worker_started) {
+    if (!xhci->service_worker_started) {
         size_t tid =
-            create_kernel_thread((void *)xhci_hid_worker, xhci,
-                                 (char *)"xhci-hid", NULL);
+            create_kernel_thread((void *)xhci_service_worker, xhci,
+                                 (char *)"xhci-svc", NULL);
+        xhci->service_worker_started = true;
         xhci->hid_worker_started = true;
-        printk("xhci: hid poller started tid=%u\n", (unsigned int)tid);
+        printk("xhci: service worker started tid=%u hid=%s\n",
+               (unsigned int)tid, xhci_has_active_hid(xhci) ? "yes" : "no");
     }
     return 0;
 }

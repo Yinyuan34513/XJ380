@@ -2,6 +2,8 @@
 
 extern "C" {
 #include "../../include/errno.h"
+#include "../../include/device.h"
+#include "../../include/krlibc.h"
 #include "../../include/mm/page.h"
 #include "../../include/pci/pci.h"
 #include "../../include/proto.hpp"
@@ -93,6 +95,8 @@ extern "C" {
 #define XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT 16
 
 #define XHCI_EP_TYPE_CONTROL 4U
+#define XHCI_EP_TYPE_BULK_OUT 2U
+#define XHCI_EP_TYPE_BULK_IN 6U
 #define XHCI_EP_TYPE_INTERRUPT_IN 7U
 
 #define USB_DIR_OUT 0x00U
@@ -101,6 +105,7 @@ extern "C" {
 #define USB_TYPE_CLASS (0x01U << 5)
 #define USB_RECIP_DEVICE 0x00U
 #define USB_RECIP_INTERFACE 0x01U
+#define USB_RECIP_ENDPOINT 0x02U
 #define USB_RECIP_OTHER 0x03U
 
 #define USB_REQ_GET_STATUS 0x00U
@@ -111,6 +116,8 @@ extern "C" {
 #define USB_REQ_SET_CONFIGURATION 0x09U
 #define HID_REQ_SET_IDLE 0x0AU
 #define HID_REQ_SET_PROTOCOL 0x0BU
+#define USB_MSC_REQ_RESET 0xFFU
+#define USB_MSC_REQ_GET_MAX_LUN 0xFEU
 
 #define USB_DT_DEVICE 0x01U
 #define USB_DT_CONFIG 0x02U
@@ -122,15 +129,20 @@ extern "C" {
 
 #define USB_CLASS_HID 0x03U
 #define USB_CLASS_HUB 0x09U
+#define USB_CLASS_MASS_STORAGE 0x08U
 
 #define USB_INTERFACE_SUBCLASS_BOOT 0x01U
 #define USB_INTERFACE_PROTOCOL_KEYBOARD 0x01U
 #define USB_INTERFACE_PROTOCOL_MOUSE 0x02U
+#define USB_MSC_SUBCLASS_SCSI 0x06U
+#define USB_MSC_PROTOCOL_BBB 0x50U
 
 #define USB_ENDPOINT_XFER_CONTROL 0x00U
 #define USB_ENDPOINT_XFER_ISOC 0x01U
 #define USB_ENDPOINT_XFER_BULK 0x02U
 #define USB_ENDPOINT_XFER_INT 0x03U
+
+#define USB_FEATURE_ENDPOINT_HALT 0x00U
 
 #define HUB_REQ_SET_HUB_DEPTH 0x0CU
 
@@ -157,6 +169,19 @@ extern "C" {
 #define XHCI_SPEED_LOW 2U
 #define XHCI_SPEED_HIGH 3U
 #define XHCI_SPEED_SUPER 4U
+
+#define XHCI_MSC_CBW_SIGNATURE 0x43425355U
+#define XHCI_MSC_CSW_SIGNATURE 0x53425355U
+
+#define SCSI_TEST_UNIT_READY 0x00U
+#define SCSI_REQUEST_SENSE 0x03U
+#define SCSI_INQUIRY 0x12U
+#define SCSI_READ_CAPACITY_10 0x25U
+#define SCSI_READ_10 0x28U
+#define SCSI_WRITE_10 0x2AU
+#define SCSI_SERVICE_ACTION_IN_16 0x9EU
+#define SCSI_READ_16 0x88U
+#define SCSI_WRITE_16 0x8AU
 
 enum xhci_trb_type {
     XHCI_TRB_TYPE_RESERVED = 0,
@@ -340,6 +365,14 @@ struct usb_endpoint_descriptor {
     uint8_t bInterval;
 } __attribute__((packed));
 
+struct usb_ss_ep_comp_descriptor {
+    uint8_t bLength;
+    uint8_t bDescriptorType;
+    uint8_t bMaxBurst;
+    uint8_t bmAttributes;
+    uint16_t wBytesPerInterval;
+} __attribute__((packed));
+
 struct usb_hub_descriptor_prefix {
     uint8_t bDescLength;
     uint8_t bDescriptorType;
@@ -405,6 +438,51 @@ struct xhci_hid_state {
     uint8_t reserved0[6];
 };
 
+struct xhci_slot_state;
+struct xhci_controller;
+
+struct xhci_msc_state {
+    bool supported;
+    bool ready;
+    bool use_read16;
+    uint8_t interface_number;
+    uint8_t max_lun;
+    uint8_t bulk_in_address;
+    uint8_t bulk_out_address;
+    uint8_t bulk_in_epid;
+    uint8_t bulk_out_epid;
+    uint8_t bulk_in_max_burst;
+    uint8_t bulk_out_max_burst;
+    uint16_t bulk_in_max_packet;
+    uint16_t bulk_out_max_packet;
+    uint32_t block_size;
+    uint32_t tag;
+    uint64_t block_count;
+    xhci_ring bulk_in_ring;
+    xhci_ring bulk_out_ring;
+    xhci_slot_state *slot;
+    xhci_controller *controller;
+    volatile uint32_t io_lock;
+    int device_id;
+};
+
+struct xhci_msc_cbw {
+    uint32_t signature;
+    uint32_t tag;
+    uint32_t data_transfer_length;
+    uint8_t flags;
+    uint8_t lun;
+    uint8_t cb_length;
+    uint8_t cdb[16];
+} __attribute__((packed));
+
+struct xhci_msc_csw {
+    uint32_t signature;
+    uint32_t tag;
+    uint32_t data_residue;
+    uint8_t status;
+} __attribute__((packed));
+
 struct xhci_slot_state {
     bool used;
     bool configured;
@@ -433,6 +511,7 @@ struct xhci_slot_state {
     uint64_t output_ctx_phys;
     void *config_buffer;
     xhci_hid_state hid;
+    xhci_msc_state msc;
     usb_device_descriptor device_desc;
     usb_config_descriptor config_desc;
 };
@@ -470,6 +549,9 @@ struct xhci_controller {
     uint32_t scratchpad_count;
 
     xhci_slot_state *slots;
+    uint8_t *root_port_pending;
+    volatile uint32_t event_lock;
+    bool service_worker_started;
     bool hid_worker_started;
     bool hid_devices_present;
 };

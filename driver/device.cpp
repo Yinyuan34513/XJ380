@@ -170,6 +170,7 @@ void delete_device(int vdiskid) {
     dev.flag    = 0;
     dev.vdiskid = 0;
 }
+EXPORT_SYMBOL(delete_device);
 
 bool have_vdisk(int drive) {
     int indx = drive;
