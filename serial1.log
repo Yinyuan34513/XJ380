@@ -1,0 +1,168 @@
+
+XJ380 Operating System - Serial Log
+Copyright(C) XINGJI Interacitve Software 2017-2026 All rights reserved.
+OS Version: BuildVersion
+EFI Initialize Success.
+New Page Table Created Success.
+Root Dir Open Success.
+XSK2.1 Kernel Read Success.
+Frame Buffer Phys Addr: 0xFFFF8000F00000`©ü
+Video Initialize Success.
+ACPI Table Found Success.
+ACPI Version: 2
+XSDT Address: 0xFBF0064
+SDT Entry 0:
+SDT Address: 0xFBF0088
+SRAT(
+
+SDT Entry 1:
+SDT Address: 0xFBF0090
+FACPô
+FADT Found Success.
+
+SDT Entry 2:
+SDT Address: 0xFBF0098
+APIC²
+MADT Found Success.
+
+SDT Entry 3:
+SDT Address: 0xFBF00A0
+MCFG<
+MCFG Found Success.
+
+SDT Entry 4:
+SDT Address: 0xFBF00A8
+HPET8
+HPET Found Success.
+
+SDT Entry 5:
+SDT Address: 0xFBF00B0
+WAET(
+
+SDT Entry 6:
+SDT Address: 0xFBF00B8
+WSMT(
+
+Initializing IDT...
+IDT Initialize Success.
+GDT Initialize Success.
+Setup acpi hpet table (nano_time: 2958030414).
+Initializing APIC...
+Mask 8259A Success.
+Your PC support x2APIC.
+Initializing IOAPIC...
+Setup I/O apic.
+IOAPIC Address: 0xFFFF8000FEC00000
+IOAPIC Initialize Success.
+APIC Initialize Success.
+0x00000000100000~0x0000000d62a000
+0x0000000f07f000~0x0000000f1dc000
+0x0000000f1dd000~0x0000000f1de000
+0x0000000fa7f000~0x0000000fa80000
+0x0000000fe00000~0x0000000ffab000
+0x00000010000000~0x000000c0000000
+0x00000100000000~0x00000140000000
+0x00000140053000~0x00000240000000
+Available memory: 8151 MiB
+Virtual File System initialize.
+Found PCIe device: 0x60000 name: Host Bridge
+Found PCIe device: 0x60100 name: ISA Bridge
+Found PCIe device: 0x1018a name: IDE Controller
+Found PCIe device: 0x68000 name: Other Bridge
+Found PCIe device: 0x88000 name: Other Base System Peripheral
+Found PCIe device: 0x30000 name: VGA Compatible Controller
+Found PCIe device: 0x20000 name: Ethernet Controller
+Found PCIe device: 0x40100 name: Multimedia Audio Controller
+Found PCIe device: 0x10601 name: Serial ATA Controller
+Found PCIe device: 0xc0300 name: USB Controller
+Found PCIe device: 0xc0320 name: USB Controller
+Found PCIe device: 0xc0330 name: USB Controller
+Found PCIe device: 0x10802 name: Non-Volatile Memory Controller
+PCIE device loaded: 13
+VM hint: generic/VMware/real hardware
+AHCI: environment=generic/vmware/real controller=02:02.0 vendor=0x15ad device=0x7e0
+AHCI: PCI command before=0x300006 after=0x300006
+AHCI: BAR5=0xfc051000 size=0x1000 CAP=0xc1341f1d CAP2=0x0 PI=0x3fffffff VS=1.3.0
+AHCI: CAP2=0x0 BOHC(before)=0x0
+AHCI: BIOS/OS handoff not supported
+AHCI: mode enabled CAP=0xc1341f1d CAP2=0x0 ports=30 cmd_slots=32 PI=0x3fffffff
+AHCI: port signature=0x101
+AHCI: ATA device detected, sending IDENTIFY
+AHCI: Device initialized: VMware Virtual SATA Hard Drive         , blocks: 262144, block_size: 512
+Registers (sata0)device success
+sata0: blk_size=512, blk=0..262144, VMware Virtual SATA Hard Drive         
+AHCI initialized: online_ports=1 ready_ports=1 implemented_ports=30 version=1.3.0
+AHCI: acceleration disabled
+Found NVME controller.
+Invalid namespace size
+Initializing IDE controller...
+IDE: Found IDE controller
+IDE: Detecting Primary Master...
+IDE: Detecting Primary Slave...
+IDE: Detecting Secondary Master...
+IDE: Detecting Secondary Slave...
+IDE: Registering devices...
+IDE controller initialized.
+PART: /dev/sata0
+part: Partition init success, device sata0 found.
+PART: read sata0 sector_size=512 size=0x8000000
+PART: MBR read attempt=1 signature=55aa type0=ee
+PART: MBR signature=55aa type0=ee
+PART: GPT sig=EFI PART rev=0x10000 hdr=92 pe_lba=2 entries=128 entry_size=128
+GPT Partition(sata0) 1 GUID: B47CE186-BA9E-4D64-84EB-07FD759887F1
+Loading part device...
+Registers (sata0p0)device success
+[XJ380 System Kernel][MESSAGE] Standard PS/2 mouse detected
+[XJ380 System Kernel][MESSAGE] Mouse initialized successfully, type: 0
+Setup process <XSK System> PID:0
+Initializing SMP...
+Searching CPUs...
+Start Up APs...
+Initializing CPU 1.
+CPU 1 Initialize Success.
+Initializing CPU 2.
+CPU 2 Initialize Success.
+Initializing CPU 3.
+CPU 3 Initialize Success.
+Initializing CPU 4.
+CPU 4 Initialize Success.
+Initializing CPU 5.
+CPU 5 Initialize Success.
+Initializing CPU 6.
+CPU 6 Initialize Success.
+Initializing CPU 7.
+CPU 7 Initialize Success.
+SMP init with 8 cpus
+/dev/sata0p0
+Mount root OK!
+Registers (stdio)device success
+XJ380 Message Initialize Success.
+kmod: Modulee1000 /lib/modules/e1000.km
+Found 26 kernel symbols
+Dynamic linker initialized
+Cannot find symbol _init in ELF file.
+Loaded shared object: /lib/modules/e1000.km at 0xffffffffb0000000
+find dlmain 
+[XJ380 System Kernel][MESSAGE] e1000: Found Intel E1000 network controller
+[XJ380 System Kernel][MESSAGE] e1000: MAC address: 00:00:00:00:00:00
+Loaded kernel module: e1000 at 0xffffffffb0000000
+Process Killer is ready
+AHCI: keeping conservative IO path on vmware/real hardware
+desktop flusher is running
+Initializing Sheet Manager...
+Sheet Manager Initialize Success.
+Initializing Font...
+TTF: loaded '/system/font/XJ380F.ttf' size=10807764 read=13584ms init=0ms magic=00010000
+TTF: loaded '/system/font/XJ380C.ttf' size=5448380 read=6758ms init=0ms magic=00010000
+TTF Initialize Success.
+Initializing XWM...
+Reading Theme...
+XWM Initializing Success.
+user & settings initialized.
+desktop initialized.
+components flusher is running
+Creating User Process. Process Name: fmanager
+Creating User Thread. Thread Name: fmanager
+CWD: /system
+UEFI ResetSystem returned unexpectedly.
+ACPI poweroff: PM1a=0x444 PM1b=0x0 SLP_TYPa=0x0 SLP_TYPb=0x0

@@ -9,6 +9,7 @@
 #include <rtc.h>
 #include <syscall/syscall.h>
 #include <efi/boot.h>
+#include <dlinker.h>
 #include <power.h>
 
 mouse_dec ms_dec;
@@ -505,6 +506,27 @@ int get_mouse_scroll()
     ms_dec.scroll = 0;  // 读取后重置
     return scroll;
 }
+
+void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
+{
+    ms_dec.btn = buttons & 0x07;
+    ms_dec.x   = dx;
+    ms_dec.y   = dy;
+    ms_dec.scroll += wheel;
+
+    mouse_x += dx;
+    mouse_y += dy;
+
+    if (mouse_x < 0) mouse_x = 0;
+    if (mouse_y < 0) mouse_y = 0;
+    if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+    if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
+
+    ms_dec.need_flush = true;
+    process_mouse_button();
+}
+
+EXPORT_SYMBOL(mouse_inject_report);
 
 static bool send_command(uint8_t value)
 {

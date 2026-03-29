@@ -7,6 +7,7 @@
 #define PTE_HUGE            (0x1 << 7)
 #define PTE_FRAME_ALLOCATED (((uint64_t)0x1) << 62)
 #define PTE_NO_EXECUTE      (((uint64_t)0x1) << 63)
+#define PTE_ADDR_MASK       0x00007fffffff000ULL
 
 #define ARCH_PT_IS_TABLE(x) (((x) & (PTE_PRESENT | PTE_WRITEABLE)) == (PTE_PRESENT | PTE_WRITEABLE))
 #define ARCH_PT_IS_LARGE(x) (((x) & (PTE_PRESENT | PTE_HUGE)) == (PTE_PRESENT | PTE_HUGE))

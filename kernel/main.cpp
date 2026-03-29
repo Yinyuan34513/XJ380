@@ -52,6 +52,8 @@ bool                     no_interrupt = false; // 为true时代表严禁开启�
 extern spin_t            fb_print_lock;
 
 extern bool allow_to_flush;
+extern void ahci_set_accel(bool enabled);
+extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
 
@@ -425,6 +427,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_fmt("VM hint: %s\n", BootConfig.is_qemu == 1 ? "QEMU/BOCHS" : "generic/VMware/real hardware");
     ahci_set_environment(BootConfig.is_qemu == 1);
     ahci_setup();
+    ahci_set_accel(false);
     nvme_setup();
     
     extern void ide_setup(void);
@@ -436,8 +439,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // hda_init();
     // sb16_init();
 
-    keyboard_init();
-    mouse_init();
+    // keyboard_init();
+    // mouse_init();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -504,6 +507,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
+    if (ahci_is_qemu_environment()) {
+        ahci_set_accel(true);
+    } else {
+        write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
+    }
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
     // delay_s_hp(60);
 

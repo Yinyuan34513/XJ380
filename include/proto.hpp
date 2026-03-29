@@ -229,6 +229,7 @@ extern const FrameBufferConfig *fbc_addr;
 // extern struct keyboard_buf kb_fifo;
 // extern uint8_t             keyboard_code[256];
 // extern uint8_t             keyboard_code1[256];
+void keyboard_push_input(uint8_t value);
 
 // driver/ps2/mouse.cpp
 void mouse_init();
@@ -241,6 +242,7 @@ int  get_mouse_y();
 int  get_mouse_scroll();
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet);
 void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py);
+void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
 
 /*
  *

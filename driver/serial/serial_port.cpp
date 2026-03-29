@@ -304,7 +304,9 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         /* Calc length of `%s` and set num_flag */
         switch (**fmt_ptr)
         {
-        case 'c': break;
+        case 'c':
+            if (num_fmter.size == 0) num_fmter.size = 1;
+            break;
         case 's':
             str_len = strlen(str);
             if (num_fmter.size < str_len) num_fmter.size = str_len;

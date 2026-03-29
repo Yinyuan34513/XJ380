@@ -10,11 +10,6 @@ partition_t     partitions[MAX_PARTITIONS_NUM];
 size_t          partition_num = 0;
 partition_t    *device_lists[MAX_PARTITIONS_NUM];
 
-static size_t partition_expected_sectors(size_t bytes, size_t sector_size)
-{
-    return PADDING_UP(bytes, sector_size) / sector_size;
-}
-
 static void partition_dump_prefix(const char *name, const uint8_t *buf, size_t bytes)
 {
     size_t dump_len = bytes > 64 ? 64 : bytes;
@@ -30,12 +25,11 @@ static void partition_dump_prefix(const char *name, const uint8_t *buf, size_t b
 static bool partition_read_exact(vfs_node_t device, device_t disk, void *buf, size_t offset, size_t bytes,
                                  const char *tag)
 {
-    size_t expected = partition_expected_sectors(bytes, disk.sector_size);
     size_t got      = vfs_read(device, buf, offset, bytes);
-    if (got != expected)
+    if (got != bytes)
     {
-        write_serial_fmt("PART: %s short read offset=0x%zx bytes=0x%zx expected_sectors=%zu got=%zu\n", tag, offset,
-                         bytes, expected, got);
+        write_serial_fmt("PART: %s short read offset=0x%zx bytes=0x%zx got=0x%zx sector_size=%zu\n", tag, offset,
+                         bytes, got, disk.sector_size);
         return false;
     }
     return true;
@@ -358,14 +352,20 @@ void partition_init()
     {
         partition_t partition = partitions[j];
         device_t    part;
+        memset(&part, 0, sizeof(part));
         part.sector_size  = partition.sector_size;
         part.flag         = 1;
         part.type         = DEVICE_BLOCK;
         part.read         = partition_read;
         part.write        = partition_write;
         part.ioctl        = partition_ioctl;
+        part.poll         = (pollf)empty;
+        part.map          = (mapf)empty;
+        part.read_vbuf    = NULL;
+        part.write_vbuf   = NULL;
         part.size         = (partition.ending_lba - partition.starting_lba + 1) * partition.sector_size;
         device_t *src_dev = get_device(partition.vdisk_id);
+        part.max_size     = src_dev ? src_dev->max_size : __UINT64_MAX__;
         char      buf[20];
         sprintf(buf, "%sp%zu", src_dev->drive_name, j);
         strcpy(part.drive_name, buf);
