@@ -146,6 +146,9 @@ int regist_device(const char *path, device_t vd) {
         write_serial_fmt("Registers (%s)device error: %d\n", vd.drive_name, ret);
     }else{
         write_serial_fmt("Registers (%s)device success\n", vd.drive_name);
+        if (device_ctl[i].type == DEVICE_BLOCK) {
+            partition_device_added((size_t)i);
+        }
     }
     return i;
 }

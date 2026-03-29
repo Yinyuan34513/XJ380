@@ -6,7 +6,7 @@ EFI Initialize Success.
 New Page Table Created Success.
 Root Dir Open Success.
 XSK2.1 Kernel Read Success.
-Frame Buffer Phys Addr: 0xFFFF8000F00000`©ü
+Frame Buffer Phys Addr: 0xFFFF8000F00000`ï¿½ï¿½
 Video Initialize Success.
 ACPI Table Found Success.
 ACPI Version: 2
@@ -17,12 +17,12 @@ SRAT(
 
 SDT Entry 1:
 SDT Address: 0xFBF0090
-FACPô
+FACPï¿½
 FADT Found Success.
 
 SDT Entry 2:
 SDT Address: 0xFBF0098
-APIC²
+APICï¿½
 MADT Found Success.
 
 SDT Entry 3:
@@ -112,8 +112,8 @@ PART: GPT sig=EFI PART rev=0x10000 hdr=92 pe_lba=2 entries=128 entry_size=128
 GPT Partition(sata0) 1 GUID: B47CE186-BA9E-4D64-84EB-07FD759887F1
 Loading part device...
 Registers (sata0p0)device success
-[XJ380 System Kernel][MESSAGE] Standard PS/2 mouse detected
-[XJ380 System Kernel][MESSAGE] Mouse initialized successfully, type: 0
+[XS Kernel][MESSAGE] Standard PS/2 mouse detected
+[XS Kernel][MESSAGE] Mouse initialized successfully, type: 0
 Setup process <XSK System> PID:0
 Initializing SMP...
 Searching CPUs...
@@ -143,8 +143,8 @@ Dynamic linker initialized
 Cannot find symbol _init in ELF file.
 Loaded shared object: /lib/modules/e1000.km at 0xffffffffb0000000
 find dlmain 
-[XJ380 System Kernel][MESSAGE] e1000: Found Intel E1000 network controller
-[XJ380 System Kernel][MESSAGE] e1000: MAC address: 00:00:00:00:00:00
+[XS Kernel][MESSAGE] e1000: Found Intel E1000 network controller
+[XS Kernel][MESSAGE] e1000: MAC address: 00:00:00:00:00:00
 Loaded kernel module: e1000 at 0xffffffffb0000000
 Process Killer is ready
 AHCI: keeping conservative IO path on vmware/real hardware
