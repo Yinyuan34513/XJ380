@@ -146,6 +146,9 @@ int regist_device(const char *path, device_t vd) {
         write_serial_fmt("Registers (%s)device error: %d\n", vd.drive_name, ret);
     }else{
         write_serial_fmt("Registers (%s)device success\n", vd.drive_name);
+        if (device_ctl[i].type == DEVICE_BLOCK) {
+            partition_device_added((size_t)i);
+        }
     }
     return i;
 }
@@ -170,6 +173,7 @@ void delete_device(int vdiskid) {
     dev.flag    = 0;
     dev.vdiskid = 0;
 }
+EXPORT_SYMBOL(delete_device);
 
 bool have_vdisk(int drive) {
     int indx = drive;

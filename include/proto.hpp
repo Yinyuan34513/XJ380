@@ -200,6 +200,7 @@ void    *virt_to_phys(uint64_t virt_addr);
 void    *driver_phys_to_virt(uint64_t phys_addr);
 void    *driver_virt_to_phys(uint64_t virt_addr);
 uint64_t page_virt_to_phys(uint64_t va);
+
 #define USER_MMAP_START 0x0000400000000000UL // 用户堆映射起始地址
 // kernel/memory/page.cpp
 #include <mm/page.h>
@@ -276,6 +277,7 @@ uint64_t getline_from_file(void *buffer, char *str);
 // ulog.cpp
 void init_xuls();
 void write_ulog(char *str);
+
 void ulog_err(char *err_type);
 
 #endif

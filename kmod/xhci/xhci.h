@@ -2,6 +2,8 @@
 
 extern "C" {
 #include "../../include/errno.h"
+#include "../../include/device.h"
+#include "../../include/krlibc.h"
 #include "../../include/mm/page.h"
 #include "../../include/pci/pci.h"
 #include "../../include/proto.hpp"
@@ -93,6 +95,8 @@ extern "C" {
 #define XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT 16
 
 #define XHCI_EP_TYPE_CONTROL 4U
+#define XHCI_EP_TYPE_BULK_OUT 2U
+#define XHCI_EP_TYPE_BULK_IN 6U
 #define XHCI_EP_TYPE_INTERRUPT_IN 7U
 
 #define USB_DIR_OUT 0x00U
@@ -101,6 +105,7 @@ extern "C" {
 #define USB_TYPE_CLASS (0x01U << 5)
 #define USB_RECIP_DEVICE 0x00U
 #define USB_RECIP_INTERFACE 0x01U
+#define USB_RECIP_ENDPOINT 0x02U
 #define USB_RECIP_OTHER 0x03U
 
 #define USB_REQ_GET_STATUS 0x00U
@@ -111,6 +116,8 @@ extern "C" {
 #define USB_REQ_SET_CONFIGURATION 0x09U
 #define HID_REQ_SET_IDLE 0x0AU
 #define HID_REQ_SET_PROTOCOL 0x0BU
+#define USB_MSC_REQ_RESET 0xFFU
+#define USB_MSC_REQ_GET_MAX_LUN 0xFEU
 
 #define USB_DT_DEVICE 0x01U
 #define USB_DT_CONFIG 0x02U
@@ -122,19 +129,25 @@ extern "C" {
 
 #define USB_CLASS_HID 0x03U
 #define USB_CLASS_HUB 0x09U
+#define USB_CLASS_MASS_STORAGE 0x08U
 
 #define USB_INTERFACE_SUBCLASS_BOOT 0x01U
 #define USB_INTERFACE_PROTOCOL_KEYBOARD 0x01U
 #define USB_INTERFACE_PROTOCOL_MOUSE 0x02U
+#define USB_MSC_SUBCLASS_SCSI 0x06U
+#define USB_MSC_PROTOCOL_BBB 0x50U
 
 #define USB_ENDPOINT_XFER_CONTROL 0x00U
 #define USB_ENDPOINT_XFER_ISOC 0x01U
 #define USB_ENDPOINT_XFER_BULK 0x02U
 #define USB_ENDPOINT_XFER_INT 0x03U
 
+#define USB_FEATURE_ENDPOINT_HALT 0x00U
+
 #define HUB_REQ_SET_HUB_DEPTH 0x0CU
 
 #define USB_PORT_FEAT_RESET 4U
+#define USB_PORT_FEAT_ENABLE 1U
 #define USB_PORT_FEAT_POWER 8U
 #define USB_PORT_FEAT_C_CONNECTION 16U
 #define USB_PORT_FEAT_C_ENABLE 17U
@@ -157,6 +170,28 @@ extern "C" {
 #define XHCI_SPEED_LOW 2U
 #define XHCI_SPEED_HIGH 3U
 #define XHCI_SPEED_SUPER 4U
+
+#define XHCI_MSC_CBW_SIGNATURE 0x43425355U
+#define XHCI_MSC_CSW_SIGNATURE 0x53425355U
+
+#define SCSI_TEST_UNIT_READY 0x00U
+#define SCSI_REQUEST_SENSE 0x03U
+#define SCSI_INQUIRY 0x12U
+#define SCSI_READ_CAPACITY_10 0x25U
+#define SCSI_READ_10 0x28U
+#define SCSI_WRITE_10 0x2AU
+#define SCSI_SERVICE_ACTION_IN_16 0x9EU
+#define SCSI_READ_16 0x88U
+#define SCSI_WRITE_16 0x8AU
+
+static inline uint8_t xhci_endpoint_id_from_address(uint8_t endpoint_address) {
+    if ((endpoint_address & 0x0FU) == 0) {
+        return 1U;
+    }
+
+    uint8_t epid = (uint8_t)((endpoint_address & 0x0FU) << 1);
+    return (endpoint_address & USB_DIR_IN) ? (uint8_t)(epid | 1U) : epid;
+}
 
 enum xhci_trb_type {
     XHCI_TRB_TYPE_RESERVED = 0,
@@ -340,6 +375,14 @@ struct usb_endpoint_descriptor {
     uint8_t bInterval;
 } __attribute__((packed));
 
+struct usb_ss_ep_comp_descriptor {
+    uint8_t bLength;
+    uint8_t bDescriptorType;
+    uint8_t bMaxBurst;
+    uint8_t bmAttributes;
+    uint16_t wBytesPerInterval;
+} __attribute__((packed));
+
 struct usb_hub_descriptor_prefix {
     uint8_t bDescLength;
     uint8_t bDescriptorType;
@@ -405,6 +448,54 @@ struct xhci_hid_state {
     uint8_t reserved0[6];
 };
 
+struct xhci_slot_state;
+struct xhci_controller;
+struct usb_device;
+struct usb_hub;
+struct usb_driver;
+
+struct xhci_msc_state {
+    bool supported;
+    bool ready;
+    bool use_read16;
+    uint8_t interface_number;
+    uint8_t max_lun;
+    uint8_t bulk_in_address;
+    uint8_t bulk_out_address;
+    uint8_t bulk_in_epid;
+    uint8_t bulk_out_epid;
+    uint8_t bulk_in_max_burst;
+    uint8_t bulk_out_max_burst;
+    uint16_t bulk_in_max_packet;
+    uint16_t bulk_out_max_packet;
+    uint32_t block_size;
+    uint32_t tag;
+    uint64_t block_count;
+    xhci_ring bulk_in_ring;
+    xhci_ring bulk_out_ring;
+    xhci_slot_state *slot;
+    xhci_controller *controller;
+    volatile uint32_t io_lock;
+    int device_id;
+};
+
+struct xhci_msc_cbw {
+    uint32_t signature;
+    uint32_t tag;
+    uint32_t data_transfer_length;
+    uint8_t flags;
+    uint8_t lun;
+    uint8_t cb_length;
+    uint8_t cdb[16];
+} __attribute__((packed));
+
+struct xhci_msc_csw {
+    uint32_t signature;
+    uint32_t tag;
+    uint32_t data_residue;
+    uint8_t status;
+} __attribute__((packed));
+
 struct xhci_slot_state {
     bool used;
     bool configured;
@@ -428,11 +519,13 @@ struct xhci_slot_state {
     uint16_t hub_characteristics;
     uint16_t config_length;
     uint16_t reserved0;
+    usb_device *usbdev;
     xhci_ring ep0_ring;
     void *output_ctx;
     uint64_t output_ctx_phys;
     void *config_buffer;
     xhci_hid_state hid;
+    xhci_msc_state msc;
     usb_device_descriptor device_desc;
     usb_config_descriptor config_desc;
 };
@@ -470,6 +563,158 @@ struct xhci_controller {
     uint32_t scratchpad_count;
 
     xhci_slot_state *slots;
+    uint8_t *root_port_pending;
+    volatile uint32_t event_lock;
+    bool service_worker_started;
     bool hid_worker_started;
     bool hid_devices_present;
+    usb_hub *root_hub;
+    usb_device *root_usbdev;
 };
+
+#define USB_CORE_MAX_IFACES 8
+#define USB_CORE_MAX_ENDPOINTS 8
+#define USB_DRIVER_MATCH_VENDOR 0x0001U
+#define USB_DRIVER_MATCH_PRODUCT 0x0002U
+#define USB_DRIVER_MATCH_IFACE_CLASS 0x0004U
+#define USB_DRIVER_MATCH_IFACE_SUBCLASS 0x0008U
+#define USB_DRIVER_MATCH_IFACE_PROTOCOL 0x0010U
+
+struct usb_endpoint_info {
+    uint8_t address;
+    uint8_t attributes;
+    uint8_t interval;
+    uint8_t max_burst;
+    uint16_t max_packet;
+};
+
+struct usb_interface_info {
+    uint8_t number;
+    uint8_t alt_setting;
+    uint8_t interface_class;
+    uint8_t interface_subclass;
+    uint8_t interface_protocol;
+    uint8_t endpoint_count;
+    usb_endpoint_info endpoints[USB_CORE_MAX_ENDPOINTS];
+};
+
+struct usb_driver_id {
+    uint16_t match_flags;
+    uint16_t vendor_id;
+    uint16_t product_id;
+    uint8_t interface_class;
+    uint8_t interface_subclass;
+    uint8_t interface_protocol;
+};
+
+struct usb_hub_ops {
+    int (*detect)(usb_hub *hub, uint8_t port, usb_port_status *status);
+    int (*reset)(usb_hub *hub, uint8_t port, uint8_t *speed_out);
+    void (*disconnect)(usb_hub *hub, uint8_t port);
+    void (*ack)(usb_hub *hub, uint8_t port, const usb_port_status *status);
+};
+
+struct usb_hub {
+    xhci_controller *controller;
+    usb_device *usbdev;
+    const usb_hub_ops *ops;
+    uint8_t port_count;
+    bool registered;
+    bool needs_rescan;
+    usb_device **children;
+    uint8_t *port_changed;
+    usb_hub *next;
+};
+
+struct usb_device {
+    xhci_controller *controller;
+    xhci_slot_state *slot;
+    usb_hub *parent_hub;
+    usb_hub *child_hub;
+    bool is_root_hub;
+    bool online;
+    uint8_t port;
+    uint8_t speed_id;
+    uint8_t level;
+    uint8_t config_value;
+    uint8_t interface_count;
+    uint16_t vendor_id;
+    uint16_t product_id;
+    void *driver_data;
+    usb_driver *bound_drivers[4];
+    uint8_t bound_driver_count;
+    char topology[64];
+    usb_device_descriptor device_desc;
+    usb_config_descriptor config_desc;
+    void *config_buffer;
+    uint16_t config_length;
+    usb_interface_info interfaces[USB_CORE_MAX_IFACES];
+};
+
+struct usb_driver {
+    const char *name;
+    int priority;
+    const usb_driver_id *id_table;
+    int (*probe)(usb_device *usbdev, const usb_interface_info *iface);
+    void (*remove)(usb_device *usbdev);
+    usb_driver *next;
+};
+
+void usb_core_init(void);
+void usb_register_driver(usb_driver *driver);
+void usb_register_hub(usb_hub *hub);
+void usb_hub_mark_port_changed(usb_hub *hub, uint32_t port_idx);
+void usb_scan_all_hubs(void);
+void usb_fill_topology(usb_device *usbdev);
+int usb_parse_configuration(usb_device *usbdev);
+int usb_probe_device(usb_device *usbdev);
+void usb_disconnect_device(usb_device *usbdev);
+void usb_register_builtin_hub_driver(void);
+void usb_register_builtin_msc_driver(void);
+int usb_fallback_probe_hub(usb_device *usbdev);
+int usb_fallback_probe_msc(usb_device *usbdev);
+
+int xhci_usb_enumerate_device(xhci_controller *xhci, usb_hub *parent_hub,
+                              uint8_t parent_port, uint8_t speed_id,
+                              usb_device **device_out);
+void xhci_usb_release_device(usb_device *usbdev);
+
+int xhci_control_request(xhci_controller *xhci, xhci_slot_state *slot,
+                         uint8_t request_type, uint8_t request,
+                         uint16_t value, uint16_t index, void *data,
+                         uint16_t length, uint32_t *actual_len);
+int xhci_set_configuration(xhci_controller *xhci, xhci_slot_state *slot,
+                           uint8_t config_value);
+int xhci_configure_msc_endpoints(xhci_controller *xhci,
+                                 xhci_slot_state *slot);
+void xhci_release_msc(xhci_slot_state *slot);
+int xhci_msc_scsi_test_unit_ready(xhci_controller *xhci,
+                                  xhci_slot_state *slot);
+int xhci_msc_scsi_request_sense(xhci_controller *xhci,
+                                xhci_slot_state *slot, void *data,
+                                uint8_t alloc_len);
+int xhci_msc_scsi_inquiry(xhci_controller *xhci, xhci_slot_state *slot,
+                          void *data, uint8_t alloc_len);
+int xhci_msc_scsi_read_capacity10(xhci_controller *xhci,
+                                  xhci_slot_state *slot, void *data);
+int xhci_msc_scsi_read_capacity16(xhci_controller *xhci,
+                                  xhci_slot_state *slot, void *data);
+int xhci_msc_scsi_rw(xhci_controller *xhci, xhci_slot_state *slot,
+                     void *buffer, uint64_t lba, uint32_t blocks, bool write);
+
+int xhci_hub_get_descriptor(xhci_controller *xhci, xhci_slot_state *slot,
+                            usb_hub_descriptor_prefix *desc);
+int xhci_hub_set_depth(xhci_controller *xhci, xhci_slot_state *slot);
+int xhci_hub_set_port_feature(xhci_controller *xhci, xhci_slot_state *slot,
+                              uint8_t port, uint16_t feature);
+int xhci_hub_clear_port_feature(xhci_controller *xhci, xhci_slot_state *slot,
+                                uint8_t port, uint16_t feature);
+int xhci_hub_get_port_status(xhci_controller *xhci, xhci_slot_state *slot,
+                             uint8_t port, usb_port_status *status);
+void xhci_hub_ack_port_change(xhci_controller *xhci, xhci_slot_state *slot,
+                              uint8_t port, const usb_port_status *status);
+int xhci_hub_detect_port(xhci_controller *xhci, xhci_slot_state *slot,
+                         uint8_t port, usb_port_status *status);
+int xhci_hub_reset_port(xhci_controller *xhci, xhci_slot_state *slot,
+                        uint8_t port, uint8_t *speed_out);
+int xhci_setup_hub(xhci_controller *xhci, xhci_slot_state *slot);

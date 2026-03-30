@@ -73,3 +73,4 @@ typedef struct partition {
 } partition_t;
 
 void partition_init();
+extern "C" void partition_device_added(size_t vdisk_id);

@@ -1062,3 +1062,5 @@ void dlinker_init() {
     
     write_serial_fmt("Dynamic linker initialized\n");
 }
+EXPORT_SYMBOL(scheduler_yield);
+EXPORT_SYMBOL(page_virt_to_phys);
