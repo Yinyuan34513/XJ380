@@ -7,15 +7,17 @@ extern "C"{
 // Global device array
 e1000_device_t *e1000_devices[MAX_E1000_DEVICES];
 int e1000_device_count = 0;
+static uint32_t g_e1000_tx_log_count = 0;
+static uint32_t g_e1000_rx_log_count = 0;
 
 // MMIO Read/Write functions
 static inline uint32_t e1000_read32(e1000_device_t *dev, uint32_t reg) {
-    return *((volatile uint32_t *)((uint32_t*)(dev->mmio_base) + reg));
+    return *(volatile uint32_t *)((uint8_t *)dev->mmio_base + reg);
 }
 
 static inline void e1000_write32(e1000_device_t *dev, uint32_t reg,
                                  uint32_t value) {
-    *((volatile uint32_t *)((uint32_t*)dev->mmio_base + reg)) = value;
+    *(volatile uint32_t *)((uint8_t *)dev->mmio_base + reg) = value;
 }
 
 // Read from EEPROM
@@ -139,9 +141,6 @@ static int e1000_init_tx(e1000_device_t *dev) {
 
     // Initialize TX descriptors
     memset(dev->tx_descs, 0, E1000_NUM_TX_DESC * sizeof(struct e1000_tx_desc));
-    for (int i = 0; i < E1000_NUM_TX_DESC; i++) {
-        dev->tx_buffers[i] = NULL;
-    }
 
     // Program TX descriptor registers
     uint64_t tx_desc_phys = (uint64_t)virt_to_phys((uint64_t)dev->tx_descs);
@@ -190,10 +189,15 @@ int e1000_init(void *mmio_base) {
 
     memset(dev, 0, sizeof(e1000_device_t));
     dev->mmio_base = mmio_base;
-    dev->mtu = E1000_MTU;
+    dev->mtu = E1000_TX_BUFFER_SIZE;
 
     // Reset device
     e1000_reset(dev);
+
+    uint32_t ctrl = e1000_read32(dev, E1000_CTRL);
+    ctrl |= E1000_CTRL_ASDE | E1000_CTRL_SLU;
+    ctrl &= ~(E1000_CTRL_FRCSPD | E1000_CTRL_FRCDPLX);
+    e1000_write32(dev, E1000_CTRL, ctrl);
 
     // Get MAC address
     if (e1000_get_mac_address(dev) != 0) {
@@ -234,6 +238,17 @@ int e1000_send(void *dev_desc, void *data, uint32_t len) {
 
     if (len > E1000_MTU || len == 0) {
         return -1;
+    }
+
+    if (g_e1000_tx_log_count < 24 && len >= 14) {
+        uint8_t *frame = (uint8_t *)data;
+        uint16_t eth_type = ((uint16_t)frame[12] << 8) | frame[13];
+        printk("e1000: tx len=%u type=0x%04x dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x\n",
+               len,
+               (unsigned int)eth_type,
+               frame[0], frame[1], frame[2], frame[3], frame[4], frame[5],
+               frame[6], frame[7], frame[8], frame[9], frame[10], frame[11]);
+        g_e1000_tx_log_count++;
     }
 
     // Check if we have a free TX descriptor
@@ -317,6 +332,19 @@ int e1000_receive(void *dev_desc, void *buffer, uint32_t buffer_size) {
     // Copy packet data to user buffer
     memcpy(buffer, phys_to_virt((uint64_t)(void *)desc->buffer_addr), packet_len);
 
+    if (g_e1000_rx_log_count < 24 && packet_len >= 14) {
+        uint8_t *frame = (uint8_t *)buffer;
+        uint16_t eth_type = ((uint16_t)frame[12] << 8) | frame[13];
+        printk("e1000: rx len=%u type=0x%04x dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x status=0x%x err=0x%x\n",
+               packet_len,
+               (unsigned int)eth_type,
+               frame[0], frame[1], frame[2], frame[3], frame[4], frame[5],
+               frame[6], frame[7], frame[8], frame[9], frame[10], frame[11],
+               (unsigned int)desc->status,
+               (unsigned int)desc->errors);
+        g_e1000_rx_log_count++;
+    }
+
 cleanup:
     // Recycle the descriptor
     desc->status = 0;
@@ -352,6 +380,7 @@ uint32_t e1000_get_device_count(void) { return e1000_device_count; }
 
 // PCI Driver Interface
 static int e1000_pci_probe(pci_device_t *pci_dev, uint32_t vendor_device_id) {
+    (void)vendor_device_id;
     if (pci_dev->device_id != 0x100e && pci_dev->device_id != 0x100f) {
         return 0;
     }
@@ -374,10 +403,10 @@ static int e1000_pci_probe(pci_device_t *pci_dev, uint32_t vendor_device_id) {
         return -1;
     }
 
-    // Map MMIO region
+    printk("e1000: MMIO BAR base=0x%llx size=0x%llx\n", mmio_base, mmio_size);
+
+    // PCI MMIO is already reachable through the kernel's direct physical mapping.
     void *mmio_vaddr = (void *)phys_to_virt(mmio_base);
-    page_map_range(get_current_directory(), (uint64_t)mmio_vaddr, mmio_base,
-                   mmio_size, PTE_PRESENT | PTE_WRITEABLE | (1UL<<5));
 
     // Initialize E1000 device
     return e1000_init(mmio_vaddr);

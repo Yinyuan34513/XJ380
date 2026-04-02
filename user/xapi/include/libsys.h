@@ -40,7 +40,14 @@
 
 #define SYS_GETPID 39
 
+#define SYS_SOCKET 41
+#define SYS_CONNECT 42
+#define SYS_ACCEPT 43
+
 #define SYS_SHUTDOWN 48
+
+#define SYS_BIND 49
+#define SYS_LISTEN 50
 
 #define SYS_FORK 57
 #define SYS_VFORK 58

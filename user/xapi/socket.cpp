@@ -1,0 +1,32 @@
+#include "./include/xposix/socket.h"
+#include "./include/libsys.h"
+
+int socket(int domain, int type, int protocol)
+{
+    return enter_syscall(SYS_SOCKET, domain, type, protocol, 0, 0, 0);
+}
+
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    return enter_syscall(SYS_BIND, sockfd, (uint64_t)addr, addrlen, 0, 0, 0);
+}
+
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    return enter_syscall(SYS_CONNECT, sockfd, (uint64_t)addr, addrlen, 0, 0, 0);
+}
+
+int listen(int sockfd, int backlog)
+{
+    return enter_syscall(SYS_LISTEN, sockfd, backlog, 0, 0, 0, 0);
+}
+
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    return enter_syscall(SYS_ACCEPT, sockfd, (uint64_t)addr, (uint64_t)addrlen, 0, 0, 0);
+}
+
+int shutdown(int sockfd, int how)
+{
+    return enter_syscall(SYS_SHUTDOWN, sockfd, how, 0, 0, 0, 0);
+}

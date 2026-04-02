@@ -1,14 +1,10 @@
 extern "C"{
-#include "sys_arch.h"
-
-uint64_t next = 1;
 #include "../../../include/rtc.h"
+#include "../../../include/task/pcb.h"
+#include "../../../include/task/scheduler.h"
+#include "lwip/arch.h"
 #include "sys_arch.h"
 #include "lwipopts.h"
-
-#include "lwip/arch.h"
-#include "lwip/opt.h"
-
 #include <lwip/arch.h>
 #include <lwip/debug.h>
 #include <lwip/opt.h>
@@ -21,13 +17,27 @@ int errno_ = 0;
 
 // lwip glue code for cavOS
 // Copyright (C) 2024 Panagiotis
+extern "C" {
 
 void sys_init(void) {
     // boo!
 }
 
-void sys_mutex_lock(spin_t *spinlock) { spin_lock(&spinlock); }
-void sys_mutex_unlock(spin_t *spinlock) { spin_unlock(&spinlock); }
+sys_prot_t sys_arch_protect(void) {
+    asm volatile("cli" ::: "memory");
+    return 0;
+}
+
+void sys_arch_unprotect(sys_prot_t pval) {
+    (void)pval;
+    asm volatile("sti" ::: "memory");
+}
+
+void sys_mutex_lock(spin_t *spinlock) { spin_lock(spinlock); }
+void sys_mutex_unlock(spin_t *spinlock) { spin_unlock(spinlock); }
+void sys_mutex_free(sys_mutex_t *spinlock) { (void)spinlock; }
+int sys_mutex_valid(sys_mutex_t *spinlock) { return spinlock != NULL; }
+void sys_mutex_set_invalid(sys_mutex_t *spinlock) { (void)spinlock; }
 
 err_t sys_mutex_new(spin_t *spinlock) {
     *spinlock=SPIN_INIT;
@@ -36,6 +46,7 @@ err_t sys_mutex_new(spin_t *spinlock) {
 
 err_t sys_sem_new(sys_sem_t *sem, uint8_t cnt) {
     sem->invalid = false;
+    sem->cnt = cnt;
     sys_mutex_new(&sem->lock);
 
     return ERR_OK;
@@ -78,16 +89,14 @@ void sys_sem_set_invalid(sys_sem_t *sem) { sem->invalid = true; }
 int sys_sem_valid(sys_sem_t *sem) { return !sem->invalid; }
 
 uint32_t sys_now(void) {
-    tm time;
-    time_read(&time);
-    return mktime(&time) * 1000;
+    return (u32_t)(nanoTime() / 1000000ULL);
 }
 
 sys_thread_t sys_thread_new(const char *pcName,
                             void (*pxThread)(void *pvParameters), void *pvArg,
                             int iStackSize, int iPriority) {
     
-    return create_kernel_thread((void (*)(uint64_t))pxThread,pvArg,(char*)pcName,NULL);
+    return create_kernel_thread((void *)pxThread, pvArg, (char *)pcName, NULL);
 }
 
 err_t sys_mbox_new(sys_mbox_t *mbox, int size) {
@@ -234,3 +243,4 @@ void sio_send(u8_t c, void *fd) {}
 u8_t sio_recv(void *fd) { return 0; }
 u32_t sio_read(void *fd, u8_t *data, u32_t len) { return 0; }
 u32_t sio_tryread(void *fd, u8_t *data, u32_t len) { return 0; }
+}

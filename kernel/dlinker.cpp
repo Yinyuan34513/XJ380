@@ -72,7 +72,9 @@ void *find_symbol_address(const char *symbol_name, Elf64_Ehdr *ehdr, uint64_t of
             return addr;
         }
     }
-    write_serial_fmt("Cannot find symbol %s in ELF file.\n", symbol_name);
+    if (strcmp(symbol_name, "_init") != 0) {
+        write_serial_fmt("Cannot find symbol %s in ELF file.\n", symbol_name);
+    }
     return NULL;
 }
 
@@ -358,9 +360,29 @@ cp_module_t *get_module_raw(const char *module_name) {
 
 void module_setup() {
     vfs_node_t mr = vfs_open("/lib/modules");
+    if (mr == NULL) {
+        write_serial_fmt("kmod: /lib/modules not found\n");
+        return;
+    }
     list_foreach(mr->child,i) {
         vfs_node_t ch = (vfs_node_t)i->data;
-        char* buf = strdup(strcat("/lib/modules/",ch->name));
+        size_t path_len = strlen("/lib/modules/") + strlen(ch->name) + 1;
+        char* buf = (char*)malloc(path_len);
+        if (buf == NULL) {
+            continue;
+        }
+        snprintf(buf, path_len, "/lib/modules/%s", ch->name);
+        bool exists = false;
+        for (size_t j = 0; j < module_count; j++) {
+            if (module_ls[j].is_use && strcmp(module_ls[j].raw_name, buf) == 0) {
+                exists = true;
+                break;
+            }
+        }
+        if (exists) {
+            free(buf);
+            continue;
+        }
         extract_name(buf, module_ls[module_count].module_name, sizeof(char) * 20);
         module_ls[module_count].path = buf;
         uint8_t *data=(uint8_t*)malloc(ch->size+128);
@@ -369,11 +391,7 @@ void module_setup() {
         module_ls[module_count].size = ch->size;
         strcpy(module_ls[module_count].raw_name, buf);
         module_ls[module_count].is_use = true;
-        write_serial_string("kmod: Module");
-        write_serial_string(module_ls[module_count].module_name);
-        write_serial_string(" ");
-        write_serial_string(buf);
-        write_serial_string("\n");
+        write_serial_fmt("kmod: Module %s %s\n", module_ls[module_count].module_name, buf);
         module_count++;
     }
 }
@@ -635,6 +653,15 @@ static bool resolve_dependencies(dlhandle_t* handle, Elf64_Dyn* dyn) {
 dlhandle_t* load_shared_object_internal(const char* path, int flags, 
                                                page_directory_t* pd) {
     if (!path) return NULL;
+
+    dlhandle_t* current = dlhandle_list;
+    while (current) {
+        if (current->path && strcmp(current->path, path) == 0) {
+            write_serial_fmt("Reusing shared object: %s at 0x%llx\n", path, current->base_addr);
+            return current;
+        }
+        current = current->next;
+    }
     
     // 1. 打开文件
     vfs_node_t file = vfs_open(path);

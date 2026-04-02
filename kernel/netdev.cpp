@@ -22,6 +22,7 @@ void regist_netdev(void *desc, uint8_t *mac, uint32_t mtu, netdev_send_t send,
 EXPORT_SYMBOL(regist_netdev);
 
 netdev_t *get_default_netdev() { return netdevs[0]; }
+EXPORT_SYMBOL(get_default_netdev);
 
 int netdev_send(netdev_t *dev, void *data, uint32_t len) {
     if (dev == NULL || data == NULL) {
@@ -31,30 +32,13 @@ int netdev_send(netdev_t *dev, void *data, uint32_t len) {
     if (len == 0) {
         return 0;
     }
-
-    uint8_t *ptr = (uint8_t *)data;
-    uint32_t remaining = len;
-    uint32_t total_sent = 0;
-
-    while (remaining > 0) {
-        uint32_t chunk_size = (remaining > dev->mtu) ? dev->mtu : remaining;
-
-        int ret = dev->send(dev->desc, ptr, chunk_size);
-        if (ret < 0) {
-            return ret;
-        }
-
-        if (ret == 0) {
-            break;
-        }
-
-        ptr += ret;
-        remaining -= ret;
-        total_sent += ret;
+    if (len > dev->mtu) {
+        return -EMSGSIZE;
     }
 
-    return total_sent;
+    return dev->send(dev->desc, data, len);
 }
+EXPORT_SYMBOL(netdev_send);
 
 int netdev_recv(netdev_t *dev, void *data, uint32_t len) {
     if (dev == NULL || data == NULL) {
@@ -69,3 +53,4 @@ int netdev_recv(netdev_t *dev, void *data, uint32_t len) {
 
     return ret;
 }
+EXPORT_SYMBOL(netdev_recv);

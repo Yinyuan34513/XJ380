@@ -1,4 +1,5 @@
 #include <mm/alloc/alloc.h>
+#include <dlinker.h>
 
 void *calloc(size_t num, size_t size)
 {
@@ -7,3 +8,4 @@ void *calloc(size_t num, size_t size)
     if (ptr) memset(ptr, 0, tot);
     return ptr;
 }
+EXPORT_SYMBOL(calloc);

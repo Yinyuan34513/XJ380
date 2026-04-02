@@ -4,6 +4,7 @@
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.hpp"
+#include <dlinker.h>
 #include <cpu/longm.h>
 #include <elf.h>
 #include <errno.h>
@@ -961,3 +962,4 @@ void process_setup()
 
     write_serial_fmt("Setup process <%s> PID:%zu\n", kernel_pcb->name, kernel_pcb->pid);
 }
+EXPORT_SYMBOL(create_kernel_thread);

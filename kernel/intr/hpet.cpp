@@ -1,4 +1,5 @@
 #include <apic/hpet.h>
+#include <dlinker.h>
 #include <proto.hpp>
 #include <stdint.h>
 
@@ -11,6 +12,7 @@ uint64_t nanoTime()
     uint64_t mcv = info->mainCounterValue;
     return mcv * hpetPeriod;
 }
+EXPORT_SYMBOL(nanoTime);
 
 void nsleep(uint64_t nano)
 {

@@ -441,6 +441,10 @@ errno_t vfs_close(vfs_node_t node) {
 
     if(node->refcount > 0) node->refcount--;
 
+    if ((node->type & file_socket) && node->refcount > 0) {
+        return VFS_STATUS_SUCCESS;
+    }
+
     if (node->type & file_proxy){
          return VFS_STATUS_SUCCESS;
     }

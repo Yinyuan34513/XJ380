@@ -25,7 +25,7 @@ endif
 
 BUILD_DIR := out
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG)
 
 COMPILER_PREFIX ?= 
 
@@ -168,6 +168,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/chat.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font

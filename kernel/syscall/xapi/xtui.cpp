@@ -97,10 +97,10 @@ void do_xapi_Input(char *str)
                 scheduler_yield();
             }
             // found it!
-            strcat(str, "\0");
             strcpy(str, front_p->xtttp_stc->input);
+            memset(front_p->xtttp_stc->input, 0, sizeof(front_p->xtttp_stc->input));
             front_p->xtttp_stc->input_lock = false;
-            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->input) + 1) * sizeof(uint8_t));
+            front_p->xtttp_stc->wait_for_input = false;
             return;
         }
         front_p = front_p->parent_task;

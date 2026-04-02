@@ -15,6 +15,8 @@
  * +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
  */
 
+extern "C" {
+
 void *LinkedListAllocate(void **LLfirstPtr, uint32_t structSize) {
     LLheader *target = (LLheader *)malloc(structSize);
     memset(target, 0, structSize);
@@ -92,4 +94,6 @@ void LinkedListPushFrontUnsafe(void **LLfirstPtr, void *LLtarget) {
     *LLfirstPtr = LLtarget;
     LLheader *target = (LLheader *)(LLtarget);
     target->next = (LLheader*)next;
+}
+
 }

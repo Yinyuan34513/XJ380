@@ -1,6 +1,7 @@
 #include "cpu/fpu.h"
 #include "cpu/fsgsbase.h"
 #include "cpu/lock.h"
+#include "dlinker.h"
 #include "lock_queue.h"
 #include "proto.hpp"
 #include "smp/smp.h"
@@ -25,6 +26,7 @@ tcb_t get_current_task()
 {
     return get_current_cpu()->current_task;
 }
+EXPORT_SYMBOL(get_current_task);
 
 __attribute__((naked)) void save_registers()
 {
@@ -305,6 +307,7 @@ void scheduler_yield()
     if (!is_scheduler) return;
     __asm__ volatile("int %0" ::"i"(32));
 }
+EXPORT_SYMBOL(scheduler_yield);
 
 void debug_sched_queue(lock_queue *q)
 {

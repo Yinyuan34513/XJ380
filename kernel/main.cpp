@@ -401,6 +401,7 @@ extern size_t   now_tid;
 extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
+extern int      socketfs_setup();
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
@@ -482,6 +483,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     mount_root();
     pipefs_setup();
+    socketfs_setup();
     stdio_init();
 
     signal_init();

@@ -5,6 +5,7 @@
 #include <task/poll.h>
 #include <mm/lazyalloc.h>
 #include "../build_settings.h"
+#include <net/socket.h>
 #include <pipe.h>
 #include <rtc.h>
 #include <math.hpp>
@@ -49,6 +50,8 @@ next:
     // not_null_assets(fd_handle, "sys_open: null alloc fd");
     fd_handle->offset = flags & O_APPEND ? node->size : 0;
     fd_handle->node   = node;
+    fd_handle->flags  = flags;
+    fd_handle->node->flags = flags;
     int index         = (int)lock_queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
     fd_handle->fd     = index;
     spin_unlock(&get_current_task()->parent_group->file_open->lock);
@@ -68,6 +71,7 @@ sys_(close, int fd)
 {
     if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle = (fd_file_handle *)queue_remove_at(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL) return SYSCALL_FAULT_(EBADF);
     vfs_close(handle->node);
     free(handle);
     return 0;
@@ -84,6 +88,12 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket)
+    {
+        ssize_t ret = socket_write(handle->node, buffer, size);
+        if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+        return ret;
+    }
     size_t ret = vfs_write(handle->node, buffer, handle->offset, size);
     if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
     if (handle->node->size != (uint64_t)-1) handle->offset += ret;
@@ -97,6 +107,12 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     if (unlikely(size == 0)) return 0;
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket)
+    {
+        ssize_t ret = socket_read(handle->node, buffer, size);
+        if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+        return ret;
+    }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)
     {
         return SYSCALL_FAULT_(EWOULDBLOCK);
@@ -152,6 +168,28 @@ sys_(getpid)
                  arg4 == UINT64_MAX))
         return 1;
     return get_current_task()->parent_group->pid;
+}
+
+sys_(socket, int domain, int type, int protocol)
+{
+    int ret = socket_open(domain, type, protocol);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
+sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
+    int ret = socket_connect(fd, addr, addrlen);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
+sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    int ret = socket_accept(fd, addr, addrlen);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
 }
 
 
@@ -269,6 +307,23 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
     if (unlikely(fd < 0 || iov == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (iovcnt == 0) return 0;
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket)
+    {
+        size_t total = 0;
+        for (int i = 0; i < iovcnt; i++)
+        {
+            ssize_t ret = socket_write(handle->node, iov[i].iov_base, iov[i].iov_len);
+            if (ret < 0)
+            {
+                if (total > 0) return total;
+                return SYSCALL_FAULT_((int)-ret);
+            }
+            total += (size_t)ret;
+            if ((size_t)ret < iov[i].iov_len) break;
+        }
+        return total;
+    }
     size_t          total  = 0;
     for (int i = 0; i < iovcnt; i++)
     {
@@ -291,6 +346,22 @@ sys_(readv, int fd, struct iovec *iov, int iovcnt0)
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (iovcnt == 0) return 0;
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket)
+    {
+        size_t total = 0;
+        for (size_t i = 0; i < iovcnt; i++)
+        {
+            ssize_t ret = socket_read(handle->node, iov[i].iov_base, iov[i].iov_len);
+            if (ret < 0)
+            {
+                if (total > 0) return total;
+                return SYSCALL_FAULT_((int)-ret);
+            }
+            total += (size_t)ret;
+            if ((size_t)ret < iov[i].iov_len) break;
+        }
+        return total;
+    }
     size_t buf_len = 0;
     for (size_t i = 0; i < iovcnt; i++)
     {
@@ -715,18 +786,26 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 {
     int      ready      = 0;
     uint64_t start_time = nanoTime();
+    uint64_t timeout_ns = timeout == (size_t)-1 ? (uint64_t)-1 : timeout * 1000000ULL;
     bool     sigexit    = false;
 
     extern vfs_callback_t fs_callbacks[256];
 
     do
     {
-        // 检查每个文件描述符
-        size_t i = 0;
-        queue_foreach(get_current_task()->parent_group->file_open, node0)
+        ready = 0;
+        for (size_t i = 0; i < nfds; i++)
         {
-            if (i >= nfds) break;
-            fd_file_handle *handle = (fd_file_handle *)node0->data;
+            fds_user[i].revents = 0;
+            if (fds_user[i].fd < 0) continue;
+            fd_file_handle *handle =
+                (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fds_user[i].fd);
+            if (handle == NULL)
+            {
+                fds_user[i].revents = POLLNVAL;
+                ready++;
+                continue;
+            }
             vfs_node_t      node   = handle->node;
             if (fs_callbacks[node->fsid]->poll == (void *)empty)
             {
@@ -735,7 +814,6 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
                     fds_user[i].revents = fds_user[i].events & POLLIN ? POLLIN : POLLOUT;
                     ready++;
                 }
-                i++;
                 continue;
             }
             int revents = (int)epoll_to_poll_comp(vfs_poll(node, poll_to_epoll_comp(fds_user[i].events)));
@@ -744,7 +822,6 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
                 fds_user[i].revents = (short)revents;
                 ready++;
             }
-            i++;
         }
 
         // sigexit = signals_pending_quick(get_current_task());
@@ -753,7 +830,7 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 
         open_interrupt;
         __asm__("pause");
-    } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout));
+    } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout_ns));
 
     close_interrupt;
 
@@ -822,7 +899,13 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
     case F_SETFL:
         {uint32_t valid_flags  = O_APPEND | O_DIRECT | O_NOATIME | O_NONBLOCK;
         handle->node->flags  &= ~valid_flags;
-        handle->node->flags  |= arg & valid_flags;}
+        handle->node->flags  |= arg & valid_flags;
+        handle->flags        &= ~valid_flags;
+        handle->flags        |= arg & valid_flags;
+        if (handle->node->type & file_socket) {
+            int ret = socket_apply_flags(handle->node, handle->node->flags);
+            if (ret < 0) return SYSCALL_FAULT_(-ret);
+        }}
     default: break;
     }
     return 0;
@@ -924,6 +1007,13 @@ sys_(clock_getres)
     return 0;
 }
 
+sys_(shutdown, int fd, int how)
+{
+    int ret = socket_shutdown(fd, how);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
 
 sys_(mkdir, char *name, uint64_t mode)
 {
@@ -934,10 +1024,26 @@ sys_(mkdir, char *name, uint64_t mode)
     return ret;
 }
 
+sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
+    int ret = socket_bind(fd, addr, addrlen);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
+sys_(listen, int fd, int backlog)
+{
+    int ret = socket_listen(fd, backlog);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
 sys_(lseek, int fd, size_t offset, size_t whence)
 {
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (unlikely(handle == NULL)) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket) return SYSCALL_FAULT_(ESPIPE);
 
     int64_t real_offset = (int64_t)offset;
     if (real_offset < 0 && handle->node->type & file_none && whence != SEEK_CUR) return SYSCALL_FAULT_(EBADF);
