@@ -169,6 +169,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/chat.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/httpget.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
