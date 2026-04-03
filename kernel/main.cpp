@@ -388,6 +388,7 @@ extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
 extern int      socketfs_setup();
+extern int      dnsfs_setup();
 EFI_SYSTEM_TABLE *EFI_ST;
 BOOT_CONFIG *EFI_BC;
 
@@ -481,6 +482,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     mount_root();
     pipefs_setup();
     socketfs_setup();
+    dnsfs_setup();
     stdio_init();
 
     signal_init();

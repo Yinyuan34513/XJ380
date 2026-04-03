@@ -159,7 +159,7 @@ void do_xapi_Sleep(uint64_t ms)
     uint64_t old_t = nanoTime();
     while (nanoTime() - old_t <= ms * 1000000)
     {
-        __asm__ volatile("pause");
+        __asm__ volatile("hlt");
     }
     close_interrupt;
 }

@@ -49,6 +49,9 @@ typedef struct socket_provider {
     int     (*shutdown)(void *socket, int how);
     int     (*poll)(void *socket, size_t events);
     int     (*set_flags)(void *socket, uint64_t flags);
+    int     (*resolve_ipv4)(const char *hostname, uint32_t *out_addr);
+    int     (*set_dns_server)(uint32_t addr);
+    int     (*get_dns_server)(uint32_t *out_addr);
 } socket_provider_t;
 
 int     socket_provider_register(const socket_provider_t *provider);
@@ -62,6 +65,9 @@ int     socket_shutdown(int fd, int how);
 ssize_t socket_read(vfs_node_t node, void *buffer, size_t size);
 ssize_t socket_write(vfs_node_t node, const void *buffer, size_t size);
 int     socket_apply_flags(vfs_node_t node, uint64_t flags);
+int     socket_resolve_ipv4(const char *hostname, uint32_t *out_addr);
+int     socket_set_dns_server(uint32_t addr);
+int     socket_get_dns_server(uint32_t *out_addr);
 
 #ifdef __cplusplus
 }

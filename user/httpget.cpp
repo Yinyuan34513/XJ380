@@ -5,6 +5,8 @@ static const int      HTTPGET_HEIGHT           = 520;
 static const int      HTTPGET_MAX_LINES        = 160;
 static const int      HTTPGET_LINE_LENGTH      = 256;
 static const int      HTTPGET_VISIBLE_LINES    = 24;
+static const int      HTTPGET_LOOP_SLEEP_MS    = 16;
+static const int      HTTPGET_STARTUP_GUARD_TICKS = 32;
 static const uint32_t HTTPGET_COLOR_BG         = 0xf2efe9ff;
 static const uint32_t HTTPGET_COLOR_PANEL      = 0xfffbf5ff;
 static const uint32_t HTTPGET_COLOR_HEADER     = 0x1d3557ff;
@@ -29,8 +31,10 @@ typedef struct httpget_response_state {
 static HDLE           g_window      = 0;
 static bool           g_need_redraw = true;
 static bool           g_send_req    = false;
+static bool           g_ignore_first_submit = true;
+static int            g_startup_submit_guard = HTTPGET_STARTUP_GUARD_TICKS;
 static char           g_input[512]  = "GET 10.0.2.2 80 /";
-static int            g_input_len   = 16;
+static int            g_input_len   = 17;
 static char           g_status[128] = "Ready";
 static httpget_line_t g_lines[HTTPGET_MAX_LINES];
 static int            g_line_count  = 0;
@@ -99,7 +103,7 @@ static void render_window()
 
     xapi_DrawSWText(g_window, 16, 12, (char *)"HTTP Client", 0xffffffff);
     xapi_DrawSWText(g_window, 170, 12, g_status, HTTPGET_COLOR_STATUS);
-    xapi_DrawSWText(g_window, 18, 56, (char *)"Syntax: METHOD IP PORT PATH [BODY]", HTTPGET_COLOR_INFO);
+    xapi_DrawSWText(g_window, 18, 56, (char *)"Syntax: METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, 72, (char *)"Methods: GET POST PUT PATCH DELETE HEAD OPTIONS TRACE CONNECT", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, 88, (char *)"Example: POST 10.0.2.2 80 /api hello world", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, HTTPGET_HEIGHT - 56, (char *)"Request:", HTTPGET_COLOR_INFO);
@@ -130,7 +134,7 @@ static void run_http_request()
     char *body   = strtok(NULL, "");
 
     if (method == NULL || host == NULL || port_s == NULL || path == NULL) {
-        append_line("Invalid syntax. Use: METHOD IP PORT PATH [BODY]", HTTPGET_COLOR_ERROR);
+        append_line("Invalid syntax. Use: METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_ERROR);
         set_status("parse failed");
         return;
     }
@@ -138,13 +142,6 @@ static void run_http_request()
     if (!xhttp_validate_method(method)) {
         append_line("Invalid HTTP method token.", HTTPGET_COLOR_ERROR);
         set_status("bad method");
-        return;
-    }
-
-    uint32_t parsed_addr = 0;
-    if (!xhttp_parse_ipv4(host, &parsed_addr)) {
-        append_line("Invalid IPv4 address.", HTTPGET_COLOR_ERROR);
-        set_status("bad ip");
         return;
     }
 
@@ -171,9 +168,14 @@ static void run_http_request()
     append_line("---------------- RESPONSE ----------------", HTTPGET_COLOR_INFO);
     set_status("requesting");
     render_window();
+    xapi_OutputSerial((char *)"httpget: dispatch request\n");
 
     int status = xhttp_request(&request, httpget_response_callback, &response_state);
-    xapi_Printf((char *)"httpget: xhttp_request status=%d\n", status);
+    {
+        char logbuf[96];
+        snprintf(logbuf, sizeof(logbuf), "httpget: request status=%d\n", status);
+        xapi_OutputSerial(logbuf);
+    }
     if (response_state.line_len > 0) {
         append_response_line(&response_state);
     }
@@ -225,6 +227,7 @@ static void httpget_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
     switch (type) {
     case MSG_CHAR:
         if ((char)lData >= ' ' && g_input_len < (int)sizeof(g_input) - 1) {
+            g_ignore_first_submit = false;
             g_input[g_input_len++] = (char)lData;
             g_input[g_input_len]   = '\0';
             g_need_redraw          = true;
@@ -233,10 +236,20 @@ static void httpget_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
     case MSG_SPCHAR:
         if ((char)lData == '\b') {
             if (g_input_len > 0) {
+                g_ignore_first_submit = false;
                 g_input[--g_input_len] = '\0';
                 g_need_redraw          = true;
             }
         } else if ((char)lData == '\n') {
+            if (g_startup_submit_guard > 0) {
+                xapi_OutputSerial((char *)"httpget: ignored startup submit guard\n");
+                break;
+            }
+            if (g_ignore_first_submit) {
+                g_ignore_first_submit = false;
+                xapi_OutputSerial((char *)"httpget: ignored startup submit\n");
+                break;
+            }
             g_send_req = true;
         }
         break;
@@ -251,6 +264,8 @@ static int httpget_main_impl(int argc, char *argv[], char *envp[])
     (void)argv;
     (void)envp;
 
+    xapi_OutputSerial((char *)"httpget: main enter\n");
+
     XWINDOW window;
     window.title  = (char *)"HTTP Client";
     window.width  = HTTPGET_WIDTH;
@@ -258,11 +273,15 @@ static int httpget_main_impl(int argc, char *argv[], char *envp[])
     window.sets   = XWIN_NORMAL;
 
     xapi_CreateWindow(&g_window, &window);
+    xapi_OutputSerial((char *)"httpget: window created\n");
     xapi_SetIcon(g_window, "/system/icon/terminal.png");
+    xapi_OutputSerial((char *)"httpget: icon set\n");
     SetMsgPrcor(g_window, httpget_message_proc);
+    xapi_OutputSerial((char *)"httpget: msg procor set\n");
 
     append_line("Ready to send HTTP requests.", HTTPGET_COLOR_INFO);
     render_window();
+    xapi_OutputSerial((char *)"httpget: initial render done\n");
 
     while (true) {
         if (g_send_req) {
@@ -271,7 +290,10 @@ static int httpget_main_impl(int argc, char *argv[], char *envp[])
         if (g_need_redraw) {
             render_window();
         }
-        xapi_Sleep(50);
+        if (g_startup_submit_guard > 0) {
+            g_startup_submit_guard--;
+        }
+        xapi_Sleep(HTTPGET_LOOP_SLEEP_MS);
     }
 
     return 0;

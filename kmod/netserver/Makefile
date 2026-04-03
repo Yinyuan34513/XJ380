@@ -1,5 +1,6 @@
 LWIP_CORE_C := \
 	lwip/core/def.c \
+	lwip/core/dns.c \
 	lwip/core/init.c \
 	lwip/core/inet_chksum.c \
 	lwip/core/ip.c \
@@ -38,6 +39,9 @@ CPP_SOURCES := \
 C_OBJECTS := $(C_SOURCES:.c=.o)
 CPP_OBJECTS := $(CPP_SOURCES:.cpp=.o)
 
+CC ?= clang
+CXX ?= clang++
+
 C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden
 INCLUDES = -I../../include -I./lwip/include -I./
@@ -46,12 +50,12 @@ LDFLAGS := -nostdlib -Wl,-e,dlmain -Wl,-z,muldefs
 all: ../../out/netserver.km
 
 ../../out/netserver.km: $(C_OBJECTS) $(CPP_OBJECTS)
-	$(CPP) -shared $(CPP_OBJECTS) $(C_OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) -shared $(CPP_OBJECTS) $(C_OBJECTS) $(LDFLAGS) -o $@
 
 %.o: %.c
 	$(CC) $(C_FLAGS) $(INCLUDES) -c $< -o $@
 
 %.o: %.cpp
-	$(CPP) $(CPP_FLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CPP_FLAGS) $(INCLUDES) -c $< -o $@
 
 .PHONY: all

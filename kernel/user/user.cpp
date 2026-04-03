@@ -45,6 +45,20 @@ UserInfo root_user = {
 extern SHEET *desktop_ct_sheet;
 extern mouse_dec ms_dec;
 
+static bool append_cmdline_arg(char *cmdline, size_t cmdline_size, char **cursor, const char *arg)
+{
+    if (cmdline == NULL || cursor == NULL || *cursor == NULL || arg == NULL) return false;
+
+    size_t used = (size_t)(*cursor - cmdline);
+    if (used >= cmdline_size) return false;
+
+    int written = snprintf(*cursor, cmdline_size - used, "%s ", arg);
+    if (written < 0 || (size_t)written >= (cmdline_size - used)) return false;
+
+    *cursor += written;
+    return true;
+}
+
 char password_layout_ball_bitmap[8][9] = {
     "..####..",
     ".######.",
@@ -242,20 +256,24 @@ void copy_args(char *dst[], char *src[], int n)
 
 void get_thread_name_from_filepath(char *path, char *name)
 {
-    char *p = path;
-    char *q = name;
-    while (*p != '\0')
-        p++;
-    while (*p != '\\' && *p != '/' && *p != '|')
-        p--;
-    p++;
-    while (*p != '\0' && *p != '.')
+    if (path == NULL || name == NULL)
     {
-        *q = *p;
-        p++;
-        q++;
+        return;
     }
-    *q = '\0';
+
+    char *start = path;
+    for (char *p = path; *p != '\0'; p++)
+    {
+        if (*p == '\\' || *p == '/' || *p == '|') start = p + 1;
+    }
+
+    size_t i = 0;
+    while (start[i] != '\0' && start[i] != '.' && i < 31)
+    {
+        name[i] = start[i];
+        i++;
+    }
+    name[i] = '\0';
 }
 void *aligned_malloc(size_t size, size_t alignment)
 {
@@ -336,6 +354,14 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     uint64_t entry = ehdr.e_entry;
 
     elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
+    if (mapping_space == NULL)
+    {
+        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+        pr_warn("Parse ELF/EPF file failed.\n");
+        write_serial_fmt("Reason:   Cannot Alloc Mapping Space.\n");
+        vfs_close(file);
+        return NULL;
+    }
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
                          (uint64_t *)&mapping_space->load_end);
 
@@ -420,6 +446,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
     vfs_close(file);
+    free(mapping_space);
 
     switch_page_directory(current_pagedir); // 恢复页表
 
@@ -469,23 +496,39 @@ char *getCwd(char *path)
 
 void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
-    char  *process_name = (char*)malloc(strlen(path) + 1);
+    if (path == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Empty Path.\n");
+        return;
+    }
+
+    char  process_name[32];
     void *entry;
     int   argc = 0;
-    // if (entry == NULL) return;   // ))???????????????????????????????????????????
 
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), false);
+    if (new_directory == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Clone Page Directory.\n");
+        return;
+    }
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
+    if (group == NULL)
+    {
+        free_page_directory(new_directory);
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Create Process Group.\n");
+        return;
+    }
 
     entry = (void *)parse_elf_file(path, group);
 
     if (entry == NULL)
     {
         write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
-        free(process_name);
+        kill_proc(group, 0, false);
         return;
     }
 
@@ -498,19 +541,38 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     {
         for (int i = 0; argv[i]; i++)
         {
-            int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
-            cmdline_ptr += len;
+            if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, argv[i]))
+            {
+                write_serial_fmt("Create User Process Failed. Reason: Command Line Too Long.\n");
+                kill_proc(group, 0, false);
+                return;
+            }
             argc++;
         }
     }
 
     char *old_cmdline = group->cmdline;
     group->cmdline    = strdup(cmdline);
+    if (group->cmdline == NULL)
+    {
+        group->cmdline = old_cmdline;
+        kill_proc(group, 0, false);
+        return;
+    }
     if (old_cmdline != NULL) free(old_cmdline);
     char *cwd = getCwd(path);
+    if (cwd == NULL)
+    {
+        kill_proc(group, 0, false);
+        return;
+    }
     write_serial_fmt("CWD: %s\n", cwd);
-    create_user_thread(entry, NULL, argc, process_name, group, cwd);
-    free(process_name);
+    size_t tid = create_user_thread(entry, NULL, argc, process_name, group, cwd);
+    if ((int64_t)tid < 0)
+    {
+        free(cwd);
+        kill_proc(group, 0, false);
+    }
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)
@@ -520,5 +582,8 @@ void create_user_thread_from_file(char *path, pcb_t pcb)
     if (entry == NULL) return;
     get_thread_name_from_filepath(path, thread_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
-    create_user_thread(entry, NULL, NULL, thread_name, pcb, getCwd(path));
+    char *cwd = getCwd(path);
+    if (cwd == NULL) return;
+    size_t tid = create_user_thread(entry, NULL, NULL, thread_name, pcb, cwd);
+    if ((int64_t)tid < 0) free(cwd);
 }

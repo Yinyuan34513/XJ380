@@ -223,7 +223,8 @@ int socket_provider_register(const socket_provider_t *provider)
     if (provider == NULL || provider->create == NULL || provider->close == NULL ||
         provider->read == NULL || provider->write == NULL || provider->bind == NULL ||
         provider->connect == NULL || provider->listen == NULL || provider->accept == NULL ||
-        provider->shutdown == NULL || provider->poll == NULL || provider->set_flags == NULL) {
+        provider->shutdown == NULL || provider->poll == NULL || provider->set_flags == NULL ||
+        provider->resolve_ipv4 == NULL || provider->set_dns_server == NULL || provider->get_dns_server == NULL) {
         return -EINVAL;
     }
 
@@ -252,12 +253,16 @@ int socket_open(int domain, int type, int protocol)
         return -ENOSYS;
     }
 
+    printk("socketfs: open domain=%d type=%d protocol=%d\n", domain, type, protocol);
+
     void *impl = NULL;
     int   ret  = g_socket_provider->create(domain, type, protocol, &impl);
     if (ret < 0) {
+        printk("socketfs: provider create failed ret=%d\n", ret);
         return ret;
     }
 
+    printk("socketfs: provider create ok impl=%p\n", impl);
     return socketfs_alloc_fd(impl, 0);
 }
 
@@ -368,4 +373,28 @@ int socket_apply_flags(vfs_node_t node, uint64_t flags)
     }
     node->flags = flags;
     return handle->provider->set_flags(handle->socket, flags);
+}
+
+int socket_resolve_ipv4(const char *hostname, uint32_t *out_addr)
+{
+    if (g_socket_provider == NULL || g_socket_provider->resolve_ipv4 == NULL || hostname == NULL || out_addr == NULL) {
+        return -EINVAL;
+    }
+    return g_socket_provider->resolve_ipv4(hostname, out_addr);
+}
+
+int socket_set_dns_server(uint32_t addr)
+{
+    if (g_socket_provider == NULL || g_socket_provider->set_dns_server == NULL) {
+        return -ENOSYS;
+    }
+    return g_socket_provider->set_dns_server(addr);
+}
+
+int socket_get_dns_server(uint32_t *out_addr)
+{
+    if (g_socket_provider == NULL || g_socket_provider->get_dns_server == NULL || out_addr == NULL) {
+        return -EINVAL;
+    }
+    return g_socket_provider->get_dns_server(out_addr);
 }

@@ -281,9 +281,18 @@ int e1000_send(void *dev_desc, void *data, uint32_t len) {
     dev->tx_tail = next_tail;
     e1000_write32(dev, E1000_TDT, dev->tx_tail);
 
-    // Poll for completion
+    // Poll for completion, but never spin forever.
+    uint64_t wait_start = nanoTime();
     while (!(dev->tx_descs[dev->tx_head].status & E1000_TXD_STAT_DD)) {
-        // Wait for transmission to complete
+        if (nanoTime() - wait_start >= 100000000ULL) {
+            printk("e1000: tx timeout head=%u tail=%u len=%u status=0x%x\n",
+                   (unsigned int)dev->tx_head,
+                   (unsigned int)dev->tx_tail,
+                   (unsigned int)len,
+                   (unsigned int)dev->tx_descs[dev->tx_head].status);
+            return -1;
+        }
+        __asm__ volatile("pause" ::: "memory");
     }
 
     // Clean up completed descriptors

@@ -189,6 +189,7 @@ enum {
     NETFS_REGISTER_ID = 4, // 网络文件系统注册ID
     CPFS_REGISTER_ID  = 5, // CPIO文件系统注册ID
     PROC_REGISTER_ID  = 6, // 进程信息文件系统注册ID
+    DNS_REGISTER_ID   = 7, // DNS 文件系统注册ID
 };
 
 extern struct vfs_callback vfs_empty_callback;

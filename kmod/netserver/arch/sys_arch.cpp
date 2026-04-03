@@ -24,13 +24,22 @@ void sys_init(void) {
 }
 
 sys_prot_t sys_arch_protect(void) {
-    asm volatile("cli" ::: "memory");
-    return 0;
+    sys_prot_t flags;
+    asm volatile("pushfq\n\t"
+                 "pop %0\n\t"
+                 "cli"
+                 : "=r"(flags)
+                 :
+                 : "memory");
+    return flags;
 }
 
 void sys_arch_unprotect(sys_prot_t pval) {
-    (void)pval;
-    asm volatile("sti" ::: "memory");
+    asm volatile("push %0\n\t"
+                 "popfq"
+                 :
+                 : "r"(pval)
+                 : "memory", "cc");
 }
 
 void sys_mutex_lock(spin_t *spinlock) { spin_lock(spinlock); }
@@ -59,24 +68,22 @@ void sys_sem_signal(sys_sem_t *sem) {
 }
 
 uint32_t sys_arch_sem_wait(sys_sem_t *sem, uint32_t timeout) {
-    bool ret = false;
+    uint32_t start = sys_now();
 
     while (true) {
         spin_lock(&sem->lock);
         if (sem->cnt > 0) {
             sem->cnt--;
-            ret = true;
-            goto cleanup;
+            spin_unlock(&sem->lock);
+            return sys_now() - start;
         }
         spin_unlock(&sem->lock);
 
+        if (timeout != 0 && (uint32_t)(sys_now() - start) >= timeout) {
+            return SYS_ARCH_TIMEOUT;
+        }
         scheduler_yield();
     }
-
-cleanup:
-    spin_unlock(&sem->lock);
-just_return:
-    return ret ? 0 : SYS_ARCH_TIMEOUT;
 }
 
 void sys_sem_free(sys_sem_t *sem) {
@@ -145,16 +152,6 @@ int sys_mbox_valid(sys_mbox_t *mbox) {
 void sys_mbox_post_unsafe(sys_mbox_t *q, void *msg) {
     q->msges[q->ptrWrite] = msg;
     q->ptrWrite = (q->ptrWrite + 1) % q->size;
-
-    mboxBlock *browse = q->firstBlock;
-    while (browse) {
-        mboxBlock *next = browse->next;
-        if (browse->write == false) {
-            LinkedListRemove((void **)&q->firstBlock, browse);
-            free(browse); // 释放移除的block
-        }
-        browse = next;
-    }
 }
 
 void sys_mbox_post(sys_mbox_t *q, void *msg) {
@@ -189,6 +186,7 @@ err_t sys_mbox_trypost_fromisr(sys_mbox_t *q, void *msg) {
 
 u32_t sys_arch_mbox_fetch(sys_mbox_t *q, void **msg, u32_t timeout) {
     mboxBlock *myBlock = NULL;
+    u32_t      start   = sys_now();
 
     while (true) {
         spin_lock(&q->lock);
@@ -211,14 +209,25 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *q, void **msg, u32_t timeout) {
         }
         spin_unlock(&q->lock);
 
+        if (timeout != 0 && (u32_t)(sys_now() - start) >= timeout) {
+            if (myBlock != NULL) {
+                spin_lock(&q->lock);
+                LinkedListRemove((void **)&q->firstBlock, myBlock);
+                free(myBlock);
+                spin_unlock(&q->lock);
+            }
+            return SYS_ARCH_TIMEOUT;
+        }
         scheduler_yield();
     }
 
-    *msg = q->msges[q->ptrRead];
+    if (msg != NULL) {
+        *msg = q->msges[q->ptrRead];
+    }
     q->ptrRead = (q->ptrRead + 1) % q->size;
     spin_unlock(&q->lock);
 
-    return 0;
+    return sys_now() - start;
 }
 
 u32_t sys_arch_mbox_tryfetch(sys_mbox_t *q, void **msg) {

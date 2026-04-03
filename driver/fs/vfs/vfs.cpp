@@ -469,7 +469,7 @@ bool is_virtual_fs(const char *src) {
     return ((uint64_t)src) == DEVFS_REGISTER_ID || ((uint64_t)src) == MODFS_REGISTER_ID ||
            ((uint64_t)src) == TMPFS_REGISTER_ID || ((uint64_t)src) == PIEFS_REGISTER_ID ||
            ((uint64_t)src) == NETFS_REGISTER_ID || ((uint64_t)src) == CPFS_REGISTER_ID ||
-           ((uint64_t)src) == PROC_REGISTER_ID;
+           ((uint64_t)src) == PROC_REGISTER_ID || ((uint64_t)src) == DNS_REGISTER_ID;
 }
 
 void vfs_free(vfs_node_t vfs) {

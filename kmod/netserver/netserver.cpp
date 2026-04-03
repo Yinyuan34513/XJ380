@@ -10,6 +10,7 @@ extern "C" {
 #include "lwip/api.h"
 #include "lwip/def.h"
 #include "lwip/dhcp.h"
+#include "lwip/dns.h"
 #include "lwip/etharp.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/netif.h"
@@ -35,6 +36,12 @@ static uint32_t     g_rx_log_count        = 0;
 static uint32_t     g_tx_log_count        = 0;
 static uint32_t     g_connect_log_count   = 0;
 static uint32_t     g_write_log_count     = 0;
+
+typedef struct xj380_dns_query {
+    volatile int done;
+    volatile int status;
+    ip_addr_t     addr;
+} xj380_dns_query_t;
 
 static int xj380_err_to_errno(err_t err)
 {
@@ -138,6 +145,36 @@ static bool xj380_mbox_has_data(sys_mbox_t *mbox)
     return ready;
 }
 
+static void xj380_dns_found_cb(const char *name, const ip_addr_t *ipaddr, void *arg)
+{
+    xj380_dns_query_t *query = (xj380_dns_query_t *)arg;
+    if (query == NULL) {
+        return;
+    }
+
+    if (ipaddr == NULL) {
+        query->status = -EHOSTUNREACH;
+        query->done   = 1;
+        printk("netserver: dns callback name=%s status=not-found\n", name ? name : "(null)");
+        return;
+    }
+
+    query->addr = *ipaddr;
+    if (!IP_IS_V4(ipaddr)) {
+        query->status = -EAFNOSUPPORT;
+        query->done   = 1;
+        printk("netserver: dns callback name=%s family=non-ipv4\n", name ? name : "(null)");
+        return;
+    }
+
+    const ip4_addr_t *ip4 = ip_2_ip4(ipaddr);
+    query->status = 0;
+    query->done   = 1;
+    printk("netserver: dns callback name=%s addr=%u.%u.%u.%u\n",
+           name ? name : "(null)",
+           ip4_addr1(ip4), ip4_addr2(ip4), ip4_addr3(ip4), ip4_addr4(ip4));
+}
+
 static ssize_t xj380_socket_read_impl(xj380_lwip_socket_t *socket, void *buffer, size_t size, uint64_t flags)
 {
     u8_t    api_flags = NETCONN_NOAUTORCVD;
@@ -190,6 +227,9 @@ static ssize_t xj380_socket_read_impl(xj380_lwip_socket_t *socket, void *buffer,
 
 static int xj380_provider_create(int domain, int type, int protocol, void **out_socket)
 {
+    printk("netserver: socket create domain=%d type=%d protocol=%d stack_ready=%d\n",
+           domain, type, protocol, (int)g_stack_ready);
+
     if (out_socket == NULL) {
         return -EINVAL;
     }
@@ -210,8 +250,10 @@ static int xj380_provider_create(int domain, int type, int protocol, void **out_
 
     struct netconn *conn = netconn_new(NETCONN_TCP);
     if (conn == NULL) {
+        printk("netserver: netconn_new failed\n");
         return -ENOMEM;
     }
+    printk("netserver: netconn_new ok conn=%p\n", conn);
 
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)calloc(1, sizeof(xj380_lwip_socket_t));
     if (socket == NULL) {
@@ -221,6 +263,7 @@ static int xj380_provider_create(int domain, int type, int protocol, void **out_
 
     socket->conn = conn;
     *out_socket  = socket;
+    printk("netserver: socket create ok socket=%p\n", socket);
     return 0;
 }
 
@@ -457,6 +500,97 @@ static int xj380_provider_set_flags(void *socket_ptr, uint64_t flags)
     return 0;
 }
 
+static int xj380_provider_resolve_ipv4(const char *hostname, uint32_t *out_addr)
+{
+    if (hostname == NULL || out_addr == NULL || hostname[0] == '\0') {
+        return -EINVAL;
+    }
+    if (!g_stack_ready) {
+        for (int retry = 0; retry < 500 && !g_stack_ready; ++retry) {
+            delay_ms_hp(10);
+        }
+        if (!g_stack_ready) {
+            return -ENETDOWN;
+        }
+    }
+
+    ip_addr_t resolved_addr;
+    if (ipaddr_aton(hostname, &resolved_addr)) {
+        if (!IP_IS_V4(&resolved_addr)) {
+            return -EAFNOSUPPORT;
+        }
+        *out_addr = ip_2_ip4(&resolved_addr)->addr;
+        return 0;
+    }
+
+    printk("netserver: dns resolve start host=%s\n", hostname);
+
+    xj380_dns_query_t query;
+    memset(&query, 0, sizeof(query));
+
+    LOCK_TCPIP_CORE();
+    err_t err = dns_gethostbyname_addrtype(hostname, &resolved_addr, xj380_dns_found_cb, &query, LWIP_DNS_ADDRTYPE_IPV4);
+    UNLOCK_TCPIP_CORE();
+
+    if (err != ERR_OK) {
+        if (err != ERR_INPROGRESS) {
+            printk("netserver: dns resolve host=%s err=%d\n", hostname, (int)err);
+            return xj380_err_to_errno(err);
+        }
+
+        uint32_t start_ms = sys_now();
+        while (!query.done) {
+            if ((uint32_t)(sys_now() - start_ms) >= 5000U) {
+                printk("netserver: dns resolve timeout host=%s\n", hostname);
+                return -ETIMEDOUT;
+            }
+            scheduler_yield();
+        }
+
+        if (query.status < 0) {
+            printk("netserver: dns resolve failed host=%s status=%d\n", hostname, query.status);
+            return query.status;
+        }
+        resolved_addr = query.addr;
+    }
+    if (!IP_IS_V4(&resolved_addr)) {
+        return -EAFNOSUPPORT;
+    }
+
+    *out_addr = ip_2_ip4(&resolved_addr)->addr;
+    const ip4_addr_t *ip4 = ip_2_ip4(&resolved_addr);
+    printk("netserver: dns resolve done host=%s addr=%u.%u.%u.%u\n",
+           hostname,
+           ip4_addr1(ip4), ip4_addr2(ip4), ip4_addr3(ip4), ip4_addr4(ip4));
+    return 0;
+}
+
+static int xj380_provider_set_dns_server(uint32_t addr)
+{
+    ip4_addr_t ip4;
+    ip4.addr = addr;
+
+    ip_addr_t dns_addr;
+    ip_addr_copy_from_ip4(dns_addr, ip4);
+    dns_setserver(0, &dns_addr);
+    return 0;
+}
+
+static int xj380_provider_get_dns_server(uint32_t *out_addr)
+{
+    if (out_addr == NULL) {
+        return -EINVAL;
+    }
+
+    const ip_addr_t *dns_addr = dns_getserver(0);
+    if (dns_addr == NULL || !IP_IS_V4(dns_addr)) {
+        return -ENODATA;
+    }
+
+    *out_addr = ip_2_ip4(dns_addr)->addr;
+    return 0;
+}
+
 static socket_provider_t g_socket_provider = {
     .create    = xj380_provider_create,
     .close     = xj380_provider_close,
@@ -469,6 +603,9 @@ static socket_provider_t g_socket_provider = {
     .shutdown  = xj380_provider_shutdown,
     .poll      = xj380_provider_poll,
     .set_flags = xj380_provider_set_flags,
+    .resolve_ipv4 = xj380_provider_resolve_ipv4,
+    .set_dns_server = xj380_provider_set_dns_server,
+    .get_dns_server = xj380_provider_get_dns_server,
 };
 
 static void xj380_update_net_state(void)
@@ -534,11 +671,13 @@ static int xj380_setup_stack(void)
     ip4_addr_t ipaddr;
     ip4_addr_t netmask;
     ip4_addr_t gateway;
+    ip4_addr_t dns_server;
     bool       tcpip_ready = false;
 
     IP4_ADDR(&ipaddr, 10, 0, 2, 15);
     IP4_ADDR(&netmask, 255, 255, 255, 0);
     IP4_ADDR(&gateway, 10, 0, 2, 2);
+    IP4_ADDR(&dns_server, 112, 112, 112, 112);
 
     tcpip_init([](void *arg) { *(bool *)arg = true; }, &tcpip_ready);
     while (!tcpip_ready) {
@@ -557,6 +696,9 @@ static int xj380_setup_stack(void)
     netif_set_addr(&g_netif, &ipaddr, &netmask, &gateway);
     netif_set_link_up(&g_netif);
     netif_set_up(&g_netif);
+    ip_addr_t dns_addr;
+    ip_addr_copy_from_ip4(dns_addr, dns_server);
+    dns_setserver(0, &dns_addr);
 
     // The current lwIP port leaves admin/link flags and hwaddr_len inconsistent
     // after init; force the ethernet netif state so ARP/TCP can run.
@@ -575,6 +717,8 @@ static int xj380_setup_stack(void)
            ip4_addr1(&ipaddr), ip4_addr2(&ipaddr), ip4_addr3(&ipaddr), ip4_addr4(&ipaddr),
            ip4_addr1(&netmask), ip4_addr2(&netmask), ip4_addr3(&netmask), ip4_addr4(&netmask),
            ip4_addr1(&gateway), ip4_addr2(&gateway), ip4_addr3(&gateway), ip4_addr4(&gateway));
+    printk("netserver: dns server %u.%u.%u.%u\n",
+           ip4_addr1(&dns_server), ip4_addr2(&dns_server), ip4_addr3(&dns_server), ip4_addr4(&dns_server));
 
     UNLOCK_TCPIP_CORE();
     g_dhcp_ready_logged = true;
