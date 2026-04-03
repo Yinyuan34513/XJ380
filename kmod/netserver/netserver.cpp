@@ -16,6 +16,7 @@ extern "C" {
 #include "lwip/netif.h"
 #include "lwip/netifapi.h"
 #include "lwip/pbuf.h"
+#include "lwip/prot/dhcp.h"
 #include "lwip/tcpip.h"
 #include "netif/ethernet.h"
 }
@@ -31,11 +32,15 @@ static netdev_t    *g_netdev              = NULL;
 static bool         g_stack_ready         = false;
 static bool         g_worker_started      = false;
 static bool         g_provider_registered = false;
+static bool         g_dhcp_started        = false;
 static bool         g_dhcp_ready_logged   = false;
+static bool         g_dns_manual_override = false;
 static uint32_t     g_rx_log_count        = 0;
 static uint32_t     g_tx_log_count        = 0;
 static uint32_t     g_connect_log_count   = 0;
 static uint32_t     g_write_log_count     = 0;
+static uint32_t     g_dns_manual_addr     = 0;
+static uint8_t      g_last_dhcp_state     = 0xff;
 
 typedef struct xj380_dns_query {
     volatile int done;
@@ -49,6 +54,46 @@ static int xj380_err_to_errno(err_t err)
         return 0;
     }
     return -err_to_errno(err);
+}
+
+static uint8_t xj380_current_dhcp_state(void)
+{
+    struct dhcp *dhcp = netif_dhcp_data(&g_netif);
+    return dhcp != NULL ? dhcp->state : DHCP_STATE_OFF;
+}
+
+static const char *xj380_dhcp_state_name(uint8_t state)
+{
+    switch (state) {
+    case DHCP_STATE_OFF:
+        return "off";
+    case DHCP_STATE_REQUESTING:
+        return "requesting";
+    case DHCP_STATE_INIT:
+        return "init";
+    case DHCP_STATE_REBOOTING:
+        return "rebooting";
+    case DHCP_STATE_REBINDING:
+        return "rebinding";
+    case DHCP_STATE_RENEWING:
+        return "renewing";
+    case DHCP_STATE_SELECTING:
+        return "selecting";
+    case DHCP_STATE_INFORMING:
+        return "informing";
+    case DHCP_STATE_CHECKING:
+        return "checking";
+    case DHCP_STATE_PERMANENT:
+        return "permanent";
+    case DHCP_STATE_BOUND:
+        return "bound";
+    case DHCP_STATE_RELEASING:
+        return "releasing";
+    case DHCP_STATE_BACKING_OFF:
+        return "backing-off";
+    default:
+        return "unknown";
+    }
 }
 
 static err_t xj380_linkoutput(struct netif *netif, struct pbuf *p)
@@ -567,12 +612,20 @@ static int xj380_provider_resolve_ipv4(const char *hostname, uint32_t *out_addr)
 
 static int xj380_provider_set_dns_server(uint32_t addr)
 {
+    if (addr == 0) {
+        g_dns_manual_override = false;
+        g_dns_manual_addr     = 0;
+        return 0;
+    }
+
     ip4_addr_t ip4;
     ip4.addr = addr;
 
     ip_addr_t dns_addr;
     ip_addr_copy_from_ip4(dns_addr, ip4);
     dns_setserver(0, &dns_addr);
+    g_dns_manual_override = true;
+    g_dns_manual_addr     = addr;
     return 0;
 }
 
@@ -591,6 +644,50 @@ static int xj380_provider_get_dns_server(uint32_t *out_addr)
     return 0;
 }
 
+static int xj380_provider_get_netinfo(socket_netinfo_t *out_info)
+{
+    if (out_info == NULL) {
+        return -EINVAL;
+    }
+
+    memset(out_info, 0, sizeof(*out_info));
+
+    if (g_netdev != NULL) {
+        memcpy(out_info->mac, g_netdev->mac, sizeof(out_info->mac));
+        out_info->mtu = g_netdev->mtu;
+    }
+
+    out_info->ifname[0] = 'e';
+    out_info->ifname[1] = '0';
+    out_info->ifname[2] = '\0';
+    out_info->stack_ready = g_stack_ready ? 1 : 0;
+    out_info->ipv4_method = g_dhcp_started ? SOCKET_IPV4_METHOD_DHCP : SOCKET_IPV4_METHOD_NONE;
+
+    if (!g_stack_ready) {
+        return 0;
+    }
+
+    out_info->link_up = (netif_is_up(&g_netif) && netif_is_link_up(&g_netif)) ? 1 : 0;
+    out_info->mtu     = g_netif.mtu;
+    out_info->dhcp_state = xj380_current_dhcp_state();
+    memcpy(out_info->mac, g_netif.hwaddr, sizeof(out_info->mac));
+
+    const ip4_addr_t *ip = netif_ip4_addr(&g_netif);
+    if (ip != NULL && !ip4_addr_isany_val(*ip)) {
+        out_info->ip_ready     = 1;
+        out_info->ipv4_addr    = ip->addr;
+        out_info->ipv4_netmask = netif_ip4_netmask(&g_netif)->addr;
+        out_info->ipv4_gateway = netif_ip4_gw(&g_netif)->addr;
+    }
+
+    uint32_t dns_addr = 0;
+    if (xj380_provider_get_dns_server(&dns_addr) == 0) {
+        out_info->dns_server = dns_addr;
+    }
+
+    return 0;
+}
+
 static socket_provider_t g_socket_provider = {
     .create    = xj380_provider_create,
     .close     = xj380_provider_close,
@@ -606,6 +703,7 @@ static socket_provider_t g_socket_provider = {
     .resolve_ipv4 = xj380_provider_resolve_ipv4,
     .set_dns_server = xj380_provider_set_dns_server,
     .get_dns_server = xj380_provider_get_dns_server,
+    .get_netinfo = xj380_provider_get_netinfo,
 };
 
 static void xj380_update_net_state(void)
@@ -614,8 +712,34 @@ static void xj380_update_net_state(void)
         return;
     }
 
+    uint8_t dhcp_state = xj380_current_dhcp_state();
+    if (dhcp_state != g_last_dhcp_state) {
+        g_last_dhcp_state = dhcp_state;
+        printk("netserver: dhcp state -> %s (%u)\n",
+               xj380_dhcp_state_name(dhcp_state), (unsigned int)dhcp_state);
+        if (dhcp_state != DHCP_STATE_BOUND && dhcp_state != DHCP_STATE_RENEWING &&
+            dhcp_state != DHCP_STATE_REBINDING) {
+            g_dhcp_ready_logged = false;
+        }
+    }
+
+    if (g_dns_manual_override) {
+        const ip_addr_t *dns_addr = dns_getserver(0);
+        uint32_t current_dns = 0;
+        if (dns_addr != NULL && IP_IS_V4(dns_addr)) {
+            current_dns = ip_2_ip4(dns_addr)->addr;
+        }
+        if (current_dns != g_dns_manual_addr) {
+            ip4_addr_t ip4;
+            ip4.addr = g_dns_manual_addr;
+            ip_addr_t dns_addr_out;
+            ip_addr_copy_from_ip4(dns_addr_out, ip4);
+            dns_setserver(0, &dns_addr_out);
+        }
+    }
+
     const ip4_addr_t *ip = netif_ip4_addr(&g_netif);
-    if (!g_dhcp_ready_logged && !ip4_addr_isany_val(*ip)) {
+    if (!g_dhcp_ready_logged && dhcp_supplied_address(&g_netif) && !ip4_addr_isany_val(*ip)) {
         const ip4_addr_t *mask = netif_ip4_netmask(&g_netif);
         const ip4_addr_t *gw   = netif_ip4_gw(&g_netif);
         g_dhcp_ready_logged    = true;
@@ -668,16 +792,7 @@ static void xj380_poll_input(void)
 
 static int xj380_setup_stack(void)
 {
-    ip4_addr_t ipaddr;
-    ip4_addr_t netmask;
-    ip4_addr_t gateway;
-    ip4_addr_t dns_server;
     bool       tcpip_ready = false;
-
-    IP4_ADDR(&ipaddr, 10, 0, 2, 15);
-    IP4_ADDR(&netmask, 255, 255, 255, 0);
-    IP4_ADDR(&gateway, 10, 0, 2, 2);
-    IP4_ADDR(&dns_server, 112, 112, 112, 112);
 
     tcpip_init([](void *arg) { *(bool *)arg = true; }, &tcpip_ready);
     while (!tcpip_ready) {
@@ -686,19 +801,15 @@ static int xj380_setup_stack(void)
 
     LOCK_TCPIP_CORE();
 
-    struct netif *added = netif_add(&g_netif, &ipaddr, &netmask, &gateway, g_netdev, xj380_netif_init, tcpip_input);
+    struct netif *added = netif_add(&g_netif, NULL, NULL, NULL, g_netdev, xj380_netif_init, tcpip_input);
     if (added == NULL) {
         UNLOCK_TCPIP_CORE();
         return -EIO;
     }
 
     netif_set_default(&g_netif);
-    netif_set_addr(&g_netif, &ipaddr, &netmask, &gateway);
     netif_set_link_up(&g_netif);
     netif_set_up(&g_netif);
-    ip_addr_t dns_addr;
-    ip_addr_copy_from_ip4(dns_addr, dns_server);
-    dns_setserver(0, &dns_addr);
 
     // The current lwIP port leaves admin/link flags and hwaddr_len inconsistent
     // after init; force the ethernet netif state so ARP/TCP can run.
@@ -713,16 +824,29 @@ static int xj380_setup_stack(void)
            (unsigned int)g_netif.mtu,
            g_netif.hwaddr[0], g_netif.hwaddr[1], g_netif.hwaddr[2],
            g_netif.hwaddr[3], g_netif.hwaddr[4], g_netif.hwaddr[5]);
-    printk("netserver: static ip %u.%u.%u.%u mask=%u.%u.%u.%u gw=%u.%u.%u.%u\n",
-           ip4_addr1(&ipaddr), ip4_addr2(&ipaddr), ip4_addr3(&ipaddr), ip4_addr4(&ipaddr),
-           ip4_addr1(&netmask), ip4_addr2(&netmask), ip4_addr3(&netmask), ip4_addr4(&netmask),
-           ip4_addr1(&gateway), ip4_addr2(&gateway), ip4_addr3(&gateway), ip4_addr4(&gateway));
-    printk("netserver: dns server %u.%u.%u.%u\n",
-           ip4_addr1(&dns_server), ip4_addr2(&dns_server), ip4_addr3(&dns_server), ip4_addr4(&dns_server));
+
+    err_t dhcp_err = dhcp_start(&g_netif);
+    if (dhcp_err != ERR_OK) {
+        printk("netserver: dhcp_start failed: %d\n", (int)dhcp_err);
+        UNLOCK_TCPIP_CORE();
+        return xj380_err_to_errno(dhcp_err);
+    }
+
+    if (g_dns_manual_override && g_dns_manual_addr != 0) {
+        ip4_addr_t ip4;
+        ip4.addr = g_dns_manual_addr;
+        ip_addr_t dns_addr;
+        ip_addr_copy_from_ip4(dns_addr, ip4);
+        dns_setserver(0, &dns_addr);
+    }
+
+    printk("netserver: dhcp client started on %c%c\n", g_netif.name[0], g_netif.name[1]);
 
     UNLOCK_TCPIP_CORE();
-    g_dhcp_ready_logged = true;
 
+    g_dhcp_started      = true;
+    g_dhcp_ready_logged = false;
+    g_last_dhcp_state   = 0xff;
     g_stack_ready = true;
     return 0;
 }

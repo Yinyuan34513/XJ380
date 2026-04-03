@@ -42,8 +42,8 @@ CPP_OBJECTS := $(CPP_SOURCES:.cpp=.o)
 CC ?= clang
 CXX ?= clang++
 
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden
-CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden
+C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden -MMD -MP
+CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden -MMD -MP
 INCLUDES = -I../../include -I./lwip/include -I./
 LDFLAGS := -nostdlib -Wl,-e,dlmain -Wl,-z,muldefs
 
@@ -59,3 +59,5 @@ all: ../../out/netserver.km
 	$(CXX) $(CPP_FLAGS) $(INCLUDES) -c $< -o $@
 
 .PHONY: all
+
+-include $(C_OBJECTS:.o=.d) $(CPP_OBJECTS:.o=.d)

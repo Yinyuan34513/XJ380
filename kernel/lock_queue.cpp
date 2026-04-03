@@ -49,6 +49,7 @@ size_t lock_queue_enqueue(lock_queue *q, void *data)
     spin_lock(&q->lock);
     new_node->index = q->next_index++;
     queue_append_node(q, new_node);
+    spin_unlock(&q->lock);
 
     return new_node->index;
 }

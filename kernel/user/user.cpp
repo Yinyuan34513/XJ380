@@ -44,6 +44,15 @@ UserInfo root_user = {
 
 extern SHEET *desktop_ct_sheet;
 extern mouse_dec ms_dec;
+extern bool no_interrupt;
+extern bool is_scheduler;
+
+static void restore_runtime_state(bool was_scheduler_enabled, bool was_interrupt_enabled)
+{
+    if (was_scheduler_enabled) enable_scheduler();
+    if (was_interrupt_enabled && !no_interrupt) open_interrupt;
+    else close_interrupt;
+}
 
 static bool append_cmdline_arg(char *cmdline, size_t cmdline_size, char **cursor, const char *arg)
 {
@@ -365,6 +374,11 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
                          (uint64_t *)&mapping_space->load_end);
 
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
+    if (!no_interrupt) close_interrupt;
+    disable_scheduler();
+
     page_map_range_to_random(group->pagedir, mapping_space->load_start,
                              mapping_space->load_end - mapping_space->load_start,
                              PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
@@ -444,11 +458,12 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     ld_so_vma->vm_name = strdup(group->name);
     vma_insert(&group->vma_manager, ld_so_vma);
 
+    switch_page_directory(current_pagedir); // 恢复页表
+    restore_runtime_state(was_scheduler_enabled, is_sti);
+
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
     vfs_close(file);
     free(mapping_space);
-
-    switch_page_directory(current_pagedir); // 恢复页表
 
     // 设置程序入口点
     return entry;

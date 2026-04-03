@@ -55,8 +55,13 @@ static inline void spin_unlock(spin_t *lock)
 }
 #endif
 
-typedef spin_t sys_mutex_t;
 typedef unsigned long sys_prot_t;
+typedef struct sys_mutex {
+    volatile long state;
+    void    *owner;
+    u32_t    depth;
+    bool     valid;
+} sys_mutex_t;
 
 typedef struct sys_sem {
     bool   invalid;
@@ -77,7 +82,6 @@ typedef struct sys_mbox {
     void     **msges;
     u32_t      ptrWrite;
     u32_t      ptrRead;
-    mboxBlock *firstBlock;
 } sys_mbox_t;
 
 typedef size_t sys_thread_t;

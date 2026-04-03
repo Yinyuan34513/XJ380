@@ -37,6 +37,28 @@ struct sockaddr_in {
     unsigned char   sin_zero[8];
 };
 
+typedef struct socket_netinfo {
+    uint32_t ipv4_addr;
+    uint32_t ipv4_netmask;
+    uint32_t ipv4_gateway;
+    uint32_t dns_server;
+    uint32_t mtu;
+    uint8_t  mac[6];
+    uint8_t  link_up;
+    uint8_t  stack_ready;
+    uint8_t  ip_ready;
+    uint8_t  ipv4_method;
+    uint8_t  dhcp_state;
+    uint8_t  reserved[3];
+    char     ifname[16];
+} socket_netinfo_t;
+
+enum {
+    SOCKET_IPV4_METHOD_NONE   = 0,
+    SOCKET_IPV4_METHOD_MANUAL = 1,
+    SOCKET_IPV4_METHOD_DHCP   = 2,
+};
+
 typedef struct socket_provider {
     int     (*create)(int domain, int type, int protocol, void **out_socket);
     int     (*close)(void *socket);
@@ -52,6 +74,7 @@ typedef struct socket_provider {
     int     (*resolve_ipv4)(const char *hostname, uint32_t *out_addr);
     int     (*set_dns_server)(uint32_t addr);
     int     (*get_dns_server)(uint32_t *out_addr);
+    int     (*get_netinfo)(socket_netinfo_t *out_info);
 } socket_provider_t;
 
 int     socket_provider_register(const socket_provider_t *provider);
@@ -68,6 +91,7 @@ int     socket_apply_flags(vfs_node_t node, uint64_t flags);
 int     socket_resolve_ipv4(const char *hostname, uint32_t *out_addr);
 int     socket_set_dns_server(uint32_t addr);
 int     socket_get_dns_server(uint32_t *out_addr);
+int     socket_get_netinfo(socket_netinfo_t *out_info);
 
 #ifdef __cplusplus
 }

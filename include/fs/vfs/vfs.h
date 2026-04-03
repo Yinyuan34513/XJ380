@@ -190,11 +190,15 @@ enum {
     CPFS_REGISTER_ID  = 5, // CPIO文件系统注册ID
     PROC_REGISTER_ID  = 6, // 进程信息文件系统注册ID
     DNS_REGISTER_ID   = 7, // DNS 文件系统注册ID
+    NM_REGISTER_ID    = 8, // NetworkManager 运行态文件系统注册ID
 };
 
 extern struct vfs_callback vfs_empty_callback;
 extern vfs_node_t          rootdir;
 extern struct llist_header fs_metadata_list;
+
+void vfs_child_lock();
+void vfs_child_unlock();
 
 /**
  * 创建目录节点

@@ -38,6 +38,8 @@ void   write_serial_fmt_heapless(const char *fmt, ...);
 void   serial_wprintf(const char *fmt, ...);
 size_t vwprintf(Writer *writer, const char *fmt, va_list args);
 int    sprintf(char *buf, const char *fmt, ...);
+void   serial_redraw_screen_overlay();
+void   serial_show_screen_overlay_now();
 
 int printk(const char *fmt, ...);
 int pr_debug(const char *fmt, ...);

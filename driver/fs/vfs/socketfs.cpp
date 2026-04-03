@@ -1,6 +1,7 @@
 #define ALL_IMPLEMENTATION
 
 #include <dlinker.h>
+#include <cpu/lock.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 #include <krlibc.h>
@@ -9,15 +10,44 @@
 #include <task/pcb.h>
 
 typedef struct socketfs_handle {
-    const socket_provider_t *provider;
-    void                    *socket;
+    socket_provider_t provider;
+    void             *socket;
 } socketfs_handle_t;
 
 static int        socketfs_id      = 0;
 static int        socketfs_next_id = 0;
 static vfs_node_t socketfs_root    = NULL;
 
-static const socket_provider_t *g_socket_provider = NULL;
+static spin_t           g_socket_provider_lock  = SPIN_INIT;
+static socket_provider_t g_socket_provider_data = {};
+static bool              g_socket_provider_ready = false;
+
+static inline bool socketfs_provider_valid(const socket_provider_t *provider)
+{
+    return provider != NULL && provider->create != NULL && provider->close != NULL &&
+           provider->read != NULL && provider->write != NULL && provider->bind != NULL &&
+           provider->connect != NULL && provider->listen != NULL && provider->accept != NULL &&
+           provider->shutdown != NULL && provider->poll != NULL && provider->set_flags != NULL &&
+           provider->resolve_ipv4 != NULL && provider->set_dns_server != NULL &&
+           provider->get_dns_server != NULL && provider->get_netinfo != NULL;
+}
+
+static int socketfs_snapshot_provider(socket_provider_t *out_provider)
+{
+    if (out_provider == NULL) {
+        return -EINVAL;
+    }
+
+    spin_lock(&g_socket_provider_lock);
+    if (!g_socket_provider_ready || !socketfs_provider_valid(&g_socket_provider_data)) {
+        memset(out_provider, 0, sizeof(*out_provider));
+        spin_unlock(&g_socket_provider_lock);
+        return -ENOSYS;
+    }
+    *out_provider = g_socket_provider_data;
+    spin_unlock(&g_socket_provider_lock);
+    return 0;
+}
 
 static inline socketfs_handle_t *socketfs_get_handle(vfs_node_t node)
 {
@@ -29,10 +59,14 @@ static inline socketfs_handle_t *socketfs_get_handle(vfs_node_t node)
 
 static inline fd_file_handle *socketfs_get_fd_handle(int fd)
 {
+    tcb_t current = get_current_task();
+    if (current == NULL || current->parent_group == NULL || current->parent_group->file_open == NULL) {
+        return NULL;
+    }
     if (fd < 0) {
         return NULL;
     }
-    return (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    return (fd_file_handle *)queue_get(current->parent_group->file_open, fd);
 }
 
 static inline bool socketfs_is_socket_fd(int fd, fd_file_handle **out_handle)
@@ -86,10 +120,10 @@ static size_t socketfs_read_cb(void *file, void *addr, size_t offset, size_t siz
 {
     (void)offset;
     socketfs_handle_t *handle = (socketfs_handle_t *)file;
-    if (handle == NULL || handle->provider == NULL || handle->provider->read == NULL) {
+    if (handle == NULL || handle->provider.read == NULL) {
         return VFS_STATUS_FAILED;
     }
-    ssize_t ret = handle->provider->read(handle->socket, addr, size, 0);
+    ssize_t ret = handle->provider.read(handle->socket, addr, size, 0);
     return ret < 0 ? VFS_STATUS_FAILED : (size_t)ret;
 }
 
@@ -97,10 +131,10 @@ static size_t socketfs_write_cb(void *file, const void *addr, size_t offset, siz
 {
     (void)offset;
     socketfs_handle_t *handle = (socketfs_handle_t *)file;
-    if (handle == NULL || handle->provider == NULL || handle->provider->write == NULL) {
+    if (handle == NULL || handle->provider.write == NULL) {
         return VFS_STATUS_FAILED;
     }
-    ssize_t ret = handle->provider->write(handle->socket, addr, size, 0);
+    ssize_t ret = handle->provider.write(handle->socket, addr, size, 0);
     return ret < 0 ? VFS_STATUS_FAILED : (size_t)ret;
 }
 
@@ -115,10 +149,10 @@ static errno_t socketfs_ioctl(void *file, size_t req, void *arg)
 static errno_t socketfs_poll_cb(void *file, size_t events)
 {
     socketfs_handle_t *handle = (socketfs_handle_t *)file;
-    if (handle == NULL || handle->provider == NULL || handle->provider->poll == NULL) {
+    if (handle == NULL || handle->provider.poll == NULL) {
         return -EINVAL;
     }
-    return handle->provider->poll(handle->socket, events);
+    return handle->provider.poll(handle->socket, events);
 }
 
 static errno_t socketfs_del(void *parent, vfs_node_t node)
@@ -126,8 +160,8 @@ static errno_t socketfs_del(void *parent, vfs_node_t node)
     (void)parent;
     socketfs_handle_t *handle = socketfs_get_handle(node);
     if (handle != NULL) {
-        if (handle->provider != NULL && handle->provider->close != NULL) {
-            handle->provider->close(handle->socket);
+        if (socketfs_provider_valid(&handle->provider)) {
+            handle->provider.close(handle->socket);
         }
         free(handle);
         node->handle = NULL;
@@ -163,7 +197,12 @@ static struct vfs_callback socketfs_callbacks = {
 
 static int socketfs_alloc_fd(void *impl, uint64_t flags)
 {
-    if (socketfs_root == NULL || impl == NULL || g_socket_provider == NULL) {
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
+    }
+    if (socketfs_root == NULL || impl == NULL) {
         return -ENOSYS;
     }
 
@@ -183,7 +222,7 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
         return -ENOMEM;
     }
 
-    socket_handle->provider = g_socket_provider;
+    socket_handle->provider = provider;
     socket_handle->socket   = impl;
 
     node->type   = file_socket | file_delete;
@@ -220,15 +259,14 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
 
 int socket_provider_register(const socket_provider_t *provider)
 {
-    if (provider == NULL || provider->create == NULL || provider->close == NULL ||
-        provider->read == NULL || provider->write == NULL || provider->bind == NULL ||
-        provider->connect == NULL || provider->listen == NULL || provider->accept == NULL ||
-        provider->shutdown == NULL || provider->poll == NULL || provider->set_flags == NULL ||
-        provider->resolve_ipv4 == NULL || provider->set_dns_server == NULL || provider->get_dns_server == NULL) {
+    if (!socketfs_provider_valid(provider)) {
         return -EINVAL;
     }
 
-    g_socket_provider = provider;
+    spin_lock(&g_socket_provider_lock);
+    g_socket_provider_data  = *provider;
+    g_socket_provider_ready = true;
+    spin_unlock(&g_socket_provider_lock);
     return 0;
 }
 EXPORT_SYMBOL(socket_provider_register);
@@ -249,14 +287,17 @@ int socketfs_setup(void)
 
 int socket_open(int domain, int type, int protocol)
 {
-    if (g_socket_provider == NULL) {
-        return -ENOSYS;
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
     }
 
-    printk("socketfs: open domain=%d type=%d protocol=%d\n", domain, type, protocol);
+    printk("socketfs: open domain=%d type=%d protocol=%d create=%p\n",
+           domain, type, protocol, provider.create);
 
     void *impl = NULL;
-    int   ret  = g_socket_provider->create(domain, type, protocol, &impl);
+    ret = provider.create(domain, type, protocol, &impl);
     if (ret < 0) {
         printk("socketfs: provider create failed ret=%d\n", ret);
         return ret;
@@ -274,11 +315,11 @@ int socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL) {
+    if (handle == NULL || handle->provider.bind == NULL) {
         return -EBADF;
     }
 
-    return handle->provider->bind(handle->socket, addr, addrlen);
+    return handle->provider.bind(handle->socket, addr, addrlen);
 }
 
 int socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
@@ -289,11 +330,11 @@ int socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL) {
+    if (handle == NULL || handle->provider.connect == NULL) {
         return -EBADF;
     }
 
-    return handle->provider->connect(handle->socket, addr, addrlen);
+    return handle->provider.connect(handle->socket, addr, addrlen);
 }
 
 int socket_listen(int fd, int backlog)
@@ -304,11 +345,11 @@ int socket_listen(int fd, int backlog)
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL) {
+    if (handle == NULL || handle->provider.listen == NULL) {
         return -EBADF;
     }
 
-    return handle->provider->listen(handle->socket, backlog);
+    return handle->provider.listen(handle->socket, backlog);
 }
 
 int socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
@@ -319,12 +360,12 @@ int socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL) {
+    if (handle == NULL || handle->provider.accept == NULL) {
         return -EBADF;
     }
 
     void *new_socket = NULL;
-    int   ret        = handle->provider->accept(handle->socket, &new_socket, addr, addrlen);
+    int   ret        = handle->provider.accept(handle->socket, &new_socket, addr, addrlen);
     if (ret < 0) {
         return ret;
     }
@@ -340,61 +381,86 @@ int socket_shutdown(int fd, int how)
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL) {
+    if (handle == NULL || handle->provider.shutdown == NULL) {
         return -EBADF;
     }
 
-    return handle->provider->shutdown(handle->socket, how);
+    return handle->provider.shutdown(handle->socket, how);
 }
 
 ssize_t socket_read(vfs_node_t node, void *buffer, size_t size)
 {
     socketfs_handle_t *handle = socketfs_get_handle(node);
-    if (handle == NULL || buffer == NULL) {
+    if (handle == NULL || buffer == NULL || handle->provider.read == NULL) {
         return -EBADF;
     }
-    return handle->provider->read(handle->socket, buffer, size, node->flags);
+    return handle->provider.read(handle->socket, buffer, size, node->flags);
 }
 
 ssize_t socket_write(vfs_node_t node, const void *buffer, size_t size)
 {
     socketfs_handle_t *handle = socketfs_get_handle(node);
-    if (handle == NULL || buffer == NULL) {
+    if (handle == NULL || buffer == NULL || handle->provider.write == NULL) {
         return -EBADF;
     }
-    return handle->provider->write(handle->socket, buffer, size, node->flags);
+    return handle->provider.write(handle->socket, buffer, size, node->flags);
 }
 
 int socket_apply_flags(vfs_node_t node, uint64_t flags)
 {
     socketfs_handle_t *handle = socketfs_get_handle(node);
-    if (handle == NULL) {
+    if (handle == NULL || handle->provider.set_flags == NULL) {
         return -EBADF;
     }
     node->flags = flags;
-    return handle->provider->set_flags(handle->socket, flags);
+    return handle->provider.set_flags(handle->socket, flags);
 }
 
 int socket_resolve_ipv4(const char *hostname, uint32_t *out_addr)
 {
-    if (g_socket_provider == NULL || g_socket_provider->resolve_ipv4 == NULL || hostname == NULL || out_addr == NULL) {
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
+    }
+    if (hostname == NULL || out_addr == NULL) {
         return -EINVAL;
     }
-    return g_socket_provider->resolve_ipv4(hostname, out_addr);
+    return provider.resolve_ipv4(hostname, out_addr);
 }
 
 int socket_set_dns_server(uint32_t addr)
 {
-    if (g_socket_provider == NULL || g_socket_provider->set_dns_server == NULL) {
-        return -ENOSYS;
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
     }
-    return g_socket_provider->set_dns_server(addr);
+    return provider.set_dns_server(addr);
 }
 
 int socket_get_dns_server(uint32_t *out_addr)
 {
-    if (g_socket_provider == NULL || g_socket_provider->get_dns_server == NULL || out_addr == NULL) {
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
+    }
+    if (out_addr == NULL) {
         return -EINVAL;
     }
-    return g_socket_provider->get_dns_server(out_addr);
+    return provider.get_dns_server(out_addr);
+}
+
+int socket_get_netinfo(socket_netinfo_t *out_info)
+{
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
+    }
+    if (out_info == NULL) {
+        return -EINVAL;
+    }
+    return provider.get_netinfo(out_info);
 }

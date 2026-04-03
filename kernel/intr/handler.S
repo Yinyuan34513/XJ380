@@ -26,6 +26,10 @@ CS	    =	0xa0
 RFLAGS	=	0xa8
 OLD_RSP	=	0xb0
 OLDSS	=	0xb8
+CPU_CURRENT_TASK = 0x4c0
+CPU_SYSCALL_USER_RSP = 0x4d8
+CPU_SYSCALL_USER_RAX = 0x4e0
+THREAD_SYSCALL_STACK = 0xb40
 
 Restore_all:
     // === 恢复调用现场 ===
@@ -302,9 +306,16 @@ ENTRY(sb16_interr)
 ENTRY(syscall_handler)
     cli
     cld
+    swapgs
 
+    movq %rax, %gs:CPU_SYSCALL_USER_RAX
+    movq %rsp, %gs:CPU_SYSCALL_USER_RSP
+
+    movq %gs:CPU_CURRENT_TASK, %rax
+    movq THREAD_SYSCALL_STACK(%rax), %rsp
     subq $0x38, %rsp
 
+    movq %gs:CPU_SYSCALL_USER_RAX, %rax
     pushq %rax
 
     movq %es, %rax
@@ -327,52 +338,35 @@ ENTRY(syscall_handler)
     pushq %r14
     pushq %r15
 
-    movq %rsp, %r15
-
-    call switch_to_kernel_stack
-    subq $0xc0, %rax
-    movq %rax, %rsp
-    movq %rax, %rbp
-
     movq %rsp, %rdi
-    movq %r15, %rsi
-    movq $0xc0, %rdx
-    call memcpy
-
-    movq %rsp, %rdi
-    movq %r15, %rsi
+    movq %gs:CPU_SYSCALL_USER_RSP, %rsi
     call c_syscall_handler
 
-    movq %rax, %rdi
-    movq %rsp, %rsi
-    movq $0xc0, %rdx
-    call memcpy
-
-    movq %rax, %rsp
-
 ENTRY(ret_from_syscall)
-    popq %r15
-    popq %r14
-    popq %r13
-    popq %r12
-    popq %r11
-    popq %r10
-    popq %r9
-    popq %r8
-    popq %rbx
-    popq %rcx
-    popq %rdx
-    popq %rsi
-    popq %rdi
-    popq %rbp
+    movq RIP(%rsp), %rcx
+    movq RFLAGS(%rsp), %r11
+    movq OLD_RSP(%rsp), %rax
+    movq %rax, %gs:CPU_SYSCALL_USER_RSP
 
-    popq %rax
+    movq R15(%rsp), %r15
+    movq R14(%rsp), %r14
+    movq R13(%rsp), %r13
+    movq R12(%rsp), %r12
+    movq R9(%rsp), %r9
+    movq R8(%rsp), %r8
+    movq RBX(%rsp), %rbx
+    movq RDX(%rsp), %rdx
+    movq RSI(%rsp), %rsi
+    movq RDI(%rsp), %rdi
+    movq RBP(%rsp), %rbp
+
+    movq DS(%rsp), %rax
     movq %rax, %ds
-    popq %rax
+    movq ES(%rsp), %rax
     movq %rax, %es
 
-    popq %rax
-
-    addq $0x38, %rsp
-
+    movq R10(%rsp), %r10
+    movq RAX(%rsp), %rax
+    movq %gs:CPU_SYSCALL_USER_RSP, %rsp
+    swapgs
     sysretq

@@ -330,46 +330,37 @@ SHEET *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
 
 SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
+    if (sht == NULL || sht->start == NULL) {
+        return NULL;
+    }
+
     SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->next == NULL)
-        {
-            front_p = front_p->front;
-            front_p = front_p->front;
-            while (true)
-            {
-                if (front_p->type == MovableSheetType)
-                {
-                    if (front_p->bx + 22 <= x && front_p->bx + front_p->width - 32 >= x && front_p->by <= y &&
-                        front_p->by + 22 >= y)
-                    {
-                        return front_p;
-                    }
-                    else
-                    {
-                        return NULL;
-                    }
-                }
-                else if (front_p->type == NoEdgeWindowSheetType)
-                {
-                    if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
-                        front_p->by + front_p->height >= y)
-                    {
-                        return front_p;
-                    }
-                    else
-                    {
-                        return NULL;
-                    }
-                }
-                else if (front_p->front == NULL) { return NULL; }
-                front_p = front_p->front;
-            }
-            return NULL;
-        }
+    while (front_p->next != NULL) {
         front_p = front_p->next;
     }
+
+    while (front_p != NULL)
+    {
+        if (front_p->type == MovableSheetType)
+        {
+            if (front_p->bx + 22 <= x && front_p->bx + (int)front_p->width - 32 >= x &&
+                front_p->by <= y && front_p->by + 22 >= y)
+            {
+                return front_p;
+            }
+        }
+        else if (front_p->type == NoEdgeWindowSheetType)
+        {
+            if (front_p->bx <= x && front_p->bx + (int)front_p->width >= x &&
+                front_p->by <= y && front_p->by + (int)front_p->height >= y)
+            {
+                return front_p;
+            }
+        }
+        front_p = front_p->front;
+    }
+
+    return NULL;
 }
 
 void change_sheet_type(SHEET_INFO *sht, SHEET *csheet, uint32_t new_type)
@@ -575,6 +566,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         }
     }
 
+    serial_redraw_screen_overlay();
     SheetIsRefreshing = false;
 }
 

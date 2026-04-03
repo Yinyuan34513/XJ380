@@ -67,7 +67,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     regs->rip    = regs->rcx;
     regs->cs     = SELECTOR_USER_CS;
     regs->rflags = regs->r11;
-    regs->rsp    = user_rsp + sizeof(struct X64_REGS);
+    regs->rsp    = user_rsp;
     regs->ss     = SELECTOR_USER_DS;
 
     uint64_t syscall_number = regs->rax;
@@ -289,5 +289,5 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     }
 
-    return user_rsp;
+    return (uint64_t)regs;
 }

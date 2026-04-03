@@ -31,8 +31,17 @@ vfs_callback_t fs_callbacks[256] = {
 struct llist_header fs_metadata_list;
 
 static int fs_nextid = 1;
+static spin_t vfs_child_list_lock = SPIN_INIT;
 
 #define callbackof(node, _name_) (fs_callbacks[(node)->fsid]->_name_)
+
+void vfs_child_lock() {
+    spin_lock(&vfs_child_list_lock);
+}
+
+void vfs_child_unlock() {
+    spin_unlock(&vfs_child_list_lock);
+}
 
 static inline char *pathtok(char **sp) {
     char *s = *sp;
@@ -109,7 +118,11 @@ vfs_node_t vfs_child_append(vfs_node_t parent, const char *name, void *handle) {
 }
 
 static vfs_node_t vfs_child_find(vfs_node_t parent, const char *name) {
-    return (vfs_node_t)list_first(parent->child, data, streq(name, ((vfs_node_t)data)->name));
+    if (parent == NULL || name == NULL) return NULL;
+    vfs_child_lock();
+    vfs_node_t child = (vfs_node_t)list_first(parent->child, data, streq(name, ((vfs_node_t)data)->name));
+    vfs_child_unlock();
+    return child;
 }
 
 errno_t vfs_mkdir(const char *name) {
@@ -321,7 +334,11 @@ int vfs_regist(const char *name, vfs_callback_t callback, int register_id, uint6
 }
 
 vfs_node_t vfs_do_search(vfs_node_t dir, const char *name) {
-    return (vfs_node_t)list_first(dir->child, data, streq(name, ((vfs_node_t)data)->name));
+    if (dir == NULL || name == NULL) return NULL;
+    vfs_child_lock();
+    vfs_node_t child = (vfs_node_t)list_first(dir->child, data, streq(name, ((vfs_node_t)data)->name));
+    vfs_child_unlock();
+    return child;
 }
 
 vfs_node_t vfs_open(const char *str) {
@@ -430,7 +447,12 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
     node->blksz    = PAGE_SIZE;
     node->mode     = 0777;
     node->linkto   = NULL;
-    if (parent) list_prepend(parent->child, node);
+    if (parent)
+    {
+        vfs_child_lock();
+        list_prepend(parent->child, node);
+        vfs_child_unlock();
+    }
     return node;
 }
 
@@ -455,7 +477,9 @@ errno_t vfs_close(vfs_node_t node) {
     if (node->type & file_delete && node->refcount <= 0) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;
+        vfs_child_lock();
         list_delete(node->parent->child, node);
+        vfs_child_unlock();
         node->handle = NULL;
         vfs_free(node);
     } else {
@@ -469,12 +493,17 @@ bool is_virtual_fs(const char *src) {
     return ((uint64_t)src) == DEVFS_REGISTER_ID || ((uint64_t)src) == MODFS_REGISTER_ID ||
            ((uint64_t)src) == TMPFS_REGISTER_ID || ((uint64_t)src) == PIEFS_REGISTER_ID ||
            ((uint64_t)src) == NETFS_REGISTER_ID || ((uint64_t)src) == CPFS_REGISTER_ID ||
-           ((uint64_t)src) == PROC_REGISTER_ID || ((uint64_t)src) == DNS_REGISTER_ID;
+           ((uint64_t)src) == PROC_REGISTER_ID || ((uint64_t)src) == DNS_REGISTER_ID ||
+           ((uint64_t)src) == NM_REGISTER_ID;
 }
 
 void vfs_free(vfs_node_t vfs) {
     if (vfs == NULL) return;
-    list_free_with(vfs->child, (void (*)(void *))vfs_free);
+    vfs_child_lock();
+    list_t child = vfs->child;
+    vfs->child   = NULL;
+    vfs_child_unlock();
+    list_free_with(child, (void (*)(void *))vfs_free);
     vfs_close(vfs);
     free(vfs->name);
     free(vfs);
@@ -482,7 +511,11 @@ void vfs_free(vfs_node_t vfs) {
 
 void vfs_free_child(vfs_node_t vfs) {
     if (vfs == NULL) return;
-    list_free_with(vfs->child, (void (*)(void *))vfs_free);
+    vfs_child_lock();
+    list_t child = vfs->child;
+    vfs->child   = NULL;
+    vfs_child_unlock();
+    list_free_with(child, (void (*)(void *))vfs_free);
 }
 
 errno_t vfs_mount(const char *src, vfs_node_t node) {

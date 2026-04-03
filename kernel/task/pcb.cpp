@@ -35,8 +35,31 @@ extern bool is_scheduler;
 #include "task/scheduler.h"
 
 extern spin_t scheduler_lock;
+extern void message_thread(tcb_t task);
+extern uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);
 
 uint16_t dock_ct_sheet;
+static constexpr uint64_t MESSAGE_THREAD_STACK_HEADROOM = PAGE_SIZE;
+
+static bool ensure_message_entry_stub(page_directory_t *pagedir)
+{
+    if (pagedir == NULL) return false;
+
+    constexpr uint64_t stub_page = XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS;
+    const size_t message_thread_size = (size_t)((uintptr_t)message_ask - (uintptr_t)message_thread);
+    if (message_thread_size == 0 || message_thread_size > (PAGE_SIZE - XPSR_OFFEST)) return false;
+
+    if (translate_address(pagedir, stub_page) == 0)
+    {
+        page_map_range_to_random(pagedir, stub_page, PAGE_SIZE, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    }
+
+    page_directory_t *current_dir = get_current_directory();
+    switch_page_directory(pagedir);
+    memcpy((void *)(stub_page + XPSR_OFFEST), (void *)message_thread, message_thread_size);
+    switch_page_directory(current_dir);
+    return true;
+}
 
 static void restore_runtime_state(bool was_scheduler_enabled, bool was_interrupt_enabled)
 {
@@ -401,7 +424,12 @@ void switch_to_user_mode()
 void jump_to_message(uint64_t tcb)
 {
     close_interrupt;
-    uint64_t *rsp = (uint64_t *)get_current_task()->user_stack_top;
+    uint64_t rsp_value = get_current_task()->user_stack_top;
+    if (rsp_value > MESSAGE_THREAD_STACK_HEADROOM) rsp_value -= MESSAGE_THREAD_STACK_HEADROOM;
+    rsp_value &= ~0xFULL;
+    rsp_value -= sizeof(uint64_t);
+    *(uint64_t *)rsp_value = 0;
+    uint64_t *rsp = (uint64_t *)rsp_value;
 
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
@@ -941,6 +969,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         return (size_t)-ENOMEM;
     }
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+
     new_task->main           = (uint64_t)_start;
     new_task->context0.cs    = 0x8;
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
@@ -1059,6 +1088,20 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
         return (size_t)-ENOMEM;
     }
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+
+    if (!ensure_message_entry_stub(pcb->pagedir))
+    {
+        vfs_close(new_task->cwd);
+        unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
+        free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        write_serial_string("Failed to prepare message thread entry stub.\n");
+        return (size_t)-ENOMEM;
+    }
+
     new_task->main           = (uint64_t)_start;
     new_task->context0.cs    = 0x8;
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;

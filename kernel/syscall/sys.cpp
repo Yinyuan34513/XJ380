@@ -4,11 +4,95 @@
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
 #include <mm/lazyalloc.h>
+#include <mm/uaccess.h>
 #include "../build_settings.h"
 #include <net/socket.h>
 #include <pipe.h>
 #include <rtc.h>
 #include <math.hpp>
+
+static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
+
+static int64_t serial_write_from_user(const uint8_t *buffer, size_t size)
+{
+    if (buffer == NULL) return -EFAULT;
+    if (size == 0) return 0;
+
+    pcb_t process = get_current_task()->parent_group;
+    size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
+    uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
+    if (bounce == NULL) return -ENOMEM;
+
+    size_t total = 0;
+    while (total < size)
+    {
+        size_t chunk = MIN(size - total, bounce_bytes);
+        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EFAULT;
+        }
+
+        for (size_t i = 0; i < chunk; i++)
+        {
+            write_serial((char)bounce[i]);
+        }
+        total += chunk;
+    }
+
+    free(bounce);
+    return (int64_t)total;
+}
+
+static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buffer, size_t size, bool socket_mode)
+{
+    if (handle == NULL || buffer == NULL) return -EINVAL;
+    if (size == 0) return 0;
+
+    pcb_t process = get_current_task()->parent_group;
+    size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
+    uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
+    if (bounce == NULL) return -ENOMEM;
+
+    size_t total = 0;
+    while (total < size)
+    {
+        size_t chunk = MIN(size - total, bounce_bytes);
+        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EFAULT;
+        }
+
+        if (socket_mode)
+        {
+            ssize_t wrote = socket_write(handle->node, bounce, chunk);
+            if (wrote < 0)
+            {
+                free(bounce);
+                return total > 0 ? (int64_t)total : wrote;
+            }
+            total += (size_t)wrote;
+            if ((size_t)wrote < chunk) break;
+            continue;
+        }
+
+        size_t wrote = vfs_write(handle->node, bounce, handle->offset, chunk);
+        if (wrote == (size_t)VFS_STATUS_FAILED)
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EIO;
+        }
+        if (handle->node->size != (uint64_t)-1) handle->offset += wrote;
+        total += wrote;
+        if (wrote < chunk) break;
+    }
+
+    free(bounce);
+    if (!socket_mode) vfs_update(handle->node);
+    return (int64_t)total;
+}
+
 sys_(exit, int exit_code)
 {
     tcb_t exit_thread = get_current_task();
@@ -54,7 +138,6 @@ next:
     fd_handle->node->flags = flags;
     int index         = (int)lock_queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
     fd_handle->fd     = index;
-    spin_unlock(&get_current_task()->parent_group->file_open->lock);
     if (index == -1)
     {
         write_serial_fmt("sys_open: open %s failed.\n", normalized_path);
@@ -83,22 +166,20 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     if (unlikely(size == 0)) return 0;
     if (fd == 1 || fd == 2)
     {
-        write_serial_fmt("%s", (char *)buffer);
-        return strlen((char *)buffer);
+        int64_t ret = serial_write_from_user(buffer, size);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)
     {
-        ssize_t ret = socket_write(handle->node, buffer, size);
+        int64_t ret = write_from_user_buffer(handle, buffer, size, true);
         if (ret < 0) return SYSCALL_FAULT_((int)-ret);
-        return ret;
+        return (uint64_t)ret;
     }
-    size_t ret = vfs_write(handle->node, buffer, handle->offset, size);
-    if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
-    if (handle->node->size != (uint64_t)-1) handle->offset += ret;
-    vfs_update(handle->node);
-    return ret;
+    int64_t ret = write_from_user_buffer(handle, buffer, size, false);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+    return (uint64_t)ret;
 }
 
 sys_(read, int fd, uint8_t *buffer, size_t size)
@@ -287,7 +368,10 @@ sys_(nano_sleep, void *time_handle)
 {
     struct timespec k_req;
     if (unlikely(time_handle == NULL)) return SYSCALL_FAULT_(EINVAL);
-    memcpy(&k_req, time_handle, sizeof(k_req));
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &k_req, time_handle, sizeof(k_req)))
+    {
+        return SYSCALL_FAULT_(EFAULT);
+    }
     if (unlikely(k_req.tv_nsec >= 1000000000L)) return SYSCALL_FAULT_(EINVAL);
     uint64_t nsec = k_req.tv_sec * 1000000000 + k_req.tv_nsec;
     scheduler_nano_sleep(nsec);
@@ -308,32 +392,40 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
     if (iovcnt == 0) return 0;
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
     if (handle->node->type & file_socket)
     {
         size_t total = 0;
         for (int i = 0; i < iovcnt; i++)
         {
-            ssize_t ret = socket_write(handle->node, iov[i].iov_base, iov[i].iov_len);
+            struct iovec kiov;
+            if (!copy_from_user_pagedir(pagedir, &kiov, &iov[i], sizeof(kiov)))
+            {
+                return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
+            }
+            int64_t ret = write_from_user_buffer(handle, (const uint8_t *)kiov.iov_base, kiov.iov_len, true);
             if (ret < 0)
             {
                 if (total > 0) return total;
                 return SYSCALL_FAULT_((int)-ret);
             }
             total += (size_t)ret;
-            if ((size_t)ret < iov[i].iov_len) break;
+            if ((size_t)ret < kiov.iov_len) break;
         }
         return total;
     }
     size_t          total  = 0;
     for (int i = 0; i < iovcnt; i++)
     {
-        size_t status = vfs_write(handle->node, iov[i].iov_base, handle->offset, iov[i].iov_len);
-        if (handle->node->size != (uint64_t)-1)
+        struct iovec kiov;
+        if (!copy_from_user_pagedir(pagedir, &kiov, &iov[i], sizeof(kiov)))
         {
-            if (status == (size_t)VFS_STATUS_FAILED) return total;
-            handle->offset += status;
+            return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
         }
-        total += iov[i].iov_len;
+        int64_t status = write_from_user_buffer(handle, (const uint8_t *)kiov.iov_base, kiov.iov_len, false);
+        if (status < 0) return total > 0 ? total : SYSCALL_FAULT_((int)-status);
+        total += (size_t)status;
+        if ((size_t)status < kiov.iov_len) break;
     }
     return total;
 }
@@ -1202,6 +1294,7 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
     size_t   read_count    = 0;
     uint64_t offset        = 0;
     vfs_node_t child_node;
+    vfs_child_lock();
     list_foreach(handle->node->child, i)
     {
         if (offset < handle->offset) { goto next; }
@@ -1227,6 +1320,7 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
     next:
         offset += sizeof(struct dirent);
     }
+    vfs_child_unlock();
     return read_count * sizeof(struct dirent);
 }
 

@@ -6,9 +6,11 @@
 #include <font.h>
 #include <proto.hpp>
 #include <dlinker.h>
+#include <efi/boot.h>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
+extern BOOT_CONFIG *EFI_BC;
 
 #if BUILD_EDITION == DEBUG_VERSION
 int serial_x     = 0;
@@ -16,6 +18,14 @@ int serial_y     = 0;
 int serial_x_max = 0;
 static constexpr int SERIAL_CHAR_WIDTH  = 8;
 static constexpr int SERIAL_CHAR_HEIGHT = 16;
+static constexpr int SERIAL_SCREEN_PADDING   = 8;
+static constexpr int SERIAL_SCREEN_MARGIN    = 8;
+static constexpr int SERIAL_SCREEN_MIN_COLS  = 32;
+static constexpr int SERIAL_SCREEN_MAX_COLS  = 96;
+static constexpr int SERIAL_SCREEN_MIN_LINES = 6;
+static constexpr int SERIAL_SCREEN_MAX_LINES = 14;
+static constexpr int SERIAL_LOG_RING_LINES   = 128;
+static constexpr int SERIAL_LOG_LINE_CAP     = 128;
 
 static constexpr PixelColor SERIAL_SCREEN_WHITE  = {0xff, 0xff, 0xff};
 static constexpr PixelColor SERIAL_SCREEN_GRAY   = {0x80, 0x80, 0x80};
@@ -25,6 +35,166 @@ static constexpr PixelColor SERIAL_SCREEN_CYAN   = {0x43, 0xd7, 0xff};
 static constexpr PixelColor SERIAL_SCREEN_RED    = {0xff, 0x3b, 0x30};
 static constexpr PixelColor SERIAL_SCREEN_RED_SOFT = {0xff, 0x78, 0x78};
 static constexpr PixelColor SERIAL_SCREEN_BG     = {0x00, 0x00, 0x00};
+static constexpr PixelColor SERIAL_SCREEN_BORDER = {0x44, 0x44, 0x44};
+
+typedef struct serial_screen_line {
+    char       text[SERIAL_LOG_LINE_CAP];
+    uint16_t   len;
+    PixelColor color;
+} serial_screen_line_t;
+
+static serial_screen_line_t g_serial_log_lines[SERIAL_LOG_RING_LINES];
+static int                  g_serial_log_head        = 0;
+static int                  g_serial_log_count       = 0;
+static int                  g_serial_log_current     = -1;
+static int                  g_serial_screen_cols     = SERIAL_SCREEN_MIN_COLS;
+static int                  g_serial_screen_rows     = SERIAL_SCREEN_MIN_LINES;
+static int                  g_serial_screen_left     = 0;
+static int                  g_serial_screen_top      = 0;
+static int                  g_serial_screen_width    = 0;
+static int                  g_serial_screen_height   = 0;
+static bool                 g_serial_overlay_force_show = false;
+
+static bool serial_runtime_overlay_enabled()
+{
+    if (EFI_BC != NULL && EFI_BC->is_qemu == 1 && !g_serial_overlay_force_show) {
+        return false;
+    }
+    return true;
+}
+
+static inline int serial_clamp_int(int value, int min_value, int max_value)
+{
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static void serial_screen_update_layout()
+{
+    if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
+        return;
+    }
+
+    int width  = (int)fbc_addr->horizontal_resolution;
+    int height = (int)fbc_addr->vertical_resolution;
+
+    g_serial_screen_cols = serial_clamp_int(width / SERIAL_CHAR_WIDTH / 3,
+                                            SERIAL_SCREEN_MIN_COLS,
+                                            SERIAL_SCREEN_MAX_COLS);
+    g_serial_screen_rows = serial_clamp_int(height / SERIAL_CHAR_HEIGHT / 4,
+                                            SERIAL_SCREEN_MIN_LINES,
+                                            SERIAL_SCREEN_MAX_LINES);
+    g_serial_screen_width =
+        g_serial_screen_cols * SERIAL_CHAR_WIDTH + SERIAL_SCREEN_PADDING * 2;
+    g_serial_screen_height =
+        g_serial_screen_rows * SERIAL_CHAR_HEIGHT + SERIAL_SCREEN_PADDING * 2;
+    g_serial_screen_left =
+        width - g_serial_screen_width - SERIAL_SCREEN_MARGIN;
+    if (g_serial_screen_left < SERIAL_SCREEN_MARGIN) {
+        g_serial_screen_left = SERIAL_SCREEN_MARGIN;
+    }
+    g_serial_screen_top =
+        height - g_serial_screen_height - SERIAL_SCREEN_MARGIN;
+    if (g_serial_screen_top < SERIAL_SCREEN_MARGIN) {
+        g_serial_screen_top = SERIAL_SCREEN_MARGIN;
+    }
+}
+
+static void serial_screen_reset_line(serial_screen_line_t *line, const PixelColor &color)
+{
+    if (line == NULL) {
+        return;
+    }
+    memset(line->text, 0, sizeof(line->text));
+    line->len   = 0;
+    line->color = color;
+}
+
+static serial_screen_line_t *serial_screen_current_line(const PixelColor &color)
+{
+    if (g_serial_log_current >= 0) {
+        serial_screen_line_t *line = &g_serial_log_lines[g_serial_log_current];
+        if (line->len == 0) {
+            line->color = color;
+        }
+        return line;
+    }
+
+    int index;
+    if (g_serial_log_count < SERIAL_LOG_RING_LINES) {
+        index = (g_serial_log_head + g_serial_log_count) % SERIAL_LOG_RING_LINES;
+        g_serial_log_count++;
+    } else {
+        index = g_serial_log_head;
+        g_serial_log_head = (g_serial_log_head + 1) % SERIAL_LOG_RING_LINES;
+    }
+
+    g_serial_log_current = index;
+    serial_screen_reset_line(&g_serial_log_lines[index], color);
+    return &g_serial_log_lines[index];
+}
+
+static void serial_screen_finish_line()
+{
+    if (g_serial_log_current < 0) {
+        return;
+    }
+
+    serial_screen_line_t *line = &g_serial_log_lines[g_serial_log_current];
+    if (line->len == 0 && g_serial_log_count > 0) {
+        g_serial_log_count--;
+    }
+    g_serial_log_current = -1;
+}
+
+static void serial_screen_append_char(char ch, const PixelColor &color)
+{
+    if (ch == '\r') {
+        return;
+    }
+    if (ch == '\n') {
+        serial_screen_finish_line();
+        return;
+    }
+
+    serial_screen_update_layout();
+
+    if (ch == '\t') {
+        ch = ' ';
+    }
+
+    serial_screen_line_t *line = serial_screen_current_line(color);
+    if (line == NULL) {
+        return;
+    }
+
+    if (line->len >= (SERIAL_LOG_LINE_CAP - 1) ||
+        line->len >= (uint16_t)g_serial_screen_cols) {
+        serial_screen_finish_line();
+        line = serial_screen_current_line(color);
+        if (line == NULL) {
+            return;
+        }
+    }
+
+    line->text[line->len++] = ch;
+    line->text[line->len]   = '\0';
+}
+
+static void serial_screen_draw_line(int x, int y, const serial_screen_line_t *line)
+{
+    if (line == NULL) {
+        return;
+    }
+
+    for (uint16_t i = 0; i < line->len; ++i) {
+        int draw_x = x + (int)i * SERIAL_CHAR_WIDTH;
+        rect(*fbc_addr, draw_x, y, draw_x + SERIAL_CHAR_WIDTH,
+             y + SERIAL_CHAR_HEIGHT, SERIAL_SCREEN_BG);
+        WriteAscii(*fbc_addr, draw_x, y, line->text[i], line->color);
+    }
+}
 #endif
 
 #define PORT 0x3f8 // COM1
@@ -76,57 +246,64 @@ void write_serial(char a)
     outb(PORT, a);
 }
 
-static void serial_screen_puts(const char *str, const PixelColor &color)
+static void serial_redraw_screen_overlay_locked()
 {
-#if BUILD_EDITION == DEBUG_VERSION  // 串口那么可爱为什么要谋害他（哭
+#if BUILD_EDITION == DEBUG_VERSION
+    if (!serial_runtime_overlay_enabled()) {
+        return;
+    }
     if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
         return;
     }
 
-    auto serial_screen_scroll = []() {
-        size_t bytes_per_row = (size_t)fbc_addr->pixels_per_scan_line * 4;
-        size_t scroll_rows   = fbc_addr->vertical_resolution - SERIAL_CHAR_HEIGHT;
-        memmove(fbc_addr->frame_buffer,
-                fbc_addr->frame_buffer + SERIAL_CHAR_HEIGHT * bytes_per_row,
-                scroll_rows * bytes_per_row);
-        rect(*fbc_addr, 0, (int)scroll_rows, (int)fbc_addr->horizontal_resolution,
-             (int)fbc_addr->vertical_resolution, SERIAL_SCREEN_BG);
-        serial_y = (int)scroll_rows;
-        serial_x = 0;
-        serial_x_max = (serial_x_max > serial_x) ? serial_x_max : serial_x;
-    };
+    serial_screen_update_layout();
+    rect(*fbc_addr, g_serial_screen_left, g_serial_screen_top,
+         g_serial_screen_left + g_serial_screen_width,
+         g_serial_screen_top + g_serial_screen_height, SERIAL_SCREEN_BG);
+    rect(*fbc_addr, g_serial_screen_left, g_serial_screen_top,
+         g_serial_screen_left + g_serial_screen_width, g_serial_screen_top + 1,
+         SERIAL_SCREEN_BORDER);
+    rect(*fbc_addr, g_serial_screen_left, g_serial_screen_top + g_serial_screen_height - 1,
+         g_serial_screen_left + g_serial_screen_width,
+         g_serial_screen_top + g_serial_screen_height, SERIAL_SCREEN_BORDER);
 
-    auto serial_screen_newline = [&]() {
-        serial_x = 0;
-        serial_y += SERIAL_CHAR_HEIGHT;
-        if (serial_y + SERIAL_CHAR_HEIGHT > (int)fbc_addr->vertical_resolution) {
-            serial_screen_scroll();
-        }
-    };
-
-    while (*str)
-    {
-        if (*str == '\n')
-        {
-            serial_screen_newline();
-        }
-        else
-        {
-            if (serial_x + SERIAL_CHAR_WIDTH > (int)fbc_addr->horizontal_resolution) {
-                serial_screen_newline();
-            }
-
-            rect(*fbc_addr, serial_x, serial_y, serial_x + SERIAL_CHAR_WIDTH,
-                 serial_y + SERIAL_CHAR_HEIGHT, SERIAL_SCREEN_BG);
-            WriteAscii(*fbc_addr, serial_x, serial_y, *str, color);
-            serial_x += SERIAL_CHAR_WIDTH;
-        }
-        if (serial_x > serial_x_max) { serial_x_max = serial_x; }
-        ++str;
+    int visible = g_serial_log_count;
+    if (visible > g_serial_screen_rows) {
+        visible = g_serial_screen_rows;
     }
+
+    int start = g_serial_log_count - visible;
+    for (int i = 0; i < visible; ++i) {
+        int index = (g_serial_log_head + start + i) % SERIAL_LOG_RING_LINES;
+        int draw_x = g_serial_screen_left + SERIAL_SCREEN_PADDING;
+        int draw_y = g_serial_screen_top + SERIAL_SCREEN_PADDING + i * SERIAL_CHAR_HEIGHT;
+        serial_screen_draw_line(draw_x, draw_y, &g_serial_log_lines[index]);
+    }
+
+    serial_y     = g_serial_screen_top + SERIAL_SCREEN_PADDING + (visible > 0 ? (visible - 1) * SERIAL_CHAR_HEIGHT : 0);
+    serial_x     = g_serial_screen_left + SERIAL_SCREEN_PADDING;
+    serial_x_max = g_serial_screen_left + g_serial_screen_width - SERIAL_SCREEN_PADDING;
 #else
-    (void)str;
-    (void)color;
+    return;
+#endif
+}
+
+void serial_redraw_screen_overlay()
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    spin_lock(&serial_lock);
+    serial_redraw_screen_overlay_locked();
+    spin_unlock(&serial_lock);
+#endif
+}
+
+void serial_show_screen_overlay_now()
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    spin_lock(&serial_lock);
+    g_serial_overlay_force_show = true;
+    serial_redraw_screen_overlay_locked();
+    spin_unlock(&serial_lock);
 #endif
 }
 
@@ -137,7 +314,12 @@ static void write_serial_string_colored(const char *str, const PixelColor &color
     }
 
     spin_lock(&serial_lock);
-    serial_screen_puts(str, color);
+    for (const char *cursor = str; *cursor != '\0'; ++cursor) {
+        serial_screen_append_char(*cursor, color);
+    }
+    if (serial_runtime_overlay_enabled()) {
+        serial_redraw_screen_overlay_locked();
+    }
     while (*str)
     {
         write_serial(*str++);

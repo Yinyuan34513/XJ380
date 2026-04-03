@@ -7,6 +7,7 @@
 #include <apic/apic.h>
 #include <apic/madt.h>
 #include <cpu/msr.h>
+#include <cpu/fsgsbase.h>
 #include <krlibc.h>
 #include <syscall/syscall.h>
 
@@ -87,6 +88,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
             asm volatile("hlt");
         }
     }
+    write_kgsbase((uint64_t)info);
 
     init_cpu();
 

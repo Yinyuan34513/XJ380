@@ -2,6 +2,7 @@
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
 #include <device.h>
+#include <cpu/fsgsbase.h>
 #include <dlinker.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
@@ -389,6 +390,7 @@ extern void     mount_root();
 extern void     stdio_init();
 extern int      socketfs_setup();
 extern int      dnsfs_setup();
+extern int      nmfs_setup();
 EFI_SYSTEM_TABLE *EFI_ST;
 BOOT_CONFIG *EFI_BC;
 
@@ -418,29 +420,49 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 
+    write_serial_string("BOOT: device_manager_init begin\n");
     device_manager_init();
+    write_serial_string("BOOT: device_manager_init done\n");
+    write_serial_string("BOOT: vfs_init begin\n");
     vfs_init();
+    write_serial_string("BOOT: vfs_init done\n");
+    write_serial_string("BOOT: fatfs_init begin\n");
     fatfs_init();
+    write_serial_string("BOOT: fatfs_init done\n");
+    write_serial_string("BOOT: devfs_setup begin\n");
     devfs_setup();
+    write_serial_string("BOOT: devfs_setup done\n");
 
+    write_serial_string("BOOT: pci_setup begin\n");
     pci_setup(BootConfig.MCFG);
+    write_serial_string("BOOT: pci_setup done\n");
+    write_serial_string("BOOT: pci_init begin\n");
     pci_init();
+    write_serial_string("BOOT: pci_init done\n");
     write_serial_fmt("VM hint: %s\n", BootConfig.is_qemu == 1 ? "QEMU/BOCHS" : "generic/VMware/real hardware");
     ahci_set_environment(BootConfig.is_qemu == 1);
+    write_serial_string("BOOT: ahci_setup begin\n");
     ahci_setup();
+    write_serial_string("BOOT: ahci_setup done\n");
     ahci_set_accel(false);
+    write_serial_string("BOOT: nvme_setup begin\n");
     nvme_setup();
+    write_serial_string("BOOT: nvme_setup done\n");
     
     extern void ide_setup(void);
+    write_serial_string("BOOT: ide_setup begin\n");
     ide_setup();
+    write_serial_string("BOOT: ide_setup done\n");
+    write_serial_string("BOOT: partition_init begin\n");
     partition_init();
+    write_serial_string("BOOT: partition_init done\n");
     // enable_intr();
 
     // disable_intr();
     // hda_init();
     // sb16_init();
 
-    // keyboard_init();
+    keyboard_init();
     // mouse_init();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
@@ -472,6 +494,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     idle_thread->cwd->refcount++;
 
     get_current_cpu()->current_task = idle_thread;
+    write_kgsbase((uint64_t)get_current_cpu());
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
@@ -483,6 +506,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pipefs_setup();
     socketfs_setup();
     dnsfs_setup();
+    nmfs_setup();
     stdio_init();
 
     signal_init();

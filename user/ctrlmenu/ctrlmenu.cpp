@@ -66,6 +66,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
     xapi_RefreshWindow(handle);
 
     int old_min = 60;
+    int old_sec = -1;
 
     while (1)
     {
@@ -82,6 +83,11 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
             draw_background();
             old_min = tm.tm_min;
         }
+        else if (cindex == 3 && setting_cindex == 2 && tm.tm_sec != old_sec)
+        {
+            draw_background();
+        }
+        old_sec = tm.tm_sec;
 
         if (waiting_change_setting_apps)
         {
@@ -154,4 +160,3 @@ extern "C" int ctrlmenu_main_cpp(int argc, char *argv[], char *envp[])
 {
     return ctrlmenu_main_impl(argc, argv, envp);
 }
-

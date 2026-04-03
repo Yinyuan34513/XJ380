@@ -233,6 +233,12 @@ static size_t dnsfs_write(void *file, const void *addr, size_t offset, size_t si
 
     if (handle->kind == DNSFS_KIND_SERVER) {
         const char *ip_text = dnsfs_extract_server_ip(input);
+        if (strcmp(ip_text, "auto") == 0 || strcmp(ip_text, "dhcp") == 0 || ip_text[0] == '\0') {
+            if (socket_set_dns_server(0) < 0) {
+                return VFS_STATUS_FAILED;
+            }
+            return size;
+        }
         uint32_t    dns_addr = 0;
         if (!dnsfs_parse_ipv4_text(ip_text, &dns_addr)) {
             return VFS_STATUS_FAILED;
