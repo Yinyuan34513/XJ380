@@ -84,6 +84,17 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
 {
     switch_page_directory(target->parent_group->pagedir);
     set_kernel_stack(target->kernel_stack);
+    write_kgsbase((uint64_t)get_current_cpu());
+
+    if ((target->context0.cs & 0x3) == 0x3) {
+        // Returning to user mode: keep user GSBASE clear and leave CPU-local
+        // data in KGSBASE for the next syscall/swapgs entry.
+        write_gsbase(0);
+    } else {
+        // Returning to kernel mode (for example, resuming inside a syscall):
+        // kernel code expects %gs to point at the current CPU area.
+        write_gsbase((uint64_t)get_current_cpu());
+    }
 
     __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(target->fs));
     write_fsbase(target->fs_base);
@@ -324,10 +335,33 @@ void debug_sched_queue(lock_queue *q)
     spin_unlock(&q->lock);
 }
 
+static PROCESSOR_INFO *find_cpu_by_lapic_id(uint64_t lapic_id, size_t *cpu_index)
+{
+    for (size_t i = 0; i < get_cpu_num(); i++) {
+        PROCESSOR_INFO *cpu = get_cpu(i);
+        if (cpu != NULL && cpu->lapic_id == lapic_id) {
+            if (cpu_index != NULL) *cpu_index = i;
+            return cpu;
+        }
+    }
+
+    if (cpu_index != NULL) *cpu_index = 0;
+    return NULL;
+}
+
+static PROCESSOR_INFO *get_bsp_cpu_info(size_t *cpu_index)
+{
+    PROCESSOR_INFO *cpu = find_cpu_by_lapic_id(get_bsp(), cpu_index);
+    if (cpu != NULL) return cpu;
+
+    if (cpu_index != NULL) *cpu_index = 0;
+    return get_cpu(0);
+}
+
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
-    
+	    
     spin_lock(&scheduler_lock);
     
     // 确保任务有基本设置
@@ -335,16 +369,26 @@ size_t add_task(tcb_t new_task)
         new_task->status = START;
     }
     
-    // 选择负载最少的CPU
-    struct PROCESSOR_INFO *min_cpu = get_cpu(0);
-    for (int i = 1; i < get_cpu_num(); i++) {
-        struct PROCESSOR_INFO *cpui = get_cpu(i);
-        if (cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) { 
-            min_cpu = cpui; 
+    struct PROCESSOR_INFO *min_cpu = NULL;
+    size_t                 min_cpu_index = 0;
+
+    if (new_task->task_level == TASK_APPLICATION_LEVEL) {
+        // User/message threads are not stable on APs yet. Force them onto the
+        // BSP until per-CPU syscall GS state is reliable on every core.
+        min_cpu = get_bsp_cpu_info(&min_cpu_index);
+    } else {
+        // 内核线程仍然按负载最少分配
+        min_cpu = get_cpu(0);
+        for (int i = 1; i < get_cpu_num(); i++) {
+            struct PROCESSOR_INFO *cpui = get_cpu(i);
+            if (cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) {
+                min_cpu       = cpui;
+                min_cpu_index = i;
+            }
         }
     }
-    
-    new_task->cpu_id = min_cpu->processor_id;
+	    
+    new_task->cpu_id = min_cpu_index;
     new_task->queue_index = queue_enqueue(min_cpu->scheduler_queue, new_task);
 
     // debug_sched_queue(min_cpu->scheduler_queue);
@@ -357,7 +401,26 @@ void remove_task(tcb_t task) {
     if (task == NULL) return;
     spin_lock(&scheduler_lock);
 
-    PROCESSOR_INFO *smp = get_cpu(task->cpu_id);
-    queue_remove_at(smp->scheduler_queue, task->queue_index);
+    if (task->cpu_id < get_cpu_num()) {
+        PROCESSOR_INFO *cpu = get_cpu(task->cpu_id);
+        if (cpu != NULL &&
+            cpu->scheduler_queue != NULL &&
+            queue_get(cpu->scheduler_queue, task->queue_index) == task) {
+            queue_remove_at(cpu->scheduler_queue, task->queue_index);
+            spin_unlock(&scheduler_lock);
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < get_cpu_num(); i++) {
+        PROCESSOR_INFO *cpu = get_cpu(i);
+        if (cpu == NULL || cpu->scheduler_queue == NULL) continue;
+        if (queue_get(cpu->scheduler_queue, task->queue_index) != task) continue;
+
+        task->cpu_id = i;
+        queue_remove_at(cpu->scheduler_queue, task->queue_index);
+        break;
+    }
+
     spin_unlock(&scheduler_lock);
 }

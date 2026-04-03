@@ -1,4 +1,5 @@
 #include "task/pcb.h"
+#include "cpu/fsgsbase.h"
 #include "cpu/regio.h"
 #include "krlibc.h"
 #include "mm/heap.h"
@@ -401,6 +402,10 @@ void switch_to_user_mode()
 
     free(new_path);
 
+    // Keep syscall entry deterministic for first user entry.
+    write_kgsbase((uint64_t)get_current_cpu());
+    write_gsbase(0);
+	
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
                      "pushq %5\n"      // SS
@@ -434,6 +439,10 @@ void jump_to_message(uint64_t tcb)
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
 
+    // Message threads enter user mode through the same syscall path.
+    write_kgsbase((uint64_t)get_current_cpu());
+    write_gsbase(0);
+	
     __asm__ volatile("mov %0, %%es\n"
                      "mov %0, %%ds\n"
                      "pushq %5\n"      // SS

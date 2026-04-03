@@ -1,4 +1,5 @@
 #include <cpu/lock.h>
+#include <cpu/fsgsbase.h>
 #include <cpu/longm.h>
 #include <cpu/regio.h>
 #include <dlinker.h>
@@ -105,6 +106,11 @@ err:;
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+    write_serial_fmt("PF cpu lapic=%d gs=0x%x kgs=0x%x current_cpu=0x%x\n",
+                     lapic_id(),
+                     read_gsbase(),
+                     read_kgsbase(),
+                     (uint64_t)get_current_cpu());
 
     if (current_task != NULL)
     {
