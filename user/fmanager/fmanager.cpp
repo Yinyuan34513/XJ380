@@ -61,8 +61,6 @@ static int fmanager_main_impl(int argc, char *argv[], char *envp[])
     path_p = 0;  // 当前位置指针
     path_r = 0;  // 最早位置指针
 
-    xapi_RefreshWindow(handle);
-
     RightMenuItem rmi[3];
     rmi[0].text = (char *)"新建文件夹";
     rmi[0].CRLid = 1;
@@ -77,24 +75,23 @@ static int fmanager_main_impl(int argc, char *argv[], char *envp[])
         if (double_click && !register_lock)
         {
             double_click = false;
-            // Double Click!
-            // 搜索点到了哪个文件夹/文件
-            // y_begin = 148 + 24 * index
-            int click_index = (click_y - 148) / 24 + file_count_base;
-            uint32_t count = 0;
-            DirNode  fdir[256];
-            memset(fdir, 0, sizeof(DirNode) * 256);
-            xapi_SearchFile(current_path, &count, fdir);
-            if (count == 0 || count == 404)
+            need_paint = false;
+
+            int click_index = double_click_file_index;
+            double_click_file_index = -1;
+            if (file_count <= 0)
             {
-                paint_dir(current_path);
                 continue;
             }
-            if (fdir[click_index].filetype == 1)
+            if (click_index < 0 || click_index >= file_count)
+            {
+                continue;
+            }
+            if (file_dir_cache[click_index].filetype == 1)
             {
                 // 是文件夹
                 record_current_path();
-                cat_path(fdir[click_index].filename);
+                cat_path(file_dir_cache[click_index].filename);
                 paint_dir(current_path);
             }
             else
@@ -104,7 +101,7 @@ static int fmanager_main_impl(int argc, char *argv[], char *envp[])
                 memset(file_path, 0, 1024);
                 strcat(file_path, current_path);
                 strcat(file_path, "/");
-                strcat(file_path, fdir[click_index].filename);
+                strcat(file_path, file_dir_cache[click_index].filename);
                 xapi_Run(file_path);
             }
         }
@@ -247,4 +244,3 @@ void delete_typebox()
     reg_unlock();
     paint_dir(current_path);
 }
-

@@ -6,6 +6,7 @@
 int cindex = 1;
 
 bool dont_refresh = false;
+bool about_memory_show_mb = false;
 
 char wdaystr_table[7][20] = {
     "星期日",
@@ -22,6 +23,7 @@ void draw_background()
     if (dont_refresh) return;
 
     xapi_DrawRect(handle, 0, 0, win_width - 1, win_height - 1, 0x4d4d4dea, true);
+    xapi_DrawPicture(handle, 0, 0, win_width, win_height, "/system/image/background3.png");
     xapi_DrawText(handle, 30, 18, "控制中心", 40, 0xffffffff);
     xapi_DrawRect(handle, 0, 116, win_width - 1, 120, 0x00a2e8ff, true);
 
@@ -92,10 +94,21 @@ void draw_setting()
         xapi_GetSystemVersion(system_version);
         char cpu_model[64];
         xapi_GetCpuModel(cpu_model);
+        uint64_t memory_kib = xapi_GetMemorySize();
         char memory_size[64];
-        strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024));
-        strcat(memory_size, " GB");
+        memset(memory_size, 0, sizeof(memory_size));
+        if (about_memory_show_mb)
+        {
+            strcat(memory_size, xcr_int2char(memory_kib / 1024));
+            strcat(memory_size, " MB");
+        }
+        else
+        {
+            strcat(memory_size, xcr_int2char(memory_kib / 1024 / 1024));
+            strcat(memory_size, " GB");
+        }
         char fenbianlv[64];
+        memset(fenbianlv, 0, sizeof(fenbianlv));
         strcat(fenbianlv, xcr_int2char(win_width));
         strcat(fenbianlv, "x");
         strcat(fenbianlv, xcr_int2char(win_height));
@@ -109,7 +122,7 @@ void draw_setting()
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 218, cpu_model, 11, 0xffffffff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "运行内存", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffc8f7ff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 278, "内核版本", 11, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 278, KN_VERSION, 11, 0xffffffff);
@@ -301,6 +314,8 @@ void change_clock_hour_offset(int value)
     draw_background();
 }
 
+char background_file_path[256];
+
 char *get_background_file_path()
 {
     UserInfo usif;
@@ -313,8 +328,9 @@ char *get_background_file_path()
     XFILE *f = xapi_OpenFile(runfile_path);
     if (!f) return NULL;
     SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
+    strcpy(background_file_path, sdff->BackgroundFilePath);
 
     xapi_CloseFile(f);
 
-    return sdff->BackgroundFilePath;
+    return background_file_path;
 }

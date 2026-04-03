@@ -68,4 +68,6 @@ errno_t devfs_delete(const char *path);
 bool   have_vdisk(int drive);
 size_t device_read(size_t lba, size_t number, void *buffer, int drive);
 size_t device_write(size_t lba, size_t number, const void *buffer, int drive);
+size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length);
+size_t blk_device_write(device_t device, const void *buffer, size_t offset, size_t length);
 void  *device_mmap(int drive, void *addr, size_t len);

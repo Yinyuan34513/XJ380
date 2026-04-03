@@ -8,12 +8,19 @@
 #include <global_color.h>
 #include <graphics/window/window.h>
 #include <proto.hpp>
+#include <ps2/mouse.h>
 #include <ttf.h>
 #include <syscall/pxapi.h>
 
 bool WindowIsCreating = false;
+extern mouse_dec ms_dec;
 
 int window_create_offest_xy = 32;
+
+static bool is_valid_gui_ptr(const void *ptr)
+{
+    return ptr != NULL && (uint64_t)ptr >= get_physical_memory_offset();
+}
 
 void init_xwm(XWM_INFO *xwmi)
 {
@@ -131,12 +138,13 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
                  width + 24, height + 47, NoEdgeWindowSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+    int refresh_bx = getBX(sht, new_window->w_sheet);
+    int refresh_by = getBY(sht, new_window->w_sheet);
 
     window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
     window_create_offest_xy += 32;
 
-    refresh_part_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
-        width + 24 + window_create_offest_xy, height + 52 + window_create_offest_xy);
+    refresh_part_sheet(sht, refresh_bx, refresh_by, refresh_bx + width + 24, refresh_by + height + 47);
     WindowIsCreating = false;
 }
 
@@ -177,7 +185,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->width  = width;
     new_window->height = height;
 
-    strcpy(new_window->title, title);
+    strncpy(new_window->title, title, sizeof(new_window->title) - 1);
+    new_window->title[sizeof(new_window->title) - 1] = '\0';
 
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
@@ -185,6 +194,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
                  width + 24, height + 47, MovableSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
+    int refresh_bx = getBX(sht, new_window->w_sheet);
+    int refresh_by = getBY(sht, new_window->w_sheet);
 
     window_create_offest_xy %= sht_img->fbc->vertical_resolution / 2;
     window_create_offest_xy += 32;
@@ -214,8 +225,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     free(top);
     free(lft);
 
-    refresh_part_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
-        width + 24 + window_create_offest_xy, height + 52 + window_create_offest_xy);
+    refresh_part_sheet(sht, refresh_bx, refresh_by, refresh_bx + width + 24, refresh_by + height + 47);
 
     register_task_dock(new_window);
 
@@ -228,6 +238,7 @@ void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
     resize_theme_width(top, xwmi->theme.top, windowls->width + 24, 336, 27);
     copy_buffer_by_id(sht, windowls->w_sheet, top, 0, 0, windowls->width + 24, 27);
     print_box_ttf(sht, windowls->w_sheet, title, WHITE, 22, 0, 11);
+    free(top);
     refresh_part_sheet(sht, getBX(sht, windowls->w_sheet), getBY(sht, windowls->w_sheet),
                        getBX(sht, windowls->w_sheet) + getXsize(sht, windowls->w_sheet) + 10,
                        getBY(sht, windowls->w_sheet) + 22);
@@ -259,25 +270,37 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         if (!WindowIsCreating) { break; }
     }
 
+    if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls)) return;
+    if (!is_valid_gui_ptr(windowls->w_sheet) && windowls->type != XWIN_FULL_SCR) return;
+
+    if (ms_dec.sht_now == windowls->w_sheet)
+    {
+        ms_dec.sht_now       = NULL;
+        ms_dec.win_move_lock = false;
+    }
+
     if (windowls->type == XWIN_FULL_SCR)
     {
         have_full_screen_app = false;
-        found_sheet_byid(sht_img, windowls->w_sheet)->type = FixedSheetType;
-        memset(found_sheet_byid(sht_img, windowls->w_sheet)->buffer, 
-                0, sizeof(SHEET_BUFFER) * 
-                found_sheet_byid(sht_img, windowls->w_sheet)->width * 
-                found_sheet_byid(sht_img, windowls->w_sheet)->height);
-        init_dock(sht_img, windowls->w_sheet);
-        init_shortcut_dock(sht_img, windowls->w_sheet);
+        SHEET *fs_sheet = found_sheet_byid(sht_img, windowls->w_sheet);
+        if (is_valid_gui_ptr(fs_sheet) && is_valid_gui_ptr(fs_sheet->buffer))
+        {
+            fs_sheet->type = FixedSheetType;
+            memset(fs_sheet->buffer, 0, sizeof(SHEET_BUFFER) * fs_sheet->width * fs_sheet->height);
+            init_dock(sht_img, windowls->w_sheet);
+            init_shortcut_dock(sht_img, windowls->w_sheet);
+        }
     }
 
     WindowIsCreating  = true;
     SHEET    *front_p3 = sht->start;
-    int       bx, by, ex, ey;
+    int       bx = 0, by = 0, ex = 0, ey = 0;
+    bool      need_refresh = false;
 
+    unregister_right_rb_button_menu_components(windowls);
     unregister_task_dock(windowls);
 
-    while (true)
+    while (front_p3 != NULL)
     {
         if (front_p3 == windowls->w_sheet)
         {
@@ -285,48 +308,51 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             by = front_p3->by;
             ex = bx + front_p3->width;
             ey = by + front_p3->height;
+            need_refresh = true;
             break;
-        }
-        else if (front_p3->next == NULL)
-        {
-            write_serial_fmt("Window Delete Faild. (Cannot found sheet) SheetAddress: 0x%x\n", (uint64_t)windowls->w_sheet);
-            return;
         }
         front_p3 = front_p3->next;
     }
 
-    WINDOWLS *front_p = xwmi->start;
-    WINDOWLS *front_p2;
-
-    while (true)
+    WINDOWLS *front_p  = xwmi->start;
+    WINDOWLS *front_p2 = NULL;
+    while (front_p != NULL)
     {
         if (front_p == windowls)
         {
-            front_p2->next = front_p->next;
-            windowls->w_task->window_count--;
-            if (windowls->type != XWIN_FULL_SCR) 
+            if (front_p2 == NULL) xwmi->start = front_p->next;
+            else front_p2->next = front_p->next;
+
+            if (windowls->w_task != NULL && windowls->w_task->window_count > 0) windowls->w_task->window_count--;
+            if (xwmi->win_num > 0) xwmi->win_num--;
+
+            if (windowls->type != XWIN_FULL_SCR)
+            {
                 delete_sheet(sht, windowls->w_sheet);
-            memset(windowls, 0, sizeof(SHEET));
+            }
+
+            memset(windowls, 0, sizeof(WINDOWLS));
             free((void *)(windowls));
-            // xwmi->win_num--;
-            refresh_part_sheet(sht_img, bx, by, ex, ey);
             break;
-        }
-        else if (front_p->next == NULL)
-        {
-            write_serial_string("Window Delete Faild. (Cannot found window) WindowID: ");
-            return;
         }
         front_p2 = front_p;
         front_p  = front_p->next;
     }
 
     WindowIsCreating = false;
+
+    if (front_p == NULL)
+    {
+        write_serial_string("Window Delete Faild. (Cannot found window)\n");
+        return;
+    }
+
+    if (need_refresh) refresh_part_sheet(sht_img, bx, by, ex, ey);
 }
 
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
 {
-    if (csheet == NULL) { return NULL; }
+    if (!is_valid_gui_ptr(xwmi) || csheet == NULL) { return NULL; }
 
     WINDOWLS *front_p = xwmi->start;
     if (front_p == NULL) { return NULL; }
@@ -340,6 +366,7 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
 
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread)
 {
+    if (!is_valid_gui_ptr(xwmi) || thread == NULL) { return NULL; }
     WINDOWLS *front_p = xwmi->start;
     if (front_p == NULL) { return NULL; }
     while (true)

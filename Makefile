@@ -14,7 +14,7 @@ DEBUG_FLAG = -s -S
 endif
 
 ifeq ($(SUDO), 1)
-SUDO_CMD = sudo
+SUDO_CMD = sudo -E env DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY)
 endif
 
 ifeq ($(KVM), 1)
@@ -24,8 +24,15 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+KMOD_DIR := kmod
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG)
+# QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
+# not an X11 DISPLAY string like ":0".
+# Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
+# via SUDO_CMD when needed.
+DISPLAY_BACKEND ?= gtk
+USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -device sb16 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?= 
 
@@ -108,7 +115,7 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
-	@$(MAKE) -C mod
+	@$(MAKE) -C $(KMOD_DIR)
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
@@ -137,7 +144,7 @@ vdisk: all
 # You must execute the following command with sudo privileges, that's not good...
 	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system

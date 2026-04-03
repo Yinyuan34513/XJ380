@@ -47,39 +47,51 @@ EFI_GUID gEfiFileInfoGuid = {
 
 void dot(const FrameBufferConfig &fbc, int x, int y, const PixelColor &c)
 {
-    bool USERGB = true;
-    switch (fbc.pixel_format)
-    {
-    case PixelFormat::kRGBR: USERGB = true; break;
-    case PixelFormat::kBGRR: USERGB = false; break;
-    default: break;
+    // 边界检查
+    if (x < 0 || x >= (int)fbc.horizontal_resolution || y < 0 || y >= (int)fbc.vertical_resolution)
+        return;
+    
+    // 直接计算并写入，避免函数调用
+    uint8_t *pixel = (uint8_t *)fbc.frame_buffer + (y * fbc.pixels_per_scan_line + x) * 4;
+    
+    if (fbc.pixel_format == PixelFormat::kRGBR) {
+        pixel[0] = c.r;
+        pixel[1] = c.g;
+        pixel[2] = c.b;
+    } else {
+        pixel[0] = c.b;
+        pixel[1] = c.g;
+        pixel[2] = c.r;
     }
-
-    if (USERGB)
-        WriteRGBR(x, y, c, fbc);
-    else
-        WriteBGRR(x, y, c, fbc);
-    return;
 }
 
 void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const PixelColor &c)
 {
-    bool USERGB = true;
-    switch (fbc.pixel_format)
-    {
-    case PixelFormat::kRGBR: USERGB = true; break;
-    case PixelFormat::kBGRR: USERGB = false; break;
-    default: break;
+    // 边界检查和调整
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 > (int)fbc.horizontal_resolution) x2 = (int)fbc.horizontal_resolution;
+    if (y2 > (int)fbc.vertical_resolution) y2 = (int)fbc.vertical_resolution;
+    if (x1 >= x2 || y1 >= y2) return;
+    
+    uint8_t *frame_buffer = (uint8_t *)fbc.frame_buffer;
+    uint32_t pixels_per_scan_line = fbc.pixels_per_scan_line;
+    
+    // 预计算像素值
+    uint32_t pixel_value;
+    if (fbc.pixel_format == PixelFormat::kRGBR) {
+        // RGB 格式
+        pixel_value = (0 << 24) | (c.b << 16) | (c.g << 8) | c.r;
+    } else {
+        // BGR 格式
+        pixel_value = (0 << 24) | (c.r << 16) | (c.g << 8) | c.b;
     }
-    for (int x = x1; x < x2; x++)
-    {
-        for (int y = y1; y < y2; y++)
-        {
-            if (USERGB)
-                WriteRGBR(x, y, c, fbc);
-            else
-                WriteBGRR(x, y, c, fbc);
+    
+    // 批量填充矩形区域
+    for (int y = y1; y < y2; y++) {
+        uint32_t *row_start = (uint32_t *)(frame_buffer + (y * pixels_per_scan_line + x1) * 4);
+        for (int x = 0; x < (x2 - x1); x++) {
+            row_start[x] = pixel_value;
         }
     }
-    return;
 }

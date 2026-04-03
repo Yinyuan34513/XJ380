@@ -25,6 +25,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <user/user.h>
+
 #include <ttf.h>
 
 char *current_user_envp[100] = {
@@ -55,6 +56,48 @@ char password_layout_ball_bitmap[8][9] = {
     "..####..",
 };
 
+static const int PASSWORD_BOX_X      = 128;
+static const int PASSWORD_BOX_Y      = 168;
+static const int PASSWORD_BOX_WIDTH  = 300;
+static const int PASSWORD_BOX_HEIGHT = 24;
+static const int PASSWORD_TEXT_X     = 136;
+static const int PASSWORD_TEXT_Y     = 176;
+static const int PASSWORD_SLOT_WIDTH = 16;
+static const int PASSWORD_MAX_INPUT  = 18;
+static const uint64_t PASSWORD_CURSOR_BLINK_NS = 500000000ULL;
+
+static void render_password_input(const char *input_password, int input_count, bool show_cursor)
+{
+    (void)input_password;
+
+    draw_rect(sht_img, desktop_ct_sheet, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+              PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT, WHITE);
+
+    for (int i = 0; i < input_count; i++)
+    {
+        for (int y = 0; y < 8; y++)
+        {
+            for (int x = 0; x < 8; x++)
+            {
+                if (password_layout_ball_bitmap[y][x] == '#')
+                {
+                    draw_point(sht_img, desktop_ct_sheet, PASSWORD_TEXT_X + PASSWORD_SLOT_WIDTH * i + x,
+                               PASSWORD_TEXT_Y + y, BLACK);
+                }
+            }
+        }
+    }
+
+    if (show_cursor)
+    {
+        int cursor_x = PASSWORD_TEXT_X + PASSWORD_SLOT_WIDTH * input_count;
+        draw_rect(sht_img, desktop_ct_sheet, cursor_x, PASSWORD_BOX_Y + 4, cursor_x + 1, PASSWORD_BOX_Y + 20, BLACK);
+    }
+
+    refresh_part_sheet(sht_img, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+                       PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
+}
+
 void init_user()
 {
     char user_reg_data_path[256];
@@ -73,7 +116,7 @@ void init_user()
 
     // 选择用户
     draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x3f, 0x48, 0xcc, 0xff});
-    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background2.png");
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background3.png");
     print_box_ttf(sht_img, desktop_ct_sheet, "选择一个用户", WHITE, 64, 44, 40);
 
     for (int i = 1; i < urf_data->user_count; i++)
@@ -98,12 +141,13 @@ void init_user()
 
     // 登录
     draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x3f, 0x48, 0xcc, 0xff});
-    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background2.png");
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry, "/system/image/background3.png");
     print_box_ttf(sht_img, desktop_ct_sheet, "登录", WHITE, 64, 44, 40);
     print_box_ttf(sht_img, desktop_ct_sheet, "用户：", WHITE, 64, 130, 16);
     print_box_ttf(sht_img, desktop_ct_sheet, "密码：", WHITE, 64, 164, 16);
 
-    draw_rect(sht_img, desktop_ct_sheet, 128, 168, 128 + 300, 168 + 24, WHITE);
+    draw_rect(sht_img, desktop_ct_sheet, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+              PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT, WHITE);
     print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[current_user_number].name, WHITE, 128, 130, 16);
     PrintPicture_blend(sht_img, desktop_ct_sheet, 128 + 300 + 8, 168, 24, 24, "/system/icon/nextstep.png");
 
@@ -111,42 +155,38 @@ void init_user()
 
     int input_count = 0;
     char input_password[64];
+    memset(input_password, 0, sizeof(input_password));
+    bool cursor_visible = true;
+    uint64_t last_cursor_toggle = nanoTime();
+    render_password_input(input_password, input_count, cursor_visible);
     while (1)
     {
-        uint8_t k_input = get_keyboard_input();
-        if (k_input != '\b' && k_input != '\n' && k_input != NULL && k_input < 128 && input_count < 18)
+        uint64_t now = nanoTime();
+        if (now - last_cursor_toggle >= PASSWORD_CURSOR_BLINK_NS)
         {
-            for (int y = 0; y < 8; y++)
-            {
-                for (int x = 0; x < 8; x++)
-                {
-                    if (password_layout_ball_bitmap[y][x] == '#')
-                    {
-                        draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, BLACK);
-                        input_password[input_count] = k_input;
-                        refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
-                    }
-                }
-            }
+            cursor_visible = !cursor_visible;
+            last_cursor_toggle = now;
+            render_password_input(input_password, input_count, cursor_visible);
+        }
+
+        uint8_t k_input = get_keyboard_input();
+        if (k_input != '\b' && k_input != '\n' && k_input != NULL && k_input < 128 && input_count < PASSWORD_MAX_INPUT)
+        {
+            input_password[input_count] = k_input;
             input_count++;
+            cursor_visible = true;
+            last_cursor_toggle = nanoTime();
+            render_password_input(input_password, input_count, cursor_visible);
         }
         else if (k_input == '\b')
         {
-            if (input_count <= 0) return;
-            
-            input_count--;
-            input_password[input_count] = '\0';
-            for (int y = 0; y < 8; y++)
+            if (input_count > 0)
             {
-                for (int x = 0; x < 8; x++)
-                {
-                    if (password_layout_ball_bitmap[y][x] == '#')
-                    {
-                        draw_point(sht_img, desktop_ct_sheet, x + 16 * input_count + 136, 176 + y, WHITE);
-                        input_password[input_count] = k_input;
-                        refresh_part_sheet(sht_img, 128, 168, 128 + 300, 168 + 24);
-                    }
-                }
+                input_count--;
+                input_password[input_count] = '\0';
+                cursor_visible = true;
+                last_cursor_toggle = nanoTime();
+                render_password_input(input_password, input_count, cursor_visible);
             }
         }
         else if (k_input == '\n')
@@ -255,6 +295,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     {
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   ? Where is your parent group?\n");
+        vfs_close(file);
         return NULL;
     }
 
@@ -264,14 +305,17 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     {
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Cannot Alloc Memory.\n");
+        vfs_close(file);
         return NULL;
     }
     memset(buf, 0, file_size);
 
     if (vfs_read(file, buf, 0, file->size) == -1)
     {
+        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Cannot Read File.\n");
+        vfs_close(file);
         return NULL;
     }
 
@@ -285,6 +329,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
         free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Bad Format.\n");
+        vfs_close(file);
         return NULL;
     }
 
@@ -308,11 +353,11 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
 
     // 呃，目前看起来好像没什么用？
-    uint64_t start_code, end_code;
-    uint64_t start_data, end_data;
-    uint64_t start_rodata, end_rodata;
-    uint64_t start_brk, end_brk;
-    uint64_t start_stack;
+    uint64_t start_code   = ~0ULL, end_code = 0;
+    uint64_t start_data   = ~0ULL, end_data = 0;
+    uint64_t start_rodata = ~0ULL, end_rodata = 0;
+    uint64_t start_brk    = 0, end_brk = 0;
+    uint64_t start_stack  = 0;
 
     // 遍历并加载程序段
     for (int i = 0; i < ehdr.e_phnum; i++)
@@ -360,7 +405,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     // memcpy(buffer, buf, file_size);
 
     group->load_start = mapping_space->load_start;
-    group->elf_file   = buf;
+    group->elf_file   = NULL;
     group->elf_size   = file_size;
     // VMA
     vma_t *ld_so_vma = vma_alloc();
@@ -374,6 +419,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     vma_insert(&group->vma_manager, ld_so_vma);
 
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+    vfs_close(file);
 
     switch_page_directory(current_pagedir); // 恢复页表
 
@@ -423,14 +469,15 @@ char *getCwd(char *path)
 
 void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
-    char  process_name[50];
+    char  *process_name = (char*)malloc(strlen(path) + 1);
     void *entry;
-    // if (entry == NULL) return;   // ???????????????????????????????????????????
+    int   argc = 0;
+    // if (entry == NULL) return;   // ))???????????????????????????????????????????
 
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
-    page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), true);
+    page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), false);
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
 
     entry = (void *)parse_elf_file(path, group);
@@ -438,6 +485,7 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     if (entry == NULL)
     {
         write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
+        free(process_name);
         return;
     }
 
@@ -452,14 +500,17 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         {
             int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
             cmdline_ptr += len;
+            argc++;
         }
     }
 
     char *old_cmdline = group->cmdline;
     group->cmdline    = strdup(cmdline);
-    write_serial_fmt("CWD: %s\n", getCwd(path));
+    if (old_cmdline != NULL) free(old_cmdline);
     char *cwd = getCwd(path);
-    create_user_thread(entry, NULL, 1, process_name, group, strdup(cwd));
+    write_serial_fmt("CWD: %s\n", cwd);
+    create_user_thread(entry, NULL, argc, process_name, group, cwd);
+    free(process_name);
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

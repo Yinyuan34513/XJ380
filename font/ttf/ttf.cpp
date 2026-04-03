@@ -19,6 +19,73 @@ extern stbtt_fontinfo font_c;
 extern char          *ttf_buffer_m;
 extern stbtt_fontinfo font_m;
 
+static char *ttf_alloc_file_buffer(size_t bytes)
+{
+    size_t pages = PADDING_UP(bytes, PAGE_SIZE) / PAGE_SIZE;
+    uint64_t phys = alloc_frames(pages);
+    if (phys == 0) {
+        return NULL;
+    }
+    return (char *)phys_to_virt(phys);
+}
+
+static void ttf_free_file_buffer(char *buffer, size_t bytes)
+{
+    if (buffer == NULL || bytes == 0) {
+        return;
+    }
+    free_frames((uint64_t)virt_to_phys((uint64_t)buffer), PADDING_UP(bytes, PAGE_SIZE) / PAGE_SIZE);
+}
+
+static bool ttf_load_font_file(const char *path, char **buffer_out, stbtt_fontinfo *font_out)
+{
+    vfs_node_t v = vfs_open(path);
+    if (!v)
+    {
+        write_serial_fmt("init_ttf: cannot open '%s'\n", path);
+        return false;
+    }
+
+    size_t size = v->size;
+    char  *buffer = ttf_alloc_file_buffer(size);
+    uint64_t read_begin = nanoTime();
+    if (!buffer)
+    {
+        write_serial_fmt("init_ttf: cannot allocate '%s' (%u bytes)\n", path, (unsigned)size);
+        vfs_close(v);
+        return false;
+    }
+
+    size_t got = vfs_read(v, (uint8_t *)buffer, 0, size);
+    uint64_t read_end = nanoTime();
+    vfs_close(v);
+    if (got != size)
+    {
+        write_serial_fmt("init_ttf: short read '%s' expected=%u got=%u\n", path, (unsigned)size, (unsigned)got);
+        ttf_free_file_buffer(buffer, size);
+        return false;
+    }
+
+    int      font_offset = stbtt_GetFontOffsetForIndex((uint8_t *)buffer, 0);
+    uint64_t init_begin  = nanoTime();
+    bool     ok          = stbtt_InitFont(font_out, (uint8_t *)buffer, font_offset);
+    uint64_t init_end    = nanoTime();
+    if (!ok)
+    {
+        write_serial_fmt("init_ttf: invalid font '%s' magic=%02x%02x%02x%02x\n", path, (uint8_t)buffer[0],
+                         (uint8_t)buffer[1], (uint8_t)buffer[2], (uint8_t)buffer[3]);
+        ttf_free_file_buffer(buffer, size);
+        return false;
+    }
+
+    write_serial_fmt("TTF: loaded '%s' size=%u read=%llums init=%llums magic=%02x%02x%02x%02x\n", path,
+                     (unsigned)size, (read_end - read_begin) / 1000000ULL, (init_end - init_begin) / 1000000ULL,
+                     (uint8_t)buffer[0], (uint8_t)buffer[1], (uint8_t)buffer[2], (uint8_t)buffer[3]);
+
+    *buffer_out = buffer;
+    return true;
+}
+
 SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER background_color, uint8_t alpha)
 {
     uint8_t       text_r   = foreground_color.r;
@@ -210,7 +277,7 @@ static int utf8_char_len(unsigned char c)
 }
 
 // 刷新缓冲区内容到屏幕
-static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
+static void flush_ttf_buffer(FbTTFWriterData *data)
 {
     if (data->idx == 0) return;
 
@@ -224,6 +291,7 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     if (utf_len > data->rune_buf_size)
     {
         r         = (Rune *)malloc((utf_len + 1) * sizeof(Rune));
+        if (r == NULL) { return; }
         free_rune = 1;
     }
     else
@@ -246,10 +314,11 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     if (bitmap == NULL)
     {
         write_serial_fmt("TTF Print Failed. Reason: Memory Allocate Failed.\n");
+        if (free_rune) { free(r); }
         return;
     }
 
-    *i_width = width;
+    if (data->i_width != NULL) { *data->i_width = width; }
 
     // 查找图层
     SHEET *front_p = data->sht->start;
@@ -260,14 +329,15 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     }
     if (front_p == NULL)
     {
-        free(r);
+        if (free_rune) { free(r); }
+        free_frames((uint64_t)virt_to_phys((uint64_t)bitmap), (2560 * 1440 + PAGE_SIZE - 1) / PAGE_SIZE);
         return;
     }
 
     put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 2560, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
-    *i_width = width;
+    if (data->i_width != NULL) { *data->i_width = width; }
 
     // 更新光标位置
     data->x += (int)width;
@@ -277,14 +347,12 @@ static void flush_ttf_buffer(FbTTFWriterData *data, uint32_t *i_width)
     data->idx = 0; // 重置缓冲区
 }
 
-uint32_t *input_width; // 玛德沙比format，只能写成这样了
-
 uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 {
     FbTTFWriterData *fbttf = (FbTTFWriterData *)writer->data;
 
     // 处理缓冲区溢出
-    if (fbttf->idx + utf8_char_len(ch) > fbttf->buf_size - 1) { flush_ttf_buffer(fbttf, input_width); }
+    if (fbttf->idx + utf8_char_len(ch) > fbttf->buf_size - 1) { flush_ttf_buffer(fbttf); }
 
     // 将字符添加到缓冲区
     fbttf->buf[fbttf->idx++] = ch;
@@ -292,7 +360,7 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
     // 如果是换行符，立即刷新
     if (ch == '\n')
     {
-        flush_ttf_buffer(fbttf, input_width);
+        flush_ttf_buffer(fbttf);
         fbttf->y += fbttf->size + 4;
         fbttf->x  = fbttf->start_x;
     }
@@ -303,12 +371,16 @@ uint8_t fb_ttf_writer_handler(Writer *writer, char ch)
 void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt, ...)
 {
     uint32_t temp_i_width;
-    input_width = &temp_i_width;
     char *buf   = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
-    // char buf[TTF_BUF_SIZE];
-    buf[0]         = '\0';
     Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
-    // Rune rune_buf[TTF_BUF_SIZE];
+    if (buf == NULL || rune_buf == NULL)
+    {
+        free(buf);
+        free(rune_buf);
+        write_serial_string("print_fmt_box_ttf: buffer allocation failed\n");
+        return;
+    }
+    buf[0] = '\0';
 
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
@@ -320,6 +392,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
         .x             = x,
         .y             = y,
         .size          = size,
+        .i_width       = &temp_i_width,
         .rune_buf      = rune_buf,
         .rune_buf_size = TTF_BUF_SIZE,
         .buf           = buf,
@@ -336,7 +409,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
     va_end(args);
 
     // 刷新剩余内容
-    flush_ttf_buffer(&fb_ttf_writer_data, &temp_i_width);
+    flush_ttf_buffer(&fb_ttf_writer_data);
 
     free(buf);
     free(rune_buf);
@@ -345,12 +418,16 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
 void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, uint32_t *i_width,
                        const char *fmt, ...)
 {
-    input_width = i_width;
     char *buf   = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
-    // char buf[TTF_BUF_SIZE];
-    buf[0]         = '\0';
     Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
-    // Rune rune_buf[TTF_BUF_SIZE];
+    if (buf == NULL || rune_buf == NULL)
+    {
+        free(buf);
+        free(rune_buf);
+        write_serial_string("print_fmt_box_ttf: buffer allocation failed\n");
+        return;
+    }
+    buf[0] = '\0';
 
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {
@@ -362,6 +439,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
         .x             = x,
         .y             = y,
         .size          = size,
+        .i_width       = i_width,
         .rune_buf      = rune_buf,
         .rune_buf_size = TTF_BUF_SIZE,
         .buf           = buf,
@@ -378,7 +456,7 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
     va_end(args);
 
     // 刷新剩余内容
-    flush_ttf_buffer(&fb_ttf_writer_data, i_width);
+    flush_ttf_buffer(&fb_ttf_writer_data);
 
     free(buf);
     free(rune_buf);
@@ -394,65 +472,14 @@ void print_fmt_box_ttf(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, i
 void init_ttf()
 {
     write_serial_string("Initializing Font...\n");
-    // delay_s(10);
-
-    // 不等宽字体
-    vfs_node_t v = vfs_open("/system/font/XJ380F.ttf");
-    if (!v)
-    {
-        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380F.ttf");
+    if (!ttf_load_font_file("/system/font/XJ380F.ttf", &ttf_buffer, &font)) {
         return;
     }
-    ttf_buffer = (char *)malloc(v->size);
-    if (!ttf_buffer)
-    {
-        write_serial_string("Cannot allocate memory for XJ380F.ttf\n");
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Reading Font - XJ380F (1/2)...\n");
-    vfs_read(v, (uint8_t *)ttf_buffer, 0, v->size);
-    if (*(uint64_t *)ttf_buffer == 0)
-    {
-        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380F.ttf", (unsigned)v->size);
-        free(ttf_buffer);
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Loading Font - XJ380F (1/2)...\n");
-    stbtt_InitFont(&font, (uint8_t *)ttf_buffer, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer, 0));
     set_size(16);
-
-    vfs_close(v);
-
-    // 等宽字体
-    v = vfs_open("/system/font/XJ380C.ttf");
-    if (!v)
-    {
-        write_serial_fmt("init_ttf: cannot open '%s'\n", "/system/font/XJ380C.ttf");
+    if (!ttf_load_font_file("/system/font/XJ380C.ttf", &ttf_buffer_c, &font_c)) {
         return;
     }
-    ttf_buffer_c = (char *)malloc(v->size);
-    if (!ttf_buffer_c)
-    {
-        write_serial_string("Cannot allocate memory for XJ380C.ttf\n");
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Reading Font - XJ380C (2/2)...\n");
-    vfs_read(v, (uint8_t *)ttf_buffer_c, 0, v->size);
-    if (*(uint64_t *)ttf_buffer_c == 0)
-    {
-        write_serial_fmt("init_ttf: read failed for '%s' (%u bytes)\n", "/system/font/XJ380C.ttf", (unsigned)v->size);
-        free(ttf_buffer_c);
-        vfs_close(v);
-        return;
-    }
-    write_serial_string("Loading Font - XJ380C (2/2)...\n");
-    stbtt_InitFont(&font_c, (uint8_t *)ttf_buffer_c, stbtt_GetFontOffsetForIndex((uint8_t *)ttf_buffer_c, 0));
     set_size(16);
-
-    vfs_close(v);
 
     write_serial_string("TTF Initialize Success.\n");
 }

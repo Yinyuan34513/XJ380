@@ -3,6 +3,8 @@
 #ifndef _EFI_H_
 #define _EFI_H_
 // efi规范定义，不要动
+
+#pragma pack(push, 8)
 // 无符号整型
 typedef __UINT8_TYPE__  UINT8;
 typedef __UINT16_TYPE__ UINT16;
@@ -201,6 +203,15 @@ typedef struct
     VOID    *VendorTable;
 } EFI_CONFIGURATION_TABLE;
 
+typedef struct
+{
+    UINT64 Signature;
+    UINT32 Revision;
+    UINT32 HeaderSize;
+    UINT32 CRC32;
+    UINT32 Reserved;
+} EFI_TABLE_HEADER;
+
 struct EFI_BOOT_SERVICES
 {
     char _buf1[24];
@@ -261,16 +272,18 @@ struct EFI_BOOT_SERVICES
 
 struct EFI_RUNTIME_SERVICES
 {
-    char  _buf1[24];
+    EFI_TABLE_HEADER Hdr;
     // Variable Services
     UINTN _buf2[4];
 
     // Time Services
     EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
-    UINTN  _buf3[2];
+    UINTN  _buf3[3];
 
     // Virtual Memory Services
     UINTN _buf4[2];
+
+    EFIAPI EFI_STATUS (*GetNextHighMonotonicCount)(UINT32 *HighCount);
 
     EFIAPI VOID (*ResetSystem)(EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, UINTN DataSize, VOID *ResetData);
     UINTN  _buf5[3];
@@ -278,14 +291,17 @@ struct EFI_RUNTIME_SERVICES
 
 struct EFI_SYSTEM_TABLE
 {
-    char _buf1[44];
+    EFI_TABLE_HEADER Hdr;
+    CHAR16          *FirmwareVendor;
+    UINT32           FirmwareRevision;
+    EFI_HANDLE       ConsoleInHandle;
     struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL
     {
         UINTN     Reset;
         EFIAPI    EFI_STATUS (*ReadKeyStroke)(struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL *This, struct EFI_INPUT_KEY *Key);
         EFI_EVENT WaitForKey;
     }    *ConIn;
-    UINTN _buf2;
+    EFI_HANDLE ConsoleOutHandle;
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
     {
         UINTN _buf;
@@ -294,7 +310,8 @@ struct EFI_SYSTEM_TABLE
         UINTN  _buf2[4];
         EFIAPI EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
     }                           *ConOut;
-    UINTN                        _buf3[2];
+    EFI_HANDLE                   StandardErrorHandle;
+    struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *StdErr;
     struct EFI_RUNTIME_SERVICES *RuntimeServices; // 此有bug
     struct EFI_BOOT_SERVICES    *BootServices;
     UINTN                        NumberOfTableEntries;
@@ -485,4 +502,6 @@ struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL
     UINT64 Revision;
     EFIAPI EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, struct EFI_FILE_PROTOCOL **Root);
 }; // SFSP
+
+#pragma pack(pop)
 #endif

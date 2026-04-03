@@ -22,6 +22,7 @@
 #include <nvme/nvme.h>
 #include <pci/pci.h>
 #include <pipe.h>
+#include <power.h>
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
@@ -45,41 +46,16 @@ extern XSK_SMP_INFO *xsi;
 size_t               tid;
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
-EFI_SYSTEM_TABLE        *ST;
-BOOT_CONFIG             *BC;
 uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
 extern bool allow_to_flush;
+extern void ahci_set_accel(bool enabled);
+extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
-
-void test_task()
-{
-    uint64_t ret;
-    uint64_t syscall_number = 1145;
-    uint64_t arg1;
-    uint64_t arg2;
-    uint64_t arg3;
-    uint64_t arg4;
-    uint64_t arg5;
-    uint64_t arg6;
-    __asm__ __volatile__("movq %2, %%rdi\n\t"
-                         "movq %3, %%rsi\n\t"
-                         "movq %4, %%rdx\n\t"
-                         "movq %5, %%r10\n\t"
-                         "movq %6, %%r8\n\t"
-                         "movq %7, %%r9\n\t"
-                         "syscall\n\t"
-                         : "=a"(ret)
-                         : "a"(syscall_number), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5), "r"(arg6)
-                         : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
-
-    while (1)
-        ;
-}
 
 void init_cpu()
 {
@@ -316,12 +292,23 @@ void desktop_flusher()
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 13 / 16;
 
-    tw_data           = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    tw_data = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    if (tw_data == NULL)
+    {
+        write_serial_string("timer widget allocation failed\n");
+        desktop_done = true;
+        goto skip_timer_widget_init;
+    }
+    memset(tw_data, 0, sizeof(TimerWidgetsData));
     tw_data->sht      = &shtinf;
     tw_data->ct_sheet = dock_ct_sheet;
     tw_data->scdx     = scdx;
+    time_read(&tw_data->time);
+    tw_data->old_time = tw_data->time;
 
     desktop_done = true;
+
+skip_timer_widget_init:
 
     delay_s_hp(1);
     
@@ -335,7 +322,6 @@ void desktop_flusher()
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
-    // calc_ttf_length("114514 测试", 10);
 
     while (1)
     {
@@ -402,13 +388,18 @@ extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
 extern int      socketfs_setup();
+EFI_SYSTEM_TABLE *EFI_ST;
+BOOT_CONFIG *EFI_BC;
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
-    (void)SystemTable; // 暂时不用
     no_interrupt = true;
     disable_intr();
     disable_scheduler();
+
+    EFI_ST = &SystemTable;
+    EFI_BC = &BootConfig;
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution), 7, {0xe6, 0xe6, 0xe6}); // 开机进度条
 
@@ -433,8 +424,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     pci_setup(BootConfig.MCFG);
     pci_init();
+    write_serial_fmt("VM hint: %s\n", BootConfig.is_qemu == 1 ? "QEMU/BOCHS" : "generic/VMware/real hardware");
+    ahci_set_environment(BootConfig.is_qemu == 1);
     ahci_setup();
+    ahci_set_accel(false);
     nvme_setup();
+    
+    extern void ide_setup(void);
+    ide_setup();
     partition_init();
     // enable_intr();
 
@@ -442,8 +439,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // hda_init();
     // sb16_init();
 
-    keyboard_init();
-    mouse_init();
+    // keyboard_init();
+    // mouse_init();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 5, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -511,6 +508,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
+    if (ahci_is_qemu_environment()) {
+        ahci_set_accel(true);
+    } else {
+        write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
+    }
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
     // delay_s_hp(60);
 

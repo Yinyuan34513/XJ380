@@ -5,10 +5,27 @@
 char path[1024] = "/";
 
 FILE_TYPEINFO_INDEX file_ti_index[2048];
+DirNode file_dir_cache[256];
 
 bool need_duopage = false;
 int  file_count_base = 0;
 int  file_count = 0;
+
+static bool visible_index_is_valid(int visible_index)
+{
+    int visible_count = file_count - file_count_base;
+    if (visible_count > 12)
+    {
+        visible_count = 12;
+    }
+
+    return visible_index >= 0 && visible_index < visible_count;
+}
+
+void refresh_fm_part(int x1, int y1, int x2, int y2)
+{
+    xapi_RefreshPartWindow(handle, x1 + 12, y1 + 27, x2 + 12, y2 + 27);
+}
 
 void paint_fm_back()
 {
@@ -98,21 +115,52 @@ type_is_found:
     }
 }
 
+static void refresh_visible_item(int visible_index)
+{
+    if (!visible_index_is_valid(visible_index))
+    {
+        return;
+    }
+
+    int file_index = file_count_base + visible_index;
+    paint_item(visible_index,
+        file_dir_cache[file_index].filename,
+        file_dir_cache[file_index].filetype,
+        file_dir_cache[file_index].length,
+        (choosing_index == visible_index));
+    refresh_fm_part(4, 148 + 24 * visible_index - 4, FMR_X - 1, 148 + 24 * visible_index + 20);
+}
+
+void refresh_choose_change(int old_visible_index, int new_visible_index)
+{
+    if (register_lock)
+    {
+        return;
+    }
+
+    reg_lock();
+    refresh_visible_item(old_visible_index);
+    if (new_visible_index != old_visible_index)
+    {
+        refresh_visible_item(new_visible_index);
+    }
+    reg_unlock();
+}
+
 void paint_dir(char *path)
 {
     if (register_lock) return;
     reg_lock();
 
     uint32_t count = 0;
-    DirNode  fdir[256];
-    memset(fdir, 0, sizeof(DirNode) * 256);
+    memset(file_dir_cache, 0, sizeof(DirNode) * 256);
     xapi_DrawRect(handle, 0, 0, FMR_X - 1, FMR_Y - 1, 0xffffffff, true);
-    xapi_SearchFile(path, &count, fdir);
+    xapi_SearchFile(path, &count, file_dir_cache);
+    file_count = (count == 404) ? 0 : (int)count;
 
     if (count > 12)
     {
         need_duopage = true;
-        file_count = count;
     }
     else 
     {
@@ -135,12 +183,12 @@ void paint_dir(char *path)
     for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
     {
         paint_item(i - file_count_base, 
-            fdir[i].filename, 
-            fdir[i].filetype, 
-            fdir[i].length, 
+            file_dir_cache[i].filename, 
+            file_dir_cache[i].filetype, 
+            file_dir_cache[i].length, 
             (choosing_index == i - file_count_base));
     }
-    xapi_RefreshWindow(handle);
+    refresh_fm_part(0, 0, FMR_X - 1, FMR_Y - 1);
 
     reg_unlock();
 }

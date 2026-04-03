@@ -1,85 +1,130 @@
 #include "ahci/ahci.h"
 #include "proto.hpp"
 
-int ahci_try_send(struct hba_port *port, int slot)
+extern bool ahci_get_accel();
+
+static void ahci_log_cmd_failure(struct hba_port *port, int slot, const char *reason) {
+    write_serial_fmt(
+        "AHCI: %s slot=%d CI=0x%x SACT=0x%x IS=0x%x TFD=0x%x SERR=0x%x SSTS=0x%x CMD=0x%x\n", reason, slot,
+        port->regs[HBA_RPxCI], port->regs[HBA_RPxSACT], port->regs[HBA_RPxIS], port->regs[HBA_RPxTFD],
+        port->regs[HBA_RPxSERR], port->regs[HBA_RPxSSTS], port->regs[HBA_RPxCMD]);
+}
+
+static int ahci_try_send_safe(struct hba_port *port, int slot)
 {
-    int retries = 0, bitmask = 1 << slot;
-
-    // 确保端口是空闲的
-    wait_until(!(port->regs[HBA_RPxTFD] & (HBA_PxTFD_BSY | HBA_PxTFD_DRQ)));
-
-    hba_clear_reg(port->regs[HBA_RPxIS]);
-
-    while (retries < MAX_RETRY)
-    {
-        delay_ms_hp(50);
-        // PxCI寄存器置位，告诉HBA这儿有个数据需要发送到SATA端口
-        port->regs[HBA_RPxCI] = bitmask;
-
-        wait_until(!(port->regs[HBA_RPxCI] & bitmask));
-
-        port->regs[HBA_RPxCI] &= ~bitmask; // ensure CI bit is cleared
-        if ((port->regs[HBA_RPxTFD] & HBA_PxTFD_ERR))
-        {
-            // 有错误
-            sata_read_error(port);
-            retries++;
-        }
-        else { break; }
+    uint32_t bitmask = 1u << slot;
+    uint64_t ready   = wait_until_expire(!(port->regs[HBA_RPxTFD] & (HBA_PxTFD_BSY | HBA_PxTFD_DRQ)), 1000000);
+    if (ready == 0) {
+        ahci_log_cmd_failure(port, slot, "device busy timeout");
+        return 0;
     }
 
     hba_clear_reg(port->regs[HBA_RPxIS]);
+    hba_clear_reg(port->regs[HBA_RPxSERR]);
 
-    return retries < MAX_RETRY;
+    for (int retries = 0; retries < 3; retries++) {
+        port->regs[HBA_RPxCI] |= bitmask;
+
+        uint64_t complete = 10000000;
+        while ((port->regs[HBA_RPxCI] & bitmask) != 0 && complete-- > 0) {
+            if (port->regs[HBA_RPxIS] & HBA_FATAL) break;
+            asm volatile("pause");
+        }
+
+        if ((port->regs[HBA_RPxCI] & bitmask) != 0) {
+            port->regs[HBA_RPxCI] &= ~bitmask;
+            ahci_log_cmd_failure(port, slot, "command completion timeout");
+        } else if ((port->regs[HBA_RPxIS] & HBA_FATAL) || (port->regs[HBA_RPxTFD] & HBA_PxTFD_ERR)) {
+            sata_read_error(port);
+            ahci_log_cmd_failure(port, slot, "task file error");
+        } else {
+            uint64_t settle = 100000;
+            while (settle-- > 0) {
+                uint32_t is = port->regs[HBA_RPxIS];
+                if (is & (HBA_PxINTR_DPS | HBA_PxINTR_DHR | HBA_FATAL)) break;
+                asm volatile("pause");
+            }
+            io_mfence();
+            delay_us_hp(10);
+            hba_clear_reg(port->regs[HBA_RPxIS]);
+            return 1;
+        }
+
+        hba_clear_reg(port->regs[HBA_RPxIS]);
+        hba_clear_reg(port->regs[HBA_RPxSERR]);
+        delay_ms_hp(1);
+    }
+
+    return 0;
 }
 
-// ATA 状态寄存器 (STS) 位定义
-#define ATA_STS_ERR (1 << 0) // Error
-#define ATA_STS_DRQ (1 << 3) // Data Request
-#define ATA_STS_BSY (1 << 7) // Busy
+static int ahci_wait_port_ready(struct hba_port *port, uint64_t timeout_ns)
+{
+    uint64_t deadline = nanoTime() + timeout_ns;
+    while (port->regs[HBA_RPxTFD] & (HBA_PxTFD_BSY | HBA_PxTFD_DRQ)) {
+        if (nanoTime() >= deadline) { return 0; }
+        asm volatile("pause");
+    }
+    return 1;
+}
 
-// ATA 错误寄存器 (ERR) 位定义
-#define ATA_ERR_AMNF  (1 << 0) // Address Mark Not Found
-#define ATA_ERR_TKZNF (1 << 1) // Track Zero Not Found
-#define ATA_ERR_ABRT  (1 << 2) // Command Aborted
-#define ATA_ERR_IDNF  (1 << 4) // ID Not Found (LBA out of range)
-#define ATA_ERR_UNC   (1 << 6) // Uncorrectable Data Error
+int ahci_try_send(struct hba_port *port, int slot)
+{
+    if (slot < 0 || slot >= 32) {
+        write_serial_fmt("AHCI: invalid slot %d\n", slot);
+        return 0;
+    }
 
-// AHCI 命令寄存器 (PxCMD) 位定义
-#define AHCI_CMD_FR (1 << 14) // FIS Receive Running
-#define AHCI_CMD_CR (1 << 15) // Command Running
+    if (!ahci_get_accel()) {
+        return ahci_try_send_safe(port, slot);
+    }
+
+    uint32_t bitmask = 1u << slot;
+    if (!ahci_wait_port_ready(port, 100000000ULL)) {
+        ahci_log_cmd_failure(port, slot, "device busy timeout");
+        return 0;
+    }
+
+    hba_clear_reg(port->regs[HBA_RPxIS]);
+    hba_clear_reg(port->regs[HBA_RPxSERR]);
+
+    for (int retries = 0; retries < 3; retries++) {
+        port->regs[HBA_RPxCI] |= bitmask;
+
+        uint64_t deadline = nanoTime() + 2000000000ULL;
+        while ((port->regs[HBA_RPxCI] & bitmask) != 0) {
+            if (port->regs[HBA_RPxIS] & HBA_FATAL) break;
+            if (nanoTime() >= deadline) break;
+            asm volatile("pause");
+        }
+
+        if ((port->regs[HBA_RPxCI] & bitmask) != 0) {
+            port->regs[HBA_RPxCI] &= ~bitmask;
+            ahci_log_cmd_failure(port, slot, "command completion timeout");
+        } else if ((port->regs[HBA_RPxIS] & HBA_FATAL) || (port->regs[HBA_RPxTFD] & HBA_PxTFD_ERR)) {
+            sata_read_error(port);
+            ahci_log_cmd_failure(port, slot, "task file error");
+        } else {
+            io_mfence();
+            hba_clear_reg(port->regs[HBA_RPxIS]);
+            return 1;
+        }
+
+        hba_clear_reg(port->regs[HBA_RPxIS]);
+        hba_clear_reg(port->regs[HBA_RPxSERR]);
+        delay_ms_hp(1);
+    }
+
+    return 0;
+}
 
 void ahci_post(struct hba_port *port, struct hba_cmd_state *state, int slot)
 {
-    int bitmask = 1 << slot;
-
-    // 确保端口是空闲的
-    uint64_t counter = wait_until_expire(!(port->regs[HBA_RPxTFD] & (HBA_PxTFD_BSY | HBA_PxTFD_DRQ)), __UINT64_MAX__);
-    if (!counter)
-    {
-        write_serial_fmt("AHCI wait timeout\n");
-        return;
+    uint32_t bitmask = 1u << slot;
+    port->cmdctx.issued[slot] = state;
+    port->cmdctx.tracked_ci  |= bitmask;
+    if (!ahci_try_send(port, slot)) {
+        write_serial_fmt("AHCI: async post failed for slot=%d\n", slot);
     }
-
-    hba_clear_reg(port->regs[HBA_RPxIS]);
-
-    port->cmdctx.issued[slot]  = state;
-    port->cmdctx.tracked_ci   |= bitmask;
-    port->regs[HBA_RPxCI]     |= bitmask;
-
-    while (1)
-    {
-        if ((port->regs[HBA_RPxCI] & (1 << slot)) == 0) break;
-        if (port->regs[HBA_RPxIS] & HBA_PxINTR_TFE) { goto err; }
-    }
-
-    if (port->regs[HBA_RPxIS] & HBA_PxINTR_TFE)
-    {
-    err:
-        write_serial_fmt("AHCI task file error\n");
-
-        port->regs[HBA_RPxCI] &= ~bitmask;
-
-        hba_clear_reg(port->regs[HBA_RPxIS]);
-    }
+    port->cmdctx.tracked_ci &= ~bitmask;
 }

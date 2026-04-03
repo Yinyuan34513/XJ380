@@ -1,8 +1,63 @@
 #include <proto.hpp>
+#include <dlinker.h>
 #include <syscall/syscall.h>
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
+static uint8_t kb_synth_buf[KB_BUF_SIZE];
+static uint8_t *kb_synth_head = kb_synth_buf;
+static uint8_t *kb_synth_tail = kb_synth_buf;
+static volatile uint32_t kb_synth_lock = 0;
+
+static void kb_synth_lock_acquire()
+{
+    while (__sync_lock_test_and_set(&kb_synth_lock, 1) != 0)
+    {
+        while (kb_synth_lock != 0) { __asm__ volatile("pause"); }
+    }
+}
+
+static void kb_synth_lock_release()
+{
+    __sync_lock_release(&kb_synth_lock);
+}
+
+static void kb_synth_enqueue(uint8_t value)
+{
+    if (value == 0) return;
+
+    kb_synth_lock_acquire();
+    uint8_t *next = kb_synth_head + 1;
+    if (next == kb_synth_buf + KB_BUF_SIZE) { next = kb_synth_buf; }
+
+    if (next == kb_synth_tail)
+    {
+        kb_synth_lock_release();
+        return;
+    }
+
+    *kb_synth_head = value;
+    kb_synth_head  = next;
+    kb_synth_lock_release();
+}
+
+static uint8_t kb_synth_dequeue()
+{
+    uint8_t value = 0;
+
+    kb_synth_lock_acquire();
+    if (kb_synth_tail != kb_synth_head)
+    {
+        value = *kb_synth_tail;
+        kb_synth_tail++;
+        if (kb_synth_tail == kb_synth_buf + KB_BUF_SIZE) {
+            kb_synth_tail = kb_synth_buf;
+        }
+    }
+    kb_synth_lock_release();
+    return value;
+}
+
 uint8_t keyboard_code[256] = {
     0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
@@ -59,6 +114,11 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 
 uint8_t get_keyboard_input()
 {
+    uint8_t synthetic = kb_synth_dequeue();
+    if (synthetic != 0) {
+        return synthetic;
+    }
+
     if (kb_fifo.p_tail != kb_fifo.p_head)
     {
         // 有没有读的
@@ -93,9 +153,19 @@ void keyboard_init()
     kb_fifo.p_head = kb_fifo.buf;
     kb_fifo.p_tail = kb_fifo.buf;
     kb_fifo.count  = 0;
+    kb_synth_head  = kb_synth_buf;
+    kb_synth_tail  = kb_synth_buf;
     memset(kb_fifo.buf, 0, KB_BUF_SIZE);
+    memset(kb_synth_buf, 0, sizeof(kb_synth_buf));
     wait_KB_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
     wait_KB_read();
     outb(PORT_KB_DATA, KB_INIT_MODE);
 }
+
+void keyboard_push_input(uint8_t value)
+{
+    kb_synth_enqueue(value);
+}
+
+EXPORT_SYMBOL(keyboard_push_input);

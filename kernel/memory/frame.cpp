@@ -36,7 +36,7 @@ uint64_t get_memory_all_size(MEMORY_MAP map)
         EfiMemory++;
     }
 
-    return total_pages * 4;
+    return total_pages * PAGE_SIZE;
 }
 
 static uint64_t get_zone_boundary(enum zone_type type)
@@ -201,13 +201,18 @@ spin_t frame_op_lock = SPIN_INIT;
 
 uint64_t alloc_frames_l(size_t count)
 {
+    spin_lock(&frame_op_lock);
     Bitmap *bitmap      = &frame_allocator.bitmap;
     size_t  frame_index = bitmap_find_range(bitmap, count, true);
 
-    if (frame_index == (size_t)-1) return 0;
+    if (frame_index == (size_t)-1) {
+        spin_unlock(&frame_op_lock);
+        return 0;
+    }
     bitmap_set_range(bitmap, frame_index, frame_index + count, false);
 
     frame_allocator.usable_frames -= count;
+    spin_unlock(&frame_op_lock);
 
     return frame_index * PAGE_SIZE;
 }

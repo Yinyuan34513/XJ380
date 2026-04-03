@@ -20,13 +20,14 @@ uint64_t calc_ttf_length(char *str, int size);
 typedef struct FbTTFWriterData
 {
     SHEET_INFO  *sht;
-    SHEET    *ct_sheet;
+    SHEET      *ct_sheet;
     SHEET_BUFFER color;
     int          start_x;
     int          start_y;
     int          x;
     int          y;
     int          size;
+    uint32_t    *i_width;
 
     // 缓冲区设计
     Rune   *rune_buf;      // Rune缓冲区指针

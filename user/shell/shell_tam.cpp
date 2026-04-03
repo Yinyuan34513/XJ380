@@ -29,6 +29,7 @@ void tam_flush_buffer()
         strcpy(temp, char_buffer);
         int temp_pchb = p_chbuffer;
 
+        hide_terminal_cursor(false);
         if (cur_x + temp_pchb * 9 >= TML_X - 8) { newline(); }
 
         p_chbuffer = 0;
@@ -37,6 +38,8 @@ void tam_flush_buffer()
         strcpy(&app_input_buffer[p_input_buffer], char_buffer);
         p_input_buffer += strlen(char_buffer);
         cur_x += temp_pchb * 9;
+        reset_terminal_cursor_blink();
+        show_terminal_cursor(false);
         xapi_RefreshWindow(handle);
     }
 }
@@ -54,6 +57,7 @@ static int utf8_char_len(unsigned char c) {
 
 void ptt_console_sp(char *str)
 {
+    hide_terminal_cursor(false);
     char *p = str;
     while (*p != '\0')
     {
@@ -103,11 +107,15 @@ void ptt_console_sp(char *str)
 void tam_main_loop()
 {
     cur_y += 2;
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(true);
     while (true)
     {
         // 获取输入
+        xapi_Sleep(16);
         __asm__ volatile("pause\n\t");
         if (p_chbuffer) { tam_flush_buffer(); }
+        update_terminal_cursor_blink(16);
 
         // 检查输出缓冲区
         char output_stream[1024];
@@ -115,6 +123,8 @@ void tam_main_loop()
         if (output_stream[0] != '\0') 
         {
             ptt_console_sp(output_stream);
+            reset_terminal_cursor_blink();
+            show_terminal_cursor(false);
             memset(output_stream, 0, (strlen(output_stream) + 1) * sizeof(uint8_t));
             xapi_RefreshWindow(handle);
             terminal_app_mark_finish_output();
@@ -129,6 +139,8 @@ void tam_main_loop()
             write_xttp_buffer(app_input_buffer);
             app_input_buffer[0] = '\0';
             p_input_buffer      = 0;
+            reset_terminal_cursor_blink();
+            show_terminal_cursor(true);
         }
     }
 }

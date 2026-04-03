@@ -12,6 +12,45 @@ size_t          dlfunc_count = 0;
 
 char fmt_buf[4096];
 
+static uint8_t *dlinker_alloc_file_buffer(size_t size) {
+    size_t pages = PADDING_UP(size, PAGE_SIZE) / PAGE_SIZE;
+    if (pages == 0) {
+        return NULL;
+    }
+
+    uint64_t phys = alloc_frames(pages);
+    if (phys == 0) {
+        return NULL;
+    }
+    return (uint8_t *)phys_to_virt(phys);
+}
+
+static void dlinker_free_file_buffer(void *buffer, size_t size) {
+    if (buffer == NULL || size == 0) {
+        return;
+    }
+    free_frames((uint64_t)virt_to_phys((uint64_t)buffer), PADDING_UP(size, PAGE_SIZE) / PAGE_SIZE);
+}
+
+static uint8_t *dlinker_read_entire_file(vfs_node_t file) {
+    if (file == NULL || file->size == 0) {
+        return NULL;
+    }
+
+    uint8_t *buffer = dlinker_alloc_file_buffer(file->size);
+    if (buffer == NULL) {
+        return NULL;
+    }
+
+    size_t got = vfs_read(file, buffer, 0, file->size);
+    if (got != file->size) {
+        dlinker_free_file_buffer(buffer, file->size);
+        return NULL;
+    }
+
+    return buffer;
+}
+
 void *resolve_symbol(Elf64_Sym *symtab, uint32_t sym_idx) {
     return (void *)symtab[sym_idx].st_value;
 }
@@ -25,7 +64,6 @@ bool handle_relocations(Elf64_Rela *rela_start, Elf64_Sym *symtab, char *strtab,
         Elf64_Rela *rela        = &rela_plt[i];
         Elf64_Sym  *sym         = &symtab[ELF64_R_SYM(rela->r_info)];
         char       *sym_name    = &strtab[sym->st_name];
-        write_serial_fmt("sym name %s\n",sym_name);
         dlfunc_t   *func        = find_func(sym_name);
         uint64_t   *target_addr = (uint64_t *)(rela->r_offset + offset);
         if (func != NULL) {
@@ -364,11 +402,24 @@ void module_setup() {
         write_serial_fmt("kmod: /lib/modules not found\n");
         return;
     }
+    if (mr->type != file_dir) {
+        write_serial_string("kmod: /lib/modules is not a directory\n");
+        vfs_close(mr);
+        return;
+    }
     list_foreach(mr->child,i) {
+        if (module_count >= MAX_KERNEL_MODULE) {
+            write_serial_string("kmod: module list full\n");
+            break;
+        }
         vfs_node_t ch = (vfs_node_t)i->data;
+        if (ch == NULL || ch->name == NULL) {
+            continue;
+        }
         size_t path_len = strlen("/lib/modules/") + strlen(ch->name) + 1;
-        char* buf = (char*)malloc(path_len);
+        char *buf = (char *)malloc(path_len);
         if (buf == NULL) {
+            write_serial_fmt("kmod: no memory for %s\n", ch->name);
             continue;
         }
         snprintf(buf, path_len, "/lib/modules/%s", ch->name);
@@ -385,8 +436,12 @@ void module_setup() {
         }
         extract_name(buf, module_ls[module_count].module_name, sizeof(char) * 20);
         module_ls[module_count].path = buf;
-        uint8_t *data=(uint8_t*)malloc(ch->size+128);
-        vfs_read(ch,data,0,ch->size);
+        uint8_t *data = dlinker_read_entire_file(ch);
+        if (data == NULL) {
+            write_serial_fmt("kmod: Failed to read %s\n", buf);
+            free(buf);
+            continue;
+        }
         module_ls[module_count].data = data;
         module_ls[module_count].size = ch->size;
         strcpy(module_ls[module_count].raw_name, buf);
@@ -394,6 +449,7 @@ void module_setup() {
         write_serial_fmt("kmod: Module %s %s\n", module_ls[module_count].module_name, buf);
         module_count++;
     }
+    vfs_close(mr);
 }
 
 static bool ends_with_km(const char *str) {
@@ -478,7 +534,6 @@ static uint64_t user_so_next_addr = USER_SO_BASE_START;
 // 查找符号（支持全局查找）
 static void* find_symbol_internal(const char* name, dlhandle_t* exclude) {
     // 1. 先在全局符号表中查找
-    write_serial_fmt("FIND name %s\n",name);
     for (size_t i = 0; i < global_symbol_count; i++) {
         if (strcmp(global_symbol_table[i].name, name) == 0) {
             // 确保不是来自排除的句柄
@@ -491,7 +546,6 @@ static void* find_symbol_internal(const char* name, dlhandle_t* exclude) {
     // 2. 在内核符号表中查找
     for (size_t i = 0; i < dlfunc_count; i++) {
         dlfunc_t* entry = &__ksymtab_start[i];
-        write_serial_fmt("sym name %s\n",name);
         if (strcmp(entry->name, name) == 0) {
             return entry->addr;
         }
@@ -671,27 +725,26 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
     }
     
     // 2. 读取文件到内存
-    uint8_t* file_data = (uint8_t*)malloc(file->size);
+    size_t file_size = file->size;
+    uint8_t* file_data = dlinker_read_entire_file(file);
     if (!file_data) {
         vfs_close(file);
         return NULL;
     }
-    
-    vfs_read(file, file_data, 0, file->size);
     vfs_close(file);
     
     // 3. 解析 ELF 头
     Elf64_Ehdr* ehdr = (Elf64_Ehdr*)file_data;
     if (!elf_test_head(ehdr)) {
         write_serial_fmt("Invalid ELF file: %s\n", path);
-        free(file_data);
+        dlinker_free_file_buffer(file_data, file_size);
         return NULL;
     }
     
     // 4. 检查是否为动态库
     if (ehdr->e_type != ET_DYN) {
         write_serial_fmt("Not a shared object: %s\n", path);
-        free(file_data);
+        dlinker_free_file_buffer(file_data, file_size);
         return NULL;
     }
     
@@ -703,7 +756,7 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
         // 内核模块：使用固定地址空间
         if (kernel_modules_load_offset >= (0xffffffffc0000000 - 0xffffffffb0000000)) {
             write_serial_fmt("Kernel module space exhausted\n");
-            free(file_data);
+            dlinker_free_file_buffer(file_data, file_size);
             return NULL;
         }
         base_addr = 0xffffffffb0000000 + kernel_modules_load_offset;
@@ -711,7 +764,7 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
         // 用户态动态库：分配地址空间
         if (user_so_next_addr >= USER_SO_BASE_END) {
             write_serial_fmt("User SO space exhausted\n");
-            free(file_data);
+            dlinker_free_file_buffer(file_data, file_size);
             return NULL;
         }
         base_addr = user_so_next_addr;
@@ -722,7 +775,7 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
     handle->path = strdup(path);
     handle->base_addr = base_addr;
     handle->ehdr = file_data; // 保留文件数据指针
-    handle->size = file->size;
+    handle->size = file_size;
     handle->is_kernel = is_kernel;
     handle->pd = pd;
     
@@ -735,7 +788,7 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
         write_serial_fmt("Failed to map segments: %s\n", path);
         free(handle->path);
         free(handle);
-        free(file_data);
+        dlinker_free_file_buffer(file_data, file_size);
         return NULL;
     }
     
@@ -1025,3 +1078,4 @@ void dlinker_init() {
     
     write_serial_fmt("Dynamic linker initialized\n");
 }
+EXPORT_SYMBOL(page_virt_to_phys);

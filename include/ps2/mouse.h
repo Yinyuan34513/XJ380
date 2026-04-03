@@ -24,8 +24,10 @@ typedef struct
     bool      first_click;
     bool      double_click;
     uint64_t  click_time;
+    bool      left_release_pending;
     
     SHEET    *sht_now;
+    WINDOWLSP left_release_window;
 
     int       scroll;
 } mouse_dec;

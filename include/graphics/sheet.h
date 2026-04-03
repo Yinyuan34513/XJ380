@@ -61,7 +61,6 @@ typedef struct
     void                    *temp_buffer;
     uint32_t                 scrx, scry;
     uint16_t                 sheet_num; // 图层数量 - 1
-    uint16_t                 sht_numed; // 图层数量 - 1，用于编号
     FoxLandPeek              foxland;
     const FrameBufferConfig *fbc;
 } SHEET_INFO;

@@ -59,7 +59,7 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
  * @param oh 目标高度
  * @param path 路径
  */
-spin_t PPlk=SPIN_INIT;
+spin_t PPlk = SPIN_INIT;
 
 void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path)
 {
@@ -81,7 +81,7 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
         return;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
-    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 4);
     /* source memory no longer needed after load */
     free(bf);
     if (!b)
@@ -92,7 +92,7 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
         spin_unlock(&PPlk);
         return;
     }
-    uint8_t *b1 = (uint8_t *)malloc(ow * oh * bpp);
+    uint8_t *b1 = (uint8_t *)malloc(ow * oh * 4);
     if (!b1)
     {
         write_serial_fmt("PrintPic: output buffer allocate failed (%u bytes) for '%s' (ow=%d,oh=%d)\n",
@@ -102,23 +102,20 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
         spin_unlock(&PPlk);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, bpp);
+    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p == csheet) { break; }
-        else if (front_p->next == NULL) { return; spin_unlock(&PPlk);}
-        front_p = front_p->next;
-    }
+    SHEET *front_p = csheet;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
     for (int i = 0; i < oh; i++)
     {
         for (int j = 0; j < ow; j++)
         {
-            SheetBuffer[(i + y) * front_p->width + (j + x)] =
-                LCD_AlphaBlend(buff[i * ow + j], SheetBuffer[(i + y) * front_p->width + (j + x)], buff[i * ow + j].a);
+            int dst_y = i + y;
+            int dst_x = j + x;
+            if (dst_x < 0 || dst_y < 0 || dst_x >= (int)front_p->width || dst_y >= (int)front_p->height) continue;
+            SheetBuffer[dst_y * front_p->width + dst_x] =
+                LCD_AlphaBlend(buff[i * ow + j], SheetBuffer[dst_y * front_p->width + dst_x], buff[i * ow + j].a);
         }
     }
     free(b1);
@@ -155,7 +152,7 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
         return;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
-    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 4);
     free(bf);
     if (!b)
     {
@@ -163,7 +160,7 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
         vfs_close(v);
         return;
     }
-    uint8_t *b1 = (uint8_t *)malloc(ow * oh * bpp);
+    uint8_t *b1 = (uint8_t *)malloc(ow * oh * 4);
     if (!b1)
     {
         write_serial_fmt("PrintPic: output buffer allocate failed (%u bytes) for '%s' (ow=%d,oh=%d)\n",
@@ -172,22 +169,19 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
         vfs_close(v);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, bpp);
+    stbir_resize_uint8(b, w, h, 0, b1, ow, oh, 0, 4);
     SHEET_BUFFER *buff = (SHEET_BUFFER *)b1;
 
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p == csheet) { break; }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
-    }
+    SHEET *front_p = csheet;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
     for (int i = 0; i < oh; i++)
     {
         for (int j = 0; j < ow; j++)
         {
-            SheetBuffer[(i + y) * front_p->width + (j + x)] = buff[i * ow + j];
+            int dst_y = i + y;
+            int dst_x = j + x;
+            if (dst_x < 0 || dst_y < 0 || dst_x >= (int)front_p->width || dst_y >= (int)front_p->height) continue;
+            SheetBuffer[dst_y * front_p->width + dst_x] = buff[i * ow + j];
         }
     }
     free(b1);
@@ -212,7 +206,7 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
         return;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
-    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 4);
     free(bf);
     if (!b)
     {
@@ -220,7 +214,7 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
         vfs_close(v);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, bpp);
+    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, 4);
     stbi_image_free(b);
     vfs_close(v);
 }
@@ -242,7 +236,7 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
         return;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
-    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
+    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 4);
     if (!b)
     {
         write_serial_fmt("LoadPictureOgM: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
@@ -250,17 +244,17 @@ void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)
         vfs_close(v);
         return;
     }
-    *buffer = (SHEET_BUFFER *)malloc((size_t)w * h * bpp);
+    *buffer = (SHEET_BUFFER *)malloc((size_t)w * h * 4);
     if (!*buffer)
     {
         write_serial_fmt("LoadPictureOgM: output buffer alloc failed (%u bytes) for '%s'\n",
-                         (unsigned)((size_t)w * h * bpp), path);
+                         (unsigned)((size_t)w * h * 4), path);
         stbi_image_free(b);
         free(bf);
         vfs_close(v);
         return;
     }
-    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(*buffer), w, h, 0, bpp);
+    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(*buffer), w, h, 0, 4);
     stbi_image_free(b);
     free(bf);
     vfs_close(v);

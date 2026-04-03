@@ -67,6 +67,7 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
     close_interrupt;
     disable_scheduler();
+    tcb_t current_task = get_current_task();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
 
@@ -78,10 +79,10 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
                                                 : "Unknown";
 
     // 长大后在学习吧！
-    if (get_current_task() != NULL)
+    if (current_task != NULL)
     {
-        pcb_t current_proc = get_current_task()->parent_group;
-        if (current_proc->task_level == TASK_APPLICATION_LEVEL)
+        pcb_t current_proc = current_task->parent_group;
+        if (current_proc != NULL && current_proc->task_level == TASK_APPLICATION_LEVEL)
         {
             errno_t status = lazy_tryalloc(current_proc, faulting_address);
             if (status != 0) { goto err; }
@@ -104,8 +105,16 @@ err:;
     write_serial_string(error_msg);
     write_serial_string("\n");
 
-    write_serial_fmt("Fault Thread Name: %s 0x%x\n", get_current_task()->name, (uint64_t)get_current_task());
-    write_serial_fmt("TID: %d\n", get_current_task()->tid);
+    if (current_task != NULL)
+    {
+        write_serial_fmt("Fault Thread Name: %s 0x%x\n", current_task->name, (uint64_t)current_task);
+        write_serial_fmt("TID: %d\n", current_task->tid);
+    }
+    else
+    {
+        write_serial_string("Fault Thread Name: <none>\n");
+        write_serial_string("TID: <none>\n");
+    }
 
     backtrace(frame);
 
@@ -262,8 +271,14 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 
     uint64_t      phy_frame = alloc_frames(1);
     page_table_t *new_table = (page_table_t *)(phys_to_virt(phy_frame));
+    page_table_clear(new_table);
     for (uint64_t i = 0; i < (all_copy ? 512 : (level == 4 ? 256 : 512)); i++)
     {
+        if (!(source_table->entries[i].value & PTE_PRESENT))
+        {
+            new_table->entries[i].value = 0;
+            continue;
+        }
         if (source_table->entries[i].value & PTE_HUGE)
         {
             // 指向一块2M的页
@@ -461,7 +476,7 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     }
 
     // 获取PDPT表
-    page_table_t      *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PAGE_MASK);
+    page_table_t      *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pdpt_entry = pdpt_table->entries[pdp_index];
 
     // 检查PDPT条目是否存在
@@ -470,12 +485,12 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     // 如果PDPT条目指向的是1GB大页
     if (ARCH_PT_IS_LARGE(pdpt_entry.value))
     {
-        uint64_t base_addr = pdpt_entry.value & ~((1UL << 30) - 1);
+        uint64_t base_addr = pdpt_entry.value & (PTE_ADDR_MASK & ~((1ULL << 30) - 1));
         return base_addr + (virtual_address & ((1UL << 30) - 1));
     }
 
     // 获取PD表
-    page_table_t      *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PAGE_MASK);
+    page_table_t      *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pd_entry = pd_table->entries[pd_index];
 
     // 检查PD条目是否存在
@@ -484,19 +499,19 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     // 如果PD条目指向的是2MB大页
     if (ARCH_PT_IS_LARGE(pd_entry.value))
     {
-        uint64_t base_addr = pd_entry.value & ~((1UL << 21) - 1);
+        uint64_t base_addr = pd_entry.value & (PTE_ADDR_MASK & ~((1ULL << 21) - 1));
         return base_addr + (virtual_address & ((1UL << 21) - 1));
     }
 
     // 获取PT表
-    page_table_t      *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PAGE_MASK);
+    page_table_t      *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pt_entry = pt_table->entries[pt_index];
 
     // 检查PT条目是否存在
     if (!(pt_entry.value & PTE_PRESENT)) { return 0; }
 
     // 返回4KB页的物理地址
-    return (pt_entry.value & PAGE_MASK) + (virtual_address & ~PAGE_MASK);
+    return (pt_entry.value & PTE_ADDR_MASK) + (virtual_address & ~PAGE_MASK);
 }
 
 void switch_xsk_page_directory()

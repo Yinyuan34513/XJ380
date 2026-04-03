@@ -180,8 +180,10 @@ uint64_t do_xapi_GetMemorySize()
 
 void do_xapi_Run(char *path)
 {
+    page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
     char  *fpath = vfs_cwd_path_build((char *)path);
     runfile(fpath);
+    switch_page_directory(caller_pagedir);
     free(fpath);
 }
 
