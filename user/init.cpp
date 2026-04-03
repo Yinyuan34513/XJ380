@@ -1,6 +1,6 @@
 #include "./xapi/include/x3api.h"
 
-int main(int argc, char *argv[], char *envp[])
+static int init_main_impl(int argc, char *argv[], char *envp[])
 {
     write(1, (char *)"init process is running!!!\n", 0);
 
@@ -8,4 +8,10 @@ int main(int argc, char *argv[], char *envp[])
     
     while(1)__asm__ __volatile__("pause");
     return -1;
+}
+
+extern "C" int init_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int init_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return init_main_impl(argc, argv, envp);
 }

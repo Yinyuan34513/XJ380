@@ -33,6 +33,8 @@ static bool         g_provider_registered = false;
 static bool         g_dhcp_ready_logged   = false;
 static uint32_t     g_rx_log_count        = 0;
 static uint32_t     g_tx_log_count        = 0;
+static uint32_t     g_connect_log_count   = 0;
+static uint32_t     g_write_log_count     = 0;
 
 static int xj380_err_to_errno(err_t err)
 {
@@ -261,8 +263,25 @@ static ssize_t xj380_provider_write(void *socket_ptr, const void *buffer, size_t
         api_flags |= NETCONN_DONTBLOCK;
     }
 
+    if (g_write_log_count < 16) {
+        printk("netserver: write size=%u flags=0x%x state=%d pending_err=%d\n",
+               (unsigned int)size,
+               (unsigned int)flags,
+               (int)socket->conn->state,
+               (int)socket->conn->pending_err);
+        g_write_log_count++;
+    }
+
     err_t err = netconn_write_partly(socket->conn, buffer, size, api_flags, &written);
     if (err != ERR_OK) {
+        if (g_write_log_count < 24) {
+            printk("netserver: write err=%d written=%u state=%d pending_err=%d\n",
+                   (int)err,
+                   (unsigned int)written,
+                   (int)socket->conn->state,
+                   (int)socket->conn->pending_err);
+            g_write_log_count++;
+        }
         if (written > 0) {
             return (ssize_t)written;
         }
@@ -304,7 +323,28 @@ static int xj380_provider_connect(void *socket_ptr, const struct sockaddr *addr,
         return ret;
     }
 
-    return xj380_err_to_errno(netconn_connect(socket->conn, &ip, port));
+    if (g_connect_log_count < 16) {
+        const ip4_addr_t *ip4 = ip_2_ip4(&ip);
+        printk("netserver: connect dst=%u.%u.%u.%u:%u flags=0x%x state=%d pending_err=%d\n",
+               ip4_addr1(ip4), ip4_addr2(ip4), ip4_addr3(ip4), ip4_addr4(ip4),
+               (unsigned int)port,
+               (unsigned int)netconn_is_nonblocking(socket->conn),
+               (int)socket->conn->state,
+               (int)socket->conn->pending_err);
+        g_connect_log_count++;
+    }
+
+    err_t err = netconn_connect(socket->conn, &ip, port);
+
+    if (g_connect_log_count < 24) {
+        printk("netserver: connect ret=%d state=%d pending_err=%d\n",
+               (int)err,
+               (int)socket->conn->state,
+               (int)socket->conn->pending_err);
+        g_connect_log_count++;
+    }
+
+    return xj380_err_to_errno(err);
 }
 
 static int xj380_provider_listen(void *socket_ptr, int backlog)
@@ -392,7 +432,7 @@ static int xj380_provider_poll(void *socket_ptr, size_t events)
     }
 
     if (events & EPOLLOUT) {
-        if (socket->conn->pending_err == ERR_OK) {
+        if (socket->conn->state != NETCONN_CONNECT && socket->conn->pending_err == ERR_OK) {
             out |= EPOLLOUT;
         }
     }

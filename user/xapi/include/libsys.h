@@ -56,6 +56,7 @@
 #define SYS_WAIT4 61
 #define SYS_KILL 62
 #define SYS_UNAME 63
+#define SYS_FCNTL 72
 
 #define SYS_GETDENTS 78
 #define SYS_GETCWD 79

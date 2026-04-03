@@ -50,7 +50,7 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+static int shell_main_impl(int argc, char *argv[], char *envp[])
 {
     XWINDOW Winfo;
     Winfo.title  = (char *)"终端";
@@ -92,4 +92,10 @@ int main(int argc, char *argv[], char *envp[])
         if (p_chbuffer) { flush_buffer(); }
         __asm__ __volatile__("pause");
     }
+}
+
+extern "C" int shell_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int shell_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return shell_main_impl(argc, argv, envp);
 }

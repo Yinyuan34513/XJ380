@@ -33,7 +33,7 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
 {
     (void)envp;
 
@@ -149,4 +149,9 @@ int main(int argc, char *argv[], char *envp[])
     }
 }
 
+extern "C" int ctrlmenu_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int ctrlmenu_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return ctrlmenu_main_impl(argc, argv, envp);
+}
 

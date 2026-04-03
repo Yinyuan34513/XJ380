@@ -116,6 +116,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_ACCEPT: regs->rax = (uint64_t)sys_accept(regs->rdi, (struct sockaddr *)regs->rsi, (socklen_t *)regs->rdx,0,0,0,regs); break;
     case SYS_FSTAT: regs->rax = (uint64_t)sys_fstat(regs->rdi, (struct stat *)regs->rsi,0,0,0,0,regs); break;
     case SYS_CREAT: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi,O_CREAT,0,0,0,regs); break;
+    case SYS_FCNTL: regs->rax = (uint64_t)sys_fcntl(regs->rdi, regs->rsi, regs->rdx,0,0,0,regs); break;
     case SYS_MKDIR: regs->rax = (uint64_t)sys_mkdir((char *)regs->rdi, regs->rsi,0,0,0,0,regs); break;
     case SYS_RMDIR: regs->rax = (uint64_t)sys_rmdir(regs->rdi,0,0,0,0,0,regs); break;
     case SYS_UNLINK: regs->rax = (uint64_t)sys_unlink(regs->rdi,0,0,0,0,0,regs); break;

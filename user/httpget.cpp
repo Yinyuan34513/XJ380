@@ -1,4 +1,4 @@
-#include "./xapi/include/x3api.h"
+#include "httpclient.h"
 
 static const int      HTTPGET_WIDTH            = 760;
 static const int      HTTPGET_HEIGHT           = 520;
@@ -14,10 +14,17 @@ static const uint32_t HTTPGET_COLOR_INFO       = 0x3d405bff;
 static const uint32_t HTTPGET_COLOR_ERROR      = 0xb00020ff;
 static const uint32_t HTTPGET_COLOR_RESPONSE   = 0x264653ff;
 
+static void render_window();
+
 typedef struct httpget_line {
     char     text[HTTPGET_LINE_LENGTH];
     uint32_t color;
 } httpget_line_t;
+
+typedef struct httpget_response_state {
+    char line[HTTPGET_LINE_LENGTH];
+    int  line_len;
+} httpget_response_state_t;
 
 static HDLE           g_window      = 0;
 static bool           g_need_redraw = true;
@@ -55,78 +62,31 @@ static void append_line(const char *text, uint32_t color)
     g_need_redraw = true;
 }
 
-static void append_response_chunk(const char *data, int len)
+static void append_response_line(httpget_response_state_t *state)
 {
-    char line[HTTPGET_LINE_LENGTH];
-    int  line_len = 0;
+    state->line[state->line_len] = '\0';
+    append_line(state->line_len == 0 ? "" : state->line, HTTPGET_COLOR_RESPONSE);
+    state->line_len = 0;
+}
 
+static int httpget_response_callback(const char *data, int len, void *user_data)
+{
+    httpget_response_state_t *state = (httpget_response_state_t *)user_data;
     for (int i = 0; i < len; ++i) {
         char ch = data[i];
         if (ch == '\r') {
             continue;
         }
-        if (ch == '\n' || line_len >= HTTPGET_LINE_LENGTH - 1) {
-            line[line_len] = '\0';
-            append_line(line_len == 0 ? "" : line, HTTPGET_COLOR_RESPONSE);
-            line_len = 0;
+        if (ch == '\n' || state->line_len >= HTTPGET_LINE_LENGTH - 1) {
+            append_response_line(state);
             if (ch == '\n') {
                 continue;
             }
         }
-        line[line_len++] = ch;
+        state->line[state->line_len++] = ch;
     }
 
-    if (line_len > 0) {
-        line[line_len] = '\0';
-        append_line(line, HTTPGET_COLOR_RESPONSE);
-    }
-}
-
-static bool parse_ipv4(const char *text, uint32_t *out_addr)
-{
-    uint32_t parts[4] = {0, 0, 0, 0};
-    int      part     = 0;
-    uint32_t value    = 0;
-
-    for (const char *p = text; ; ++p) {
-        char ch = *p;
-        if (isdigit(ch)) {
-            value = value * 10 + (uint32_t)(ch - '0');
-            if (value > 255) {
-                return false;
-            }
-        } else if (ch == '.' || ch == '\0') {
-            if (part >= 4) {
-                return false;
-            }
-            parts[part++] = value;
-            value         = 0;
-            if (ch == '\0') {
-                break;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    if (part != 4) {
-        return false;
-    }
-
-    *out_addr = htonl((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]);
-    return true;
-}
-
-static int socket_send_all(int sockfd, const char *data, int len)
-{
-    int sent_total = 0;
-    while (sent_total < len) {
-        int sent = write(sockfd, (char *)data + sent_total, (uint64_t)(len - sent_total));
-        if (sent <= 0) {
-            return -1;
-        }
-        sent_total += sent;
-    }
+    render_window();
     return 0;
 }
 
@@ -140,13 +100,14 @@ static void render_window()
     xapi_DrawSWText(g_window, 16, 12, (char *)"HTTP Client", 0xffffffff);
     xapi_DrawSWText(g_window, 170, 12, g_status, HTTPGET_COLOR_STATUS);
     xapi_DrawSWText(g_window, 18, 56, (char *)"Syntax: METHOD IP PORT PATH [BODY]", HTTPGET_COLOR_INFO);
-    xapi_DrawSWText(g_window, 18, 72, (char *)"Example: GET 10.0.2.2 80 /", HTTPGET_COLOR_INFO);
+    xapi_DrawSWText(g_window, 18, 72, (char *)"Methods: GET POST PUT PATCH DELETE HEAD OPTIONS TRACE CONNECT", HTTPGET_COLOR_INFO);
+    xapi_DrawSWText(g_window, 18, 88, (char *)"Example: POST 10.0.2.2 80 /api hello world", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, HTTPGET_HEIGHT - 56, (char *)"Request:", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 90, HTTPGET_HEIGHT - 56, g_input, HTTPGET_COLOR_TEXT);
 
     int start = g_line_count > HTTPGET_VISIBLE_LINES ? g_line_count - HTTPGET_VISIBLE_LINES : 0;
     for (int i = start; i < g_line_count; ++i) {
-        xapi_DrawSWText(g_window, 20, 104 + (i - start) * 16, g_lines[i].text, g_lines[i].color);
+        xapi_DrawSWText(g_window, 20, 120 + (i - start) * 16, g_lines[i].text, g_lines[i].color);
     }
 
     xapi_RefreshWindow(g_window);
@@ -156,6 +117,7 @@ static void render_window()
 static void run_http_request()
 {
     g_send_req = false;
+    xapi_OutputSerial((char *)"httpget: run_http_request\n");
 
     char request_line[sizeof(g_input)];
     strncpy(request_line, g_input, sizeof(request_line) - 1);
@@ -173,8 +135,14 @@ static void run_http_request()
         return;
     }
 
-    uint32_t addr = 0;
-    if (!parse_ipv4(host, &addr)) {
+    if (!xhttp_validate_method(method)) {
+        append_line("Invalid HTTP method token.", HTTPGET_COLOR_ERROR);
+        set_status("bad method");
+        return;
+    }
+
+    uint32_t parsed_addr = 0;
+    if (!xhttp_parse_ipv4(host, &parsed_addr)) {
         append_line("Invalid IPv4 address.", HTTPGET_COLOR_ERROR);
         set_status("bad ip");
         return;
@@ -187,86 +155,67 @@ static void run_http_request()
         return;
     }
 
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
+    xhttp_request_t request;
+    request.method        = method;
+    request.host          = host;
+    request.port          = (uint16_t)port;
+    request.path          = path;
+    request.body          = body;
+    request.content_type  = "text/plain";
+    request.extra_headers = "";
+
+    httpget_response_state_t response_state;
+    memset(&response_state, 0, sizeof(response_state));
+
+    append_line("Request queued.", HTTPGET_COLOR_INFO);
+    append_line("---------------- RESPONSE ----------------", HTTPGET_COLOR_INFO);
+    set_status("requesting");
+    render_window();
+
+    int status = xhttp_request(&request, httpget_response_callback, &response_state);
+    xapi_Printf((char *)"httpget: xhttp_request status=%d\n", status);
+    if (response_state.line_len > 0) {
+        append_response_line(&response_state);
+    }
+
+    if (status == XHTTP_OK) {
+        append_line("-------------- END RESPONSE --------------", HTTPGET_COLOR_INFO);
+        set_status("done");
+        return;
+    }
+
+    switch (status) {
+    case XHTTP_ERR_SOCKET:
         append_line("socket() failed", HTTPGET_COLOR_ERROR);
         set_status("socket failed");
-        return;
-    }
-
-    struct sockaddr_in addr_in;
-    memset(&addr_in, 0, sizeof(addr_in));
-    addr_in.sin_family      = AF_INET;
-    addr_in.sin_port        = htons((uint16_t)port);
-    addr_in.sin_addr.s_addr = addr;
-
-    set_status("connecting");
-    render_window();
-
-    if (connect(sockfd, (struct sockaddr *)&addr_in, sizeof(addr_in)) < 0) {
+        break;
+    case XHTTP_ERR_CONNECT:
         append_line("connect() failed", HTTPGET_COLOR_ERROR);
         set_status("connect failed");
-        close(sockfd);
-        return;
-    }
-
-    append_line("Connected.", HTTPGET_COLOR_INFO);
-
-    char request[2048];
-    int  body_len = body ? (int)strlen(body) : 0;
-    int  req_len  = 0;
-
-    if (body_len > 0) {
-        req_len = snprintf(request, sizeof(request),
-                           "%s %s HTTP/1.0\r\n"
-                           "Host: %s\r\n"
-                           "Connection: close\r\n"
-                           "Content-Length: %d\r\n"
-                           "\r\n"
-                           "%s",
-                           method, path, host, body_len, body);
-    } else {
-        req_len = snprintf(request, sizeof(request),
-                           "%s %s HTTP/1.0\r\n"
-                           "Host: %s\r\n"
-                           "Connection: close\r\n"
-                           "\r\n",
-                           method, path, host);
-    }
-
-    if (req_len <= 0 || req_len >= (int)sizeof(request)) {
+        break;
+    case XHTTP_ERR_REQUEST_BUILD:
         append_line("Request is too large.", HTTPGET_COLOR_ERROR);
         set_status("request too large");
-        close(sockfd);
-        return;
-    }
-
-    if (socket_send_all(sockfd, request, req_len) < 0) {
+        break;
+    case XHTTP_ERR_SEND:
         append_line("send() failed", HTTPGET_COLOR_ERROR);
         set_status("send failed");
-        close(sockfd);
-        return;
-    }
-
-    append_line("Request sent.", HTTPGET_COLOR_INFO);
-    append_line("---------------- RESPONSE ----------------", HTTPGET_COLOR_INFO);
-    set_status("reading response");
-    render_window();
-
-    char buffer[512];
-    while (true) {
-        int got = read(sockfd, buffer, sizeof(buffer));
-        if (got <= 0) {
-            break;
-        }
-        append_response_chunk(buffer, got);
-        render_window();
+        break;
+    case XHTTP_ERR_RECV:
+        append_line("read() failed", HTTPGET_COLOR_ERROR);
+        set_status("recv failed");
+        break;
+    case XHTTP_ERR_TIMEOUT:
+        append_line("request timed out", HTTPGET_COLOR_ERROR);
+        set_status("timeout");
+        break;
+    default:
+        append_line("HTTP request failed.", HTTPGET_COLOR_ERROR);
+        set_status("request failed");
+        break;
     }
 
     append_line("-------------- END RESPONSE --------------", HTTPGET_COLOR_INFO);
-    set_status("done");
-    shutdown(sockfd, SHUT_RDWR);
-    close(sockfd);
 }
 
 static void httpget_message_proc(UINT64 type, UINT64 hData, UINT64 lData)

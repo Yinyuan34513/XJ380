@@ -1,6 +1,7 @@
 all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf
 
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -Wno-writable-strings
+export CXX ?= g++
+export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -Wno-write-strings
 
 build_xapi:
 	make -C xapi build_all_api
@@ -16,35 +17,35 @@ build_xapi:
 # $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o")
 
 init.elf: init.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 # 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
 cp537.elf: cp537.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
 picturer.elf: picturer/picturer.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
 chat.elf: chat.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
 
 httpget.elf: httpget.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
 
 bcms-sp.elf: bcms-sp.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/constart.cpp.o ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
@@ -80,7 +81,7 @@ TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES
 
 ../out/calc/%.o: ./calc/%.cpp
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 shell.elf: $(SHELL_OBJECTS)
@@ -91,7 +92,7 @@ shell.elf: $(SHELL_OBJECTS)
 # 为每个 shell 源文件定义编译规则
 ../out/shell/%.o: ./shell/%.cpp
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 fmanager.elf: $(FMANAGER_OBJECTS)
@@ -106,7 +107,7 @@ calc.elf: $(CALC_OBJECTS)
 
 ../out/fmanager/%.o: ./fmanager/%.cpp
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 
@@ -118,7 +119,7 @@ ctrlmenu.elf: $(CTRLMENU_OBJECTS)
 
 ../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 
@@ -129,7 +130,7 @@ texter.elf: $(TEXTER_OBJECTS)
 
 ../out/texter/%.o: ./texter/%.cpp
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 .PHONY: clean
