@@ -82,6 +82,8 @@ __attribute__((naked)) void save_registers()
 
 void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
 {
+    current_task0->fs_base = read_fsbase();
+
     switch_page_directory(target->parent_group->pagedir);
     set_kernel_stack(target->kernel_stack);
     write_kgsbase((uint64_t)get_current_cpu());
@@ -272,8 +274,8 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         return reg;
     }
 
-    // 保存当前FSBASE
-    write_fsbase(current->fs_base);
+    // 记录当前线程运行时最新的 FSBASE，避免调度后丢失用户态 TLS 环境。
+    current->fs_base = read_fsbase();
 
     // 任务寻父处理
     if (best->parent_group && 
@@ -305,9 +307,6 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         }
         
         enable_scheduler();
-    } else {
-        // 没切换任务，恢复原来的FSBASE
-        write_fsbase(current->fs_base);
     }
     send_eoi();
     return reg;

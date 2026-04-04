@@ -80,7 +80,16 @@ static inline int xhttp_wait_fd(int fd, short events, int timeout_ms)
     if (poll_ret == 0) {
         return XHTTP_ERR_TIMEOUT;
     }
-    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+    if (pfd.revents & POLLNVAL) {
+        return XHTTP_ERR_CONNECT;
+    }
+    if ((events & POLLIN) && (pfd.revents & (POLLIN | POLLHUP))) {
+        return XHTTP_OK;
+    }
+    if ((events & POLLOUT) && (pfd.revents & POLLOUT)) {
+        return XHTTP_OK;
+    }
+    if (pfd.revents & (POLLERR | POLLHUP)) {
         return XHTTP_ERR_CONNECT;
     }
     if ((pfd.revents & events) == 0) {

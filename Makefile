@@ -111,7 +111,7 @@ all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) liballoc-x86_64.a
 
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o liballoc-x86_64.a
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) ./font/hankaku.o liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user

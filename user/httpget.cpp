@@ -1,4 +1,5 @@
 #include "httpclient.h"
+#include "https_client.h"
 
 static const int      HTTPGET_WIDTH            = 760;
 static const int      HTTPGET_HEIGHT           = 520;
@@ -33,8 +34,8 @@ static bool           g_need_redraw = true;
 static bool           g_send_req    = false;
 static bool           g_ignore_first_submit = true;
 static int            g_startup_submit_guard = HTTPGET_STARTUP_GUARD_TICKS;
-static char           g_input[512]  = "GET 10.0.2.2 80 /";
-static int            g_input_len   = 17;
+static char           g_input[512]  = "GET https://example.com/";
+static int            g_input_len   = 24;
 static char           g_status[128] = "Ready";
 static httpget_line_t g_lines[HTTPGET_MAX_LINES];
 static int            g_line_count  = 0;
@@ -103,9 +104,9 @@ static void render_window()
 
     xapi_DrawSWText(g_window, 16, 12, (char *)"HTTP Client", 0xffffffff);
     xapi_DrawSWText(g_window, 170, 12, g_status, HTTPGET_COLOR_STATUS);
-    xapi_DrawSWText(g_window, 18, 56, (char *)"Syntax: METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_INFO);
+    xapi_DrawSWText(g_window, 18, 56, (char *)"Syntax: METHOD URL [BODY] or METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, 72, (char *)"Methods: GET POST PUT PATCH DELETE HEAD OPTIONS TRACE CONNECT", HTTPGET_COLOR_INFO);
-    xapi_DrawSWText(g_window, 18, 88, (char *)"Example: POST 10.0.2.2 80 /api hello world", HTTPGET_COLOR_INFO);
+    xapi_DrawSWText(g_window, 18, 88, (char *)"Example: GET https://example.com/  or  POST 10.0.2.2 80 /api hi", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, HTTPGET_HEIGHT - 56, (char *)"Request:", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 90, HTTPGET_HEIGHT - 56, g_input, HTTPGET_COLOR_TEXT);
 
@@ -128,13 +129,13 @@ static void run_http_request()
     request_line[sizeof(request_line) - 1] = '\0';
 
     char *method = strtok(request_line, " ");
-    char *host   = strtok(NULL, " ");
+    char *target = strtok(NULL, " ");
     char *port_s = strtok(NULL, " ");
     char *path   = strtok(NULL, " ");
     char *body   = strtok(NULL, "");
 
-    if (method == NULL || host == NULL || port_s == NULL || path == NULL) {
-        append_line("Invalid syntax. Use: METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_ERROR);
+    if (method == NULL || target == NULL) {
+        append_line("Invalid syntax. Use: METHOD URL or METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_ERROR);
         set_status("parse failed");
         return;
     }
@@ -145,17 +146,84 @@ static void run_http_request()
         return;
     }
 
-    long port = strtol(port_s, NULL, 10);
-    if (port <= 0 || port > 65535) {
-        append_line("Invalid port.", HTTPGET_COLOR_ERROR);
-        set_status("bad port");
+    bool      use_tls        = false;
+    uint16_t  port           = 0;
+    bool      allocated_path = false;
+    char     *host           = NULL;
+    char      target_copy[sizeof(g_input)];
+
+    if (strncmp(target, "http://", 7) == 0 || strncmp(target, "https://", 8) == 0) {
+        strncpy(target_copy, target, sizeof(target_copy) - 1);
+        target_copy[sizeof(target_copy) - 1] = '\0';
+
+        use_tls = strncmp(target_copy, "https://", 8) == 0;
+        host = strstr(target_copy, "://");
+        host = host ? host + 3 : target_copy;
+        port = use_tls ? 443 : 80;
+
+        char *path_sep = strchr(host, '/');
+        if (path_sep != NULL) {
+            *path_sep = '\0';
+            path = path_sep;
+        } else {
+            path = (char *)"/";
+        }
+
+        char *port_sep = strchr(host, ':');
+        if (port_sep != NULL) {
+            *port_sep = '\0';
+            long parsed_port = strtol(port_sep + 1, NULL, 10);
+            if (parsed_port <= 0 || parsed_port > 65535) {
+                append_line("Invalid URL port.", HTTPGET_COLOR_ERROR);
+                set_status("bad port");
+                return;
+            }
+            port = (uint16_t)parsed_port;
+        }
+    } else {
+        host = target;
+        if (port_s == NULL || path == NULL) {
+            append_line("Missing HOST PORT PATH for legacy syntax.", HTTPGET_COLOR_ERROR);
+            set_status("parse failed");
+            return;
+        }
+
+        long parsed_port = strtol(port_s, NULL, 10);
+        if (parsed_port <= 0 || parsed_port > 65535) {
+            append_line("Invalid port.", HTTPGET_COLOR_ERROR);
+            set_status("bad port");
+            return;
+        }
+        port = (uint16_t)parsed_port;
+    }
+
+    if (host == NULL || host[0] == '\0') {
+        append_line("Invalid host.", HTTPGET_COLOR_ERROR);
+        set_status("bad host");
         return;
+    }
+
+    if (path == NULL || path[0] == '\0') {
+        path = (char *)"/";
+    } else if (path[0] != '/') {
+        char normalized_path[256];
+        snprintf(normalized_path, sizeof(normalized_path), "/%s", path);
+        size_t normalized_len = strlen(normalized_path) + 1;
+        char *owned_path = (char *)malloc(normalized_len);
+        if (owned_path == NULL) {
+            append_line("Out of memory while normalizing path.", HTTPGET_COLOR_ERROR);
+            set_status("oom");
+            return;
+        }
+        memcpy(owned_path, normalized_path, normalized_len);
+        path = owned_path;
+        allocated_path = true;
     }
 
     xhttp_request_t request;
     request.method        = method;
     request.host          = host;
-    request.port          = (uint16_t)port;
+    request.port          = port;
     request.path          = path;
     request.body          = body;
     request.content_type  = "text/plain";
@@ -164,13 +232,18 @@ static void run_http_request()
     httpget_response_state_t response_state;
     memset(&response_state, 0, sizeof(response_state));
 
-    append_line("Request queued.", HTTPGET_COLOR_INFO);
+    append_line(use_tls ? "HTTPS request queued." : "HTTP request queued.", HTTPGET_COLOR_INFO);
     append_line("---------------- RESPONSE ----------------", HTTPGET_COLOR_INFO);
-    set_status("requesting");
+    set_status(use_tls ? "tls requesting" : "requesting");
     render_window();
     xapi_OutputSerial((char *)"httpget: dispatch request\n");
 
-    int status = xhttp_request(&request, httpget_response_callback, &response_state);
+    int status = use_tls
+                     ? xtls_request(&request, httpget_response_callback, &response_state)
+                     : xhttp_request(&request, httpget_response_callback, &response_state);
+    if (allocated_path) {
+        free(path);
+    }
     {
         char logbuf[96];
         snprintf(logbuf, sizeof(logbuf), "httpget: request status=%d\n", status);
@@ -210,6 +283,30 @@ static void run_http_request()
     case XHTTP_ERR_TIMEOUT:
         append_line("request timed out", HTTPGET_COLOR_ERROR);
         set_status("timeout");
+        break;
+    case XHTTP_ERR_TLS_INIT:
+        append_line("TLS init failed", HTTPGET_COLOR_ERROR);
+        set_status("tls init failed");
+        break;
+    case XHTTP_ERR_TLS_SEED:
+        append_line("TLS RNG seed failed", HTTPGET_COLOR_ERROR);
+        set_status("tls seed failed");
+        break;
+    case XHTTP_ERR_TLS_CONFIG:
+        append_line("TLS config failed", HTTPGET_COLOR_ERROR);
+        set_status("tls config failed");
+        break;
+    case XHTTP_ERR_TLS_HANDSHAKE:
+        append_line("TLS handshake failed", HTTPGET_COLOR_ERROR);
+        set_status("tls handshake failed");
+        break;
+    case XHTTP_ERR_TLS_SEND:
+        append_line("TLS write failed", HTTPGET_COLOR_ERROR);
+        set_status("tls send failed");
+        break;
+    case XHTTP_ERR_TLS_RECV:
+        append_line("TLS read failed", HTTPGET_COLOR_ERROR);
+        set_status("tls recv failed");
         break;
     default:
         append_line("HTTP request failed.", HTTPGET_COLOR_ERROR);
@@ -279,7 +376,7 @@ static int httpget_main_impl(int argc, char *argv[], char *envp[])
     SetMsgPrcor(g_window, httpget_message_proc);
     xapi_OutputSerial((char *)"httpget: msg procor set\n");
 
-    append_line("Ready to send HTTP requests.", HTTPGET_COLOR_INFO);
+    append_line("Ready to send HTTP/HTTPS requests.", HTTPGET_COLOR_INFO);
     render_window();
     xapi_OutputSerial((char *)"httpget: initial render done\n");
 

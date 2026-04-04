@@ -19,6 +19,7 @@
 #include <hda/hda.h>
 #include <hda/pcspk.h>
 #include <krlibc.h>
+#include <mm/alloc/alloc.h>
 #include <mm/frame.h>
 #include <nvme/nvme.h>
 #include <pci/pci.h>
@@ -57,6 +58,14 @@ extern void ahci_set_accel(bool enabled);
 extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
+
+static tcb_t alloc_zeroed_tcb(void)
+{
+    const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
+    tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
+    if (task != NULL) memset(task, 0, sizeof(struct thread_control_block));
+    return task;
+}
 
 void init_cpu()
 {
@@ -478,7 +487,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_smp(BootConfig.MADT);
 
-    tcb_t idle_thread         = (tcb_t)malloc(sizeof(struct thread_control_block));
+    tcb_t idle_thread         = alloc_zeroed_tcb();
+    if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
@@ -492,6 +502,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
     idle_thread->cwd->refcount++;
+    save_fpu_context(&idle_thread->fpu_context);
 
     get_current_cpu()->current_task = idle_thread;
     write_kgsbase((uint64_t)get_current_cpu());

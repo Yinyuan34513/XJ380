@@ -2,6 +2,7 @@
 #include "cpu/fsgsbase.h"
 #include "cpu/regio.h"
 #include "krlibc.h"
+#include "mm/alloc/alloc.h"
 #include "mm/heap.h"
 #include "mm/page.h"
 #include "proto.hpp"
@@ -38,6 +39,14 @@ extern bool is_scheduler;
 extern spin_t scheduler_lock;
 extern void message_thread(tcb_t task);
 extern uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);
+
+static tcb_t alloc_zeroed_tcb(void)
+{
+    const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
+    tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
+    if (task != NULL) memset(task, 0, sizeof(struct thread_control_block));
+    return task;
+}
 
 uint16_t dock_ct_sheet;
 static constexpr uint64_t MESSAGE_THREAD_STACK_HEADROOM = PAGE_SIZE;
@@ -712,9 +721,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     tcb_t parent_task = get_current_task();
 
-    tcb_t new_task = (tcb_t)malloc(sizeof(struct thread_control_block));
+    tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL) return (uint64_t)-(ENOMEM);
-    memset(new_task, 0, sizeof(struct thread_control_block));
     new_task->task_level     = TASK_APPLICATION_LEVEL;
     new_task->cpu_id         = get_current_cpu()->processor_id;
     new_task->status         = START;
@@ -817,7 +825,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
         return (size_t)-EINVAL;
     }
 
-    tcb_t new_task = (tcb_t)calloc(1, sizeof(struct thread_control_block));
+    tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
         spin_unlock(&create_thread_lock);
@@ -849,6 +857,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.ds     = 0x10;
     new_task->status          = CREATE;
     new_task->main            = (uint64_t)_start;
+    save_fpu_context(&new_task->fpu_context);
 
     new_task->winnum  = 0;
     new_task->hasfscr = false;
@@ -903,7 +912,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-(EINVAL);
     }
-    tcb_t new_task = (tcb_t)calloc(1, sizeof(struct thread_control_block));
+    tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
         spin_unlock(&create_thread_lock);
@@ -983,6 +992,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->context0.cs    = 0x8;
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
     new_task->status                                                      = CREATE;
+    save_fpu_context(&new_task->fpu_context);
 
     new_task->fs_base = (uint64_t)new_task;
 
@@ -1024,7 +1034,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-(EINVAL);
     }
-    tcb_t new_task = (tcb_t)calloc(1, sizeof(struct thread_control_block));
+    tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
         spin_unlock(&create_thread_lock);
@@ -1115,6 +1125,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     new_task->context0.cs    = 0x8;
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
     new_task->status                                                      = CREATE;
+    save_fpu_context(&new_task->fpu_context);
 
     new_task->fs_base = (uint64_t)new_task;
 

@@ -160,9 +160,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
             regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9,regs);
             break;
 
-        // case SYS_ARCH_PRCTL:
-        //     regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);
-        //     break;
+        case SYS_ARCH_PRCTL:
+            regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+            break;
         // case SYS_SET_TID_ADDRESS:
         //     // todo
         //     regs->rax = get_current_task()->parent_group->pid;
