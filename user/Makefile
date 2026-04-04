@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf
 
 export CXX ?= g++
 export CC ?= gcc
@@ -98,6 +98,60 @@ MBEDTLS_LIBRARY_SOURCES := \
 	$(MBEDTLS_SRC_DIR)/library/x509write_csr.c
 MBEDTLS_LIBRARY_OBJECTS := $(patsubst $(MBEDTLS_SRC_DIR)/library/%.c, ../out/httpget/mbedtls/%.o, $(MBEDTLS_LIBRARY_SOURCES))
 
+LITEHTML_SRC_DIR := ../third_party/litehtml
+LITEHTML_INCLUDE_DIRS := -I $(LITEHTML_SRC_DIR)/include -I $(LITEHTML_SRC_DIR)/include/litehtml -I $(LITEHTML_SRC_DIR)/src -I $(LITEHTML_SRC_DIR)/src/gumbo -I $(LITEHTML_SRC_DIR)/src/gumbo/include -I $(LITEHTML_SRC_DIR)/src/gumbo/include/gumbo
+LITEHTML_SOURCES := $(shell find $(LITEHTML_SRC_DIR)/src -maxdepth 1 -name "*.cpp" | sort)
+LITEHTML_OBJECTS := $(patsubst $(LITEHTML_SRC_DIR)/src/%.cpp, ../out/browser/litehtml/%.o, $(LITEHTML_SOURCES))
+GUMBO_SOURCES := $(shell find $(LITEHTML_SRC_DIR)/src/gumbo -maxdepth 1 -name "*.c" | sort)
+GUMBO_OBJECTS := $(patsubst $(LITEHTML_SRC_DIR)/src/gumbo/%.c, ../out/browser/gumbo/%.o, $(GUMBO_SOURCES))
+WEBP_SRC_DIR := ./browser/third_party/libwebp/src
+WEBP_INCLUDE_DIRS := -I ./browser/third_party/libwebp
+WEBP_DEC_SOURCES := \
+	$(WEBP_SRC_DIR)/dec/alpha_dec.c \
+	$(WEBP_SRC_DIR)/dec/buffer_dec.c \
+	$(WEBP_SRC_DIR)/dec/frame_dec.c \
+	$(WEBP_SRC_DIR)/dec/idec_dec.c \
+	$(WEBP_SRC_DIR)/dec/io_dec.c \
+	$(WEBP_SRC_DIR)/dec/quant_dec.c \
+	$(WEBP_SRC_DIR)/dec/tree_dec.c \
+	$(WEBP_SRC_DIR)/dec/vp8_dec.c \
+	$(WEBP_SRC_DIR)/dec/vp8l_dec.c \
+	$(WEBP_SRC_DIR)/dec/webp_dec.c \
+	$(WEBP_SRC_DIR)/dsp/alpha_processing.c \
+	$(WEBP_SRC_DIR)/dsp/cpu.c \
+	$(WEBP_SRC_DIR)/dsp/dec.c \
+	$(WEBP_SRC_DIR)/dsp/dec_clip_tables.c \
+	$(WEBP_SRC_DIR)/dsp/filters.c \
+	$(WEBP_SRC_DIR)/dsp/lossless.c \
+	$(WEBP_SRC_DIR)/dsp/rescaler.c \
+	$(WEBP_SRC_DIR)/dsp/upsampling.c \
+	$(WEBP_SRC_DIR)/dsp/yuv.c \
+	$(WEBP_SRC_DIR)/utils/bit_reader_utils.c \
+	$(WEBP_SRC_DIR)/utils/color_cache_utils.c \
+	$(WEBP_SRC_DIR)/utils/filters_utils.c \
+	$(WEBP_SRC_DIR)/utils/huffman_utils.c \
+	$(WEBP_SRC_DIR)/utils/palette.c \
+	$(WEBP_SRC_DIR)/utils/quant_levels_dec_utils.c \
+	$(WEBP_SRC_DIR)/utils/random_utils.c \
+	$(WEBP_SRC_DIR)/utils/rescaler_utils.c \
+	$(WEBP_SRC_DIR)/utils/thread_utils.c \
+	$(WEBP_SRC_DIR)/utils/utils.c
+WEBP_DEC_OBJECTS := $(patsubst $(WEBP_SRC_DIR)/%.c, ../out/browser/libwebp/%.o, $(WEBP_DEC_SOURCES))
+
+BROWSER_HOSTED_CXXFLAGS := -O0 -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./browser $(LITEHTML_INCLUDE_DIRS) $(WEBP_INCLUDE_DIRS) -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT
+BROWSER_HOSTED_CFLAGS := -O0 -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -ffunction-sections -fdata-sections $(LITEHTML_INCLUDE_DIRS) $(WEBP_INCLUDE_DIRS) -DNDEBUG -DHAVE_CONFIG_H
+BROWSER_START_CFLAGS := $(CFLAGS)
+
+BROWSER_SOURCES := ./browser/browser_app.cpp ./browser/browser_fetch.cpp ./browser/browser_alloc_guard.cpp ./browser/browser_image_decode.cpp
+BROWSER_OBJECTS := $(patsubst ./browser/%.cpp, ../out/browser/%.o, $(BROWSER_SOURCES))
+BROWSER_START_OBJECT := ../out/browser/browser_start.o
+BROWSER_TLS_OBJECTS := ../out/httpget/https_client.o ../out/httpget/http_tls_compat.o $(MBEDTLS_LIBRARY_OBJECTS)
+BROWSER_STDCPP := $(shell $(CXX) -print-file-name=libstdc++.a)
+BROWSER_SUPCPP := $(shell $(CXX) -print-file-name=libsupc++.a)
+BROWSER_LIBGCC := $(shell $(CXX) -print-libgcc-file-name)
+BROWSER_LIBGCC_EH := $(shell $(CXX) -print-file-name=libgcc_eh.a)
+BROWSER_BUILTINS := /usr/lib/clang/22/lib/linux/libclang_rt.builtins-x86_64.a
+
 build_xapi:
 	make -C xapi build_all_api
 
@@ -149,6 +203,40 @@ httpget.elf: $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS)
 ../out/httpget/mbedtls/%.o: $(MBEDTLS_SRC_DIR)/library/%.c
 	@mkdir -p $(@D)
 	@$(CC) $(MBEDTLS_CCFLAGS) -c $< -o $@
+	@echo "CC $< -> $@"
+
+browser.elf: $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GUMBO_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OBJECTS)
+	@$(LD) -Ttext=0x200000 --gc-sections --wrap=free $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GUMBO_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OBJECTS) --start-group $(BROWSER_STDCPP) $(BROWSER_SUPCPP) $(BROWSER_LIBGCC_EH) $(BROWSER_LIBGCC) $(BROWSER_BUILTINS) --end-group -o ../out/$@
+	@echo "LINK browser objects -> ../out/$@"
+
+../out/browser/browser_start.o: ./browser/browser_start.cpp
+	@mkdir -p $(@D)
+	@$(CXX) $(BROWSER_START_CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/browser/%.o: ./browser/%.cpp
+	@mkdir -p $(@D)
+	@$(CXX) $(BROWSER_HOSTED_CXXFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/browser/litehtml/encodings.o: $(LITEHTML_SRC_DIR)/src/encodings.cpp
+	@mkdir -p $(@D)
+	@$(CXX) $(BROWSER_HOSTED_CXXFLAGS) -fexceptions -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/browser/litehtml/%.o: $(LITEHTML_SRC_DIR)/src/%.cpp
+	@mkdir -p $(@D)
+	@$(CXX) $(BROWSER_HOSTED_CXXFLAGS) -fno-exceptions -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/browser/gumbo/%.o: $(LITEHTML_SRC_DIR)/src/gumbo/%.c
+	@mkdir -p $(@D)
+	@$(CC) $(BROWSER_HOSTED_CFLAGS) -c $< -o $@
+	@echo "CC $< -> $@"
+
+../out/browser/libwebp/%.o: $(WEBP_SRC_DIR)/%.c
+	@mkdir -p $(@D)
+	@$(CC) $(BROWSER_HOSTED_CFLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
 bcms-sp.elf: bcms-sp.cpp

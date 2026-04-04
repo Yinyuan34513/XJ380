@@ -144,6 +144,25 @@ static int xtls_socket_recv(void *ctx, unsigned char *buf, size_t len)
     return got;
 }
 
+static void xtls_log_mbedtls_error(const char *stage, int ret)
+{
+    char logbuf[128];
+    snprintf(logbuf, sizeof(logbuf), "xtls: %s ret=%d hex=0x%x\n", stage, ret, (unsigned int)(-ret));
+    xapi_OutputSerial(logbuf);
+}
+
+static int xtls_headers_need_crlf(const char *headers)
+{
+    size_t len = headers ? strlen(headers) : 0;
+    if (len == 0) {
+        return 0;
+    }
+    if (len >= 2 && headers[len - 2] == '\r' && headers[len - 1] == '\n') {
+        return 0;
+    }
+    return 1;
+}
+
 static int xtls_ssl_write_all(mbedtls_ssl_context *ssl, const char *data, int len)
 {
     int sent_total = 0;
@@ -152,7 +171,10 @@ static int xtls_ssl_write_all(mbedtls_ssl_context *ssl, const char *data, int le
         int ret = mbedtls_ssl_write(ssl, (const unsigned char *)data + sent_total, (size_t)(len - sent_total));
         if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
         if (ret == MBEDTLS_ERR_SSL_TIMEOUT) return XHTTP_ERR_TIMEOUT;
-        if (ret <= 0) return XHTTP_ERR_TLS_SEND;
+        if (ret <= 0) {
+            xtls_log_mbedtls_error("ssl_write", ret);
+            return XHTTP_ERR_TLS_SEND;
+        }
         sent_total += ret;
     }
 
@@ -170,7 +192,10 @@ static int xtls_ssl_recv_loop(mbedtls_ssl_context *ssl,
         if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
         if (ret == MBEDTLS_ERR_SSL_TIMEOUT) return XHTTP_ERR_TIMEOUT;
         if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || ret == 0) break;
-        if (ret < 0) return XHTTP_ERR_TLS_RECV;
+        if (ret < 0) {
+            xtls_log_mbedtls_error("ssl_read", ret);
+            return XHTTP_ERR_TLS_RECV;
+        }
 
         if (callback != NULL && callback(buffer, ret, user_data) != 0) break;
     }
@@ -178,9 +203,10 @@ static int xtls_ssl_recv_loop(mbedtls_ssl_context *ssl,
     return XHTTP_OK;
 }
 
-int xtls_request(const xhttp_request_t *request,
-                 xhttp_response_callback_t callback,
-                 void *user_data)
+static int xtls_request_once(const xhttp_request_t *request,
+                             xhttp_response_callback_t callback,
+                             void *user_data,
+                             mbedtls_ssl_protocol_version max_tls_version)
 {
     if (request == NULL || request->host == NULL || request->path == NULL) {
         return XHTTP_ERR_BAD_ARGUMENT;
@@ -214,6 +240,7 @@ int xtls_request(const xhttp_request_t *request,
     const char              *body = NULL;
     const char              *content_type = NULL;
     const char              *extra_headers = NULL;
+    const char              *extra_headers_suffix = "";
     int                      body_len = 0;
     char                     request_text[XHTTP_REQUEST_BUFFER_SIZE];
     int                      request_len = 0;
@@ -248,7 +275,7 @@ int xtls_request(const xhttp_request_t *request,
     }
 
     mbedtls_ssl_conf_min_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_2);
-    mbedtls_ssl_conf_max_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
+    mbedtls_ssl_conf_max_tls_version(&conf, max_tls_version);
     mbedtls_ssl_conf_session_tickets(&conf, MBEDTLS_SSL_SESSION_TICKETS_DISABLED);
 
     mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
@@ -276,11 +303,7 @@ int xtls_request(const xhttp_request_t *request,
 
     while ((ret = mbedtls_ssl_handshake(&ssl)) != 0) {
         if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
-        {
-            char logbuf[96];
-            snprintf(logbuf, sizeof(logbuf), "xtls: handshake ret=%d hex=0x%x\n", ret, (unsigned int)(-ret));
-            xapi_OutputSerial(logbuf);
-        }
+        xtls_log_mbedtls_error("handshake", ret);
         if (ret == MBEDTLS_ERR_SSL_TIMEOUT) {
             status = XHTTP_ERR_TIMEOUT;
         } else {
@@ -288,12 +311,20 @@ int xtls_request(const xhttp_request_t *request,
         }
         goto cleanup;
     }
+    {
+        char logbuf[160];
+        snprintf(logbuf, sizeof(logbuf), "xtls: handshake ok version=%s cipher=%s\n",
+                 mbedtls_ssl_get_version(&ssl),
+                 mbedtls_ssl_get_ciphersuite(&ssl));
+        xapi_OutputSerial(logbuf);
+    }
 
     path          = request->path[0] ? request->path : "/";
     body          = request->body;
     content_type  = request->content_type ? request->content_type : "text/plain";
     extra_headers = request->extra_headers ? request->extra_headers : "";
     body_len      = body ? (int)strlen(body) : 0;
+    extra_headers_suffix = xtls_headers_need_crlf(extra_headers) ? "\r\n" : "";
 
     if (body_len > 0) {
         request_len = snprintf(request_text, sizeof(request_text),
@@ -305,9 +336,11 @@ int xtls_request(const xhttp_request_t *request,
                                "Content-Type: %s\r\n"
                                "Content-Length: %d\r\n"
                                "%s"
+                               "%s"
                                "\r\n"
                                "%s",
-                               request->method, path, request->host, content_type, body_len, extra_headers, body);
+                               request->method, path, request->host, content_type, body_len,
+                               extra_headers, extra_headers_suffix, body);
     } else {
         request_len = snprintf(request_text, sizeof(request_text),
                                "%s %s HTTP/1.1\r\n"
@@ -316,8 +349,9 @@ int xtls_request(const xhttp_request_t *request,
                                "Accept: */*\r\n"
                                "Connection: close\r\n"
                                "%s"
+                               "%s"
                                "\r\n",
-                               request->method, path, request->host, extra_headers);
+                               request->method, path, request->host, extra_headers, extra_headers_suffix);
     }
 
     if (request_len <= 0 || request_len >= (int)sizeof(request_text)) {
@@ -331,6 +365,11 @@ int xtls_request(const xhttp_request_t *request,
     }
 
 cleanup:
+    if (status != XHTTP_OK) {
+        char logbuf[96];
+        snprintf(logbuf, sizeof(logbuf), "xtls: request status=%d maxver=0x%x\n", status, max_tls_version);
+        xapi_OutputSerial(logbuf);
+    }
     mbedtls_ssl_free(&ssl);
     mbedtls_ssl_config_free(&conf);
     mbedtls_ctr_drbg_free(&drbg);
@@ -338,4 +377,23 @@ cleanup:
     shutdown(sockfd, SHUT_RDWR);
     close(sockfd);
     return status;
+}
+
+int xtls_request(const xhttp_request_t *request,
+                 xhttp_response_callback_t callback,
+                 void *user_data)
+{
+    int status = xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_3);
+    if (status == XHTTP_OK || request == NULL || request->method == NULL) {
+        return status;
+    }
+
+    if ((strcmp(request->method, "GET") != 0 && strcmp(request->method, "HEAD") != 0) ||
+        (status != XHTTP_ERR_TLS_HANDSHAKE && status != XHTTP_ERR_TLS_SEND &&
+         status != XHTTP_ERR_TLS_RECV && status != XHTTP_ERR_TIMEOUT)) {
+        return status;
+    }
+
+    xapi_OutputSerial((char *)"xtls: retry with tls1.2\n");
+    return xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_2);
 }

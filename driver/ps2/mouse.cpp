@@ -365,8 +365,8 @@ void process_mouse_info()
     {
         if (!ms_dec.win_move_lock)
         {
-            ms_dec.sht_now = found_sheet_movable(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sht_now == NULL || have_full_screen_app)
+            SHEET *movable_sheet = found_sheet_movable(sht_img, mouse_x, mouse_y);
+            if (movable_sheet == NULL || have_full_screen_app)
             {
                 // 点在了标题栏外
                 ms_dec.win_move_lock = false;
@@ -375,7 +375,7 @@ void process_mouse_info()
             {
                 // 点在了窗口上
                 ms_dec.win_move_lock = true;
-                ms_dec.sht_now       = get_sheet(sht_img, ms_dec.sht_now);
+                ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
                 lift_sheet(sht_img, ms_dec.sht_now);
                 refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
                                    ms_dec.sht_now->bx + ms_dec.sht_now->width,
@@ -383,8 +383,8 @@ void process_mouse_info()
                 ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
                 ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
             }
-            ms_dec.sht_now = found_sheetmb(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sht_now == NULL)
+            SHEET *hover_sheet = found_sheetmb(sht_img, mouse_x, mouse_y);
+            if (hover_sheet == NULL)
             {
                 // 点在了桌面或快捷栏上
                 // do nothing
@@ -396,17 +396,23 @@ void process_mouse_info()
             }
             else
             {
-                ms_dec.sht_now = get_sheet(sht_img, ms_dec.sht_now);
-                if (!have_full_screen_app) lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
+                SHEET *active_sheet = get_sheet(sht_img, hover_sheet);
+                if (!have_full_screen_app) lift_sheet(sht_img, active_sheet);
+                refresh_part_sheet(sht_img, active_sheet->bx, active_sheet->by,
+                                   active_sheet->bx + active_sheet->width,
+                                   active_sheet->by + active_sheet->height);
 
-                focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
+                focus_window_dock(sht_found_win(xwmii, sht_img, active_sheet));
             }
         }
         else if (ms_dec.win_move_lock)
         {
+            if (ms_dec.sht_now == NULL)
+            {
+                ms_dec.win_move_lock = false;
+                ms_dec.need_flush = false;
+                return;
+            }
             int his_x = ms_dec.sht_now->bx;
             int his_y = ms_dec.sht_now->by;
             // 移动窗口
