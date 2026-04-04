@@ -1,99 +1,109 @@
 #include <arch/utils.h>
 
-// Linked Lists (singly, non-circular); basically just allocated structs
-// pointing at each other! Used literally everywhere in the system...
-// Copyright (C) 2024 Panagiotis
-
-/*
- * Requirement for this DS utility is that the next entry of the linked list is
- * prepended! Please consider this during usage, otherwise results WILL be
- * fatal!
- *
- * +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
- * |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |
- * | <-    void* next   -> | <-      rest       -> |
- * +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
- */
-
 extern "C" {
 
-void *LinkedListAllocate(void **LLfirstPtr, uint32_t structSize) {
-    LLheader *target = (LLheader *)malloc(structSize);
-    memset(target, 0, structSize);
-
-    LLheader *curr = (LLheader *)(*LLfirstPtr);
-    while (1) {
-        if (curr == 0) {
-            // means this is our first one
-            *LLfirstPtr = target;
-            break;
-        }
-        if (curr->next == 0) {
-            // next is non-existent (end of linked list)
-            curr->next = target;
-            break;
-        }
-        curr = curr->next; // cycle
-    }
-
-    target->next = 0; // null ptr
-    return target;
+static inline LLheader *ll_as_header(void *node)
+{
+    return static_cast<LLheader *>(node);
 }
 
-bool LinkedListUnregister(void **LLfirstPtr, const void *LLtarget) {
-    LLheader *LLfirstCopy = (LLheader*)*LLfirstPtr;
+static inline const LLheader *ll_as_header_const(const void *node)
+{
+    return static_cast<const LLheader *>(node);
+}
 
-    LLheader *curr = (LLheader *)(*LLfirstPtr);
-    while (curr) {
-        if (curr->next && curr->next == LLtarget)
-            break;
-        curr = curr->next;
+void *LinkedListAllocate(void **LLfirstPtr, uint32_t structSize)
+{
+    if (LLfirstPtr == nullptr || structSize < sizeof(LLheader)) {
+        return nullptr;
     }
 
-    if (LLfirstCopy == LLtarget) {
-        // target is the first one
-        *LLfirstPtr = LLfirstCopy->next;
-        return true;
-    } else if (!curr)
+    LLheader *node = static_cast<LLheader *>(malloc(structSize));
+    if (node == nullptr) {
+        return nullptr;
+    }
+
+    memset(node, 0, structSize);
+    node->next = nullptr;
+
+    if (*LLfirstPtr == nullptr) {
+        *LLfirstPtr = node;
+        return node;
+    }
+
+    LLheader *tail = ll_as_header(*LLfirstPtr);
+    while (tail->next != nullptr) {
+        tail = tail->next;
+    }
+    tail->next = node;
+    return node;
+}
+
+bool LinkedListUnregister(void **LLfirstPtr, const void *LLtarget)
+{
+    if (LLfirstPtr == nullptr || *LLfirstPtr == nullptr || LLtarget == nullptr) {
         return false;
+    }
 
-    LLheader *target = curr->next;
-    curr->next = target->next; // remove reference
+    LLheader *head = ll_as_header(*LLfirstPtr);
+    if (head == LLtarget) {
+        *LLfirstPtr = head->next;
+        return true;
+    }
 
-    return true;
+    for (LLheader *current = head; current->next != nullptr; current = current->next) {
+        if (current->next == LLtarget) {
+            current->next = ll_as_header(current->next)->next;
+            return true;
+        }
+    }
+
+    return false;
 }
 
-bool LinkedListRemove(void **LLfirstPtr, void *LLtarget) {
-    bool res = LinkedListUnregister(LLfirstPtr, LLtarget);
+bool LinkedListRemove(void **LLfirstPtr, void *LLtarget)
+{
+    if (!LinkedListUnregister(LLfirstPtr, LLtarget)) {
+        return false;
+    }
+
     free(LLtarget);
-    return res;
+    return true;
 }
 
 bool LinkedListDuplicate(void **LLfirstPtrSource, void **LLfirstPtrTarget,
-                         uint32_t structSize) {
-    LLheader *browse = (LLheader *)(LLfirstPtrSource);
-    while (browse) {
-        LLheader *nw = (LLheader*)LinkedListAllocate(LLfirstPtrTarget, structSize);
-        memcpy((void *)((size_t)nw + sizeof(nw->next)),
-               (void *)((size_t)browse + sizeof(browse->next)),
-               structSize - sizeof(browse->next));
-        browse = browse->next;
+                         uint32_t structSize)
+{
+    if (LLfirstPtrSource == nullptr || LLfirstPtrTarget == nullptr ||
+        structSize < sizeof(LLheader)) {
+        return false;
+    }
+
+    for (LLheader *current = ll_as_header(*LLfirstPtrSource); current != nullptr;
+         current = current->next) {
+        LLheader *copy = static_cast<LLheader *>(
+            LinkedListAllocate(LLfirstPtrTarget, structSize));
+        if (copy == nullptr) {
+            return false;
+        }
+
+        memcpy(reinterpret_cast<char *>(copy) + sizeof(copy->next),
+               reinterpret_cast<const char *>(current) + sizeof(current->next),
+               structSize - sizeof(copy->next));
     }
 
     return true;
 }
 
-void LinkedListPushFrontUnsafe(void **LLfirstPtr, void *LLtarget) {
-    if (*LLfirstPtr == 0) {
-        // todo: zero next (checks)
-        *LLfirstPtr = LLtarget;
+void LinkedListPushFrontUnsafe(void **LLfirstPtr, void *LLtarget)
+{
+    if (LLfirstPtr == nullptr || LLtarget == nullptr) {
         return;
     }
 
-    void *next = *LLfirstPtr;
-    *LLfirstPtr = LLtarget;
-    LLheader *target = (LLheader *)(LLtarget);
-    target->next = (LLheader*)next;
+    LLheader *target = ll_as_header(LLtarget);
+    target->next = ll_as_header(*LLfirstPtr);
+    *LLfirstPtr = target;
 }
 
 }
