@@ -966,7 +966,7 @@ public:
     std::string resolve_url(const std::string &url, const std::string &base_url) const;
     BrowserFetchResult fetch_resource(const std::string &url);
     const BrowserDecodedImage *load_image_resource(const std::string &url);
-    void invalidate_view() { need_redraw_ = true; }
+    void invalidate_view() { invalidate_content(); }
 
 private:
     struct CachedResource
@@ -989,6 +989,9 @@ private:
     std::string            pending_url_;
     std::string            page_title_;
     bool                   need_redraw_ = true;
+    bool                   frame_dirty_ = true;
+    bool                   header_dirty_ = true;
+    bool                   content_dirty_ = true;
     bool                   load_pending_ = false;
     bool                   startup_guard_ = true;
     int                    scroll_y_ = 0;
@@ -1000,8 +1003,14 @@ private:
     std::vector<CachedResource> resource_cache_;
     std::vector<CachedImage> image_cache_;
 
+    void invalidate_header() { header_dirty_ = true; need_redraw_ = true; }
+    void invalidate_content() { content_dirty_ = true; need_redraw_ = true; }
+    void invalidate_all() { frame_dirty_ = true; header_dirty_ = true; content_dirty_ = true; need_redraw_ = true; }
     void load_current_url();
     void render();
+    void render_frame();
+    void render_header();
+    void render_content();
     void set_status(const std::string &text);
     void prepare_text_view(const BrowserFetchResult &response);
     BrowserPreparedDocument prepare_document_html(const BrowserFetchResult &response);
@@ -1384,13 +1393,13 @@ void BrowserContainer::get_language(litehtml::string &language, litehtml::string
 void BrowserApp::set_title(const std::string &title)
 {
     page_title_ = title;
-    need_redraw_ = true;
+    invalidate_header();
 }
 
 void BrowserApp::set_status(const std::string &text)
 {
     std::snprintf(status_, sizeof(status_), "%s", text.c_str());
-    need_redraw_ = true;
+    invalidate_header();
 }
 
 std::string BrowserApp::run_script_compat(const std::string &script_source,
@@ -1731,7 +1740,7 @@ void BrowserApp::request_navigation(const std::string &url)
     std::snprintf(url_input_, sizeof(url_input_), "%s", url.c_str());
     input_len_ = static_cast<int>(std::strlen(url_input_));
     load_pending_ = true;
-    need_redraw_ = true;
+    invalidate_header();
 }
 
 void BrowserApp::clamp_scroll()
@@ -1778,7 +1787,7 @@ void BrowserApp::process_pointer_move(int x, int y)
                              static_cast<float>(client_x),
                              static_cast<float>(client_y),
                              redraw);
-    need_redraw_ = true;
+    invalidate_content();
 }
 
 void BrowserApp::process_pointer_click(int x, int y)
@@ -1800,7 +1809,7 @@ void BrowserApp::process_pointer_click(int x, int y)
                              static_cast<float>(client_x),
                              static_cast<float>(client_y),
                              redraw);
-    need_redraw_ = true;
+    invalidate_content();
 }
 
 void BrowserApp::handle_message(unsigned long long type, unsigned long long hData, unsigned long long lData)
@@ -1811,7 +1820,7 @@ void BrowserApp::handle_message(unsigned long long type, unsigned long long hDat
             startup_guard_ = false;
             url_input_[input_len_++] = static_cast<char>(lData);
             url_input_[input_len_] = '\0';
-            need_redraw_ = true;
+            invalidate_header();
         }
         break;
     case MSG_SPCHAR:
@@ -1819,7 +1828,7 @@ void BrowserApp::handle_message(unsigned long long type, unsigned long long hDat
             if (input_len_ > 0) {
                 startup_guard_ = false;
                 url_input_[--input_len_] = '\0';
-                need_redraw_ = true;
+                invalidate_header();
             }
         } else if (static_cast<char>(lData) == '\n') {
             if (!startup_guard_) {
@@ -1839,7 +1848,7 @@ void BrowserApp::handle_message(unsigned long long type, unsigned long long hDat
     case MSG_ROLLER:
         scroll_y_ -= static_cast<int>(hData) * BROWSER_SCROLL_STEP;
         clamp_scroll();
-        need_redraw_ = true;
+        invalidate_content();
         break;
     default:
         break;
@@ -1868,6 +1877,7 @@ void BrowserApp::load_current_url()
                 base_url_ = target;
                 scroll_y_ = 0;
                 set_status("Load failed");
+                invalidate_content();
                 return;
             }
 
@@ -1949,23 +1959,43 @@ void BrowserApp::load_current_url()
         }
         clamp_scroll();
         set_status("Loaded");
-        need_redraw_ = true;
+        invalidate_content();
     } catch (const std::exception &ex) {
         log_line(std::string("exception: ") + ex.what());
         document_.reset();
         set_status("Exception");
+        invalidate_content();
     } catch (...) {
         log_line("unknown exception");
         document_.reset();
         set_status("Exception");
+        invalidate_content();
     }
 }
 
-void BrowserApp::render()
+void BrowserApp::render_frame()
 {
     xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEIGHT - 1, COLOR_BG, true);
     xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
-    xapi_DrawRect(window_, BROWSER_MARGIN, BROWSER_HEADER_HEIGHT + 2, BROWSER_WIDTH - BROWSER_MARGIN, BROWSER_HEIGHT - BROWSER_MARGIN, COLOR_PANEL, true);
+    xapi_DrawRect(window_,
+                  BROWSER_MARGIN,
+                  BROWSER_HEADER_HEIGHT + 2,
+                  BROWSER_WIDTH - BROWSER_MARGIN,
+                  BROWSER_HEIGHT - BROWSER_MARGIN,
+                  COLOR_PANEL,
+                  true);
+    xapi_DrawRect(window_,
+                  BROWSER_INPUT_X,
+                  BROWSER_INPUT_Y,
+                  BROWSER_WIDTH - BROWSER_MARGIN,
+                  BROWSER_INPUT_Y + BROWSER_INPUT_HEIGHT,
+                  COLOR_INPUT,
+                  true);
+}
+
+void BrowserApp::render_header()
+{
+    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
     xapi_DrawRect(window_,
                   BROWSER_INPUT_X,
                   BROWSER_INPUT_Y,
@@ -1980,8 +2010,12 @@ void BrowserApp::render()
     xapi_DrawSWText(window_, BROWSER_INPUT_X + 8, BROWSER_INPUT_Y + 6, url_input_, COLOR_TEXT);
 
     const std::string title = page_title_.empty() ? std::string("litehtml browser") : page_title_;
+    xapi_DrawRect(window_, BROWSER_WIDTH - 360, 18, BROWSER_WIDTH - BROWSER_MARGIN, 36, COLOR_HEADER, true);
     xapi_DrawSWText(window_, BROWSER_WIDTH - 360, 18, const_cast<char *>(title.c_str()), COLOR_MUTED);
+}
 
+void BrowserApp::render_content()
+{
     xapi_DrawRect(window_,
                   content_x(),
                   content_y(),
@@ -2028,8 +2062,38 @@ void BrowserApp::render()
     } else {
         xapi_DrawSWText(window_, content_x() + 12, content_y() + 12, const_cast<char *>("No page loaded."), COLOR_ERROR);
     }
+}
 
-    xapi_RefreshWindow(window_);
+void BrowserApp::render()
+{
+    if (frame_dirty_) {
+        render_frame();
+        render_header();
+        render_content();
+        xapi_RefreshPartWindow(window_, 0, 0, BROWSER_WIDTH, BROWSER_HEIGHT);
+        frame_dirty_ = false;
+        header_dirty_ = false;
+        content_dirty_ = false;
+        need_redraw_ = false;
+        return;
+    }
+
+    if (header_dirty_) {
+        render_header();
+        xapi_RefreshPartWindow(window_, 0, 0, BROWSER_WIDTH, BROWSER_HEADER_HEIGHT);
+        header_dirty_ = false;
+    }
+
+    if (content_dirty_) {
+        render_content();
+        xapi_RefreshPartWindow(window_,
+                               content_x(),
+                               content_y(),
+                               content_x() + content_width(),
+                               content_y() + content_height());
+        content_dirty_ = false;
+    }
+
     need_redraw_ = false;
 }
 

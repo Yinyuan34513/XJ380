@@ -601,34 +601,170 @@ extern "C" int __read_chk(int fd, void *buf, size_t nbytes, size_t bufsize)
 
 extern "C" int inet_pton(int af, const char *src, void *dst)
 {
-    if (af != 2 || src == NULL || dst == NULL) return 0;
+    if (src == NULL || dst == NULL) return 0;
 
-    uint32_t parts[4] = {0, 0, 0, 0};
-    int      part = 0;
-    uint32_t value = 0;
+    auto parse_ipv4_bytes = [](const char *text, uint8_t out[4]) -> int {
+        uint32_t parts[4] = {0, 0, 0, 0};
+        int      part = 0;
+        uint32_t value = 0;
 
-    for (const char *p = src;; ++p) {
-        char ch = *p;
-        if (ch >= '0' && ch <= '9') {
-            value = value * 10 + (uint32_t)(ch - '0');
-            if (value > 255) return 0;
-        } else if (ch == '.' || ch == '\0') {
-            if (part >= 4) return 0;
-            parts[part++] = value;
-            value = 0;
-            if (ch == '\0') break;
-        } else {
+        for (const char *p = text;; ++p) {
+            char ch = *p;
+            if (ch >= '0' && ch <= '9') {
+                value = value * 10 + (uint32_t)(ch - '0');
+                if (value > 255) return 0;
+            } else if (ch == '.' || ch == '\0') {
+                if (part >= 4) return 0;
+                parts[part++] = value;
+                value = 0;
+                if (ch == '\0') break;
+            } else {
+                return 0;
+            }
+        }
+
+        if (part != 4) return 0;
+        out[0] = (uint8_t)parts[0];
+        out[1] = (uint8_t)parts[1];
+        out[2] = (uint8_t)parts[2];
+        out[3] = (uint8_t)parts[3];
+        return 1;
+    };
+
+    auto hex_value = [](char ch) -> int {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+        if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+        return -1;
+    };
+
+    if (af == 2) {
+        return parse_ipv4_bytes(src, (uint8_t *)dst);
+    }
+    if (af != 10) {
+        return 0;
+    }
+
+    uint16_t    words[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int         word_count = 0;
+    int         compress_at = -1;
+    const char *p = src;
+    const char *end = src + strlen(src);
+
+    if ((end - p) >= 2 && p[0] == '[' && end[-1] == ']') {
+        ++p;
+        --end;
+    }
+    if (p == end) {
+        return 0;
+    }
+
+    if (*p == ':') {
+        if (p + 1 >= end || p[1] != ':') {
             return 0;
+        }
+        compress_at = 0;
+        p += 2;
+    }
+
+    while (p < end) {
+        if (word_count >= 8) {
+            return 0;
+        }
+
+        const char *segment_start = p;
+        while (p < end && *p != ':') {
+            ++p;
+        }
+
+        const char *dot = NULL;
+        for (const char *cursor = segment_start; cursor < p; ++cursor) {
+            if (*cursor == '.') {
+                dot = cursor;
+                break;
+            }
+        }
+
+        if (dot != NULL) {
+            if (word_count > 6) {
+                return 0;
+            }
+
+            char tail[32];
+            size_t tail_len = (size_t)(end - segment_start);
+            if (tail_len == 0 || tail_len >= sizeof(tail)) {
+                return 0;
+            }
+            memcpy(tail, segment_start, tail_len);
+            tail[tail_len] = '\0';
+
+            uint8_t ipv4_bytes[4];
+            if (!parse_ipv4_bytes(tail, ipv4_bytes)) {
+                return 0;
+            }
+            words[word_count++] = (uint16_t)(((uint16_t)ipv4_bytes[0] << 8) | ipv4_bytes[1]);
+            words[word_count++] = (uint16_t)(((uint16_t)ipv4_bytes[2] << 8) | ipv4_bytes[3]);
+            p = end;
+            break;
+        }
+
+        if (segment_start == p) {
+            return 0;
+        }
+
+        uint32_t value = 0;
+        int      digits = 0;
+        for (const char *cursor = segment_start; cursor < p; ++cursor) {
+            int hex = hex_value(*cursor);
+            if (hex < 0) {
+                return 0;
+            }
+            value = (value << 4) | (uint32_t)hex;
+            if (++digits > 4) {
+                return 0;
+            }
+        }
+        words[word_count++] = (uint16_t)value;
+
+        if (p >= end) {
+            break;
+        }
+
+        ++p;
+        if (p < end && *p == ':') {
+            if (compress_at >= 0) {
+                return 0;
+            }
+            compress_at = word_count;
+            ++p;
+            if (p >= end) {
+                break;
+            }
         }
     }
 
-    if (part != 4) return 0;
+    if (compress_at < 0) {
+        if (word_count != 8) {
+            return 0;
+        }
+    } else {
+        int zeros = 8 - word_count;
+        if (zeros < 0) {
+            return 0;
+        }
+        for (int i = word_count - 1; i >= compress_at; --i) {
+            words[i + zeros] = words[i];
+        }
+        for (int i = 0; i < zeros; ++i) {
+            words[compress_at + i] = 0;
+        }
+    }
 
     uint8_t *out = (uint8_t *)dst;
-    out[0] = (uint8_t)parts[0];
-    out[1] = (uint8_t)parts[1];
-    out[2] = (uint8_t)parts[2];
-    out[3] = (uint8_t)parts[3];
+    for (int i = 0; i < 8; ++i) {
+        out[i * 2]     = (uint8_t)(words[i] >> 8);
+        out[i * 2 + 1] = (uint8_t)(words[i] & 0xffU);
+    }
     return 1;
 }
 

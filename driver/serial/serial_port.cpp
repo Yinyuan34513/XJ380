@@ -288,12 +288,54 @@ static void serial_redraw_screen_overlay_locked()
 #endif
 }
 
+static bool serial_overlay_intersects_dirty_rect(int x1, int y1, int x2, int y2)
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    if (!serial_runtime_overlay_enabled()) {
+        return false;
+    }
+    if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
+        return false;
+    }
+
+    serial_screen_update_layout();
+    const int overlay_x1 = g_serial_screen_left;
+    const int overlay_y1 = g_serial_screen_top;
+    const int overlay_x2 = g_serial_screen_left + g_serial_screen_width;
+    const int overlay_y2 = g_serial_screen_top + g_serial_screen_height;
+
+    return x1 < overlay_x2 && x2 > overlay_x1 && y1 < overlay_y2 && y2 > overlay_y1;
+#else
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
+    return false;
+#endif
+}
+
 void serial_redraw_screen_overlay()
 {
 #if BUILD_EDITION == DEBUG_VERSION
     spin_lock(&serial_lock);
     serial_redraw_screen_overlay_locked();
     spin_unlock(&serial_lock);
+#endif
+}
+
+void serial_redraw_screen_overlay_part(int x1, int y1, int x2, int y2)
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    spin_lock(&serial_lock);
+    if (serial_overlay_intersects_dirty_rect(x1, y1, x2, y2)) {
+        serial_redraw_screen_overlay_locked();
+    }
+    spin_unlock(&serial_lock);
+#else
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
 #endif
 }
 

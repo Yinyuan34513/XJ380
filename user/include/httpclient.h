@@ -184,37 +184,91 @@ static inline int xhttp_parse_ipv4(const char *text, uint32_t *out_addr)
     return 1;
 }
 
-static inline int xhttp_resolve_host(const char *host, uint32_t *out_addr)
+static inline int xhttp_host_needs_brackets(const char *host)
 {
-    uint32_t resolved_addr = 0;
+    return host != NULL && strchr(host, ':') != NULL && host[0] != '[';
+}
+
+static inline void xhttp_format_host_header(const char *host, char *buffer, size_t size)
+{
+    if (buffer == NULL || size == 0) {
+        return;
+    }
 
     if (host == NULL) {
-        return 0;
+        buffer[0] = '\0';
+        return;
     }
-    if (out_addr == NULL) {
-        out_addr = &resolved_addr;
+
+    if (xhttp_host_needs_brackets(host)) {
+        snprintf(buffer, size, "[%s]", host);
+    } else {
+        snprintf(buffer, size, "%s", host);
     }
-    if (xhttp_parse_ipv4(host, out_addr)) {
-        return 1;
+}
+
+static inline int xhttp_connect_socket_fd(const char *host, uint16_t port)
+{
+    if (host == NULL || port == 0) {
+        return XHTTP_ERR_BAD_ARGUMENT;
     }
+
+    char port_buffer[16];
+    snprintf(port_buffer, sizeof(port_buffer), "%u", (unsigned int)port);
 
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = AF_INET;
+    hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
     struct addrinfo *result = NULL;
-    if (getaddrinfo(host, NULL, &hints, &result) != 0 || result == NULL || result->ai_addr == NULL) {
+    if (getaddrinfo(host, port_buffer, &hints, &result) != 0 || result == NULL) {
         if (result != NULL) {
             freeaddrinfo(result);
         }
-        return 0;
+        return XHTTP_ERR_BAD_HOST;
     }
 
-    struct sockaddr_in *addr_in = (struct sockaddr_in *)result->ai_addr;
-    *out_addr = addr_in->sin_addr.s_addr;
+    int status = XHTTP_ERR_CONNECT;
+    for (struct addrinfo *it = result; it != NULL; it = it->ai_next) {
+        if (it->ai_addr == NULL) {
+            continue;
+        }
+
+        int sockfd = socket(it->ai_family, SOCK_STREAM, 0);
+        if (sockfd < 0) {
+            status = XHTTP_ERR_SOCKET;
+            continue;
+        }
+
+        int original_flags = fcntl(sockfd, F_GETFL, 0);
+        if (original_flags >= 0) {
+            fcntl(sockfd, F_SETFL, (uint64_t)(original_flags | O_NONBLOCK));
+        }
+
+        int connect_ret = connect(sockfd, it->ai_addr, it->ai_addrlen);
+        if (connect_ret < 0 && connect_ret != -EINPROGRESS &&
+            connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
+            close(sockfd);
+            status = XHTTP_ERR_CONNECT;
+            continue;
+        }
+
+        int wait_status = xhttp_wait_fd(sockfd, POLLOUT, XHTTP_IO_TIMEOUT_MS);
+        if (original_flags >= 0) {
+            fcntl(sockfd, F_SETFL, (uint64_t)original_flags);
+        }
+        if (wait_status == XHTTP_OK) {
+            freeaddrinfo(result);
+            return sockfd;
+        }
+
+        close(sockfd);
+        status = wait_status == XHTTP_ERR_TIMEOUT ? XHTTP_ERR_TIMEOUT : XHTTP_ERR_CONNECT;
+    }
+
     freeaddrinfo(result);
-    return 1;
+    return status;
 }
 
 static inline int xhttp_request(const xhttp_request_t *request,
@@ -238,15 +292,7 @@ static inline int xhttp_request(const xhttp_request_t *request,
         xapi_OutputSerial(logbuf);
     }
 
-    uint32_t addr = 0;
-    if (!xhttp_resolve_host(request->host, &addr)) {
-        char logbuf[192];
-        snprintf(logbuf, sizeof(logbuf), "xhttp: resolve failed host=%s\n", request->host);
-        xapi_OutputSerial(logbuf);
-        return XHTTP_ERR_BAD_HOST;
-    }
-
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int sockfd = xhttp_connect_socket_fd(request->host, request->port);
     {
         char logbuf[128];
         snprintf(logbuf, sizeof(logbuf), "xhttp: socket ret=%d\n", sockfd);
@@ -256,44 +302,9 @@ static inline int xhttp_request(const xhttp_request_t *request,
         char logbuf[128];
         snprintf(logbuf, sizeof(logbuf), "xhttp: socket failed ret=%d\n", sockfd);
         xapi_OutputSerial(logbuf);
-        return XHTTP_ERR_SOCKET;
-    }
-
-    struct sockaddr_in addr_in;
-    memset(&addr_in, 0, sizeof(addr_in));
-    addr_in.sin_family      = AF_INET;
-    addr_in.sin_port        = htons(request->port);
-    addr_in.sin_addr.s_addr = addr;
-
-    {
-        char logbuf[96];
-        snprintf(logbuf, sizeof(logbuf), "xhttp: connect fd=%d\n", sockfd);
-        xapi_OutputSerial(logbuf);
-    }
-    int original_flags = fcntl(sockfd, F_GETFL, 0);
-    if (original_flags >= 0) {
-        fcntl(sockfd, F_SETFL, (uint64_t)(original_flags | O_NONBLOCK));
-    }
-
-    int connect_ret = connect(sockfd, (const struct sockaddr *)&addr_in, sizeof(addr_in));
-    if (connect_ret < 0 && connect_ret != -EINPROGRESS && connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
-        char logbuf[128];
-        snprintf(logbuf, sizeof(logbuf), "xhttp: connect failed ret=%d\n", connect_ret);
-        xapi_OutputSerial(logbuf);
-        close(sockfd);
-        return XHTTP_ERR_CONNECT;
-    }
-
-    int wait_status = xhttp_wait_fd(sockfd, POLLOUT, XHTTP_IO_TIMEOUT_MS);
-    if (original_flags >= 0) {
-        fcntl(sockfd, F_SETFL, (uint64_t)original_flags);
-    }
-    if (wait_status != XHTTP_OK) {
-        char logbuf[128];
-        snprintf(logbuf, sizeof(logbuf), "xhttp: connect wait failed status=%d\n", wait_status);
-        xapi_OutputSerial(logbuf);
-        close(sockfd);
-        return wait_status == XHTTP_ERR_TIMEOUT ? XHTTP_ERR_TIMEOUT : XHTTP_ERR_CONNECT;
+        return sockfd == XHTTP_ERR_BAD_HOST ? XHTTP_ERR_BAD_HOST :
+               (sockfd == XHTTP_ERR_TIMEOUT ? XHTTP_ERR_TIMEOUT :
+                (sockfd == XHTTP_ERR_SOCKET ? XHTTP_ERR_SOCKET : XHTTP_ERR_CONNECT));
     }
 
     const char *path          = request->path[0] ? request->path : "/";
@@ -301,6 +312,8 @@ static inline int xhttp_request(const xhttp_request_t *request,
     const char *content_type  = request->content_type ? request->content_type : "text/plain";
     const char *extra_headers = request->extra_headers ? request->extra_headers : "";
     int         body_len      = body ? (int)strlen(body) : 0;
+    char        host_header[320];
+    xhttp_format_host_header(request->host, host_header, sizeof(host_header));
 
     char request_text[XHTTP_REQUEST_BUFFER_SIZE];
     int  request_len = 0;
@@ -315,7 +328,7 @@ static inline int xhttp_request(const xhttp_request_t *request,
                                "%s"
                                "\r\n"
                                "%s",
-                               request->method, path, request->host, content_type, body_len, extra_headers, body);
+                               request->method, path, host_header, content_type, body_len, extra_headers, body);
     } else {
         request_len = snprintf(request_text, sizeof(request_text),
                                "%s %s HTTP/1.0\r\n"
@@ -323,7 +336,7 @@ static inline int xhttp_request(const xhttp_request_t *request,
                                "Connection: close\r\n"
                                "%s"
                                "\r\n",
-                               request->method, path, request->host, extra_headers);
+                               request->method, path, host_header, extra_headers);
     }
 
     if (request_len <= 0 || request_len >= (int)sizeof(request_text)) {

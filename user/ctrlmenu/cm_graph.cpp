@@ -19,6 +19,8 @@ char wdaystr_table[7][20] = {
     "星期六",
 };
 
+static void draw_background_region(UINT64 refresh_x1, UINT64 refresh_y1, UINT64 refresh_x2, UINT64 refresh_y2);
+
 static int ctrlmenu_read_text_file(const char *path, char *buffer, size_t size)
 {
     if (path == NULL || buffer == NULL || size == 0) return -1;
@@ -97,6 +99,21 @@ static void ctrlmenu_draw_network_status()
 
 void draw_background()
 {
+    draw_background_region(0, 0, win_width, win_height);
+}
+
+void draw_background_body()
+{
+    draw_background_region(0, 121, win_width, win_height);
+}
+
+void draw_background_time()
+{
+    draw_background_region(900, 18, win_width - 8, 68);
+}
+
+static void draw_background_region(UINT64 refresh_x1, UINT64 refresh_y1, UINT64 refresh_x2, UINT64 refresh_y2)
+{
     if (dont_refresh) return;
 
     xapi_DrawRect(handle, 0, 0, win_width - 1, win_height - 1, 0x4d4d4dea, true);
@@ -133,7 +150,7 @@ void draw_background()
                     wdaystr_table[tm.tm_wday - 1], tm.tm_hour, tm.tm_min);
     xapi_DrawText(handle, 940, 44, time_str_buffer, 16, 0xffffffff);
 
-    xapi_RefreshWindow(handle);
+    xapi_RefreshPartWindow(handle, refresh_x1, refresh_y1, refresh_x2, refresh_y2);
 }
 
 void draw_mainpage()
@@ -331,7 +348,7 @@ void delete_input_box()
     charbox_buf[charbox_count] = '\0';
     charbox_input_complete = true;
     dont_refresh = false;
-    draw_background();
+    draw_background_body();
 }
 
 bool waiting_change_setting_apps = false;
@@ -388,7 +405,7 @@ void change_clock_hour_offset(int value)
     xapi_CloseFile(f);
 
     xapi_FlushTime();
-    draw_background();
+    draw_background_body();
 }
 
 char background_file_path[256];

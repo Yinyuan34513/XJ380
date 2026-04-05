@@ -84,6 +84,23 @@ static void dnsfs_format_ipv4_text(uint32_t addr, char *buffer, size_t size)
              (unsigned int)(host & 0xffU));
 }
 
+static void dnsfs_format_ipv6_text(const uint8_t addr[16], char *buffer, size_t size)
+{
+    if (buffer == NULL || size == 0 || addr == NULL) {
+        return;
+    }
+
+    snprintf(buffer, size, "%x:%x:%x:%x:%x:%x:%x:%x",
+             (unsigned int)(((uint16_t)addr[0] << 8) | addr[1]),
+             (unsigned int)(((uint16_t)addr[2] << 8) | addr[3]),
+             (unsigned int)(((uint16_t)addr[4] << 8) | addr[5]),
+             (unsigned int)(((uint16_t)addr[6] << 8) | addr[7]),
+             (unsigned int)(((uint16_t)addr[8] << 8) | addr[9]),
+             (unsigned int)(((uint16_t)addr[10] << 8) | addr[11]),
+             (unsigned int)(((uint16_t)addr[12] << 8) | addr[13]),
+             (unsigned int)(((uint16_t)addr[14] << 8) | addr[15]));
+}
+
 static size_t dnsfs_copy_text_out(const char *text, size_t text_len, void *addr, size_t offset, size_t size)
 {
     if (offset >= text_len) {
@@ -123,6 +140,56 @@ static const char *dnsfs_extract_server_ip(char *buffer)
         return cursor;
     }
     return buffer;
+}
+
+static int dnsfs_parse_resolve_request(char *buffer, int *out_family, char **out_host)
+{
+    if (buffer == NULL || out_family == NULL || out_host == NULL) {
+        return -EINVAL;
+    }
+
+    dnsfs_trim_line(buffer);
+    if (buffer[0] == '\0') {
+        return -EINVAL;
+    }
+
+    *out_family = AF_INET;
+    *out_host   = buffer;
+
+    char *space = strchr(buffer, ' ');
+    if (space == NULL) {
+        return 0;
+    }
+
+    *space = '\0';
+    char *value = space + 1;
+    while (*value == ' ' || *value == '\t') {
+        value++;
+    }
+    if (*value == '\0') {
+        return -EINVAL;
+    }
+
+    if (strcmp(buffer, "ipv4") == 0 || strcmp(buffer, "a") == 0) {
+        *out_family = AF_INET;
+        *out_host   = value;
+        return 0;
+    }
+    if (strcmp(buffer, "ipv6") == 0 || strcmp(buffer, "aaaa") == 0) {
+        *out_family = AF_INET6;
+        *out_host   = value;
+        return 0;
+    }
+    if (strcmp(buffer, "auto") == 0 || strcmp(buffer, "unspec") == 0) {
+        *out_family = AF_UNSPEC;
+        *out_host   = value;
+        return 0;
+    }
+
+    *space = ' ';
+    *out_family = AF_INET;
+    *out_host   = buffer;
+    return 0;
 }
 
 static errno_t dnsfs_mount(const char *handle, vfs_node_t node)
@@ -249,8 +316,9 @@ static size_t dnsfs_write(void *file, const void *addr, size_t offset, size_t si
         return size;
     }
 
-    dnsfs_trim_line(input);
-    if (input[0] == '\0') {
+    int   family = AF_INET;
+    char *host   = NULL;
+    if (dnsfs_parse_resolve_request(input, &family, &host) < 0 || host == NULL || host[0] == '\0') {
         spin_lock(&handle->lock);
         handle->buffer[0] = '\0';
         handle->length    = 0;
@@ -258,17 +326,45 @@ static size_t dnsfs_write(void *file, const void *addr, size_t offset, size_t si
         return size;
     }
 
-    uint32_t resolved_addr = 0;
-    char     resolved_text[64];
-    if (socket_resolve_ipv4(input, &resolved_addr) < 0) {
+    char resolved_text[96];
+    memset(resolved_text, 0, sizeof(resolved_text));
+
+    int status = -EINVAL;
+    if (family == AF_INET) {
+        uint32_t resolved_addr = 0;
+        status = socket_resolve_ipv4(host, &resolved_addr);
+        if (status >= 0) {
+            dnsfs_format_ipv4_text(resolved_addr, resolved_text, sizeof(resolved_text));
+        }
+    } else if (family == AF_INET6) {
+        uint8_t resolved_addr[16];
+        memset(resolved_addr, 0, sizeof(resolved_addr));
+        status = socket_resolve_ipv6(host, resolved_addr);
+        if (status >= 0) {
+            dnsfs_format_ipv6_text(resolved_addr, resolved_text, sizeof(resolved_text));
+        }
+    } else {
+        uint8_t resolved_addr6[16];
+        memset(resolved_addr6, 0, sizeof(resolved_addr6));
+        status = socket_resolve_ipv6(host, resolved_addr6);
+        if (status >= 0) {
+            dnsfs_format_ipv6_text(resolved_addr6, resolved_text, sizeof(resolved_text));
+        } else {
+            uint32_t resolved_addr4 = 0;
+            status = socket_resolve_ipv4(host, &resolved_addr4);
+            if (status >= 0) {
+                dnsfs_format_ipv4_text(resolved_addr4, resolved_text, sizeof(resolved_text));
+            }
+        }
+    }
+
+    if (status < 0 || resolved_text[0] == '\0') {
         spin_lock(&handle->lock);
         handle->buffer[0] = '\0';
         handle->length    = 0;
         spin_unlock(&handle->lock);
         return size;
     }
-
-    dnsfs_format_ipv4_text(resolved_addr, resolved_text, sizeof(resolved_text));
     spin_lock(&handle->lock);
     strncpy(handle->buffer, resolved_text, sizeof(handle->buffer) - 1);
     handle->buffer[sizeof(handle->buffer) - 1] = '\0';

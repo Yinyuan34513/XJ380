@@ -39,6 +39,7 @@ void   serial_wprintf(const char *fmt, ...);
 size_t vwprintf(Writer *writer, const char *fmt, va_list args);
 int    sprintf(char *buf, const char *fmt, ...);
 void   serial_redraw_screen_overlay();
+void   serial_redraw_screen_overlay_part(int x1, int y1, int x2, int y2);
 void   serial_show_screen_overlay_now();
 
 int printk(const char *fmt, ...);
@@ -243,6 +244,8 @@ bool mousedecode(uint8_t data);
 int  get_mouse_x();
 int  get_mouse_y();
 int  get_mouse_scroll();
+void set_mouse_position(int x, int y);
+void center_mouse_cursor();
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet);
 void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py);
 void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);

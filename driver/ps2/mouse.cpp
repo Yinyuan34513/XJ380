@@ -36,6 +36,72 @@ extern bool allow_to_flush;
 
 static volatile bool desktop_refresh_pending = false;
 
+static inline int rect_min_int(int a, int b)
+{
+    return a < b ? a : b;
+}
+
+static inline int rect_max_int(int a, int b)
+{
+    return a > b ? a : b;
+}
+
+static void refresh_union_rect(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
+                               int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    if (sht == NULL) {
+        return;
+    }
+    refresh_part_sheet(sht,
+                       rect_min_int(x1, other_x1),
+                       rect_min_int(y1, other_y1),
+                       rect_max_int(x2, other_x2),
+                       rect_max_int(y2, other_y2));
+}
+
+static void refresh_part_sheet_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2)
+{
+    if (sht == NULL) {
+        return;
+    }
+    refresh_part_sheet(sht, x1, y1, x2, y2);
+    flush_sheet_damage_queue(sht);
+}
+
+static void refresh_union_rect_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
+                                   int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    refresh_union_rect(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+    flush_sheet_damage_queue(sht);
+}
+
+static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, int *y)
+{
+    if (sht == NULL || sheet == NULL || x == NULL || y == NULL) {
+        return;
+    }
+
+    const int visible_title_width = 96;
+    const int visible_title_height = 24;
+
+    int min_x = -(int)sheet->width + visible_title_width;
+    int max_x = (int)sht->scrx - visible_title_width;
+    int min_y = 0;
+    int max_y = (int)sht->scry - visible_title_height;
+
+    if (min_x > max_x) {
+        min_x = max_x;
+    }
+    if (min_y > max_y) {
+        min_y = max_y;
+    }
+
+    if (*x < min_x) *x = min_x;
+    if (*x > max_x) *x = max_x;
+    if (*y < min_y) *y = min_y;
+    if (*y > max_y) *y = max_y;
+}
+
 extern EFI_SYSTEM_TABLE *EFI_ST;
 extern BOOT_CONFIG *EFI_BC;
 
@@ -123,10 +189,10 @@ void process_mouse_button()
                 int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
                 // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
                 get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
-                refresh_part_sheet(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
-                                   bx + get_sheet(sht_img, current_window->w_sheet)->width,
-                                   get_sheet(sht_img, current_window->w_sheet)->by +
-                                       get_sheet(sht_img, current_window->w_sheet)->height);
+                refresh_part_sheet_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
+                                       bx + get_sheet(sht_img, current_window->w_sheet)->width,
+                                       get_sheet(sht_img, current_window->w_sheet)->by +
+                                           get_sheet(sht_img, current_window->w_sheet)->height);
             }
         }
         ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
@@ -210,12 +276,13 @@ void process_mouse_button()
     tby         = getBY(sht_img, mouse_ct_sheet_img);
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
+    int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
+    int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_ct_sheet_img),
-                       tby + getYsize(sht_img, mouse_ct_sheet_img));
-    refresh_part_sheet(sht_img, getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
-                       getBX(sht_img, mouse_ct_sheet_img) + getXsize(sht_img, mouse_ct_sheet_img),
-                       getBY(sht_img, mouse_ct_sheet_img) + getYsize(sht_img, mouse_ct_sheet_img));
+    refresh_union_rect_now(sht_img, tbx, tby, tbx + mouse_w, tby + mouse_h,
+                           getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                           getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                           getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)
@@ -273,6 +340,7 @@ void process_mouse_info()
         desktop_refresh_pending = false;
         init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
         refresh_sheet(sht_img);
+        flush_sheet_damage_queue(sht_img);
     }
 
     if (ms_dec.left_release_pending)
@@ -298,9 +366,9 @@ void process_mouse_info()
                     lift_sheet(sht_img, tdb->windowls->w_sheet);
                     ms_dec.sht_now = tdb->windowls->w_sheet;
                     focus_window_dock(tdb->windowls);
-                    refresh_part_sheet(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
-                                       tdb->windowls->w_sheet->bx + tdb->windowls->w_sheet->width,
-                                       tdb->windowls->w_sheet->by + tdb->windowls->w_sheet->height);
+                    refresh_part_sheet_now(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
+                                           tdb->windowls->w_sheet->bx + tdb->windowls->w_sheet->width,
+                                           tdb->windowls->w_sheet->by + tdb->windowls->w_sheet->height);
                 }
             }
             else if (tby < 24 && !have_full_screen_app)
@@ -377,9 +445,9 @@ void process_mouse_info()
                 ms_dec.win_move_lock = true;
                 ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
                 lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
+                refresh_part_sheet_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
                 ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
                 ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
             }
@@ -398,9 +466,9 @@ void process_mouse_info()
             {
                 SHEET *active_sheet = get_sheet(sht_img, hover_sheet);
                 if (!have_full_screen_app) lift_sheet(sht_img, active_sheet);
-                refresh_part_sheet(sht_img, active_sheet->bx, active_sheet->by,
-                                   active_sheet->bx + active_sheet->width,
-                                   active_sheet->by + active_sheet->height);
+                refresh_part_sheet_now(sht_img, active_sheet->bx, active_sheet->by,
+                                       active_sheet->bx + active_sheet->width,
+                                       active_sheet->by + active_sheet->height);
 
                 focus_window_dock(sht_found_win(xwmii, sht_img, active_sheet));
             }
@@ -416,11 +484,17 @@ void process_mouse_info()
             int his_x = ms_dec.sht_now->bx;
             int his_y = ms_dec.sht_now->by;
             // 移动窗口
-            ms_dec.sht_now->bx = mouse_x - ms_dec.win_x_offset;
-            ms_dec.sht_now->by = mouse_y - ms_dec.win_y_offset;
-            refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                               ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + ms_dec.sht_now->height);
-            refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width, his_y + ms_dec.sht_now->height);
+            int next_x = mouse_x - ms_dec.win_x_offset;
+            int next_y = mouse_y - ms_dec.win_y_offset;
+            clamp_drag_window_position(sht_img, ms_dec.sht_now, &next_x, &next_y);
+            ms_dec.sht_now->bx = next_x;
+            ms_dec.sht_now->by = next_y;
+            refresh_union_rect_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                   ms_dec.sht_now->by + ms_dec.sht_now->height,
+                                   his_x, his_y,
+                                   his_x + ms_dec.sht_now->width,
+                                   his_y + ms_dec.sht_now->height);
         }
     }
 
@@ -504,6 +578,39 @@ int get_mouse_x()
 int get_mouse_y()
 {
     return mouse_y;
+}
+
+void set_mouse_position(int x, int y)
+{
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > (int)get_hor() - 1) x = (int)get_hor() - 1;
+    if (y > (int)get_ver() - 1) y = (int)get_ver() - 1;
+
+    int old_x = mouse_x;
+    int old_y = mouse_y;
+    mouse_x = x;
+    mouse_y = y;
+
+    ms_dec.win_move_lock = false;
+    ms_dec.sht_now = NULL;
+
+    if (sht_img == NULL || mouse_ct_sheet_img == NULL) {
+        return;
+    }
+
+    int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
+    int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
+    move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
+    refresh_union_rect_now(sht_img, old_x, old_y, old_x + mouse_w, old_y + mouse_h,
+                           getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                           getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                           getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+}
+
+void center_mouse_cursor()
+{
+    set_mouse_position((int)(get_hor() - 16) / 2, (int)(get_ver() - 28 - 29) / 2);
 }
 
 int get_mouse_scroll()

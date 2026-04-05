@@ -228,9 +228,14 @@ void load_segment(Elf64_Phdr *phdr, void *elf, page_directory_t *directory, bool
     uint64_t          p_vaddr  = (uint64_t)phdr->p_vaddr + offset;
     uint64_t          p_filesz = (uint64_t)phdr->p_filesz;
     uint64_t          p_memsz  = (uint64_t)phdr->p_memsz;
+    if (p_filesz > p_memsz) {
+        p_filesz = p_memsz;
+    }
     page_directory_t *dir      = get_current_directory();
     switch_process_page_directory(directory);
-    memcpy((void *)p_vaddr, (void*)((uint64_t)elf + phdr->p_offset), p_memsz);
+    if (p_filesz > 0) {
+        memcpy((void *)p_vaddr, (void *)((uint64_t)elf + phdr->p_offset), p_filesz);
+    }
 
     if (p_memsz > p_filesz) { // 这个是bss段
         memset((void *)(p_vaddr + p_filesz), 0, p_memsz - p_filesz);

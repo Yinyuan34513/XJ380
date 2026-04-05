@@ -89,6 +89,24 @@ static const int PASSWORD_SLOT_WIDTH = 16;
 static const int PASSWORD_MAX_INPUT  = 18;
 static const uint64_t PASSWORD_CURSOR_BLINK_NS = 500000000ULL;
 
+static void refresh_user_ui_now(int x1, int y1, int x2, int y2)
+{
+    refresh_part_sheet(sht_img, x1, y1, x2, y2);
+    flush_sheet_damage_queue(sht_img);
+}
+
+static void refresh_user_fullscreen_now()
+{
+    refresh_sheet(sht_img);
+    flush_sheet_damage_queue(sht_img);
+}
+
+static void service_user_wait_loop()
+{
+    flush_sheet_damage_queue(sht_img);
+    __asm__ __volatile__("pause");
+}
+
 static void render_password_input(const char *input_password, int input_count, bool show_cursor)
 {
     (void)input_password;
@@ -117,8 +135,8 @@ static void render_password_input(const char *input_password, int input_count, b
         draw_rect(sht_img, desktop_ct_sheet, cursor_x, PASSWORD_BOX_Y + 4, cursor_x + 1, PASSWORD_BOX_Y + 20, BLACK);
     }
 
-    refresh_part_sheet(sht_img, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
-                       PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
+    refresh_user_ui_now(PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+                        PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
 }
 
 void init_user()
@@ -148,10 +166,11 @@ void init_user()
         print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[i].name, WHITE, 122, 138 + (i - 1) * 50, 16);
     }
 
-    refresh_sheet(sht_img);
+    refresh_user_fullscreen_now();
 
     while (1)
     {
+        service_user_wait_loop();
         if (ms_dec.left)
         {
             if (get_mouse_x() > 64 && get_mouse_y() > 130 && get_mouse_y() < 130 + (urf_data->user_count) * 50)
@@ -174,7 +193,7 @@ void init_user()
     print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[current_user_number].name, WHITE, 128, 130, 16);
     PrintPicture_blend(sht_img, desktop_ct_sheet, 128 + 300 + 8, 168, 24, 24, "/system/icon/nextstep.png");
 
-    refresh_sheet(sht_img);
+    refresh_user_fullscreen_now();
 
     int input_count = 0;
     char input_password[64];
@@ -184,6 +203,7 @@ void init_user()
     render_password_input(input_password, input_count, cursor_visible);
     while (1)
     {
+        service_user_wait_loop();
         uint64_t now = nanoTime();
         if (now - last_cursor_toggle >= PASSWORD_CURSOR_BLINK_NS)
         {
@@ -232,6 +252,7 @@ check_password:
                 else
                 {
                     print_box_ttf(sht_img, desktop_ct_sheet, "密码错误，请重试。", RED, 64, 200, 12);
+                    refresh_user_ui_now(64, 200, 220, 216);
                     delay_ms(200);
                 }
             }
@@ -245,6 +266,8 @@ check_password:
     current_user->envc      = 2;
     current_user->envp      = current_user_envp;
 
+    center_mouse_cursor();
+
     vfs_mkdir("/users");
     char user_folder_path[265] = "/users/";
     strcat(user_folder_path, current_user->name);
@@ -255,10 +278,24 @@ void copy_args(char *dst[], char *src[], int n)
 {
     for (int i = 0; i < n; i++)
     {
+        dst[i] = NULL;
         if (src[i] != NULL)
         {
-            dst[i] = (char *)malloc(strlen(src[i]) * sizeof(char));
-            strcpy(dst[i], src[i]);
+            size_t len = strlen(src[i]);
+            dst[i] = (char *)malloc(len + 1);
+            if (dst[i] == NULL)
+            {
+                for (int j = 0; j < i; ++j)
+                {
+                    if (dst[j] != NULL)
+                    {
+                        free(dst[j]);
+                        dst[j] = NULL;
+                    }
+                }
+                return;
+            }
+            memcpy(dst[i], src[i], len + 1);
         }
     }
 }

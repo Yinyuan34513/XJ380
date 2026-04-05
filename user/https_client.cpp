@@ -46,41 +46,7 @@ static int xtls_entropy(void *ctx, unsigned char *output, size_t len)
 
 static int xtls_connect_socket(const xhttp_request_t *request)
 {
-    uint32_t addr = 0;
-    if (!xhttp_resolve_host(request->host, &addr)) {
-        return XHTTP_ERR_BAD_HOST;
-    }
-
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) return XHTTP_ERR_SOCKET;
-
-    struct sockaddr_in addr_in;
-    memset(&addr_in, 0, sizeof(addr_in));
-    addr_in.sin_family      = AF_INET;
-    addr_in.sin_port        = htons(request->port);
-    addr_in.sin_addr.s_addr = addr;
-
-    int original_flags = fcntl(sockfd, F_GETFL, 0);
-    if (original_flags >= 0) {
-        fcntl(sockfd, F_SETFL, (uint64_t)(original_flags | O_NONBLOCK));
-    }
-
-    int connect_ret = connect(sockfd, (const struct sockaddr *)&addr_in, sizeof(addr_in));
-    if (connect_ret < 0 && connect_ret != -EINPROGRESS && connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
-        close(sockfd);
-        return XHTTP_ERR_CONNECT;
-    }
-
-    int wait_status = xhttp_wait_fd(sockfd, POLLOUT, XHTTP_IO_TIMEOUT_MS);
-    if (original_flags >= 0) {
-        fcntl(sockfd, F_SETFL, (uint64_t)original_flags);
-    }
-    if (wait_status != XHTTP_OK) {
-        close(sockfd);
-        return wait_status == XHTTP_ERR_TIMEOUT ? XHTTP_ERR_TIMEOUT : XHTTP_ERR_CONNECT;
-    }
-
-    return sockfd;
+    return xhttp_connect_socket_fd(request->host, request->port);
 }
 
 static int xtls_socket_send(void *ctx, const unsigned char *buf, size_t len)
@@ -243,6 +209,7 @@ static int xtls_request_once(const xhttp_request_t *request,
     const char              *extra_headers_suffix = "";
     int                      body_len = 0;
     char                     request_text[XHTTP_REQUEST_BUFFER_SIZE];
+    char                     host_header[320];
     int                      request_len = 0;
 
     mbedtls_ssl_init(&ssl);
@@ -325,6 +292,7 @@ static int xtls_request_once(const xhttp_request_t *request,
     extra_headers = request->extra_headers ? request->extra_headers : "";
     body_len      = body ? (int)strlen(body) : 0;
     extra_headers_suffix = xtls_headers_need_crlf(extra_headers) ? "\r\n" : "";
+    xhttp_format_host_header(request->host, host_header, sizeof(host_header));
 
     if (body_len > 0) {
         request_len = snprintf(request_text, sizeof(request_text),
@@ -339,7 +307,7 @@ static int xtls_request_once(const xhttp_request_t *request,
                                "%s"
                                "\r\n"
                                "%s",
-                               request->method, path, request->host, content_type, body_len,
+                               request->method, path, host_header, content_type, body_len,
                                extra_headers, extra_headers_suffix, body);
     } else {
         request_len = snprintf(request_text, sizeof(request_text),
@@ -351,7 +319,7 @@ static int xtls_request_once(const xhttp_request_t *request,
                                "%s"
                                "%s"
                                "\r\n",
-                               request->method, path, request->host, extra_headers, extra_headers_suffix);
+                               request->method, path, host_header, extra_headers, extra_headers_suffix);
     }
 
     if (request_len <= 0 || request_len >= (int)sizeof(request_text)) {

@@ -4,9 +4,14 @@ static const uint64_t CHAT_POLL_INTERVAL_MS = 500;
 static const uint64_t CHAT_LOOP_SLEEP_MS    = 50;
 static const int      CHAT_WIDTH            = 720;
 static const int      CHAT_HEIGHT           = 480;
-static const int      CHAT_MAX_LINES        = 128;
-static const int      CHAT_LINE_LENGTH      = 256;
-static const int      CHAT_VISIBLE_LINES    = 22;
+static const int      CHAT_MAX_LINES        = 256;
+static const int      CHAT_LINE_LENGTH      = 96;
+static const int      CHAT_HEADER_TEXT_MAX  = 52;
+static const int      CHAT_INPUT_TEXT_MAX   = 68;
+static const int      CHAT_SCROLL_STEP      = 3;
+static const int      CHAT_LINES_TOP        = 60;
+static const int      CHAT_LINE_HEIGHT      = 16;
+static const int      CHAT_VISIBLE_LINES    = 20;
 
 typedef struct chat_line {
     char     text[CHAT_LINE_LENGTH];
@@ -24,6 +29,63 @@ static char        g_input[512]          = {0};
 static char        g_status[128]         = "Starting chat...";
 static chat_line_t g_lines[CHAT_MAX_LINES];
 static int         g_line_count          = 0;
+static int         g_scroll_offset       = 0;
+
+static void chat_format_head_text(const char *text, char *buffer, int buffer_size, int max_chars)
+{
+    if (buffer == NULL || buffer_size <= 0) {
+        return;
+    }
+    buffer[0] = '\0';
+    if (text == NULL) {
+        return;
+    }
+
+    int len = (int)strlen(text);
+    if (len <= max_chars || max_chars < 4) {
+        strncpy(buffer, text, (size_t)buffer_size - 1);
+        buffer[buffer_size - 1] = '\0';
+        return;
+    }
+
+    int copy_len = MIN(max_chars - 3, buffer_size - 1);
+    memcpy(buffer, text, (uint64_t)copy_len);
+    memcpy(buffer + copy_len, "...", 3);
+    buffer[copy_len + 3] = '\0';
+}
+
+static void chat_format_tail_text(const char *text, char *buffer, int buffer_size, int max_chars)
+{
+    if (buffer == NULL || buffer_size <= 0) {
+        return;
+    }
+    buffer[0] = '\0';
+    if (text == NULL) {
+        return;
+    }
+
+    int len = (int)strlen(text);
+    if (len <= max_chars || max_chars < 4) {
+        strncpy(buffer, text, (size_t)buffer_size - 1);
+        buffer[buffer_size - 1] = '\0';
+        return;
+    }
+
+    int copy_len = MIN(max_chars - 3, buffer_size - 1);
+    memcpy(buffer, "...", 3);
+    memcpy(buffer + 3, text + len - copy_len, (uint64_t)copy_len);
+    buffer[copy_len + 3] = '\0';
+}
+
+static void chat_clamp_scroll(void)
+{
+    int max_scroll = MAX(0, g_line_count - CHAT_VISIBLE_LINES);
+    if (g_scroll_offset < 0) {
+        g_scroll_offset = 0;
+    } else if (g_scroll_offset > max_scroll) {
+        g_scroll_offset = max_scroll;
+    }
+}
 
 static void set_status(const char *text)
 {
@@ -49,35 +111,68 @@ static void append_line(const char *text, uint32_t color)
     g_lines[g_line_count].text[CHAT_LINE_LENGTH - 1] = '\0';
     g_lines[g_line_count].color                      = color;
     g_line_count++;
+    chat_clamp_scroll();
     g_need_redraw = true;
 }
 
-static void append_prefixed_line(const char *prefix, const char *data, int len, uint32_t color)
+static void append_wrapped_text(const char *prefix, const char *data, int len, uint32_t color)
 {
     char line[CHAT_LINE_LENGTH];
-    int  prefix_len = (int)strlen(prefix);
-    int  copy_len   = len;
+    int  prefix_len = prefix != NULL ? (int)strlen(prefix) : 0;
+    int  data_pos   = 0;
+    bool first_line = true;
 
-    if (copy_len < 0) {
-        copy_len = 0;
+    if (len < 0) {
+        len = 0;
     }
-    if (prefix_len + copy_len + 1 > CHAT_LINE_LENGTH) {
-        copy_len = CHAT_LINE_LENGTH - prefix_len - 1;
-    }
-
-    memcpy(line, prefix, (uint64_t)prefix_len);
-    if (copy_len > 0) {
-        memcpy(line + prefix_len, data, (uint64_t)copy_len);
-    }
-    line[prefix_len + copy_len] = '\0';
-
-    // Drop a trailing newline so the renderer keeps one message per row.
-    int out_len = prefix_len + copy_len;
-    while (out_len > 0 && (line[out_len - 1] == '\n' || line[out_len - 1] == '\r')) {
-        line[--out_len] = '\0';
+    if (prefix_len >= CHAT_LINE_LENGTH - 2) {
+        prefix_len = CHAT_LINE_LENGTH - 2;
     }
 
-    append_line(line, color);
+    while (data_pos < len || first_line) {
+        int  line_pos      = 0;
+        int  text_capacity = CHAT_LINE_LENGTH - prefix_len - 1;
+        char prefix_buf[CHAT_LINE_LENGTH];
+        memset(prefix_buf, ' ', sizeof(prefix_buf));
+        prefix_buf[prefix_len] = '\0';
+        if (first_line && prefix != NULL) {
+            memcpy(prefix_buf, prefix, (uint64_t)prefix_len);
+        }
+
+        if (prefix_len > 0) {
+            memcpy(line, prefix_buf, (uint64_t)prefix_len);
+            line_pos = prefix_len;
+        }
+
+        while (data_pos < len && (data[data_pos] == '\n' || data[data_pos] == '\r')) {
+            data_pos++;
+        }
+
+        int chunk_len = 0;
+        while (data_pos + chunk_len < len &&
+               data[data_pos + chunk_len] != '\n' &&
+               data[data_pos + chunk_len] != '\r' &&
+               chunk_len < text_capacity) {
+            line[line_pos + chunk_len] = data[data_pos + chunk_len];
+            chunk_len++;
+        }
+
+        if (chunk_len == 0 && data_pos >= len && !first_line) {
+            break;
+        }
+
+        line[line_pos + chunk_len] = '\0';
+        append_line(line, color);
+
+        data_pos += chunk_len;
+        while (data_pos < len && (data[data_pos] == '\n' || data[data_pos] == '\r')) {
+            data_pos++;
+            if (data_pos < len) {
+                break;
+            }
+        }
+        first_line = false;
+    }
 }
 
 static int socket_send_all(int sockfd, const char *data, int len)
@@ -95,20 +190,31 @@ static int socket_send_all(int sockfd, const char *data, int len)
 
 static void render_chat_window()
 {
+    char header_status[CHAT_LINE_LENGTH];
+    char input_view[CHAT_LINE_LENGTH];
+    chat_format_head_text(g_status, header_status, sizeof(header_status), CHAT_HEADER_TEXT_MAX);
+    chat_format_tail_text(g_input, input_view, sizeof(input_view), CHAT_INPUT_TEXT_MAX);
+
     xapi_DrawRect(g_window, 0, 0, CHAT_WIDTH - 1, CHAT_HEIGHT - 1, 0xf4efe6ff, true);
     xapi_DrawRect(g_window, 0, 0, CHAT_WIDTH - 1, 39, 0x264653ff, true);
     xapi_DrawRect(g_window, 0, CHAT_HEIGHT - 72, CHAT_WIDTH - 1, CHAT_HEIGHT - 1, 0xe9dcc9ff, true);
     xapi_DrawRect(g_window, 12, 52, CHAT_WIDTH - 13, CHAT_HEIGHT - 84, 0xfffbf5ff, true);
     xapi_DrawRect(g_window, 12, CHAT_HEIGHT - 60, CHAT_WIDTH - 13, CHAT_HEIGHT - 16, 0xffffffff, true);
+    xapi_DrawRect(g_window, 12, 52, CHAT_WIDTH - 13, CHAT_HEIGHT - 84, 0xded6caff, false);
+    xapi_DrawRect(g_window, 12, CHAT_HEIGHT - 60, CHAT_WIDTH - 13, CHAT_HEIGHT - 16, 0xd0c4b4ff, false);
 
     xapi_DrawSWText(g_window, 16, 12, (char *)"XJ380 Chat", 0xffffffff);
-    xapi_DrawSWText(g_window, 190, 12, g_status, 0xd8f3dcff);
+    xapi_DrawSWText(g_window, 150, 12, header_status, 0xd8f3dcff);
+    xapi_DrawSWText(g_window, CHAT_WIDTH - 184, 12, (char *)"Wheel: scroll history", 0xcfe8e6ff);
     xapi_DrawSWText(g_window, 16, CHAT_HEIGHT - 54, (char *)"Input:", 0x3d405bff);
-    xapi_DrawSWText(g_window, 72, CHAT_HEIGHT - 54, g_input, 0x111111ff);
+    xapi_DrawSWText(g_window, 72, CHAT_HEIGHT - 54, input_view, 0x111111ff);
 
-    int start = g_line_count > CHAT_VISIBLE_LINES ? g_line_count - CHAT_VISIBLE_LINES : 0;
-    for (int i = start; i < g_line_count; ++i) {
-        xapi_DrawSWText(g_window, 20, 60 + (i - start) * 16, g_lines[i].text, g_lines[i].color);
+    chat_clamp_scroll();
+    int max_start = MAX(0, g_line_count - CHAT_VISIBLE_LINES);
+    int start     = MAX(0, max_start - g_scroll_offset);
+    int end       = MIN(g_line_count, start + CHAT_VISIBLE_LINES);
+    for (int i = start; i < end; ++i) {
+        xapi_DrawSWText(g_window, 20, CHAT_LINES_TOP + (i - start) * CHAT_LINE_HEIGHT, g_lines[i].text, g_lines[i].color);
     }
 
     xapi_RefreshWindow(g_window);
@@ -224,7 +330,7 @@ static void poll_socket_once()
         return;
     }
 
-    append_prefixed_line("[host] ", buffer, got, 0x264653ff);
+    append_wrapped_text("[host] ", buffer, got, 0x264653ff);
 }
 
 static void send_input_line()
@@ -259,7 +365,7 @@ static void send_input_line()
         close(g_sockfd);
         g_sockfd = -1;
     } else {
-        append_prefixed_line("[me] ", g_input, g_input_len, 0xe76f51ff);
+        append_wrapped_text("[me] ", g_input, g_input_len, 0xe76f51ff);
     }
 
     g_input[0]    = '\0';
@@ -288,6 +394,11 @@ static void chat_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
         } else if ((char)lData == '\n') {
             g_send_requested = true;
         }
+        break;
+    case MSG_ROLLER:
+        g_scroll_offset += (int)hData * CHAT_SCROLL_STEP;
+        chat_clamp_scroll();
+        g_need_redraw = true;
         break;
     default:
         break;

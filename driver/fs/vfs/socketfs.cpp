@@ -28,8 +28,10 @@ static inline bool socketfs_provider_valid(const socket_provider_t *provider)
            provider->read != NULL && provider->write != NULL && provider->bind != NULL &&
            provider->connect != NULL && provider->listen != NULL && provider->accept != NULL &&
            provider->shutdown != NULL && provider->poll != NULL && provider->set_flags != NULL &&
-           provider->resolve_ipv4 != NULL && provider->set_dns_server != NULL &&
-           provider->get_dns_server != NULL && provider->get_netinfo != NULL;
+           provider->resolve_ipv4 != NULL && provider->resolve_ipv6 != NULL &&
+           provider->set_dns_server != NULL &&
+           provider->get_dns_server != NULL && provider->set_ipv4_config != NULL &&
+           provider->get_netinfo != NULL;
 }
 
 static int socketfs_snapshot_provider(socket_provider_t *out_provider)
@@ -429,6 +431,19 @@ int socket_resolve_ipv4(const char *hostname, uint32_t *out_addr)
     return provider.resolve_ipv4(hostname, out_addr);
 }
 
+int socket_resolve_ipv6(const char *hostname, uint8_t out_addr[16])
+{
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
+    }
+    if (hostname == NULL || out_addr == NULL) {
+        return -EINVAL;
+    }
+    return provider.resolve_ipv6(hostname, out_addr);
+}
+
 int socket_set_dns_server(uint32_t addr)
 {
     socket_provider_t provider = {};
@@ -450,6 +465,19 @@ int socket_get_dns_server(uint32_t *out_addr)
         return -EINVAL;
     }
     return provider.get_dns_server(out_addr);
+}
+
+int socket_set_ipv4_config(const socket_ipv4_config_t *config)
+{
+    socket_provider_t provider = {};
+    int               ret      = socketfs_snapshot_provider(&provider);
+    if (ret < 0) {
+        return ret;
+    }
+    if (config == NULL) {
+        return -EINVAL;
+    }
+    return provider.set_ipv4_config(config);
 }
 
 int socket_get_netinfo(socket_netinfo_t *out_info)

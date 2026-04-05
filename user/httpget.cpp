@@ -95,6 +95,69 @@ static int httpget_response_callback(const char *data, int len, void *user_data)
     return 0;
 }
 
+static bool httpget_parse_url_target(char *target,
+                                     bool *out_use_tls,
+                                     char **out_host,
+                                     uint16_t *out_port,
+                                     char **out_path)
+{
+    if (target == NULL || out_use_tls == NULL || out_host == NULL || out_port == NULL || out_path == NULL) {
+        return false;
+    }
+
+    *out_use_tls = strncmp(target, "https://", 8) == 0;
+    if (!(strncmp(target, "http://", 7) == 0 || *out_use_tls)) {
+        return false;
+    }
+
+    char *host = strstr(target, "://");
+    host = host ? host + 3 : target;
+    uint16_t port = *out_use_tls ? 443 : 80;
+
+    char *path = strchr(host, '/');
+    if (path != NULL) {
+        *path = '\0';
+        ++path;
+        --path;
+    } else {
+        path = (char *)"/";
+    }
+
+    if (host[0] == '[') {
+        char *host_end = strchr(host, ']');
+        if (host_end == NULL) {
+            return false;
+        }
+        *host_end = '\0';
+        *out_host = host + 1;
+        if (host_end[1] != '\0') {
+            if (host_end[1] != ':') {
+                return false;
+            }
+            long parsed_port = strtol(host_end + 2, NULL, 10);
+            if (parsed_port <= 0 || parsed_port > 65535) {
+                return false;
+            }
+            port = (uint16_t)parsed_port;
+        }
+    } else {
+        char *port_sep = strrchr(host, ':');
+        if (port_sep != NULL && strchr(host, ':') == port_sep) {
+            *port_sep = '\0';
+            long parsed_port = strtol(port_sep + 1, NULL, 10);
+            if (parsed_port <= 0 || parsed_port > 65535) {
+                return false;
+            }
+            port = (uint16_t)parsed_port;
+        }
+        *out_host = host;
+    }
+
+    *out_port = port;
+    *out_path = path;
+    return *out_host != NULL && (*out_host)[0] != '\0';
+}
+
 static void render_window()
 {
     xapi_DrawRect(g_window, 0, 0, HTTPGET_WIDTH - 1, HTTPGET_HEIGHT - 1, HTTPGET_COLOR_BG, true);
@@ -156,29 +219,10 @@ static void run_http_request()
         strncpy(target_copy, target, sizeof(target_copy) - 1);
         target_copy[sizeof(target_copy) - 1] = '\0';
 
-        use_tls = strncmp(target_copy, "https://", 8) == 0;
-        host = strstr(target_copy, "://");
-        host = host ? host + 3 : target_copy;
-        port = use_tls ? 443 : 80;
-
-        char *path_sep = strchr(host, '/');
-        if (path_sep != NULL) {
-            *path_sep = '\0';
-            path = path_sep;
-        } else {
-            path = (char *)"/";
-        }
-
-        char *port_sep = strchr(host, ':');
-        if (port_sep != NULL) {
-            *port_sep = '\0';
-            long parsed_port = strtol(port_sep + 1, NULL, 10);
-            if (parsed_port <= 0 || parsed_port > 65535) {
-                append_line("Invalid URL port.", HTTPGET_COLOR_ERROR);
-                set_status("bad port");
-                return;
-            }
-            port = (uint16_t)parsed_port;
+        if (!httpget_parse_url_target(target_copy, &use_tls, &host, &port, &path)) {
+            append_line("Invalid URL host or port.", HTTPGET_COLOR_ERROR);
+            set_status("bad url");
+            return;
         }
     } else {
         host = target;

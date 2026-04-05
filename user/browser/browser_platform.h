@@ -39,6 +39,11 @@ struct in_addr
     unsigned int s_addr;
 };
 
+struct in6_addr
+{
+    unsigned char s6_addr[16];
+};
+
 using sa_family_t = unsigned short;
 using in_port_t = unsigned short;
 using socklen_t = unsigned int;
@@ -55,6 +60,15 @@ struct sockaddr_in
     in_port_t      sin_port;
     in_addr        sin_addr;
     unsigned char  sin_zero[8];
+};
+
+struct sockaddr_in6
+{
+    sa_family_t    sin6_family;
+    in_port_t      sin6_port;
+    unsigned int   sin6_flowinfo;
+    in6_addr       sin6_addr;
+    unsigned int   sin6_scope_id;
 };
 
 struct pollfd
@@ -78,6 +92,7 @@ struct addrinfo
 
 constexpr int AF_UNSPEC = 0;
 constexpr int AF_INET = 2;
+constexpr int AF_INET6 = 10;
 
 constexpr int SOCK_STREAM = 1;
 

@@ -67,6 +67,77 @@ static tcb_t alloc_zeroed_tcb(void)
     return task;
 }
 
+static inline SHEET_BUFFER boot_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 0xff)
+{
+    return {r, g, b, a};
+}
+
+static void play_boot_animation(SHEET_INFO *sht, SHEET *csheet)
+{
+    static char kBootTitle[] = "XJ380";
+    static char kBootSubtitle[] = "Starting desktop services";
+    static char kBootStatus[] = "Loading shell, desktop and user services";
+
+    const int scrx = (int)sht->scrx;
+    const int scry = (int)sht->scry;
+    const int frames = 18;
+    const int logo_w = 84;
+    const int logo_h = 64;
+    const int title_size = scrx >= 1280 ? 28 : 24;
+    const int subtitle_size = 12;
+
+    int card_w = scrx - 96;
+    if (card_w > 560) card_w = 560;
+    if (card_w < 280) card_w = scrx - 32;
+
+    int card_h = 210;
+    if (card_h > scry - 40) card_h = scry - 40;
+
+    const int card_x = (scrx - card_w) / 2;
+    int card_y = (scry - card_h) / 2 - 20;
+    if (card_y < 20) card_y = 20;
+
+    const uint32_t title_width = (uint32_t)calc_ttf_length(kBootTitle, title_size);
+    const uint32_t subtitle_width = (uint32_t)calc_ttf_length(kBootSubtitle, subtitle_size);
+
+    for (int frame = 0; frame < frames; ++frame) {
+        const int progress = (card_w - 72) * (frame + 1) / frames;
+        const int logo_y = card_y + 28 + (frames - frame - 1) / 3;
+        const int shine_w = 38;
+        int shine_x = card_x + 36 + progress - shine_w / 2;
+        if (shine_x < card_x + 36) shine_x = card_x + 36;
+        if (shine_x + shine_w > card_x + card_w - 36) {
+            shine_x = card_x + card_w - 36 - shine_w;
+        }
+
+        draw_rect(sht, csheet, 0, 0, scrx - 1, scry - 1, boot_color(8, 20, 40));
+        draw_rect(sht, csheet, 0, scry * 2 / 3, scrx - 1, scry - 1, boot_color(12, 30, 56));
+
+        draw_rect(sht, csheet, card_x + 8, card_y + 10, card_x + card_w + 7, card_y + card_h + 9,
+                  boot_color(5, 12, 26));
+        draw_rect(sht, csheet, card_x, card_y, card_x + card_w - 1, card_y + card_h - 1,
+                  boot_color(238, 244, 250));
+        draw_rect(sht, csheet, card_x, card_y, card_x + card_w - 1, card_y + 5, boot_color(0, 162, 232));
+
+        draw_logo(sht, csheet, card_x + (card_w - logo_w) / 2, logo_y);
+        print_box_ttf(sht, csheet, kBootTitle, boot_color(26, 36, 50),
+                      card_x + (card_w - (int)title_width) / 2, card_y + 105, title_size);
+        print_box_ttf(sht, csheet, kBootSubtitle, boot_color(86, 102, 120),
+                      card_x + (card_w - (int)subtitle_width) / 2, card_y + 142, subtitle_size);
+        print_box_ttf(sht, csheet, kBootStatus, boot_color(86, 102, 120), card_x + 36, card_y + card_h - 64, 11);
+
+        draw_rect(sht, csheet, card_x + 36, card_y + card_h - 34, card_x + card_w - 37, card_y + card_h - 19,
+                  boot_color(196, 208, 220));
+        draw_rect(sht, csheet, card_x + 36, card_y + card_h - 34, card_x + 35 + progress, card_y + card_h - 19,
+                  boot_color(0, 162, 232));
+        draw_rect(sht, csheet, shine_x, card_y + card_h - 34, shine_x + shine_w, card_y + card_h - 19,
+                  boot_color(255, 255, 255));
+
+        refresh_sheet(sht);
+        delay_ms(16);
+    }
+}
+
 void init_cpu()
 {
     __asm__ __volatile__("movq %%cr0, %%rax\n\t"
@@ -98,6 +169,8 @@ int clock_hour_offset = 0;
 
 void init_time()
 {
+    if (current_user == NULL) return;
+
     char setfile_path[256];
     memset(setfile_path, 0, 256);
     strcat(setfile_path, "/users/");
@@ -105,17 +178,22 @@ void init_time()
     strcat(setfile_path, "/settings.dat");
     vfs_node_t v = vfs_open(setfile_path);
     if (!v) return;
-    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)malloc(v->size);
-    if (!sdff) return;
-    vfs_read(v, sdff, 0, v->size);
 
-    clock_hour_offset = sdff->ClockHourOffset;
+    SettingsDataFileFormat sdff;
+    memset(&sdff, 0, sizeof(sdff));
+    size_t read_size = v->size < sizeof(sdff) ? (size_t)v->size : sizeof(sdff);
+    if (read_size == 0 || vfs_read(v, &sdff, 0, read_size) == -1)
+    {
+        vfs_close(v);
+        return;
+    }
+
+    clock_hour_offset = sdff.ClockHourOffset;
 
     if (clock_hour_offset < 0)
         clock_hour_offset = 0;
 
     vfs_close(v);
-    free(sdff);
 }
 
 void components_flusher()
@@ -155,6 +233,7 @@ void components_flusher()
             }
         }
         if (ms_dec.need_flush) { process_mouse_info(); }
+        if (sht_img != NULL) { flush_sheet_damage_queue(sht_img); }
     }
 }
 
@@ -194,6 +273,7 @@ void desktop_flusher()
         &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
+    play_boot_animation(&shtinf, desktop_ct_sheet);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
@@ -281,9 +361,12 @@ void desktop_flusher()
     enable_scheduler();
     allow_to_flush = true;
 
+    write_serial_string("desktop: init_user begin\n");
     init_user();
-
+    write_serial_string("desktop: init_user done\n");
+    write_serial_string("desktop: init_xuls begin\n");
     init_xuls();
+    write_serial_string("desktop: init_xuls done\n");
     init_time();
 
     write_serial_string("user & settings initialized.\n");
@@ -295,6 +378,7 @@ void desktop_flusher()
     winRD_lock = true;
 
     refresh_sheet(&shtinf); // 刷新
+    flush_sheet_damage_queue(&shtinf);
 
     uint8_t k_input;
 
@@ -381,6 +465,7 @@ skip_timer_widget_init:
             fonty += 16;
         }
 #endif
+        flush_sheet_damage_queue(&shtinf);
     }
 }
 #define KERNEL_HEAP_START 0xffffc00000000000

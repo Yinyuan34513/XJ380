@@ -12,7 +12,9 @@ extern "C" {
 #include "lwip/dhcp.h"
 #include "lwip/dns.h"
 #include "lwip/etharp.h"
+#include "lwip/ethip6.h"
 #include "lwip/ip4_addr.h"
+#include "lwip/ip6_addr.h"
 #include "lwip/netif.h"
 #include "lwip/netifapi.h"
 #include "lwip/pbuf.h"
@@ -34,12 +36,20 @@ static bool         g_worker_started      = false;
 static bool         g_provider_registered = false;
 static bool         g_dhcp_started        = false;
 static bool         g_dhcp_ready_logged   = false;
-static bool         g_dns_manual_override = false;
+static uint8_t      g_ipv4_method         = SOCKET_IPV4_METHOD_NONE;
+static constexpr uint32_t kDefaultDnsServer = ((uint32_t)5U << 24) |
+                                              ((uint32_t)5U << 16) |
+                                              ((uint32_t)5U << 8) |
+                                              223U; // 223.5.5.5
+static bool         g_dns_manual_override = true;
 static uint32_t     g_rx_log_count        = 0;
 static uint32_t     g_tx_log_count        = 0;
 static uint32_t     g_connect_log_count   = 0;
 static uint32_t     g_write_log_count     = 0;
-static uint32_t     g_dns_manual_addr     = 0;
+static uint32_t     g_dns_manual_addr     = kDefaultDnsServer;
+static uint32_t     g_manual_ipv4_addr    = 0;
+static uint32_t     g_manual_ipv4_netmask = 0;
+static uint32_t     g_manual_ipv4_gateway = 0;
 static uint8_t      g_last_dhcp_state     = 0xff;
 
 typedef struct xj380_dns_query {
@@ -54,6 +64,83 @@ static int xj380_err_to_errno(err_t err)
         return 0;
     }
     return -err_to_errno(err);
+}
+
+static void xj380_apply_dns_server(uint32_t addr)
+{
+    ip4_addr_t ip4;
+    ip4.addr = addr;
+
+    ip_addr_t dns_addr;
+    ip_addr_copy_from_ip4(dns_addr, ip4);
+    dns_setserver(0, &dns_addr);
+}
+
+static int xj380_apply_manual_ipv4_config(uint32_t addr, uint32_t netmask, uint32_t gateway)
+{
+    if (addr == 0 || netmask == 0 || !ip4_addr_netmask_valid(netmask)) {
+        return -EINVAL;
+    }
+
+    ip4_addr_t ip;
+    ip.addr = addr;
+    ip4_addr_t mask;
+    mask.addr = netmask;
+    ip4_addr_t gw;
+    gw.addr = gateway;
+
+    err_t err = netifapi_dhcp_stop(&g_netif);
+    if (err != ERR_OK) {
+        return xj380_err_to_errno(err);
+    }
+
+    err = netifapi_netif_set_addr(&g_netif, &ip, &mask, &gw);
+    if (err != ERR_OK) {
+        return xj380_err_to_errno(err);
+    }
+
+    g_dhcp_started        = false;
+    g_dhcp_ready_logged   = false;
+    g_ipv4_method         = SOCKET_IPV4_METHOD_MANUAL;
+    g_manual_ipv4_addr    = addr;
+    g_manual_ipv4_netmask = netmask;
+    g_manual_ipv4_gateway = gateway;
+    g_last_dhcp_state     = 0xff;
+
+    printk("netserver: manual ipv4 -> %u.%u.%u.%u mask=%u.%u.%u.%u gw=%u.%u.%u.%u\n",
+           ip4_addr1(&ip), ip4_addr2(&ip), ip4_addr3(&ip), ip4_addr4(&ip),
+           ip4_addr1(&mask), ip4_addr2(&mask), ip4_addr3(&mask), ip4_addr4(&mask),
+           ip4_addr1(&gw), ip4_addr2(&gw), ip4_addr3(&gw), ip4_addr4(&gw));
+    return 0;
+}
+
+static int xj380_apply_dhcp_ipv4_config(void)
+{
+    err_t err = netifapi_dhcp_stop(&g_netif);
+    if (err != ERR_OK) {
+        return xj380_err_to_errno(err);
+    }
+
+    err = netifapi_netif_set_addr(&g_netif, NULL, NULL, NULL);
+    if (err != ERR_OK) {
+        return xj380_err_to_errno(err);
+    }
+
+    err = netifapi_dhcp_start(&g_netif);
+    if (err != ERR_OK) {
+        return xj380_err_to_errno(err);
+    }
+
+    g_dhcp_started        = true;
+    g_dhcp_ready_logged   = false;
+    g_ipv4_method         = SOCKET_IPV4_METHOD_DHCP;
+    g_manual_ipv4_addr    = 0;
+    g_manual_ipv4_netmask = 0;
+    g_manual_ipv4_gateway = 0;
+    g_last_dhcp_state     = 0xff;
+
+    printk("netserver: switched ipv4 method -> auto (dhcp)\n");
+    return 0;
 }
 
 static uint8_t xj380_current_dhcp_state(void)
@@ -136,27 +223,60 @@ static err_t xj380_netif_init(struct netif *netif)
     memcpy(netif->hwaddr, g_netdev->mac, ETH_HWADDR_LEN);
     netif->mtu        = 1500;
     netif->flags      = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_ETHERNET;
+#if LWIP_IPV6 && LWIP_IPV6_MLD
+    netif->flags |= NETIF_FLAG_MLD6;
+#endif
     netif->output     = etharp_output;
+    netif->output_ip6 = ethip6_output;
     netif->linkoutput = xj380_linkoutput;
     return ERR_OK;
 }
 
 static int xj380_sockaddr_to_ip(const struct sockaddr *addr, socklen_t addrlen, ip_addr_t *ip, u16_t *port)
 {
-    if (addr == NULL || ip == NULL || port == NULL || addrlen < sizeof(struct sockaddr_in)) {
+    if (addr == NULL || ip == NULL || port == NULL || addrlen < sizeof(struct sockaddr)) {
         return -EINVAL;
     }
 
-    const struct sockaddr_in *sin = (const struct sockaddr_in *)addr;
-    if (sin->sin_family != AF_INET) {
-        return -EAFNOSUPPORT;
+    if (addr->sa_family == AF_INET) {
+        if (addrlen < sizeof(struct sockaddr_in)) {
+            return -EINVAL;
+        }
+
+        const struct sockaddr_in *sin = (const struct sockaddr_in *)addr;
+        ip4_addr_t                ip4;
+        ip4.addr = sin->sin_addr.s_addr;
+        ip_addr_copy_from_ip4(*ip, ip4);
+        *port = lwip_ntohs(sin->sin_port);
+        return 0;
     }
 
-    ip4_addr_t ip4;
-    ip4.addr = sin->sin_addr.s_addr;
-    ip_addr_copy_from_ip4(*ip, ip4);
-    *port = lwip_ntohs(sin->sin_port);
-    return 0;
+    if (addr->sa_family == AF_INET6) {
+        if (addrlen < sizeof(struct sockaddr_in6)) {
+            return -EINVAL;
+        }
+
+        const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)addr;
+        ip6_addr_p_t               packed;
+        memcpy(&packed, sin6->sin6_addr.s6_addr, sizeof(packed));
+        ip_addr_copy_from_ip6_packed(*ip, packed);
+        ip6_addr_assign_zone(ip_2_ip6(ip), IP6_UNKNOWN, &g_netif);
+        *port = lwip_ntohs(sin6->sin6_port);
+        return 0;
+    }
+
+    return -EAFNOSUPPORT;
+}
+
+static void xj380_copy_ip6_to_bytes(const ip6_addr_t *ip6, uint8_t out[16])
+{
+    if (ip6 == NULL || out == NULL) {
+        return;
+    }
+
+    ip6_addr_p_t packed;
+    ip6_addr_copy_to_packed(packed, *ip6);
+    memcpy(out, &packed, 16);
 }
 
 static void xj380_ip_to_sockaddr(const ip_addr_t *ip, u16_t port, struct sockaddr *addr, socklen_t *addrlen)
@@ -164,6 +284,29 @@ static void xj380_ip_to_sockaddr(const ip_addr_t *ip, u16_t port, struct sockadd
     if (addrlen == NULL) {
         return;
     }
+
+    if (ip != NULL && IP_IS_V6(ip)) {
+        if (*addrlen < sizeof(struct sockaddr_in6) || addr == NULL) {
+            *addrlen = sizeof(struct sockaddr_in6);
+            return;
+        }
+
+        struct sockaddr_in6 out6;
+        memset(&out6, 0, sizeof(out6));
+        out6.sin6_family = AF_INET6;
+        out6.sin6_port   = lwip_htons(port);
+        xj380_copy_ip6_to_bytes(ip_2_ip6(ip), out6.sin6_addr.s6_addr);
+#if LWIP_IPV6_SCOPES
+        out6.sin6_scope_id = ip6_addr_zone(ip_2_ip6(ip));
+#else
+        out6.sin6_scope_id = ip6_addr_islinklocal(ip_2_ip6(ip)) ? g_netif.num : 0;
+#endif
+
+        memcpy(addr, &out6, sizeof(out6));
+        *addrlen = sizeof(out6);
+        return;
+    }
+
     if (*addrlen < sizeof(struct sockaddr_in) || addr == NULL) {
         *addrlen = sizeof(struct sockaddr_in);
         return;
@@ -179,6 +322,24 @@ static void xj380_ip_to_sockaddr(const ip_addr_t *ip, u16_t port, struct sockadd
 
     memcpy(addr, &out, sizeof(out));
     *addrlen = sizeof(out);
+}
+
+static void xj380_log_ip_addr(const char *prefix,
+                              const ip_addr_t *ip,
+                              u16_t port,
+                              uint32_t extra_flags,
+                              int state,
+                              int pending_err)
+{
+    char        ipbuf[64];
+    const char *ip_text = ip != NULL ? ipaddr_ntoa_r(ip, ipbuf, sizeof(ipbuf)) : "(null)";
+    printk("%s%s:%u flags=0x%x state=%d pending_err=%d\n",
+           prefix,
+           ip_text != NULL ? ip_text : "(format-failed)",
+           (unsigned int)port,
+           (unsigned int)extra_flags,
+           state,
+           pending_err);
 }
 
 static bool xj380_mbox_has_data(sys_mbox_t *mbox)
@@ -205,19 +366,12 @@ static void xj380_dns_found_cb(const char *name, const ip_addr_t *ipaddr, void *
     }
 
     query->addr = *ipaddr;
-    if (!IP_IS_V4(ipaddr)) {
-        query->status = -EAFNOSUPPORT;
-        query->done   = 1;
-        printk("netserver: dns callback name=%s family=non-ipv4\n", name ? name : "(null)");
-        return;
-    }
-
-    const ip4_addr_t *ip4 = ip_2_ip4(ipaddr);
     query->status = 0;
     query->done   = 1;
-    printk("netserver: dns callback name=%s addr=%u.%u.%u.%u\n",
+    char ipbuf[64];
+    printk("netserver: dns callback name=%s addr=%s\n",
            name ? name : "(null)",
-           ip4_addr1(ip4), ip4_addr2(ip4), ip4_addr3(ip4), ip4_addr4(ip4));
+           ipaddr_ntoa_r(ipaddr, ipbuf, sizeof(ipbuf)));
 }
 
 static ssize_t xj380_socket_read_impl(xj380_lwip_socket_t *socket, void *buffer, size_t size, uint64_t flags)
@@ -286,14 +440,23 @@ static int xj380_provider_create(int domain, int type, int protocol, void **out_
             return -ENETDOWN;
         }
     }
-    if (domain != AF_INET || type != SOCK_STREAM) {
+    if (type != SOCK_STREAM) {
         return -EAFNOSUPPORT;
     }
     if (protocol != 0 && protocol != 6) {
         return -EPROTONOSUPPORT;
     }
 
-    struct netconn *conn = netconn_new(NETCONN_TCP);
+    enum netconn_type conn_type;
+    if (domain == AF_INET) {
+        conn_type = NETCONN_TCP;
+    } else if (domain == AF_INET6) {
+        conn_type = NETCONN_TCP_IPV6;
+    } else {
+        return -EAFNOSUPPORT;
+    }
+
+    struct netconn *conn = netconn_new(conn_type);
     if (conn == NULL) {
         printk("netserver: netconn_new failed\n");
         return -ENOMEM;
@@ -412,13 +575,10 @@ static int xj380_provider_connect(void *socket_ptr, const struct sockaddr *addr,
     }
 
     if (g_connect_log_count < 16) {
-        const ip4_addr_t *ip4 = ip_2_ip4(&ip);
-        printk("netserver: connect dst=%u.%u.%u.%u:%u flags=0x%x state=%d pending_err=%d\n",
-               ip4_addr1(ip4), ip4_addr2(ip4), ip4_addr3(ip4), ip4_addr4(ip4),
-               (unsigned int)port,
-               (unsigned int)netconn_is_nonblocking(socket->conn),
-               (int)socket->conn->state,
-               (int)socket->conn->pending_err);
+        xj380_log_ip_addr("netserver: connect dst=", &ip, port,
+                          (uint32_t)netconn_is_nonblocking(socket->conn),
+                          (int)socket->conn->state,
+                          (int)socket->conn->pending_err);
         g_connect_log_count++;
     }
 
@@ -545,7 +705,7 @@ static int xj380_provider_set_flags(void *socket_ptr, uint64_t flags)
     return 0;
 }
 
-static int xj380_provider_resolve_ipv4(const char *hostname, uint32_t *out_addr)
+static int xj380_resolve_host(const char *hostname, uint8_t family, ip_addr_t *out_addr)
 {
     if (hostname == NULL || out_addr == NULL || hostname[0] == '\0') {
         return -EINVAL;
@@ -561,20 +721,23 @@ static int xj380_provider_resolve_ipv4(const char *hostname, uint32_t *out_addr)
 
     ip_addr_t resolved_addr;
     if (ipaddr_aton(hostname, &resolved_addr)) {
-        if (!IP_IS_V4(&resolved_addr)) {
+        if ((family == AF_INET && !IP_IS_V4(&resolved_addr)) ||
+            (family == AF_INET6 && !IP_IS_V6(&resolved_addr))) {
             return -EAFNOSUPPORT;
         }
-        *out_addr = ip_2_ip4(&resolved_addr)->addr;
+        *out_addr = resolved_addr;
         return 0;
     }
 
-    printk("netserver: dns resolve start host=%s\n", hostname);
+    printk("netserver: dns resolve start host=%s family=%u\n",
+           hostname, (unsigned int)family);
 
     xj380_dns_query_t query;
     memset(&query, 0, sizeof(query));
 
     LOCK_TCPIP_CORE();
-    err_t err = dns_gethostbyname_addrtype(hostname, &resolved_addr, xj380_dns_found_cb, &query, LWIP_DNS_ADDRTYPE_IPV4);
+    u8_t dns_addrtype = family == AF_INET6 ? LWIP_DNS_ADDRTYPE_IPV6 : LWIP_DNS_ADDRTYPE_IPV4;
+    err_t err = dns_gethostbyname_addrtype(hostname, &resolved_addr, xj380_dns_found_cb, &query, dns_addrtype);
     UNLOCK_TCPIP_CORE();
 
     if (err != ERR_OK) {
@@ -598,15 +761,49 @@ static int xj380_provider_resolve_ipv4(const char *hostname, uint32_t *out_addr)
         }
         resolved_addr = query.addr;
     }
-    if (!IP_IS_V4(&resolved_addr)) {
+
+    if ((family == AF_INET && !IP_IS_V4(&resolved_addr)) ||
+        (family == AF_INET6 && !IP_IS_V6(&resolved_addr))) {
         return -EAFNOSUPPORT;
     }
 
-    *out_addr = ip_2_ip4(&resolved_addr)->addr;
-    const ip4_addr_t *ip4 = ip_2_ip4(&resolved_addr);
-    printk("netserver: dns resolve done host=%s addr=%u.%u.%u.%u\n",
+    *out_addr = resolved_addr;
+    char ipbuf[64];
+    printk("netserver: dns resolve done host=%s addr=%s\n",
            hostname,
-           ip4_addr1(ip4), ip4_addr2(ip4), ip4_addr3(ip4), ip4_addr4(ip4));
+           ipaddr_ntoa_r(&resolved_addr, ipbuf, sizeof(ipbuf)));
+    return 0;
+}
+
+static int xj380_provider_resolve_ipv4(const char *hostname, uint32_t *out_addr)
+{
+    if (out_addr == NULL) {
+        return -EINVAL;
+    }
+
+    ip_addr_t resolved_addr;
+    int       ret = xj380_resolve_host(hostname, AF_INET, &resolved_addr);
+    if (ret < 0) {
+        return ret;
+    }
+
+    *out_addr = ip_2_ip4(&resolved_addr)->addr;
+    return 0;
+}
+
+static int xj380_provider_resolve_ipv6(const char *hostname, uint8_t out_addr[16])
+{
+    if (out_addr == NULL) {
+        return -EINVAL;
+    }
+
+    ip_addr_t resolved_addr;
+    int       ret = xj380_resolve_host(hostname, AF_INET6, &resolved_addr);
+    if (ret < 0) {
+        return ret;
+    }
+
+    xj380_copy_ip6_to_bytes(ip_2_ip6(&resolved_addr), out_addr);
     return 0;
 }
 
@@ -618,12 +815,7 @@ static int xj380_provider_set_dns_server(uint32_t addr)
         return 0;
     }
 
-    ip4_addr_t ip4;
-    ip4.addr = addr;
-
-    ip_addr_t dns_addr;
-    ip_addr_copy_from_ip4(dns_addr, ip4);
-    dns_setserver(0, &dns_addr);
+    xj380_apply_dns_server(addr);
     g_dns_manual_override = true;
     g_dns_manual_addr     = addr;
     return 0;
@@ -644,6 +836,26 @@ static int xj380_provider_get_dns_server(uint32_t *out_addr)
     return 0;
 }
 
+static int xj380_provider_set_ipv4_config(const socket_ipv4_config_t *config)
+{
+    if (config == NULL) {
+        return -EINVAL;
+    }
+    if (!g_stack_ready) {
+        return -EAGAIN;
+    }
+
+    switch (config->method) {
+    case SOCKET_IPV4_METHOD_DHCP:
+        return xj380_apply_dhcp_ipv4_config();
+    case SOCKET_IPV4_METHOD_MANUAL:
+        return xj380_apply_manual_ipv4_config(config->ipv4_addr, config->ipv4_netmask,
+                                              config->ipv4_gateway);
+    default:
+        return -EINVAL;
+    }
+}
+
 static int xj380_provider_get_netinfo(socket_netinfo_t *out_info)
 {
     if (out_info == NULL) {
@@ -661,7 +873,7 @@ static int xj380_provider_get_netinfo(socket_netinfo_t *out_info)
     out_info->ifname[1] = '0';
     out_info->ifname[2] = '\0';
     out_info->stack_ready = g_stack_ready ? 1 : 0;
-    out_info->ipv4_method = g_dhcp_started ? SOCKET_IPV4_METHOD_DHCP : SOCKET_IPV4_METHOD_NONE;
+    out_info->ipv4_method = g_ipv4_method;
 
     if (!g_stack_ready) {
         return 0;
@@ -679,6 +891,32 @@ static int xj380_provider_get_netinfo(socket_netinfo_t *out_info)
         out_info->ipv4_netmask = netif_ip4_netmask(&g_netif)->addr;
         out_info->ipv4_gateway = netif_ip4_gw(&g_netif)->addr;
     }
+
+#if LWIP_IPV6
+    for (u8_t i = 0; i < LWIP_IPV6_NUM_ADDRESSES; ++i) {
+        if (!ip6_addr_isvalid(netif_ip6_addr_state(&g_netif, i))) {
+            continue;
+        }
+
+        const ip6_addr_t *ip6 = netif_ip6_addr(&g_netif, i);
+        if (ip6 == NULL || ip6_addr_isany(ip6)) {
+            continue;
+        }
+
+        if (!out_info->ipv6_linklocal_ready && ip6_addr_islinklocal(ip6)) {
+            xj380_copy_ip6_to_bytes(ip6, out_info->ipv6_linklocal);
+            out_info->ipv6_linklocal_ready = 1;
+            out_info->ip_ready = 1;
+            continue;
+        }
+
+        if (!out_info->ipv6_global_ready && !ip6_addr_islinklocal(ip6) && !ip6_addr_isloopback(ip6)) {
+            xj380_copy_ip6_to_bytes(ip6, out_info->ipv6_global);
+            out_info->ipv6_global_ready = 1;
+            out_info->ip_ready = 1;
+        }
+    }
+#endif
 
     uint32_t dns_addr = 0;
     if (xj380_provider_get_dns_server(&dns_addr) == 0) {
@@ -701,8 +939,10 @@ static socket_provider_t g_socket_provider = {
     .poll      = xj380_provider_poll,
     .set_flags = xj380_provider_set_flags,
     .resolve_ipv4 = xj380_provider_resolve_ipv4,
+    .resolve_ipv6 = xj380_provider_resolve_ipv6,
     .set_dns_server = xj380_provider_set_dns_server,
     .get_dns_server = xj380_provider_get_dns_server,
+    .set_ipv4_config = xj380_provider_set_ipv4_config,
     .get_netinfo = xj380_provider_get_netinfo,
 };
 
@@ -730,11 +970,7 @@ static void xj380_update_net_state(void)
             current_dns = ip_2_ip4(dns_addr)->addr;
         }
         if (current_dns != g_dns_manual_addr) {
-            ip4_addr_t ip4;
-            ip4.addr = g_dns_manual_addr;
-            ip_addr_t dns_addr_out;
-            ip_addr_copy_from_ip4(dns_addr_out, ip4);
-            dns_setserver(0, &dns_addr_out);
+            xj380_apply_dns_server(g_dns_manual_addr);
         }
     }
 
@@ -816,6 +1052,10 @@ static int xj380_setup_stack(void)
     g_netif.hwaddr_len = ETH_HWADDR_LEN;
     memcpy(g_netif.hwaddr, g_netdev->mac, ETH_HWADDR_LEN);
     g_netif.flags |= (NETIF_FLAG_UP | NETIF_FLAG_LINK_UP);
+#if LWIP_IPV6_AUTOCONFIG
+    g_netif.ip6_autoconfig_enabled = 1;
+#endif
+    netif_create_ip6_linklocal_address(&g_netif, 1);
 
     printk("netserver: netif ready flags=0x%x up=%u link=%u mtu=%u mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
            (unsigned int)g_netif.flags,
@@ -825,6 +1065,15 @@ static int xj380_setup_stack(void)
            g_netif.hwaddr[0], g_netif.hwaddr[1], g_netif.hwaddr[2],
            g_netif.hwaddr[3], g_netif.hwaddr[4], g_netif.hwaddr[5]);
 
+#if LWIP_IPV6
+    {
+        char             ip6buf[64];
+        const ip6_addr_t *ll = netif_ip6_addr(&g_netif, 0);
+        printk("netserver: ipv6 link-local=%s\n",
+               ll != NULL ? ip6addr_ntoa_r(ll, ip6buf, sizeof(ip6buf)) : "(null)");
+    }
+#endif
+
     err_t dhcp_err = dhcp_start(&g_netif);
     if (dhcp_err != ERR_OK) {
         printk("netserver: dhcp_start failed: %d\n", (int)dhcp_err);
@@ -833,11 +1082,11 @@ static int xj380_setup_stack(void)
     }
 
     if (g_dns_manual_override && g_dns_manual_addr != 0) {
+        xj380_apply_dns_server(g_dns_manual_addr);
         ip4_addr_t ip4;
         ip4.addr = g_dns_manual_addr;
-        ip_addr_t dns_addr;
-        ip_addr_copy_from_ip4(dns_addr, ip4);
-        dns_setserver(0, &dns_addr);
+        printk("netserver: default dns -> %u.%u.%u.%u\n",
+               ip4_addr1(&ip4), ip4_addr2(&ip4), ip4_addr3(&ip4), ip4_addr4(&ip4));
     }
 
     printk("netserver: dhcp client started on %c%c\n", g_netif.name[0], g_netif.name[1]);
@@ -846,6 +1095,7 @@ static int xj380_setup_stack(void)
 
     g_dhcp_started      = true;
     g_dhcp_ready_logged = false;
+    g_ipv4_method       = SOCKET_IPV4_METHOD_DHCP;
     g_last_dhcp_state   = 0xff;
     g_stack_ready = true;
     return 0;

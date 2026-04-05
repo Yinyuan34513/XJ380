@@ -113,19 +113,49 @@ static bool parse_url(const std::string &input, ParsedUrl &parsed, std::string &
         return false;
     }
 
-    std::size_t port_sep = authority.rfind(':');
-    if (port_sep != std::string::npos) {
-        parsed.host = authority.substr(0, port_sep);
-        const std::string port_text = authority.substr(port_sep + 1);
-        const long        port_value = std::strtol(port_text.c_str(), nullptr, 10);
-        if (port_value <= 0 || port_value > 65535) {
-            error = "bad port";
+    if (authority.front() == '[') {
+        const std::size_t host_end = authority.find(']');
+        if (host_end == std::string::npos) {
+            error = "bad host";
             return false;
         }
-        parsed.port = static_cast<std::uint16_t>(port_value);
+
+        parsed.host = authority.substr(1, host_end - 1);
+        if (parsed.host.empty()) {
+            error = "missing host";
+            return false;
+        }
+
+        if (host_end + 1 < authority.size()) {
+            if (authority[host_end + 1] != ':') {
+                error = "bad port";
+                return false;
+            }
+            const std::string port_text = authority.substr(host_end + 2);
+            const long        port_value = std::strtol(port_text.c_str(), nullptr, 10);
+            if (port_value <= 0 || port_value > 65535) {
+                error = "bad port";
+                return false;
+            }
+            parsed.port = static_cast<std::uint16_t>(port_value);
+        } else {
+            parsed.port = parsed.scheme == "https" ? 443 : 80;
+        }
     } else {
-        parsed.host = authority;
-        parsed.port = parsed.scheme == "https" ? 443 : 80;
+        const std::size_t port_sep = authority.rfind(':');
+        if (port_sep != std::string::npos && authority.find(':') == port_sep) {
+            parsed.host = authority.substr(0, port_sep);
+            const std::string port_text = authority.substr(port_sep + 1);
+            const long        port_value = std::strtol(port_text.c_str(), nullptr, 10);
+            if (port_value <= 0 || port_value > 65535) {
+                error = "bad port";
+                return false;
+            }
+            parsed.port = static_cast<std::uint16_t>(port_value);
+        } else {
+            parsed.host = authority;
+            parsed.port = parsed.scheme == "https" ? 443 : 80;
+        }
     }
 
     if (parsed.host.empty()) {
@@ -212,49 +242,56 @@ static int append_response_chunk(const char *data, int len, void *user_data)
 static int connect_tcp_socket(const ParsedUrl &url)
 {
     addrinfo hints {};
-    hints.ai_family = AF_INET;
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
     char port_buffer[16];
     std::snprintf(port_buffer, sizeof(port_buffer), "%u", static_cast<unsigned int>(url.port));
 
     addrinfo *result = nullptr;
-    if (getaddrinfo(url.host.c_str(), port_buffer, &hints, &result) != 0 || result == nullptr || result->ai_addr == nullptr) {
+    if (getaddrinfo(url.host.c_str(), port_buffer, &hints, &result) != 0 || result == nullptr) {
         if (result != nullptr) {
             freeaddrinfo(result);
         }
         return -1;
     }
 
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        freeaddrinfo(result);
-        return -1;
-    }
+    int sockfd = -1;
+    for (addrinfo *it = result; it != nullptr; it = it->ai_next) {
+        if (it->ai_addr == nullptr) {
+            continue;
+        }
 
-    const int original_flags = fcntl(sockfd, F_GETFL, 0);
-    if (original_flags >= 0) {
-        fcntl(sockfd, F_SETFL, static_cast<unsigned long long>(original_flags | O_NONBLOCK));
-    }
+        sockfd = socket(it->ai_family, SOCK_STREAM, 0);
+        if (sockfd < 0) {
+            continue;
+        }
 
-    int connect_ret = connect(sockfd, result->ai_addr, result->ai_addrlen);
-    if (connect_ret < 0 && connect_ret != -EINPROGRESS && connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
+        const int original_flags = fcntl(sockfd, F_GETFL, 0);
+        if (original_flags >= 0) {
+            fcntl(sockfd, F_SETFL, static_cast<unsigned long long>(original_flags | O_NONBLOCK));
+        }
+
+        int connect_ret = connect(sockfd, it->ai_addr, it->ai_addrlen);
+        if (connect_ret < 0 && connect_ret != -EINPROGRESS &&
+            connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
+            close(sockfd);
+            sockfd = -1;
+            continue;
+        }
+
+        pollfd fd {};
+        fd.fd = sockfd;
+        fd.events = POLLOUT;
+        if (poll(&fd, 1, 5000) > 0 && (fd.revents & (POLLERR | POLLHUP | POLLNVAL)) == 0) {
+            if (original_flags >= 0) {
+                fcntl(sockfd, F_SETFL, static_cast<unsigned long long>(original_flags));
+            }
+            break;
+        }
+
         close(sockfd);
-        freeaddrinfo(result);
-        return -1;
-    }
-
-    pollfd fd {};
-    fd.fd = sockfd;
-    fd.events = POLLOUT;
-    if (poll(&fd, 1, 5000) <= 0 || (fd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
-        close(sockfd);
-        freeaddrinfo(result);
-        return -1;
-    }
-
-    if (original_flags >= 0) {
-        fcntl(sockfd, F_SETFL, static_cast<unsigned long long>(original_flags));
+        sockfd = -1;
     }
 
     freeaddrinfo(result);
@@ -277,7 +314,9 @@ static bool send_all(int sockfd, const char *data, std::size_t len)
 static BrowserFetchResult fetch_http(const ParsedUrl &url)
 {
     BrowserFetchResult result;
-    result.final_url = url.scheme + "://" + url.host + url.path;
+    result.final_url = url.scheme + "://" +
+                       (url.host.find(':') != std::string::npos ? "[" + url.host + "]" : url.host) +
+                       url.path;
 
     const int sockfd = connect_tcp_socket(url);
     if (sockfd < 0) {
@@ -289,7 +328,13 @@ static BrowserFetchResult fetch_http(const ParsedUrl &url)
     request += "GET ";
     request += url.path;
     request += " HTTP/1.1\r\nHost: ";
-    request += url.host;
+    if (url.host.find(':') != std::string::npos) {
+        request += "[";
+        request += url.host;
+        request += "]";
+    } else {
+        request += url.host;
+    }
     request += "\r\nUser-Agent: XJ380Browser/0.1\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n";
 
     if (!send_all(sockfd, request.c_str(), request.size())) {
@@ -338,7 +383,9 @@ static BrowserFetchResult fetch_http(const ParsedUrl &url)
 static BrowserFetchResult fetch_https(const ParsedUrl &url)
 {
     BrowserFetchResult result;
-    result.final_url = url.scheme + "://" + url.host + url.path;
+    result.final_url = url.scheme + "://" +
+                       (url.host.find(':') != std::string::npos ? "[" + url.host + "]" : url.host) +
+                       url.path;
 
     xhttp_request_t request {};
     request.method = "GET";

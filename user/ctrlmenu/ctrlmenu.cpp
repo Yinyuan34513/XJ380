@@ -63,8 +63,6 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
 
     draw_background();
 
-    xapi_RefreshWindow(handle);
-
     int old_min = 60;
     int old_sec = -1;
 
@@ -80,12 +78,16 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
 
         if (tm.tm_min != old_min)
         {
-            draw_background();
+            draw_background_time();
+            if (cindex == 3 && setting_cindex == 5)
+            {
+                draw_background_body();
+            }
             old_min = tm.tm_min;
         }
         else if (cindex == 3 && setting_cindex == 2 && tm.tm_sec != old_sec)
         {
-            draw_background();
+            draw_background_body();
         }
         old_sec = tm.tm_sec;
 
@@ -114,7 +116,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
 
                     xapi_CloseFile(f);
 
-                    draw_background();
+                    draw_background_body();
                 }
             }
             waiting_change_setting_apps = false;
@@ -145,7 +147,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
 
                     xapi_CloseFile(f);
 
-                    draw_background();
+                    draw_background_body();
                 }
             }
             waiting_change_setting_background = false;

@@ -1,8 +1,23 @@
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
 #include <proto.hpp>
+#include <cpu/lock.h>
 bool SheetIsRefreshing = false;
 bool SheetIsCreating   = false;
+
+typedef struct
+{
+    SHEET_INFO *sht;
+    int         x1;
+    int         y1;
+    int         x2;
+    int         y2;
+    bool        pending;
+} SheetDamageQueueState;
+
+static spin_t               g_sheet_damage_lock = SPIN_INIT;
+static spin_t               g_sheet_flush_lock  = SPIN_INIT;
+static SheetDamageQueueState g_sheet_damage_queue = {NULL, 0, 0, 0, 0, false};
 
 static size_t sheet_buffer_bytes(uint32_t width, uint32_t height)
 {
@@ -447,22 +462,24 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 
 bool allow_to_flush = false;
 
-void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2) {
-    if (!allow_to_flush) return;
-    SheetIsRefreshing = true;
+static bool clip_refresh_region(SHEET_INFO *sht, int *bex1, int *bey1, int *bex2, int *bey2)
+{
+    if (sht == NULL) return false;
+    if (*bex1 < 0) *bex1 = 0;
+    if (*bey1 < 0) *bey1 = 0;
+    if (*bex2 > (int)sht->scrx) *bex2 = sht->scrx;
+    if (*bey2 > (int)sht->scry) *bey2 = sht->scry;
+    if (*bex1 >= *bex2 || *bey1 >= *bey2) return false;
+    return true;
+}
 
-    // 屏幕边界裁剪
-    if (bex1 < 0) bex1 = 0;
-    if (bey1 < 0) bey1 = 0;
-    if (bex2 > (int)sht->scrx) bex2 = sht->scrx;
-    if (bey2 > (int)sht->scry) bey2 = sht->scry;
-    if (bex1 >= bex2 || bey1 >= bey2) {
-        SheetIsRefreshing = false;
-        return;
-    }
+static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
+{
+    SheetIsRefreshing = true;
 
     SHEET_BUFFER *temp_buf_base = (SHEET_BUFFER *)sht->temp_buffer;
     uint8_t *temp_peek_sign = sht->foxland.peek_sign;
+    bool need_peek_overlay = false;
 
     // 遍历所有图层进行合成 - 优化：减少分支判断
     for (SHEET *st = sht->start; st != nullptr; st = st->next) {
@@ -487,46 +504,56 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
             SHEET_BUFFER *p_src = &st_buf[st_off];
             uint8_t *p_sign = &temp_peek_sign[screen_off];
 
-            // 展开循环，减少分支预测失败
-            for (int x = 0; x < width; x++) {
+            for (int x = 0; x < width; ) {
                 uint8_t alpha = p_src[x].a;
-                
+
                 if (alpha == 255) {
-                    // 全不透明，直接复制
-                    p_dst[x] = p_src[x];
-                    p_sign[x] = 0;
-                } else if (alpha > 0) {
-                    // Alpha 混合
+                    int run = 1;
+                    while (x + run < width && p_src[x + run].a == 255) {
+                        run++;
+                    }
+
+                    memcpy(&p_dst[x], &p_src[x], (size_t)run * sizeof(SHEET_BUFFER));
+                    memset(&p_sign[x], 0, (size_t)run);
+                    x += run;
+                    continue;
+                }
+
+                if (alpha > 0) {
                     uint32_t inv_alpha = 255 - alpha;
-                    
+
                     p_dst[x].r = (p_src[x].r * alpha + p_dst[x].r * inv_alpha) >> 8;
                     p_dst[x].g = (p_src[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
                     p_dst[x].b = (p_src[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
-                    
+
                     p_sign[x] = 1;
+                    need_peek_overlay = true;
                 }
+                x++;
             }
         }
     }
 
     // Foxland Peek 处理 - 优化：减少指针计算
-    SHEET_BUFFER *temp_peek = (SHEET_BUFFER *)sht->foxland.fl_peek_buffer;
-    int peek_width = bex2 - bex1;
-    
-    for (int y = bey1; y < bey2; y++) {
-        int offset = y * sht->scrx + bex1;
-        SHEET_BUFFER *p_dst = &temp_buf_base[offset];
-        uint8_t *p_sign = &temp_peek_sign[offset];
-        SHEET_BUFFER *p_peek = &temp_peek[offset];
+    if (need_peek_overlay) {
+        SHEET_BUFFER *temp_peek = (SHEET_BUFFER *)sht->foxland.fl_peek_buffer;
+        int peek_width = bex2 - bex1;
 
-        for (int x = 0; x < peek_width; x++) {
-            if (p_sign[x] == 1) {
-                uint32_t alpha = p_peek[x].a;
-                uint32_t inv_alpha = 255 - alpha;
-                p_dst[x].r = (p_peek[x].r * alpha + p_dst[x].r * inv_alpha) >> 8;
-                p_dst[x].g = (p_peek[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
-                p_dst[x].b = (p_peek[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
-                p_sign[x] = 0; // 重置标志位
+        for (int y = bey1; y < bey2; y++) {
+            int offset = y * sht->scrx + bex1;
+            SHEET_BUFFER *p_dst = &temp_buf_base[offset];
+            uint8_t *p_sign = &temp_peek_sign[offset];
+            SHEET_BUFFER *p_peek = &temp_peek[offset];
+
+            for (int x = 0; x < peek_width; x++) {
+                if (p_sign[x] == 1) {
+                    uint32_t alpha = p_peek[x].a;
+                    uint32_t inv_alpha = 255 - alpha;
+                    p_dst[x].r = (p_peek[x].r * alpha + p_dst[x].r * inv_alpha) >> 8;
+                    p_dst[x].g = (p_peek[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
+                    p_dst[x].b = (p_peek[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
+                    p_sign[x] = 0;
+                }
             }
         }
     }
@@ -534,24 +561,16 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
     // 写入显存 - 优化：使用 memcpy 批量复制
     uint8_t *frame_buffer = (uint8_t *)sht->fbc->frame_buffer;
     uint32_t pixels_per_scan_line = sht->fbc->pixels_per_scan_line;
-    size_t row_bytes = (bex2 - bex1) * 4; // 每行的字节数
+    size_t row_bytes = (size_t)(bex2 - bex1) * sizeof(SHEET_BUFFER);
     
     if (sht->fbc->pixel_format == PixelFormat::kRGBR) {
-        // RGB 格式
         for (int y = bey1; y < bey2; y++) {
             SHEET_BUFFER *src_line = &temp_buf_base[y * sht->scrx + bex1];
             uint8_t *dst_line = frame_buffer + (y * pixels_per_scan_line + bex1) * 4;
-            
-            // 转换并复制整行
-            for (int x = 0; x < (bex2 - bex1); x++) {
-                dst_line[x * 4 + 0] = src_line[x].r;
-                dst_line[x * 4 + 1] = src_line[x].g;
-                dst_line[x * 4 + 2] = src_line[x].b;
-                dst_line[x * 4 + 3] = 0;
-            }
+
+            memcpy(dst_line, src_line, row_bytes);
         }
     } else {
-        // BGR 格式
         for (int y = bey1; y < bey2; y++) {
             SHEET_BUFFER *src_line = &temp_buf_base[y * sht->scrx + bex1];
             uint8_t *dst_line = frame_buffer + (y * pixels_per_scan_line + bex1) * 4;
@@ -566,14 +585,69 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
         }
     }
 
-    serial_redraw_screen_overlay();
+    serial_redraw_screen_overlay_part(bex1, bey1, bex2, bey2);
     SheetIsRefreshing = false;
+}
+
+void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
+{
+    if (!allow_to_flush) return;
+    if (!clip_refresh_region(sht, &bex1, &bey1, &bex2, &bey2)) return;
+
+    spin_lock(&g_sheet_damage_lock);
+    if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht)
+    {
+        if (bex1 < g_sheet_damage_queue.x1) g_sheet_damage_queue.x1 = bex1;
+        if (bey1 < g_sheet_damage_queue.y1) g_sheet_damage_queue.y1 = bey1;
+        if (bex2 > g_sheet_damage_queue.x2) g_sheet_damage_queue.x2 = bex2;
+        if (bey2 > g_sheet_damage_queue.y2) g_sheet_damage_queue.y2 = bey2;
+    }
+    else
+    {
+        g_sheet_damage_queue.sht = sht;
+        g_sheet_damage_queue.x1 = bex1;
+        g_sheet_damage_queue.y1 = bey1;
+        g_sheet_damage_queue.x2 = bex2;
+        g_sheet_damage_queue.y2 = bey2;
+        g_sheet_damage_queue.pending = true;
+    }
+    spin_unlock(&g_sheet_damage_lock);
 }
 
 void refresh_sheet(SHEET_INFO *sht)
 {
-    // 已摆烂
     refresh_part_sheet(sht, 0, 0, sht->scrx, sht->scry);
+}
+
+void flush_sheet_damage_queue(SHEET_INFO *sht)
+{
+    if (!allow_to_flush || sht == NULL) return;
+
+    spin_lock(&g_sheet_flush_lock);
+    while (true)
+    {
+        SHEET_INFO *pending_sht = NULL;
+        int         x1 = 0;
+        int         y1 = 0;
+        int         x2 = 0;
+        int         y2 = 0;
+
+        spin_lock(&g_sheet_damage_lock);
+        if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht)
+        {
+            pending_sht = g_sheet_damage_queue.sht;
+            x1 = g_sheet_damage_queue.x1;
+            y1 = g_sheet_damage_queue.y1;
+            x2 = g_sheet_damage_queue.x2;
+            y2 = g_sheet_damage_queue.y2;
+            g_sheet_damage_queue.pending = false;
+        }
+        spin_unlock(&g_sheet_damage_lock);
+
+        if (pending_sht == NULL) break;
+        refresh_part_sheet_now(pending_sht, x1, y1, x2, y2);
+    }
+    spin_unlock(&g_sheet_flush_lock);
 }
 
 uint32_t get_hor()
@@ -603,11 +677,9 @@ void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uin
     SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
     for (int y = 0; y < height_i; y++)
     {
-        for (int x = 0; x < width_i; x++)
-        {
-            dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)] =
-                src[(src_y_i + y) * src_stride + (src_x_i + x)];
-        }
+        SHEET_BUFFER *dst_row = &dst[(dst_y_i + y) * dst_sheet->width + dst_x_i];
+        SHEET_BUFFER *src_row = &src[(src_y_i + y) * src_stride + src_x_i];
+        memcpy(dst_row, src_row, (size_t)width_i * sizeof(SHEET_BUFFER));
     }
 }
 
@@ -628,10 +700,12 @@ void copy_buffer_by_id_without_alpha(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BU
     SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
     for (int y = 0; y < height_i; y++)
     {
+        SHEET_BUFFER *dst_row = &dst[(dst_y_i + y) * dst_sheet->width + dst_x_i];
+        SHEET_BUFFER *src_row = &src[(src_y_i + y) * src_stride + src_x_i];
         for (int x = 0; x < width_i; x++)
         {
-            SHEET_BUFFER pixel = src[(src_y_i + y) * src_stride + (src_x_i + x)];
-            if (pixel.a > 10) dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)] = pixel;
+            SHEET_BUFFER pixel = src_row[x];
+            if (pixel.a > 10) dst_row[x] = pixel;
         }
     }
 }
@@ -655,11 +729,18 @@ void copy_buffer_blend_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *sr
     SHEET_BUFFER *dst = (SHEET_BUFFER *)dst_sheet->buffer;
     for (int y = 0; y < height_i; y++)
     {
+        SHEET_BUFFER *dst_row = &dst[(dst_y_i + y) * dst_sheet->width + dst_x_i];
+        SHEET_BUFFER *src_row = &src[(src_y_i + y) * src_stride + src_x_i];
         for (int x = 0; x < width_i; x++)
         {
-            SHEET_BUFFER pixel = src[(src_y_i + y) * src_stride + (src_x_i + x)];
-            dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)] =
-                LCD_AlphaBlend(pixel, dst[(dst_y_i + y) * dst_sheet->width + (dst_x_i + x)], pixel.a);
+            SHEET_BUFFER pixel = src_row[x];
+            if (pixel.a == 0) continue;
+            if (pixel.a == 255)
+            {
+                dst_row[x] = pixel;
+                continue;
+            }
+            dst_row[x] = LCD_AlphaBlend(pixel, dst_row[x], pixel.a);
         }
     }
 }

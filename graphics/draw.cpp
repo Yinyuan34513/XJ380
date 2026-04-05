@@ -76,6 +76,8 @@ void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const Pi
     
     uint8_t *frame_buffer = (uint8_t *)fbc.frame_buffer;
     uint32_t pixels_per_scan_line = fbc.pixels_per_scan_line;
+    int rect_width = x2 - x1;
+    int rect_height = y2 - y1;
     
     // 预计算像素值
     uint32_t pixel_value;
@@ -87,11 +89,18 @@ void rect(const FrameBufferConfig &fbc, int x1, int y1, int x2, int y2, const Pi
         pixel_value = (0 << 24) | (c.r << 16) | (c.g << 8) | c.b;
     }
     
-    // 批量填充矩形区域
-    for (int y = y1; y < y2; y++) {
-        uint32_t *row_start = (uint32_t *)(frame_buffer + (y * pixels_per_scan_line + x1) * 4);
-        for (int x = 0; x < (x2 - x1); x++) {
-            row_start[x] = pixel_value;
-        }
+    uint32_t *first_row = (uint32_t *)(frame_buffer + (y1 * pixels_per_scan_line + x1) * 4);
+    for (int x = 0; x < rect_width; x++) {
+        first_row[x] = pixel_value;
+    }
+
+    if (rect_height <= 1) {
+        return;
+    }
+
+    size_t row_bytes = (size_t)rect_width * sizeof(uint32_t);
+    for (int y = 1; y < rect_height; y++) {
+        uint8_t *row_start = frame_buffer + ((y1 + y) * pixels_per_scan_line + x1) * 4;
+        memcpy(row_start, first_row, row_bytes);
     }
 }

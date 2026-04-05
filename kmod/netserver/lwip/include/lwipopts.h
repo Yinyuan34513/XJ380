@@ -21,7 +21,7 @@
 #define LWIP_ICMP 1
 #define LWIP_DHCP 1
 #define LWIP_DNS 1
-#define LWIP_IPV6 0
+#define LWIP_IPV6 1
 
 #define LWIP_ETHERNET 1
 #define LWIP_ARP 1
@@ -50,7 +50,7 @@
 #define TCP_SND_QUEUELEN 16
 #define MEMP_NUM_TCP_PCB 8
 #define MEMP_NUM_TCP_SEG 32
-#define MEMP_NUM_SYS_TIMEOUT 16
+#define MEMP_NUM_SYS_TIMEOUT 32
 #define MEMP_NUM_TCPIP_MSG_API 32
 #define MEMP_NUM_TCPIP_MSG_INPKT 32
 #define TCP_LISTEN_BACKLOG 1
