@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf xmlviewer.elf
 
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -Wno-writable-strings
 
@@ -28,6 +28,12 @@ cp537.elf: cp537.cpp
 	@echo "CPPLD $< -> ../out/$@"
 
 picturer.elf: picturer/picturer.cpp
+	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+#	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "CPPLD $< -> ../out/$@"
+
+xmlviewer.elf: xmlviewer.cpp
 	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
@@ -124,4 +130,4 @@ texter.elf: $(TEXTER_OBJECTS)
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/picturer.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/picturer.* ../out/xmlviewer.*
