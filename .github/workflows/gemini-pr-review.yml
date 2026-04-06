@@ -75,8 +75,8 @@ jobs:
           elif [ "${EVENT_NAME}" = "issue_comment" ]; then
             pr_number="${COMMENT_PR}"
             case "${COMMENT_BODY}" in
-              "/gemini reviwe"*)
-                focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini reviwe[[:space:]]*@@')"
+              "/gemini review"*)
+                focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini review[[:space:]]*@@')"
                 ;;
               "/gemini-review"*)
                 focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini-review[[:space:]]*@@')"
