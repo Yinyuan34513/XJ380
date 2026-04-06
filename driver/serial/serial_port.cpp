@@ -14,6 +14,17 @@ spin_t fmt_lock; // For write_serial_fmt
 int serial_x     = 0;
 int serial_y     = 0;
 int serial_x_max = 0;
+static constexpr int SERIAL_CHAR_WIDTH  = 8;
+static constexpr int SERIAL_CHAR_HEIGHT = 16;
+
+static constexpr PixelColor SERIAL_SCREEN_WHITE  = {0xff, 0xff, 0xff};
+static constexpr PixelColor SERIAL_SCREEN_GRAY   = {0x80, 0x80, 0x80};
+static constexpr PixelColor SERIAL_SCREEN_BLUE   = {0x31, 0x56, 0xd6};
+static constexpr PixelColor SERIAL_SCREEN_YELLOW = {0xff, 0xf1, 0x22};
+static constexpr PixelColor SERIAL_SCREEN_CYAN   = {0x43, 0xd7, 0xff};
+static constexpr PixelColor SERIAL_SCREEN_RED    = {0xff, 0x3b, 0x30};
+static constexpr PixelColor SERIAL_SCREEN_RED_SOFT = {0xff, 0x78, 0x78};
+static constexpr PixelColor SERIAL_SCREEN_BG     = {0x00, 0x00, 0x00};
 #endif
 
 #define PORT 0x3f8 // COM1
@@ -65,35 +76,82 @@ void write_serial(char a)
     outb(PORT, a);
 }
 
-void write_serial_string(const char *str)
+static void serial_screen_puts(const char *str, const PixelColor &color)
 {
-    spin_lock(&serial_lock);
+#if BUILD_EDITION == DEBUG_VERSION  // 串口那么可爱为什么要谋害他（哭
+    if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
+        return;
+    }
+
+    auto serial_screen_scroll = []() {
+        size_t bytes_per_row = (size_t)fbc_addr->pixels_per_scan_line * 4;
+        size_t scroll_rows   = fbc_addr->vertical_resolution - SERIAL_CHAR_HEIGHT;
+        memmove(fbc_addr->frame_buffer,
+                fbc_addr->frame_buffer + SERIAL_CHAR_HEIGHT * bytes_per_row,
+                scroll_rows * bytes_per_row);
+        rect(*fbc_addr, 0, (int)scroll_rows, (int)fbc_addr->horizontal_resolution,
+             (int)fbc_addr->vertical_resolution, SERIAL_SCREEN_BG);
+        serial_y = (int)scroll_rows;
+        serial_x = 0;
+        serial_x_max = (serial_x_max > serial_x) ? serial_x_max : serial_x;
+    };
+
+    auto serial_screen_newline = [&]() {
+        serial_x = 0;
+        serial_y += SERIAL_CHAR_HEIGHT;
+        if (serial_y + SERIAL_CHAR_HEIGHT > (int)fbc_addr->vertical_resolution) {
+            serial_screen_scroll();
+        }
+    };
+
     while (*str)
     {
-#if BUILD_EDITION == DEBUG_VERSION  // 串口那么可爱为什么要谋害他（哭
         if (*str == '\n')
         {
-            serial_x  = 0;
-            serial_y += 16;
+            serial_screen_newline();
         }
         else
         {
-            rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
-            WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
-            serial_x += 8;
-        }
+            if (serial_x + SERIAL_CHAR_WIDTH > (int)fbc_addr->horizontal_resolution) {
+                serial_screen_newline();
+            }
 
-        if (serial_y >= fbc_addr->vertical_resolution)
-        {
-            rect(*fbc_addr, 0, 0, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
-            serial_x_max = 0;
-            serial_y     = 0;
+            rect(*fbc_addr, serial_x, serial_y, serial_x + SERIAL_CHAR_WIDTH,
+                 serial_y + SERIAL_CHAR_HEIGHT, SERIAL_SCREEN_BG);
+            WriteAscii(*fbc_addr, serial_x, serial_y, *str, color);
+            serial_x += SERIAL_CHAR_WIDTH;
         }
         if (serial_x > serial_x_max) { serial_x_max = serial_x; }
+        ++str;
+    }
+#else
+    (void)str;
+    (void)color;
 #endif
+}
+
+static void write_serial_string_colored(const char *str, const PixelColor &color)
+{
+    if (str == NULL) {
+        return;
+    }
+
+    spin_lock(&serial_lock);
+    serial_screen_puts(str, color);
+    while (*str)
+    {
         write_serial(*str++);
     }
     spin_unlock(&serial_lock);
+}
+
+void write_serial_string(const char *str)
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    write_serial_string_colored(str, SERIAL_SCREEN_WHITE);
+#else
+    write_serial_string_colored(str, {0xff, 0xff, 0xff});
+#endif
 }
 
 void write_serial_dec(unsigned long long dec)
@@ -304,7 +362,9 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         /* Calc length of `%s` and set num_flag */
         switch (**fmt_ptr)
         {
-        case 'c': break;
+        case 'c':
+            if (num_fmter.size == 0) num_fmter.size = 1;
+            break;
         case 's':
             str_len = strlen(str);
             if (num_fmter.size < str_len) num_fmter.size = str_len;
@@ -448,18 +508,43 @@ Writer SerialWriter = {
     .handler = serial_write_handler,
 };
 
+static void serial_flush_buffer(void)
+{
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string(serial_write_buffer);
+        serial_write_buffer_index = 0;
+    }
+}
+
+static void serial_flush_buffer_colored(const PixelColor &color)
+{
+    if (serial_write_buffer_index > 0)
+    {
+        write_serial_string_colored(serial_write_buffer, color);
+        serial_write_buffer_index = 0;
+    }
+}
+
+static int serial_log_vprint(const char *prefix, const PixelColor &prefix_color,
+                             const PixelColor &body_color, const char *fmt,
+                             va_list args)
+{
+    spin_lock(&fmt_lock);
+    write_serial_string_colored(prefix, prefix_color);
+    vwprintf(&SerialWriter, fmt, args);
+    serial_flush_buffer_colored(body_color);
+    spin_unlock(&fmt_lock);
+    return 0;
+}
+
 void serial_wprintf(const char *fmt, ...)
 {
     spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
     vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    serial_flush_buffer();
     va_end(args);
     spin_unlock(&fmt_lock);
 }
@@ -473,12 +558,7 @@ int write_serial_fmt(const char *fmt, ...)
     va_list args;
     va_start(args, fmt);
     vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    serial_flush_buffer();
     va_end(args);
     spin_unlock(&fmt_lock);
     return 0;
@@ -490,22 +570,19 @@ int write_serial_fmt(const char *fmt, ...)
 // 用于输出消息
 int printk(const char *fmt, ...)
 {
-    spin_lock(&fmt_lock);
-
-    write_serial_string("[XJ380 System Kernel][MESSAGE] ");
-
     va_list args;
     va_start(args, fmt);
-    vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    int rc = serial_log_vprint("[XS Kernel][MSG] ",
+#if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_GRAY,
+                               SERIAL_SCREEN_WHITE,
+#else
+                               {0xff, 0xff, 0xff},
+                               {0xff, 0xff, 0xff},
+#endif
+                               fmt, args);
     va_end(args);
-    spin_unlock(&fmt_lock);
-    return 0;
+    return rc;
 }
 
 EXPORT_SYMBOL(printk);
@@ -513,110 +590,99 @@ EXPORT_SYMBOL(printk);
 // 用于输出调试消息
 int pr_debug(const char *fmt, ...)
 {
-    spin_lock(&fmt_lock);
-
-    write_serial_string("[XJ380 System Kernel][DEBUG] ");
-
     va_list args;
     va_start(args, fmt);
-    vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    int rc = serial_log_vprint("[XS Kernel][DEBUG] ",
+#if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_CYAN,
+                               SERIAL_SCREEN_GRAY,
+#else
+                               {0xff, 0xff, 0xff},
+                               {0xff, 0xff, 0xff},
+#endif
+                               fmt, args);
     va_end(args);
-    spin_unlock(&fmt_lock);
-    return 0;
+    return rc;
 }
+
 EXPORT_SYMBOL(pr_debug);
 
 // 用于输出警告消息
 int pr_warn(const char *fmt, ...)
 {
-    spin_lock(&fmt_lock);
-
-    write_serial_string("[XJ380 System Kernel][WARNING] ");
-
     va_list args;
     va_start(args, fmt);
-    vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    int rc = serial_log_vprint("[XS Kernel][WARNING] ",
+#if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_YELLOW,
+                               SERIAL_SCREEN_WHITE,
+#else
+                               {0xff, 0xff, 0xff},
+                               {0xff, 0xff, 0xff},
+#endif
+                               fmt, args);
     va_end(args);
-    spin_unlock(&fmt_lock);
-    return 0;
+    return rc;
 }
+
 EXPORT_SYMBOL(pr_warn);
 
 // 用于输出调试信息消息
 int pr_info(const char *fmt, ...)
 {
-    spin_lock(&fmt_lock);
-
-    write_serial_string("[XJ380 System Kernel][INFO] ");
-
     va_list args;
     va_start(args, fmt);
-    vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    int rc = serial_log_vprint("[XS Kernel][INFO] ",
+#if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_BLUE,
+                               SERIAL_SCREEN_WHITE,
+#else
+                               {0xff, 0xff, 0xff},
+                               {0xff, 0xff, 0xff},
+#endif
+                               fmt, args);
     va_end(args);
-    spin_unlock(&fmt_lock);
-    return 0;
+    return rc;
 }
+
 EXPORT_SYMBOL(pr_info);
 
 // 用于输出提示消息
 int pr_notice(const char *fmt, ...)
 {
-    spin_lock(&fmt_lock);
-
-    write_serial_string("[XJ380 System Kernel][NOTICE] ");
-
     va_list args;
     va_start(args, fmt);
-    vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    int rc = serial_log_vprint("[XS Kernel][NOTICE] ",
+#if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_CYAN,
+                               SERIAL_SCREEN_WHITE,
+#else
+                               {0xff, 0xff, 0xff},
+                               {0xff, 0xff, 0xff},
+#endif
+                               fmt, args);
     va_end(args);
-    spin_unlock(&fmt_lock);
-    return 0;
+    return rc;
 }
+
 EXPORT_SYMBOL(pr_notice);
 
 // 用于输出错误消息
 int pr_err(const char *fmt, ...)
 {
-    spin_lock(&fmt_lock);
-
-    write_serial_string("[XJ380 System Kernel][ERROR] ");
-
     va_list args;
     va_start(args, fmt);
-    vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    int rc = serial_log_vprint("[XS Kernel][ERROR] ",
+#if BUILD_EDITION == DEBUG_VERSION
+                               SERIAL_SCREEN_RED,
+                               SERIAL_SCREEN_RED_SOFT,
+#else
+                               {0xff, 0xff, 0xff},
+                               {0xff, 0xff, 0xff},
+#endif
+                               fmt, args);
     va_end(args);
-    spin_unlock(&fmt_lock);
-    return 0;
+    return rc;
 }
 
 
@@ -728,12 +794,7 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
     va_list args;
     va_start(args, fmt);
     vwprintf(&SerialWriter, fmt, args);
-    // flush buffer
-    if (serial_write_buffer_index > 0)
-    {
-        write_serial_string(serial_write_buffer);
-        serial_write_buffer_index = 0;
-    }
+    serial_flush_buffer();
     va_end(args);
     spin_unlock(&fmt_lock);
 }
