@@ -507,7 +507,7 @@ int get_mouse_scroll()
     return scroll;
 }
 
-void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
+extern "C" void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
 {
     ms_dec.btn = buttons & 0x07;
     ms_dec.x   = dx;

@@ -184,8 +184,14 @@ extern "C" {
 #define SCSI_READ_16 0x88U
 #define SCSI_WRITE_16 0x8AU
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 void keyboard_push_input(uint8_t value);
 void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
+#ifdef __cplusplus
+}
+#endif
 
 static inline uint8_t xhci_endpoint_id_from_address(uint8_t endpoint_address) {
     if ((endpoint_address & 0x0FU) == 0) {
