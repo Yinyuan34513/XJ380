@@ -227,7 +227,9 @@ static err_t xj380_netif_init(struct netif *netif)
     netif->flags |= NETIF_FLAG_MLD6;
 #endif
     netif->output     = etharp_output;
+#if LWIP_IPV6
     netif->output_ip6 = ethip6_output;
+#endif
     netif->linkoutput = xj380_linkoutput;
     return ERR_OK;
 }
@@ -251,6 +253,7 @@ static int xj380_sockaddr_to_ip(const struct sockaddr *addr, socklen_t addrlen, 
         return 0;
     }
 
+#if LWIP_IPV6
     if (addr->sa_family == AF_INET6) {
         if (addrlen < sizeof(struct sockaddr_in6)) {
             return -EINVAL;
@@ -264,10 +267,12 @@ static int xj380_sockaddr_to_ip(const struct sockaddr *addr, socklen_t addrlen, 
         *port = lwip_ntohs(sin6->sin6_port);
         return 0;
     }
+#endif
 
     return -EAFNOSUPPORT;
 }
 
+#if LWIP_IPV6
 static void xj380_copy_ip6_to_bytes(const ip6_addr_t *ip6, uint8_t out[16])
 {
     if (ip6 == NULL || out == NULL) {
@@ -278,6 +283,7 @@ static void xj380_copy_ip6_to_bytes(const ip6_addr_t *ip6, uint8_t out[16])
     ip6_addr_copy_to_packed(packed, *ip6);
     memcpy(out, &packed, 16);
 }
+#endif
 
 static void xj380_ip_to_sockaddr(const ip_addr_t *ip, u16_t port, struct sockaddr *addr, socklen_t *addrlen)
 {
@@ -285,6 +291,7 @@ static void xj380_ip_to_sockaddr(const ip_addr_t *ip, u16_t port, struct sockadd
         return;
     }
 
+#if LWIP_IPV6
     if (ip != NULL && IP_IS_V6(ip)) {
         if (*addrlen < sizeof(struct sockaddr_in6) || addr == NULL) {
             *addrlen = sizeof(struct sockaddr_in6);
@@ -306,6 +313,7 @@ static void xj380_ip_to_sockaddr(const ip_addr_t *ip, u16_t port, struct sockadd
         *addrlen = sizeof(out6);
         return;
     }
+#endif
 
     if (*addrlen < sizeof(struct sockaddr_in) || addr == NULL) {
         *addrlen = sizeof(struct sockaddr_in);
@@ -450,9 +458,13 @@ static int xj380_provider_create(int domain, int type, int protocol, void **out_
     enum netconn_type conn_type;
     if (domain == AF_INET) {
         conn_type = NETCONN_TCP;
-    } else if (domain == AF_INET6) {
+    }
+#if LWIP_IPV6
+    else if (domain == AF_INET6) {
         conn_type = NETCONN_TCP_IPV6;
-    } else {
+    }
+#endif
+    else {
         return -EAFNOSUPPORT;
     }
 
@@ -710,6 +722,11 @@ static int xj380_resolve_host(const char *hostname, uint8_t family, ip_addr_t *o
     if (hostname == NULL || out_addr == NULL || hostname[0] == '\0') {
         return -EINVAL;
     }
+#if !LWIP_IPV6
+    if (family == AF_INET6) {
+        return -EAFNOSUPPORT;
+    }
+#endif
     if (!g_stack_ready) {
         for (int retry = 0; retry < 500 && !g_stack_ready; ++retry) {
             delay_ms_hp(10);
@@ -736,7 +753,12 @@ static int xj380_resolve_host(const char *hostname, uint8_t family, ip_addr_t *o
     memset(&query, 0, sizeof(query));
 
     LOCK_TCPIP_CORE();
-    u8_t dns_addrtype = family == AF_INET6 ? LWIP_DNS_ADDRTYPE_IPV6 : LWIP_DNS_ADDRTYPE_IPV4;
+    u8_t dns_addrtype = LWIP_DNS_ADDRTYPE_IPV4;
+#if LWIP_IPV6
+    if (family == AF_INET6) {
+        dns_addrtype = LWIP_DNS_ADDRTYPE_IPV6;
+    }
+#endif
     err_t err = dns_gethostbyname_addrtype(hostname, &resolved_addr, xj380_dns_found_cb, &query, dns_addrtype);
     UNLOCK_TCPIP_CORE();
 
@@ -797,6 +819,11 @@ static int xj380_provider_resolve_ipv6(const char *hostname, uint8_t out_addr[16
         return -EINVAL;
     }
 
+#if !LWIP_IPV6
+    (void)hostname;
+    memset(out_addr, 0, 16);
+    return -EAFNOSUPPORT;
+#else
     ip_addr_t resolved_addr;
     int       ret = xj380_resolve_host(hostname, AF_INET6, &resolved_addr);
     if (ret < 0) {
@@ -805,6 +832,7 @@ static int xj380_provider_resolve_ipv6(const char *hostname, uint8_t out_addr[16
 
     xj380_copy_ip6_to_bytes(ip_2_ip6(&resolved_addr), out_addr);
     return 0;
+#endif
 }
 
 static int xj380_provider_set_dns_server(uint32_t addr)
@@ -1055,7 +1083,9 @@ static int xj380_setup_stack(void)
 #if LWIP_IPV6_AUTOCONFIG
     g_netif.ip6_autoconfig_enabled = 1;
 #endif
+#if LWIP_IPV6
     netif_create_ip6_linklocal_address(&g_netif, 1);
+#endif
 
     printk("netserver: netif ready flags=0x%x up=%u link=%u mtu=%u mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
            (unsigned int)g_netif.flags,
@@ -1089,7 +1119,7 @@ static int xj380_setup_stack(void)
                ip4_addr1(&ip4), ip4_addr2(&ip4), ip4_addr3(&ip4), ip4_addr4(&ip4));
     }
 
-    printk("netserver: dhcp client started on %c%c\n", g_netif.name[0], g_netif.name[1]);
+    printk("netserver: dhcp client started on e0\n");
 
     UNLOCK_TCPIP_CORE();
 
