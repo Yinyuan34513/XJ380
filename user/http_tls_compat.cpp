@@ -6,13 +6,6 @@
 #include <psa/crypto.h>
 #include <psa/crypto_platform.h>
 
-extern int xj380_snprintf(char *str, size_t size, const char *format, ...)
-    asm("_Z8snprintfPcyPKcz");
-extern int xj380_vsnprintf(char *str, size_t size, const char *format, va_list ap)
-    asm("_Z9vsnprintfPcyPKcP13__va_list_tag");
-int c_snprintf(char *str, size_t maxlen, const char *fmt, ...) asm("snprintf");
-int c_vsnprintf(char *str, size_t maxlen, const char *fmt, va_list ap) asm("vsnprintf");
-
 struct tls_timespec
 {
     int64_t tv_sec;
@@ -334,28 +327,14 @@ extern "C" int __snprintf_chk(char *str, size_t maxlen, int, size_t, const char 
 {
     va_list ap;
     va_start(ap, fmt);
-    int ret = xj380_vsnprintf(str, maxlen, fmt, ap);
+    int ret = vsnprintf(str, maxlen, fmt, ap);
     va_end(ap);
     return ret;
 }
 
 extern "C" int __vsnprintf_chk(char *str, size_t maxlen, int, size_t, const char *fmt, va_list ap)
 {
-    return xj380_vsnprintf(str, maxlen, fmt, ap);
-}
-
-int c_snprintf(char *str, size_t maxlen, const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    int ret = xj380_vsnprintf(str, maxlen, fmt, ap);
-    va_end(ap);
-    return ret;
-}
-
-int c_vsnprintf(char *str, size_t maxlen, const char *fmt, va_list ap)
-{
-    return xj380_vsnprintf(str, maxlen, fmt, ap);
+    return vsnprintf(str, maxlen, fmt, ap);
 }
 
 extern "C" int __printf_chk(int, const char *fmt, ...)
@@ -363,7 +342,7 @@ extern "C" int __printf_chk(int, const char *fmt, ...)
     char    buffer[512];
     va_list ap;
     va_start(ap, fmt);
-    int ret = xj380_vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    int ret = vsnprintf(buffer, sizeof(buffer), fmt, ap);
     va_end(ap);
 
     if (ret > 0) {
@@ -378,7 +357,7 @@ extern "C" int __printf_chk(int, const char *fmt, ...)
 extern "C" int __vfprintf_chk(FILE *stream, int, const char *fmt, va_list ap)
 {
     char buffer[512];
-    int  ret = xj380_vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    int  ret = vsnprintf(buffer, sizeof(buffer), fmt, ap);
 
     if (ret > 0) {
         int write_len = ret;
@@ -401,7 +380,7 @@ extern "C" int __sprintf_chk(char *str, int, size_t maxlen, const char *fmt, ...
 {
     va_list ap;
     va_start(ap, fmt);
-    int ret = xj380_vsnprintf(str, maxlen, fmt, ap);
+    int ret = vsnprintf(str, maxlen, fmt, ap);
     va_end(ap);
     return ret;
 }
@@ -411,7 +390,7 @@ extern "C" int printf(const char *fmt, ...)
     char    buffer[512];
     va_list ap;
     va_start(ap, fmt);
-    int ret = xj380_vsnprintf(buffer, sizeof(buffer), fmt, ap);
+    int ret = vsnprintf(buffer, sizeof(buffer), fmt, ap);
     va_end(ap);
 
     if (ret > 0) {
@@ -1067,7 +1046,7 @@ extern "C" long syscall(long, ...)
 extern "C" char *strerror_r(int errnum, char *buf, size_t buflen)
 {
     if (buf == NULL || buflen == 0) return NULL;
-    xj380_snprintf(buf, buflen, "errno %d", errnum);
+    snprintf(buf, buflen, "errno %d", errnum);
     return buf;
 }
 

@@ -185,7 +185,7 @@ void keyboard_init()
     outb(PORT_KB_DATA, KB_INIT_MODE);
 }
 
-void keyboard_push_input(uint8_t value)
+extern "C" void keyboard_push_input(uint8_t value)
 {
     kb_synth_enqueue(value);
 }

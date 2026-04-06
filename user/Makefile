@@ -3,6 +3,9 @@ all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf
 export CXX ?= g++
 export CC ?= gcc
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -Wno-write-strings
+XAPI_HEADERS := $(shell find ./xapi/include -type f \( -name "*.h" -o -name "*.hpp" \))
+USER_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \))
+BROWSER_HEADERS := $(shell find ./browser -maxdepth 1 -type f \( -name "*.h" -o -name "*.hpp" \))
 
 MBEDTLS_SRC_DIR := ../third_party/mbedtls-src
 MBEDTLS_CONFIG_HEADER := mbed_compat/xj380_mbedtls_user_config.h
@@ -165,30 +168,30 @@ build_xapi:
 # 命令行程序用：
 # $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o")
 
-init.elf: init.cpp
+init.elf: init.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 # 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-cp537.elf: cp537.cpp
+cp537.elf: cp537.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-picturer.elf: picturer/picturer.cpp
+picturer.elf: picturer/picturer.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-chat.elf: chat.cpp
+chat.elf: chat.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
 
-netcfg.elf: netcfg.cpp
+netcfg.elf: netcfg.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
@@ -200,7 +203,7 @@ httpget.elf: $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS) /usr/lib/clang/22/lib/linux/libclang_rt.builtins-x86_64.a -o ../out/$@
 	@echo "LINK httpget objects -> ../out/$@"
 
-../out/httpget/%.o: ./%.cpp
+../out/httpget/%.o: ./%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -214,12 +217,12 @@ browser.elf: $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GU
 	@$(LD) -Ttext=0x200000 --gc-sections --wrap=free $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GUMBO_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OBJECTS) --start-group $(BROWSER_STDCPP) $(BROWSER_SUPCPP) $(BROWSER_LIBGCC_EH) $(BROWSER_LIBGCC) $(BROWSER_BUILTINS) --end-group -o ../out/$@
 	@echo "LINK browser objects -> ../out/$@"
 
-../out/browser/browser_start.o: ./browser/browser_start.cpp
+../out/browser/browser_start.o: ./browser/browser_start.cpp $(XAPI_HEADERS) $(USER_HEADERS) $(BROWSER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(BROWSER_START_CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
-../out/browser/%.o: ./browser/%.cpp
+../out/browser/%.o: ./browser/%.cpp $(XAPI_HEADERS) $(USER_HEADERS) $(BROWSER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(BROWSER_HOSTED_CXXFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -244,7 +247,7 @@ browser.elf: $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GU
 	@$(CC) $(BROWSER_HOSTED_CFLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
 
-bcms-sp.elf: bcms-sp.cpp
+bcms-sp.elf: bcms-sp.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/constart.cpp.o ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
@@ -279,7 +282,7 @@ CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU
 CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 
-../out/calc/%.o: ./calc/%.cpp
+../out/calc/%.o: ./calc/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -290,7 +293,7 @@ shell.elf: $(SHELL_OBJECTS)
 	@echo "LINK shell objects -> ../out/$@"
 
 # 为每个 shell 源文件定义编译规则
-../out/shell/%.o: ./shell/%.cpp
+../out/shell/%.o: ./shell/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -305,7 +308,7 @@ calc.elf: $(CALC_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK clac objects -> ../out/$@"
 
-../out/fmanager/%.o: ./fmanager/%.cpp
+../out/fmanager/%.o: ./fmanager/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -317,7 +320,7 @@ ctrlmenu.elf: $(CTRLMENU_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK ctrlmenu objects -> ../out/$@"
 
-../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp
+../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -328,7 +331,7 @@ texter.elf: $(TEXTER_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK texter objects -> ../out/$@"
 
-../out/texter/%.o: ./texter/%.cpp
+../out/texter/%.o: ./texter/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"

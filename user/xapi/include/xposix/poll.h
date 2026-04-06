@@ -10,6 +10,10 @@
 #define POLLHUP  0x0010
 #define POLLNVAL 0x0020
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct pollfd {
     int   fd;
     short events;
@@ -17,3 +21,7 @@ struct pollfd {
 };
 
 int poll(struct pollfd *fds, uint64_t nfds, uint64_t timeout_ms);
+
+#ifdef __cplusplus
+}
+#endif

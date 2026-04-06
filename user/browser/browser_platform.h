@@ -155,6 +155,7 @@ void     xapi_OutputSerial(WSTR str);
 void     xapi_Sleep(unsigned long long ms);
 void     SetMsgPrcor(HDLE handle, MsgPrcor func);
 
+extern "C" {
 int      socket(int domain, int type, int protocol);
 int      connect(int sockfd, const sockaddr *addr, socklen_t addrlen);
 int      shutdown(int sockfd, int how);
@@ -162,7 +163,6 @@ int      close(int fd);
 int      read(int fd, char *buf, unsigned long long len);
 int      write(int fd, char *buf, unsigned long long len);
 int      poll(pollfd *fds, unsigned long long nfds, unsigned long long timeout_ms);
-extern "C" {
 int      fcntl(int fd, int cmd, unsigned long long arg);
 int      getaddrinfo(const char *node, const char *service, const addrinfo *hints, addrinfo **res);
 void     freeaddrinfo(addrinfo *res);

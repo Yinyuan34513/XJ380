@@ -203,7 +203,6 @@ void    *virt_to_phys(uint64_t virt_addr);
 void    *driver_phys_to_virt(uint64_t phys_addr);
 void    *driver_virt_to_phys(uint64_t virt_addr);
 uint64_t page_virt_to_phys(uint64_t va);
-
 #define USER_MMAP_START 0x0000400000000000UL // 用户堆映射起始地址
 // kernel/memory/page.cpp
 #include <mm/page.h>
@@ -233,7 +232,13 @@ extern const FrameBufferConfig *fbc_addr;
 // extern struct keyboard_buf kb_fifo;
 // extern uint8_t             keyboard_code[256];
 // extern uint8_t             keyboard_code1[256];
+#ifdef __cplusplus
+extern "C" {
+#endif
 void keyboard_push_input(uint8_t value);
+#ifdef __cplusplus
+}
+#endif
 
 // driver/ps2/mouse.cpp
 void mouse_init();
@@ -248,7 +253,13 @@ void set_mouse_position(int x, int y);
 void center_mouse_cursor();
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet);
 void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py);
+#ifdef __cplusplus
+extern "C" {
+#endif
 void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
+#ifdef __cplusplus
+}
+#endif
 
 /*
  *
@@ -282,7 +293,6 @@ uint64_t getline_from_file(void *buffer, char *str);
 // ulog.cpp
 void init_xuls();
 void write_ulog(char *str);
-
 void ulog_err(char *err_type);
 
 #endif

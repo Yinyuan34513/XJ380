@@ -6,6 +6,10 @@ typedef uint16_t sa_family_t;
 typedef uint16_t in_port_t;
 typedef uint32_t socklen_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define AF_UNSPEC 0
 #define AF_INET   2
 #define AF_INET6  10
@@ -74,3 +78,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int sockfd, int backlog);
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int shutdown(int sockfd, int how);
+
+#ifdef __cplusplus
+}
+#endif
