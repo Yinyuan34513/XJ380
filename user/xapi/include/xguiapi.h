@@ -124,6 +124,15 @@ INT32 xapi_drawSvg(
 	bool    enableTrans = false
 );
 
+INT32 xapi_drawFA(
+	HDLE  	handle,
+	UINT32  x,
+	UINT32  y,
+	UINT32  width,
+	char   *name,
+	bool    enableTrans = false
+);
+
 // void  xapi_DrawCircle(
 // 	HDLE  	handle,
 // 	UINT32 	x,

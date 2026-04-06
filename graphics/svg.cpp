@@ -1,5 +1,6 @@
 #include <graphics/svg.h>
 
+#include <fs/vfs/vfs.h>
 #include <krlibc.h>
 #include <mm/alloc/alloc.h>
 #include <xapi_xml.h>
@@ -8,6 +9,7 @@ typedef struct xapi_style
 {
     bool     fillEnabled;
     uint32_t fillColor;
+    bool     fillRuleEvenOdd;
     bool     strokeEnabled;
     uint32_t strokeColor;
     int      strokeWidth;
@@ -34,6 +36,26 @@ typedef struct xapi_pathPointList
     int  count;
     int  capacity;
 } xapi_pathPointList;
+
+typedef struct xapi_fillContour
+{
+    int *xs;
+    int *ys;
+    int  count;
+} xapi_fillContour;
+
+typedef struct xapi_fillContourList
+{
+    xapi_fillContour *items;
+    int               count;
+    int               capacity;
+} xapi_fillContourList;
+
+typedef struct xapi_scanIntersection
+{
+    int x;
+    int windingDelta;
+} xapi_scanIntersection;
 
 static uint32_t xapi_packColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
@@ -63,6 +85,93 @@ static uint32_t xapi_applyTransColor(const xapi_renderContext *ctx, uint32_t col
 static int xapi_roundToInt(double value)
 {
     return (value >= 0.0) ? (int)(value + 0.5) : (int)(value - 0.5);
+}
+
+static double xapi_absDouble(double value)
+{
+    return value < 0.0 ? -value : value;
+}
+
+static double xapi_sqrtDouble(double value)
+{
+    if (value <= 0.0) { return 0.0; }
+
+    double x = value > 1.0 ? value : 1.0;
+    for (int i = 0; i < 24; i++)
+    {
+        x = 0.5 * (x + value / x);
+    }
+    return x;
+}
+
+static double xapi_wrapAngle(double angle)
+{
+    const double pi    = 3.14159265358979323846;
+    const double twoPi = 6.28318530717958647692;
+
+    while (angle > pi)
+    {
+        angle -= twoPi;
+    }
+    while (angle < -pi)
+    {
+        angle += twoPi;
+    }
+    return angle;
+}
+
+static double xapi_sinApprox(double angle)
+{
+    angle = xapi_wrapAngle(angle);
+    double x2 = angle * angle;
+    double x3 = x2 * angle;
+    double x5 = x3 * x2;
+    double x7 = x5 * x2;
+    double x9 = x7 * x2;
+
+    return angle - x3 / 6.0 + x5 / 120.0 - x7 / 5040.0 + x9 / 362880.0;
+}
+
+static double xapi_cosApprox(double angle)
+{
+    angle = xapi_wrapAngle(angle);
+    double x2 = angle * angle;
+    double x4 = x2 * x2;
+    double x6 = x4 * x2;
+    double x8 = x6 * x2;
+
+    return 1.0 - x2 / 2.0 + x4 / 24.0 - x6 / 720.0 + x8 / 40320.0;
+}
+
+static double xapi_atanApprox(double value)
+{
+    const double piDiv2 = 1.57079632679489661923;
+    double       absV   = xapi_absDouble(value);
+
+    if (absV <= 1.0)
+    {
+        return value * (0.7853981633974483 + 0.273 * (1.0 - absV));
+    }
+
+    double inv  = 1.0 / value;
+    double atan = inv * (0.7853981633974483 + 0.273 * (1.0 - xapi_absDouble(inv)));
+    return value > 0.0 ? (piDiv2 - atan) : (-piDiv2 - atan);
+}
+
+static double xapi_atan2Approx(double y, double x)
+{
+    const double pi     = 3.14159265358979323846;
+    const double piDiv2 = 1.57079632679489661923;
+
+    if (x > 0.0) { return xapi_atanApprox(y / x); }
+    if (x < 0.0)
+    {
+        if (y >= 0.0) { return xapi_atanApprox(y / x) + pi; }
+        return xapi_atanApprox(y / x) - pi;
+    }
+    if (y > 0.0) { return piDiv2; }
+    if (y < 0.0) { return -piDiv2; }
+    return 0.0;
 }
 
 static int xapi_clampInt(int value, int minValue, int maxValue)
@@ -473,6 +582,19 @@ static void xapi_applyPaintToken(
             if (stroke > 64) { stroke = 64; }
             style->strokeWidth = stroke;
         }
+        return;
+    }
+
+    if (strcmp(key, "fill-rule") == 0)
+    {
+        if (strcmp(value, "evenodd") == 0)
+        {
+            style->fillRuleEvenOdd = true;
+        }
+        else if (strcmp(value, "nonzero") == 0)
+        {
+            style->fillRuleEvenOdd = false;
+        }
     }
 }
 
@@ -524,6 +646,9 @@ static void xapi_applyPresentationAttributes(
 
     const char *strokeWidthAttr = xapi_findAttribute(node, "stroke-width");
     if (strokeWidthAttr) { xapi_applyPaintToken("stroke-width", strokeWidthAttr, style); }
+
+    const char *fillRuleAttr = xapi_findAttribute(node, "fill-rule");
+    if (fillRuleAttr) { xapi_applyPaintToken("fill-rule", fillRuleAttr, style); }
 }
 
 static int xapi_integerSqrt(int value)
@@ -1047,6 +1172,185 @@ static void xapi_pathPointListFree(xapi_pathPointList *list)
     list->capacity = 0;
 }
 
+static bool xapi_fillContourListReserve(xapi_fillContourList *list, int required)
+{
+    if (!list) { return false; }
+    if (required <= list->capacity) { return true; }
+
+    int newCapacity = list->capacity > 0 ? list->capacity : 8;
+    while (newCapacity < required)
+    {
+        if (newCapacity > (1 << 20)) { return false; }
+        newCapacity *= 2;
+    }
+
+    xapi_fillContour *newItems = (xapi_fillContour *)malloc((size_t)newCapacity * sizeof(xapi_fillContour));
+    if (!newItems) { return false; }
+
+    if (list->count > 0)
+    {
+        memcpy(newItems, list->items, (size_t)list->count * sizeof(xapi_fillContour));
+    }
+    free(list->items);
+    list->items    = newItems;
+    list->capacity = newCapacity;
+    return true;
+}
+
+static bool xapi_fillContourListAppendFromPath(xapi_fillContourList *list, const xapi_pathPointList *pathPoints)
+{
+    if (!list || !pathPoints || pathPoints->count < 3) { return true; }
+    if (!xapi_fillContourListReserve(list, list->count + 1)) { return false; }
+
+    xapi_fillContour contour;
+    contour.count = pathPoints->count;
+    contour.xs    = (int *)malloc((size_t)contour.count * sizeof(int));
+    contour.ys    = (int *)malloc((size_t)contour.count * sizeof(int));
+    if (!contour.xs || !contour.ys)
+    {
+        free(contour.xs);
+        free(contour.ys);
+        return false;
+    }
+
+    memcpy(contour.xs, pathPoints->xs, (size_t)contour.count * sizeof(int));
+    memcpy(contour.ys, pathPoints->ys, (size_t)contour.count * sizeof(int));
+    list->items[list->count] = contour;
+    list->count++;
+    return true;
+}
+
+static void xapi_fillContourListFree(xapi_fillContourList *list)
+{
+    if (!list) { return; }
+    for (int i = 0; i < list->count; i++)
+    {
+        free(list->items[i].xs);
+        free(list->items[i].ys);
+        list->items[i].xs    = NULL;
+        list->items[i].ys    = NULL;
+        list->items[i].count = 0;
+    }
+    free(list->items);
+    list->items    = NULL;
+    list->count    = 0;
+    list->capacity = 0;
+}
+
+static void xapi_fillContours(
+    xapi_renderContext        *ctx,
+    const xapi_fillContourList *contours,
+    uint32_t                   color,
+    bool                       useEvenOddRule)
+{
+    if (!ctx || !contours || contours->count <= 0) { return; }
+
+    int minY = 0;
+    int maxY = 0;
+    bool hasPoint = false;
+    int totalEdges = 0;
+    for (int c = 0; c < contours->count; c++)
+    {
+        const xapi_fillContour *contour = &contours->items[c];
+        if (!contour->xs || !contour->ys || contour->count < 3) { continue; }
+        totalEdges += contour->count;
+        for (int i = 0; i < contour->count; i++)
+        {
+            int y = contour->ys[i];
+            if (!hasPoint)
+            {
+                minY     = y;
+                maxY     = y;
+                hasPoint = true;
+            }
+            else
+            {
+                if (y < minY) { minY = y; }
+                if (y > maxY) { maxY = y; }
+            }
+        }
+    }
+    if (!hasPoint || totalEdges <= 0) { return; }
+
+    xapi_scanIntersection *intersections =
+        (xapi_scanIntersection *)malloc((size_t)totalEdges * sizeof(xapi_scanIntersection));
+    if (!intersections) { return; }
+
+    SHEET_BUFFER pixel = xapi_toSheetColor(xapi_applyTransColor(ctx, color));
+    for (int y = minY; y <= maxY; y++)
+    {
+        int hitCount = 0;
+        for (int c = 0; c < contours->count; c++)
+        {
+            const xapi_fillContour *contour = &contours->items[c];
+            if (!contour->xs || !contour->ys || contour->count < 3) { continue; }
+
+            for (int i = 0, j = contour->count - 1; i < contour->count; j = i++)
+            {
+                int x1 = contour->xs[j];
+                int y1 = contour->ys[j];
+                int x2 = contour->xs[i];
+                int y2 = contour->ys[i];
+
+                if (y1 == y2) { continue; }
+                if (y < MIN(y1, y2) || y >= MAX(y1, y2)) { continue; }
+
+                double t = (double)(y - y1) / (double)(y2 - y1);
+                intersections[hitCount].x            = x1 + xapi_roundToInt((double)(x2 - x1) * t);
+                intersections[hitCount].windingDelta = (y2 > y1) ? 1 : -1;
+                hitCount++;
+            }
+        }
+
+        for (int i = 0; i < hitCount - 1; i++)
+        {
+            for (int j = i + 1; j < hitCount; j++)
+            {
+                if (intersections[i].x > intersections[j].x)
+                {
+                    xapi_scanIntersection tmp = intersections[i];
+                    intersections[i]          = intersections[j];
+                    intersections[j]          = tmp;
+                }
+            }
+        }
+
+        if (useEvenOddRule)
+        {
+            for (int i = 0; i + 1 < hitCount; i += 2)
+            {
+                int xStart = intersections[i].x;
+                int xEnd   = intersections[i + 1].x;
+                for (int x = xStart; x <= xEnd; x++)
+                {
+                    draw_point(ctx->sheetInfo, ctx->sheet, x, y, pixel);
+                }
+            }
+            continue;
+        }
+
+        int  winding = 0;
+        bool hasPrev = false;
+        int  prevX   = 0;
+        for (int i = 0; i < hitCount; i++)
+        {
+            int x = intersections[i].x;
+            if (hasPrev && winding != 0)
+            {
+                for (int fillX = prevX; fillX <= x; fillX++)
+                {
+                    draw_point(ctx->sheetInfo, ctx->sheet, fillX, y, pixel);
+                }
+            }
+            winding += intersections[i].windingDelta;
+            prevX    = x;
+            hasPrev  = true;
+        }
+    }
+
+    free(intersections);
+}
+
 static bool xapi_appendQuadraticCurvePoints(
     xapi_renderContext *ctx,
     xapi_pathPointList *points,
@@ -1115,6 +1419,161 @@ static bool xapi_appendCubicCurvePoints(
     return true;
 }
 
+static bool xapi_renderArcToPath(
+    xapi_renderContext *ctx,
+    xapi_pathPointList *subPathPoints,
+    bool                fillOn,
+    bool                strokeOn,
+    uint32_t            strokeColor,
+    int                 lineWidth,
+    double              startX,
+    double              startY,
+    double              radiusX,
+    double              radiusY,
+    double              xAxisRotation,
+    bool                largeArcFlag,
+    bool                sweepFlag,
+    double              endX,
+    double              endY)
+{
+    const double pi     = 3.14159265358979323846;
+    const double twoPi  = 6.28318530717958647692;
+    const double epsilon = 1e-9;
+
+    auto appendEndpoint = [&]() -> bool {
+        if (!fillOn) { return true; }
+        return xapi_pathPointListAppend(
+            subPathPoints, xapi_transformX(ctx, endX), xapi_transformY(ctx, endY));
+    };
+
+    if ((xapi_absDouble(endX - startX) < epsilon && xapi_absDouble(endY - startY) < epsilon) || radiusX == 0.0 ||
+        radiusY == 0.0)
+    {
+        if (strokeOn)
+        {
+            xapi_drawSvgLine(
+                ctx, startX, startY, endX, endY, strokeColor, lineWidth);
+        }
+        return appendEndpoint();
+    }
+
+    double rx = xapi_absDouble(radiusX);
+    double ry = xapi_absDouble(radiusY);
+    if (rx < epsilon || ry < epsilon)
+    {
+        if (strokeOn)
+        {
+            xapi_drawSvgLine(
+                ctx, startX, startY, endX, endY, strokeColor, lineWidth);
+        }
+        return appendEndpoint();
+    }
+
+    double phi    = xAxisRotation * (pi / 180.0);
+    double cosPhi = xapi_cosApprox(phi);
+    double sinPhi = xapi_sinApprox(phi);
+
+    double dx2 = (startX - endX) * 0.5;
+    double dy2 = (startY - endY) * 0.5;
+
+    double x1p = cosPhi * dx2 + sinPhi * dy2;
+    double y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+    double rx2 = rx * rx;
+    double ry2 = ry * ry;
+    double x1p2 = x1p * x1p;
+    double y1p2 = y1p * y1p;
+
+    double lambda = x1p2 / rx2 + y1p2 / ry2;
+    if (lambda > 1.0)
+    {
+        double scale = xapi_sqrtDouble(lambda);
+        rx *= scale;
+        ry *= scale;
+        rx2 = rx * rx;
+        ry2 = ry * ry;
+    }
+
+    double denominator = rx2 * y1p2 + ry2 * x1p2;
+    if (denominator <= epsilon)
+    {
+        if (strokeOn)
+        {
+            xapi_drawSvgLine(
+                ctx, startX, startY, endX, endY, strokeColor, lineWidth);
+        }
+        return appendEndpoint();
+    }
+
+    double numerator = rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2;
+    if (numerator < 0.0) { numerator = 0.0; }
+
+    double sign = (largeArcFlag == sweepFlag) ? -1.0 : 1.0;
+    double coef = sign * xapi_sqrtDouble(numerator / denominator);
+
+    double cxp = coef * ((rx * y1p) / ry);
+    double cyp = coef * (-(ry * x1p) / rx);
+
+    double cx = cosPhi * cxp - sinPhi * cyp + (startX + endX) * 0.5;
+    double cy = sinPhi * cxp + cosPhi * cyp + (startY + endY) * 0.5;
+
+    double ux = (x1p - cxp) / rx;
+    double uy = (y1p - cyp) / ry;
+    double vx = (-x1p - cxp) / rx;
+    double vy = (-y1p - cyp) / ry;
+
+    double startAngle = xapi_atan2Approx(uy, ux);
+    double deltaAngle = xapi_atan2Approx(ux * vy - uy * vx, ux * vx + uy * vy);
+    if (!sweepFlag && deltaAngle > 0.0)
+    {
+        deltaAngle -= twoPi;
+    }
+    else if (sweepFlag && deltaAngle < 0.0)
+    {
+        deltaAngle += twoPi;
+    }
+
+    double radiusScreen = (rx > ry ? rx : ry) * ctx->scale;
+    int    segmentsByAngle =
+        xapi_clampInt((int)(xapi_absDouble(deltaAngle) / (pi / 24.0)) + 1, 1, 2048);
+    int segmentsByRadius = xapi_clampInt((int)(xapi_absDouble(deltaAngle) * radiusScreen / 3.0) + 1, 1, 2048);
+    int segments         = segmentsByAngle > segmentsByRadius ? segmentsByAngle : segmentsByRadius;
+
+    double prevX = startX;
+    double prevY = startY;
+    for (int i = 1; i <= segments; i++)
+    {
+        double nextX = endX;
+        double nextY = endY;
+        if (i != segments)
+        {
+            double t       = (double)i / (double)segments;
+            double angle   = startAngle + deltaAngle * t;
+            double cosA    = xapi_cosApprox(angle);
+            double sinA    = xapi_sinApprox(angle);
+            nextX          = cx + cosPhi * rx * cosA - sinPhi * ry * sinA;
+            nextY          = cy + sinPhi * rx * cosA + cosPhi * ry * sinA;
+        }
+
+        if (strokeOn)
+        {
+            xapi_drawSvgLine(
+                ctx, prevX, prevY, nextX, nextY, strokeColor, lineWidth);
+        }
+
+        if (fillOn &&
+            !xapi_pathPointListAppend(subPathPoints, xapi_transformX(ctx, nextX), xapi_transformY(ctx, nextY)))
+        {
+            return false;
+        }
+
+        prevX = nextX;
+        prevY = nextY;
+    }
+
+    return true;
+}
+
 static void xapi_renderPath(
     xapi_renderContext *ctx,
     const xapi_XmlNode                    *node,
@@ -1147,6 +1606,8 @@ static void xapi_renderPath(
 
     xapi_pathPointList subPathPoints;
     memset(&subPathPoints, 0, sizeof(subPathPoints));
+    xapi_fillContourList fillContours;
+    memset(&fillContours, 0, sizeof(fillContours));
 
     while (true)
     {
@@ -1186,9 +1647,10 @@ static void xapi_renderPath(
                     parseFailed = true;
                     break;
                 }
-                if (subPathPoints.count >= 3)
+                if (!xapi_fillContourListAppendFromPath(&fillContours, &subPathPoints))
                 {
-                    xapi_fillPolygon(ctx, subPathPoints.xs, subPathPoints.ys, subPathPoints.count, fillColor);
+                    parseFailed = true;
+                    break;
                 }
                 xapi_pathPointListReset(&subPathPoints);
             }
@@ -1207,9 +1669,11 @@ static void xapi_renderPath(
                 break;
             }
 
-            if (fillOn && hasSubPath && subPathPoints.count >= 3)
+            if (fillOn && hasSubPath && subPathPoints.count >= 3 &&
+                !xapi_fillContourListAppendFromPath(&fillContours, &subPathPoints))
             {
-                xapi_fillPolygon(ctx, subPathPoints.xs, subPathPoints.ys, subPathPoints.count, fillColor);
+                parseFailed = true;
+                break;
             }
             xapi_pathPointListReset(&subPathPoints);
 
@@ -1553,19 +2017,27 @@ static void xapi_renderPath(
 
                 double ex = relative ? (currentX + x) : x;
                 double ey = relative ? (currentY + y) : y;
-                if (strokeOn)
+                bool largeArcFlag = largeArc >= 0.5;
+                bool sweepFlag    = sweep >= 0.5;
+                if (!xapi_renderArcToPath(
+                        ctx,
+                        &subPathPoints,
+                        fillOn,
+                        strokeOn,
+                        strokeColor,
+                        lineWidth,
+                        currentX,
+                        currentY,
+                        rx,
+                        ry,
+                        axis,
+                        largeArcFlag,
+                        sweepFlag,
+                        ex,
+                        ey))
                 {
-                    xapi_drawSvgLine(
-                        ctx, currentX, currentY, ex, ey, strokeColor, lineWidth);
-                }
-                if (fillOn)
-                {
-                    if (!xapi_pathPointListAppend(
-                            &subPathPoints, xapi_transformX(ctx, ex), xapi_transformY(ctx, ey)))
-                    {
-                        parseFailed = true;
-                        break;
-                    }
+                    parseFailed = true;
+                    break;
                 }
                 currentX = ex;
                 currentY = ey;
@@ -1578,10 +2050,17 @@ static void xapi_renderPath(
         break;
     }
 
-    if (fillOn && !parseFailed && hasSubPath && subPathPoints.count >= 3)
+    if (fillOn && !parseFailed && hasSubPath && subPathPoints.count >= 3 &&
+        !xapi_fillContourListAppendFromPath(&fillContours, &subPathPoints))
     {
-        xapi_fillPolygon(ctx, subPathPoints.xs, subPathPoints.ys, subPathPoints.count, fillColor);
+        parseFailed = true;
     }
+
+    if (fillOn && !parseFailed && fillContours.count > 0)
+    {
+        xapi_fillContours(ctx, &fillContours, fillColor, style->fillRuleEvenOdd);
+    }
+    xapi_fillContourListFree(&fillContours);
     xapi_pathPointListFree(&subPathPoints);
 }
 
@@ -1728,6 +2207,7 @@ static void xapi_initBaseStyle(xapi_style *baseStyle)
     if (!baseStyle) { return; }
     baseStyle->fillEnabled   = true;
     baseStyle->fillColor     = xapi_packColor(0, 0, 0, 0xff);
+    baseStyle->fillRuleEvenOdd = false;
     baseStyle->strokeEnabled = false;
     baseStyle->strokeColor   = xapi_packColor(0, 0, 0, 0xff);
     baseStyle->strokeWidth   = 1;
@@ -1924,4 +2404,70 @@ int xapi_drawSvgBySheet(
 
     xapi_freeXmlTree(&tree);
     return targetHeight;
+}
+
+static bool xapi_isValidFaName(const char *name)
+{
+    if (!name || *name == '\0') { return false; }
+    if (strstr(name, "..")) { return false; }
+
+    for (const char *p = name; *p != '\0'; ++p)
+    {
+        if (*p == '/' || *p == '\\' || *p == ':') { return false; }
+    }
+    return true;
+}
+
+int xapi_drawFABySheet(
+    SHEET_INFO *sheetInfo,
+    SHEET      *sheet,
+    int         startX,
+    int         startY,
+    int         width,
+    const char *name,
+    bool        enableTrans)
+{
+    if (!sheetInfo || !sheet || width <= 0 || !xapi_isValidFaName(name)) { return -1; }
+
+    static const char *kSvgDir = "/system/resources/svg/";
+    static const char *kSvgExt = ".svg";
+
+    size_t nameLen = strlen(name);
+    size_t pathLen = strlen(kSvgDir) + nameLen + strlen(kSvgExt);
+    char  *path    = (char *)malloc(pathLen + 1);
+    if (!path) { return -1; }
+
+    memcpy(path, kSvgDir, strlen(kSvgDir));
+    memcpy(path + strlen(kSvgDir), name, nameLen);
+    memcpy(path + strlen(kSvgDir) + nameLen, kSvgExt, strlen(kSvgExt));
+    path[pathLen] = '\0';
+
+    vfs_node_t file = vfs_open(path);
+    free(path);
+    if (!file || file->size == 0 || file->size > (size_t)(2 * 1024 * 1024))
+    {
+        if (file) { vfs_close(file); }
+        return -1;
+    }
+
+    size_t fileSize = file->size;
+    char  *svgText  = (char *)malloc(fileSize + 1);
+    if (!svgText)
+    {
+        vfs_close(file);
+        return -1;
+    }
+
+    size_t readSize = vfs_read(file, (uint8_t *)svgText, 0, fileSize);
+    vfs_close(file);
+    if (readSize != fileSize)
+    {
+        free(svgText);
+        return -1;
+    }
+    svgText[fileSize] = '\0';
+
+    int ret = xapi_drawSvgBySheet(sheetInfo, sheet, startX, startY, width, svgText, enableTrans);
+    free(svgText);
+    return ret;
 }

@@ -39,12 +39,13 @@ extern UserInfo *current_user;
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet);
 
+/*
 static const char *xapi_demoSvgCheck =
     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\">"
     "<!--!Font Awesome Free v7.2.0 by @fontawesome - https://fontawesome.com License - "
     "https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.-->"
     "<path d=\"M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z\"/>"
-    "</svg>";
+    "</svg>"; */
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
@@ -121,8 +122,8 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     int svg_demo_height = 64;
     int svg_demo_x      = scrx - svg_demo_width - 28;
     int svg_demo_y      = 34;
-    xapi_drawSvgBySheet(sht, csheet, svg_demo_x, svg_demo_y, svg_demo_width,
-                                           xapi_demoSvgCheck, true);
+    // xapi_drawSvgBySheet(sht, csheet, svg_demo_x, svg_demo_y, svg_demo_width,
+    //                                        xapi_demoSvgCheck, true);
 }
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)

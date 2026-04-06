@@ -25,6 +25,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <user/user.h>
+#include <graphics/svg.h>
 
 #include <ttf.h>
 
@@ -121,7 +122,8 @@ void init_user()
 
     for (int i = 1; i < urf_data->user_count; i++)
     {
-        PrintPicture_blend(sht_img, desktop_ct_sheet, 64, 130 + (i - 1) * 50, 50, 50, "/system/icon/user.png");
+        // PrintPicture_blend(sht_img, desktop_ct_sheet, 64, 130 + (i - 1) * 50, 50, 50, "/system/icon/user.png");
+        xapi_drawFABySheet(sht_img, desktop_ct_sheet, 64, 132 + (i - 1) * 50, 38, "user", true);
         print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[i].name, WHITE, 122, 138 + (i - 1) * 50, 16);
     }
 

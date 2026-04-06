@@ -16,6 +16,16 @@ int xapi_drawSvgBySheet(
     bool        enableTrans = false
 );
 
+int xapi_drawFABySheet(
+    SHEET_INFO *sheetInfo,
+    SHEET      *sheet,
+    int         startX,
+    int         startY,
+    int         width,
+    const char *name,
+    bool        enableTrans = false
+);
+
 #ifdef __cplusplus
 }
 #endif
