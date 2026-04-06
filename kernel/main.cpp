@@ -194,7 +194,7 @@ void desktop_flusher()
         &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
-    play_boot_animation(&shtinf, desktop_ct_sheet);
+    // play_boot_animation(&shtinf, desktop_ct_sheet);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
@@ -493,7 +493,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_smp(BootConfig.MADT);
 
-    tcb_t idle_thread         = alloc_zeroed_tcb();
+    const size_t idle_alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
+    tcb_t idle_thread            = (tcb_t)aligned_alloc(16, idle_alloc_size);
+    if (idle_thread != NULL) memset(idle_thread, 0, sizeof(struct thread_control_block));
     if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;
