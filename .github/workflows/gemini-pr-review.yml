@@ -1,6 +1,14 @@
 name: Gemini PR Review
 
 on:
+  pull_request:
+    branches:
+      - "**"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -23,6 +31,10 @@ jobs:
   review:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.draft == false
+      ) ||
       (
         github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
@@ -50,6 +62,7 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_PR: ${{ github.event.issue.number }}
           PR_FROM_INPUT: ${{ inputs.pr_number }}
@@ -57,7 +70,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${EVENT_NAME}" = "issue_comment" ]; then
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            pr_number="${PR_FROM_EVENT}"
+            focus=""
+          elif [ "${EVENT_NAME}" = "issue_comment" ]; then
             pr_number="${COMMENT_PR}"
             case "${COMMENT_BODY}" in
               "/gemini review"*)
