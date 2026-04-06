@@ -54,6 +54,11 @@ void xapi_DrawRect(
 	}
 }
 
+INT32 xapi_drawSvg(HDLE handle, UINT32 x, UINT32 y, UINT32 width, WSTR svgText, bool enableTrans)
+{
+	return (INT32)enter_syscall(XAPI_DRAW_SVG, handle, x, y, width, (UINT64)svgText, enableTrans ? 1 : 0);
+}
+
 // void xapi_DrawCircle(
 // 	HDLE  	handle,
 // 	UINT32 	x,

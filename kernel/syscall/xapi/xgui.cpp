@@ -11,6 +11,7 @@
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <graphics/svg.h>
 #include <graphics/window/window.h>
 #include <krlibc.h>
 #include <mm/frame.h>
@@ -443,6 +444,43 @@ int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
+}
+
+int xapi_doDrawSvg(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t svg_text, uint64_t enable_trans)
+{
+    WINDOW_HANDLE *window_handle = (WINDOW_HANDLE *)(handle);
+    const char    *svg_string    = (const char *)svg_text;
+    if (!window_handle || !window_handle->WindowNodePtr || !window_handle->WindowNodePtr->w_sheet || !svg_string)
+    {
+        return -1;
+    }
+    if (width == 0) { return -1; }
+
+    SHEET *sheet = found_sheet_byid(sht_img, window_handle->WindowNodePtr->w_sheet);
+    if (!sheet) { return -1; }
+
+    int content_x = 0;
+    int content_y = 0;
+    int content_w = (int)sheet->width;
+    int content_h = (int)sheet->height;
+
+    if (window_handle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        content_x = 12;
+        content_y = 27;
+        content_w -= 24;
+        content_h -= 47;
+    }
+
+    if (content_w <= 0 || content_h <= 0) { return -1; }
+    if (x >= (uint32_t)content_w || y >= (uint32_t)content_h) { return -1; }
+
+    uint32_t max_width = (uint32_t)(content_w - (int)x);
+    if (width > max_width) { width = max_width; }
+    if (width == 0) { return -1; }
+
+    return xapi_drawSvgBySheet(sht_img, window_handle->WindowNodePtr->w_sheet, (int)x + content_x, (int)y + content_y,
+                              (int)width, svg_string, enable_trans != 0);
 }
 
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func)

@@ -11,6 +11,13 @@ bool need_duopage = false;
 int  file_count_base = 0;
 int  file_count = 0;
 
+static const char *xapi_demoSvgCheck =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\">"
+    "<!--!Font Awesome Free v7.2.0 by @fontawesome - https://fontawesome.com License - "
+    "https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.-->"
+    "<path d=\"M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z\"/>"
+    "</svg>";
+
 static bool visible_index_is_valid(int visible_index)
 {
     int visible_count = file_count - file_count_base;
@@ -35,6 +42,7 @@ void paint_fm_back()
     xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
     xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/icon/bright.png");
     xapi_DrawText(handle, 56, 2, current_path, 11, 0x000000ff);
+    xapi_drawSvg(handle, FMR_X - 40, 30, 28, (char *)xapi_demoSvgCheck);
 
     if (need_duopage)
     {
