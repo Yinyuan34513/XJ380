@@ -1,0 +1,61 @@
+name: PR Build Check
+
+on:
+  pull_request:
+    branches:
+      - "**"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  workflow_dispatch:
+
+concurrency:
+  group: pr-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  make-build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            lld \
+            nasm \
+            curl \
+            gcc-mingw-w64-x86-64
+
+      - name: Resolve clang builtins path
+        id: builtins
+        shell: bash
+        run: |
+          set -euo pipefail
+          path=""
+          runtime_dir="$(clang --print-runtime-dir 2>/dev/null || true)"
+          if [[ -n "${runtime_dir}" && -f "${runtime_dir}/libclang_rt.builtins-x86_64.a" ]]; then
+            path="${runtime_dir}/libclang_rt.builtins-x86_64.a"
+          else
+            path="$(find /usr/lib/clang -type f -name 'libclang_rt.builtins-x86_64.a' | sort -V | tail -n 1 || true)"
+          fi
+
+          if [[ -z "${path}" || ! -f "${path}" ]]; then
+            echo "Cannot find libclang_rt.builtins-x86_64.a"
+            exit 1
+          fi
+
+          echo "path=${path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build
+        run: |
+          make all -j"$(nproc)" SUDO=0 DEBUG=0 KVM=0 BROWSER_BUILTINS="${{ steps.builtins.outputs.path }}"

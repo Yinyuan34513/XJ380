@@ -808,6 +808,13 @@ extern "C" wchar_t *__wmemcpy_chk(wchar_t *dest, const wchar_t *src, size_t coun
     return tls_wmemcpy(dest, src, count);
 }
 
+extern "C" wchar_t *__wmemset_chk(wchar_t *dest, wchar_t ch, size_t count, size_t destlen)
+{
+    size_t max_count = destlen / sizeof(wchar_t);
+    if (count > max_count) count = max_count;
+    return tls_wmemset(dest, ch, count);
+}
+
 extern "C" int __strcoll_l(const char *lhs, const char *rhs, void *)
 {
     return strcmp(lhs, rhs);
@@ -925,6 +932,13 @@ extern "C" size_t __mbsrtowcs_chk(wchar_t *dest, const char **src, size_t len, s
 {
     if (len > dstlen) len = dstlen;
     return mbsnrtowcs(dest, src, len, len, ps);
+}
+
+extern "C" size_t __mbsnrtowcs_chk(wchar_t *dest, const char **src, size_t nms, size_t len,
+                                   size_t dstlen, void *ps)
+{
+    if (len > dstlen) len = dstlen;
+    return mbsnrtowcs(dest, src, nms, len, ps);
 }
 
 extern "C" size_t mbrtowc(wchar_t *pwc, const char *src, size_t len, void *)
