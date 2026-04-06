@@ -759,10 +759,12 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         switch (**fmt_ptr)
         {
         case 'c':
+        {
+            size_t char_pad = num_fmter.size > 1 ? (num_fmter.size - 1) : 0;
             // Right align
             if (!(num_flag.left))
             {
-                while (write_counter < num_fmter.size - 1)
+                while (write_counter < char_pad)
                 {
                     write(writer, ' ');
                     ++write_counter;
@@ -773,13 +775,14 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
             // Left align
             if (num_flag.left)
             {
-                while (write_counter < num_fmter.size - 1)
+                while (write_counter < char_pad + 1)
                 {
                     write(writer, ' ');
                     ++write_counter;
                 }
             }
             break;
+        }
         case 's':
             // Right align
             if (!(num_flag.left))

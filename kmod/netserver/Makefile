@@ -21,15 +21,7 @@ LWIP_IPV4_C := \
 	lwip/core/ipv4/icmp.c \
 	lwip/core/ipv4/ip4.c \
 	lwip/core/ipv4/ip4_addr.c
-LWIP_IPV6_C := \
-	lwip/core/ipv6/ethip6.c \
-	lwip/core/ipv6/icmp6.c \
-	lwip/core/ipv6/inet6.c \
-	lwip/core/ipv6/ip6.c \
-	lwip/core/ipv6/ip6_addr.c \
-	lwip/core/ipv6/ip6_frag.c \
-	lwip/core/ipv6/mld6.c \
-	lwip/core/ipv6/nd6.c
+LWIP_IPV6_C :=
 LWIP_NETIF_C := lwip/netif/ethernet.c
 LWIP_API_C := \
 	lwip/api/api_lib.c \
