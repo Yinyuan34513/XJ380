@@ -92,6 +92,7 @@ void *memset(void *dst, int val, size_t size)
 }
 
 EXPORT_SYMBOL(memset);
+EXPORT_SYMBOL(memcmp);
 
 char *strcpy(char *dest, const char *src)
 {
@@ -116,6 +117,7 @@ size_t strlen(const char *str)
     }
     return s - str;
 }
+EXPORT_SYMBOL(strlen);
 
 /**
  * 把字符串数字转成整数
@@ -138,6 +140,7 @@ int atoi(const char *pstr)
     ret_integer = integer_sign * ret_integer;
     return ret_integer;
 }
+EXPORT_SYMBOL(atoi);
 
 char *strcat(char *dest, const char *src)
 {
@@ -148,6 +151,7 @@ char *strcat(char *dest, const char *src)
         ;
     return ret;
 }
+EXPORT_SYMBOL(strcat);
 
 char *strchrnul(const char *s, int c)
 {
@@ -169,6 +173,7 @@ int strncmp(const char *s1, const char *s2, size_t n)
     }
     return 0;
 }
+EXPORT_SYMBOL(strncmp);
 
 char *strchr(const char *s, int c)
 {
@@ -179,6 +184,7 @@ char *strchr(const char *s, int c)
     }
     return (*s == (char)c) ? (char *)s : NULL;
 }
+EXPORT_SYMBOL(strchr);
 
 char *strstr(const char *str1, const char *str2)
 {
@@ -197,6 +203,7 @@ char *strstr(const char *str1, const char *str2)
     }
     return NULL;
 }
+EXPORT_SYMBOL(strstr);
 
 int strcmp(const char *s1, const char *s2)
 {
@@ -219,11 +226,13 @@ int strcmp(const char *s1, const char *s2)
     }
     else { return (int)(*s1 - *s2); }
 }
+EXPORT_SYMBOL(strcmp);
 
 int isspace(int c)
 {
     return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
 }
+EXPORT_SYMBOL(isspace);
 
 char *strtok(char *str, const char *delim)
 {
@@ -326,6 +335,7 @@ int64_t strtol(const char *str, char **endptr, int base)
     if (endptr != NULL) *endptr = (char *)(any ? s - 1 : str);
     return (acc);
 }
+EXPORT_SYMBOL(strtol);
 
 int cmd_parse(const char *cmd_str, char **argv, char token)
 {
@@ -381,6 +391,7 @@ char *strdup(const char *str)
 
     return ret - (len + 1);
 }
+EXPORT_SYMBOL(strdup);
 
 char *strncpy(char *dest, const char *src, size_t n)
 {
@@ -395,6 +406,7 @@ char *strncpy(char *dest, const char *src, size_t n)
     }
     return dest;
 }
+EXPORT_SYMBOL(strncpy);
 
 char *strrchr(const char *s, int c)
 {
@@ -406,11 +418,13 @@ char *strrchr(const char *s, int c)
     }
     return (c == '\0') ? (char *)s : last;
 }
+EXPORT_SYMBOL(strrchr);
 
 int isdigit(int c)
 {
     return (c >= '0' && c <= '9');
 }
+EXPORT_SYMBOL(isdigit);
 
 int fls(unsigned int x)
 {

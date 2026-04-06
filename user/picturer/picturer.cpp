@@ -1,6 +1,6 @@
 #include <x3api.h>
 
-int main(int argc, char *argv[], char *envp[])
+static int picturer_main_impl(int argc, char *argv[], char *envp[])
 {
     char picpath[256];
 
@@ -29,4 +29,10 @@ int main(int argc, char *argv[], char *envp[])
     xapi_RefreshWindow(handle);
 
     return 0;
+}
+
+extern "C" int picturer_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int picturer_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return picturer_main_impl(argc, argv, envp);
 }

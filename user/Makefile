@@ -15,14 +15,14 @@ build_xapi:
 # 命令行程序用：
 # $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o")
 
-init.elf: init.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+init.elf: init.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 # 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-cp537.elf: cp537.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+cp537.elf: cp537.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
@@ -39,8 +39,8 @@ xmlviewer.elf: xmlviewer.cpp
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-bcms-sp.elf: bcms-sp.cpp
-	@$(CPP) $(CFLAGS) -c $< -o ../out/$@.o
+bcms-sp.elf: bcms-sp.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/constart.cpp.o ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
@@ -74,9 +74,9 @@ CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU
 CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 
-../out/calc/%.o: ./calc/%.cpp
+../out/calc/%.o: ./calc/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 shell.elf: $(SHELL_OBJECTS)
@@ -85,9 +85,9 @@ shell.elf: $(SHELL_OBJECTS)
 	@echo "LINK shell objects -> ../out/$@"
 
 # 为每个 shell 源文件定义编译规则
-../out/shell/%.o: ./shell/%.cpp
+../out/shell/%.o: ./shell/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 fmanager.elf: $(FMANAGER_OBJECTS)
@@ -100,9 +100,9 @@ calc.elf: $(CALC_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK clac objects -> ../out/$@"
 
-../out/fmanager/%.o: ./fmanager/%.cpp
+../out/fmanager/%.o: ./fmanager/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 
@@ -112,9 +112,9 @@ ctrlmenu.elf: $(CTRLMENU_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK ctrlmenu objects -> ../out/$@"
 
-../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp
+../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 
@@ -123,9 +123,9 @@ texter.elf: $(TEXTER_OBJECTS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK texter objects -> ../out/$@"
 
-../out/texter/%.o: ./texter/%.cpp
+../out/texter/%.o: ./texter/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
-	@$(CPP) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
 .PHONY: clean

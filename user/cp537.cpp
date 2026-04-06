@@ -42,7 +42,7 @@ void cp537_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+static int cp537_main_impl(int argc, char *argv[], char *envp[])
 {
     (void)argc;
     (void)argv;
@@ -73,6 +73,12 @@ int main(int argc, char *argv[], char *envp[])
     // xapi_CloseWindow(handle);
     execve((char *)"/shell.elf", NULL, NULL);
     return 0;
+}
+
+extern "C" int cp537_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int cp537_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return cp537_main_impl(argc, argv, envp);
 }
 
 // HariMain原版见下

@@ -137,6 +137,8 @@ void tam_main_loop()
             input_is_enter = false;
             strcat(app_input_buffer, "\0");
             write_xttp_buffer(app_input_buffer);
+            app_input_buffer[0] = '\0';
+            p_input_buffer      = 0;
             reset_terminal_cursor_blink();
             show_terminal_cursor(true);
         }

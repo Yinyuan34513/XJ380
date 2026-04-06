@@ -97,10 +97,10 @@ void do_xapi_Input(char *str)
                 scheduler_yield();
             }
             // found it!
-            strcat(str, "\0");
             strcpy(str, front_p->xtttp_stc->input);
+            memset(front_p->xtttp_stc->input, 0, sizeof(front_p->xtttp_stc->input));
             front_p->xtttp_stc->input_lock = false;
-            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->input) + 1) * sizeof(uint8_t));
+            front_p->xtttp_stc->wait_for_input = false;
             return;
         }
         front_p = front_p->parent_task;
@@ -159,7 +159,7 @@ void do_xapi_Sleep(uint64_t ms)
     uint64_t old_t = nanoTime();
     while (nanoTime() - old_t <= ms * 1000000)
     {
-        __asm__ volatile("pause");
+        __asm__ volatile("hlt");
     }
     close_interrupt;
 }
@@ -206,6 +206,8 @@ extern int clock_hour_offset;
 
 void do_xapi_FlushTime()
 {
+    if (current_user == NULL) return;
+
     char setfile_path[256];
     memset(setfile_path, 0, 256);
     strcat(setfile_path, "/users/");
@@ -213,15 +215,20 @@ void do_xapi_FlushTime()
     strcat(setfile_path, "/settings.dat");
     vfs_node_t v = vfs_open(setfile_path);
     if (!v) return;
-    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)malloc(v->size);
-    if (!sdff) return;
-    vfs_read(v, sdff, 0, v->size);
 
-    clock_hour_offset = sdff->ClockHourOffset;
+    SettingsDataFileFormat sdff;
+    memset(&sdff, 0, sizeof(sdff));
+    size_t read_size = v->size < sizeof(sdff) ? (size_t)v->size : sizeof(sdff);
+    if (read_size == 0 || vfs_read(v, &sdff, 0, read_size) == -1)
+    {
+        vfs_close(v);
+        return;
+    }
+
+    clock_hour_offset = sdff.ClockHourOffset;
 
     if (clock_hour_offset < 0)
         clock_hour_offset = 0;
 
     vfs_close(v);
-    free(sdff);
 }

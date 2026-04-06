@@ -356,11 +356,13 @@ void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width,
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
     for (int wy = 0; wy < (int)height; wy++)
     {
+        SHEET_BUFFER_WOA *dst_row = &buf[wy * width];
+        SHEET_BUFFER *src_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
         for (int wx = 0; wx < (int)width; wx++)
         {
-            buf[wy * width + wx].r = src[(wy + y + base_y) * xsize + (wx + x + base_x)].r;
-            buf[wy * width + wx].g = src[(wy + y + base_y) * xsize + (wx + x + base_x)].g;
-            buf[wy * width + wx].b = src[(wy + y + base_y) * xsize + (wx + x + base_x)].b;
+            dst_row[wx].r = src_row[wx].r;
+            dst_row[wx].g = src_row[wx].g;
+            dst_row[wx].b = src_row[wx].b;
         }
     }
 }
@@ -376,12 +378,14 @@ void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
     for (int wy = 0; wy < (int)height; wy++)
     {
+        SHEET_BUFFER_WOA *src_row = &buf[wy * width];
+        SHEET_BUFFER *dst_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
         for (int wx = 0; wx < (int)width; wx++)
         {
-            src[(wy + y + base_y) * xsize + (wx + x + base_x)].r = buf[wy * width + wx].r;
-            src[(wy + y + base_y) * xsize + (wx + x + base_x)].g = buf[wy * width + wx].g;
-            src[(wy + y + base_y) * xsize + (wx + x + base_x)].b = buf[wy * width + wx].b;
-            src[(wy + y + base_y) * xsize + (wx + x + base_x)].a = 255;
+            dst_row[wx].r = src_row[wx].r;
+            dst_row[wx].g = src_row[wx].g;
+            dst_row[wx].b = src_row[wx].b;
+            dst_row[wx].a = 255;
         }
     }
 }
@@ -397,10 +401,9 @@ void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
     for (int wy = 0; wy < (int)height; wy++)
     {
-        for (int wx = 0; wx < (int)width; wx++)
-        {
-            buf[wy * width + wx] = src[(wy + y + base_y) * xsize + (wx + x + base_x)];
-        }
+        SHEET_BUFFER *dst_row = &buf[wy * width];
+        SHEET_BUFFER *src_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
+        memcpy(dst_row, src_row, (size_t)width * sizeof(SHEET_BUFFER));
     }
 }
 
@@ -415,10 +418,9 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
     for (int wy = 0; wy < (int)height; wy++)
     {
-        for (int wx = 0; wx < (int)width; wx++)
-        {
-            src[(wy + y + base_y) * xsize + (wx + x + base_x)] = buf[wy * width + wx];
-        }
+        SHEET_BUFFER *dst_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
+        SHEET_BUFFER *src_row = &buf[wy * width];
+        memcpy(dst_row, src_row, (size_t)width * sizeof(SHEET_BUFFER));
     }
 }
 

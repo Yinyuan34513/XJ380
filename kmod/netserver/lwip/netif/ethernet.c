@@ -328,11 +328,33 @@ err_t ethernet_output(struct netif *netif, struct pbuf *p,
 
     ethhdr = (struct eth_hdr *)p->payload;
     ethhdr->type = eth_type_be;
+    LWIP_PLATFORM_DIAG(("ethernet_output: src_arg=%02x:%02x:%02x:%02x:%02x:%02x netif_hw=%02x:%02x:%02x:%02x:%02x:%02x type=0x%04x\n",
+                        src->addr[0], src->addr[1], src->addr[2],
+                        src->addr[3], src->addr[4], src->addr[5],
+                        netif->hwaddr[0], netif->hwaddr[1], netif->hwaddr[2],
+                        netif->hwaddr[3], netif->hwaddr[4], netif->hwaddr[5],
+                        (unsigned int)eth_type));
+    if (netif->hwaddr_len != ETH_HWADDR_LEN) {
+        LWIP_PLATFORM_DIAG(("ethernet_output: invalid hwaddr_len=%u flags=0x%x mtu=%u netif=%p default=%p\n",
+                            (unsigned int)netif->hwaddr_len,
+                            (unsigned int)netif->flags,
+                            (unsigned int)netif->mtu,
+                            (void *)netif,
+                            (void *)netif_default));
+        if ((netif_default != NULL) &&
+            (netif_default->hwaddr_len == ETH_HWADDR_LEN) &&
+            (netif_default->linkoutput != NULL)) {
+            netif = netif_default;
+            LWIP_PLATFORM_DIAG(("ethernet_output: fallback default hwaddr=%02x:%02x:%02x:%02x:%02x:%02x flags=0x%x\n",
+                                netif->hwaddr[0], netif->hwaddr[1], netif->hwaddr[2],
+                                netif->hwaddr[3], netif->hwaddr[4], netif->hwaddr[5],
+                                (unsigned int)netif->flags));
+        } else {
+            return ERR_ARG;
+        }
+    }
     SMEMCPY(&ethhdr->dest, dst, ETH_HWADDR_LEN);
-    SMEMCPY(&ethhdr->src, src, ETH_HWADDR_LEN);
-
-    LWIP_ASSERT("netif->hwaddr_len must be 6 for ethernet_output!",
-                (netif->hwaddr_len == ETH_HWADDR_LEN));
+    SMEMCPY(&ethhdr->src, netif->hwaddr, ETH_HWADDR_LEN);
     LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE,
                 ("ethernet_output: sending packet %p\n", (void *)p));
 

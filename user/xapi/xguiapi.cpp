@@ -222,7 +222,7 @@ void xapi_RefreshPartWindow(
 	UINT32  x2,
 	UINT32  y2
 ) {
-	enter_syscall(XAPI_REFRESH_WINDOW, handle, x1, y1, x2, y2, 0);
+	enter_syscall(XAPI_REFRESH_PART_WINDOW, handle, x1, y1, x2, y2, 0);
 }
 
 // 4-6

@@ -4,6 +4,7 @@
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
+static volatile bool kb_fifo_ready = false;
 static uint8_t kb_synth_buf[KB_BUF_SIZE];
 static uint8_t *kb_synth_head = kb_synth_buf;
 static uint8_t *kb_synth_tail = kb_synth_buf;
@@ -20,6 +21,24 @@ static void kb_synth_lock_acquire()
 static void kb_synth_lock_release()
 {
     __sync_lock_release(&kb_synth_lock);
+}
+
+static void keyboard_prepare_fifo()
+{
+    if (kb_fifo_ready) return;
+
+    kb_fifo.p_head = kb_fifo.buf;
+    kb_fifo.p_tail = kb_fifo.buf;
+    kb_fifo.count  = 0;
+    kb_fifo.ctrl   = false;
+    kb_fifo.shift  = false;
+    kb_fifo.alt    = false;
+    kb_fifo.caps   = false;
+    memset(kb_fifo.buf, 0, KB_BUF_SIZE);
+    kb_synth_head  = kb_synth_buf;
+    kb_synth_tail  = kb_synth_buf;
+    memset(kb_synth_buf, 0, sizeof(kb_synth_buf));
+    kb_fifo_ready = true;
 }
 
 static void kb_synth_enqueue(uint8_t value)
@@ -75,6 +94,8 @@ uint8_t keyboard_code1[256] = {                                                 
 
 extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 {
+    keyboard_prepare_fifo();
+
     uint8_t x;
     x = inb(0x60);
     if (x == 0x2a || x == 0x36)
@@ -105,6 +126,11 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     }
 
     if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_head = kb_fifo.buf; }
+    if (kb_fifo.count >= KB_BUF_SIZE) {
+        kb_fifo.p_tail++;
+        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
+        kb_fifo.count = KB_BUF_SIZE - 1;
+    }
     *kb_fifo.p_head = x;
 
     kb_fifo.count++;
@@ -114,6 +140,8 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 
 uint8_t get_keyboard_input()
 {
+    keyboard_prepare_fifo();
+
     uint8_t synthetic = kb_synth_dequeue();
     if (synthetic != 0) {
         return synthetic;
@@ -150,16 +178,10 @@ void wait_ps2_read()
 
 void keyboard_init()
 {
-    kb_fifo.p_head = kb_fifo.buf;
-    kb_fifo.p_tail = kb_fifo.buf;
-    kb_fifo.count  = 0;
-    kb_synth_head  = kb_synth_buf;
-    kb_synth_tail  = kb_synth_buf;
-    memset(kb_fifo.buf, 0, KB_BUF_SIZE);
-    memset(kb_synth_buf, 0, sizeof(kb_synth_buf));
-    wait_KB_write();
+    keyboard_prepare_fifo();
+    wait_ps2_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
-    wait_KB_read();
+    wait_ps2_read();
     outb(PORT_KB_DATA, KB_INIT_MODE);
 }
 

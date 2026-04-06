@@ -6,7 +6,6 @@ void ipc_send(pcb_t process, ipc_message_t message) {
     if (process->ipc_queue == NULL) { return; }
     size_t index   = lock_queue_enqueue(process->ipc_queue, message);
     message->index = index;
-    spin_unlock(&process->ipc_queue->lock);
 }
 
 void ipc_free_type(uint8_t type) {
@@ -18,7 +17,6 @@ void ipc_free_type(uint8_t type) {
         } else {
             message->index = lock_queue_enqueue(pcb->ipc_queue, message);
         }
-        spin_unlock(&pcb->ipc_queue->lock);
     }
 }
 
@@ -28,7 +26,6 @@ ipc_message_t ipc_recv(uint8_t type) {
         ipc_message_t message = (ipc_message_t)queue_dequeue(pcb->ipc_queue);
         if (message->type == type) { return message; }
         message->index = lock_queue_enqueue(pcb->ipc_queue, message);
-        spin_unlock(&pcb->ipc_queue->lock);
     }
     return NULL;
 }

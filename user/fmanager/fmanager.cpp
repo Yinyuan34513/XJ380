@@ -32,7 +32,7 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+static int fmanager_main_impl(int argc, char *argv[], char *envp[])
 {
     (void)envp;
 
@@ -112,6 +112,12 @@ int main(int argc, char *argv[], char *envp[])
         }
         __asm__ __volatile__("pause");
     }
+}
+
+extern "C" int fmanager_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int fmanager_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return fmanager_main_impl(argc, argv, envp);
 }
 
 int  tb_cop = -1;

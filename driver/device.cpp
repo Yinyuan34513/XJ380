@@ -6,6 +6,8 @@
 #include <proto.hpp>
 #include <fs/partition.h>
 #include <dlinker.h>
+#include <mm/uaccess.h>
+#include <task/pcb.h>
 
 device_t        device_ctl[256];
 id_allocator_t *dev_allocator;
@@ -133,6 +135,26 @@ static size_t blk_direct_span_bytes(const void *buffer, size_t max_bytes) {
     }
 
     return total;
+}
+
+static bool blk_user_buffer_valid(const void *buffer, size_t length) {
+    if (buffer == NULL) {
+        return false;
+    }
+    if (length == 0) {
+        return true;
+    }
+
+    uint64_t addr = (uint64_t)buffer;
+    if (!check_user_overflow(addr, length)) {
+        tcb_t current = get_current_task();
+        if (current == NULL || current->parent_group == NULL) {
+            return false;
+        }
+        return user_range_mapped(current->parent_group->pagedir, buffer, length);
+    }
+
+    return true;
 }
 
 int regist_device(const char *path, device_t vd) {
@@ -360,6 +382,12 @@ out:
 size_t blk_device_write(device_t device, const void *buffer, size_t offset, size_t length) {
     if (length == 0) {
         return 0;
+    }
+    if (!blk_user_buffer_valid(buffer, length)) {
+        write_serial_fmt("blk_device_write: reject unmapped buffer=%#llx len=%#llx thread=%s\n",
+                         (unsigned long long)(uint64_t)buffer, (unsigned long long)length,
+                         get_current_task() ? get_current_task()->name : "<none>");
+        return (uint64_t)-1;
     }
     if (device.type == DEVICE_STREAM) {
         return device.write(device.vdiskid, (uint8_t *)buffer, length, offset);

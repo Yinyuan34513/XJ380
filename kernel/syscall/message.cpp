@@ -38,8 +38,10 @@ void message_thread(tcb_t task)
         {
             // 发送message
             func(msg_type, hData, lData);
+            continue;
         }
-        __asm__ volatile("pause\n\t");
+        register long sleep_ms __asm__("rdi") = 1;
+        __asm__ __volatile__("syscall" : : "a"(XAPI_SLEEP), "r"(sleep_ms) : "rcx", "r11", "memory");
     }
 }
 
@@ -50,6 +52,8 @@ uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint
     uint64_t *lData     = (uint64_t *)ldatap;
     MsgPrcor *func      = (MsgPrcor *)funcp;
     tcb_t     current   = (tcb_t)taskp;
+
+    if (current == NULL || current->message_queue == NULL) return 0;
 
     if (current->message_queue->size > 0)
     {
@@ -95,12 +99,19 @@ void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinM
 
 void init_message()
 {
+    size_t message_thread_size = (size_t)((uintptr_t)message_ask - (uintptr_t)message_thread);
+    if (message_thread_size == 0 || message_thread_size > (PAGE_SIZE - XPSR_OFFEST))
+    {
+        write_serial_fmt("XJ380 Message Initialize Failed. Invalid Stub Size: %d\n", message_thread_size);
+        return;
+    }
+
     page_map_range_to_random(get_current_directory(), 
                              XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS, 1, 
                              PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
                              
     memcpy((void *)(XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST), 
-           (void *)message_thread, 0xff);   // 我也不知道这个会有多大，就这样吧先
+           (void *)message_thread, message_thread_size);
 
     write_serial_fmt("XJ380 Message Initialize Success.\n");
 }
