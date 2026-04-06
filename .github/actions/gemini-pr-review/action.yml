@@ -1,0 +1,241 @@
+name: Gemini PR Review
+description: Collect PR context, call Gemini, and publish an AI review summary back to the PR.
+
+inputs:
+  github-token:
+    description: GitHub token used to read PR metadata and publish the review.
+    required: true
+  gemini-api-key:
+    description: Gemini API key.
+    required: true
+  pr-number:
+    description: Pull request number to review.
+    required: true
+  focus:
+    description: Optional reviewer guidance to focus the AI review.
+    required: false
+    default: ""
+  model:
+    description: Gemini model name.
+    required: false
+    default: gemini-2.5-flash
+  prompt-file:
+    description: Prompt template file path.
+    required: false
+    default: .github/prompts/gemini-pr-review.md
+
+runs:
+  using: composite
+  steps:
+    - name: Collect PR context
+      uses: actions/github-script@v7
+      env:
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REVIEW_FOCUS: ${{ inputs.focus }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const prNumber = Number(process.env.PR_NUMBER);
+          if (!Number.isInteger(prNumber) || prNumber <= 0) {
+            core.setFailed(`Invalid PR number: ${process.env.PR_NUMBER}`);
+            return;
+          }
+
+          const { owner, repo } = context.repo;
+          const pr = (await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: prNumber,
+          })).data;
+
+          const files = await github.paginate(github.rest.pulls.listFiles, {
+            owner,
+            repo,
+            pull_number: prNumber,
+            per_page: 100,
+          });
+
+          const MAX_FILES = 100;
+          const MAX_PATCH_CHARS = 6000;
+          const MAX_TOTAL_PATCH_CHARS = 120000;
+
+          let totalPatchChars = 0;
+          const normalizedFiles = [];
+
+          for (const file of files) {
+            if (normalizedFiles.length >= MAX_FILES) {
+              break;
+            }
+
+            let patch = file.patch || '';
+            let patchTruncated = false;
+
+            if (patch.length > MAX_PATCH_CHARS) {
+              patch = `${patch.slice(0, MAX_PATCH_CHARS)}\n... [patch truncated]`;
+              patchTruncated = true;
+            }
+
+            if (totalPatchChars + patch.length > MAX_TOTAL_PATCH_CHARS) {
+              const remaining = Math.max(0, MAX_TOTAL_PATCH_CHARS - totalPatchChars);
+              if (remaining > 0) {
+                patch = `${patch.slice(0, remaining)}\n... [patch truncated due to total context limit]`;
+              } else {
+                patch = '[patch omitted due to total context limit]';
+              }
+              patchTruncated = true;
+            }
+
+            totalPatchChars += patch.length;
+            normalizedFiles.push({
+              filename: file.filename,
+              status: file.status,
+              additions: file.additions,
+              deletions: file.deletions,
+              changes: file.changes,
+              patch,
+              patch_truncated: patchTruncated,
+            });
+
+            if (totalPatchChars >= MAX_TOTAL_PATCH_CHARS) {
+              break;
+            }
+          }
+
+          const payload = {
+            review_focus: process.env.REVIEW_FOCUS || '',
+            pull_request: {
+              number: pr.number,
+              title: pr.title,
+              body: pr.body || '',
+              state: pr.state,
+              html_url: pr.html_url,
+              additions: pr.additions,
+              deletions: pr.deletions,
+              changed_files: pr.changed_files,
+              commits: pr.commits,
+              base: {
+                ref: pr.base.ref,
+                sha: pr.base.sha,
+              },
+              head: {
+                ref: pr.head.ref,
+                sha: pr.head.sha,
+              },
+            },
+            files_included: normalizedFiles.length,
+            files_omitted: Math.max(0, files.length - normalizedFiles.length),
+            files: normalizedFiles,
+          };
+
+          const outDir = path.join(process.env.GITHUB_WORKSPACE, '.tmp', 'gemini-pr-review');
+          fs.mkdirSync(outDir, { recursive: true });
+          fs.writeFileSync(
+            path.join(outDir, 'pr-context.json'),
+            JSON.stringify(payload, null, 2),
+            'utf8'
+          );
+
+    - name: Build Gemini request
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        mkdir -p .tmp/gemini-pr-review
+
+        jq -n \
+          --rawfile instructions "${{ inputs.prompt-file }}" \
+          --rawfile context ".tmp/gemini-pr-review/pr-context.json" \
+          '{
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: ($instructions + "\n\nPR context JSON:\n" + $context)
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.2
+            }
+          }' > .tmp/gemini-pr-review/request.json
+
+    - name: Call Gemini
+      shell: bash
+      env:
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        GEMINI_MODEL: ${{ inputs.model }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${GEMINI_API_KEY}" ]; then
+          echo "GEMINI_API_KEY is required." >&2
+          exit 1
+        fi
+
+        curl -fsSL \
+          "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent" \
+          -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+          -H "Content-Type: application/json" \
+          -X POST \
+          -d @.tmp/gemini-pr-review/request.json \
+          > .tmp/gemini-pr-review/response.json
+
+        if ! jq -e '.candidates and (.candidates | length > 0)' .tmp/gemini-pr-review/response.json > /dev/null; then
+          echo "Gemini returned no candidates." >&2
+          cat .tmp/gemini-pr-review/response.json >&2
+          exit 1
+        fi
+
+        jq -r '[.candidates[0].content.parts[]?.text] | join("\n")' \
+          .tmp/gemini-pr-review/response.json \
+          > .tmp/gemini-pr-review/review.md
+
+        if [ ! -s .tmp/gemini-pr-review/review.md ]; then
+          echo "Gemini review output is empty." >&2
+          cat .tmp/gemini-pr-review/response.json >&2
+          exit 1
+        fi
+
+    - name: Publish review
+      uses: actions/github-script@v7
+      env:
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REVIEW_FILE: .tmp/gemini-pr-review/review.md
+        GEMINI_MODEL: ${{ inputs.model }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+
+          const prNumber = Number(process.env.PR_NUMBER);
+          const reviewBody = fs.readFileSync(process.env.REVIEW_FILE, 'utf8').trim();
+          const body = [
+            `Gemini AI review (${process.env.GEMINI_MODEL})`,
+            '',
+            reviewBody,
+          ].join('\n');
+
+          const { owner, repo } = context.repo;
+
+          try {
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number: prNumber,
+              event: 'COMMENT',
+              body,
+            });
+          } catch (error) {
+            core.warning(`createReview failed, falling back to issue comment: ${error.message}`);
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body,
+            });
+          }

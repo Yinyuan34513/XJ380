@@ -1,0 +1,78 @@
+name: Gemini PR Review
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: string
+      focus:
+        description: Optional review focus, e.g. "重点看网络和并发"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        github.event.comment.user.type != 'Bot' &&
+        startsWith(github.event.comment.body, '/gemini-review') &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Resolve inputs
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_PR: ${{ github.event.issue.number }}
+          DISPATCH_PR: ${{ inputs.pr_number }}
+          DISPATCH_FOCUS: ${{ inputs.focus }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "issue_comment" ]; then
+            pr_number="${COMMENT_PR}"
+            focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini-review[[:space:]]*@@')"
+          else
+            pr_number="${DISPATCH_PR}"
+            focus="${DISPATCH_FOCUS}"
+          fi
+
+          {
+            echo "pr_number=${pr_number}"
+            echo "focus<<EOF"
+            printf '%s\n' "${focus}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Run Gemini PR review
+        uses: ./.github/actions/gemini-pr-review
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          pr-number: ${{ steps.resolve.outputs.pr_number }}
+          focus: ${{ steps.resolve.outputs.focus }}
