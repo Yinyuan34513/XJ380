@@ -1,12 +1,21 @@
 #include <ide/ide.h>
 #include <proto.hpp>
 #include <pci/pci.h>
+#include <fs/vfs/vfs.h>
 
 static ide_device_t ide_devices[4]; // 最多 4 个 IDE 设备
+extern vfs_node_t devfs_root;
 
-// 等待 IDE 就绪
-static void ide_wait_ready(uint16_t base) {
-    while (inb(base + 7) & IDE_STATUS_BSY);
+static bool ide_wait_not_busy(uint16_t base, uint32_t timeout) {
+    while (timeout-- > 0) {
+        uint8_t status = inb(base + 7);
+        if (status != 0xFF && (status & IDE_STATUS_BSY) == 0) {
+            return true;
+        }
+        __asm__ __volatile__("pause" ::: "memory");
+    }
+    write_serial_fmt("IDE: wait_not_busy timeout on base 0x%x status=0x%x\n", base, inb(base + 7));
+    return false;
 }
 
 // 等待数据就绪
@@ -15,8 +24,11 @@ static int ide_wait_drq(uint16_t base) {
     while (timeout--) {
         uint8_t status = inb(base + 7);
         if (status & IDE_STATUS_DRQ) return 0;
+        if (status == 0 || status == 0xFF) return -1;
         if (status & (IDE_STATUS_DF | IDE_STATUS_ERR)) return -1;
+        __asm__ __volatile__("pause" ::: "memory");
     }
+    write_serial_fmt("IDE: wait_drq timeout on base 0x%x status=0x%x\n", base, inb(base + 7));
     return -1;
 }
 
@@ -49,11 +61,18 @@ int ide_detect_device(uint8_t port, uint8_t device) {
     status = inb(base + 7);
     if (status == 0) return -1;
     
-    // 等待
-    ide_wait_ready(base);
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
+
+    uint8_t lba_mid = inb(base + 4);
+    uint8_t lba_hi  = inb(base + 5);
+    if ((lba_mid == 0x14 && lba_hi == 0xEB) || (lba_mid == 0x69 && lba_hi == 0x96)) {
+        write_serial_fmt("IDE: port %d device %d is ATAPI, skipping ATA IDENTIFY path\n", port, device);
+        return -1;
+    }
     
     // 检查错误
-    if (inb(base + 7) & IDE_STATUS_ERR) return -1;
+    status = inb(base + 7);
+    if (status == 0 || status == 0xFF || (status & IDE_STATUS_ERR)) return -1;
     
     // 等待 DRQ
     if (ide_wait_drq(base) != 0) return -1;
@@ -102,7 +121,7 @@ int ide_read(int drive, uint8_t *buffer, size_t size, size_t lba) {
     uint8_t drive_select = ide_devices[drive].is_master ? IDE_DEVICE_MASTER : IDE_DEVICE_SLAVE;
     
     // 等待就绪
-    ide_wait_ready(base);
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
     
     // 选择设备和 LBA 模式
     outb(base + 6, drive_select | 0x40 | ((lba >> 24) & 0x0F));
@@ -136,7 +155,7 @@ int ide_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     uint8_t drive_select = ide_devices[drive].is_master ? IDE_DEVICE_MASTER : IDE_DEVICE_SLAVE;
     
     // 等待就绪
-    ide_wait_ready(base);
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
     
     // 选择设备和 LBA 模式
     outb(base + 6, drive_select | 0x40 | ((lba >> 24) & 0x0F));
@@ -151,7 +170,7 @@ int ide_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     outb(base + 7, IDE_CMD_WRITE_SECTORS);
     
     // 等待就绪
-    ide_wait_ready(base);
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
     
     // 写入数据
     uint16_t *buf = (uint16_t *)buffer;
@@ -160,7 +179,7 @@ int ide_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     }
     
     // 等待完成
-    ide_wait_ready(base);
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
     
     return 0;
 }
@@ -180,10 +199,13 @@ static size_t ide_write_callback(int drive, uint8_t *buffer, size_t size, size_t
 // 等待 devfs 就绪
 static void wait_devfs_ready(void) {
     // 自旋等待 devfs_root 被设置
-    extern vfs_node_t devfs_root;
-    while (devfs_root == NULL) {
+    uint32_t timeout = 1000000;
+    while (devfs_root == NULL && timeout-- > 0) {
         // 可以添加 pause 指令减少功耗
         __asm__ __volatile__("pause" ::: "memory");
+    }
+    if (devfs_root == NULL) {
+        write_serial_string("IDE: devfs_root not ready, skip IDE setup\n");
     }
 }
 
@@ -210,6 +232,7 @@ void ide_setup(void) {
     
     // 等待 devfs 就绪，而不是用延迟
     wait_devfs_ready();
+    if (devfs_root == NULL) return;
     
     // 检测主通道主从设备
     write_serial_string("IDE: Detecting Primary Master...\n");

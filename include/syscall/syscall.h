@@ -1,5 +1,6 @@
 #pragma once
 #include <proto.hpp>
+#include <net/socket.h>
 #include "pxapi.h"
 #include <syscall/signal.h>
 #include <cpu/longm.h>
@@ -257,7 +258,14 @@
 
 #define SYS_GETPID 39
 
+#define SYS_SOCKET 41
+#define SYS_CONNECT 42
+#define SYS_ACCEPT 43
+
 #define SYS_SHUTDOWN 48
+
+#define SYS_BIND 49
+#define SYS_LISTEN 50
 
 #define SYS_FORK   57
 #define SYS_VFORK  58
@@ -266,6 +274,7 @@
 #define SYS_WAIT4  61
 #define SYS_KILL   62
 #define SYS_UNAME  63
+#define SYS_FCNTL  72
 
 #define SYS_GETDENTS 78
 #define SYS_GETCWD   79
@@ -478,6 +487,9 @@ sys_(write, int fd, uint8_t *buffer, size_t size);
 sys_(read, int fd, uint8_t *buffer, size_t size);
 sys_(sigret);
 sys_(getpid);
+sys_(socket, int domain, int type, int protocol);
+sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen);
+sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(stat, char *fn, struct stat *buf);
 sys_(arch_prctl, uint64_t code, uint64_t addr);
 sys_(yield);
@@ -548,3 +560,6 @@ sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct ti
 sys_(lseek, int fd, size_t offset, size_t whence);
 sys_(mkdir, char *name, uint64_t mode);
 sys_(clock_getres);
+sys_(shutdown, int fd, int how);
+sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen);
+sys_(listen, int fd, int backlog);

@@ -44,6 +44,29 @@ UserInfo root_user = {
 
 extern SHEET *desktop_ct_sheet;
 extern mouse_dec ms_dec;
+extern bool no_interrupt;
+extern bool is_scheduler;
+
+static void restore_runtime_state(bool was_scheduler_enabled, bool was_interrupt_enabled)
+{
+    if (was_scheduler_enabled) enable_scheduler();
+    if (was_interrupt_enabled && !no_interrupt) open_interrupt;
+    else close_interrupt;
+}
+
+static bool append_cmdline_arg(char *cmdline, size_t cmdline_size, char **cursor, const char *arg)
+{
+    if (cmdline == NULL || cursor == NULL || *cursor == NULL || arg == NULL) return false;
+
+    size_t used = (size_t)(*cursor - cmdline);
+    if (used >= cmdline_size) return false;
+
+    int written = snprintf(*cursor, cmdline_size - used, "%s ", arg);
+    if (written < 0 || (size_t)written >= (cmdline_size - used)) return false;
+
+    *cursor += written;
+    return true;
+}
 
 char password_layout_ball_bitmap[8][9] = {
     "..####..",
@@ -65,6 +88,24 @@ static const int PASSWORD_TEXT_Y     = 176;
 static const int PASSWORD_SLOT_WIDTH = 16;
 static const int PASSWORD_MAX_INPUT  = 18;
 static const uint64_t PASSWORD_CURSOR_BLINK_NS = 500000000ULL;
+
+static void refresh_user_ui_now(int x1, int y1, int x2, int y2)
+{
+    refresh_part_sheet(sht_img, x1, y1, x2, y2);
+    flush_sheet_damage_queue(sht_img);
+}
+
+static void refresh_user_fullscreen_now()
+{
+    refresh_sheet(sht_img);
+    flush_sheet_damage_queue(sht_img);
+}
+
+static void service_user_wait_loop()
+{
+    flush_sheet_damage_queue(sht_img);
+    __asm__ __volatile__("pause");
+}
 
 static void render_password_input(const char *input_password, int input_count, bool show_cursor)
 {
@@ -94,8 +135,8 @@ static void render_password_input(const char *input_password, int input_count, b
         draw_rect(sht_img, desktop_ct_sheet, cursor_x, PASSWORD_BOX_Y + 4, cursor_x + 1, PASSWORD_BOX_Y + 20, BLACK);
     }
 
-    refresh_part_sheet(sht_img, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
-                       PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
+    refresh_user_ui_now(PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_X + PASSWORD_BOX_WIDTH,
+                        PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
 }
 
 void init_user()
@@ -125,10 +166,11 @@ void init_user()
         print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[i].name, WHITE, 122, 138 + (i - 1) * 50, 16);
     }
 
-    refresh_sheet(sht_img);
+    refresh_user_fullscreen_now();
 
     while (1)
     {
+        service_user_wait_loop();
         if (ms_dec.left)
         {
             if (get_mouse_x() > 64 && get_mouse_y() > 130 && get_mouse_y() < 130 + (urf_data->user_count) * 50)
@@ -151,7 +193,7 @@ void init_user()
     print_box_ttf(sht_img, desktop_ct_sheet, urf_data->uinf[current_user_number].name, WHITE, 128, 130, 16);
     PrintPicture_blend(sht_img, desktop_ct_sheet, 128 + 300 + 8, 168, 24, 24, "/system/icon/nextstep.png");
 
-    refresh_sheet(sht_img);
+    refresh_user_fullscreen_now();
 
     int input_count = 0;
     char input_password[64];
@@ -161,6 +203,7 @@ void init_user()
     render_password_input(input_password, input_count, cursor_visible);
     while (1)
     {
+        service_user_wait_loop();
         uint64_t now = nanoTime();
         if (now - last_cursor_toggle >= PASSWORD_CURSOR_BLINK_NS)
         {
@@ -209,6 +252,7 @@ check_password:
                 else
                 {
                     print_box_ttf(sht_img, desktop_ct_sheet, "密码错误，请重试。", RED, 64, 200, 12);
+                    refresh_user_ui_now(64, 200, 220, 216);
                     delay_ms(200);
                 }
             }
@@ -222,6 +266,8 @@ check_password:
     current_user->envc      = 2;
     current_user->envp      = current_user_envp;
 
+    center_mouse_cursor();
+
     vfs_mkdir("/users");
     char user_folder_path[265] = "/users/";
     strcat(user_folder_path, current_user->name);
@@ -232,30 +278,48 @@ void copy_args(char *dst[], char *src[], int n)
 {
     for (int i = 0; i < n; i++)
     {
+        dst[i] = NULL;
         if (src[i] != NULL)
         {
-            dst[i] = (char *)malloc(strlen(src[i]) * sizeof(char));
-            strcpy(dst[i], src[i]);
+            size_t len = strlen(src[i]);
+            dst[i] = (char *)malloc(len + 1);
+            if (dst[i] == NULL)
+            {
+                for (int j = 0; j < i; ++j)
+                {
+                    if (dst[j] != NULL)
+                    {
+                        free(dst[j]);
+                        dst[j] = NULL;
+                    }
+                }
+                return;
+            }
+            memcpy(dst[i], src[i], len + 1);
         }
     }
 }
 
 void get_thread_name_from_filepath(char *path, char *name)
 {
-    char *p = path;
-    char *q = name;
-    while (*p != '\0')
-        p++;
-    while (*p != '\\' && *p != '/' && *p != '|')
-        p--;
-    p++;
-    while (*p != '\0' && *p != '.')
+    if (path == NULL || name == NULL)
     {
-        *q = *p;
-        p++;
-        q++;
+        return;
     }
-    *q = '\0';
+
+    char *start = path;
+    for (char *p = path; *p != '\0'; p++)
+    {
+        if (*p == '\\' || *p == '/' || *p == '|') start = p + 1;
+    }
+
+    size_t i = 0;
+    while (start[i] != '\0' && start[i] != '.' && i < 31)
+    {
+        name[i] = start[i];
+        i++;
+    }
+    name[i] = '\0';
 }
 void *aligned_malloc(size_t size, size_t alignment)
 {
@@ -336,8 +400,21 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     uint64_t entry = ehdr.e_entry;
 
     elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
+    if (mapping_space == NULL)
+    {
+        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+        pr_warn("Parse ELF/EPF file failed.\n");
+        write_serial_fmt("Reason:   Cannot Alloc Mapping Space.\n");
+        vfs_close(file);
+        return NULL;
+    }
     CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
                          (uint64_t *)&mapping_space->load_end);
+
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
+    if (!no_interrupt) close_interrupt;
+    disable_scheduler();
 
     page_map_range_to_random(group->pagedir, mapping_space->load_start,
                              mapping_space->load_end - mapping_space->load_start,
@@ -418,10 +495,12 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     ld_so_vma->vm_name = strdup(group->name);
     vma_insert(&group->vma_manager, ld_so_vma);
 
+    switch_page_directory(current_pagedir); // 恢复页表
+    restore_runtime_state(was_scheduler_enabled, is_sti);
+
     free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
     vfs_close(file);
-
-    switch_page_directory(current_pagedir); // 恢复页表
+    free(mapping_space);
 
     // 设置程序入口点
     return entry;
@@ -469,23 +548,39 @@ char *getCwd(char *path)
 
 void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
-    char  *process_name = (char*)malloc(strlen(path) + 1);
+    if (path == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Empty Path.\n");
+        return;
+    }
+
+    char  process_name[32];
     void *entry;
     int   argc = 0;
-    // if (entry == NULL) return;   // ))???????????????????????????????????????????
 
     get_thread_name_from_filepath(path, process_name);
 
     write_serial_fmt("Creating User Process. Process Name: %s\n", process_name);
     page_directory_t *new_directory = clone_page_directory(get_kernel_pagedir(), false);
+    if (new_directory == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Clone Page Directory.\n");
+        return;
+    }
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
+    if (group == NULL)
+    {
+        free_page_directory(new_directory);
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Create Process Group.\n");
+        return;
+    }
 
     entry = (void *)parse_elf_file(path, group);
 
     if (entry == NULL)
     {
         write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
-        free(process_name);
+        kill_proc(group, 0, false);
         return;
     }
 
@@ -498,19 +593,38 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     {
         for (int i = 0; argv[i]; i++)
         {
-            int len      = sprintf(cmdline_ptr, "%s ", argv[i]);
-            cmdline_ptr += len;
+            if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, argv[i]))
+            {
+                write_serial_fmt("Create User Process Failed. Reason: Command Line Too Long.\n");
+                kill_proc(group, 0, false);
+                return;
+            }
             argc++;
         }
     }
 
     char *old_cmdline = group->cmdline;
     group->cmdline    = strdup(cmdline);
+    if (group->cmdline == NULL)
+    {
+        group->cmdline = old_cmdline;
+        kill_proc(group, 0, false);
+        return;
+    }
     if (old_cmdline != NULL) free(old_cmdline);
     char *cwd = getCwd(path);
+    if (cwd == NULL)
+    {
+        kill_proc(group, 0, false);
+        return;
+    }
     write_serial_fmt("CWD: %s\n", cwd);
-    create_user_thread(entry, NULL, argc, process_name, group, cwd);
-    free(process_name);
+    size_t tid = create_user_thread(entry, NULL, argc, process_name, group, cwd);
+    if ((int64_t)tid < 0)
+    {
+        free(cwd);
+        kill_proc(group, 0, false);
+    }
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)
@@ -520,5 +634,8 @@ void create_user_thread_from_file(char *path, pcb_t pcb)
     if (entry == NULL) return;
     get_thread_name_from_filepath(path, thread_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
-    create_user_thread(entry, NULL, NULL, thread_name, pcb, getCwd(path));
+    char *cwd = getCwd(path);
+    if (cwd == NULL) return;
+    size_t tid = create_user_thread(entry, NULL, NULL, thread_name, pcb, cwd);
+    if ((int64_t)tid < 0) free(cwd);
 }

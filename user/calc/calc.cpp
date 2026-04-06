@@ -415,7 +415,7 @@ void message_handler(UINT64 Type, UINT64 hData, UINT64 lData)
         break;
     }
 }
-int main(int argc, char *argv[], char *envp[])
+static int calc_main_impl(int argc, char *argv[], char *envp[])
 {
     // 初始化计算器状态
     init_calculator();
@@ -445,4 +445,10 @@ int main(int argc, char *argv[], char *envp[])
     }
 
     return 0;
+}
+
+extern "C" int calc_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int calc_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return calc_main_impl(argc, argv, envp);
 }

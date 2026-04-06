@@ -6,13 +6,40 @@ static bool can_access_sheet_buffer(SHEET *csheet)
     return csheet != NULL && csheet->buffer != NULL && (uint64_t)csheet->buffer >= get_physical_memory_offset();
 }
 
+static inline uint8_t blend_channel(uint8_t src, uint8_t dst, uint8_t alpha)
+{
+    return (uint8_t)(((uint32_t)src * alpha + (uint32_t)dst * (255 - alpha) + 127) / 255);
+}
+
+static inline void blend_pixel_in_place(SHEET_BUFFER *dst, const SHEET_BUFFER &src)
+{
+    if (dst == NULL) return;
+
+    uint8_t alpha = src.a;
+    if (alpha == 0) return;
+    if (alpha == 255)
+    {
+        *dst = src;
+        return;
+    }
+
+    dst->r = blend_channel(src.r, dst->r, alpha);
+    dst->g = blend_channel(src.g, dst->g, alpha);
+    dst->b = blend_channel(src.b, dst->b, alpha);
+    if (dst->a == 255)
+    {
+        return;
+    }
+    dst->a = (uint8_t)(alpha + ((uint32_t)dst->a * (255 - alpha) + 127) / 255);
+}
+
 void draw_point(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER &color)
 {
     if (!can_access_sheet_buffer(csheet)) return;
     if (x < 0 || y < 0 || x >= (int)csheet->width || y >= (int)csheet->height) return;
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(csheet->buffer);
-    uint32_t *pixel = (uint32_t *)&SheetBuffer[csheet->width * y + x];
-    *pixel = *(uint32_t*)&color;  // 一次性写入 4 字节
+    SHEET_BUFFER *pixel = &SheetBuffer[csheet->width * y + x];
+    blend_pixel_in_place(pixel, color);
 }
 
 void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color)
@@ -28,19 +55,30 @@ void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, c
     
     SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(csheet->buffer);
     int width = x2 - x1 + 1;
-    
-    // 预组合颜色值（如果 SHEET_BUFFER 是 4 字节结构）
-    uint32_t color_value = *(uint32_t*)&color;
-    
+
+    if (color.a == 0) return;
+
+    if (color.a == 255)
+    {
+        uint32_t color_value = *(uint32_t *)&color;
+        for (int y = y1; y <= y2; y++)
+        {
+            SHEET_BUFFER *row_start = &SheetBuffer[csheet->width * y + x1];
+            uint32_t *row_ptr = (uint32_t *)row_start;
+            for (int x = 0; x < width; x++)
+            {
+                row_ptr[x] = color_value;
+            }
+        }
+        return;
+    }
+
     for (int y = y1; y <= y2; y++)
     {
         SHEET_BUFFER *row_start = &SheetBuffer[csheet->width * y + x1];
-        
-        // 使用 32 位批量写入
-        uint32_t *row_ptr = (uint32_t *)row_start;
         for (int x = 0; x < width; x++)
         {
-            row_ptr[x] = color_value;
+            blend_pixel_in_place(&row_start[x], color);
         }
     }
 }
@@ -83,7 +121,14 @@ void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, c
         int pixel_x = x >> 10;
         if (pixel_x >= 0 && pixel_y >= 0 && pixel_x < (int)csheet->width && pixel_y < (int)csheet->height)
         {
-            pixels[csheet->width * pixel_y + pixel_x] = color_value;
+            if (color.a == 255)
+            {
+                pixels[csheet->width * pixel_y + pixel_x] = color_value;
+            }
+            else if (color.a > 0)
+            {
+                blend_pixel_in_place(&SheetBuffer[csheet->width * pixel_y + pixel_x], color);
+            }
         }
         x += dx;
         y += dy;

@@ -221,6 +221,7 @@ void fatfs_open(void *parent, const char *name, vfs_node_t node) {
             // 为空时表示所有项目读取完毕，跳出
             if (res != FR_OK || fno.fname[0] == 0) break;
             bool has_equre = false;
+            vfs_child_lock();
             list_foreach(node->child, child_node0) {
                 vfs_node_t e_child = (vfs_node_t)child_node0->data;
                 if (strcmp(e_child->name, fno.fname) == 0) {
@@ -228,6 +229,7 @@ void fatfs_open(void *parent, const char *name, vfs_node_t node) {
                     break;
                 }
             }
+            vfs_child_unlock();
             if (has_equre) continue;
             vfs_node_t child_node = vfs_child_append(node, fno.fname, NULL);
             child_node->type      = ((fno.fattrib & AM_DIR) != 0) ? file_dir : file_none;
@@ -327,6 +329,7 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
         // 为空时表示所有项目读取完毕，跳出
         if (res != FR_OK || fno.fname[0] == 0) break;
         vfs_node_t exist = NULL;
+        vfs_child_lock();
         list_foreach(node->child, child_node0) {
             vfs_node_t e_child = (vfs_node_t)child_node0->data;
             if (strcmp(e_child->name, fno.fname) == 0) {
@@ -334,6 +337,7 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
                 break;
             }
         }
+        vfs_child_unlock();
         if (exist) {
             exist->visited = true;
             continue;
@@ -384,10 +388,12 @@ int fatfs_stat(void *handle, vfs_node_t node) {
         node->type = file_dir;
         DIR *fp    = (DIR*)malloc(sizeof(DIR));
         res        = f_opendir(fp, f->path);
+        vfs_child_lock();
         list_foreach(node->child, child_node0) {
             vfs_node_t e_child = (vfs_node_t)child_node0->data;
             e_child->visited   = false;
         }
+        vfs_child_unlock();
 
         for (;;) {
             // 读取目录下的内容，再读会自动读下一个文件
@@ -395,6 +401,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
             // 为空时表示所有项目读取完毕，跳出
             if (res != FR_OK || fno.fname[0] == 0) break;
             vfs_node_t exist = NULL;
+            vfs_child_lock();
             list_foreach(node->child, child_node0) {
                 vfs_node_t e_child = (vfs_node_t)child_node0->data;
                 if (strcmp(e_child->name, fno.fname) == 0) {
@@ -402,6 +409,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
                     break;
                 }
             }
+            vfs_child_unlock();
             if (exist) {
                 exist->visited = true;
                 continue;
@@ -416,6 +424,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
         free(fp);
         do {
             vfs_node_t exist = NULL;
+            vfs_child_lock();
             list_foreach(node->child, child_node0) {
                 vfs_node_t e_child = (vfs_node_t)child_node0->data;
                 if (!e_child->visited) {
@@ -423,8 +432,9 @@ int fatfs_stat(void *handle, vfs_node_t node) {
                     break;
                 }
             }
+            if (exist != NULL) list_delete(node->child, exist);
+            vfs_child_unlock();
             if (exist == NULL) break;
-            list_delete(node->child, exist);
             vfs_free(exist);
         } while (true);
     } else {

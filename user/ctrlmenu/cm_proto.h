@@ -42,6 +42,8 @@ struct SettingsDataFileFormat
 };
 
 void draw_background();
+void draw_background_body();
+void draw_background_time();
 void process_left_key(int x, int y);
 void draw_mainpage();
 void draw_setting();

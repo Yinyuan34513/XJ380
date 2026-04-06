@@ -20,7 +20,7 @@ void texter_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+static int texter_main_impl(int argc, char *argv[], char *envp[])
 {
     (void)envp;
 
@@ -77,6 +77,12 @@ flush:
     xapi_CloseFile(f);
 
     return 0;
+}
+
+extern "C" int texter_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int texter_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return texter_main_impl(argc, argv, envp);
 }
 
 // 从文件里读取字符直到结束符/换行符，返回偏移量

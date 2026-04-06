@@ -12,7 +12,7 @@
 #include "./include/libsys.h"
 #include "./include/liballoc/alloc.h"
 
-extern int main(int argc, char *argv[], char *envp[]);
+extern "C" int xapi_cpp_main(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
 // extern void _init();
 // extern void __preinit_array_start();
 // extern void __preinit_array_end();
@@ -23,7 +23,7 @@ extern int main(int argc, char *argv[], char *envp[]);
 
 #define SXAH_CHECK_TERMINAL_INIT_STATUS  3801    // 查询终端初始化状态
 
-extern "C" void xapi_start(int argc, char *argv[], char *envp[])
+extern "C" __attribute__((force_align_arg_pointer)) void xapi_start(int argc, char *argv[], char *envp[])
 {
     //{
     //    void (*fn)() = __preinit_array_start;
@@ -61,11 +61,11 @@ extern "C" void xapi_start(int argc, char *argv[], char *envp[])
             if (enter_syscall(SXAH_CHECK_TERMINAL_INIT_STATUS, 0, 0, 0, 0, 0, 0)) break;
         }
         // return; // 国企鱼是超级大傻逼
-        exit(main(argc, argv, envp));
+        exit(xapi_cpp_main(argc, argv, envp));
     }
 
     char *execve_argv[2] = {"-xj380sys-terminal-app-mode"};
     xapi_Execve("/system/shell.elf", execve_argv, NULL);
 
-    exit(main(argc,argv,envp));
+    exit(xapi_cpp_main(argc, argv, envp));
 }

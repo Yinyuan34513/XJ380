@@ -38,6 +38,9 @@ void   write_serial_fmt_heapless(const char *fmt, ...);
 void   serial_wprintf(const char *fmt, ...);
 size_t vwprintf(Writer *writer, const char *fmt, va_list args);
 int    sprintf(char *buf, const char *fmt, ...);
+void   serial_redraw_screen_overlay();
+void   serial_redraw_screen_overlay_part(int x1, int y1, int x2, int y2);
+void   serial_show_screen_overlay_now();
 
 int printk(const char *fmt, ...);
 int pr_debug(const char *fmt, ...);
@@ -229,6 +232,13 @@ extern const FrameBufferConfig *fbc_addr;
 // extern struct keyboard_buf kb_fifo;
 // extern uint8_t             keyboard_code[256];
 // extern uint8_t             keyboard_code1[256];
+#ifdef __cplusplus
+extern "C" {
+#endif
+void keyboard_push_input(uint8_t value);
+#ifdef __cplusplus
+}
+#endif
 
 // driver/ps2/mouse.cpp
 void mouse_init();
@@ -239,8 +249,17 @@ bool mousedecode(uint8_t data);
 int  get_mouse_x();
 int  get_mouse_y();
 int  get_mouse_scroll();
+void set_mouse_position(int x, int y);
+void center_mouse_cursor();
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet);
 void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py);
+#ifdef __cplusplus
+extern "C" {
+#endif
+void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
+#ifdef __cplusplus
+}
+#endif
 
 /*
  *

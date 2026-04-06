@@ -453,8 +453,11 @@ static err_t etharp_update_arp_entry(struct netif *netif,
                                      const ip4_addr_t *ipaddr,
                                      struct eth_addr *ethaddr, u8_t flags) {
     s16_t i;
-    LWIP_ASSERT("netif->hwaddr_len == ETH_HWADDR_LEN",
-                netif->hwaddr_len == ETH_HWADDR_LEN);
+    if (netif->hwaddr_len != ETH_HWADDR_LEN) {
+        printk("etharp_update_arp_entry: fixing hwaddr_len=%u flags=0x%x\n",
+               (unsigned int)netif->hwaddr_len, (unsigned int)netif->flags);
+        netif->hwaddr_len = ETH_HWADDR_LEN;
+    }
     LWIP_DEBUGF(ETHARP_DEBUG | LWIP_DBG_TRACE,
                 ("etharp_update_arp_entry: %" U16_F ".%" U16_F ".%" U16_F
                  ".%" U16_F " - %02" X16_F ":%02" X16_F ":%02" X16_F

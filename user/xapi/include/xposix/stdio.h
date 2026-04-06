@@ -3,12 +3,12 @@
 #include "../stdint.h"
 #include "../krlibc.h"
 
-int read(int fd, char *buf, uint64_t len);
-int write(int fd, char *buf, uint64_t len);
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+int read(int fd, char *buf, uint64_t len);
+int write(int fd, char *buf, uint64_t len);
 
 #define READ     0x2
 #define WRITE    0x4
@@ -47,4 +47,3 @@ int          ungetc(int c, FILE *fp);
 #ifdef __cplusplus
 }
 #endif
-

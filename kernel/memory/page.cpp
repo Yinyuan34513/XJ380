@@ -1,4 +1,5 @@
 #include <cpu/lock.h>
+#include <cpu/fsgsbase.h>
 #include <cpu/longm.h>
 #include <cpu/regio.h>
 #include <dlinker.h>
@@ -95,6 +96,7 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
         }
     }
 err:;
+    serial_show_screen_overlay_now();
     write_serial_string("Page fault virtual address (cr2): ");
     write_serial_hex(faulting_address);
     write_serial_string(" ");
@@ -104,6 +106,11 @@ err:;
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+    write_serial_fmt("PF cpu lapic=%d gs=0x%x kgs=0x%x current_cpu=0x%x\n",
+                     lapic_id(),
+                     read_gsbase(),
+                     read_kgsbase(),
+                     (uint64_t)get_current_cpu());
 
     if (current_task != NULL)
     {
@@ -142,6 +149,8 @@ void page_table_clear(page_table_t *table)
 
 bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *out_flags)
 {
+    if (directory == NULL || directory->table == NULL || out_flags == NULL) return false;
+
     uint64_t l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t l3_index = (((addr >> 30)) & 0x1FF);
     uint64_t l2_index = (((addr >> 21)) & 0x1FF);
@@ -156,7 +165,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pdpt = (page_table_t *)(pml4->entries[l4_index].value & PAGE_MASK);
+    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PAGE_MASK);
+    if (pdpt == NULL) return false;
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
     if (pdpt->entries[l3_index].value & PTE_HUGE)
     {
@@ -164,7 +174,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pd = (page_table_t *)(pdpt->entries[l3_index].value & PAGE_MASK);
+    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PAGE_MASK);
+    if (pd == NULL) return false;
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
     if (pd->entries[l2_index].value & PTE_HUGE)
     {
@@ -172,7 +183,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pt = (page_table_t *)(pd->entries[l2_index].value & PAGE_MASK);
+    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PAGE_MASK);
+    if (pt == NULL) return false;
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
     *out_flags = pt->entries[l1_index].value & 0xFFF;
@@ -181,6 +193,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
 
 bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_t new_flags)
 {
+    if (directory == NULL || directory->table == NULL) return false;
+
     page_table_t *pml4     = directory->table;
     uint64_t      l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t      l3_index = (((addr >> 30)) & 0x1FF);
@@ -195,7 +209,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
         return true;
     }
 
-    page_table_t *pdpt = (page_table_t *)(pml4->entries[l4_index].value & PAGE_MASK);
+    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PAGE_MASK);
+    if (pdpt == NULL) return false;
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
     if (pdpt->entries[l3_index].value & PTE_HUGE)
     {
@@ -204,7 +219,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
         return true;
     }
 
-    page_table_t *pd = (page_table_t *)(pdpt->entries[l3_index].value & PAGE_MASK);
+    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PAGE_MASK);
+    if (pd == NULL) return false;
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
     if (pd->entries[l2_index].value & PTE_HUGE)
     {
@@ -213,7 +229,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
         return true;
     }
 
-    page_table_t *pt = (page_table_t *)(pd->entries[l2_index].value & PAGE_MASK);
+    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PAGE_MASK);
+    if (pt == NULL) return false;
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
     uint64_t phys               = pt->entries[l1_index].value & PAGE_MASK;

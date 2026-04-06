@@ -1978,9 +1978,17 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
     LWIP_UNUSED_ARG(arg);
 
+    printk("dhcp_recv: netif=%p p=%p len=%u tot=%u port=%u state=%u\n",
+           (void *)netif, (void *)p,
+           p != NULL ? (unsigned int)p->len : 0U,
+           p != NULL ? (unsigned int)p->tot_len : 0U,
+           (unsigned int)port,
+           dhcp != NULL ? (unsigned int)dhcp->state : 0U);
+
     /* Caught DHCP message from netif that does not have DHCP enabled? -> not
      * interested */
     if ((dhcp == NULL) || (dhcp->pcb_allocated == 0)) {
+        printk("dhcp_recv: ignored, dhcp disabled\n");
         goto free_pbuf_and_return;
     }
 
@@ -2008,6 +2016,7 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     }
 
     if (reply_msg->op != DHCP_BOOTREPLY) {
+        printk("dhcp_recv: ignore op=%u\n", (unsigned int)reply_msg->op);
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING,
                     ("not a DHCP reply message, but type %" U16_F "\n",
                      (u16_t)reply_msg->op));
@@ -2018,6 +2027,10 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                 i < LWIP_MIN(DHCP_CHADDR_LEN, NETIF_MAX_HWADDR_LEN);
          i++) {
         if (netif->hwaddr[i] != reply_msg->chaddr[i]) {
+            printk("dhcp_recv: chaddr mismatch i=%u netif=%02x reply=%02x\n",
+                   (unsigned int)i,
+                   (unsigned int)netif->hwaddr[i],
+                   (unsigned int)reply_msg->chaddr[i]);
             LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING,
                         ("netif->hwaddr[%" U16_F "]==%02" X16_F
                          " != reply_msg->chaddr[%" U16_F "]==%02" X16_F "\n",
@@ -2028,6 +2041,9 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     }
     /* match transaction ID against what we expected */
     if (lwip_ntohl(reply_msg->xid) != dhcp->xid) {
+        printk("dhcp_recv: xid mismatch reply=%x expect=%x\n",
+               (unsigned int)lwip_ntohl(reply_msg->xid),
+               (unsigned int)dhcp->xid);
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING,
                     ("transaction id mismatch reply_msg->xid(%" X32_F
                      ")!=dhcp->xid(%" X32_F ")\n",
@@ -2036,6 +2052,7 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     }
     /* option fields could be unfold? */
     if (dhcp_parse_reply(p, dhcp) != ERR_OK) {
+        printk("dhcp_recv: parse failed\n");
         LWIP_DEBUGF(
             DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_SERIOUS,
             ("problem unfolding DHCP message - too short on memory?\n"));
@@ -2046,6 +2063,7 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                 ("searching DHCP_OPTION_MESSAGE_TYPE\n"));
     /* obtain pointer to DHCP message type */
     if (!dhcp_option_given(dhcp, DHCP_OPTION_IDX_MSG_TYPE)) {
+        printk("dhcp_recv: missing msg type\n");
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_LEVEL_WARNING,
                     ("DHCP_OPTION_MESSAGE_TYPE option not found\n"));
         goto free_pbuf_and_return;
@@ -2054,6 +2072,11 @@ static void dhcp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     msg_in = (struct dhcp_msg *)p->payload;
     /* read DHCP message type */
     msg_type = (u8_t)dhcp_get_option_value(dhcp, DHCP_OPTION_IDX_MSG_TYPE);
+    printk("dhcp_recv: msg_type=%u yiaddr=%u.%u.%u.%u state=%u\n",
+           (unsigned int)msg_type,
+           ip4_addr1(&msg_in->yiaddr), ip4_addr2(&msg_in->yiaddr),
+           ip4_addr3(&msg_in->yiaddr), ip4_addr4(&msg_in->yiaddr),
+           (unsigned int)dhcp->state);
     /* message type is DHCP ACK? */
     if (msg_type == DHCP_ACK) {
         LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE, ("DHCP_ACK received\n"));

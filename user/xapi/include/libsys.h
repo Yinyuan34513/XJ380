@@ -40,7 +40,14 @@
 
 #define SYS_GETPID 39
 
+#define SYS_SOCKET 41
+#define SYS_CONNECT 42
+#define SYS_ACCEPT 43
+
 #define SYS_SHUTDOWN 48
+
+#define SYS_BIND 49
+#define SYS_LISTEN 50
 
 #define SYS_FORK 57
 #define SYS_VFORK 58
@@ -49,6 +56,7 @@
 #define SYS_WAIT4 61
 #define SYS_KILL 62
 #define SYS_UNAME 63
+#define SYS_FCNTL 72
 
 #define SYS_GETDENTS 78
 #define SYS_GETCWD 79
@@ -68,6 +76,11 @@
 #define SYS_MKNOD 133
 
 #define SYS_ARCH_PRCTL 158
+
+#define ARCH_SET_FS 0x1002
+#define ARCH_GET_FS 0x1003
+#define ARCH_SET_GS 0x1004
+#define ARCH_GET_GS 0x1005
 
 #define SYS_GETTID 186
 
