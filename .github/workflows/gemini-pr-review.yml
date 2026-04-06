@@ -40,7 +40,6 @@ jobs:
         github.event.issue.pull_request &&
         github.event.comment.user.type != 'Bot' &&
         (
-          startsWith(github.event.comment.body, '/gemini review') ||
           startsWith(github.event.comment.body, '/gemini reviwe') ||
           startsWith(github.event.comment.body, '/gemini-review')
         ) &&
