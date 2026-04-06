@@ -153,7 +153,12 @@ BROWSER_STDCPP := $(shell $(CXX) -print-file-name=libstdc++.a)
 BROWSER_SUPCPP := $(shell $(CXX) -print-file-name=libsupc++.a)
 BROWSER_LIBGCC := $(shell $(CXX) -print-libgcc-file-name)
 BROWSER_LIBGCC_EH := $(shell $(CXX) -print-file-name=libgcc_eh.a)
-BROWSER_BUILTINS := /usr/lib/clang/22/lib/linux/libclang_rt.builtins-x86_64.a
+BROWSER_BUILTINS ?= $(shell runtime_dir="$$(clang --print-runtime-dir 2>/dev/null || true)"; \
+	if [ -n "$$runtime_dir" ] && [ -f "$$runtime_dir/libclang_rt.builtins-x86_64.a" ]; then \
+		echo "$$runtime_dir/libclang_rt.builtins-x86_64.a"; \
+	else \
+		find /usr/lib/clang -type f -name 'libclang_rt.builtins-x86_64.a' 2>/dev/null | sort -V | tail -n 1; \
+	fi)
 
 build_xapi:
 	make -C xapi build_all_api
@@ -200,7 +205,7 @@ HTTPGET_SOURCES := ./httpget.cpp ./https_client.cpp ./http_tls_compat.cpp
 HTTPGET_OBJECTS := $(patsubst ./%.cpp, ../out/httpget/%.o, $(HTTPGET_SOURCES))
 
 httpget.elf: $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS)
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS) /usr/lib/clang/22/lib/linux/libclang_rt.builtins-x86_64.a -o ../out/$@
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS) $(BROWSER_BUILTINS) -o ../out/$@
 	@echo "LINK httpget objects -> ../out/$@"
 
 ../out/httpget/%.o: ./%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
