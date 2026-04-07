@@ -143,6 +143,8 @@ typedef struct {
 #define XAPI_DRAW_PICTURE   7419
 
 #define XAPI_GET_PIC_SIZE   7440
+#define XAPI_DRAW_SVG       7446
+#define XAPI_DRAW_FA        7447
 
 // P4.4
 #define XAPI_SET_MSH_PROCOR 7405
@@ -180,7 +182,7 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：7445
+// 当前最大号：7447
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -216,6 +218,8 @@ void do_xapi_GetCurrentUser(uint64_t dst);
 void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
+int  xapi_doDrawSvg(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t svg_text, uint64_t enable_trans);
+int  xapi_doDrawFA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t name, uint64_t enable_trans);
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs);
 uint64_t do_xapi_WriteFile(struct X64_REGS *regs);
 void do_xapi_Printf(char *str);

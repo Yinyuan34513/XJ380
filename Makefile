@@ -156,6 +156,7 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
 	@mkdir -p $(BUILD_DIR)/XJ380/lib/modules
+	@mkdir -p $(BUILD_DIR)/XJ380/system/resources
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -176,10 +177,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/chat.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/httpget.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/netcfg.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/xmlviewer.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
@@ -195,6 +193,8 @@ vdisk: all
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
 	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
+
+	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 	
 # temp test (remember to delete)
 	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
