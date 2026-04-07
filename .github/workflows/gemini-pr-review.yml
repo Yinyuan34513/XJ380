@@ -1,6 +1,14 @@
 name: Gemini PR Review
 
 on:
+  pull_request:
+    branches:
+      - "**"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -24,10 +32,17 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.draft == false
+      ) ||
+      (
         github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
         github.event.comment.user.type != 'Bot' &&
-        startsWith(github.event.comment.body, '/gemini-review') &&
+        (
+          startsWith(github.event.comment.body, '/gemini review') ||
+          startsWith(github.event.comment.body, '/gemini-review')
+        ) &&
         (
           github.event.comment.author_association == 'OWNER' ||
           github.event.comment.author_association == 'MEMBER' ||
@@ -35,31 +50,48 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - name: Check out default branch
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
 
       - name: Resolve inputs
         id: resolve
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_PR: ${{ github.event.issue.number }}
-          DISPATCH_PR: ${{ inputs.pr_number }}
-          DISPATCH_FOCUS: ${{ inputs.focus }}
+          PR_FROM_INPUT: ${{ inputs.pr_number }}
+          FOCUS_FROM_INPUT: ${{ inputs.focus }}
         run: |
           set -euo pipefail
 
-          if [ "${EVENT_NAME}" = "issue_comment" ]; then
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            pr_number="${PR_FROM_EVENT}"
+            focus=""
+          elif [ "${EVENT_NAME}" = "issue_comment" ]; then
             pr_number="${COMMENT_PR}"
-            focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini-review[[:space:]]*@@')"
+            case "${COMMENT_BODY}" in
+              "/gemini review"*)
+                focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini review[[:space:]]*@@')"
+                ;;
+              "/gemini-review"*)
+                focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini-review[[:space:]]*@@')"
+                ;;
+              *)
+                echo "Unsupported comment command: ${COMMENT_BODY}" >&2
+                exit 1
+                ;;
+            esac
+          elif [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            pr_number="${PR_FROM_INPUT}"
+            focus="${FOCUS_FROM_INPUT}"
           else
-            pr_number="${DISPATCH_PR}"
-            focus="${DISPATCH_FOCUS}"
+            echo "Unsupported event: ${EVENT_NAME}" >&2
+            exit 1
           fi
 
           {
