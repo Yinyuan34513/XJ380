@@ -157,10 +157,22 @@ void qemu_poweroff_fallback()
     outw(0xB004, 0x2000);
 }
 
+void vmware_poweroff_fallback()
+{
+    // VMware / VirtualBox compatible ACPI shutdown port fallback.
+    // If ACPI _S5_ parsing fails, this path can still power off the VM.
+    write_serial_string("Falling back to VMware poweroff port.\n");
+    outw(0x4004, 0x3400);
+}
+
 void poweroff_fallback(BOOT_CONFIG *boot_config)
 {
     acpi_poweroff(boot_config);
-    if (boot_config != NULL && boot_config->is_qemu == 1) qemu_poweroff_fallback();
+    if (boot_config != NULL && boot_config->is_qemu == 1) {
+        qemu_poweroff_fallback();
+    } else {
+        vmware_poweroff_fallback();
+    }
 }
 
 [[noreturn]] void power_shutdown(EFI_SYSTEM_TABLE *system_table, BOOT_CONFIG *boot_config)
