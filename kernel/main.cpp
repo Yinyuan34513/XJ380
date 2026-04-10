@@ -59,85 +59,6 @@ extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
 
-static tcb_t alloc_zeroed_tcb(void)
-{
-    const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
-    tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
-    if (task != NULL) memset(task, 0, sizeof(struct thread_control_block));
-    return task;
-}
-
-static inline SHEET_BUFFER boot_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 0xff)
-{
-    return {r, g, b, a};
-}
-
-static void play_boot_animation(SHEET_INFO *sht, SHEET *csheet)
-{
-    static char kBootTitle[] = "XJ380";
-    static char kBootSubtitle[] = "Starting desktop services";
-    static char kBootStatus[] = "Loading shell, desktop and user services";
-
-    const int scrx = (int)sht->scrx;
-    const int scry = (int)sht->scry;
-    const int frames = 18;
-    const int logo_w = 84;
-    const int logo_h = 64;
-    const int title_size = scrx >= 1280 ? 28 : 24;
-    const int subtitle_size = 12;
-
-    int card_w = scrx - 96;
-    if (card_w > 560) card_w = 560;
-    if (card_w < 280) card_w = scrx - 32;
-
-    int card_h = 210;
-    if (card_h > scry - 40) card_h = scry - 40;
-
-    const int card_x = (scrx - card_w) / 2;
-    int card_y = (scry - card_h) / 2 - 20;
-    if (card_y < 20) card_y = 20;
-
-    const uint32_t title_width = (uint32_t)calc_ttf_length(kBootTitle, title_size);
-    const uint32_t subtitle_width = (uint32_t)calc_ttf_length(kBootSubtitle, subtitle_size);
-
-    for (int frame = 0; frame < frames; ++frame) {
-        const int progress = (card_w - 72) * (frame + 1) / frames;
-        const int logo_y = card_y + 28 + (frames - frame - 1) / 3;
-        const int shine_w = 38;
-        int shine_x = card_x + 36 + progress - shine_w / 2;
-        if (shine_x < card_x + 36) shine_x = card_x + 36;
-        if (shine_x + shine_w > card_x + card_w - 36) {
-            shine_x = card_x + card_w - 36 - shine_w;
-        }
-
-        draw_rect(sht, csheet, 0, 0, scrx - 1, scry - 1, boot_color(8, 20, 40));
-        draw_rect(sht, csheet, 0, scry * 2 / 3, scrx - 1, scry - 1, boot_color(12, 30, 56));
-
-        draw_rect(sht, csheet, card_x + 8, card_y + 10, card_x + card_w + 7, card_y + card_h + 9,
-                  boot_color(5, 12, 26));
-        draw_rect(sht, csheet, card_x, card_y, card_x + card_w - 1, card_y + card_h - 1,
-                  boot_color(238, 244, 250));
-        draw_rect(sht, csheet, card_x, card_y, card_x + card_w - 1, card_y + 5, boot_color(0, 162, 232));
-
-        draw_logo(sht, csheet, card_x + (card_w - logo_w) / 2, logo_y);
-        print_box_ttf(sht, csheet, kBootTitle, boot_color(26, 36, 50),
-                      card_x + (card_w - (int)title_width) / 2, card_y + 105, title_size);
-        print_box_ttf(sht, csheet, kBootSubtitle, boot_color(86, 102, 120),
-                      card_x + (card_w - (int)subtitle_width) / 2, card_y + 142, subtitle_size);
-        print_box_ttf(sht, csheet, kBootStatus, boot_color(86, 102, 120), card_x + 36, card_y + card_h - 64, 11);
-
-        draw_rect(sht, csheet, card_x + 36, card_y + card_h - 34, card_x + card_w - 37, card_y + card_h - 19,
-                  boot_color(196, 208, 220));
-        draw_rect(sht, csheet, card_x + 36, card_y + card_h - 34, card_x + 35 + progress, card_y + card_h - 19,
-                  boot_color(0, 162, 232));
-        draw_rect(sht, csheet, shine_x, card_y + card_h - 34, shine_x + shine_w, card_y + card_h - 19,
-                  boot_color(255, 255, 255));
-
-        refresh_sheet(sht);
-        delay_ms(16);
-    }
-}
-
 void init_cpu()
 {
     __asm__ __volatile__("movq %%cr0, %%rax\n\t"
@@ -273,7 +194,7 @@ void desktop_flusher()
         &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
-    play_boot_animation(&shtinf, desktop_ct_sheet);
+    // play_boot_animation(&shtinf, desktop_ct_sheet);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
@@ -572,7 +493,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_smp(BootConfig.MADT);
 
-    tcb_t idle_thread         = alloc_zeroed_tcb();
+    const size_t idle_alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
+    tcb_t idle_thread            = (tcb_t)aligned_alloc(16, idle_alloc_size);
+    if (idle_thread != NULL) memset(idle_thread, 0, sizeof(struct thread_control_block));
     if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;

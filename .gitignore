@@ -30,3 +30,5 @@ scsi.txt
 
 # will generate by Makefile
 .clangd
+
+.codex

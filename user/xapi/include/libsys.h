@@ -182,6 +182,8 @@
 #define XAPI_DRAW_PICTURE   7419
 
 #define XAPI_GET_PIC_SIZE   7440
+#define XAPI_DRAW_SVG       7446
+#define XAPI_DRAW_FA        7447
 
 // P4.4
 #define XAPI_SET_MSH_PROCOR 7405
