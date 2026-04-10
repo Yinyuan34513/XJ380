@@ -1699,18 +1699,25 @@ bool end_condition(int index)
 	return index >= 1024;
 }
 
-void increment(int& index, const string& str)
+bool increment(int& index, const string& str)
 {
 	index++;
 	if (index >= (int)str.size() || end_condition(index))
-		throw 0; // abort prescan
+	{
+		index = -1;
+		return false;
+	}
+	return true;
 }
 
 // https://html.spec.whatwg.org/multipage/parsing.html#concept-get-attributes-when-sniffing
 bool prescan_get_attribute(const string& str, inout int& index, out string& name, out string& value)
 {
 	// 1.
-	while (is_whitespace(str[index]) || str[index] == '/') increment(index, str);
+	while (is_whitespace(str[index]) || str[index] == '/')
+	{
+		if (!increment(index, str)) return false;
+	}
 
 	// 2.
 	if (str[index] == '>') return false;
@@ -1722,7 +1729,7 @@ bool prescan_get_attribute(const string& str, inout int& index, out string& name
 step_4:
 	if (str[index] == '=' && name != "")
 	{
-		increment(index, str);
+		if (!increment(index, str)) return false;
 		goto process_value;
 	}
 	else if (is_whitespace(str[index]))
@@ -1733,23 +1740,29 @@ step_4:
 		name += (char)lowcase(str[index]);
 
 	// 5.
-	increment(index, str);
+	if (!increment(index, str)) return false;
 	goto step_4;
 
 	// 6.
 spaces:
-	while (is_whitespace(str[index])) increment(index, str);
+	while (is_whitespace(str[index]))
+	{
+		if (!increment(index, str)) return false;
+	}
 
 	// 7.
 	if (str[index] != '=')
 		return true;
 
 	// 8.
-	increment(index, str); // skip '='
+	if (!increment(index, str)) return false; // skip '='
 
 	// 9.
 process_value:
-	while (is_whitespace(str[index])) increment(index, str);
+	while (is_whitespace(str[index]))
+	{
+		if (!increment(index, str)) return false;
+	}
 
 	// 10.
 	if (str[index] == '"' || str[index] == '\'')
@@ -1759,12 +1772,12 @@ process_value:
 
 		// 2.
 	quote_loop:
-		increment(index, str);
+		if (!increment(index, str)) return false;
 
 		// 3.
 		if (str[index] == b)
 		{
-			increment(index, str);
+			if (!increment(index, str)) return false;
 			return true;
 		}
 
@@ -1788,7 +1801,7 @@ step_11:
 		value += (char)lowcase(str[index]);
 
 	// 12.
-	increment(index, str);
+	if (!increment(index, str)) return false;
 	goto step_11;
 }
 
@@ -1808,7 +1821,7 @@ loop:
 	if (match(str, index, "<!--"))
 	{
 		index = (int)str.find("-->", index);
-		if (index == -1 || end_condition(index)) throw 0; // abort prescan
+		if (index == -1 || end_condition(index)) return encoding::null;
 		index += 2; // not 3 because it will be incremented one more time in step 5 (next_byte)
 	}
 	else if (match_i(str, index, "<meta") && (is_whitespace(str[index + 5]) || str[index + 5] == '/'))
@@ -1889,7 +1902,7 @@ loop:
 	{
 		// 1.
 		index = (int)str.find_first_of(" \t\r\n\f>", index);
-		if (index == -1 || end_condition(index)) throw 0; // abort prescan
+		if (index == -1 || end_condition(index)) return encoding::null;
 
 		// 2.
 		string tmp;
@@ -1899,12 +1912,12 @@ loop:
 	else if (str[index] == '<' && is_one_of(str[index + 1], '!', '/', '?'))
 	{
 		index = (int)str.find('>', index);
-		if (index == -1 || end_condition(index)) throw 0; // abort prescan
+		if (index == -1 || end_condition(index)) return encoding::null;
 	}
 
 	// 5.
 next_byte:
-	increment(index, str);
+	if (!increment(index, str)) return encoding::null;
 	goto loop;
 }
 
@@ -1976,13 +1989,10 @@ encoding get_xml_encoding(const string& str)
 // https://html.spec.whatwg.org/multipage/parsing.html#prescan-a-byte-stream-to-determine-its-encoding
 encoding prescan_for_encoding(const string& str)
 {
-	try {
-		return prescan_a_byte_stream_to_determine_its_encoding(str);
-	}
-	catch (int)
-	{
-		return get_xml_encoding(str);
-	}
+	encoding detected = prescan_a_byte_stream_to_determine_its_encoding(str);
+	if (detected != encoding::null)
+		return detected;
+	return get_xml_encoding(str);
 }
 
 // https://html.spec.whatwg.org/multipage/parsing.html#encoding-sniffing-algorithm
