@@ -21,7 +21,7 @@
 #define MSR_STAR         0xC0000081 // STAR MSR寄存器
 #define MSR_LSTAR        0xC0000082 // LSTAR MSR寄存器
 #define MSR_SYSCALL_MASK 0xC0000084 // SYSCALL_MASK MSR寄存器
-
+#define EFER_NXE  (1 << 11)
 void init_syscall()
 {
     uint64_t efer;
@@ -59,6 +59,9 @@ void init_syscall()
 
     // 4. 设置 SYSCALL_MASK MSR (RFLAGS 掩码)
     wrmsr(MSR_SYSCALL_MASK, (1 << 9));
+
+    efer |= EFER_NXE;
+    wrmsr(MSR_EFER, efer);
 }
 
 // regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9

@@ -1,6 +1,9 @@
 #include "./xapi/include/x3api.h"
 #include "browser_css_nostl_internal.h"
+
+#ifndef BROWSER_NOSTL_DISABLE_LEXBOR
 #include "lexbor/css/css.h"
+#endif
 
 int browsercss_is_space(char ch)
 {
@@ -1483,6 +1486,7 @@ static int browsercss_add_rule_with_style(browser_css_document *doc,
     return added;
 }
 
+#ifndef BROWSER_NOSTL_DISABLE_LEXBOR
 static const lxb_css_rule_list_t *browsercss_lexbor_at_rule_block(const lxb_css_rule_at_t *at)
 {
     if (at == NULL) {
@@ -1682,6 +1686,14 @@ static int browsercss_parse_css_lexbor(browser_css_document *doc, const char *cs
     (void)lxb_css_parser_destroy(parser, true);
     return ok;
 }
+#else
+static int browsercss_parse_css_lexbor(browser_css_document *doc, const char *css_text)
+{
+    (void)doc;
+    (void)css_text;
+    return 0;
+}
+#endif
 
 /* 只有在 Lexbor 解析失败时，才退回到这个很小的兜底块解析器。 */
 static void browsercss_parse_css_fallback(browser_css_document *doc, const char *css_text)

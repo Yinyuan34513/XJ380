@@ -1029,6 +1029,8 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) open_interrupt;
 
+    tcb_t creator_task = get_current_task();
+
     spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
@@ -1132,7 +1134,18 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     new_task->status                                                      = CREATE;
     save_fpu_context(&new_task->fpu_context);
 
-    new_task->fs_base = (uint64_t)new_task;
+    // The user-mode message stub runs as a normal application thread. If it
+    // inherits the default kernel-side TCB pointer as FSBASE, any libstdc++
+    // or stack-canary access through %fs will fault in user mode.
+    if (creator_task != NULL && creator_task->parent_group == pcb)
+    {
+        new_task->fs      = creator_task->fs;
+        new_task->fs_base = creator_task->fs_base;
+    }
+    else
+    {
+        new_task->fs_base = (uint64_t)new_task;
+    }
 
     new_task->window_count = 0;
 

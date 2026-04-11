@@ -349,5 +349,20 @@ int xtls_request(const xhttp_request_t *request,
                  xhttp_response_callback_t callback,
                  void *user_data)
 {
+    int status = XHTTP_ERR_TLS_HANDSHAKE;
+
+#if defined(MBEDTLS_SSL_PROTO_TLS1_3)
+    status = xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_3);
+    if (status == XHTTP_OK) {
+        return status;
+    }
+
+    if (status != XHTTP_ERR_TLS_HANDSHAKE) {
+        return status;
+    }
+
+    xapi_OutputSerial((char *)"xtls: retry handshake with tls1.2\n");
+#endif
+
     return xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_2);
 }

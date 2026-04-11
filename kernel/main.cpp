@@ -331,7 +331,7 @@ skip_timer_widget_init:
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/browser.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/browser_nostl.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
