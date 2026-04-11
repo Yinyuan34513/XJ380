@@ -77,13 +77,14 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
             continue;
         }
 
-        size_t wrote = vfs_write(handle->node, bounce, handle->offset, chunk);
+        size_t write_offset = (handle->node->type & file_pipe) ? 0 : handle->offset;
+        size_t wrote        = vfs_write(handle->node, bounce, write_offset, chunk);
         if (wrote == (size_t)VFS_STATUS_FAILED)
         {
             free(bounce);
             return total > 0 ? (int64_t)total : -EIO;
         }
-        if (handle->node->size != (uint64_t)-1) handle->offset += wrote;
+        if (!(handle->node->type & file_pipe) && handle->node->size != (uint64_t)-1) handle->offset += wrote;
         total += wrote;
         if (wrote < chunk) break;
     }
@@ -192,6 +193,14 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     {
         ssize_t ret = socket_read(handle->node, buffer, size);
         if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+        return ret;
+    }
+    if (handle->node->type & file_pipe)
+    {
+        vfs_update(handle->node);
+        if (handle->node->size == 0 && handle->flags & O_NONBLOCK) return SYSCALL_FAULT_(EWOULDBLOCK);
+        size_t ret = vfs_read(handle->node, buffer, 0, size);
+        if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
         return ret;
     }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)

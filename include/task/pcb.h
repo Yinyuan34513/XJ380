@@ -165,7 +165,8 @@ struct thread_control_block
 
     uint64_t winnum;
     bool     hasfscr;
-    lock_queue *message_queue;  // message消息队列
+    int      message_pipe_read_fd;
+    int      message_pipe_write_fd;
 
     uint64_t window_count;
 };
@@ -184,7 +185,7 @@ void     process_setup();
 void     switch_to_user_mode();
 void get_thread_name_from_filepath(char *path, char *name);
 
-size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb);
+size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uint64_t arg);
 
 void init_killer();
 

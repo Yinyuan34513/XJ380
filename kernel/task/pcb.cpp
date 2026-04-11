@@ -37,14 +37,19 @@ extern bool is_scheduler;
 #include "task/scheduler.h"
 
 extern spin_t scheduler_lock;
-extern void message_thread(tcb_t task);
+extern void message_thread(uint64_t arg);
 extern uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);
 
 static tcb_t alloc_zeroed_tcb(void)
 {
     const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
     tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
-    if (task != NULL) memset(task, 0, sizeof(struct thread_control_block));
+    if (task != NULL)
+    {
+        memset(task, 0, sizeof(struct thread_control_block));
+        task->message_pipe_read_fd  = -1;
+        task->message_pipe_write_fd = -1;
+    }
     return task;
 }
 
@@ -1018,7 +1023,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     return new_task->tid;
 }
 
-size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb)
+size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uint64_t arg)
 {
     bool is_sti                = are_interrupts_enabled();
     bool was_scheduler_enabled = is_scheduler;
@@ -1047,7 +1052,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     strncpy(new_task->name, name, sizeof(new_task->name) - 1);
     new_task->parent_group = pcb;
 
-    new_task->context0.rdi = (uint64_t)tcb;
+    new_task->context0.rdi = arg;
 
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (kernel_stack_phys == 0)

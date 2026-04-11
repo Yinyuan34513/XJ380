@@ -16,6 +16,7 @@ void pipefs_open(void *parent, const char *name, vfs_node_t node) {
 }
 
 size_t pipefs_read(void *file, void *addr, size_t offset, size_t size) {
+    (void)offset;
     if (size > PIPE_BUFF) size = PIPE_BUFF;
 
     pipe_specific_t *spec = (pipe_specific_t *)file;
@@ -23,47 +24,50 @@ size_t pipefs_read(void *file, void *addr, size_t offset, size_t size) {
     pipe_info_t *pipe = spec->info;
     if (!pipe) return -EINVAL;
 
-    while (pipe->ptr == 0) {
-        if (pipe->write_fds == 0) { return 0; }
-
+    while (true) {
+        spin_lock(&pipe->lock);
+        if (pipe->ptr != 0) {
+            uint32_t to_read = MIN(size, pipe->ptr);
+            memcpy(addr, pipe->buf, to_read);
+            if (pipe->ptr > to_read) {
+                memmove(pipe->buf, pipe->buf + to_read, pipe->ptr - to_read);
+            }
+            pipe->ptr -= to_read;
+            spin_unlock(&pipe->lock);
+            return to_read;
+        }
+        if (pipe->write_fds == 0) {
+            spin_unlock(&pipe->lock);
+            return 0;
+        }
+        spin_unlock(&pipe->lock);
         scheduler_yield();
     }
-
-    // 实际读取量
-    uint32_t to_read = MIN(size, pipe->ptr);
-
-    if (to_read == 0) { return 0; }
-
-    spin_lock(&pipe->lock);
-
-    memcpy(addr, pipe->buf, to_read);
-    memmove(pipe->buf, &pipe->buf[pipe->ptr], pipe->ptr - to_read);
-
-    pipe->ptr -= to_read;
-
-    spin_unlock(&pipe->lock);
-
-    return to_read;
 }
 
 size_t pipe_write_inner(void *file, const void *addr, size_t size) {
     pipe_specific_t *spec = (pipe_specific_t *)file;
     pipe_info_t     *pipe = spec->info;
 
-    while ((PIPE_BUFF - pipe->ptr) < size) {
-        if (pipe->read_fds == 0) { return -EPIPE; }
+    while (true) {
+        spin_lock(&pipe->lock);
+        if (pipe->read_fds == 0) {
+            spin_unlock(&pipe->lock);
+            return (size_t)-EPIPE;
+        }
+        if ((PIPE_BUFF - pipe->ptr) >= size) {
+            memcpy(&pipe->buf[pipe->ptr], addr, size);
+            pipe->ptr += size;
+            spin_unlock(&pipe->lock);
+            return size;
+        }
+        spin_unlock(&pipe->lock);
         scheduler_yield();
     }
-
-    spin_lock(&pipe->lock);
-    memcpy(&pipe->buf[pipe->ptr], addr, size);
-    pipe->ptr += size;
-    spin_unlock(&pipe->lock);
-
-    return size;
 }
 
 size_t pipefs_write(void *file, const void *addr, size_t offset, size_t size) {
+    (void)offset;
     size_t ret       = 0;
     size_t chunks    = size / PIPE_BUFF;
     size_t remainder = size % PIPE_BUFF;
@@ -71,14 +75,22 @@ size_t pipefs_write(void *file, const void *addr, size_t offset, size_t size) {
         for (size_t i = 0; i < chunks; i++) {
             size_t cycle = 0;
             while (cycle != PIPE_BUFF)
-                cycle += pipe_write_inner(file, (void*)((uint64_t*)(addr) + i * PIPE_BUFF + cycle), PIPE_BUFF - cycle);
+            {
+                size_t wrote = pipe_write_inner(file, (const char *)addr + i * PIPE_BUFF + cycle, PIPE_BUFF - cycle);
+                if (wrote == (size_t)-EPIPE) return ret ? ret : wrote;
+                cycle += wrote;
+            }
             ret += cycle;
         }
 
     if (remainder) {
         size_t cycle = 0;
         while (cycle != remainder)
-            cycle += pipe_write_inner(file, (void*)((uint64_t*)(addr) + chunks * PIPE_BUFF + cycle), remainder - cycle);
+        {
+            size_t wrote = pipe_write_inner(file, (const char *)addr + chunks * PIPE_BUFF + cycle, remainder - cycle);
+            if (wrote == (size_t)-EPIPE) return ret ? ret : wrote;
+            cycle += wrote;
+        }
         ret += cycle;
     }
 
@@ -126,12 +138,12 @@ int pipefs_poll(void *file, size_t events) {
     spin_lock(&pipe->lock);
     if (events & EPOLLIN) {
         if (!pipe->write_fds) out |= EPOLLHUP;
-        if (pipe->assigned > 0) out |= EPOLLIN;
+        if (pipe->ptr > 0) out |= EPOLLIN;
     }
 
     if (events & EPOLLOUT) {
         if (!pipe->read_fds) out |= EPOLLHUP;
-        if (pipe->assigned < PIPE_BUFF) out |= EPOLLOUT;
+        if (pipe->ptr < PIPE_BUFF) out |= EPOLLOUT;
     }
     spin_unlock(&pipe->lock);
     return out;
@@ -179,4 +191,14 @@ static struct vfs_callback pipefs_callbacks = {
 
 void pipefs_setup() {
     pipefs_id = vfs_regist("pipefs", &pipefs_callbacks, PIEFS_REGISTER_ID, 0x50495045);
+    vfs_mkdir("/pipe");
+    vfs_node_t node = vfs_open("/pipe");
+    if (node == NULL) {
+        write_serial_string("pipefs: open /pipe failed\n");
+        return;
+    }
+    if (vfs_mount((const char *)PIEFS_REGISTER_ID, node) == VFS_STATUS_FAILED) {
+        write_serial_string("pipefs: mount failed\n");
+        return;
+    }
 }

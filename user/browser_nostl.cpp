@@ -19,6 +19,7 @@
 #define BROWSER_MAX_REDIRECTS      4
 #define BROWSER_RAW_LIMIT          (1024 * 1024)
 #define BROWSER_TEXT_LIMIT         (512 * 1024)
+#define BROWSER_EVENT_QUEUE_SIZE   1024
 
 #define BROWSER_COLOR_BG           0xe8edf2ff
 #define BROWSER_COLOR_HEADER       0x18324aff
@@ -61,6 +62,13 @@ typedef struct browser_ResponseMeta
     int   body_len;
 } browser_ResponseMeta;
 
+typedef struct browser_Event
+{
+    UINT64 type;
+    UINT64 hData;
+    UINT64 lData;
+} browser_Event;
+
 static HDLE           g_window = 0;
 static bool           g_need_redraw = true;
 static bool           g_fetch_requested = false;
@@ -82,6 +90,13 @@ static browser_Buffer g_response_buffer = {0};
 static browser_Buffer g_chunked_buffer = {0};
 static browser_Buffer g_text_buffer = {0};
 static browser_css_document *g_css_document = NULL;
+static volatile unsigned int g_event_read_index = 0;
+static volatile unsigned int g_event_write_index = 0;
+static browser_Event         g_event_queue[BROWSER_EVENT_QUEUE_SIZE];
+static volatile bool         g_move_pending = false;
+static volatile int          g_move_x = 0;
+static volatile int          g_move_y = 0;
+static volatile int          g_scroll_pending = 0;
 
 static int browser_min(int a, int b)
 {
@@ -1764,37 +1779,117 @@ static void browser_handle_special_char(char ch)
     }
 }
 
-static void browser_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
+static bool browser_enqueue_event(UINT64 type, UINT64 hData, UINT64 lData)
 {
-    switch (type) {
+    unsigned int write_index = g_event_write_index;
+    unsigned int next_index = (write_index + 1U) % BROWSER_EVENT_QUEUE_SIZE;
+    if (next_index == g_event_read_index) {
+        return false;
+    }
+
+    g_event_queue[write_index].type = type;
+    g_event_queue[write_index].hData = hData;
+    g_event_queue[write_index].lData = lData;
+    g_event_write_index = next_index;
+    return true;
+}
+
+static bool browser_dequeue_event(browser_Event *event)
+{
+    if (event == NULL) {
+        return false;
+    }
+
+    unsigned int read_index = g_event_read_index;
+    if (read_index == g_event_write_index) {
+        return false;
+    }
+
+    *event = g_event_queue[read_index];
+    g_event_read_index = (read_index + 1U) % BROWSER_EVENT_QUEUE_SIZE;
+    return true;
+}
+
+static void browser_dispatch_event(const browser_Event *event)
+{
+    if (event == NULL) {
+        return;
+    }
+
+    switch (event->type) {
     case MSG_MOVE:
-        browser_handle_mouse_move((int)hData, (int)lData);
+        browser_handle_mouse_move((int)event->hData, (int)event->lData);
         break;
     case MSG_LBUTTON:
-        browser_handle_left_click((int)hData, (int)lData);
+        browser_handle_left_click((int)event->hData, (int)event->lData);
         break;
     case MSG_CHAR:
-        browser_handle_char((char)lData);
+        browser_handle_char((char)event->lData);
         break;
     case MSG_SPCHAR:
-        browser_handle_special_char((char)lData);
+        browser_handle_special_char((char)event->lData);
         break;
     case MSG_ROLLER: {
-        int delta = (int)lData;
+        int delta = (int)event->hData;
         if (delta == 0) {
-            delta = (int)hData;
+            delta = (int)event->lData;
         }
         if (delta > 0) {
-            browser_scroll_by(-BROWSER_SCROLL_STEP);
+            browser_scroll_by(-BROWSER_SCROLL_STEP * (-delta));
             g_need_redraw = true;
         } else if (delta < 0) {
-            browser_scroll_by(BROWSER_SCROLL_STEP);
+            browser_scroll_by(BROWSER_SCROLL_STEP * (delta));
             g_need_redraw = true;
         }
         break;
     }
     default:
         break;
+    }
+}
+
+static void browser_drain_events()
+{
+    if (g_move_pending) {
+        g_move_pending = false;
+        browser_handle_mouse_move(g_move_x, g_move_y);
+    }
+
+    if (g_scroll_pending != 0) {
+        int delta = g_scroll_pending;
+        g_scroll_pending = 0;
+        if (delta > 0) {
+            browser_scroll_by(-BROWSER_SCROLL_STEP * delta);
+            g_need_redraw = true;
+        } else if (delta < 0) {
+            browser_scroll_by(BROWSER_SCROLL_STEP * (-delta));
+            g_need_redraw = true;
+        }
+    }
+
+    browser_Event event;
+    while (browser_dequeue_event(&event)) {
+        browser_dispatch_event(&event);
+    }
+}
+
+static void browser_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
+{
+    if (type == MSG_MOVE) {
+        g_move_x = (int)hData;
+        g_move_y = (int)lData;
+        g_move_pending = true;
+        return;
+    }
+
+    if (type == MSG_ROLLER) {
+        int delta = (int)hData;
+        g_scroll_pending += delta;
+        return;
+    }
+
+    if (!browser_enqueue_event(type, hData, lData)) {
+        return;
     }
 }
 
@@ -1833,6 +1928,8 @@ static int browser_main_impl(int argc, char *argv[], char *envp[])
     g_fetch_requested = true;
 
     while (!g_need_exit) {
+        browser_drain_events();
+
         if (g_fetch_requested) {
             g_fetch_requested = false;
             browser_navigate(g_url_input);
@@ -1842,7 +1939,7 @@ static int browser_main_impl(int argc, char *argv[], char *envp[])
         if (g_need_redraw) {
             browser_render_window();
         }
-        xapi_Sleep(BROWSER_LOOP_SLEEP_MS);
+        __asm__ volatile("pause");
     }
 
     free(g_response_buffer.data);
