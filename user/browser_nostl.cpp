@@ -71,6 +71,7 @@ typedef struct browser_Event
 
 static HDLE           g_window = 0;
 static bool           g_need_redraw = true;
+static bool           g_need_full_redraw = true;
 static bool           g_fetch_requested = false;
 static bool           g_need_exit = false;
 static bool           g_input_focus = true;
@@ -441,6 +442,7 @@ static void browser_set_status(const char *text)
 {
     browser_strlcpy(g_status, sizeof(g_status), text);
     g_need_redraw = true;
+    g_need_full_redraw = true;
 }
 
 static void browser_set_title(const char *title)
@@ -448,11 +450,15 @@ static void browser_set_title(const char *title)
     if (title == NULL || title[0] == '\0') {
         browser_strlcpy(g_page_title, sizeof(g_page_title), "Browser");
         xapi_SetWindowTitle(g_window, (char *)"Browser");
+        g_need_redraw = true;
+        g_need_full_redraw = true;
         return;
     }
 
     browser_strlcpy(g_page_title, sizeof(g_page_title), title);
     xapi_SetWindowTitle(g_window, g_page_title);
+    g_need_redraw = true;
+    g_need_full_redraw = true;
 }
 
 static bool browser_parse_url(const char *input, browser_ParsedUrl *parsed, char *normalized, int normalized_size, char *error, int error_size)
@@ -1352,6 +1358,52 @@ static void browser_render_window()
 
     xapi_RefreshWindow(g_window);
     g_need_redraw = false;
+    g_need_full_redraw = false;
+}
+
+static void browser_render_content_only()
+{
+    const int panel_y1 = BROWSER_HEADER_HEIGHT;
+    const int panel_y2 = BROWSER_WINDOW_HEIGHT - BROWSER_PADDING;
+    const int panel_x1 = BROWSER_PADDING;
+    const int panel_x2 = BROWSER_WINDOW_WIDTH - BROWSER_PADDING;
+    const int visible = browser_visible_lines();
+
+    xapi_DrawRect(g_window, panel_x1, panel_y1, panel_x2, panel_y2, BROWSER_COLOR_PANEL, true);
+    xapi_DrawSWText(g_window,
+                    panel_x1 + 10,
+                    panel_y1 + 8,
+                    (char *)"Enter: load   Mouse wheel: scroll   Click URL bar to edit",
+                    BROWSER_COLOR_MUTED);
+
+    if (g_rich_document && g_css_document != NULL) {
+        browser_css_draw(g_css_document,
+                         g_window,
+                         browser_content_x1(),
+                         browser_content_y1(),
+                         g_scroll_pixels,
+                         browser_content_width(),
+                         browser_content_height());
+    } else {
+        const int start_line = g_scroll_top;
+        const int y = browser_content_y1();
+        int i;
+
+        for (i = 0; i < visible && start_line + i < g_line_count; ++i) {
+            xapi_DrawSWText(g_window, browser_content_x1(), y + i * 16, g_lines[start_line + i], BROWSER_COLOR_TEXT);
+        }
+    }
+
+    if ((g_rich_document && browser_max_scroll() > 0) || (!g_rich_document && g_line_count > visible)) {
+        char scroll_info[64];
+        int scroll_now = g_rich_document ? g_scroll_pixels : g_scroll_top;
+        snprintf(scroll_info, sizeof(scroll_info), "%d/%d", scroll_now + 1, browser_max_scroll() + 1);
+        xapi_DrawSWText(g_window, panel_x2 - 56, panel_y1 + 8, scroll_info, BROWSER_COLOR_MUTED);
+    }
+
+    xapi_RefreshWindow(g_window);
+    g_need_redraw = false;
+    g_need_full_redraw = false;
 }
 
 static bool browser_fetch_once(const char *url, browser_ResponseMeta *meta, char *normalized, int normalized_size, char *error, int error_size)
@@ -1700,10 +1752,12 @@ static void browser_handle_mouse_move(int x, int y)
                                    y - browser_content_y1(),
                                    g_scroll_pixels)) {
             g_need_redraw = true;
+            g_need_full_redraw = false;
         }
     } else if (g_mouse_in_content) {
         if (browser_css_mouse_leave(g_css_document)) {
             g_need_redraw = true;
+            g_need_full_redraw = false;
         }
     }
 
@@ -1745,9 +1799,11 @@ static void browser_handle_char(char ch)
         if (ch == 'j' || ch == 'J') {
             browser_scroll_by(1);
             g_need_redraw = true;
+            g_need_full_redraw = false;
         } else if (ch == 'k' || ch == 'K') {
             browser_scroll_by(-1);
             g_need_redraw = true;
+            g_need_full_redraw = false;
         }
         return;
     }
@@ -1762,6 +1818,7 @@ static void browser_handle_char(char ch)
     g_url_input[g_url_input_len++] = ch;
     g_url_input[g_url_input_len] = '\0';
     g_need_redraw = true;
+    g_need_full_redraw = true;
 }
 
 static void browser_handle_special_char(char ch)
@@ -1770,6 +1827,7 @@ static void browser_handle_special_char(char ch)
         if (g_input_focus && g_url_input_len > 0) {
             g_url_input[--g_url_input_len] = '\0';
             g_need_redraw = true;
+            g_need_full_redraw = true;
         }
         return;
     }
@@ -1835,11 +1893,13 @@ static void browser_dispatch_event(const browser_Event *event)
             delta = (int)event->lData;
         }
         if (delta > 0) {
-            browser_scroll_by(-BROWSER_SCROLL_STEP * (-delta));
+            browser_scroll_by(BROWSER_SCROLL_STEP * (-delta));
             g_need_redraw = true;
+            g_need_full_redraw = false;
         } else if (delta < 0) {
-            browser_scroll_by(BROWSER_SCROLL_STEP * (delta));
+            browser_scroll_by(-BROWSER_SCROLL_STEP * (delta));
             g_need_redraw = true;
+            g_need_full_redraw = false;
         }
         break;
     }
@@ -1861,9 +1921,11 @@ static void browser_drain_events()
         if (delta > 0) {
             browser_scroll_by(-BROWSER_SCROLL_STEP * delta);
             g_need_redraw = true;
+            g_need_full_redraw = false;
         } else if (delta < 0) {
             browser_scroll_by(BROWSER_SCROLL_STEP * (-delta));
             g_need_redraw = true;
+            g_need_full_redraw = false;
         }
     }
 
@@ -1934,10 +1996,15 @@ static int browser_main_impl(int argc, char *argv[], char *envp[])
             g_fetch_requested = false;
             browser_navigate(g_url_input);
             g_need_redraw = true;
+            g_need_full_redraw = true;
         }
 
         if (g_need_redraw) {
-            browser_render_window();
+            if (g_need_full_redraw) {
+                browser_render_window();
+            } else {
+                browser_render_content_only();
+            }
         }
         __asm__ volatile("pause");
     }

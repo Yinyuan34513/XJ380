@@ -127,6 +127,8 @@ extern BOOT_CONFIG *EFI_BC;
 
 void process_mouse_button()
 {
+    if (sht_img == NULL) return;
+
     if (!allow_to_flush) return;
 
     if (ms_dec.btn & 0x01)

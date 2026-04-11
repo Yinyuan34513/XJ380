@@ -430,6 +430,10 @@ uint32_t getYsize(SHEET_INFO *sht, SHEET *csheet)
 
 SHEET *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
+    if (sht == NULL || sht->start == NULL) {
+        return NULL;
+    }
+
     SHEET *front_p = sht->start;
     while (true)
     {
@@ -453,6 +457,10 @@ SHEET *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
 
 SHEET *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
 {
+    if (sht == NULL || sht->start == NULL) {
+        return NULL;
+    }
+
     SHEET *front_p = sht->start;
     while (true)
     {

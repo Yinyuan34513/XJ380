@@ -13,7 +13,7 @@ ACPI Version: 2
 XSDT Address: 0xFBF0064
 SDT Entry 0:
 SDT Address: 0xFBF0088
-SRAT(
+SRATè
 
 SDT Entry 1:
 SDT Address: 0xFBF0090
@@ -22,7 +22,7 @@ FADT Found Success.
 
 SDT Entry 2:
 SDT Address: 0xFBF0098
-APIC²
+APICz
 MADT Found Success.
 
 SDT Entry 3:
@@ -46,7 +46,7 @@ WSMT(
 Initializing IDT...
 IDT Initialize Success.
 GDT Initialize Success.
-Setup acpi hpet table (nano_time: 1922395890).
+Setup acpi hpet table (nano_time: 2651576229).
 Initializing APIC...
 Mask 8259A Success.
 Your PC support x2APIC.
@@ -55,15 +55,13 @@ Setup I/O apic.
 IOAPIC Address: 0xFFFF8000FEC00000
 IOAPIC Initialize Success.
 APIC Initialize Success.
-0x00000000100000~0x0000000d607000
-0x0000000f07f000~0x0000000f1dc000
-0x0000000f1dd000~0x0000000f1de000
+0x00000000100000~0x0000000d5b4000
+0x0000000f07f000~0x0000000f208000
 0x0000000fa7f000~0x0000000fa80000
 0x0000000fe00000~0x0000000ffab000
 0x00000010000000~0x000000c0000000
 0x00000100000000~0x00000140000000
-0x00000140053000~0x00000240000000
-Available memory: 8151 MiB
+Available memory: 4055 MiB
 BOOT: device_manager_init begin
 BOOT: device_manager_init done
 BOOT: vfs_init begin
@@ -87,9 +85,8 @@ Found PCIe device: 0x40100 name: Multimedia Audio Controller
 Found PCIe device: 0x10601 name: Serial ATA Controller
 Found PCIe device: 0xc0300 name: USB Controller
 Found PCIe device: 0xc0320 name: USB Controller
-Found PCIe device: 0xc0330 name: USB Controller
 Found PCIe device: 0x10802 name: Non-Volatile Memory Controller
-PCIE device loaded: 13
+PCIE device loaded: 12
 BOOT: pci_init done
 VM hint: generic/VMware/real hardware
 BOOT: ahci_setup begin
@@ -127,7 +124,7 @@ BOOT: partition_init begin
 [XJ380 System Kernel][INFO] PART: MBR read attempt=1 signature=55aa type0=ee
 [XJ380 System Kernel][INFO] PART: MBR signature=55aa type0=ee
 [XJ380 System Kernel][INFO] PART: GPT sig=EFI PART rev=0x10000 hdr=92 pe_lba=2 entries=128 entry_size=128
-[XJ380 System Kernel][INFO] GPT Partition(sata0) 1 GUID: 43398480-3B64-451A-85DE-EE3C46BE5E49
+[XJ380 System Kernel][INFO] GPT Partition(sata0) 1 GUID: 8E1F99AC-1BC1-45EC-8704-38679E9CCA97
 Registers (sata0p0)device success
 [XJ380 System Kernel][INFO] Loading part device...
 Registers (sata0p0)device success
@@ -144,114 +141,204 @@ Initializing CPU 2.
 CPU 2 Initialize Success.
 Initializing CPU 3.
 CPU 3 Initialize Success.
-Initializing CPU 4.
-CPU 4 Initialize Success.
-Initializing CPU 5.
-CPU 5 Initialize Success.
-Initializing CPU 6.
-CPU 6 Initialize Success.
-Initializing CPU 7.
-CPU 7 Initialize Success.
-SMP init with 8 cpus
+SMP init with 4 cpus
 /dev/sata0p0
 [XJ380 System Kernel][INFO] Mount root OK!
 Registers (stdio)device success
 XJ380 Message Initialize Success.
-kmod: Module xhci /lib/modules/xhci.km
-kmod: Module netserver /lib/modules/netserver.km
 kmod: Module e1000 /lib/modules/e1000.km
 Found 59 kernel symbols
 Dynamic linker initialized
-Loaded shared object: /lib/modules/xhci.km at 0xffffffffb0000000
-find dlmain 
-Version 288 
-[XJ380 System Kernel][INFO] xhci: supported protocol capability discovered
-[XJ380 System Kernel][INFO] xhci: supported protocol capability discovered
-[XJ380 System Kernel][INFO] xhci: spec version 1.32 (raw=0x0120)
-[XJ380 System Kernel][INFO] xhci: controller ready ports=8 slots=127 intrs=31 ctx=32
-[XJ380 System Kernel][MESSAGE] usb: hotplug worker started tid=8
-[XJ380 System Kernel][DEBUG] xhci: probe topology=usb-5 slot=1 parse_rc=0 ifaces=2 parsed-hub=0 parsed-msc=0 active=03/00/00 configured=1
-[XJ380 System Kernel][DEBUG] usb: no driver matched topology=usb-5 vid=0e0f pid=0003 ifaces=2
-[XJ380 System Kernel][DEBUG] usb:   iface=0 alt=0 class=03/00/00 eps=1
-[XJ380 System Kernel][DEBUG] usb:   iface=1 alt=0 class=03/00/00 eps=1
-[XJ380 System Kernel][INFO] xhci: probe failed topology=usb-5 slot=1 rc=-19 active=03/00/00 ifaces=2
-[XJ380 System Kernel][INFO] xhci: slot 1 root-port=5 parent-slot=0 parent-port=5 level=1 route=0x0 full-speed device VID=0e0f PID=0003 class=00/00/00 mps0=8 cfg=1/1
-[XJ380 System Kernel][INFO] xhci: slot 1 config total_len=59 interfaces=2 value=1 max_power=0 iface=03/00/00
-[XJ380 System Kernel][DEBUG] usb: no driver matched topology=usb-5 vid=0e0f pid=0003 ifaces=2
-[XJ380 System Kernel][DEBUG] usb:   iface=0 alt=0 class=03/00/00 eps=1
-[XJ380 System Kernel][DEBUG] usb:   iface=1 alt=0 class=03/00/00 eps=1
-[XJ380 System Kernel][DEBUG] usb: hub scan probe failed topology=usb-5 vid=0e0f pid=0003 active=03/00/00 ifaces=2
-[XJ380 System Kernel][INFO] xhci: service worker started tid=9 hid=no
-Loaded kernel module: xhci at 0xffffffffb0000000
-Loaded shared object: /lib/modules/netserver.km at 0xffffffffb0014000
-find dlmain 
-Loaded kernel module: netserver at 0xffffffffb0014000
-Loaded shared object: /lib/modules/e1000.km at 0xffffffffb003f000
+Loaded shared object: /lib/modules/e1000.km at 0xffffffffb0000000
 find dlmain 
 [XJ380 System Kernel][MESSAGE] e1000: Found Intel E1000 network controller
 [XJ380 System Kernel][MESSAGE] e1000: MMIO BAR base=0xfc000000 size=0x20000
 [XJ380 System Kernel][MESSAGE] e1000: MAC address: 00:0c:29:3a:33:f5
-Loaded kernel module: e1000 at 0xffffffffb003f000
+Loaded kernel module: e1000 at 0xffffffffb0000000
 Process Killer is ready
 AHCI: keeping conservative IO path on vmware/real hardware
 desktop flusher is running
 Initializing Sheet Manager...
 Sheet Manager Initialize Success.
 Initializing Font...
-TTF: loaded '/system/font/XJ380F.ttf' size=10807764 read=15931ms init=0ms magic=00010000
-TTF: loaded '/system/font/XJ380C.ttf' size=5448380 read=8050ms init=0ms magic=00010000
+TTF: loaded '/system/font/XJ380F.ttf' size=10807764 read=10430ms init=0ms magic=00010000
+TTF: loaded '/system/font/XJ380C.ttf' size=5448380 read=5259ms init=0ms magic=00010000
 TTF Initialize Success.
 Initializing XWM...
 Reading Theme...
 XWM Initializing Success.
 desktop: init_user begin
-[XJ380 System Kernel][MESSAGE] netserver: worker started
-[XJ380 System Kernel][MESSAGE] netserver: netdev ready, mac=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: netif ready flags=0x1f up=1 link=1 mtu=1500 mac=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=350 type=0x0800 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=350 type=0x0800 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: default dns -> 223.5.5.5
-[XJ380 System Kernel][MESSAGE] netserver: dhcp client started on e0
-[XJ380 System Kernel][MESSAGE] e1000: rx len=62 type=0x0800 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f8:9f:c3 status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=62 type=0x0800 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f8:9f:c3 netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] netserver: dhcp state -> selecting (6)
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] e1000: rx len=342 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f8:9f:c3 status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=342 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f8:9f:c3 netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] dhcp_recv: netif=0xffffffffb003e200 p=0xffffc00001474b68 len=300 tot=300 port=67 state=6
-[XJ380 System Kernel][MESSAGE] dhcp_recv: msg_type=2 yiaddr=192.168.229.128 state=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=350 type=0x0800 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=350 type=0x0800 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: dhcp state -> requesting (1)
-[XJ380 System Kernel][MESSAGE] e1000: rx len=342 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f8:9f:c3 status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=342 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f8:9f:c3 netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] dhcp_recv: netif=0xffffffffb003e200 p=0xffffc00001474b68 len=300 tot=300 port=67 state=1
-[XJ380 System Kernel][MESSAGE] dhcp_recv: msg_type=5 yiaddr=192.168.229.128 state=1
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0806
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=42 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=42 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0806
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=42 type=0x0806 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=42 type=0x0806 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=62 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=62 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0806
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=42 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=42 type=0x0806 dst=ff:ff:ff:ff:ff:ff src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0806 dst=00:0c:29:3a:33:f5 src=00:50:56:f8:9f:c3 status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0806 dst=00:0c:29:3a:33:f5 src=00:50:56:f8:9f:c3 netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=62 type=0x0800 dst=00:50:56:f8:9f:c3 src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=62 type=0x0800 dst=00:50:56:f8:9f:c3 src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: dhcp state -> bound (10)
-[XJ380 System Kernel][MESSAGE] netserver: dhcp lease 192.168.229.128 mask=255.255.255.0 gw=192.168.229.2
+PrintPic: cannot open '/system/image/background3.png'
+
+XJ380 Operating System - Serial Log
+Copyright(C) XINGJI Interacitve Software 2017-2026 All rights reserved.
+OS Version: BuildVersion
+EFI Initialize Success.
+New Page Table Created Success.
+Root Dir Open Success.
+XSK2.1 Kernel Read Success.
+Frame Buffer Phys Addr: 0xFFFF8000F00000`©ü
+Video Initialize Success.
+ACPI Table Found Success.
+ACPI Version: 2
+XSDT Address: 0xFBF0064
+SDT Entry 0:
+SDT Address: 0xFBF0088
+SRATè
+
+SDT Entry 1:
+SDT Address: 0xFBF0090
+FACPô
+FADT Found Success.
+
+SDT Entry 2:
+SDT Address: 0xFBF0098
+APICz
+MADT Found Success.
+
+SDT Entry 3:
+SDT Address: 0xFBF00A0
+MCFG<
+MCFG Found Success.
+
+SDT Entry 4:
+SDT Address: 0xFBF00A8
+HPET8
+HPET Found Success.
+
+SDT Entry 5:
+SDT Address: 0xFBF00B0
+WAET(
+
+SDT Entry 6:
+SDT Address: 0xFBF00B8
+WSMT(
+
+Initializing IDT...
+IDT Initialize Success.
+GDT Initialize Success.
+Setup acpi hpet table (nano_time: 3909005802).
+Initializing APIC...
+Mask 8259A Success.
+Your PC support x2APIC.
+Initializing IOAPIC...
+Setup I/O apic.
+IOAPIC Address: 0xFFFF8000FEC00000
+IOAPIC Initialize Success.
+APIC Initialize Success.
+0x00000000100000~0x0000000d5b4000
+0x0000000f07f000~0x0000000f208000
+0x0000000fa7f000~0x0000000fa80000
+0x0000000fe00000~0x0000000ffab000
+0x00000010000000~0x000000c0000000
+0x00000100000000~0x00000140000000
+Available memory: 4055 MiB
+BOOT: device_manager_init begin
+BOOT: device_manager_init done
+BOOT: vfs_init begin
+Virtual File System initialize.
+BOOT: vfs_init done
+BOOT: fatfs_init begin
+BOOT: fatfs_init done
+BOOT: devfs_setup begin
+BOOT: devfs_setup done
+BOOT: pci_setup begin
+BOOT: pci_setup done
+BOOT: pci_init begin
+Found PCIe device: 0x60000 name: Host Bridge
+Found PCIe device: 0x60100 name: ISA Bridge
+Found PCIe device: 0x1018a name: IDE Controller
+Found PCIe device: 0x68000 name: Other Bridge
+Found PCIe device: 0x88000 name: Other Base System Peripheral
+Found PCIe device: 0x30000 name: VGA Compatible Controller
+Found PCIe device: 0x20000 name: Ethernet Controller
+Found PCIe device: 0x40100 name: Multimedia Audio Controller
+Found PCIe device: 0x10601 name: Serial ATA Controller
+Found PCIe device: 0xc0300 name: USB Controller
+Found PCIe device: 0xc0320 name: USB Controller
+Found PCIe device: 0x10802 name: Non-Volatile Memory Controller
+PCIE device loaded: 12
+BOOT: pci_init done
+VM hint: generic/VMware/real hardware
+BOOT: ahci_setup begin
+AHCI: environment=generic/vmware/real controller=02:02.0 vendor=0x15ad device=0x7e0
+AHCI: PCI command before=0x300006 after=0x300006
+AHCI: BAR5=0xfc051000 size=0x1000 CAP=0xc1341f1d CAP2=0x0 PI=0x3fffffff VS=1.3.0
+AHCI: CAP2=0x0 BOHC(before)=0x0
+AHCI: BIOS/OS handoff not supported
+AHCI: mode enabled CAP=0xc1341f1d CAP2=0x0 ports=30 cmd_slots=32 PI=0x3fffffff
+AHCI: port signature=0x101
+AHCI: ATA device detected, sending IDENTIFY
+AHCI: Device initialized: VMware Virtual SATA Hard Drive         , blocks: 262144, block_size: 512
+Registers (sata0)device success
+sata0: blk_size=512, blk=0..262144, VMware Virtual SATA Hard Drive         
+AHCI initialized: online_ports=1 ready_ports=1 implemented_ports=30 version=1.3.0
+BOOT: ahci_setup done
+AHCI: acceleration disabled
+BOOT: nvme_setup begin
+Found NVME controller.
+Invalid namespace size
+BOOT: nvme_setup done
+BOOT: ide_setup begin
+Initializing IDE controller...
+IDE: Found IDE controller
+IDE: Detecting Primary Master...
+IDE: Detecting Primary Slave...
+IDE: Detecting Secondary Master...
+IDE: Detecting Secondary Slave...
+IDE: Registering devices...
+IDE controller initialized.
+BOOT: ide_setup done
+BOOT: partition_init begin
+[XJ380 System Kernel][INFO] PART: /dev/sata0
+[XJ380 System Kernel][INFO] PART: read sata0 sector_size=512 size=0x8000000
+[XJ380 System Kernel][INFO] PART: MBR read attempt=1 signature=55aa type0=ee
+[XJ380 System Kernel][INFO] PART: MBR signature=55aa type0=ee
+[XJ380 System Kernel][INFO] PART: GPT sig=EFI PART rev=0x10000 hdr=92 pe_lba=2 entries=128 entry_size=128
+[XJ380 System Kernel][INFO] GPT Partition(sata0) 1 GUID: 8E1F99AC-1BC1-45EC-8704-38679E9CCA97
+Registers (sata0p0)device success
+[XJ380 System Kernel][INFO] Loading part device...
+Registers (sata0p0)device success
+BOOT: partition_init done
+[XJ380 System Kernel][MESSAGE] Standard PS/2 mouse detected
+[XJ380 System Kernel][MESSAGE] Mouse initialized successfully, type: 0
+Setup process <XSK System> PID:0
+Initializing SMP...
+Searching CPUs...
+Start Up APs...
+Initializing CPU 1.
+CPU 1 Initialize Success.
+Initializing CPU 2.
+CPU 2 Initialize Success.
+Initializing CPU 3.
+CPU 3 Initialize Success.
+SMP init with 4 cpus
+/dev/sata0p0
+[XJ380 System Kernel][INFO] Mount root OK!
+Registers (stdio)device success
+XJ380 Message Initialize Success.
+kmod: Module e1000 /lib/modules/e1000.km
+Found 59 kernel symbols
+Dynamic linker initialized
+Loaded shared object: /lib/modules/e1000.km at 0xffffffffb0000000
+find dlmain 
+[XJ380 System Kernel][MESSAGE] e1000: Found Intel E1000 network controller
+[XJ380 System Kernel][MESSAGE] e1000: MMIO BAR base=0xfc000000 size=0x20000
+[XJ380 System Kernel][MESSAGE] e1000: MAC address: 00:0c:29:3a:33:f5
+Loaded kernel module: e1000 at 0xffffffffb0000000
+Process Killer is ready
+AHCI: keeping conservative IO path on vmware/real hardware
+desktop flusher is running
+Initializing Sheet Manager...
+Sheet Manager Initialize Success.
+Initializing Font...
+TTF: loaded '/system/font/XJ380F.ttf' size=10807764 read=11072ms init=0ms magic=00010000
+TTF: loaded '/system/font/XJ380C.ttf' size=5448380 read=5341ms init=0ms magic=00010000
+TTF Initialize Success.
+Initializing XWM...
+Reading Theme...
+XWM Initializing Success.
+desktop: init_user begin
 desktop: init_user done
 desktop: init_xuls begin
 desktop: init_xuls done
@@ -261,162 +348,13 @@ components flusher is running
 Creating User Process. Process Name: browser
 Creating User Thread. Thread Name: browser
 CWD: /apps
-[XJ380 System Kernel][MESSAGE] netserver: dns resolve start host=example.com family=2
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=71 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=71 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] e1000: rx len=103 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=71 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=103 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] e1000: tx len=71 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: dns callback name=example.com addr=172.66.147.243
-[XJ380 System Kernel][MESSAGE] netserver: dns resolve done host=example.com addr=172.66.147.243
-[XJ380 System Kernel][MESSAGE] e1000: rx len=103 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] socketfs: open domain=2 type=1 protocol=0 create=0xffffffffb00168aa
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=103 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] netserver: socket create domain=2 type=1 protocol=0 stack_ready=1
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=70 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=70 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: netconn_new ok conn=0xffffc00001b17c98
-[XJ380 System Kernel][MESSAGE] netserver: socket create ok socket=0xffffc00001b17628
-[XJ380 System Kernel][MESSAGE] socketfs: provider create ok impl=0xffffc00001b17628
-[XJ380 System Kernel][MESSAGE] netserver: connect dst=172.66.147.243:443 flags=0x1 state=0 pending_err=0
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=58 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=58 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] netserver: connect ret=-5 state=3 pending_err=0
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: write size=332 flags=0x0 state=0 pending_err=0
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=386 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=386 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] xtls: send wrote=332 len=332
-ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=60 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] e1000: rx len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] xtls: recv got=5
-e1000: rx len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-xtls: recv got=95
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] xtls: recv got=5
-e1000: rx len=89 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-xtls: recv got=1355
-[XJ380 System Kernel][MESSAGE] xtls: recv got=1367
-netserver: rx frame len=89 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-xtls: recv got=5
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] xtls: recv got=88
-e1000: rx len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-xtls: recv got=26
-[XJ380 System Kernel][MESSAGE] xtls: recv got=5
-netserver: rx frame len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-xtls: recv got=4
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: write size=42 flags=0x0 state=0 pending_err=0
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=96 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=96 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] xtls: send wrote=42 len=42
-ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: write size=6 flags=0x0 state=0 pending_err=0
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] xtls: send wrote=6 len=6
-e1000: rx len=89 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: write size=37 flags=0x0 state=0 pending_err=0
-[XJ380 System Kernel][MESSAGE] xtls: send wrote=37 len=37
-netserver: rx frame len=89 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=1514 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: rx len=89 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d status=0x3 err=0x0
-[XJ380 System Kernel][MESSAGE] netserver: rx frame len=89 type=0x0800 dst=00:0c:29:3a:33:f5 src=00:50:56:f3:df:1d netif_flags=0x1f hwaddr_len=6
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: tx frame len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] e1000: tx len=54 type=0x0800 dst=00:50:56:f3:df:1d src=00:0c:29:3a:33:f5
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-xtls: recv got=5
-xtls: recv got=1
-xtls: recv got=5
-xtls: recv got=32
-[XJ380 System Kernel][MESSAGE] xtls: handshake ok version=TLSv1.2 cipher=TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256
-ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: write size=215 flags=0x0 state=0 pending_err=0
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-xtls: send wrote=215 len=215
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-xtls: recv got=5
-xtls: recv got=848
-xtls: recv got=5
-xtls: recv got=21
-xtls: recv got=5
-xtls: recv got=18
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-Page fault virtual address (cr2): 0xFFFFFFFF801AE000 0xFFFFFFFF80092A93
+Page fault virtual address (cr2): 0xFFFFFFFF801AE000 0xFFFFFFFF80092E53
 Type: NotPresent
-PF cpu lapic=4 gs=0x2aa38 kgs=0x2aa38 current_cpu=0x2aa38
-Fault Thread Name: desktop_flusher 0x91df0
-TID: 12
+PF cpu lapic=1 gs=0x29a88 kgs=0x29a88 current_cpu=0x29a88
+Fault Thread Name: desktop_flusher 0x7e420
+TID: 5
 Kernel backtrace:
-backtrace address:0xFFFFFFFF80092A93
-backtrace address:0xFFFFFFFF800145B5
-backtrace address:0xFFFFFFFF800379D0
-[XJ380 System Kernel][MESSAGE] Kernel backtrace end
-netserver: dns resolve start host=file.1t8213dbbbm ,,, family=2
-[XJ380 System Kernel][MESSAGE] ethernet_output: src_arg=00:0c:29:3a:33:f5 netif_hw=00:0c:29:3a:33:f5 type=0x0800
-[XJ380 System Kernel][MESSAGE] netserver: dns callback name=file.1t8213dbbbm ,,, status=not-found
-[XJ380 System Kernel][MESSAGE] netserver: dns resolve failed host=file.1t8213dbbbm ,,, status=-113
+backtrace address:0xFFFFFFFF80092E53
+backtrace address:0xFFFFFFFF800145CA
+backtrace address:0xFFFFFFFF80037BE0
+Kernel backtrace end

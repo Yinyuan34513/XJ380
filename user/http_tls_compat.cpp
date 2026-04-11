@@ -1097,6 +1097,11 @@ extern "C" double nearbyint(double x)
     return round(x);
 }
 
+extern "C" int abs(int x)
+{
+    return x < 0 ? -x : x;
+}
+
 extern "C" double pow(double x, double y)
 {
     long long exp = (long long)y;
