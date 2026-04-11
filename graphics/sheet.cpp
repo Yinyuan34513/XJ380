@@ -7,17 +7,149 @@ bool SheetIsCreating   = false;
 
 typedef struct
 {
-    SHEET_INFO *sht;
-    int         x1;
-    int         y1;
-    int         x2;
-    int         y2;
-    bool        pending;
+    int x1;
+    int y1;
+    int x2;
+    int y2;
+} SheetDamageRect;
+
+enum
+{
+    SHEET_DAMAGE_QUEUE_CAPACITY = 8,
+};
+
+typedef struct
+{
+    SHEET_INFO      *sht;
+    SheetDamageRect  rects[SHEET_DAMAGE_QUEUE_CAPACITY];
+    uint8_t          count;
+    bool             pending;
 } SheetDamageQueueState;
 
 static spin_t               g_sheet_damage_lock = SPIN_INIT;
 static spin_t               g_sheet_flush_lock  = SPIN_INIT;
-static SheetDamageQueueState g_sheet_damage_queue = {NULL, 0, 0, 0, 0, false};
+static SheetDamageQueueState g_sheet_damage_queue = {NULL, {}, 0, false};
+
+static inline int rect_min_int(int a, int b)
+{
+    return a < b ? a : b;
+}
+
+static inline int rect_max_int(int a, int b)
+{
+    return a > b ? a : b;
+}
+
+static inline void sheet_damage_rect_set(SheetDamageRect *rect, int x1, int y1, int x2, int y2)
+{
+    rect->x1 = x1;
+    rect->y1 = y1;
+    rect->x2 = x2;
+    rect->y2 = y2;
+}
+
+static inline bool sheet_damage_rect_intersects_or_touches(const SheetDamageRect *a, const SheetDamageRect *b)
+{
+    return a->x1 <= b->x2 && b->x1 <= a->x2 && a->y1 <= b->y2 && b->y1 <= a->y2;
+}
+
+static inline void sheet_damage_rect_union_into(SheetDamageRect *dst, const SheetDamageRect *src)
+{
+    dst->x1 = rect_min_int(dst->x1, src->x1);
+    dst->y1 = rect_min_int(dst->y1, src->y1);
+    dst->x2 = rect_max_int(dst->x2, src->x2);
+    dst->y2 = rect_max_int(dst->y2, src->y2);
+}
+
+static inline uint64_t sheet_damage_rect_area(const SheetDamageRect *rect)
+{
+    return (uint64_t)(rect->x2 - rect->x1) * (uint64_t)(rect->y2 - rect->y1);
+}
+
+static void sheet_damage_queue_compact_locked(SheetDamageQueueState *queue)
+{
+    for (uint8_t i = 0; i < queue->count; ++i)
+    {
+        for (uint8_t j = i + 1; j < queue->count;)
+        {
+            if (!sheet_damage_rect_intersects_or_touches(&queue->rects[i], &queue->rects[j]))
+            {
+                ++j;
+                continue;
+            }
+
+            sheet_damage_rect_union_into(&queue->rects[i], &queue->rects[j]);
+            queue->rects[j] = queue->rects[queue->count - 1];
+            queue->count--;
+        }
+    }
+
+    queue->pending = queue->count != 0;
+    if (!queue->pending) {
+        queue->sht = NULL;
+    }
+}
+
+static void sheet_damage_queue_push_locked(SheetDamageQueueState *queue, SHEET_INFO *sht, int x1, int y1, int x2, int y2)
+{
+    if (queue->pending && queue->sht != sht)
+    {
+        // Current callers use a single compositor. If another sheet manager
+        // starts sharing this queue, keep correctness by falling back to
+        // immediate coalescing on the existing owner first.
+        SheetDamageRect merged = queue->rects[0];
+        for (uint8_t i = 1; i < queue->count; ++i)
+        {
+            sheet_damage_rect_union_into(&merged, &queue->rects[i]);
+        }
+        queue->sht      = queue->sht;
+        queue->rects[0] = merged;
+        queue->count    = queue->count ? 1 : 0;
+        queue->pending  = queue->count != 0;
+    }
+
+    queue->sht = sht;
+
+    SheetDamageRect rect;
+    sheet_damage_rect_set(&rect, x1, y1, x2, y2);
+
+    for (uint8_t i = 0; i < queue->count;)
+    {
+        if (!sheet_damage_rect_intersects_or_touches(&queue->rects[i], &rect))
+        {
+            ++i;
+            continue;
+        }
+
+        sheet_damage_rect_union_into(&rect, &queue->rects[i]);
+        queue->rects[i] = queue->rects[queue->count - 1];
+        queue->count--;
+    }
+
+    if (queue->count < SHEET_DAMAGE_QUEUE_CAPACITY)
+    {
+        queue->rects[queue->count++] = rect;
+        queue->pending = true;
+        return;
+    }
+
+    uint8_t  best_index  = 0;
+    uint64_t best_growth = (uint64_t)-1;
+    for (uint8_t i = 0; i < queue->count; ++i)
+    {
+        SheetDamageRect merged = queue->rects[i];
+        sheet_damage_rect_union_into(&merged, &rect);
+        uint64_t growth = sheet_damage_rect_area(&merged) - sheet_damage_rect_area(&queue->rects[i]);
+        if (growth < best_growth)
+        {
+            best_growth = growth;
+            best_index  = i;
+        }
+    }
+
+    sheet_damage_rect_union_into(&queue->rects[best_index], &rect);
+    sheet_damage_queue_compact_locked(queue);
+}
 
 static size_t sheet_buffer_bytes(uint32_t width, uint32_t height)
 {
@@ -595,22 +727,7 @@ void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
     if (!clip_refresh_region(sht, &bex1, &bey1, &bex2, &bey2)) return;
 
     spin_lock(&g_sheet_damage_lock);
-    if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht)
-    {
-        if (bex1 < g_sheet_damage_queue.x1) g_sheet_damage_queue.x1 = bex1;
-        if (bey1 < g_sheet_damage_queue.y1) g_sheet_damage_queue.y1 = bey1;
-        if (bex2 > g_sheet_damage_queue.x2) g_sheet_damage_queue.x2 = bex2;
-        if (bey2 > g_sheet_damage_queue.y2) g_sheet_damage_queue.y2 = bey2;
-    }
-    else
-    {
-        g_sheet_damage_queue.sht = sht;
-        g_sheet_damage_queue.x1 = bex1;
-        g_sheet_damage_queue.y1 = bey1;
-        g_sheet_damage_queue.x2 = bex2;
-        g_sheet_damage_queue.y2 = bey2;
-        g_sheet_damage_queue.pending = true;
-    }
+    sheet_damage_queue_push_locked(&g_sheet_damage_queue, sht, bex1, bey1, bex2, bey2);
     spin_unlock(&g_sheet_damage_lock);
 }
 
@@ -626,26 +743,24 @@ void flush_sheet_damage_queue(SHEET_INFO *sht)
     spin_lock(&g_sheet_flush_lock);
     while (true)
     {
-        SHEET_INFO *pending_sht = NULL;
-        int         x1 = 0;
-        int         y1 = 0;
-        int         x2 = 0;
-        int         y2 = 0;
+        SHEET_INFO      *pending_sht = NULL;
+        SheetDamageRect  rect        = {0, 0, 0, 0};
 
         spin_lock(&g_sheet_damage_lock);
-        if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht)
+        if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht && g_sheet_damage_queue.count != 0)
         {
             pending_sht = g_sheet_damage_queue.sht;
-            x1 = g_sheet_damage_queue.x1;
-            y1 = g_sheet_damage_queue.y1;
-            x2 = g_sheet_damage_queue.x2;
-            y2 = g_sheet_damage_queue.y2;
-            g_sheet_damage_queue.pending = false;
+            rect = g_sheet_damage_queue.rects[g_sheet_damage_queue.count - 1];
+            g_sheet_damage_queue.count--;
+            g_sheet_damage_queue.pending = g_sheet_damage_queue.count != 0;
+            if (!g_sheet_damage_queue.pending) {
+                g_sheet_damage_queue.sht = NULL;
+            }
         }
         spin_unlock(&g_sheet_damage_lock);
 
         if (pending_sht == NULL) break;
-        refresh_part_sheet_now(pending_sht, x1, y1, x2, y2);
+        refresh_part_sheet_now(pending_sht, rect.x1, rect.y1, rect.x2, rect.y2);
     }
     spin_unlock(&g_sheet_flush_lock);
 }
