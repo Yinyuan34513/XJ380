@@ -268,7 +268,7 @@ check_password:
     current_user->envc      = 2;
     current_user->envp      = current_user_envp;
 
-    center_mouse_cursor();
+    
 
     vfs_mkdir("/users");
     char user_folder_path[265] = "/users/";
