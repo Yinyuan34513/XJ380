@@ -34,6 +34,22 @@ static inline size_t next_power_of_2(size_t x)
     return 1UL << (log2_floor(x) + 1);
 }
 
+static inline size_t order_to_pages(size_t order)
+{
+    return 1UL << (order - MIN_ORDER);
+}
+
+static inline size_t count_to_block_pages(size_t count)
+{
+    return next_power_of_2(count);
+}
+
+static inline size_t count_to_order(size_t count)
+{
+    size_t required_pages = count_to_block_pages(count);
+    return log2_floor(required_pages) + MIN_ORDER;
+}
+
 static inline size_t order_to_index(size_t order)
 {
     return order - MIN_ORDER;
@@ -114,8 +130,10 @@ static enum zone_type gfp_to_zone(uint32_t gfp_flags)
 }
 
 // 从指定 order 的空闲列表中弹出一个块
-static uint64_t pop_front(buddy_allocator_t *alloc, size_t order)
+static uint64_t pop_front(zone_t *zone, size_t order)
 {
+    buddy_allocator_t *alloc = &zone->allocator;
+
     if (order < MIN_ORDER || order >= MAX_ORDER) return 0;
 
     // 尝试从指定 order 分配
@@ -151,6 +169,7 @@ static uint64_t pop_front(buddy_allocator_t *alloc, size_t order)
 
         page_list.entry_num--;
         write_page_list(page_list_paddr, page_list);
+        zone->free_pages -= order_to_pages(order);
 
         return entry;
     }
@@ -182,6 +201,7 @@ try_split:
         write_page_list(page_list_paddr, page_list);
 
         if (block == 0) continue;
+        zone->free_pages -= order_to_pages(current_order);
 
         // 分裂大块，将 buddy 放回较小的 order
         while (current_order > order)
@@ -190,7 +210,7 @@ try_split:
             uint64_t buddy = block + (1UL << current_order);
 
             // 将 buddy 放入对应 order 的空闲列表
-            buddy_free_zone(container_of(alloc, zone_t, allocator), buddy, current_order);
+            buddy_free_zone(zone, buddy, current_order);
         }
 
         return block;
@@ -309,10 +329,8 @@ void buddy_free_zone(zone_t *zone, uint64_t base, size_t order)
 
             // 合并：选择较小的地址作为新块
             base = (base < buddy_addr) ? base : buddy_addr;
+            zone->free_pages -= order_to_pages(order);
             order++;
-
-            // 更新统计
-            zone->free_pages -= (1UL << (order - 1 - MIN_ORDER));
 
             continue; // 继续尝试更高 order 的合并
         }
@@ -366,7 +384,7 @@ void buddy_free_zone(zone_t *zone, uint64_t base, size_t order)
         else
         {
             // 尝试从 buddy 分配
-            new_page_paddr = pop_front(alloc, MIN_ORDER);
+            new_page_paddr = pop_front(zone, MIN_ORDER);
             if (new_page_paddr == 0) { new_page_paddr = (uint64_t)early_alloc(PAGE_SIZE); }
         }
 
@@ -414,7 +432,7 @@ void buddy_free_zone(zone_t *zone, uint64_t base, size_t order)
     write_page_list(target_paddr, target_list);
 
     // 更新统计
-    zone->free_pages += (1UL << (order - MIN_ORDER));
+    zone->free_pages += order_to_pages(order);
 }
 
 // 从 zone 分配
@@ -422,14 +440,12 @@ uint64_t buddy_alloc_zone(zone_t *zone, size_t count)
 {
     if (!zone || count == 0) return 0;
 
-    size_t required_pages = next_power_of_2(count);
-    size_t order          = log2_floor(required_pages) + MIN_ORDER;
+    size_t order = count_to_order(count);
 
     if (order >= MAX_ORDER) return 0;
 
     spin_lock(&zone->allocator.lock);
-    uint64_t addr = pop_front(&zone->allocator, order);
-    if (addr != 0) { zone->free_pages -= required_pages; }
+    uint64_t addr = pop_front(zone, order);
     spin_unlock(&zone->allocator.lock);
 
     return addr;
@@ -596,6 +612,7 @@ uint64_t alloc_frames(size_t count)
 {
     if (count == 0) return 0;
 
+    size_t required_pages = count_to_block_pages(count);
     uint64_t addr = 0;
 
     // 优先尝试 NORMAL zone
@@ -624,8 +641,8 @@ uint64_t alloc_frames(size_t count)
 ret:
     if (addr)
     {
-        bitmap_set_range(&using_regions, addr / PAGE_SIZE, addr / PAGE_SIZE + count, true);
-        for (uint64_t a = addr; a < (addr + count * PAGE_SIZE); a += PAGE_SIZE)
+        bitmap_set_range(&using_regions, addr / PAGE_SIZE, addr / PAGE_SIZE + required_pages, true);
+        for (uint64_t a = addr; a < (addr + required_pages * PAGE_SIZE); a += PAGE_SIZE)
         {
             page_t *p = get_page(a);
             page_ref(p);
@@ -644,8 +661,12 @@ void free_frames(uint64_t addr, size_t count)
 {
     if (addr == 0 || count == 0) return;
 
+    size_t required_pages = count_to_block_pages(count);
+    size_t order          = count_to_order(count);
+    if (order >= MAX_ORDER) order = MAX_ORDER - 1;
+
     uint64_t idx = addr / PAGE_SIZE;
-    for (size_t off = 0; off < count; off++)
+    for (size_t off = 0; off < required_pages; off++)
     {
         if (bitmap_get(&using_regions, idx + off) == false) return;
         if (bitmap_get(&frame_allocator.bitmap, idx + off) == false) return;
@@ -657,23 +678,18 @@ void free_frames(uint64_t addr, size_t count)
 
     if (!zone) return;
 
-    for (uint64_t a = addr; a < (addr + count * PAGE_SIZE); a += PAGE_SIZE)
+    for (uint64_t a = addr; a < (addr + required_pages * PAGE_SIZE); a += PAGE_SIZE)
     {
         address_unref(a);
     }
-    for (uint64_t a = addr; a < (addr + count * PAGE_SIZE); a += PAGE_SIZE)
+    for (uint64_t a = addr; a < (addr + required_pages * PAGE_SIZE); a += PAGE_SIZE)
     {
         if (!address_can_free(a)) return;
     }
 
-    size_t required_pages = next_power_of_2(count);
-    size_t order          = log2_floor(required_pages) + MIN_ORDER;
-
-    if (order >= MAX_ORDER) order = MAX_ORDER - 1;
-
     spin_lock(&zone->allocator.lock);
     buddy_free_zone(zone, addr, order);
-    bitmap_set_range(&using_regions, idx, idx + count, false);
+    bitmap_set_range(&using_regions, idx, idx + required_pages, false);
     spin_unlock(&zone->allocator.lock);
 }
 
@@ -683,6 +699,7 @@ uint64_t alloc_frames_dma32(size_t count)
 {
     if (count == 0) return 0;
 
+    size_t required_pages = count_to_block_pages(count);
     uint64_t addr = 0;
 
     // DMA32
@@ -702,8 +719,10 @@ uint64_t alloc_frames_dma32(size_t count)
 #endif
 
 ret:
-    bitmap_set(&frame_allocator.bitmap, addr / PAGE_SIZE, true);
-    for (uint64_t a = addr; a < (addr + count * PAGE_SIZE); a += PAGE_SIZE)
+    if (addr == 0) return 0;
+
+    bitmap_set_range(&using_regions, addr / PAGE_SIZE, addr / PAGE_SIZE + required_pages, true);
+    for (uint64_t a = addr; a < (addr + required_pages * PAGE_SIZE); a += PAGE_SIZE)
     {
         page_t *p = get_page(a);
         page_ref(p);
