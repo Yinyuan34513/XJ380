@@ -510,6 +510,7 @@ sys_(getcwd, char *buffer, size_t length);//nm
 
 sys_(chdir, char *s);
 
+sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
 sys_(exit_group, int exit_code);
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
 sys_(sched_getaffinity);//不支持

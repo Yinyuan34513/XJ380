@@ -18,5 +18,6 @@
 #include "./xposix/poll.h"
 #include "./xposix/socket.h"
 #include "./xposix/netdb.h"
+#include "./xposix/sys/wait.h"
 #include "./xposix/stdlib.h"
 #include "./liballoc/alloc.h"

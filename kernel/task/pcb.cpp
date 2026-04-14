@@ -135,9 +135,11 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
         return;
     }
 
+    pcb->exit_code = exit_code;
 
     if (is_zombie)
     {
+        pcb->status = ZOMBIE;
         if (pcb->thread_queue->size > 0)
         {
             spin_lock(&pcb->thread_queue->lock);
@@ -148,8 +150,6 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
             }
             spin_unlock(&pcb->thread_queue->lock);
         }
-
-        pcb->status       = ZOMBIE;
         ipc_message_t msg = (ipc_message_t)malloc(sizeof(struct ipc_message));
         msg->pid          = pcb->pid;
         msg->type         = IPC_MSG_TYPE_EPID;

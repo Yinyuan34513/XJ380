@@ -141,9 +141,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_EXIT:
         sys_exit(regs->rdi,0,0,0,0,0,regs);
         break;
-        // case SYS_EXIT_GROUP:
-        //     regs->rax = (uint64_t)sys_exit(regs->rdi);
-        //     break;
+    case SYS_EXIT_GROUP:
+        sys_exit_group(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
         case SYS_GETPID:
             regs->rax = get_current_task()->parent_group->pid;
             break;
@@ -153,9 +153,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         case SYS_CLOCK_GETTIME:
             regs->rax = (uint64_t)sys_clock_gettime(regs->rdi, (struct timespec *)regs->rsi, 0, 0, 0, 0, regs);
             break;
-        // case SYS_WAIT4:
-        //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
-        //     break;
+        case SYS_WAIT4:
+            regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r10, 0, 0, regs);
+            break;
         case SYS_BRK:
             regs->rax = (uint64_t)sys_brk(regs->rdi);
             break;
