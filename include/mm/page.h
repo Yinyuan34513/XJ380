@@ -29,10 +29,11 @@
 #define ENTRY_MASK 0x1FF
 
 #include <stdint.h>
+#include <mm/memory.h>
+
 typedef struct page
 {
     int refcount;
-    // TODO
 } page_t;
 
 extern page_t *page_maps;

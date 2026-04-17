@@ -207,6 +207,7 @@ void kill_proc0(pcb_t pcb)
     char *cmdline = pcb->cmdline;
     void *elf_file = pcb->elf_file;
     char **envp = pcb->envp;
+    xtttp_dtt *xtttp = pcb->xtttp_stc;
     char name[sizeof(pcb->name)];
     memset(name, 0, sizeof(name));
     strncpy(name, pcb->name, sizeof(name) - 1);
@@ -233,6 +234,7 @@ void kill_proc0(pcb_t pcb)
     free(cmdline);
     free(elf_file);
     if (envp) free_envp(envp);
+    free(xtttp);
     free(pcb);
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", name, pid,
                      vfork ? "true" : "false");

@@ -11,6 +11,7 @@
 #include "krlibc.h"
 #include "fs/vfs/list.h"
 #include "llist.h"
+#include "pipe.h"
 #include "task/pcb.h"
 #include <cpu/lock.h>
 // #include "pipefs.h"
@@ -404,15 +405,19 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
     nw->flags      = src->flags;
     nw->fd         = src->fd;
     vfs_node_t node = nw->node;
-    // if (node->type == file_pipe) {
-    //     pipe_specific_t *spec = node->handle;
-    //     pipe_info_t     *pipe = spec->info;
-    //     if (spec->write) {
-    //         pipe->write_fds++;
-    //     } else {
-    //         pipe->read_fds++;
-    //     }
-    // }
+    if ((node->type & file_pipe) && node->handle != NULL) {
+        pipe_specific_t *spec = (pipe_specific_t *)node->handle;
+        pipe_info_t     *pipe = spec != NULL ? spec->info : NULL;
+        if (pipe != NULL) {
+            spin_lock(&pipe->lock);
+            if (spec->write) {
+                pipe->write_fds++;
+            } else {
+                pipe->read_fds++;
+            }
+            spin_unlock(&pipe->lock);
+        }
+    }
     return nw;
 }
 
@@ -459,9 +464,28 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
 errno_t vfs_close(vfs_node_t node) {
     if (unlikely(node == NULL)) return VFS_STATUS_FAILED;
     if (node == rootdir) return VFS_STATUS_SUCCESS;
-    if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
-    if(node->refcount > 0) node->refcount--;
+    if (node->refcount > 0) node->refcount--;
+
+    if (node->type & file_pipe) {
+        if (node->handle != NULL) {
+            callbackof(node, close)(node->handle);
+        }
+
+        if (node->refcount <= 0) {
+            if (node->parent != NULL) {
+                vfs_child_lock();
+                list_delete(node->parent->child, node);
+                vfs_child_unlock();
+            }
+            node->handle = NULL;
+            free(node->name);
+            free(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
     if ((node->type & file_socket) && node->refcount > 0) {
         return VFS_STATUS_SUCCESS;

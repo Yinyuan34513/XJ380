@@ -105,26 +105,34 @@ int pipefs_ioctl(void *file, ssize_t cmd, ssize_t arg) {
 
 bool pipefs_close(void *current) {
     pipe_specific_t *spec = (pipe_specific_t *)current;
-    pipe_info_t     *pipe = spec->info;
+    if (spec == NULL) return true;
 
-    spin_lock(&pipe->lock);
-    if (spec->write) {
-        pipe->write_fds--;
-    } else {
-        pipe->read_fds--;
-    }
-
-    list_delete(pipefs_root->child, spec->node);
-    if ((spec->write && pipe->write_fds == 0) || pipe->read_fds == 0) free(spec);
-
-    if (pipe->write_fds == 0 && pipe->read_fds == 0) {
-        spin_unlock(&pipe->lock);
-        free(pipe->buf);
-        free(pipe);
+    pipe_info_t *pipe = spec->info;
+    if (pipe == NULL) {
+        free(spec);
         return true;
     }
 
+    bool free_spec = false;
+    bool free_pipe = false;
+
+    spin_lock(&pipe->lock);
+    if (spec->write) {
+        if (pipe->write_fds > 0) pipe->write_fds--;
+        free_spec = (pipe->write_fds == 0);
+    } else {
+        if (pipe->read_fds > 0) pipe->read_fds--;
+        free_spec = (pipe->read_fds == 0);
+    }
+    free_pipe = (pipe->write_fds == 0 && pipe->read_fds == 0);
+
     spin_unlock(&pipe->lock);
+
+    if (free_spec) free(spec);
+    if (free_pipe) {
+        free(pipe->buf);
+        free(pipe);
+    }
 
     return true;
 }

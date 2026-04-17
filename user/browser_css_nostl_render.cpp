@@ -1326,9 +1326,9 @@ extern "C" void browser_css_draw(browser_css_document *document,
             int line_y = draw_y + run->font_px + 1;
             xapi_DrawLine((HDLE)window,
                           (UINT32)draw_x,
-                          (UINT32)line_y,
-                          (UINT32)(draw_x + run->width-15),
-                          (UINT32)line_y,
+                          (UINT32)line_y+10,
+                          (UINT32)(draw_x + run->width),
+                          (UINT32)line_y+10,
                           run->color);
         }
     }
