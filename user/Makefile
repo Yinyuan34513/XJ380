@@ -161,7 +161,7 @@ BROWSER_BUILTINS ?= $(shell runtime_dir="$$(clang --print-runtime-dir 2>/dev/nul
 	fi)
 
 build_xapi:
-	make -C xapi build_all_api
+	$(MAKE) -C xapi build_all_api
 
 # init.elf: init.c
 # 	@$(CC) -static $< -o ../out/$@
