@@ -9,8 +9,8 @@ BROWSER_HEADERS := $(shell find ./browser -type f \( -name "*.h" -o -name "*.hpp
 
 MBEDTLS_SRC_DIR := ../third_party/mbedtls-src
 MBEDTLS_CONFIG_HEADER := mbed_compat/xj380_mbedtls_user_config.h
-MBEDTLS_CFLAGS := -I ./include/mbed_compat -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE=\"$(MBEDTLS_CONFIG_HEADER)\"
-MBEDTLS_CCFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include/mbed_compat -I ./xapi/include -I ./include -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE=\"$(MBEDTLS_CONFIG_HEADER)\"
+MBEDTLS_CFLAGS := -I ./include/mbed_compat -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"'
+MBEDTLS_CCFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include/mbed_compat -I ./xapi/include -I ./include -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"' -DMBEDTLS_NO_UDBL_DIVISION
 MBEDTLS_LIBRARY_SOURCES := \
 	$(MBEDTLS_SRC_DIR)/library/aes.c \
 	$(MBEDTLS_SRC_DIR)/library/aria.c \
