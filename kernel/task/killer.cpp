@@ -19,6 +19,9 @@ void check_group(pcb_t group)
 {
     if (group == NULL) return;
 
+    // Zombie processes must stay attached to their parent until wait/waitpid reaps them.
+    if (group->status == ZOMBIE) return;
+
     if (group->child_pcb != NULL)
     {
         for (lock_node *node = group->child_pcb->head; node != NULL;)

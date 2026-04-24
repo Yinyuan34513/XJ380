@@ -243,11 +243,11 @@ int e1000_send(void *dev_desc, void *data, uint32_t len) {
     if (g_e1000_tx_log_count < 24 && len >= 14) {
         uint8_t *frame = (uint8_t *)data;
         uint16_t eth_type = ((uint16_t)frame[12] << 8) | frame[13];
-        printk("e1000: tx len=%u type=0x%04x dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x\n",
-               len,
-               (unsigned int)eth_type,
-               frame[0], frame[1], frame[2], frame[3], frame[4], frame[5],
-               frame[6], frame[7], frame[8], frame[9], frame[10], frame[11]);
+        // printk("e1000: tx len=%u type=0x%04x dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x\n",
+        //        len,
+        //        (unsigned int)eth_type,
+        //        frame[0], frame[1], frame[2], frame[3], frame[4], frame[5],
+        //        frame[6], frame[7], frame[8], frame[9], frame[10], frame[11]);
         g_e1000_tx_log_count++;
     }
 
@@ -285,11 +285,11 @@ int e1000_send(void *dev_desc, void *data, uint32_t len) {
     uint64_t wait_start = nanoTime();
     while (!(dev->tx_descs[dev->tx_head].status & E1000_TXD_STAT_DD)) {
         if (nanoTime() - wait_start >= 100000000ULL) {
-            printk("e1000: tx timeout head=%u tail=%u len=%u status=0x%x\n",
-                   (unsigned int)dev->tx_head,
-                   (unsigned int)dev->tx_tail,
-                   (unsigned int)len,
-                   (unsigned int)dev->tx_descs[dev->tx_head].status);
+            // printk("e1000: tx timeout head=%u tail=%u len=%u status=0x%x\n",
+            //        (unsigned int)dev->tx_head,
+            //        (unsigned int)dev->tx_tail,
+            //        (unsigned int)len,
+            //        (unsigned int)dev->tx_descs[dev->tx_head].status);
             return -1;
         }
         __asm__ volatile("pause" ::: "memory");
@@ -344,13 +344,13 @@ int e1000_receive(void *dev_desc, void *buffer, uint32_t buffer_size) {
     if (g_e1000_rx_log_count < 24 && packet_len >= 14) {
         uint8_t *frame = (uint8_t *)buffer;
         uint16_t eth_type = ((uint16_t)frame[12] << 8) | frame[13];
-        printk("e1000: rx len=%u type=0x%04x dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x status=0x%x err=0x%x\n",
-               packet_len,
-               (unsigned int)eth_type,
-               frame[0], frame[1], frame[2], frame[3], frame[4], frame[5],
-               frame[6], frame[7], frame[8], frame[9], frame[10], frame[11],
-               (unsigned int)desc->status,
-               (unsigned int)desc->errors);
+        // printk("e1000: rx len=%u type=0x%04x dst=%02x:%02x:%02x:%02x:%02x:%02x src=%02x:%02x:%02x:%02x:%02x:%02x status=0x%x err=0x%x\n",
+        //        packet_len,
+        //        (unsigned int)eth_type,
+        //        frame[0], frame[1], frame[2], frame[3], frame[4], frame[5],
+        //        frame[6], frame[7], frame[8], frame[9], frame[10], frame[11],
+        //        (unsigned int)desc->status,
+        //        (unsigned int)desc->errors);
         g_e1000_rx_log_count++;
     }
 

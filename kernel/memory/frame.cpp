@@ -11,18 +11,22 @@ Bitmap         usable_regions;
 uint64_t       memory_size       = 0;
 uint64_t       memory_total_size = 0;
 
-uint64_t get_memory_size(MEMORY_MAP map)
+static uint64_t get_memory_top(MEMORY_MAP map)
 {
-    uint64_t       total_pages = 0;
+    uint64_t       top         = 0;
     EfiMemoryDesc *EfiMemory   = (EfiMemoryDesc *)((uint64_t)(map.Buffer) + 0xFFFF800000000000);
 
     for (int i = 0; i < (map.MapSize / map.DescriptorSize); i++)
     {
-        if (EfiMemory->Type == EfiConventionalMemory) { total_pages += EfiMemory->NumberOfPages; }
+        if (EfiMemory->Type == EfiConventionalMemory)
+        {
+            uint64_t region_end = EfiMemory->PhysicalStart + EfiMemory->NumberOfPages * PAGE_SIZE;
+            if (region_end > top) top = region_end;
+        }
         EfiMemory++;
     }
 
-    return total_pages * PAGE_SIZE;
+    return top;
 }
 
 uint64_t get_memory_all_size(MEMORY_MAP map)
@@ -108,7 +112,9 @@ static void process_memory_region(uintptr_t start, uintptr_t end)
 
 void init_frame(MEMORY_MAP map)
 {
-    memory_size       = get_memory_size(map);
+    // `memory_size` is used to size frame bitmaps and page metadata, so it must
+    // cover the highest usable PFN rather than only the sum of usable pages.
+    memory_size       = get_memory_top(map);
     memory_total_size = get_memory_all_size(map);
 
     size_t         bitmap_size    = (memory_size / 4096 + 7) / 8;

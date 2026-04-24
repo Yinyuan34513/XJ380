@@ -151,3 +151,4 @@ int      vsound_setvol(vsound_t snd, float vol);
 
 void mp3_player(const char *path);
 void wav_player(const char *path);
+void hda_test_tone(void *arg);

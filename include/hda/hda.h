@@ -41,3 +41,4 @@ void     hda_play_pcm(void *buffer, uint32_t size, uint32_t sample_rate, uint32_
                       uint32_t bits_per_sample);
 uint8_t  hda_is_supported_sample_rate(uint32_t sample_rate);
 void     hda_regist();
+void     hda_poll();

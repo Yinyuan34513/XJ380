@@ -33,6 +33,7 @@ extern bool have_full_screen_app;
 extern bool logo_menu_just_born;
 extern bool logo_menu_is_open;
 extern bool allow_to_flush;
+extern bool desktop_done;
 
 static volatile bool desktop_refresh_pending = false;
 
@@ -75,6 +76,25 @@ static void refresh_union_rect_now(SHEET_INFO *sht, int x1, int y1, int x2, int 
     flush_sheet_damage_queue(sht);
 }
 
+static void refresh_part_sheet_deferred_or_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2)
+{
+    if (desktop_done) {
+        refresh_part_sheet(sht, x1, y1, x2, y2);
+        return;
+    }
+    refresh_part_sheet_now(sht, x1, y1, x2, y2);
+}
+
+static void refresh_union_rect_deferred_or_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
+                                               int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    if (desktop_done) {
+        refresh_union_rect(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+        return;
+    }
+    refresh_union_rect_now(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+}
+
 static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, int *y)
 {
     if (sht == NULL || sheet == NULL || x == NULL || y == NULL) {
@@ -107,6 +127,8 @@ extern BOOT_CONFIG *EFI_BC;
 
 void process_mouse_button()
 {
+    if (sht_img == NULL) return;
+
     if (!allow_to_flush) return;
 
     if (ms_dec.btn & 0x01)
@@ -189,10 +211,10 @@ void process_mouse_button()
                 int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
                 // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
                 get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
-                refresh_part_sheet_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
-                                       bx + get_sheet(sht_img, current_window->w_sheet)->width,
-                                       get_sheet(sht_img, current_window->w_sheet)->by +
-                                           get_sheet(sht_img, current_window->w_sheet)->height);
+                refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
+                                                   bx + get_sheet(sht_img, current_window->w_sheet)->width,
+                                                   get_sheet(sht_img, current_window->w_sheet)->by +
+                                                       get_sheet(sht_img, current_window->w_sheet)->height);
             }
         }
         ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
@@ -279,10 +301,10 @@ void process_mouse_button()
     int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
     int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    refresh_union_rect_now(sht_img, tbx, tby, tbx + mouse_w, tby + mouse_h,
-                           getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
-                           getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
-                           getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+    refresh_union_rect_deferred_or_now(sht_img, tbx, tby, tbx + mouse_w, tby + mouse_h,
+                                       getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                                       getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                                       getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)
@@ -329,12 +351,17 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
     if (mousedecode(data))
     {
         ms_dec.need_flush = true;
-        process_mouse_button();
+        if (!desktop_done) {
+            process_mouse_button();
+        }
     }
 }
 
 void process_mouse_info()
 {
+    ms_dec.need_flush = false;
+    process_mouse_button();
+
     if (desktop_refresh_pending)
     {
         desktop_refresh_pending = false;
@@ -366,9 +393,12 @@ void process_mouse_info()
                     lift_sheet(sht_img, tdb->windowls->w_sheet);
                     ms_dec.sht_now = tdb->windowls->w_sheet;
                     focus_window_dock(tdb->windowls);
-                    refresh_part_sheet_now(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
-                                           tdb->windowls->w_sheet->bx + tdb->windowls->w_sheet->width,
-                                           tdb->windowls->w_sheet->by + tdb->windowls->w_sheet->height);
+                    refresh_part_sheet_deferred_or_now(sht_img, tdb->windowls->w_sheet->bx,
+                                                       tdb->windowls->w_sheet->by,
+                                                       tdb->windowls->w_sheet->bx +
+                                                           tdb->windowls->w_sheet->width,
+                                                       tdb->windowls->w_sheet->by +
+                                                           tdb->windowls->w_sheet->height);
                 }
             }
             else if (tby < 24 && !have_full_screen_app)
@@ -445,9 +475,9 @@ void process_mouse_info()
                 ms_dec.win_move_lock = true;
                 ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
                 lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
+                refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
                 ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
                 ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
             }
@@ -466,9 +496,9 @@ void process_mouse_info()
             {
                 SHEET *active_sheet = get_sheet(sht_img, hover_sheet);
                 if (!have_full_screen_app) lift_sheet(sht_img, active_sheet);
-                refresh_part_sheet_now(sht_img, active_sheet->bx, active_sheet->by,
-                                       active_sheet->bx + active_sheet->width,
-                                       active_sheet->by + active_sheet->height);
+                refresh_part_sheet_deferred_or_now(sht_img, active_sheet->bx, active_sheet->by,
+                                                   active_sheet->bx + active_sheet->width,
+                                                   active_sheet->by + active_sheet->height);
 
                 focus_window_dock(sht_found_win(xwmii, sht_img, active_sheet));
             }
@@ -489,16 +519,14 @@ void process_mouse_info()
             clamp_drag_window_position(sht_img, ms_dec.sht_now, &next_x, &next_y);
             ms_dec.sht_now->bx = next_x;
             ms_dec.sht_now->by = next_y;
-            refresh_union_rect_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                   ms_dec.sht_now->by + ms_dec.sht_now->height,
-                                   his_x, his_y,
-                                   his_x + ms_dec.sht_now->width,
-                                   his_y + ms_dec.sht_now->height);
+            refresh_union_rect_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                               ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                               ms_dec.sht_now->by + ms_dec.sht_now->height,
+                                               his_x, his_y,
+                                               his_x + ms_dec.sht_now->width,
+                                               his_y + ms_dec.sht_now->height);
         }
     }
-
-    ms_dec.need_flush = false;
 }
 
 bool mousedecode(uint8_t data)
@@ -602,10 +630,10 @@ void set_mouse_position(int x, int y)
     int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
     int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    refresh_union_rect_now(sht_img, old_x, old_y, old_x + mouse_w, old_y + mouse_h,
-                           getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
-                           getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
-                           getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+    refresh_union_rect_deferred_or_now(sht_img, old_x, old_y, old_x + mouse_w, old_y + mouse_h,
+                                       getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                                       getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                                       getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
 }
 
 void center_mouse_cursor()
@@ -636,7 +664,9 @@ extern "C" void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
     if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
 
     ms_dec.need_flush = true;
-    process_mouse_button();
+    if (!desktop_done) {
+        process_mouse_button();
+    }
 }
 
 EXPORT_SYMBOL(mouse_inject_report);

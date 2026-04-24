@@ -1020,6 +1020,7 @@ extern "C" unsigned int arc4random(void)
     return (unsigned int)tls_mix64(tls_rdtsc());
 }
 
+#if defined(MBEDTLS_PSA_CRYPTO_C)
 extern "C" psa_status_t mbedtls_psa_external_get_random(
     mbedtls_psa_external_random_context_t *context,
     uint8_t *output, size_t output_size, size_t *output_length)
@@ -1051,6 +1052,7 @@ extern "C" void psa_reset_key_attributes(psa_key_attributes_t *attributes)
         memset(attributes, 0, sizeof(*attributes));
     }
 }
+#endif
 
 extern "C" long syscall(long, ...)
 {
@@ -1093,6 +1095,11 @@ extern "C" float roundf(float x)
 extern "C" double nearbyint(double x)
 {
     return round(x);
+}
+
+extern "C" int abs(int x)
+{
+    return x < 0 ? -x : x;
 }
 
 extern "C" double pow(double x, double y)

@@ -247,5 +247,5 @@ void init_syscall();
 void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask);
 void init_message();
 void init_window_message(WINDOWLSP window, MsgPrcor func);
-void message_thread(tcb_t task);
+void message_thread(uint64_t arg);
 uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);

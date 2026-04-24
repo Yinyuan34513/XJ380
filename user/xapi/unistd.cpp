@@ -11,6 +11,16 @@ extern "C" uint64_t vfork()
     return enter_syscall(SYS_VFORK, 0, 0, 0, 0, 0, 0);
 }
 
+extern "C" int wait(int *status)
+{
+    return (int)enter_syscall(SYS_WAIT4, (uint64_t)-1, (uint64_t)status, 0, 0, 0, 0);
+}
+
+extern "C" int waitpid(int pid, int *status, int options)
+{
+    return (int)enter_syscall(SYS_WAIT4, (uint64_t)pid, (uint64_t)status, (uint64_t)options, 0, 0, 0);
+}
+
 extern "C" int close(int fd)
 {
     return enter_syscall(SYS_CLOSE, fd, 0, 0, 0, 0, 0);

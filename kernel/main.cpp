@@ -35,6 +35,8 @@
 #include <task/pcb.h>
 #include <ttf.h>
 #include <user/runfile.h>
+#include <hda/vsound.h>
+#include <hda/hda.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -331,7 +333,8 @@ skip_timer_widget_init:
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/browser_nostl.elf", NULL, NULL);
+    // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
@@ -474,7 +477,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // enable_intr();
 
     // disable_intr();
-    // hda_init();
+    // HDA 驱动现在会在初始化阶段自行完成注册，这里只需要启动探测即可。
+    center_mouse_cursor();
+    hda_init();
+    hda_regist();
     // sb16_init();
 
     keyboard_init();

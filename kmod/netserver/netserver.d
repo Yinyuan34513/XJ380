@@ -4,14 +4,14 @@ netserver.o: netserver.cpp ../../include/dlinker.h ../../include/krlibc.h \
  ../../include/graphics/window/window.h ../../include/task/pcb.h \
  ../../include/cpu/fpu.h ../../include/lock_queue.h \
  ../../include/cpu/lock.h ../../include/task/scheduler.h \
- ../../include/stdint.h ../../include/mm/page.h ../../include/user/user.h \
+ ../../include/stdint.h ../../include/mm/page.h ../../include/mm/memory.h \
+ ../../include/efi/efi.h ../../include/user/user.h \
  ../../include/user/./settings.h ../../include/user/x3tp.h \
  ../../include/mm/vma.h ../../include/syscall/signal.h \
  ../../include/errno.h ../../include/graphics/sheet.h \
  ../../include/efi/fbc.h ../../include/graphics/GOP.hpp \
  ../../include/graphics/components/rb_menu.h ../../include/ps2/keyboard.h \
  ../../include/ps2/mouse.h ../../include/stdarg.h \
- ../../include/mm/memory.h ../../include/efi/efi.h \
  ../../include/mm/bitmap.h ../../include/smp/smp.h ../../include/elf.h \
  ../../include/net/socket.h ../../include/fs/vfs/vfs.h \
  ../../include/llist.h ../../include/netdev.h ../../include/task/poll.h \
@@ -52,6 +52,8 @@ netserver.o: netserver.cpp ../../include/dlinker.h ../../include/krlibc.h \
 ../../include/task/scheduler.h:
 ../../include/stdint.h:
 ../../include/mm/page.h:
+../../include/mm/memory.h:
+../../include/efi/efi.h:
 ../../include/user/user.h:
 ../../include/user/./settings.h:
 ../../include/user/x3tp.h:
@@ -65,8 +67,6 @@ netserver.o: netserver.cpp ../../include/dlinker.h ../../include/krlibc.h \
 ../../include/ps2/keyboard.h:
 ../../include/ps2/mouse.h:
 ../../include/stdarg.h:
-../../include/mm/memory.h:
-../../include/efi/efi.h:
 ../../include/mm/bitmap.h:
 ../../include/smp/smp.h:
 ../../include/elf.h:

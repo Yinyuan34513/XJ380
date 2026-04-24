@@ -3,5 +3,5 @@
 
 void exit(int status)
 {
-    enter_syscall(SYS_EXIT, status, 0, 0, 0, 0, 0);
+    enter_syscall(SYS_EXIT_GROUP, status, 0, 0, 0, 0, 0);
 }

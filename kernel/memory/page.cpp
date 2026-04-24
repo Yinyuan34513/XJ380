@@ -283,6 +283,14 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
         uint64_t      frame          = alloc_frames(1);
         page_table_t *new_page_table = (page_table_t *)phys_to_virt(frame);
         memcpy(new_page_table, source_table->entries, PAGE_SIZE);
+        for (int i = 0; i < 512; i++)
+        {
+            uint64_t entry = new_page_table->entries[i].value;
+            if ((entry & PTE_PRESENT) && (entry & PTE_FRAME_ALLOCATED))
+            {
+                address_ref(entry & PTE_ADDR_MASK);
+            }
+        }
         return new_page_table;
     }
 
@@ -319,6 +327,15 @@ static void free_page_table_recursive(page_table_t *table, int level)
     if (table == NULL) return;
     if (level == 0)
     {
+        for (int i = 0; i < 512; i++)
+        {
+            uint64_t entry = table->entries[i].value;
+            if ((entry & PTE_PRESENT) && (entry & PTE_FRAME_ALLOCATED))
+            {
+                free_frame(entry & PTE_ADDR_MASK);
+                table->entries[i].value = 0;
+            }
+        }
         free_frame((uint64_t)virt_to_phys((uint64_t)table));
         return;
     }

@@ -9,6 +9,7 @@
 #include <net/socket.h>
 #include <pipe.h>
 #include <rtc.h>
+#include <task/ipc.h>
 #include <math.hpp>
 
 static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
@@ -77,13 +78,14 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
             continue;
         }
 
-        size_t wrote = vfs_write(handle->node, bounce, handle->offset, chunk);
+        size_t write_offset = (handle->node->type & file_pipe) ? 0 : handle->offset;
+        size_t wrote        = vfs_write(handle->node, bounce, write_offset, chunk);
         if (wrote == (size_t)VFS_STATUS_FAILED)
         {
             free(bounce);
             return total > 0 ? (int64_t)total : -EIO;
         }
-        if (handle->node->size != (uint64_t)-1) handle->offset += wrote;
+        if (!(handle->node->type & file_pipe) && handle->node->size != (uint64_t)-1) handle->offset += wrote;
         total += wrote;
         if (wrote < chunk) break;
     }
@@ -91,6 +93,95 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     free(bounce);
     if (!socket_mode) vfs_update(handle->node);
     return (int64_t)total;
+}
+
+static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size)
+{
+    if (size == 0) return true;
+    if (src == NULL) return false;
+    if (!user_range_mapped(pagedir, dst, size)) return false;
+    memcpy(dst, src, size);
+    return true;
+}
+
+static bool wait4_pid_matches(pcb_t child, long pid)
+{
+    if (child == NULL) return false;
+    return pid == -1 ? true : (long)child->pid == pid;
+}
+
+static pcb_t wait4_find_child(pcb_t parent, long pid)
+{
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
+
+    queue_foreach(parent->child_pcb, node)
+    {
+        pcb_t child = (pcb_t)node->data;
+        if (wait4_pid_matches(child, pid)) return child;
+    }
+
+    return NULL;
+}
+
+static pcb_t wait4_find_zombie_child(pcb_t parent, long pid)
+{
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
+
+    queue_foreach(parent->child_pcb, node)
+    {
+        pcb_t child = (pcb_t)node->data;
+        if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid)) return child;
+    }
+
+    return NULL;
+}
+
+static ipc_message_t wait4_pop_exit_message(pcb_t parent, long pid, bool wait)
+{
+    if (parent == NULL || parent->ipc_queue == NULL) return NULL;
+
+    while (true)
+    {
+        size_t remaining = parent->ipc_queue->size;
+        for (size_t i = 0; i < remaining; ++i)
+        {
+            ipc_message_t message = (ipc_message_t)queue_dequeue(parent->ipc_queue);
+            if (message == NULL) break;
+
+            if (message->type == IPC_MSG_TYPE_EPID && (pid == -1 || message->pid == pid)) return message;
+
+            message->index = lock_queue_enqueue(parent->ipc_queue, message);
+        }
+
+        if (!wait) return NULL;
+
+        __asm__ volatile("pause");
+        scheduler_yield();
+    }
+}
+
+static void wait4_discard_exit_message(pcb_t parent, int pid)
+{
+    ipc_message_t message = wait4_pop_exit_message(parent, pid, false);
+    if (message != NULL) free(message);
+}
+
+static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
+{
+    if (parent == NULL || child == NULL) return SYSCALL_FAULT_(ECHILD);
+
+    if (status != NULL)
+    {
+        int wait_status = (child->exit_code & 0xff) << 8;
+        if (!copy_to_user_pagedir(parent->pagedir, status, &wait_status, sizeof(wait_status)))
+        {
+            return SYSCALL_FAULT_(EFAULT);
+        }
+    }
+
+    wait4_discard_exit_message(parent, child->pid);
+    kill_proc(child, child->exit_code, false);
+    return (uint64_t)child->pid;
 }
 
 sys_(exit, int exit_code)
@@ -194,6 +285,14 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
         if (ret < 0) return SYSCALL_FAULT_((int)-ret);
         return ret;
     }
+    if (handle->node->type & file_pipe)
+    {
+        vfs_update(handle->node);
+        if (handle->node->size == 0 && handle->flags & O_NONBLOCK) return SYSCALL_FAULT_(EWOULDBLOCK);
+        size_t ret = vfs_read(handle->node, buffer, 0, size);
+        if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
+        return ret;
+    }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)
     {
         return SYSCALL_FAULT_(EWOULDBLOCK);
@@ -237,6 +336,46 @@ pipe:;
 //     if (status) *status = status0;
 //     return ret_pid;
 // }
+
+sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
+{
+    static constexpr int WNOHANG = 1;
+
+    pcb_t parent = get_current_task()->parent_group;
+    long  pid    = (long)pid_value;
+    (void)rusage;
+
+    if (parent == NULL || parent->child_pcb == NULL) return SYSCALL_FAULT_(ECHILD);
+    if ((options & ~WNOHANG) != 0) return SYSCALL_FAULT_(EINVAL);
+    if (pid < -1 || pid == 0) return SYSCALL_FAULT_(EINVAL);
+    if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
+
+    pcb_t zombie = wait4_find_zombie_child(parent, pid);
+    if (zombie != NULL) return wait4_reap_child(parent, zombie, status);
+    if (options & WNOHANG) return 0;
+
+    while (true)
+    {
+        ipc_message_t message = wait4_pop_exit_message(parent, pid, true);
+        if (message == NULL) continue;
+
+        int exit_code = (int)message->data[0] | ((int)message->data[1] << 8) | ((int)message->data[2] << 16) |
+                        ((int)message->data[3] << 24);
+        int child_pid = message->pid;
+        free(message);
+
+        pcb_t child = wait4_find_child(parent, child_pid);
+        if (child == NULL)
+        {
+            if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
+            continue;
+        }
+
+        child->exit_code = exit_code;
+        child->status    = ZOMBIE;
+        return wait4_reap_child(parent, child, status);
+    }
+}
 
 sys_(sigret)
 {

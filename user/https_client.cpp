@@ -1,7 +1,6 @@
 #include "https_client.h"
 
 #include <mbedtls/ctr_drbg.h>
-#include <mbedtls/debug.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/ssl_ciphersuites.h>
 #include <mbedtls/net_sockets.h>
@@ -247,7 +246,6 @@ static int xtls_request_once(const xhttp_request_t *request,
 
     mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
     mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &drbg);
-    mbedtls_debug_set_threshold(0);
 
     ret = mbedtls_ssl_setup(&ssl, &conf);
     if (ret != 0) {
@@ -351,17 +349,20 @@ int xtls_request(const xhttp_request_t *request,
                  xhttp_response_callback_t callback,
                  void *user_data)
 {
-    int status = xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_3);
-    if (status == XHTTP_OK || request == NULL || request->method == NULL) {
+    int status = XHTTP_ERR_TLS_HANDSHAKE;
+
+#if defined(MBEDTLS_SSL_PROTO_TLS1_3)
+    status = xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_3);
+    if (status == XHTTP_OK) {
         return status;
     }
 
-    if ((strcmp(request->method, "GET") != 0 && strcmp(request->method, "HEAD") != 0) ||
-        (status != XHTTP_ERR_TLS_HANDSHAKE && status != XHTTP_ERR_TLS_SEND &&
-         status != XHTTP_ERR_TLS_RECV && status != XHTTP_ERR_TIMEOUT)) {
+    if (status != XHTTP_ERR_TLS_HANDSHAKE) {
         return status;
     }
 
-    xapi_OutputSerial((char *)"xtls: retry with tls1.2\n");
+    xapi_OutputSerial((char *)"xtls: retry handshake with tls1.2\n");
+#endif
+
     return xtls_request_once(request, callback, user_data, MBEDTLS_SSL_VERSION_TLS1_2);
 }

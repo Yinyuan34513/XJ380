@@ -102,6 +102,7 @@ struct process_control_block
     bool        vfork;       // 是否是 vfork 创建的进程
     size_t      child_index; // 子进程队列索引
     lock_queue *child_pcb;   // 子进程列表
+    int         exit_code;   // 进程退出码
     uint64_t    mmap_start;  // 映射起始地址
     char       *cmdline;
     int         task_level; // 进程等级
@@ -165,7 +166,8 @@ struct thread_control_block
 
     uint64_t winnum;
     bool     hasfscr;
-    lock_queue *message_queue;  // message消息队列
+    int      message_pipe_read_fd;
+    int      message_pipe_write_fd;
 
     uint64_t window_count;
 };
@@ -184,7 +186,7 @@ void     process_setup();
 void     switch_to_user_mode();
 void get_thread_name_from_filepath(char *path, char *name);
 
-size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb);
+size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uint64_t arg);
 
 void init_killer();
 

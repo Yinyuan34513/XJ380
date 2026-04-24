@@ -37,14 +37,19 @@ extern bool is_scheduler;
 #include "task/scheduler.h"
 
 extern spin_t scheduler_lock;
-extern void message_thread(tcb_t task);
+extern void message_thread(uint64_t arg);
 extern uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);
 
 static tcb_t alloc_zeroed_tcb(void)
 {
     const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
     tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
-    if (task != NULL) memset(task, 0, sizeof(struct thread_control_block));
+    if (task != NULL)
+    {
+        memset(task, 0, sizeof(struct thread_control_block));
+        task->message_pipe_read_fd  = -1;
+        task->message_pipe_write_fd = -1;
+    }
     return task;
 }
 
@@ -130,9 +135,11 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
         return;
     }
 
+    pcb->exit_code = exit_code;
 
     if (is_zombie)
     {
+        pcb->status = ZOMBIE;
         if (pcb->thread_queue->size > 0)
         {
             spin_lock(&pcb->thread_queue->lock);
@@ -143,8 +150,6 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
             }
             spin_unlock(&pcb->thread_queue->lock);
         }
-
-        pcb->status       = ZOMBIE;
         ipc_message_t msg = (ipc_message_t)malloc(sizeof(struct ipc_message));
         msg->pid          = pcb->pid;
         msg->type         = IPC_MSG_TYPE_EPID;
@@ -202,6 +207,7 @@ void kill_proc0(pcb_t pcb)
     char *cmdline = pcb->cmdline;
     void *elf_file = pcb->elf_file;
     char **envp = pcb->envp;
+    xtttp_dtt *xtttp = pcb->xtttp_stc;
     char name[sizeof(pcb->name)];
     memset(name, 0, sizeof(name));
     strncpy(name, pcb->name, sizeof(name) - 1);
@@ -228,6 +234,7 @@ void kill_proc0(pcb_t pcb)
     free(cmdline);
     free(elf_file);
     if (envp) free_envp(envp);
+    free(xtttp);
     free(pcb);
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", name, pid,
                      vfork ? "true" : "false");
@@ -1018,11 +1025,13 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     return new_task->tid;
 }
 
-size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb_t tcb)
+size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uint64_t arg)
 {
     bool is_sti                = are_interrupts_enabled();
     bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) open_interrupt;
+
+    tcb_t creator_task = get_current_task();
 
     spin_lock(&create_thread_lock);
     close_interrupt;
@@ -1047,7 +1056,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     strncpy(new_task->name, name, sizeof(new_task->name) - 1);
     new_task->parent_group = pcb;
 
-    new_task->context0.rdi = (uint64_t)tcb;
+    new_task->context0.rdi = arg;
 
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (kernel_stack_phys == 0)
@@ -1127,7 +1136,18 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, tcb
     new_task->status                                                      = CREATE;
     save_fpu_context(&new_task->fpu_context);
 
-    new_task->fs_base = (uint64_t)new_task;
+    // The user-mode message stub runs as a normal application thread. If it
+    // inherits the default kernel-side TCB pointer as FSBASE, any libstdc++
+    // or stack-canary access through %fs will fault in user mode.
+    if (creator_task != NULL && creator_task->parent_group == pcb)
+    {
+        new_task->fs      = creator_task->fs;
+        new_task->fs_base = creator_task->fs_base;
+    }
+    else
+    {
+        new_task->fs_base = (uint64_t)new_task;
+    }
 
     new_task->window_count = 0;
 
