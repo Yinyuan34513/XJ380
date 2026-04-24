@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf browser_nostl.elf netcfg.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf
 
 export CXX ?= g++
 export CC ?= gcc
@@ -149,10 +149,6 @@ BROWSER_SOURCES := ./browser/browser_app.cpp ./browser/browser_fetch.cpp ./brows
 BROWSER_OBJECTS := $(patsubst ./browser/%.cpp, ../out/browser/%.o, $(BROWSER_SOURCES))
 BROWSER_START_OBJECT := ../out/browser/browser_start.o
 BROWSER_TLS_OBJECTS := ../out/httpget/https_client.o ../out/httpget/http_tls_compat.o $(MBEDTLS_LIBRARY_OBJECTS)
-BROWSER_NOSTL_HEADERS := ./browser_css_nostl.h ./browser_css_nostl_internal.h
-BROWSER_NOSTL_SOURCES := ./browser_nostl.cpp ./browser_css_nostl.cpp ./browser_css_nostl_render.cpp ./browser_webp_nostl.cpp
-BROWSER_NOSTL_OBJECTS := $(patsubst ./%.cpp, ../out/browser_nostl/%.o, $(BROWSER_NOSTL_SOURCES))
-BROWSER_NOSTL_CXXFLAGS := $(MBEDTLS_CFLAGS) $(CFLAGS) -DBROWSER_NOSTL_DISABLE_LEXBOR
 BROWSER_STDCPP := $(shell $(CXX) -print-file-name=libstdc++.a)
 BROWSER_SUPCPP := $(shell $(CXX) -print-file-name=libsupc++.a)
 BROWSER_LIBGCC := $(shell $(CXX) -print-libgcc-file-name)
@@ -226,10 +222,6 @@ browser.elf: $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GU
 	@$(LD) -Ttext=0x200000 --gc-sections --wrap=free $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(BROWSER_START_OBJECT) $(BROWSER_OBJECTS) $(LITEHTML_OBJECTS) $(GUMBO_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OBJECTS) --start-group $(BROWSER_STDCPP) $(BROWSER_SUPCPP) $(BROWSER_LIBGCC_EH) $(BROWSER_LIBGCC) $(BROWSER_BUILTINS) --end-group -o ../out/$@
 	@echo "LINK browser objects -> ../out/$@"
 
-browser_nostl.elf: $(BROWSER_NOSTL_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OBJECTS)
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(BROWSER_NOSTL_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OBJECTS) $(BROWSER_BUILTINS) -o ../out/$@
-	@echo "LINK nostl browser objects -> ../out/$@"
-
 ../out/browser/browser_start.o: ./browser/browser_start.cpp $(XAPI_HEADERS) $(USER_HEADERS) $(BROWSER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(BROWSER_START_CFLAGS) -c $< -o $@
@@ -259,11 +251,6 @@ browser_nostl.elf: $(BROWSER_NOSTL_OBJECTS) $(WEBP_DEC_OBJECTS) $(BROWSER_TLS_OB
 	@mkdir -p $(@D)
 	@$(CC) $(BROWSER_HOSTED_CFLAGS) -c $< -o $@
 	@echo "CC $< -> $@"
-
-../out/browser_nostl/%.o: ./%.cpp $(XAPI_HEADERS) $(USER_HEADERS) $(BROWSER_NOSTL_HEADERS)
-	@mkdir -p $(@D)
-	@$(CXX) $(BROWSER_NOSTL_CXXFLAGS) -c $< -o $@
-	@echo "CPP $< -> $@"
 
 bcms-sp.elf: bcms-sp.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
@@ -356,4 +343,4 @@ texter.elf: $(TEXTER_OBJECTS)
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/picturer.* ../out/netcfg.* ../out/browser_nostl.* ../out/browser_nostl/*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/picturer.* ../out/netcfg.* 
