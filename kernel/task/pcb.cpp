@@ -774,6 +774,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->context0.rcx    = reg->rcx;
 
     memcpy(new_task->fpu_context.fxsave_area, parent_task->fpu_context.fxsave_area, 512);
+    memcpy(new_task->actions, parent_task->actions, sizeof(new_task->actions));
+    new_task->blocked = parent_task->blocked;
+    new_task->signal  = 0;
 
     new_task->fs      = parent_task->fs;
     new_task->fs_base = parent_task->fs_base;

@@ -19,7 +19,9 @@
 #define SYS_MUNMAP 11
 #define SYS_BRK 12
 
+#define SYS_RT_SIGACTION 13
 #define SYS_RT_SIGPROCMASK 14
+#define SYS_RT_SIGRETURN 15
 
 #define SYS_IOCTL 16
 

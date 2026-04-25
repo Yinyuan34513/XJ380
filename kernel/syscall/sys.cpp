@@ -379,7 +379,7 @@ sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
 
 sys_(sigret)
 {
-    return 0;
+    return signal_return(regs);
 }
 
 sys_(getpid)
@@ -1099,6 +1099,25 @@ sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset)
     return syscall_ssetmask(how, set, oldset);
 }
 
+sys_(rt_sigaction, int sig, sigaction_t *action, sigaction_t *oldaction, size_t sigsetsize)
+{
+    if (sigsetsize < sizeof(sigset_t)) return SYSCALL_FAULT_(EINVAL);
+    int ret = syscall_sig_action(sig, action, oldaction);
+    return ret < 0 ? (uint64_t)ret : (uint64_t)ret;
+}
+
+sys_(kill, int pid, int sig)
+{
+    pcb_t target = NULL;
+    if (pid > 0) target = found_pcb(pid);
+    else if (pid == 0) target = get_current_task()->parent_group;
+    else return SYSCALL_FAULT_(ENOSYS);
+
+    if (target == NULL) return SYSCALL_FAULT_(ESRCH);
+    int ret = signal_send_process(target, sig);
+    return ret < 0 ? (uint64_t)ret : (uint64_t)ret;
+}
+
 extern fd_file_handle *fd_dup(fd_file_handle *src);
 
 sys_(dup2, int fd, int newfd)
@@ -1403,7 +1422,16 @@ sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptf
     sigset_t *sigmask    = weirdPselect6->ss;
     if (sigsetsize < sizeof(sigset_t)) { return SYSCALL_FAULT_(EINVAL); }
     sigset_t origmask = 0;
-    if (sigmask) { syscall_ssetmask(SIG_SETMASK, sigmask, &origmask); }
+    if (sigmask)
+    {
+        sigset_t requested_mask = 0;
+        if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &requested_mask, sigmask,
+                                    sizeof(requested_mask)))
+        {
+            return SYSCALL_FAULT_(EFAULT);
+        }
+        signal_setmask(SIG_SETMASK, &requested_mask, &origmask);
+    }
     struct timeval timeoutConv;
     if (timeout)
     {
@@ -1417,7 +1445,7 @@ sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptf
 
     size_t ret = sys_select((uint64_t)nfds, (uint8_t *)readfds, (uint8_t *)writefds, (uint8_t *)exceptfds,
                                 &timeoutConv, 0, 0);
-    if (sigmask) { syscall_ssetmask(SIG_SETMASK, &origmask, NULL); }
+    if (sigmask) { signal_setmask(SIG_SETMASK, &origmask, NULL); }
     return ret;
 }
 

@@ -133,6 +133,18 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_BIND: regs->rax = (uint64_t)sys_bind(regs->rdi, (const struct sockaddr *)regs->rsi, regs->rdx,0,0,0,regs); break;
     case SYS_LISTEN: regs->rax = (uint64_t)sys_listen(regs->rdi, regs->rsi,0,0,0,0,regs); break;
 
+    case SYS_RT_SIGACTION:
+        regs->rax = (uint64_t)sys_rt_sigaction(regs->rdi, (sigaction_t *)regs->rsi,
+                                               (sigaction_t *)regs->rdx, regs->r10, 0, 0, regs);
+        break;
+    case SYS_RT_SIGPROCMASK:
+        regs->rax = (uint64_t)sys_rt_sigprocmask(regs->rdi, (sigset_t *)regs->rsi,
+                                                 (sigset_t *)regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_RT_SIGRETURN:
+        regs->rax = (uint64_t)sys_sigret(0, 0, 0, 0, 0, 0, regs);
+        break;
+
     case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
     case SYS_EXECVE:
@@ -155,6 +167,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
             break;
         case SYS_WAIT4:
             regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r10, 0, 0, regs);
+            break;
+        case SYS_KILL:
+            regs->rax = (uint64_t)sys_kill(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
             break;
         case SYS_BRK:
             regs->rax = (uint64_t)sys_brk(regs->rdi);
@@ -179,11 +194,6 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     regs->rax = 0;
         //     break;
 
-        // case SYS_RT_SIGPROCMASK:
-        //     regs->rax = 0;
-        //     break;
-
-    
     /* XJ380API XAPI Edition */
     case XAPI_OUTPUT: do_xapi_Output((char *)regs->rdi); break;
     case XAPI_INPUT: do_xapi_Input((char *)regs->rdi); break;
@@ -301,6 +311,6 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         write_serial_string("\n");
         break;
     }
-
+    signal_deliver_pending(regs);
     return (uint64_t)regs;
 }

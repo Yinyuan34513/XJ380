@@ -237,7 +237,9 @@
 #define SYS_MUNMAP   11
 #define SYS_BRK      12
 
+#define SYS_RT_SIGACTION  13
 #define SYS_RT_SIGPROCMASK 14
+#define SYS_RT_SIGRETURN  15
 
 #define SYS_IOCTL 16
 
@@ -486,6 +488,7 @@ sys_(close, int fd);
 sys_(write, int fd, uint8_t *buffer, size_t size);
 sys_(read, int fd, uint8_t *buffer, size_t size);
 sys_(sigret);
+sys_(rt_sigaction, int sig, sigaction_t *action, sigaction_t *oldaction, size_t sigsetsize);
 sys_(getpid);
 sys_(socket, int domain, int type, int protocol);
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen);
@@ -515,6 +518,7 @@ sys_(exit_group, int exit_code);
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
 sys_(sched_getaffinity);//不支持
 sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
+sys_(kill, int pid, int sig);
 sys_(dup2, int fd, int newfd);
 sys_(dup, int fd);
 sys_(fcntl, int fd, int cmd, uint64_t arg);
