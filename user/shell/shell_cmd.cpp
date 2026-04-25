@@ -165,6 +165,7 @@ void check_command()
     }
     else if (strncmp("pwd", cmd, 3) == 0) { print_working_directory(); }
     else if (strncmp("clear", cmd, 5) == 0) { clear_screen(); }
+    else if (strncmp("taskmgr", cmd, 7) == 0) { xapi_Run((char *)"/system/taskmgr.elf"); }
     else if (strncmp("help", cmd, 4) == 0)
     {
         print_to_console("Available commands:");
@@ -181,6 +182,7 @@ void check_command()
         print_to_console("  version     - Show version information");
         print_to_console("  help        - Show this help");
         print_to_console("  edit        - Edit file");
+        print_to_console("  taskmgr     - Open task manager");
     }
     else if (strncmp("../", input_buf, 3) == 0) { change_directory(input_buf); }
     else if (strncmp("edit", cmd, 4) == 0)

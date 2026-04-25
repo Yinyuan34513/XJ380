@@ -135,6 +135,11 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
         return;
     }
 
+    if (xwmii != NULL && sht_img != NULL)
+    {
+        delete_process_windows(xwmii, sht_img, pcb);
+    }
+
     pcb->exit_code = exit_code;
 
     if (is_zombie)
@@ -1186,6 +1191,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->pid         = now_pid++;
     pcb->parent_task = parent_group;
     pcb->status      = START;
+    pcb->task_level  = TASK_APPLICATION_LEVEL;
     pcb->queue_index = queue_enqueue(pcb_group_queue, pcb);
     if (pcb->queue_index == (size_t)-1)
     {

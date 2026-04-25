@@ -13,6 +13,7 @@
 #pragma once
 
 #include "stdint.h"
+#include "./libsys.h"
 #include "./liballoc/alloc.h"
 
 // define
@@ -116,6 +117,8 @@ void	xapi_SendAppMessage(WSTR title, WSTR text);
 void 	xapi_Sleep(UINT64 ms);
 void 	xapi_Run(WSTR path);
 void 	xapi_FlushTime();
+UINT64  xapi_GetTaskList(XapiTaskInfo *buffer, UINT64 max_count);
+UINT64  xapi_KillProcess(UINT64 pid);
 
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size);

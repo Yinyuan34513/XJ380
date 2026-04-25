@@ -209,8 +209,9 @@ void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
     print_box_ttf(sht, csheet, (char *)"文件", BLACK, x1 + 32, 1, 10);
     print_box_ttf(sht, csheet, (char *)"设置", BLACK, x1 + 32 + 25 + 8, 1, 10);
     print_box_ttf(sht, csheet, (char *)"终端", BLACK, x1 + 32 + 25 + 8 + 25 + 9, 1, 10);
-    print_box_ttf(sht, csheet, (char *)"图形", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
-    print_box_ttf(sht, csheet, (char *)"关于", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8, 1, 10);
+    print_box_ttf(sht, csheet, (char *)"任务", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
+    print_box_ttf(sht, csheet, (char *)"图形", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9, 1, 10);
+    print_box_ttf(sht, csheet, (char *)"关于", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9 + 25 + 8, 1, 10);
     // PrintString(sht, ct_sheet, x1 + 32, 4, "Files", BLACK);
     // PrintString(sht, ct_sheet, x1 + 32 + 40 + 8, 4, "Settings", BLACK);
     // PrintString(sht, ct_sheet, x1 + 32 + 40 + 8 + 64 + 8, 4, "Terminal", BLACK);
@@ -450,12 +451,12 @@ void unregister_task_dock(WINDOWLSP window)
     spin_lock(&task_dock_lock);
     int   i       = 0;
     TDB_t front_p = first_dock_block;
-    TDB_t front_p2;
-    while (true)
+    TDB_t front_p2 = NULL;
+    while (front_p != NULL)
     {
-        if (front_p->windowls == window)
+        if (front_p->mcount && front_p->windowls == window)
         {
-            front_p2->next = front_p->next;
+            if (front_p2 != NULL) front_p2->next = front_p->next;
             free(front_p);
 
             if (have_full_screen_app) break;
@@ -468,7 +469,7 @@ void unregister_task_dock(WINDOWLSP window)
             refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
                                task_dock_index_bx + 80 * count + 64, sht_img->scry);
 
-            if (front_p2->next == NULL) break;
+            if (front_p2 == NULL || front_p2->next == NULL) break;
 
             count++;
             draw_rect(sht_img, dock_ct_sheet, task_dock_index_bx + 80 * count, sht_img->scry - 48,
@@ -480,7 +481,6 @@ void unregister_task_dock(WINDOWLSP window)
 
             break;
         }
-        if (front_p->next == NULL) { break; }
         if (front_p->mcount) { i++; }
         front_p2 = front_p;
         front_p  = front_p->next;

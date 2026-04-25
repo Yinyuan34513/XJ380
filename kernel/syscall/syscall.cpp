@@ -276,7 +276,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_GET_PIC_SIZE: GetPictureSize((int *)regs->rdi, (int *)regs->rsi, (char *)regs->rdx); break;
     case XAPI_MAP_MEMORY: regs->rax = do_xapi_MapMemory(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_REMOVEDIR: sys_rmdir(regs->rdi,0,0,0,0,0,regs); break;
-    case XAPI_FLUSH_TIME: do_xapi_FlushTime();
+    case XAPI_FLUSH_TIME: do_xapi_FlushTime(); break;
+    case XAPI_GET_TASK_LIST: regs->rax = do_xapi_GetTaskList(regs->rdi, regs->rsi); break;
+    case XAPI_KILL_PROCESS: regs->rax = do_xapi_KillProcess(regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 
