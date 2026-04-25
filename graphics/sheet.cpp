@@ -4,6 +4,7 @@
 #include <cpu/lock.h>
 bool SheetIsRefreshing = false;
 bool SheetIsCreating   = false;
+extern SHEET *mouse_ct_sheet_img;
 
 typedef struct
 {
@@ -216,6 +217,23 @@ static bool clip_sheet_copy_region(const SHEET *dst_sheet, int *dst_x, int *dst_
     *width  = w;
     *height = h;
     return true;
+}
+
+static inline bool is_point_in_sheet_rect(const SHEET *sheet, int x, int y)
+{
+    if (sheet == NULL) return false;
+    return sheet->bx <= x && sheet->bx + (int)sheet->width >= x && sheet->by <= y &&
+           sheet->by + (int)sheet->height >= y;
+}
+
+static inline bool is_sheet_pixel_opaque_at(const SHEET *sheet, int x, int y)
+{
+    if (sheet == NULL || !is_valid_sheet_buffer(sheet->buffer)) return false;
+    int lx = x - sheet->bx;
+    int ly = y - sheet->by;
+    if (lx < 0 || ly < 0 || lx >= (int)sheet->width || ly >= (int)sheet->height) return false;
+    SHEET_BUFFER *buf = (SHEET_BUFFER *)sheet->buffer;
+    return buf[ly * (int)sheet->width + lx].a != 0;
 }
 
 void init_foxland(SHEET_INFO *sht)
@@ -462,26 +480,34 @@ SHEET *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
     }
 
     SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p->next == NULL)
-        {
-            while (true)
-            {
-                if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
-                    front_p->by + front_p->height >= y &&
-                    (front_p->type == MovableSheetType || front_p->type == NoEdgeWindowSheetType ||
-                     front_p->type == TopWindowSheetType))
-                {
-                    return front_p;
-                }
-                else if (front_p->front == NULL) { return NULL; }
-                front_p = front_p->front;
-            }
-            return NULL;
-        }
+    while (front_p->next != NULL) {
         front_p = front_p->next;
     }
+
+    while (front_p != NULL)
+    {
+        if (!is_point_in_sheet_rect(front_p, (int)x, (int)y)) {
+            front_p = front_p->front;
+            continue;
+        }
+        if (front_p == mouse_ct_sheet_img) {
+            front_p = front_p->front;
+            continue;
+        }
+        if (!is_sheet_pixel_opaque_at(front_p, (int)x, (int)y)) {
+            front_p = front_p->front;
+            continue;
+        }
+
+        if (front_p->type == MovableSheetType || front_p->type == NoEdgeWindowSheetType ||
+            front_p->type == TopWindowSheetType) {
+            return front_p;
+        }
+        // 顶层非窗口图层（例如底栏）已经遮挡住该点，不应继续穿透到底下窗口。
+        return NULL;
+    }
+
+    return NULL;
 }
 
 SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
@@ -497,6 +523,19 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
 
     while (front_p != NULL)
     {
+        if (!is_point_in_sheet_rect(front_p, (int)x, (int)y)) {
+            front_p = front_p->front;
+            continue;
+        }
+        if (front_p == mouse_ct_sheet_img) {
+            front_p = front_p->front;
+            continue;
+        }
+        if (!is_sheet_pixel_opaque_at(front_p, (int)x, (int)y)) {
+            front_p = front_p->front;
+            continue;
+        }
+
         if (front_p->type == MovableSheetType)
         {
             if (front_p->bx + 22 <= x && front_p->bx + (int)front_p->width - 32 >= x &&
@@ -504,16 +543,18 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
             {
                 return front_p;
             }
+            return NULL;
         }
-        else if (front_p->type == NoEdgeWindowSheetType)
+        if (front_p->type == NoEdgeWindowSheetType)
         {
-            if (front_p->bx <= x && front_p->bx + (int)front_p->width >= x &&
-                front_p->by <= y && front_p->by + (int)front_p->height >= y)
-            {
-                return front_p;
-            }
+            return front_p;
         }
-        front_p = front_p->front;
+        if (front_p->type == TopWindowSheetType) {
+            return NULL;
+        }
+
+        // 被其他可见图层（比如底栏）挡住时，不允许拖动其下层窗口。
+        return NULL;
     }
 
     return NULL;
