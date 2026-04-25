@@ -61,6 +61,16 @@ extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
 
+extern const uint8_t _binary___graphics_logo_xj380_2_png_start;
+extern const uint8_t _binary___graphics_logo_xj380_2_png_end;
+
+extern "C" unsigned char *stbi_load_from_memory(const unsigned char *buffer, int len, int *x, int *y,
+                                                 int *channels_in_file, int desired_channels);
+extern "C" void           stbi_image_free(void *retval_from_stbi_load);
+extern "C" int            stbir_resize_uint8(const unsigned char *input_pixels, int input_w, int input_h,
+                                             int input_stride_in_bytes, unsigned char *output_pixels, int output_w,
+                                             int output_h, int output_stride_in_bytes, int num_channels);
+
 void init_cpu()
 {
     __asm__ __volatile__("movq %%cr0, %%rax\n\t"
@@ -117,6 +127,123 @@ void init_time()
         clock_hour_offset = 0;
 
     vfs_close(v);
+}
+
+static void draw_startup_screen(SHEET_INFO *shtinf, SHEET *desktop_sheet)
+{
+    if (shtinf == NULL || desktop_sheet == NULL) return;
+
+    // 开机启动界面：纯色背景 + 居中 XJ380 Logo
+    draw_rect(shtinf, desktop_sheet, 0, 0, shtinf->scrx - 1, shtinf->scry - 1, {0x0d, 0x13, 0x24, 0xff});
+
+    int logo_w = (int)(shtinf->scrx * 0.26f);
+    if (logo_w < 160) logo_w = 160;
+    if (logo_w > 420) logo_w = 420;
+    int logo_h = logo_w / 2;
+
+    int logo_x = (shtinf->scrx - logo_w) / 2;
+    int logo_y = (shtinf->scry - logo_h) / 2;
+
+    PrintPicture_blend(shtinf, desktop_sheet, logo_x, logo_y, logo_w, logo_h, (char *)"/system/xj380_2.png");
+
+    refresh_sheet(shtinf);
+    flush_sheet_damage_queue(shtinf);
+}
+
+static void draw_boot_progress_logo(const FrameBufferConfig &fbc)
+{
+    // 早期启动阶段（KernelMain 进度条）显示真实 XJ380 Logo
+    rect(fbc, 0, 0, (int)fbc.horizontal_resolution, (int)fbc.vertical_resolution, {0x0d, 0x13, 0x24});
+
+    const unsigned char *png      = (const unsigned char *)&_binary___graphics_logo_xj380_2_png_start;
+    const unsigned char *png_end  = (const unsigned char *)&_binary___graphics_logo_xj380_2_png_end;
+    size_t               png_bytes = (size_t)(png_end - png);
+    if (png_bytes == 0) {
+        WriteString(fbc, ((int)fbc.horizontal_resolution - 40) / 2, ((int)fbc.vertical_resolution - 16) / 2,
+                    "XJ380", {0xff, 0xff, 0xff});
+        return;
+    }
+
+    int src_w = 0, src_h = 0, src_c = 0;
+    unsigned char *src_rgba = stbi_load_from_memory(png, (int)png_bytes, &src_w, &src_h, &src_c, 4);
+    if (src_rgba == NULL || src_w <= 0 || src_h <= 0) {
+        if (src_rgba) stbi_image_free(src_rgba);
+        WriteString(fbc, ((int)fbc.horizontal_resolution - 40) / 2, ((int)fbc.vertical_resolution - 16) / 2,
+                    "XJ380", {0xff, 0xff, 0xff});
+        return;
+    }
+
+    int logo_w = (int)(fbc.horizontal_resolution * 0.30f);
+    if (logo_w < 180) logo_w = 180;
+    if (logo_w > 520) logo_w = 520;
+    int logo_h = (int)(((int64_t)logo_w * src_h) / src_w);
+
+    int logo_x = ((int)fbc.horizontal_resolution - logo_w) / 2;
+    int logo_y = ((int)fbc.vertical_resolution - logo_h) / 2 - 8;
+    if (logo_y < 16) logo_y = 16;
+
+    unsigned char *blit_rgba = src_rgba;
+    if (logo_w != src_w || logo_h != src_h) {
+        unsigned char *scaled = (unsigned char *)malloc((size_t)logo_w * logo_h * 4);
+        if (scaled != NULL &&
+            stbir_resize_uint8(src_rgba, src_w, src_h, 0, scaled, logo_w, logo_h, 0, 4) != 0) {
+            blit_rgba = scaled;
+        } else if (scaled != NULL) {
+            free(scaled);
+            logo_w = src_w;
+            logo_h = src_h;
+            logo_x = ((int)fbc.horizontal_resolution - logo_w) / 2;
+            logo_y = ((int)fbc.vertical_resolution - logo_h) / 2 - 8;
+            if (logo_y < 16) logo_y = 16;
+        }
+    }
+
+    for (int y = 0; y < logo_h; ++y)
+    {
+        int dst_y = logo_y + y;
+        if (dst_y < 0 || dst_y >= (int)fbc.vertical_resolution) continue;
+        for (int x = 0; x < logo_w; ++x)
+        {
+            int dst_x = logo_x + x;
+            if (dst_x < 0 || dst_x >= (int)fbc.horizontal_resolution) continue;
+
+            const uint8_t *src = &blit_rgba[(y * logo_w + x) * 4];
+            uint8_t        sa  = src[3];
+            if (sa == 0) continue;
+
+            uint8_t *dst = PixelAt(dst_x, dst_y, fbc);
+            uint8_t  dr, dg, db;
+            if (fbc.pixel_format == PixelFormat::kRGBR) {
+                dr = dst[0];
+                dg = dst[1];
+                db = dst[2];
+            } else {
+                db = dst[0];
+                dg = dst[1];
+                dr = dst[2];
+            }
+
+            uint8_t nr = (uint8_t)(((uint16_t)src[0] * sa + (uint16_t)dr * (255 - sa)) / 255);
+            uint8_t ng = (uint8_t)(((uint16_t)src[1] * sa + (uint16_t)dg * (255 - sa)) / 255);
+            uint8_t nb = (uint8_t)(((uint16_t)src[2] * sa + (uint16_t)db * (255 - sa)) / 255);
+
+            if (fbc.pixel_format == PixelFormat::kRGBR) {
+                dst[0] = nr;
+                dst[1] = ng;
+                dst[2] = nb;
+            } else {
+                dst[0] = nb;
+                dst[1] = ng;
+                dst[2] = nr;
+            }
+        }
+    }
+
+    if (blit_rgba != src_rgba) free(blit_rgba);
+    stbi_image_free(src_rgba);
+
+    WriteString(fbc, ((int)fbc.horizontal_resolution - 88) / 2, logo_y + logo_h + 14, "Starting...",
+                {0xb4, 0xc2, 0xdd});
 }
 
 void components_flusher()
@@ -196,7 +323,7 @@ void desktop_flusher()
         &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
-    // play_boot_animation(&shtinf, desktop_ct_sheet);
+    draw_startup_screen(&shtinf, desktop_ct_sheet);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
@@ -435,6 +562,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
     init_heap();
+    draw_boot_progress_logo(*fbc_addr);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 

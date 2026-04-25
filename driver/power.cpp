@@ -6,6 +6,9 @@
 #include <power.h>
 #include <proto.hpp>
 
+#define ACPI_GAS_SYSTEM_MEMORY 0
+#define ACPI_GAS_SYSTEM_IO     1
+
 static inline void reload_current_cr3()
 {
     uint64_t cr3 = get_cr3();
@@ -113,6 +116,33 @@ static void acpi_write_pm_control(uint32_t port, uint8_t width, uint16_t value)
     else outb((uint16_t)port, (uint8_t)value);
 }
 
+static void acpi_write_gas_u8(const GenericAddressStructure *gas, uint8_t value)
+{
+    if (gas == NULL || gas->address == 0) return;
+
+    uint8_t access = gas->access_size;
+    if (access == 0) {
+        if (gas->register_bit_width <= 8) access = 1;
+        else if (gas->register_bit_width <= 16) access = 2;
+        else access = 3;
+    }
+
+    if (gas->address_space_id == ACPI_GAS_SYSTEM_IO) {
+        if (access <= 1) outb((uint16_t)gas->address, value);
+        else if (access == 2) outw((uint16_t)gas->address, value);
+        else outl((uint16_t)gas->address, value);
+        return;
+    }
+
+    if (gas->address_space_id == ACPI_GAS_SYSTEM_MEMORY) {
+        uintptr_t va = (uintptr_t)phys_to_virt(gas->address);
+        if (va == 0) return;
+        if (access <= 1) *(volatile uint8_t *)va = value;
+        else if (access == 2) *(volatile uint16_t *)va = value;
+        else *(volatile uint32_t *)va = value;
+    }
+}
+
 bool acpi_poweroff(BOOT_CONFIG *boot_config)
 {
     if (boot_config == NULL)
@@ -175,6 +205,26 @@ void poweroff_fallback(BOOT_CONFIG *boot_config)
     }
 }
 
+static bool acpi_reboot(BOOT_CONFIG *boot_config)
+{
+    if (boot_config == NULL) return false;
+    const FixedAcpiDescriptionTable *fadt = (const FixedAcpiDescriptionTable *)phys_to_virt(boot_config->FADT);
+    if (fadt == NULL) return false;
+    if (fadt->reset_reg.address == 0) return false;
+
+    write_serial_fmt("ACPI reboot: reset_reg.space=%d addr=0x%llx val=0x%x\n", fadt->reset_reg.address_space_id,
+                     fadt->reset_reg.address, fadt->reset_value);
+
+    if (fadt->smi_cmd != 0 && fadt->acpi_enable != 0) {
+        outb((uint16_t)fadt->smi_cmd, fadt->acpi_enable);
+        delay_ms_hp(10);
+    }
+
+    acpi_write_gas_u8(&fadt->reset_reg, fadt->reset_value);
+    delay_ms_hp(50);
+    return true;
+}
+
 [[noreturn]] void power_shutdown(EFI_SYSTEM_TABLE *system_table, BOOT_CONFIG *boot_config)
 {
     uint64_t saved_entry     = 0;
@@ -195,6 +245,66 @@ void poweroff_fallback(BOOT_CONFIG *boot_config)
     if (identity_mapped) { restore_efi_identity_map(saved_entry); }
 
     poweroff_fallback(boot_config);
+
+    while (1)
+        __asm__ volatile("hlt");
+}
+
+static void reboot_fallback(BOOT_CONFIG *boot_config)
+{
+    write_serial_string("Falling back to legacy reboot ports.\n");
+
+    acpi_reboot(boot_config);
+
+    // Try keyboard controller reset first.
+    for (int i = 0; i < 100000; ++i) {
+        if ((inb(0x64) & 0x02) == 0) break;
+        __asm__ volatile("pause");
+    }
+    outb(0x64, 0xFE);
+    delay_ms_hp(50);
+
+    // Then try chipset reset control port.
+    outb(0xCF9, 0x02);
+    delay_ms_hp(20);
+    outb(0xCF9, 0x06);
+    delay_ms_hp(20);
+
+    // Try fast A20 reset bit path as another fallback.
+    outb(0x92, (uint8_t)(inb(0x92) | 0x01));
+    delay_ms_hp(20);
+
+    // Last resort: force triple fault to reset.
+    struct {
+        uint16_t limit;
+        uint64_t base;
+    } __attribute__((packed)) null_idtr = {0, 0};
+    __asm__ volatile("lidt %0" : : "m"(null_idtr));
+    __asm__ volatile("int3");
+}
+
+[[noreturn]] void power_reboot(EFI_SYSTEM_TABLE *system_table, BOOT_CONFIG *boot_config)
+{
+    (void)boot_config;
+
+    uint64_t saved_entry     = 0;
+    bool     identity_mapped = with_efi_identity_map(&saved_entry);
+
+    if (!identity_mapped) { write_serial_string("UEFI runtime identity map restore failed.\n"); }
+
+    if (system_table != NULL && system_table->RuntimeServices != NULL)
+    {
+        system_table->RuntimeServices->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL);
+        write_serial_string("UEFI ResetSystem(reboot) returned unexpectedly.\n");
+    }
+    else
+    {
+        write_serial_string("UEFI reboot skipped: RuntimeServices unavailable.\n");
+    }
+
+    if (identity_mapped) { restore_efi_identity_map(saved_entry); }
+
+    reboot_fallback(boot_config);
 
     while (1)
         __asm__ volatile("hlt");

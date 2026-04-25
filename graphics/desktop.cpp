@@ -584,10 +584,11 @@ void draw_logo_menu()
 {
     if (have_full_screen_app) return;
     int x1 = sht_img->scrx * 0.1875;
-    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, DOCK_COL);
-    print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 28, 10);
-    print_box_ttf(sht_img, dock_ct_sheet, "刷新", {0,0,0,255}, x1 + 8, 50, 10);
-    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 93, DOCK_COL);
+    print_box_ttf(sht_img, dock_ct_sheet, "重启", {0,0,0,255}, x1 + 8, 28, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 50, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, "刷新", {0,0,0,255}, x1 + 8, 72, 10);
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 94);
     logo_menu_just_born = true;
     logo_menu_is_open = true;
 }
@@ -602,7 +603,7 @@ void delete_logo_menu()
     }
 
     int x1 = sht_img->scrx * 0.1875;
-    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, {0, 0, 0, 0});
-    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 93, {0, 0, 0, 0});
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 94);
     logo_menu_is_open = false;
 }
