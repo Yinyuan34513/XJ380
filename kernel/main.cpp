@@ -406,10 +406,10 @@ void desktop_flusher()
 
     mouse_ct_sheet_img = mouse_ct_sheet;
 
+    allow_to_flush = true;
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
-    allow_to_flush = true;
 
     write_serial_string("desktop: init_user begin\n");
     init_user();
