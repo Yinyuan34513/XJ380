@@ -130,6 +130,8 @@ void process_mouse_button()
     if (sht_img == NULL) return;
 
     if (!allow_to_flush) return;
+    tbx = get_mouse_x();
+    tby = get_mouse_y();
 
     if (ms_dec.btn & 0x01)
     {
@@ -294,17 +296,19 @@ void process_mouse_button()
         ms_dec.center = false;
     }
 
-    tbx         = getBX(sht_img, mouse_ct_sheet_img);
-    tby         = getBY(sht_img, mouse_ct_sheet_img);
+    int prev_tbx = getBX(sht_img, mouse_ct_sheet_img);
+    int prev_tby = getBY(sht_img, mouse_ct_sheet_img);
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
     int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
     int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    refresh_union_rect_deferred_or_now(sht_img, tbx, tby, tbx + mouse_w, tby + mouse_h,
+    refresh_union_rect_deferred_or_now(sht_img, prev_tbx, prev_tby, prev_tbx + mouse_w, prev_tby + mouse_h,
                                        getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
                                        getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
                                        getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+    tbx = mouse_x;
+    tby = mouse_y;
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)
@@ -370,16 +374,24 @@ void process_mouse_info()
 
     if (ms_dec.left_release_pending)
     {
-        if (ms_dec.sht_now == NULL)
+        int  click_x  = get_mouse_x();
+        int  click_y  = get_mouse_y();
+        bool handled  = false;
+        int  menu_x1  = sht_img->scrx * 0.1875;
+        tbx = click_x;
+        tby = click_y;
+
+        if (!have_full_screen_app)
         {
-            // 点在了桌面/快捷栏上
-            if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
+            // 底栏和快捷栏点击优先，不依赖 ms_dec.sht_now，避免被错误命中窗口吞掉事件。
+            if (click_x > 24 && click_y > sht_img->scry - 24 - 63 && click_x < 24 + 84)
             {
                 create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+                handled = true;
             }
-            else if (tbx > 132 && tby > sht_img->scry - 24 - 63 && !have_full_screen_app)
+            else if (click_x > 132 && click_y > sht_img->scry - 24 - 63)
             {
-                TDB_t tdb = find_dock_icon((tbx - 132) / 80);
+                TDB_t tdb = find_dock_icon((click_x - 132) / 80);
                 if (tdb)
                 {
                     if (tdb->min_mode)
@@ -397,66 +409,79 @@ void process_mouse_info()
                                                            tdb->windowls->w_sheet->width,
                                                        tdb->windowls->w_sheet->by +
                                                            tdb->windowls->w_sheet->height);
+                    handled = true;
                 }
             }
-            else if (tby < 24 && !have_full_screen_app)
+            else if (click_y < 24)
             {
-                // 快捷栏
-                int x1 = sht_img->scrx * 0.1875;
-                if (tbx > x1 && tbx < x1 + 32)
+                if (click_x > menu_x1 && click_x < menu_x1 + 32)
                 {
                     // logo 徽标
                     draw_logo_menu();
+                    handled = true;
                 }
-                else if (tbx > x1 + 32 && tbx < x1 + 32 + 25 + 8)
+                else if (click_x > menu_x1 + 32 && click_x < menu_x1 + 32 + 25 + 8)
                 {
                     // 文件
                     create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+                    handled = true;
                 }
-                else if (tbx > x1 + 32 + 25 + 8 && tbx < x1 + 32 + 25 + 8 + 25 + 9)
+                else if (click_x > menu_x1 + 32 + 25 + 8 && click_x < menu_x1 + 32 + 25 + 8 + 25 + 9)
                 {
                     // 设置
                     char *argv[2] = {"shortdock-open-settings", NULL};
                     create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    handled = true;
                 }
-                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
                 {
                     // 终端
                     create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+                    handled = true;
                 }
-                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
                 {
                     // 图形
                     char *argv[2] = {"shortdock-open-graphics", NULL};
                     create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    handled = true;
                 }
-                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
-                         tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
                 {
                     // 关于
                     char *argv[2] = {"shortdock-open-about", NULL};
                     create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    handled = true;
                 }
             }
-            else if (tbx > sht_img->scrx * 0.1875 && tby > 28 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 50 &&
-                     logo_menu_is_open)
+        }
+
+        if (!handled && logo_menu_is_open && click_x > menu_x1 && click_x < menu_x1 + 100)
+        {
+            if (click_y > 28 && click_y < 50)
             {
                 // 重启
                 power_reboot(EFI_ST, EFI_BC);
+                handled = true;
             }
-            else if (tbx > sht_img->scrx * 0.1875 && tby > 50 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 72 &&
-                     logo_menu_is_open)
+            else if (click_y > 50 && click_y < 72)
             {
                 // 关机
                 power_shutdown(EFI_ST, EFI_BC);
+                handled = true;
             }
-            else if (tbx > sht_img->scrx * 0.1875 && tby > 72 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 94 &&
-                     logo_menu_is_open)
+            else if (click_y > 72 && click_y < 94)
             {
                 // 刷新
                 desktop_refresh_pending = true;
+                handled = true;
             }
         }
+
+        (void)handled;
         close_menu(ms_dec.left_release_window, tbx, tby);
         delete_logo_menu();
         ms_dec.left_release_window  = NULL;
