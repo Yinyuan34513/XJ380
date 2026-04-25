@@ -250,7 +250,7 @@ void components_flusher()
 {
     while (true)
     {
-        if (allow_to_flush) break;
+        if (allow_to_flush && desktop_done) break;
     }
     write_serial_string("components flusher is running\n");
     while (true)
@@ -693,6 +693,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
     }
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+
     // delay_s_hp(60);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
@@ -707,15 +709,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     while (!desktop_done)
         cpu_relax();
 
-    no_interrupt = true;
-    close_interrupt;
-    disable_scheduler();
+    // no_interrupt = true;
+    // close_interrupt;
+    // disable_scheduler();
 
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
-
-    enable_scheduler();
-    open_interrupt;
-    no_interrupt = false;
+    // enable_scheduler();
+    // open_interrupt;
+    // no_interrupt = false;
 
     while (true)
     {
