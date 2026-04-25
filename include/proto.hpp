@@ -237,6 +237,7 @@ extern const FrameBufferConfig *fbc_addr;
 extern "C" {
 #endif
 void keyboard_push_input(uint8_t value);
+void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed);
 #ifdef __cplusplus
 }
 #endif

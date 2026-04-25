@@ -281,6 +281,15 @@ static void xhci_handle_keyboard_report(xhci_slot_state *slot,
     }
 
     bool shift = (current[0] & 0x22U) != 0;
+    for (size_t i = 2; i < sizeof(hid->prev_report); ++i) {
+        uint8_t usage = hid->prev_report[i];
+        if (usage == 0 || xhci_keyboard_usage_present(current, usage)) {
+            continue;
+        }
+
+        keyboard_usb_key_event(usage, 0, 0);
+    }
+
     for (size_t i = 2; i < sizeof(current); ++i) {
         uint8_t usage = current[i];
         if (usage == 0 || xhci_keyboard_usage_present(hid->prev_report, usage)) {
@@ -294,7 +303,7 @@ static void xhci_handle_keyboard_report(xhci_slot_state *slot,
         uint8_t value =
             xhci_keyboard_translate_usage(usage, shift, hid->caps_lock);
         if (value != 0) {
-            keyboard_push_input(value);
+            keyboard_usb_key_event(usage, value, 1);
         }
     }
 
