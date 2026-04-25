@@ -56,6 +56,28 @@ static uint64_t  hda_buffer_phys = 0;
 static bool      hda_stopping   = false;
 static pcb_t    use_task;
 
+static constexpr uint32_t HDA_WAIT_STEP_US           = 50;
+static constexpr uint32_t HDA_MMIO_VERB_TIMEOUT_US   = 20000;
+static constexpr uint32_t HDA_DMA_VERB_TIMEOUT_US    = 20000;
+static constexpr uint32_t HDA_CONTROLLER_RESET_US    = 20000;
+static constexpr uint32_t HDA_RING_RESET_TIMEOUT_US  = 20000;
+
+static bool hda_wait_reg16(uintptr_t addr, uint16_t mask, uint16_t expected, uint32_t timeout_us) {
+    for (uint32_t waited = 0; waited <= timeout_us; waited += HDA_WAIT_STEP_US) {
+        if ((mem_get16(addr) & mask) == expected) return true;
+        if (waited < timeout_us) delay_us_hp(HDA_WAIT_STEP_US);
+    }
+    return false;
+}
+
+static bool hda_wait_reg32(uintptr_t addr, uint32_t mask, uint32_t expected, uint32_t timeout_us) {
+    for (uint32_t waited = 0; waited <= timeout_us; waited += HDA_WAIT_STEP_US) {
+        if ((mem_get32(addr) & mask) == expected) return true;
+        if (waited < timeout_us) delay_us_hp(HDA_WAIT_STEP_US);
+    }
+    return false;
+}
+
 // HDA 控制器只能直接访问物理地址，这里统一申请 32 位地址空间内的 DMA 缓冲。
 static void *hda_alloc_dma32(size_t size, uint64_t *phys_out) {
     const size_t page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
@@ -461,8 +483,7 @@ uint32_t hda_verb(uint32_t codec, uint32_t node, uint32_t verb, uint32_t command
     if (send_verb_method == SEND_VERB_METHOD_DMA) {
         corb[corb_write_pointer] = value;
         mem_set16(hda_base + 0x48, corb_write_pointer);
-        delay_ms_hp(500);
-        if ((mem_get16(hda_base + 0x58) & 0xff) != corb_write_pointer) {
+        if (!hda_wait_reg16(hda_base + 0x58, 0xff, (uint16_t)corb_write_pointer, HDA_DMA_VERB_TIMEOUT_US)) {
             write_serial_fmt("hda_verbI: No response from hda.\n");
             return 0;
         }
@@ -474,8 +495,7 @@ uint32_t hda_verb(uint32_t codec, uint32_t node, uint32_t verb, uint32_t command
         mem_set16(hda_base + 0x68, 0b10);
         mem_set32(hda_base + 0x60, value);
         mem_set16(hda_base + 0x68, 1);
-        delay_ms_hp(250);
-        if ((mem_get16(hda_base + 0x68) & 0x3) != 0b10) {
+        if (!hda_wait_reg16(hda_base + 0x68, 0x3, 0b10, HDA_MMIO_VERB_TIMEOUT_US)) {
             mem_set16(hda_base + 0x68, 0b10);
             write_serial_fmt("hda_verbII: No response from hda.\n");
             return 0;
@@ -542,14 +562,12 @@ void hda_init() {
     hda_base = (uintptr_t)phys_to_virt(bar0.address);
 
     mem_set32(hda_base + 0x08, 0);
-    delay_ms_hp(250);
-    if ((mem_get32(hda_base + 0x08) & 0x01) != 0) {
+    if (!hda_wait_reg32(hda_base + 0x08, 0x01, 0, HDA_CONTROLLER_RESET_US)) {
         write_serial_fmt("Intel High Definition Audio reset failed.\n");
         return;
     }
-    delay_ms_hp(250);
     mem_set32(hda_base + 0x08, 1);
-    if ((mem_get32(hda_base + 0x08) & 0x01) != 1) {
+    if (!hda_wait_reg32(hda_base + 0x08, 0x01, 1, HDA_CONTROLLER_RESET_US)) {
         write_serial_fmt("Intel High Definition Audio reset failed.\n");
         return;
     }
@@ -607,14 +625,12 @@ void hda_init() {
     write_serial_fmt("corb size: %d entries\n", corb_entry_count);
 
     mem_set16(hda_base + 0x4A, 0x8000);
-    delay_ms_hp(250);
-    if ((mem_get16(hda_base + 0x4A) & 0x8000) == 0) {
+    if (!hda_wait_reg16(hda_base + 0x4A, 0x8000, 0x8000, HDA_RING_RESET_TIMEOUT_US)) {
         write_serial_fmt("HDA corb reset failed\n");
         goto mmio;
     }
     mem_set16(hda_base + 0x4A, 0x0000);
-    delay_ms_hp(250);
-    if ((mem_get16(hda_base + 0x4A) & 0x8000) != 0) {
+    if (!hda_wait_reg16(hda_base + 0x4A, 0x8000, 0, HDA_RING_RESET_TIMEOUT_US)) {
         write_serial_fmt("HDA corb reset failed\n");
         goto mmio;
     }
@@ -647,7 +663,10 @@ void hda_init() {
     write_serial_fmt("rirb size: %d entries\n", rirb_entry_count);
 
     mem_set16(hda_base + 0x58, 0x8000);
-    delay_ms_hp(250);
+    if (!hda_wait_reg16(hda_base + 0x58, 0x8000, 0x8000, HDA_RING_RESET_TIMEOUT_US)) {
+        write_serial_fmt("HDA rirb reset failed\n");
+        goto mmio;
+    }
     mem_set16(hda_base + 0x5A, 0x0000);
     rirb_read_pointer = 1;
     write_serial_fmt("rirb has been reset already\n");

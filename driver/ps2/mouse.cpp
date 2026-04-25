@@ -351,9 +351,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
     if (mousedecode(data))
     {
         ms_dec.need_flush = true;
-        if (!desktop_done) {
-            process_mouse_button();
-        }
+        process_mouse_button();
     }
 }
 
@@ -664,9 +662,7 @@ extern "C" void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
     if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
 
     ms_dec.need_flush = true;
-    if (!desktop_done) {
-        process_mouse_button();
-    }
+    process_mouse_button();
 }
 
 EXPORT_SYMBOL(mouse_inject_report);
@@ -734,8 +730,6 @@ static MouseType get_mouse_type()
 // 修正后的 mouse_init()
 void mouse_init()
 {
-    // 1. 禁用中断
-    disable_intr();
 
     // 2. 启用辅助PS/2端口（鼠标）
     wait_KB_write();
@@ -887,9 +881,6 @@ void mouse_init()
     ms_dec.right         = false;
     ms_dec.center        = false;
     ms_dec.scroll        = 0;
-
-    // 15. 启用中断
-    enable_intr();
 
     printk("Mouse initialized successfully, type: %d\n", type);
 }

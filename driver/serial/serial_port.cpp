@@ -53,7 +53,7 @@ static int                  g_serial_screen_left     = 0;
 static int                  g_serial_screen_top      = 0;
 static int                  g_serial_screen_width    = 0;
 static int                  g_serial_screen_height   = 0;
-static bool                 g_serial_overlay_force_show = false;
+static bool                 g_serial_overlay_force_show = true;
 
 static bool serial_runtime_overlay_enabled()
 {
