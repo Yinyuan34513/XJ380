@@ -209,9 +209,8 @@ void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
     print_box_ttf(sht, csheet, (char *)"文件", BLACK, x1 + 32, 1, 10);
     print_box_ttf(sht, csheet, (char *)"设置", BLACK, x1 + 32 + 25 + 8, 1, 10);
     print_box_ttf(sht, csheet, (char *)"终端", BLACK, x1 + 32 + 25 + 8 + 25 + 9, 1, 10);
-    print_box_ttf(sht, csheet, (char *)"任务", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
-    print_box_ttf(sht, csheet, (char *)"图形", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9, 1, 10);
-    print_box_ttf(sht, csheet, (char *)"关于", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9 + 25 + 8, 1, 10);
+    print_box_ttf(sht, csheet, (char *)"进程", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
+    print_box_ttf(sht, csheet, (char *)"关于", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8, 1, 10);
     // PrintString(sht, ct_sheet, x1 + 32, 4, "Files", BLACK);
     // PrintString(sht, ct_sheet, x1 + 32 + 40 + 8, 4, "Settings", BLACK);
     // PrintString(sht, ct_sheet, x1 + 32 + 40 + 8 + 64 + 8, 4, "Terminal", BLACK);
