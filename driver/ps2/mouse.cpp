@@ -441,10 +441,16 @@ void process_mouse_info()
             else if (tbx > sht_img->scrx * 0.1875 && tby > 28 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 50 &&
                      logo_menu_is_open)
             {
+                // 重启
+                power_reboot(EFI_ST, EFI_BC);
+            }
+            else if (tbx > sht_img->scrx * 0.1875 && tby > 50 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 72 &&
+                     logo_menu_is_open)
+            {
                 // 关机
                 power_shutdown(EFI_ST, EFI_BC);
             }
-            else if (tbx > sht_img->scrx * 0.1875 && tby > 50 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 72 &&
+            else if (tbx > sht_img->scrx * 0.1875 && tby > 72 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 94 &&
                      logo_menu_is_open)
             {
                 // 刷新
