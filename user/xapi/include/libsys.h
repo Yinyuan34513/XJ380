@@ -129,6 +129,8 @@
 // P3.4
 #define XAPI_FORK   7389
 #define XAPI_EXECVE 7390
+#define XAPI_GET_TASK_LIST  7448
+#define XAPI_KILL_PROCESS   7449
 
 // P3.5
 #define XAPI_GET_VERSION        7391
@@ -184,6 +186,24 @@
 #define XAPI_GET_PIC_SIZE   7440
 #define XAPI_DRAW_SVG       7446
 #define XAPI_DRAW_FA        7447
+
+#define XAPI_TASK_NAME_LEN 32
+
+typedef struct
+{
+    UINT64 pid;
+    UINT64 ppid;
+    UINT64 tid;
+    UINT64 cpu_id;
+    UINT64 task_level;
+    UINT64 thread_count;
+    UINT64 window_count;
+    UINT64 memory_bytes;
+    UINT32 process_status;
+    UINT32 thread_status;
+    char   process_name[XAPI_TASK_NAME_LEN];
+    char   thread_name[XAPI_TASK_NAME_LEN];
+} XapiTaskInfo;
 
 // P4.4
 #define XAPI_SET_MSH_PROCOR 7405

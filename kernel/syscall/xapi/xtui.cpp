@@ -23,8 +23,10 @@
 #include <syscall/syscall.h>
 #include "../../build_settings.h"
 #include <user/runfile.h>
+#include <errno.h>
 
 extern UserInfo *current_user;
+extern lock_queue *pcb_group_queue;
 
 void do_xapi_GetSystemVersion(uint64_t str)
 {
@@ -231,4 +233,112 @@ void do_xapi_FlushTime()
         clock_hour_offset = 0;
 
     vfs_close(v);
+}
+
+static uint64_t taskmgr_process_memory_bytes(pcb_t process, uint64_t thread_count)
+{
+    if (process == NULL) return 0;
+
+    uint64_t bytes = process->vma_manager.vm_used;
+    bytes += thread_count * (BIG_USER_STACK + KERNEL_STACK_SIZE * 2);
+    return bytes;
+}
+
+static void taskmgr_copy_name(char *dst, const char *src)
+{
+    if (dst == NULL) return;
+    memset(dst, 0, XAPI_TASK_NAME_LEN);
+    if (src == NULL) return;
+    strncpy(dst, src, XAPI_TASK_NAME_LEN - 1);
+}
+
+static uint64_t taskmgr_count_windows(pcb_t process, uint64_t *thread_count)
+{
+    if (thread_count != NULL) *thread_count = 0;
+    if (process == NULL || process->thread_queue == NULL) return 0;
+
+    uint64_t windows = 0;
+    spin_lock(&process->thread_queue->lock);
+    queue_foreach(process->thread_queue, node)
+    {
+        tcb_t thread = (tcb_t)node->data;
+        if (thread == NULL) continue;
+        windows += thread->window_count;
+        if (thread_count != NULL) (*thread_count)++;
+    }
+    spin_unlock(&process->thread_queue->lock);
+    return windows;
+}
+
+static void taskmgr_fill_info(XapiTaskInfo *info, pcb_t process, tcb_t thread, uint64_t thread_count,
+                              uint64_t window_count, uint64_t memory_bytes)
+{
+    memset(info, 0, sizeof(XapiTaskInfo));
+    info->pid            = process->pid;
+    info->ppid           = process->ppid;
+    info->tid            = thread != NULL ? thread->tid : 0;
+    info->cpu_id         = thread != NULL ? thread->cpu_id : 0;
+    info->task_level     = thread != NULL ? thread->task_level : process->task_level;
+    info->thread_count   = thread_count;
+    info->window_count   = window_count;
+    info->memory_bytes   = memory_bytes;
+    info->process_status = process->status;
+    info->thread_status  = thread != NULL ? thread->status : process->status;
+    taskmgr_copy_name(info->process_name, process->name);
+    taskmgr_copy_name(info->thread_name, thread != NULL ? thread->name : process->name);
+}
+
+uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
+{
+    if (buffer == 0 || max_count == 0 || pcb_group_queue == NULL) return 0;
+
+    XapiTaskInfo *out     = (XapiTaskInfo *)buffer;
+    uint64_t      written = 0;
+
+    spin_lock(&pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, pnode)
+    {
+        pcb_t process = (pcb_t)pnode->data;
+        if (process == NULL) continue;
+
+        uint64_t thread_count = 0;
+        uint64_t window_count = taskmgr_count_windows(process, &thread_count);
+        uint64_t memory_bytes = taskmgr_process_memory_bytes(process, thread_count);
+
+        if (process->thread_queue == NULL || thread_count == 0)
+        {
+            if (written >= max_count) break;
+            taskmgr_fill_info(&out[written++], process, NULL, thread_count, window_count, memory_bytes);
+            continue;
+        }
+
+        spin_lock(&process->thread_queue->lock);
+        queue_foreach(process->thread_queue, tnode)
+        {
+            if (written >= max_count) break;
+            tcb_t thread = (tcb_t)tnode->data;
+            if (thread == NULL) continue;
+            taskmgr_fill_info(&out[written++], process, thread, thread_count, window_count, memory_bytes);
+        }
+        spin_unlock(&process->thread_queue->lock);
+
+        if (written >= max_count) break;
+    }
+    spin_unlock(&pcb_group_queue->lock);
+
+    return written;
+}
+
+uint64_t do_xapi_KillProcess(uint64_t pid)
+{
+    if (kernel_group == NULL) return (uint64_t)-ESRCH;
+
+    pcb_t current = get_current_task()->parent_group;
+    pcb_t target  = found_pcb((int)pid);
+    if (target == NULL || target->status == DEATH || target->status == OUT) return (uint64_t)-ESRCH;
+    if (target == kernel_group || target->task_level == TASK_KERNEL_LEVEL) return (uint64_t)-EPERM;
+    if (target == current) return (uint64_t)-EPERM;
+
+    kill_proc(target, -1, false);
+    return 0;
 }

@@ -90,6 +90,8 @@ typedef struct {
 // P3.4
 #define XAPI_FORK   7389
 #define XAPI_EXECVE 7390
+#define XAPI_GET_TASK_LIST  7448
+#define XAPI_KILL_PROCESS   7449
 
 // P3.5
 #define XAPI_GET_VERSION        7391
@@ -182,7 +184,25 @@ typedef struct {
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
 
-// 当前最大号：7447
+// 当前最大号：7449
+
+#define XAPI_TASK_NAME_LEN 32
+
+typedef struct
+{
+    uint64_t pid;
+    uint64_t ppid;
+    uint64_t tid;
+    uint64_t cpu_id;
+    uint64_t task_level;
+    uint64_t thread_count;
+    uint64_t window_count;
+    uint64_t memory_bytes;
+    uint32_t process_status;
+    uint32_t thread_status;
+    char     process_name[XAPI_TASK_NAME_LEN];
+    char     thread_name[XAPI_TASK_NAME_LEN];
+} XapiTaskInfo;
 
 // Proto (XAPI Edition)
 void do_xapi_Output(char *str);
@@ -238,6 +258,8 @@ int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_
 void do_xapi_Run(char *path);
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 void do_xapi_FlushTime();
+uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count);
+uint64_t do_xapi_KillProcess(uint64_t pid);
 
 
 

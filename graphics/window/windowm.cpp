@@ -278,6 +278,11 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         ms_dec.sht_now       = NULL;
         ms_dec.win_move_lock = false;
     }
+    if (ms_dec.left_release_window == windowls)
+    {
+        ms_dec.left_release_window  = NULL;
+        ms_dec.left_release_pending = false;
+    }
 
     if (windowls->type == XWIN_FULL_SCR)
     {
@@ -348,6 +353,29 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     }
 
     if (need_refresh) refresh_part_sheet(sht_img, bx, by, ex, ey);
+}
+
+void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || process == NULL) return;
+
+    while (true)
+    {
+        WINDOWLS *target = NULL;
+        WINDOWLS *front_p = xwmi->start;
+        while (front_p != NULL)
+        {
+            if (front_p->w_task != NULL && front_p->w_task->parent_group == process)
+            {
+                target = front_p;
+                break;
+            }
+            front_p = front_p->next;
+        }
+
+        if (target == NULL) break;
+        delete_window(xwmi, sht, target);
+    }
 }
 
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)

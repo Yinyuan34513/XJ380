@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf
 
 export CXX ?= g++
 export CC ?= gcc
@@ -279,6 +279,7 @@ CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
 CALC_SOURCES := ./calc/calc.cpp
 
 TEXTER_SOURCES := ./texter/texter.cpp
+TASKMGR_SOURCES := ./taskmgr/taskmgr.cpp
 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
@@ -286,6 +287,7 @@ FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER
 CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
 CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
+TASKMGR_OBJECTS := $(patsubst ./taskmgr/%.cpp, ../out/taskmgr/%.o, $(TASKMGR_SOURCES))
 
 ../out/calc/%.o: ./calc/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
@@ -341,6 +343,15 @@ texter.elf: $(TEXTER_OBJECTS)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
+taskmgr.elf: $(TASKMGR_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(TASKMGR_OBJECTS) -o ../out/$@
+	@echo "LINK taskmgr objects -> ../out/$@"
+
+../out/taskmgr/%.o: ./taskmgr/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/picturer.* ../out/netcfg.* 
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/taskmgr.* ../out/taskmgr/*.* ../out/picturer.* ../out/netcfg.* 

@@ -441,15 +441,22 @@ void process_mouse_info()
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 &&
-                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9)
+                {
+                    // 任务
+                    create_user_process_from_file((char *)"/system/taskmgr.elf", NULL, NULL);
+                    handled = true;
+                }
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9 + 25 + 8)
                 {
                     // 图形
                     char *argv[2] = {"shortdock-open-graphics", NULL};
                     create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
                     handled = true;
                 }
-                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
-                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9 + 25 + 8 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
                 {
                     // 关于
                     char *argv[2] = {"shortdock-open-about", NULL};
