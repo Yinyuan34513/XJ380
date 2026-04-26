@@ -149,7 +149,6 @@ static void devfs_open(void *parent, const char *name, vfs_node_t node) {
 
 spin_t RD_lk =SPIN_INIT;
 size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
-    close_interrupt;
     spin_lock(&RD_lk);
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir) 
@@ -158,40 +157,28 @@ size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
         return VFS_STATUS_FAILED;
     }
     device_t *deivce = handle->device;
-    // write_serial_fmt("device name: %s vdid %d\n",deivce->drive_name, deivce->vdiskid);
-
-    size_t sector_size;
-    size_t sectors_to_do;
     if (deivce->flag == 0)
     {
         spin_unlock(&RD_lk);
         return VFS_STATUS_FAILED;
     }
-    sector_size                      = deivce->sector_size;
-    size_t padding_up_to_sector_size = PADDING_UP(size, sector_size);
-    offset                           = PADDING_UP(offset, sector_size);
+    device_t device = *deivce;
+    spin_unlock(&RD_lk);
 
-    if (deivce->type == DEVICE_STREAM) goto read;
-    if (offset > deivce->size)
+    if (device.type == DEVICE_STREAM) {
+        return device.read(device.vdiskid, (uint8_t *)addr, size, offset);
+    }
+    if (offset > device.size)
     {
-        spin_unlock(&RD_lk);
         return VFS_STATUS_SUCCESS;
     }
-    if (deivce->size < offset + padding_up_to_sector_size) {
-        // 计算需要读取的扇区数
-        padding_up_to_sector_size = deivce->size - offset;
-        if (size > padding_up_to_sector_size) { size = padding_up_to_sector_size; }
+    if (device.size < offset + size) {
+        size = device.size - offset;
     }
-read:
-
-    sectors_to_do    = padding_up_to_sector_size / sector_size;
-    size_t read_size = device_read(offset / sector_size, sectors_to_do, addr, deivce->vdiskid);
-    spin_unlock(&RD_lk);
-    return read_size;
+    return blk_device_read(device.vdiskid, addr, offset, size);
 }
 spin_t WR_lk =SPIN_INIT;
 size_t devfs_write(void *file, const void *addr, size_t offset, size_t size) {
-    close_interrupt;
     spin_lock(&WR_lk);
     device_handle_t handle =  (device_handle_t)file;
     if (handle->is_dir)
@@ -200,37 +187,25 @@ size_t devfs_write(void *file, const void *addr, size_t offset, size_t size) {
         return VFS_STATUS_FAILED;
     }
     device_t *deivce = handle->device;
-
-    size_t sector_size;
-    size_t sectors_to_do;
     if (deivce->flag == 0)
     {
         spin_unlock(&WR_lk);
         return VFS_STATUS_FAILED;
     }
-    sector_size                      = deivce->sector_size;
-    size_t padding_up_to_sector_size = PADDING_UP(size, sector_size);
-    offset                           = PADDING_UP(offset, sector_size);
-    if (deivce->type == DEVICE_STREAM) goto write;
-    if (offset > deivce->size)
+    device_t device = *deivce;
+    spin_unlock(&WR_lk);
+
+    if (device.type == DEVICE_STREAM) {
+        return device.write(device.vdiskid, (uint8_t *)addr, size, offset);
+    }
+    if (offset > device.size)
     {
-        spin_unlock(&WR_lk);
         return VFS_STATUS_SUCCESS;
     }
-    if (deivce->size < offset + padding_up_to_sector_size) {
-        padding_up_to_sector_size = deivce->size - offset;
-        if (size > padding_up_to_sector_size) { size = padding_up_to_sector_size; }
+    if (device.size < offset + size) {
+        size = device.size - offset;
     }
-write:
-    sectors_to_do = padding_up_to_sector_size / sector_size;
-
-    if (padding_up_to_sector_size == size) {
-    } else {
-        device_read(offset / sector_size, sectors_to_do, (void*)addr, deivce->vdiskid);
-    }
-    size_t ret_size = device_write(offset / sector_size, sectors_to_do, addr, deivce->vdiskid);
-    spin_unlock(&WR_lk);
-    return ret_size;
+    return blk_device_write(device, addr, offset, size);
 }
 
 static errno_t devfs_ioctl(void *file, size_t req, void *arg) {

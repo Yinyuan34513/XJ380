@@ -39,6 +39,7 @@ struct FoxLandPeek
 {
     SHEET_BUFFER    *fl_peek_buffer;
     uint8_t         *peek_sign;
+    uint8_t         *opaque_count;
 };
 
 typedef struct SHEET *SHEETP;
@@ -61,7 +62,6 @@ typedef struct
     void                    *temp_buffer;
     uint32_t                 scrx, scry;
     uint16_t                 sheet_num; // 图层数量 - 1
-    uint16_t                 sht_numed; // 图层数量 - 1，用于编号
     FoxLandPeek              foxland;
     const FrameBufferConfig *fbc;
 } SHEET_INFO;
@@ -102,6 +102,7 @@ void      lift_sheet(SHEET_INFO *sht, SHEET *csheet);
 void      delete_sheet(SHEET_INFO *sht, SHEET *csheet);
 void      refresh_sheet(SHEET_INFO *sht);
 void      refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
+void      flush_sheet_damage_queue(SHEET_INFO *sht);
 uint32_t  get_hor();
 uint32_t  get_ver();
 void     *get_sheet_buffer(SHEET_INFO *sht, SHEET *csheet);

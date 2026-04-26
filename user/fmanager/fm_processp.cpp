@@ -1,10 +1,29 @@
 #include <x3api.h>
+#include <libsys.h>
 #include <krlibc.h>
 #include "fm_proto.h"
 
+#define FM_DOUBLE_CLICK_NS 1000000000ULL
+#define FM_CLOCK_MONOTONIC 1
+
+typedef struct {
+    UINT64 tv_sec;
+    UINT64 tv_nsec;
+} fm_timespec;
+
+static UINT64 get_click_time_ns()
+{
+    fm_timespec ts;
+    memset(&ts, 0, sizeof(ts));
+    enter_syscall(SYS_CLOCK_GETTIME, FM_CLOCK_MONOTONIC, (UINT64)&ts, 0, 0, 0, 0);
+    return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+}
+
 bool first_click = false;
 bool double_click = false;
+int double_click_file_index = -1;
 UINT64 clicktime_recorder = 0;
+int last_click_file_index = -1;
 
 int click_x = 0;
 int click_y = 0;
@@ -16,6 +35,30 @@ volatile bool register_lock = false;
 bool yicixing_lock = false;
 
 bool need_paint = false;
+
+static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_index)
+{
+    if (x < 4 || x > FMR_X / 10 * 8 || y < 148)
+    {
+        return false;
+    }
+
+    int current_visible_index = (y - 148) / 24;
+    int visible_count = file_count - file_count_base;
+    if (visible_count > 12)
+    {
+        visible_count = 12;
+    }
+
+    if (visible_count <= 0 || current_visible_index < 0 || current_visible_index >= visible_count)
+    {
+        return false;
+    }
+
+    *visible_index = current_visible_index;
+    *file_index = file_count_base + current_visible_index;
+    return true;
+}
 
 void reg_lock()
 {
@@ -41,16 +84,29 @@ void register_click(int x, int y)
     
     click_x = x;
     click_y = y;
-    if (first_click && xapi_GetTime() - clicktime_recorder < 2 && choosing_index == choosing_history)
+
+    int  current_file_index = -1;
+    int  current_visible_index = -1;
+    bool click_on_file = get_clicked_file_index(x, y, &current_file_index, &current_visible_index);
+    UINT64 current_time = get_click_time_ns();
+
+    if (click_on_file && first_click &&
+        current_time - clicktime_recorder < FM_DOUBLE_CLICK_NS &&
+        current_file_index == last_click_file_index)
     {
         double_click = true;
+        double_click_file_index = current_file_index;
         first_click = false;
     }
     else
     {
-        first_click = true;
-        clicktime_recorder = xapi_GetTime();
+        double_click = false;
+        double_click_file_index = -1;
+        first_click = click_on_file;
+        clicktime_recorder = click_on_file ? current_time : 0;
     }
+
+    last_click_file_index = click_on_file ? current_file_index : -1;
 
     if (x >= 5 && x <= 23 && y >= 4 && y <= 22)
     {
@@ -86,11 +142,20 @@ void register_click(int x, int y)
         }
     }
 
-    if (y >= 148)
+    if (click_on_file)
     {
-        int index = (y - 148) / 24;
+        if (double_click)
+        {
+            choosing_history = choosing_index;
+            choosing_index = current_visible_index;
+            return;
+        }
+
         choosing_history = choosing_index;
-        choosing_index = index;
-        need_paint = true;
+        choosing_index = current_visible_index;
+        if (choosing_history != choosing_index)
+        {
+            refresh_choose_change(choosing_history, choosing_index);
+        }
     }
 }

@@ -33,7 +33,7 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
 {
     (void)envp;
 
@@ -63,9 +63,8 @@ int main(int argc, char *argv[], char *envp[])
 
     draw_background();
 
-    xapi_RefreshWindow(handle);
-
     int old_min = 60;
+    int old_sec = -1;
 
     while (1)
     {
@@ -79,9 +78,18 @@ int main(int argc, char *argv[], char *envp[])
 
         if (tm.tm_min != old_min)
         {
-            draw_background();
+            draw_background_time();
+            if (cindex == 3 && setting_cindex == 5)
+            {
+                draw_background_body();
+            }
             old_min = tm.tm_min;
         }
+        else if (cindex == 3 && setting_cindex == 2 && tm.tm_sec != old_sec)
+        {
+            draw_background_body();
+        }
+        old_sec = tm.tm_sec;
 
         if (waiting_change_setting_apps)
         {
@@ -108,7 +116,7 @@ int main(int argc, char *argv[], char *envp[])
 
                     xapi_CloseFile(f);
 
-                    draw_background();
+                    draw_background_body();
                 }
             }
             waiting_change_setting_apps = false;
@@ -139,7 +147,7 @@ int main(int argc, char *argv[], char *envp[])
 
                     xapi_CloseFile(f);
 
-                    draw_background();
+                    draw_background_body();
                 }
             }
             waiting_change_setting_background = false;
@@ -149,4 +157,8 @@ int main(int argc, char *argv[], char *envp[])
     }
 }
 
-
+extern "C" int ctrlmenu_main_cpp(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int ctrlmenu_main_cpp(int argc, char *argv[], char *envp[])
+{
+    return ctrlmenu_main_impl(argc, argv, envp);
+}

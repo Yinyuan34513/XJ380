@@ -2,6 +2,8 @@
 #include <proto.hpp>
 #include "krlibc.h"
 #include <hda/vsound.h>
+#include <lock_queue.h>
+#include <mm/hhdm.h>
 #include <pci/pci.h>
 #include <cpu/longm.h>
 #include <pctable/idt.h>
@@ -29,11 +31,14 @@
 #define mem_set16(addr, val) ({ *(volatile uint16_t *)(addr) = (uint16_t)(val); })
 #define mem_set32(addr, val) ({ *(volatile uint32_t *)(addr) = (uint32_t)(val); })
 #define mem_set64(addr, val) ({ *(volatile uint64_t *)(addr) = (uint64_t)(val); })
-static uint32_t  hda_base;
-static uint32_t  hda_output_base;
+static uintptr_t hda_base;
+static uintptr_t hda_output_base;
 static uint32_t *hda_output_buffer;
+static uint64_t  hda_output_buffer_phys = 0;
 static uint32_t *corb             = NULL;
 static uint32_t *rirb             = NULL;
+static uint64_t  corb_phys        = 0;
+static uint64_t  rirb_phys        = 0;
 static uint32_t  corb_entry_count = 0, corb_write_pointer = 0;
 static uint32_t  rirb_entry_count = 0, rirb_read_pointer = 0;
 static uint32_t  send_verb_method;
@@ -47,8 +52,43 @@ static uint32_t  hda_pin_pcm_format_cap    = 0;
 static uint32_t  hda_pin_stream_format_cap = 0;
 static vsound_t  snd;
 static void     *hda_buffer_ptr = NULL;
+static uint64_t  hda_buffer_phys = 0;
 static bool      hda_stopping   = false;
 static pcb_t    use_task;
+
+static constexpr uint32_t HDA_WAIT_STEP_US           = 50;
+static constexpr uint32_t HDA_MMIO_VERB_TIMEOUT_US   = 20000;
+static constexpr uint32_t HDA_DMA_VERB_TIMEOUT_US    = 20000;
+static constexpr uint32_t HDA_CONTROLLER_RESET_US    = 20000;
+static constexpr uint32_t HDA_RING_RESET_TIMEOUT_US  = 20000;
+
+static bool hda_wait_reg16(uintptr_t addr, uint16_t mask, uint16_t expected, uint32_t timeout_us) {
+    for (uint32_t waited = 0; waited <= timeout_us; waited += HDA_WAIT_STEP_US) {
+        if ((mem_get16(addr) & mask) == expected) return true;
+        if (waited < timeout_us) delay_us_hp(HDA_WAIT_STEP_US);
+    }
+    return false;
+}
+
+static bool hda_wait_reg32(uintptr_t addr, uint32_t mask, uint32_t expected, uint32_t timeout_us) {
+    for (uint32_t waited = 0; waited <= timeout_us; waited += HDA_WAIT_STEP_US) {
+        if ((mem_get32(addr) & mask) == expected) return true;
+        if (waited < timeout_us) delay_us_hp(HDA_WAIT_STEP_US);
+    }
+    return false;
+}
+
+// HDA 控制器只能直接访问物理地址，这里统一申请 32 位地址空间内的 DMA 缓冲。
+static void *hda_alloc_dma32(size_t size, uint64_t *phys_out) {
+    const size_t page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    uint64_t     phys       = alloc_frames_dma32(page_count);
+    if (phys == 0) return NULL;
+
+    void *virt = phys_to_virt(phys);
+    memset(virt, 0, page_count * PAGE_SIZE);
+    if (phys_out) *phys_out = phys;
+    return virt;
+}
 
 static int hda_open(vsound_t vsound) {
     write_serial_fmt("hda open has been called");
@@ -80,6 +120,24 @@ void hda_continue() {
 
 uint32_t hda_get_bytes_sent() {
     return mem_get32(hda_output_base + 0x4);
+}
+
+// 中断与主动轮询共用这段收尾逻辑，避免缓冲区回收路径分叉。
+static void hda_handle_buffer_completion() {
+    uint8_t status = mem_get8(hda_output_base + 0x3);
+    if ((status & (1 << 2)) == 0) return;
+
+    mem_set8(hda_output_base + 0x3, 1 << 2);
+    if (hda_stopping) {
+        hda_stop();
+    } else {
+        vsound_played(snd);
+    }
+}
+
+void hda_poll() {
+    if (hda_output_base == 0) return;
+    hda_handle_buffer_completion();
 }
 
 uint8_t hda_node_type(uint32_t codec, uint32_t node) {
@@ -252,6 +310,8 @@ void explicit_bzero(void *_s, size_t _n) {
 
 void hda_play_pcm(void *buffer, uint32_t size, uint32_t sample_rate, uint32_t channels,
                   uint32_t bits_per_sample) {
+    // BDL 中写入的必须是物理地址，直接写虚拟地址会导致控制器 DMA 到错误位置。
+    const uint64_t buffer_phys = (uint64_t)virt_to_phys((uint64_t)buffer);
     uint16_t data_format = hda_return_sound_data_format(sample_rate, channels, bits_per_sample);
     if (!(hda_pin_stream_format_cap & 1)) {
         write_serial_fmt("pcm format not supported\n");
@@ -281,18 +341,20 @@ void hda_play_pcm(void *buffer, uint32_t size, uint32_t sample_rate, uint32_t ch
 
     mem_set8(hda_output_base + 0x3, 0b11100);
     explicit_bzero(hda_output_buffer, 16 * 2);
-    hda_output_buffer[0] = (uint32_t)(uintptr_t)buffer;
+    hda_output_buffer[0] = (uint32_t)(buffer_phys & 0xffffffffu);
+    hda_output_buffer[1] = (uint32_t)(buffer_phys >> 32);
     hda_output_buffer[2] = size;
     hda_output_buffer[3] = 1;
 
-    hda_output_buffer[4] = (uint32_t)(uintptr_t)buffer + size;
+    hda_output_buffer[4] = (uint32_t)((buffer_phys + size) & 0xffffffffu);
+    hda_output_buffer[5] = (uint32_t)((buffer_phys + size) >> 32);
     hda_output_buffer[6] = size;
     hda_output_buffer[7] = 1;
 
     __asm__ volatile("wbinvd");
 
-    mem_set32(hda_output_base + 0x18, (uint32_t)(uintptr_t)hda_output_buffer);
-    mem_set32(hda_output_base + 0x1c, 0);
+    mem_set32(hda_output_base + 0x18, (uint32_t)(hda_output_buffer_phys & 0xffffffffu));
+    mem_set32(hda_output_base + 0x1c, (uint32_t)(hda_output_buffer_phys >> 32));
 
     mem_set32(hda_output_base + 0x8, size * 2);
     mem_set16(hda_output_base + 0xc, 1);
@@ -421,8 +483,7 @@ uint32_t hda_verb(uint32_t codec, uint32_t node, uint32_t verb, uint32_t command
     if (send_verb_method == SEND_VERB_METHOD_DMA) {
         corb[corb_write_pointer] = value;
         mem_set16(hda_base + 0x48, corb_write_pointer);
-        delay_ms_hp(500);
-        if ((mem_get16(hda_base + 0x58) & 0xff) != corb_write_pointer) {
+        if (!hda_wait_reg16(hda_base + 0x58, 0xff, (uint16_t)corb_write_pointer, HDA_DMA_VERB_TIMEOUT_US)) {
             write_serial_fmt("hda_verbI: No response from hda.\n");
             return 0;
         }
@@ -434,8 +495,7 @@ uint32_t hda_verb(uint32_t codec, uint32_t node, uint32_t verb, uint32_t command
         mem_set16(hda_base + 0x68, 0b10);
         mem_set32(hda_base + 0x60, value);
         mem_set16(hda_base + 0x68, 1);
-        delay_ms_hp(250);
-        if ((mem_get16(hda_base + 0x68) & 0x3) != 0b10) {
+        if (!hda_wait_reg16(hda_base + 0x68, 0x3, 0b10, HDA_MMIO_VERB_TIMEOUT_US)) {
             mem_set16(hda_base + 0x68, 0b10);
             write_serial_fmt("hda_verbII: No response from hda.\n");
             return 0;
@@ -463,13 +523,9 @@ void hda_init_codec(uint32_t codec) {
 
 extern "C" void hda_interrupt_handler(struct X64_REGS *frame, uint64_t error_code) {
     write_serial_fmt("HDA IRQ\n");
-    if (hda_stopping) {
-        hda_stop();
-    } else {
-        vsound_played(snd);
-    }
+    hda_handle_buffer_completion();
     __asm__("wbinvd");
-    mem_set8(hda_output_base + 0x3, 1 << 2);
+    send_eoi();
 }
 extern uint32_t pci_read0(uint32_t b, uint32_t d, uint32_t f, uint32_t arg, uint32_t registeroffset);
 void pci_write0(uint32_t b, uint32_t d, uint32_t f, uint32_t arg, uint32_t registeroffset, uint32_t value);
@@ -483,8 +539,11 @@ void hda_init() {
     if (device == NULL) {
         device = pci_find_vid_did(0x8086, 0x27d8);
         if (device == NULL) device = pci_find_vid_did(0x1002, 0x4383);
+        if (device == NULL) device = pci_find_vid_did(0x8086, 0x293e);
+        if (device == NULL) device = pci_find_class(0x040300);
+        if (device == NULL) device = pci_find_class(0x040100);
         if (device == NULL) {
-            write_serial_fmt("Cannot found Intel High Definition Audio.\n");
+            write_serial_fmt("Cannot find a High Definition Audio controller.\n");
             return;
         }
     }
@@ -495,19 +554,20 @@ void hda_init() {
     pci_write0(device->bus, device->slot, device->func, NULL, 0x04,
               ((d & ~((uint32_t)1 << 10)) | (1 << 2) | (1 << 1)));
 
-
-    pci_bar_base_address bar0=device->bars[0];
-    hda_base = bar0.address;
+    pci_bar_base_address bar0 = device->bars[0];
+    if (!bar0.mmio || bar0.address == 0) {
+        write_serial_fmt("HDA controller BAR0 is invalid.\n");
+        return;
+    }
+    hda_base = (uintptr_t)phys_to_virt(bar0.address);
 
     mem_set32(hda_base + 0x08, 0);
-    delay_ms_hp(250);
-    if ((mem_get32(hda_base + 0x08) & 0x01) != 0) {
+    if (!hda_wait_reg32(hda_base + 0x08, 0x01, 0, HDA_CONTROLLER_RESET_US)) {
         write_serial_fmt("Intel High Definition Audio reset failed.\n");
         return;
     }
-    delay_ms_hp(250);
     mem_set32(hda_base + 0x08, 1);
-    if ((mem_get32(hda_base + 0x08) & 0x01) != 1) {
+    if (!hda_wait_reg32(hda_base + 0x08, 0x01, 1, HDA_CONTROLLER_RESET_US)) {
         write_serial_fmt("Intel High Definition Audio reset failed.\n");
         return;
     }
@@ -517,12 +577,20 @@ void hda_init() {
     int input_stream_count = (mem_get16(hda_base + 0x00) >> 8) & 0x0f;
     write_serial_fmt("input stream count: %d\n", input_stream_count);
     hda_output_base   = hda_base + 0x80 + (0x20 * input_stream_count);
-    hda_output_buffer = (uint32_t*)malloc(4096);
+    // BDL 和双缓冲都要放在 DMA 可见的地址范围内，否则控制器无法访问。
+    hda_output_buffer = (uint32_t *)hda_alloc_dma32(PAGE_SIZE, &hda_output_buffer_phys);
+    hda_buffer_ptr    = hda_alloc_dma32(HDA_BUF_SIZE * 2, &hda_buffer_phys);
+    if (hda_output_buffer == NULL || hda_buffer_ptr == NULL) {
+        write_serial_fmt("Failed to allocate HDA DMA buffers.\n");
+        return;
+    }
 
     int irq = pci_get_drive_irq(device->bus, device->slot, device->func);
     write_serial_fmt("HDA irq %d\n",0x20+irq);
     init_idt_desc(0x20+irq,X86_64_INTR_GATE,hda_interrupt,RING0,NULL);
     mem_set32(hda_base + 0x20, ((uint32_t)1 << 31) | ((uint32_t)1 << input_stream_count));
+    uint8_t  rirb_size  = 0;
+    uint32_t corb_size  = 0;
 
     mem_set32(hda_base + 0x70, 0);
     mem_set32(hda_base + 0x74, 0);
@@ -530,12 +598,17 @@ void hda_init() {
     mem_set32(hda_base + 0x38, 0);
     mem_set8(hda_base + 0x4c, 0);
     mem_set8(hda_base + 0x5c, 0);
+    write_serial_fmt("Using immediate command mode for HDA verbs.\n");
+    goto mmio;
 
-    corb = (uint32_t*)malloc(4096);
-    mem_set32(hda_base + 0x40, (uint32_t)(uintptr_t)corb);
-    mem_set32(hda_base + 0x44, 0);
-    uint8_t rirb_size;
-    uint32_t corb_size = mem_get8(hda_base + 0x4e) >> 4 & 0x0f;
+    corb = (uint32_t *)hda_alloc_dma32(PAGE_SIZE, &corb_phys);
+    if (corb == NULL) {
+        write_serial_fmt("Failed to allocate HDA CORB.\n");
+        goto mmio;
+    }
+    mem_set32(hda_base + 0x40, (uint32_t)(corb_phys & 0xffffffffu));
+    mem_set32(hda_base + 0x44, (uint32_t)(corb_phys >> 32));
+    corb_size = mem_get8(hda_base + 0x4e) >> 4 & 0x0f;
     if (corb_size & 0b0001) {
         corb_entry_count = 2;
         mem_set8(hda_base + 0x4e, 0b00);
@@ -552,14 +625,12 @@ void hda_init() {
     write_serial_fmt("corb size: %d entries\n", corb_entry_count);
 
     mem_set16(hda_base + 0x4A, 0x8000);
-    delay_ms_hp(250);
-    if ((mem_get16(hda_base + 0x4A) & 0x8000) == 0) {
+    if (!hda_wait_reg16(hda_base + 0x4A, 0x8000, 0x8000, HDA_RING_RESET_TIMEOUT_US)) {
         write_serial_fmt("HDA corb reset failed\n");
         goto mmio;
     }
     mem_set16(hda_base + 0x4A, 0x0000);
-    delay_ms_hp(250);
-    if ((mem_get16(hda_base + 0x4A) & 0x8000) != 0) {
+    if (!hda_wait_reg16(hda_base + 0x4A, 0x8000, 0, HDA_RING_RESET_TIMEOUT_US)) {
         write_serial_fmt("HDA corb reset failed\n");
         goto mmio;
     }
@@ -567,9 +638,13 @@ void hda_init() {
     corb_write_pointer = 1;
     write_serial_fmt("corb has been reset already\n");
 
-    rirb = (uint32_t*)malloc(4096);
-    mem_set32(hda_base + 0x50, (uint32_t)(uintptr_t)rirb);
-    mem_set32(hda_base + 0x54, 0);
+    rirb = (uint32_t *)hda_alloc_dma32(PAGE_SIZE, &rirb_phys);
+    if (rirb == NULL) {
+        write_serial_fmt("Failed to allocate HDA RIRB.\n");
+        goto mmio;
+    }
+    mem_set32(hda_base + 0x50, (uint32_t)(rirb_phys & 0xffffffffu));
+    mem_set32(hda_base + 0x54, (uint32_t)(rirb_phys >> 32));
 
     rirb_size = mem_get8(hda_base + 0x5e) >> 4 & 0x0f;
     if (rirb_size & 0b0001) {
@@ -588,7 +663,10 @@ void hda_init() {
     write_serial_fmt("rirb size: %d entries\n", rirb_entry_count);
 
     mem_set16(hda_base + 0x58, 0x8000);
-    delay_ms_hp(250);
+    if (!hda_wait_reg16(hda_base + 0x58, 0x8000, 0x8000, HDA_RING_RESET_TIMEOUT_US)) {
+        write_serial_fmt("HDA rirb reset failed\n");
+        goto mmio;
+    }
     mem_set16(hda_base + 0x5A, 0x0000);
     rirb_read_pointer = 1;
     write_serial_fmt("rirb has been reset already\n");
@@ -602,6 +680,11 @@ void hda_init() {
         if (codec_id != 0) {
             hda_codec_number = i;
             hda_init_codec(i);
+            if (hda_pin_output_node == 0) {
+                write_serial_fmt("HDA codec detected but no output node was initialized.\n");
+                return;
+            }
+            hda_regist();
             write_serial_fmt("Intel High Definition Audio load done!\n");
             return;
         }
@@ -609,13 +692,18 @@ void hda_init() {
 
 mmio:
     send_verb_method = SEND_VERB_METHOD_MMIO;
-    mem_set8(hda_output_base + 0x4c, 0);
-    mem_set8(hda_output_base + 0x5c, 0);
+    mem_set8(hda_base + 0x4c, 0);
+    mem_set8(hda_base + 0x5c, 0);
     for (int i = 0; i < 16; i++) {
         uint32_t codec_id = hda_verb(i, 0, 0xf00, 0);
         if (codec_id != 0) {
             hda_codec_number = i;
             hda_init_codec(i);
+            if (hda_pin_output_node == 0) {
+                write_serial_fmt("HDA codec detected but no output node was initialized.\n");
+                return;
+            }
+            hda_regist();
             write_serial_fmt( "Intel High Definition Audio load done!\n");
             return;
         }
@@ -641,6 +729,14 @@ static const int32_t rates[] = {
 
 void hda_regist() {
     snd = &vsound;
+    if (snd->is_registed) return;
+    // vsound 只负责注册，缓冲队列需要驱动自己准备好。
+    snd->bufs0 = queue_init();
+    snd->bufs1 = queue_init();
+    if (snd->bufs0 == NULL || snd->bufs1 == NULL || hda_buffer_ptr == NULL) {
+        write_serial_fmt("register hda fault");
+        return;
+    }
     if (!vsound_regist(snd)) {
         write_serial_fmt("register hda fault");
         return;
@@ -650,5 +746,6 @@ void hda_regist() {
     vsound_set_supported_ch(snd, 1);
     vsound_set_supported_ch(snd, 2);
     vsound_addbuf(snd, hda_buffer_ptr);
-    vsound_addbuf(snd, (void*)(((uint64_t*)hda_buffer_ptr) + HDA_BUF_SIZE));
+    // 第二块缓冲区紧跟第一块之后，按字节偏移一个完整的 HDA_BUF_SIZE。
+    vsound_addbuf(snd, (uint8_t *)hda_buffer_ptr + HDA_BUF_SIZE);
 }

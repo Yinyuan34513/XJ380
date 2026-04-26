@@ -9,6 +9,7 @@ extern UINT64 win_height;
 
 extern int cindex;
 extern int setting_cindex;
+extern bool about_memory_show_mb;
 
 extern bool exit_cm;
 
@@ -41,6 +42,8 @@ struct SettingsDataFileFormat
 };
 
 void draw_background();
+void draw_background_body();
+void draw_background_time();
 void process_left_key(int x, int y);
 void draw_mainpage();
 void draw_setting();

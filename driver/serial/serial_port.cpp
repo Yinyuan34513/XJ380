@@ -6,14 +6,195 @@
 #include <font.h>
 #include <proto.hpp>
 #include <dlinker.h>
+#include <efi/boot.h>
 
 spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
+extern BOOT_CONFIG *EFI_BC;
 
 #if BUILD_EDITION == DEBUG_VERSION
 int serial_x     = 0;
 int serial_y     = 0;
 int serial_x_max = 0;
+static constexpr int SERIAL_CHAR_WIDTH  = 8;
+static constexpr int SERIAL_CHAR_HEIGHT = 16;
+static constexpr int SERIAL_SCREEN_PADDING   = 8;
+static constexpr int SERIAL_SCREEN_MARGIN    = 8;
+static constexpr int SERIAL_SCREEN_MIN_COLS  = 32;
+static constexpr int SERIAL_SCREEN_MAX_COLS  = 96;
+static constexpr int SERIAL_SCREEN_MIN_LINES = 6;
+static constexpr int SERIAL_SCREEN_MAX_LINES = 14;
+static constexpr int SERIAL_LOG_RING_LINES   = 128;
+static constexpr int SERIAL_LOG_LINE_CAP     = 128;
+
+static constexpr PixelColor SERIAL_SCREEN_WHITE  = {0xff, 0xff, 0xff};
+static constexpr PixelColor SERIAL_SCREEN_GRAY   = {0x80, 0x80, 0x80};
+static constexpr PixelColor SERIAL_SCREEN_BLUE   = {0x31, 0x56, 0xd6};
+static constexpr PixelColor SERIAL_SCREEN_YELLOW = {0xff, 0xf1, 0x22};
+static constexpr PixelColor SERIAL_SCREEN_CYAN   = {0x43, 0xd7, 0xff};
+static constexpr PixelColor SERIAL_SCREEN_RED    = {0xff, 0x3b, 0x30};
+static constexpr PixelColor SERIAL_SCREEN_RED_SOFT = {0xff, 0x78, 0x78};
+static constexpr PixelColor SERIAL_SCREEN_BG     = {0x00, 0x00, 0x00};
+static constexpr PixelColor SERIAL_SCREEN_BORDER = {0x44, 0x44, 0x44};
+
+typedef struct serial_screen_line {
+    char       text[SERIAL_LOG_LINE_CAP];
+    uint16_t   len;
+    PixelColor color;
+} serial_screen_line_t;
+
+static serial_screen_line_t g_serial_log_lines[SERIAL_LOG_RING_LINES];
+static int                  g_serial_log_head        = 0;
+static int                  g_serial_log_count       = 0;
+static int                  g_serial_log_current     = -1;
+static int                  g_serial_screen_cols     = SERIAL_SCREEN_MIN_COLS;
+static int                  g_serial_screen_rows     = SERIAL_SCREEN_MIN_LINES;
+static int                  g_serial_screen_left     = 0;
+static int                  g_serial_screen_top      = 0;
+static int                  g_serial_screen_width    = 0;
+static int                  g_serial_screen_height   = 0;
+static bool                 g_serial_overlay_force_show = true;
+
+static bool serial_runtime_overlay_enabled()
+{
+    if (EFI_BC != NULL && EFI_BC->is_qemu == 1 && !g_serial_overlay_force_show) {
+        return false;
+    }
+    return true;
+}
+
+static inline int serial_clamp_int(int value, int min_value, int max_value)
+{
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static void serial_screen_update_layout()
+{
+    if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
+        return;
+    }
+
+    int width  = (int)fbc_addr->horizontal_resolution;
+    int height = (int)fbc_addr->vertical_resolution;
+
+    g_serial_screen_cols = serial_clamp_int(width / SERIAL_CHAR_WIDTH / 3,
+                                            SERIAL_SCREEN_MIN_COLS,
+                                            SERIAL_SCREEN_MAX_COLS);
+    g_serial_screen_rows = serial_clamp_int(height / SERIAL_CHAR_HEIGHT / 4,
+                                            SERIAL_SCREEN_MIN_LINES,
+                                            SERIAL_SCREEN_MAX_LINES);
+    g_serial_screen_width =
+        g_serial_screen_cols * SERIAL_CHAR_WIDTH + SERIAL_SCREEN_PADDING * 2;
+    g_serial_screen_height =
+        g_serial_screen_rows * SERIAL_CHAR_HEIGHT + SERIAL_SCREEN_PADDING * 2;
+    g_serial_screen_left =
+        width - g_serial_screen_width - SERIAL_SCREEN_MARGIN;
+    if (g_serial_screen_left < SERIAL_SCREEN_MARGIN) {
+        g_serial_screen_left = SERIAL_SCREEN_MARGIN;
+    }
+    g_serial_screen_top =
+        height - g_serial_screen_height - SERIAL_SCREEN_MARGIN;
+    if (g_serial_screen_top < SERIAL_SCREEN_MARGIN) {
+        g_serial_screen_top = SERIAL_SCREEN_MARGIN;
+    }
+}
+
+static void serial_screen_reset_line(serial_screen_line_t *line, const PixelColor &color)
+{
+    if (line == NULL) {
+        return;
+    }
+    memset(line->text, 0, sizeof(line->text));
+    line->len   = 0;
+    line->color = color;
+}
+
+static serial_screen_line_t *serial_screen_current_line(const PixelColor &color)
+{
+    if (g_serial_log_current >= 0) {
+        serial_screen_line_t *line = &g_serial_log_lines[g_serial_log_current];
+        if (line->len == 0) {
+            line->color = color;
+        }
+        return line;
+    }
+
+    int index;
+    if (g_serial_log_count < SERIAL_LOG_RING_LINES) {
+        index = (g_serial_log_head + g_serial_log_count) % SERIAL_LOG_RING_LINES;
+        g_serial_log_count++;
+    } else {
+        index = g_serial_log_head;
+        g_serial_log_head = (g_serial_log_head + 1) % SERIAL_LOG_RING_LINES;
+    }
+
+    g_serial_log_current = index;
+    serial_screen_reset_line(&g_serial_log_lines[index], color);
+    return &g_serial_log_lines[index];
+}
+
+static void serial_screen_finish_line()
+{
+    if (g_serial_log_current < 0) {
+        return;
+    }
+
+    serial_screen_line_t *line = &g_serial_log_lines[g_serial_log_current];
+    if (line->len == 0 && g_serial_log_count > 0) {
+        g_serial_log_count--;
+    }
+    g_serial_log_current = -1;
+}
+
+static void serial_screen_append_char(char ch, const PixelColor &color)
+{
+    if (ch == '\r') {
+        return;
+    }
+    if (ch == '\n') {
+        serial_screen_finish_line();
+        return;
+    }
+
+    serial_screen_update_layout();
+
+    if (ch == '\t') {
+        ch = ' ';
+    }
+
+    serial_screen_line_t *line = serial_screen_current_line(color);
+    if (line == NULL) {
+        return;
+    }
+
+    if (line->len >= (SERIAL_LOG_LINE_CAP - 1) ||
+        line->len >= (uint16_t)g_serial_screen_cols) {
+        serial_screen_finish_line();
+        line = serial_screen_current_line(color);
+        if (line == NULL) {
+            return;
+        }
+    }
+
+    line->text[line->len++] = ch;
+    line->text[line->len]   = '\0';
+}
+
+static void serial_screen_draw_line(int x, int y, const serial_screen_line_t *line)
+{
+    if (line == NULL) {
+        return;
+    }
+
+    for (uint16_t i = 0; i < line->len; ++i) {
+        int draw_x = x + (int)i * SERIAL_CHAR_WIDTH;
+        rect(*fbc_addr, draw_x, y, draw_x + SERIAL_CHAR_WIDTH,
+             y + SERIAL_CHAR_HEIGHT, SERIAL_SCREEN_BG);
+        WriteAscii(*fbc_addr, draw_x, y, line->text[i], line->color);
+    }
+}
 #endif
 
 #define PORT 0x3f8 // COM1
@@ -65,41 +246,136 @@ void write_serial(char a)
     outb(PORT, a);
 }
 
-extern bool no_interrupt;
+static void serial_redraw_screen_overlay_locked()
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    if (!serial_runtime_overlay_enabled()) {
+        return;
+    }
+    if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
+        return;
+    }
+
+    serial_screen_update_layout();
+    rect(*fbc_addr, g_serial_screen_left, g_serial_screen_top,
+         g_serial_screen_left + g_serial_screen_width,
+         g_serial_screen_top + g_serial_screen_height, SERIAL_SCREEN_BG);
+    rect(*fbc_addr, g_serial_screen_left, g_serial_screen_top,
+         g_serial_screen_left + g_serial_screen_width, g_serial_screen_top + 1,
+         SERIAL_SCREEN_BORDER);
+    rect(*fbc_addr, g_serial_screen_left, g_serial_screen_top + g_serial_screen_height - 1,
+         g_serial_screen_left + g_serial_screen_width,
+         g_serial_screen_top + g_serial_screen_height, SERIAL_SCREEN_BORDER);
+
+    int visible = g_serial_log_count;
+    if (visible > g_serial_screen_rows) {
+        visible = g_serial_screen_rows;
+    }
+
+    int start = g_serial_log_count - visible;
+    for (int i = 0; i < visible; ++i) {
+        int index = (g_serial_log_head + start + i) % SERIAL_LOG_RING_LINES;
+        int draw_x = g_serial_screen_left + SERIAL_SCREEN_PADDING;
+        int draw_y = g_serial_screen_top + SERIAL_SCREEN_PADDING + i * SERIAL_CHAR_HEIGHT;
+        serial_screen_draw_line(draw_x, draw_y, &g_serial_log_lines[index]);
+    }
+
+    serial_y     = g_serial_screen_top + SERIAL_SCREEN_PADDING + (visible > 0 ? (visible - 1) * SERIAL_CHAR_HEIGHT : 0);
+    serial_x     = g_serial_screen_left + SERIAL_SCREEN_PADDING;
+    serial_x_max = g_serial_screen_left + g_serial_screen_width - SERIAL_SCREEN_PADDING;
+#else
+    return;
+#endif
+}
+
+static bool serial_overlay_intersects_dirty_rect(int x1, int y1, int x2, int y2)
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    if (!serial_runtime_overlay_enabled()) {
+        return false;
+    }
+    if (fbc_addr == NULL || fbc_addr->frame_buffer == NULL) {
+        return false;
+    }
+
+    serial_screen_update_layout();
+    const int overlay_x1 = g_serial_screen_left;
+    const int overlay_y1 = g_serial_screen_top;
+    const int overlay_x2 = g_serial_screen_left + g_serial_screen_width;
+    const int overlay_y2 = g_serial_screen_top + g_serial_screen_height;
+
+    return x1 < overlay_x2 && x2 > overlay_x1 && y1 < overlay_y2 && y2 > overlay_y1;
+#else
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
+    return false;
+#endif
+}
+
+void serial_redraw_screen_overlay()
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    spin_lock(&serial_lock);
+    serial_redraw_screen_overlay_locked();
+    spin_unlock(&serial_lock);
+#endif
+}
+
+void serial_redraw_screen_overlay_part(int x1, int y1, int x2, int y2)
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    spin_lock(&serial_lock);
+    if (serial_overlay_intersects_dirty_rect(x1, y1, x2, y2)) {
+        serial_redraw_screen_overlay_locked();
+    }
+    spin_unlock(&serial_lock);
+#else
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
+#endif
+}
+
+void serial_show_screen_overlay_now()
+{
+#if BUILD_EDITION == DEBUG_VERSION
+    spin_lock(&serial_lock);
+    g_serial_overlay_force_show = true;
+    serial_redraw_screen_overlay_locked();
+    spin_unlock(&serial_lock);
+#endif
+}
+
+static void write_serial_string_colored(const char *str, const PixelColor &color)
+{
+    if (str == NULL) {
+        return;
+    }
+
+    spin_lock(&serial_lock);
+    for (const char *cursor = str; *cursor != '\0'; ++cursor) {
+        serial_screen_append_char(*cursor, color);
+    }
+    if (serial_runtime_overlay_enabled()) {
+        serial_redraw_screen_overlay_locked();
+    }
+    while (*str)
+    {
+        write_serial(*str++);
+    }
+    spin_unlock(&serial_lock);
+}
 
 void write_serial_string(const char *str)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
-    spin_lock(&serial_lock);
-    while (*str)
-    {
-#if BUILD_EDITION == DEBUG_VERSION  // 串口那么可爱为什么要谋害他（哭
-        if (*str == '\n')
-        {
-            serial_x  = 0;
-            serial_y += 16;
-        }
-        else
-        {
-            rect(*fbc_addr, serial_x, serial_y, serial_x + 8, serial_y + 16, {0, 0, 0});
-            WriteAscii(*fbc_addr, serial_x, serial_y, *str, {0xff, 0xff, 0xff});
-            serial_x += 8;
-        }
-
-        if (serial_y >= fbc_addr->vertical_resolution)
-        {
-            rect(*fbc_addr, 0, 0, serial_x_max, fbc_addr->vertical_resolution, {0, 0, 0});
-            serial_x_max = 0;
-            serial_y     = 0;
-        }
-        if (serial_x > serial_x_max) { serial_x_max = serial_x; }
+#if BUILD_EDITION == DEBUG_VERSION
+    write_serial_string_colored(str, SERIAL_SCREEN_WHITE);
+#else
+    write_serial_string_colored(str, {0xff, 0xff, 0xff});
 #endif
-        write_serial(*str++);
-    }
-    if (is_sti) close_interrupt;
-    spin_unlock(&serial_lock);
 }
 
 void write_serial_dec(unsigned long long dec)
@@ -340,10 +616,12 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         switch (**fmt_ptr)
         {
         case 'c':
+        {
+            size_t char_pad = num_fmter.size > 1 ? (num_fmter.size - 1) : 0;
             // Right align
             if (!(num_flag.left))
             {
-                while (write_counter < num_fmter.size - 1)
+                while (write_counter < char_pad)
                 {
                     write(writer, ' ');
                     ++write_counter;
@@ -354,13 +632,14 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
             // Left align
             if (num_flag.left)
             {
-                while (write_counter < num_fmter.size - 1)
+                while (write_counter < char_pad + 1)
                 {
                     write(writer, ' ');
                     ++write_counter;
                 }
             }
             break;
+        }
         case 's':
             // Right align
             if (!(num_flag.left))
@@ -456,9 +735,6 @@ Writer SerialWriter = {
 
 void serial_wprintf(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
@@ -470,7 +746,6 @@ void serial_wprintf(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
 }
 
@@ -479,9 +754,6 @@ void serial_wprintf(const char *fmt, ...)
  */
 int write_serial_fmt(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
@@ -493,7 +765,6 @@ int write_serial_fmt(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
@@ -504,9 +775,6 @@ int write_serial_fmt(const char *fmt, ...)
 // 用于输出消息
 int printk(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][MESSAGE] ");
@@ -521,7 +789,6 @@ int printk(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
@@ -531,9 +798,6 @@ EXPORT_SYMBOL(printk);
 // 用于输出调试消息
 int pr_debug(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][DEBUG] ");
@@ -548,17 +812,14 @@ int pr_debug(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
+EXPORT_SYMBOL(pr_debug);
 
 // 用于输出警告消息
 int pr_warn(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][WARNING] ");
@@ -573,17 +834,14 @@ int pr_warn(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
+EXPORT_SYMBOL(pr_warn);
 
 // 用于输出调试信息消息
 int pr_info(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][INFO] ");
@@ -598,17 +856,14 @@ int pr_info(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
+EXPORT_SYMBOL(pr_info);
 
 // 用于输出提示消息
 int pr_notice(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][NOTICE] ");
@@ -623,17 +878,14 @@ int pr_notice(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
+EXPORT_SYMBOL(pr_notice);
 
 // 用于输出错误消息
 int pr_err(const char *fmt, ...)
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
 
     write_serial_string("[XJ380 System Kernel][ERROR] ");
@@ -648,7 +900,6 @@ int pr_err(const char *fmt, ...)
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
     return 0;
 }
@@ -752,14 +1003,12 @@ int snprintf(char *buf, size_t size, const char *fmt, ...)
     // 否则返回实际写入的字符数（不包括终止空字符）
     return (int)(data.truncated ? result : data.idx);
 }
+EXPORT_SYMBOL(snprintf);
 /**
  * Needn't heap now!!!
  */
 void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
 {
-    bool is_sti = are_interrupts_enabled();
-    if (!no_interrupt) open_interrupt;
-
     spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
@@ -771,7 +1020,6 @@ void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
         serial_write_buffer_index = 0;
     }
     va_end(args);
-    if (is_sti) close_interrupt;
     spin_unlock(&fmt_lock);
 }
 

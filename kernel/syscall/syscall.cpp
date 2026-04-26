@@ -21,7 +21,7 @@
 #define MSR_STAR         0xC0000081 // STAR MSR寄存器
 #define MSR_LSTAR        0xC0000082 // LSTAR MSR寄存器
 #define MSR_SYSCALL_MASK 0xC0000084 // SYSCALL_MASK MSR寄存器
-
+#define EFER_NXE  (1 << 11)
 void init_syscall()
 {
     uint64_t efer;
@@ -59,6 +59,9 @@ void init_syscall()
 
     // 4. 设置 SYSCALL_MASK MSR (RFLAGS 掩码)
     wrmsr(MSR_SYSCALL_MASK, (1 << 9));
+
+    efer |= EFER_NXE;
+    wrmsr(MSR_EFER, efer);
 }
 
 // regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9
@@ -67,7 +70,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     regs->rip    = regs->rcx;
     regs->cs     = SELECTOR_USER_CS;
     regs->rflags = regs->r11;
-    regs->rsp    = user_rsp + sizeof(struct X64_REGS);
+    regs->rsp    = user_rsp;
     regs->ss     = SELECTOR_USER_DS;
 
     uint64_t syscall_number = regs->rax;
@@ -110,8 +113,13 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_READ: regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx,0,0,0,regs); break;
     case SYS_OPEN: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi, regs->rdx,0,0,0,regs); break;
     case SYS_CLOSE: regs->rax = (uint64_t)sys_close(regs->rdi,0,0,0,0,0,regs); break;
+    case SYS_POLL: regs->rax = (uint64_t)sys_poll((struct pollfd *)regs->rdi, regs->rsi, regs->rdx,0,0,0,regs); break;
+    case SYS_SOCKET: regs->rax = (uint64_t)sys_socket(regs->rdi, regs->rsi, regs->rdx,0,0,0,regs); break;
+    case SYS_CONNECT: regs->rax = (uint64_t)sys_connect(regs->rdi, (const struct sockaddr *)regs->rsi, regs->rdx,0,0,0,regs); break;
+    case SYS_ACCEPT: regs->rax = (uint64_t)sys_accept(regs->rdi, (struct sockaddr *)regs->rsi, (socklen_t *)regs->rdx,0,0,0,regs); break;
     case SYS_FSTAT: regs->rax = (uint64_t)sys_fstat(regs->rdi, (struct stat *)regs->rsi,0,0,0,0,regs); break;
     case SYS_CREAT: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi,O_CREAT,0,0,0,regs); break;
+    case SYS_FCNTL: regs->rax = (uint64_t)sys_fcntl(regs->rdi, regs->rsi, regs->rdx,0,0,0,regs); break;
     case SYS_MKDIR: regs->rax = (uint64_t)sys_mkdir((char *)regs->rdi, regs->rsi,0,0,0,0,regs); break;
     case SYS_RMDIR: regs->rax = (uint64_t)sys_rmdir(regs->rdi,0,0,0,0,0,regs); break;
     case SYS_UNLINK: regs->rax = (uint64_t)sys_unlink(regs->rdi,0,0,0,0,0,regs); break;
@@ -121,6 +129,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETDENTS: regs->rax = (uint64_t)sys_getdents(regs->rdi, (dirent*)regs->rsi, regs->rdx,0,0,0,regs); break;
     case SYS_DUP: regs->rax = (uint64_t)sys_dup(regs->rdi,0,0,0,0,0,regs); break;
     case SYS_DUP2: regs->rax = (uint64_t)sys_dup2(regs->rdi, regs->rsi,0,0,0,0,regs); break;
+    case SYS_SHUTDOWN: regs->rax = (uint64_t)sys_shutdown(regs->rdi, regs->rsi,0,0,0,0,regs); break;
+    case SYS_BIND: regs->rax = (uint64_t)sys_bind(regs->rdi, (const struct sockaddr *)regs->rsi, regs->rdx,0,0,0,regs); break;
+    case SYS_LISTEN: regs->rax = (uint64_t)sys_listen(regs->rdi, regs->rsi,0,0,0,0,regs); break;
 
     case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
@@ -130,18 +141,21 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_EXIT:
         sys_exit(regs->rdi,0,0,0,0,0,regs);
         break;
-        // case SYS_EXIT_GROUP:
-        //     regs->rax = (uint64_t)sys_exit(regs->rdi);
-        //     break;
+    case SYS_EXIT_GROUP:
+        sys_exit_group(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
         case SYS_GETPID:
             regs->rax = get_current_task()->parent_group->pid;
             break;
         case SYS_GETTID:
-            regs->rax = get_current_task()->parent_group->pid;
+            regs->rax = get_current_task()->tid;
             break;
-        // case SYS_WAIT4:
-        //     regs->rax = (uint64_t)sys_wait4(regs->rdi, (long *)regs->rsi, regs->rdx, (void *)regs->r10);
-        //     break;
+        case SYS_CLOCK_GETTIME:
+            regs->rax = (uint64_t)sys_clock_gettime(regs->rdi, (struct timespec *)regs->rsi, 0, 0, 0, 0, regs);
+            break;
+        case SYS_WAIT4:
+            regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r10, 0, 0, regs);
+            break;
         case SYS_BRK:
             regs->rax = (uint64_t)sys_brk(regs->rdi);
             break;
@@ -149,9 +163,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
             regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9,regs);
             break;
 
-        // case SYS_ARCH_PRCTL:
-        //     regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi);
-        //     break;
+        case SYS_ARCH_PRCTL:
+            regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+            break;
         // case SYS_SET_TID_ADDRESS:
         //     // todo
         //     regs->rax = get_current_task()->parent_group->pid;
@@ -228,6 +242,14 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_DRAW_BMP: do_xapi_DrawBMP(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_DRAW_PNG: do_xapi_DrawPNG(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_DRAW_PICTURE: do_xapi_DrawPicture(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
+    case XAPI_DRAW_SVG:
+        regs->rax =
+            (uint64_t)xapi_doDrawSvg(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DRAW_FA:
+        regs->rax =
+            (uint64_t)xapi_doDrawFA(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
     case XAPI_SET_MSH_PROCOR: regs->rax = (uint64_t)do_xapi_SetMsgProc(regs->rdi, regs->rsi); break;
     case XAPI_READBUFFER: do_xapi_ReadBuffer(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_WRITEBUFFER: do_xapi_WriteBuffer(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
@@ -253,8 +275,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_RUN: do_xapi_Run((char *)regs->rdi); break;
     case XAPI_GET_PIC_SIZE: GetPictureSize((int *)regs->rdi, (int *)regs->rsi, (char *)regs->rdx); break;
     case XAPI_MAP_MEMORY: regs->rax = do_xapi_MapMemory(regs->rdi, regs->rsi, regs->rdx); break;
-    case XAPI_REMOVEDIR: sys_rmdir(regs->rdi,0,0,0,0,0,regs);
-    case XAPI_FLUSH_TIME: do_xapi_FlushTime();
+    case XAPI_REMOVEDIR: sys_rmdir(regs->rdi,0,0,0,0,0,regs); break;
+    case XAPI_FLUSH_TIME: do_xapi_FlushTime(); break;
+    case XAPI_GET_TASK_LIST: regs->rax = do_xapi_GetTaskList(regs->rdi, regs->rsi); break;
+    case XAPI_KILL_PROCESS: regs->rax = do_xapi_KillProcess(regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 
@@ -278,5 +302,5 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     }
 
-    return user_rsp;
+    return (uint64_t)regs;
 }

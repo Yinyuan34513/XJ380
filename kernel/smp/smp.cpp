@@ -7,7 +7,9 @@
 #include <apic/apic.h>
 #include <apic/madt.h>
 #include <cpu/msr.h>
+#include <cpu/fsgsbase.h>
 #include <krlibc.h>
+#include <mm/alloc/alloc.h>
 #include <syscall/syscall.h>
 
 XSK_SMP_INFO *xsi;
@@ -21,6 +23,14 @@ extern pcb_t kernel_group;
 
 extern bool smp_scheduler_lock;
 int         scheduler_is_ready = 0;
+
+static tcb_t alloc_zeroed_tcb(void)
+{
+    const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
+    tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
+    if (task != NULL) memset(task, 0, sizeof(struct thread_control_block));
+    return task;
+}
 
 typedef char symbol[];
 
@@ -87,6 +97,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
             asm volatile("hlt");
         }
     }
+    write_kgsbase((uint64_t)info);
 
     init_cpu();
 
@@ -137,7 +148,8 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
         if (!smp_scheduler_lock) break;
     }
 
-    tcb_t apu_idle         = (tcb_t)malloc(sizeof(struct thread_control_block));
+    tcb_t apu_idle         = alloc_zeroed_tcb();
+    if (apu_idle == NULL) while (true) { asm volatile("hlt"); }
     apu_idle->task_level   = TASK_IDLE_LEVEL;
     apu_idle->tid          = now_tid++;
     apu_idle->kernel_stack = apu_idle->context0.rsp = get_rsp();

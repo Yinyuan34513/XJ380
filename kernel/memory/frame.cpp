@@ -11,18 +11,22 @@ Bitmap         usable_regions;
 uint64_t       memory_size       = 0;
 uint64_t       memory_total_size = 0;
 
-uint64_t get_memory_size(MEMORY_MAP map)
+static uint64_t get_memory_top(MEMORY_MAP map)
 {
-    uint64_t       total_pages = 0;
+    uint64_t       top         = 0;
     EfiMemoryDesc *EfiMemory   = (EfiMemoryDesc *)((uint64_t)(map.Buffer) + 0xFFFF800000000000);
 
     for (int i = 0; i < (map.MapSize / map.DescriptorSize); i++)
     {
-        if (EfiMemory->Type == EfiConventionalMemory) { total_pages += EfiMemory->NumberOfPages; }
+        if (EfiMemory->Type == EfiConventionalMemory)
+        {
+            uint64_t region_end = EfiMemory->PhysicalStart + EfiMemory->NumberOfPages * PAGE_SIZE;
+            if (region_end > top) top = region_end;
+        }
         EfiMemory++;
     }
 
-    return total_pages * PAGE_SIZE;
+    return top;
 }
 
 uint64_t get_memory_all_size(MEMORY_MAP map)
@@ -36,7 +40,7 @@ uint64_t get_memory_all_size(MEMORY_MAP map)
         EfiMemory++;
     }
 
-    return total_pages * 4;
+    return total_pages * PAGE_SIZE;
 }
 
 static uint64_t get_zone_boundary(enum zone_type type)
@@ -108,7 +112,9 @@ static void process_memory_region(uintptr_t start, uintptr_t end)
 
 void init_frame(MEMORY_MAP map)
 {
-    memory_size       = get_memory_size(map);
+    // `memory_size` is used to size frame bitmaps and page metadata, so it must
+    // cover the highest usable PFN rather than only the sum of usable pages.
+    memory_size       = get_memory_top(map);
     memory_total_size = get_memory_all_size(map);
 
     size_t         bitmap_size    = (memory_size / 4096 + 7) / 8;
@@ -201,13 +207,18 @@ spin_t frame_op_lock = SPIN_INIT;
 
 uint64_t alloc_frames_l(size_t count)
 {
+    spin_lock(&frame_op_lock);
     Bitmap *bitmap      = &frame_allocator.bitmap;
     size_t  frame_index = bitmap_find_range(bitmap, count, true);
 
-    if (frame_index == (size_t)-1) return 0;
+    if (frame_index == (size_t)-1) {
+        spin_unlock(&frame_op_lock);
+        return 0;
+    }
     bitmap_set_range(bitmap, frame_index, frame_index + count, false);
 
     frame_allocator.usable_frames -= count;
+    spin_unlock(&frame_op_lock);
 
     return frame_index * PAGE_SIZE;
 }

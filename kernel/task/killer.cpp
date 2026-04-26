@@ -8,42 +8,58 @@
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 
-extern bool no_interrupt; // 为true时代表严禁开启中断
+extern bool no_interrupt; // 涓簍rue鏃朵唬琛ㄤ弗绂佸紑鍚腑鏂?
+
+static bool is_thread_dead(tcb_t thread)
+{
+    return thread == NULL || thread->status == OUT || thread->status == DEATH;
+}
 
 void check_group(pcb_t group)
 {
     if (group == NULL) return;
 
-    if (group->child_index != 0)
+    // Zombie processes must stay attached to their parent until wait/waitpid reaps them.
+    if (group->status == ZOMBIE) return;
+
+    if (group->child_pcb != NULL)
     {
-        lock_node *front_p = group->child_pcb->head;
-        for (int i = 0; i < group->child_index; i++)
+        for (lock_node *node = group->child_pcb->head; node != NULL;)
         {
-            check_group((pcb_t)front_p->data);
-            front_p = front_p->next;
+            lock_node *next = node->next;
+            check_group((pcb_t)node->data);
+            node = next;
         }
+    }
+
+    if (group->thread_queue == NULL) return;
+
+    spin_lock(&group->thread_queue->lock);
+    if (group->thread_queue->size == 0)
+    {
+        spin_unlock(&group->thread_queue->lock);
+        return;
     }
 
     lock_node *front_p    = group->thread_queue->head;
     bool       group_dead = true;
-    for (int i = 0; i < group->thread_queue->size && front_p != NULL; i++)
+    for (; front_p != NULL; front_p = front_p->next)
     {
         tcb_t thread = (tcb_t)front_p->data;
-        if (thread->status != OUT || thread->status != DEATH)
+        if (!is_thread_dead(thread))
         {
             if (strcmp(thread->name, "Window Message Thread") != 0)
             {
-                // 不是消息线程才算
+                // 涓嶆槸娑堟伅绾跨▼鎵嶇畻
                 group_dead = false;
             }
         }
-        front_p = front_p->next;
     }
+    spin_unlock(&group->thread_queue->lock);
 
     if (group_dead)
     {
         kill_proc(group, 0, false);
-        kill_proc0(group);
     }
 }
 

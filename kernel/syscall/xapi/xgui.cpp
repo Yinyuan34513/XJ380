@@ -11,6 +11,7 @@
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <graphics/svg.h>
 #include <graphics/window/window.h>
 #include <krlibc.h>
 #include <mm/frame.h>
@@ -23,6 +24,39 @@
 #include <graphics/components/button.h>
 
 bool winRD_lock = false;
+
+static bool clip_window_region(WINDOW_HANDLE *handle, uint32_t *x, uint32_t *y, uint32_t *width, uint32_t *height,
+                               int *base_x, int *base_y, int *xsize_out)
+{
+    if (handle == NULL || handle->WindowNodePtr == NULL || handle->WindowNodePtr->w_sheet == NULL) return false;
+
+    int xsize = getXsize(sht_img, handle->WindowNodePtr->w_sheet);
+    int ysize = getYsize(sht_img, handle->WindowNodePtr->w_sheet);
+    int content_x = 0;
+    int content_y = 0;
+    int content_w = xsize;
+    int content_h = ysize;
+
+    if (handle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        content_x = 12;
+        content_y = 27;
+        content_w -= 24;
+        content_h -= 47;
+    }
+
+    if (content_w <= 0 || content_h <= 0) return false;
+    if (*x >= (uint32_t)content_w || *y >= (uint32_t)content_h) return false;
+
+    if (*width > (uint32_t)(content_w - (int)*x)) *width = (uint32_t)(content_w - (int)*x);
+    if (*height > (uint32_t)(content_h - (int)*y)) *height = (uint32_t)(content_h - (int)*y);
+    if (*width == 0 || *height == 0) return false;
+
+    *base_x = content_x;
+    *base_y = content_y;
+    *xsize_out = xsize;
+    return true;
+}
 
 /*
  *
@@ -69,7 +103,9 @@ int do_xapi_SetWindowTitle(uint64_t handle, uint64_t str)
 int do_xapi_CloseWindow(uint64_t handle)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    if (WindowHandle == NULL || WindowHandle->WindowNodePtr == NULL) return false;
     delete_window(xwmii, sht_img, WindowHandle->WindowNodePtr);
+    WindowHandle->WindowNodePtr = NULL;
 
     return true;
 }
@@ -314,30 +350,19 @@ void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width,
     WINDOW_HANDLE    *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER_WOA *buf          = (SHEET_BUFFER_WOA *)buffer;
     SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int               xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int               ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    int               xsize        = 0;
+    int               base_x       = 0;
+    int               base_y       = 0;
+    if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    for (int wy = 0; wy < (int)height; wy++)
     {
-        for (int wy = 0; wy < height; wy++)
+        SHEET_BUFFER_WOA *dst_row = &buf[wy * width];
+        SHEET_BUFFER *src_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
+        for (int wx = 0; wx < (int)width; wx++)
         {
-            for (int wx = 0; wx < width; wx++)
-            {
-                buf[wy * width + wx].r = src[(wy + y + 27) * xsize + (wx + x + 12)].r;
-                buf[wy * width + wx].g = src[(wy + y + 27) * xsize + (wx + x + 12)].g;
-                buf[wy * width + wx].b = src[(wy + y + 27) * xsize + (wx + x + 12)].b;
-            }
-        }
-    }
-    else
-    {
-        for (int wy = 0; wy < height; wy++)
-        {
-            for (int wx = 0; wx < width; wx++)
-            {
-                buf[wy * width + wx].r = src[(wy + y) * xsize + (wx + x)].r;
-                buf[wy * width + wx].g = src[(wy + y) * xsize + (wx + x)].g;
-                buf[wy * width + wx].b = src[(wy + y) * xsize + (wx + x)].b;
-            }
+            dst_row[wx].r = src_row[wx].r;
+            dst_row[wx].g = src_row[wx].g;
+            dst_row[wx].b = src_row[wx].b;
         }
     }
 }
@@ -347,32 +372,20 @@ void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     WINDOW_HANDLE    *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER_WOA *buf          = (SHEET_BUFFER_WOA *)buffer;
     SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int               xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int               ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    int               xsize        = 0;
+    int               base_x       = 0;
+    int               base_y       = 0;
+    if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    for (int wy = 0; wy < (int)height; wy++)
     {
-        for (int wy = 0; wy < height; wy++)
+        SHEET_BUFFER_WOA *src_row = &buf[wy * width];
+        SHEET_BUFFER *dst_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
+        for (int wx = 0; wx < (int)width; wx++)
         {
-            for (int wx = 0; wx < width; wx++)
-            {
-                src[(wy + y + 27) * xsize + (wx + x + 12)].r = buf[wy * width + wx].r;
-                src[(wy + y + 27) * xsize + (wx + x + 12)].g = buf[wy * width + wx].g;
-                src[(wy + y + 27) * xsize + (wx + x + 12)].b = buf[wy * width + wx].b;
-                src[(wy + y + 27) * xsize + (wx + x + 12)].a = 255;
-            }
-        }
-    }
-    else
-    {
-        for (int wy = 0; wy < height; wy++)
-        {
-            for (int wx = 0; wx < width; wx++)
-            {
-                src[(wy + y) * xsize + (wx + x)].r = buf[wy * width + wx].r;
-                src[(wy + y) * xsize + (wx + x)].g = buf[wy * width + wx].g;
-                src[(wy + y) * xsize + (wx + x)].b = buf[wy * width + wx].b;
-                src[(wy + y) * xsize + (wx + x)].a = 255;
-            }
+            dst_row[wx].r = src_row[wx].r;
+            dst_row[wx].g = src_row[wx].g;
+            dst_row[wx].b = src_row[wx].b;
+            dst_row[wx].a = 255;
         }
     }
 }
@@ -382,27 +395,15 @@ void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER  *buf          = (SHEET_BUFFER *)buffer;
     SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    int            xsize        = 0;
+    int            base_x       = 0;
+    int            base_y       = 0;
+    if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    for (int wy = 0; wy < (int)height; wy++)
     {
-        for (int wy = 0; wy < height; wy++)
-        {
-            for (int wx = 0; wx < width; wx++)
-            {
-                buf[wy * width + wx] = src[(wy + y + 27) * xsize + (wx + x + 12)];
-            }
-        }
-    }
-    else
-    {
-        for (int wy = 0; wy < height; wy++)
-        {
-            for (int wx = 0; wx < width; wx++)
-            {
-                buf[wy * width + wx] = src[(wy + y) * xsize + (wx + x)];
-            }
-        }
+        SHEET_BUFFER *dst_row = &buf[wy * width];
+        SHEET_BUFFER *src_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
+        memcpy(dst_row, src_row, (size_t)width * sizeof(SHEET_BUFFER));
     }
 }
 
@@ -411,27 +412,15 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     SHEET_BUFFER  *buf          = (SHEET_BUFFER *)buffer;
     SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            xsize        = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            ysize        = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    int            xsize        = 0;
+    int            base_x       = 0;
+    int            base_y       = 0;
+    if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    for (int wy = 0; wy < (int)height; wy++)
     {
-        for (int wy = 0; wy < height; wy++)
-        {
-            for (int wx = 0; wx < width; wx++)
-            {
-                src[(wy + y + 27) * xsize + (wx + x + 12)] = buf[wy * width + wx];
-            }
-        }
-    }
-    else
-    {
-        for (int wy = 0; wy < height; wy++)
-        {
-            for (int wx = 0; wx < width; wx++)
-            {
-                src[(wy + y) * xsize + (wx + x)] = buf[wy * width + wx];
-            }
-        }
+        SHEET_BUFFER *dst_row = &src[(wy + y + base_y) * xsize + (x + base_x)];
+        SHEET_BUFFER *src_row = &buf[wy * width];
+        memcpy(dst_row, src_row, (size_t)width * sizeof(SHEET_BUFFER));
     }
 }
 
@@ -452,11 +441,85 @@ int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x1;
     int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y1;
-    int            ex           = getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x2;
-    int            ey           = getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y2;
+    int            ex           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x2;
+    int            ey           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y2;
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
+}
+
+int xapi_doDrawSvg(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t svg_text, uint64_t enable_trans)
+{
+    WINDOW_HANDLE *window_handle = (WINDOW_HANDLE *)(handle);
+    const char    *svg_string    = (const char *)svg_text;
+    if (!window_handle || !window_handle->WindowNodePtr || !window_handle->WindowNodePtr->w_sheet || !svg_string)
+    {
+        return -1;
+    }
+    if (width == 0) { return -1; }
+
+    SHEET *sheet = found_sheet_byid(sht_img, window_handle->WindowNodePtr->w_sheet);
+    if (!sheet) { return -1; }
+
+    int content_x = 0;
+    int content_y = 0;
+    int content_w = (int)sheet->width;
+    int content_h = (int)sheet->height;
+
+    if (window_handle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        content_x = 12;
+        content_y = 27;
+        content_w -= 24;
+        content_h -= 47;
+    }
+
+    if (content_w <= 0 || content_h <= 0) { return -1; }
+    if (x >= (uint32_t)content_w || y >= (uint32_t)content_h) { return -1; }
+
+    uint32_t max_width = (uint32_t)(content_w - (int)x);
+    if (width > max_width) { width = max_width; }
+    if (width == 0) { return -1; }
+
+    return xapi_drawSvgBySheet(sht_img, window_handle->WindowNodePtr->w_sheet, (int)x + content_x, (int)y + content_y,
+                              (int)width, svg_string, enable_trans != 0);
+}
+
+int xapi_doDrawFA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t name, uint64_t enable_trans)
+{
+    WINDOW_HANDLE *window_handle = (WINDOW_HANDLE *)(handle);
+    const char    *fa_name       = (const char *)name;
+    if (!window_handle || !window_handle->WindowNodePtr || !window_handle->WindowNodePtr->w_sheet || !fa_name)
+    {
+        return -1;
+    }
+    if (width == 0) { return -1; }
+
+    SHEET *sheet = found_sheet_byid(sht_img, window_handle->WindowNodePtr->w_sheet);
+    if (!sheet) { return -1; }
+
+    int content_x = 0;
+    int content_y = 0;
+    int content_w = (int)sheet->width;
+    int content_h = (int)sheet->height;
+
+    if (window_handle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        content_x = 12;
+        content_y = 27;
+        content_w -= 24;
+        content_h -= 47;
+    }
+
+    if (content_w <= 0 || content_h <= 0) { return -1; }
+    if (x >= (uint32_t)content_w || y >= (uint32_t)content_h) { return -1; }
+
+    uint32_t max_width = (uint32_t)(content_w - (int)x);
+    if (width > max_width) { width = max_width; }
+    if (width == 0) { return -1; }
+
+    return xapi_drawFABySheet(sht_img, window_handle->WindowNodePtr->w_sheet, (int)x + content_x, (int)y + content_y,
+                              (int)width, fa_name, enable_trans != 0);
 }
 
 int do_xapi_SetMsgProc(uint64_t handle, uint64_t func)

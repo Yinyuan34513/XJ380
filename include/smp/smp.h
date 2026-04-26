@@ -39,6 +39,8 @@ struct PROCESSOR_INFO
     tcb_t               current_task;    // 当前核心运行的任务
     lock_queue         *scheduler_queue; // 该核心的调度队列
     lock_node          *iter_node;       // 该核心当前调度迭代的节点
+    uint64_t            syscall_user_rsp;
+    uint64_t            syscall_user_rax;
 };
 
 struct XSK_SMP_INFO

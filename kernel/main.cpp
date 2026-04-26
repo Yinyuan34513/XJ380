@@ -2,6 +2,7 @@
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
 #include <device.h>
+#include <cpu/fsgsbase.h>
 #include <dlinker.h>
 #include <efi/boot.h>
 #include <efi/efi.h>
@@ -18,10 +19,12 @@
 #include <hda/hda.h>
 #include <hda/pcspk.h>
 #include <krlibc.h>
+#include <mm/alloc/alloc.h>
 #include <mm/frame.h>
 #include <nvme/nvme.h>
 #include <pci/pci.h>
 #include <pipe.h>
+#include <power.h>
 #include <proto.hpp>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
@@ -32,6 +35,8 @@
 #include <task/pcb.h>
 #include <ttf.h>
 #include <user/runfile.h>
+#include <hda/vsound.h>
+#include <hda/hda.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -45,41 +50,26 @@ extern XSK_SMP_INFO *xsi;
 size_t               tid;
 #define NULL 0
 const FrameBufferConfig *fbc_addr;
-EFI_SYSTEM_TABLE        *ST;
-BOOT_CONFIG             *BC;
 uint64_t                *saved_mtrrs;
 void                    *temp_stack[MAX_CPU_NUM];
 bool                     no_interrupt = false; // 为true时代表严禁开启中断
 extern spin_t            fb_print_lock;
 
 extern bool allow_to_flush;
+extern void ahci_set_accel(bool enabled);
+extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
 
-void test_task()
-{
-    uint64_t ret;
-    uint64_t syscall_number = 1145;
-    uint64_t arg1;
-    uint64_t arg2;
-    uint64_t arg3;
-    uint64_t arg4;
-    uint64_t arg5;
-    uint64_t arg6;
-    __asm__ __volatile__("movq %2, %%rdi\n\t"
-                         "movq %3, %%rsi\n\t"
-                         "movq %4, %%rdx\n\t"
-                         "movq %5, %%r10\n\t"
-                         "movq %6, %%r8\n\t"
-                         "movq %7, %%r9\n\t"
-                         "syscall\n\t"
-                         : "=a"(ret)
-                         : "a"(syscall_number), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4), "r"(arg5), "r"(arg6)
-                         : "memory", "rdi", "rsi", "rdx", "r10", "r8", "r9");
+extern const uint8_t _binary___graphics_logo_xj380_2_png_start;
+extern const uint8_t _binary___graphics_logo_xj380_2_png_end;
 
-    while (1)
-        ;
-}
+extern "C" unsigned char *stbi_load_from_memory(const unsigned char *buffer, int len, int *x, int *y,
+                                                 int *channels_in_file, int desired_channels);
+extern "C" void           stbi_image_free(void *retval_from_stbi_load);
+extern "C" int            stbir_resize_uint8(const unsigned char *input_pixels, int input_w, int input_h,
+                                             int input_stride_in_bytes, unsigned char *output_pixels, int output_w,
+                                             int output_h, int output_stride_in_bytes, int num_channels);
 
 void init_cpu()
 {
@@ -112,6 +102,8 @@ int clock_hour_offset = 0;
 
 void init_time()
 {
+    if (current_user == NULL) return;
+
     char setfile_path[256];
     memset(setfile_path, 0, 256);
     strcat(setfile_path, "/users/");
@@ -119,24 +111,146 @@ void init_time()
     strcat(setfile_path, "/settings.dat");
     vfs_node_t v = vfs_open(setfile_path);
     if (!v) return;
-    SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)malloc(v->size);
-    if (!sdff) return;
-    vfs_read(v, sdff, 0, v->size);
 
-    clock_hour_offset = sdff->ClockHourOffset;
+    SettingsDataFileFormat sdff;
+    memset(&sdff, 0, sizeof(sdff));
+    size_t read_size = v->size < sizeof(sdff) ? (size_t)v->size : sizeof(sdff);
+    if (read_size == 0 || vfs_read(v, &sdff, 0, read_size) == -1)
+    {
+        vfs_close(v);
+        return;
+    }
+
+    clock_hour_offset = sdff.ClockHourOffset;
 
     if (clock_hour_offset < 0)
         clock_hour_offset = 0;
 
     vfs_close(v);
-    free(sdff);
+}
+
+static void draw_startup_screen(SHEET_INFO *shtinf, SHEET *desktop_sheet)
+{
+    if (shtinf == NULL || desktop_sheet == NULL) return;
+
+    // 开机启动界面：纯色背景 + 居中 XJ380 Logo
+    draw_rect(shtinf, desktop_sheet, 0, 0, shtinf->scrx - 1, shtinf->scry - 1, {0x0d, 0x13, 0x24, 0xff});
+
+    int logo_w = (int)(shtinf->scrx * 0.26f);
+    if (logo_w < 160) logo_w = 160;
+    if (logo_w > 420) logo_w = 420;
+    int logo_h = logo_w / 2;
+
+    int logo_x = (shtinf->scrx - logo_w) / 2;
+    int logo_y = (shtinf->scry - logo_h) / 2;
+
+    PrintPicture_blend(shtinf, desktop_sheet, logo_x, logo_y, logo_w, logo_h, (char *)"/system/xj380_2.png");
+
+    refresh_sheet(shtinf);
+    flush_sheet_damage_queue(shtinf);
+}
+
+static void draw_boot_progress_logo(const FrameBufferConfig &fbc)
+{
+    // 早期启动阶段（KernelMain 进度条）显示真实 XJ380 Logo
+    rect(fbc, 0, 0, (int)fbc.horizontal_resolution, (int)fbc.vertical_resolution, {0x0d, 0x13, 0x24});
+
+    const unsigned char *png      = (const unsigned char *)&_binary___graphics_logo_xj380_2_png_start;
+    const unsigned char *png_end  = (const unsigned char *)&_binary___graphics_logo_xj380_2_png_end;
+    size_t               png_bytes = (size_t)(png_end - png);
+    if (png_bytes == 0) {
+        WriteString(fbc, ((int)fbc.horizontal_resolution - 40) / 2, ((int)fbc.vertical_resolution - 16) / 2,
+                    "XJ380", {0xff, 0xff, 0xff});
+        return;
+    }
+
+    int src_w = 0, src_h = 0, src_c = 0;
+    unsigned char *src_rgba = stbi_load_from_memory(png, (int)png_bytes, &src_w, &src_h, &src_c, 4);
+    if (src_rgba == NULL || src_w <= 0 || src_h <= 0) {
+        if (src_rgba) stbi_image_free(src_rgba);
+        WriteString(fbc, ((int)fbc.horizontal_resolution - 40) / 2, ((int)fbc.vertical_resolution - 16) / 2,
+                    "XJ380", {0xff, 0xff, 0xff});
+        return;
+    }
+
+    int logo_w = (int)(fbc.horizontal_resolution * 0.30f);
+    if (logo_w < 180) logo_w = 180;
+    if (logo_w > 520) logo_w = 520;
+    int logo_h = (int)(((int64_t)logo_w * src_h) / src_w);
+
+    int logo_x = ((int)fbc.horizontal_resolution - logo_w) / 2;
+    int logo_y = ((int)fbc.vertical_resolution - logo_h) / 2 - 8;
+    if (logo_y < 16) logo_y = 16;
+
+    unsigned char *blit_rgba = src_rgba;
+    if (logo_w != src_w || logo_h != src_h) {
+        unsigned char *scaled = (unsigned char *)malloc((size_t)logo_w * logo_h * 4);
+        if (scaled != NULL &&
+            stbir_resize_uint8(src_rgba, src_w, src_h, 0, scaled, logo_w, logo_h, 0, 4) != 0) {
+            blit_rgba = scaled;
+        } else if (scaled != NULL) {
+            free(scaled);
+            logo_w = src_w;
+            logo_h = src_h;
+            logo_x = ((int)fbc.horizontal_resolution - logo_w) / 2;
+            logo_y = ((int)fbc.vertical_resolution - logo_h) / 2 - 8;
+            if (logo_y < 16) logo_y = 16;
+        }
+    }
+
+    for (int y = 0; y < logo_h; ++y)
+    {
+        int dst_y = logo_y + y;
+        if (dst_y < 0 || dst_y >= (int)fbc.vertical_resolution) continue;
+        for (int x = 0; x < logo_w; ++x)
+        {
+            int dst_x = logo_x + x;
+            if (dst_x < 0 || dst_x >= (int)fbc.horizontal_resolution) continue;
+
+            const uint8_t *src = &blit_rgba[(y * logo_w + x) * 4];
+            uint8_t        sa  = src[3];
+            if (sa == 0) continue;
+
+            uint8_t *dst = PixelAt(dst_x, dst_y, fbc);
+            uint8_t  dr, dg, db;
+            if (fbc.pixel_format == PixelFormat::kRGBR) {
+                dr = dst[0];
+                dg = dst[1];
+                db = dst[2];
+            } else {
+                db = dst[0];
+                dg = dst[1];
+                dr = dst[2];
+            }
+
+            uint8_t nr = (uint8_t)(((uint16_t)src[0] * sa + (uint16_t)dr * (255 - sa)) / 255);
+            uint8_t ng = (uint8_t)(((uint16_t)src[1] * sa + (uint16_t)dg * (255 - sa)) / 255);
+            uint8_t nb = (uint8_t)(((uint16_t)src[2] * sa + (uint16_t)db * (255 - sa)) / 255);
+
+            if (fbc.pixel_format == PixelFormat::kRGBR) {
+                dst[0] = nr;
+                dst[1] = ng;
+                dst[2] = nb;
+            } else {
+                dst[0] = nb;
+                dst[1] = ng;
+                dst[2] = nr;
+            }
+        }
+    }
+
+    if (blit_rgba != src_rgba) free(blit_rgba);
+    stbi_image_free(src_rgba);
+
+    WriteString(fbc, ((int)fbc.horizontal_resolution - 88) / 2, logo_y + logo_h + 14, "Starting...",
+                {0xb4, 0xc2, 0xdd});
 }
 
 void components_flusher()
 {
     while (true)
     {
-        if (allow_to_flush) break;
+        if (allow_to_flush && desktop_done) break;
     }
     write_serial_string("components flusher is running\n");
     while (true)
@@ -169,6 +283,7 @@ void components_flusher()
             }
         }
         if (ms_dec.need_flush) { process_mouse_info(); }
+        if (sht_img != NULL) { flush_sheet_damage_queue(sht_img); }
     }
 }
 
@@ -208,6 +323,7 @@ void desktop_flusher()
         &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
 
     init_ttf();
+    draw_startup_screen(&shtinf, desktop_ct_sheet);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 9, 7, {0x00, 0xa2, 0xe8}); // GUI好了来一下
 
@@ -290,14 +406,17 @@ void desktop_flusher()
 
     mouse_ct_sheet_img = mouse_ct_sheet;
 
+    allow_to_flush = true;
     no_interrupt = false;
     enable_intr();
     enable_scheduler();
-    allow_to_flush = true;
 
+    write_serial_string("desktop: init_user begin\n");
     init_user();
-
+    write_serial_string("desktop: init_user done\n");
+    write_serial_string("desktop: init_xuls begin\n");
     init_xuls();
+    write_serial_string("desktop: init_xuls done\n");
     init_time();
 
     write_serial_string("user & settings initialized.\n");
@@ -309,6 +428,7 @@ void desktop_flusher()
     winRD_lock = true;
 
     refresh_sheet(&shtinf); // 刷新
+    flush_sheet_damage_queue(&shtinf);
 
     uint8_t k_input;
 
@@ -316,12 +436,23 @@ void desktop_flusher()
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 13 / 16;
 
-    tw_data           = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    tw_data = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
+    if (tw_data == NULL)
+    {
+        write_serial_string("timer widget allocation failed\n");
+        desktop_done = true;
+        goto skip_timer_widget_init;
+    }
+    memset(tw_data, 0, sizeof(TimerWidgetsData));
     tw_data->sht      = &shtinf;
     tw_data->ct_sheet = dock_ct_sheet;
     tw_data->scdx     = scdx;
+    time_read(&tw_data->time);
+    tw_data->old_time = tw_data->time;
 
     desktop_done = true;
+
+skip_timer_widget_init:
 
     delay_s_hp(1);
     
@@ -329,13 +460,13 @@ void desktop_flusher()
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/browser.elf", NULL, NULL);
+    // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
-    // calc_ttf_length("114514 测试", 10);
 
     while (1)
     {
@@ -385,6 +516,7 @@ void desktop_flusher()
             fonty += 16;
         }
 #endif
+        flush_sheet_damage_queue(&shtinf);
     }
 }
 #define KERNEL_HEAP_START 0xffffc00000000000
@@ -401,13 +533,21 @@ extern size_t   now_tid;
 extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
+extern int      socketfs_setup();
+extern int      dnsfs_setup();
+extern int      nmfs_setup();
+EFI_SYSTEM_TABLE *EFI_ST;
+BOOT_CONFIG *EFI_BC;
+
 extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
 {
     fbc_addr = &fbc;
-    (void)SystemTable; // 暂时不用
     no_interrupt = true;
     disable_intr();
     disable_scheduler();
+
+    EFI_ST = &SystemTable;
+    EFI_BC = &BootConfig;
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution), 7, {0xe6, 0xe6, 0xe6}); // 开机进度条
 
@@ -422,23 +562,53 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
     init_heap();
+    draw_boot_progress_logo(*fbc_addr);
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 
+    write_serial_string("BOOT: device_manager_init begin\n");
     device_manager_init();
+    write_serial_string("BOOT: device_manager_init done\n");
+    write_serial_string("BOOT: vfs_init begin\n");
     vfs_init();
+    write_serial_string("BOOT: vfs_init done\n");
+    write_serial_string("BOOT: fatfs_init begin\n");
     fatfs_init();
+    write_serial_string("BOOT: fatfs_init done\n");
+    write_serial_string("BOOT: devfs_setup begin\n");
     devfs_setup();
+    write_serial_string("BOOT: devfs_setup done\n");
 
+    write_serial_string("BOOT: pci_setup begin\n");
     pci_setup(BootConfig.MCFG);
+    write_serial_string("BOOT: pci_setup done\n");
+    write_serial_string("BOOT: pci_init begin\n");
     pci_init();
+    write_serial_string("BOOT: pci_init done\n");
+    write_serial_fmt("VM hint: %s\n", BootConfig.is_qemu == 1 ? "QEMU/BOCHS" : "generic/VMware/real hardware");
+    ahci_set_environment(BootConfig.is_qemu == 1);
+    write_serial_string("BOOT: ahci_setup begin\n");
     ahci_setup();
+    write_serial_string("BOOT: ahci_setup done\n");
+    ahci_set_accel(false);
+    write_serial_string("BOOT: nvme_setup begin\n");
     nvme_setup();
+    write_serial_string("BOOT: nvme_setup done\n");
+    
+    extern void ide_setup(void);
+    write_serial_string("BOOT: ide_setup begin\n");
+    ide_setup();
+    write_serial_string("BOOT: ide_setup done\n");
+    write_serial_string("BOOT: partition_init begin\n");
     partition_init();
+    write_serial_string("BOOT: partition_init done\n");
     // enable_intr();
 
     // disable_intr();
-    // hda_init();
+    // HDA 驱动现在会在初始化阶段自行完成注册，这里只需要启动探测即可。
+    center_mouse_cursor();
+    hda_init();
+    hda_regist();
     // sb16_init();
 
     keyboard_init();
@@ -457,7 +627,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_smp(BootConfig.MADT);
 
-    tcb_t idle_thread         = (tcb_t)malloc(sizeof(struct thread_control_block));
+    const size_t idle_alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
+    tcb_t idle_thread            = (tcb_t)aligned_alloc(16, idle_alloc_size);
+    if (idle_thread != NULL) memset(idle_thread, 0, sizeof(struct thread_control_block));
+    if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
@@ -471,8 +644,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
     idle_thread->cwd->refcount++;
+    save_fpu_context(&idle_thread->fpu_context);
 
     get_current_cpu()->current_task = idle_thread;
+    write_kgsbase((uint64_t)get_current_cpu());
 
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
@@ -482,6 +657,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     mount_root();
     pipefs_setup();
+    socketfs_setup();
+    dnsfs_setup();
+    nmfs_setup();
     stdio_init();
 
     signal_init();
@@ -509,7 +687,14 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
+    if (ahci_is_qemu_environment()) {
+        ahci_set_accel(true);
+    } else {
+        write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
+    }
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
+    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+
     // delay_s_hp(60);
 
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
@@ -524,15 +709,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     while (!desktop_done)
         cpu_relax();
 
-    no_interrupt = true;
-    close_interrupt;
-    disable_scheduler();
+    // no_interrupt = true;
+    // close_interrupt;
+    // disable_scheduler();
 
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
-
-    enable_scheduler();
-    open_interrupt;
-    no_interrupt = false;
+    // enable_scheduler();
+    // open_interrupt;
+    // no_interrupt = false;
 
     while (true)
     {

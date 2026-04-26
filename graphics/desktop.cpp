@@ -15,6 +15,7 @@
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <graphics/svg.h>
 #include <graphics/window/window.h>
 #include <hda/hda.h>
 #include <hda/pcspk.h>
@@ -37,6 +38,14 @@
 extern UserInfo *current_user;
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet);
+
+/*
+static const char *xapi_demoSvgCheck =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\">"
+    "<!--!Font Awesome Free v7.2.0 by @fontawesome - https://fontawesome.com License - "
+    "https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.-->"
+    "<path d=\"M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z\"/>"
+    "</svg>"; */
 
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
@@ -108,6 +117,13 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     init_dock(sht, dock_ct_sheet);
     init_shortcut_dock(sht, dock_ct_sheet);
     init_desktop_icon(sht, csheet);
+
+    int svg_demo_width  = 56;
+    int svg_demo_height = 64;
+    int svg_demo_x      = scrx - svg_demo_width - 28;
+    int svg_demo_y      = 34;
+    // xapi_drawSvgBySheet(sht, csheet, svg_demo_x, svg_demo_y, svg_demo_width,
+    //                                        xapi_demoSvgCheck, true);
 }
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
@@ -193,7 +209,7 @@ void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
     print_box_ttf(sht, csheet, (char *)"文件", BLACK, x1 + 32, 1, 10);
     print_box_ttf(sht, csheet, (char *)"设置", BLACK, x1 + 32 + 25 + 8, 1, 10);
     print_box_ttf(sht, csheet, (char *)"终端", BLACK, x1 + 32 + 25 + 8 + 25 + 9, 1, 10);
-    print_box_ttf(sht, csheet, (char *)"图形", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
+    print_box_ttf(sht, csheet, (char *)"进程", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9, 1, 10);
     print_box_ttf(sht, csheet, (char *)"关于", BLACK, x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8, 1, 10);
     // PrintString(sht, ct_sheet, x1 + 32, 4, "Files", BLACK);
     // PrintString(sht, ct_sheet, x1 + 32 + 40 + 8, 4, "Settings", BLACK);
@@ -434,12 +450,12 @@ void unregister_task_dock(WINDOWLSP window)
     spin_lock(&task_dock_lock);
     int   i       = 0;
     TDB_t front_p = first_dock_block;
-    TDB_t front_p2;
-    while (true)
+    TDB_t front_p2 = NULL;
+    while (front_p != NULL)
     {
-        if (front_p->windowls == window)
+        if (front_p->mcount && front_p->windowls == window)
         {
-            front_p2->next = front_p->next;
+            if (front_p2 != NULL) front_p2->next = front_p->next;
             free(front_p);
 
             if (have_full_screen_app) break;
@@ -452,7 +468,7 @@ void unregister_task_dock(WINDOWLSP window)
             refresh_part_sheet(sht_img, task_dock_index_bx + 80 * count, sht_img->scry - 24 - 63,
                                task_dock_index_bx + 80 * count + 64, sht_img->scry);
 
-            if (front_p2->next == NULL) break;
+            if (front_p2 == NULL || front_p2->next == NULL) break;
 
             count++;
             draw_rect(sht_img, dock_ct_sheet, task_dock_index_bx + 80 * count, sht_img->scry - 48,
@@ -464,7 +480,6 @@ void unregister_task_dock(WINDOWLSP window)
 
             break;
         }
-        if (front_p->next == NULL) { break; }
         if (front_p->mcount) { i++; }
         front_p2 = front_p;
         front_p  = front_p->next;
@@ -568,10 +583,11 @@ void draw_logo_menu()
 {
     if (have_full_screen_app) return;
     int x1 = sht_img->scrx * 0.1875;
-    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, DOCK_COL);
-    print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 28, 10);
-    print_box_ttf(sht_img, dock_ct_sheet, "刷新", {0,0,0,255}, x1 + 8, 50, 10);
-    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 93, DOCK_COL);
+    print_box_ttf(sht_img, dock_ct_sheet, "重启", {0,0,0,255}, x1 + 8, 28, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, "关机", {0,0,0,255}, x1 + 8, 50, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, "刷新", {0,0,0,255}, x1 + 8, 72, 10);
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 94);
     logo_menu_just_born = true;
     logo_menu_is_open = true;
 }
@@ -586,7 +602,7 @@ void delete_logo_menu()
     }
 
     int x1 = sht_img->scrx * 0.1875;
-    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 71, {0, 0, 0, 0});
-    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 72);
+    draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 93, {0, 0, 0, 0});
+    refresh_part_sheet(sht_img, x1, 28, x1 + 100, 94);
     logo_menu_is_open = false;
 }

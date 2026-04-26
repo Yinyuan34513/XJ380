@@ -77,6 +77,7 @@ void wsod_system_kernel_error(struct X64_REGS *regs, uint64_t error_code)
 void wsod_general_protection(struct X64_REGS *regs, uint64_t error_code)
 {
     disable_scheduler();
+    serial_show_screen_overlay_now();
 
     write_serial_string("Fault Thread Name: ");
     write_serial_string(get_current_task()->name);
@@ -123,5 +124,6 @@ void wsod_debug(struct X64_REGS *regs, uint64_t error_code)
 
 void default_isr(struct X64_REGS *regs, uint64_t error_code)
 {
-    // 啥也没有。
+    // 啥也没有。(*最好是)
+    send_eoi();
 }

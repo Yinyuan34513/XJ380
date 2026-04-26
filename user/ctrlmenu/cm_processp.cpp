@@ -33,7 +33,21 @@ void process_left_key(int x, int y)
             if (y > 196 && y < 234) { setting_cindex = 3; }
             if (y > 242 && y < 272) { setting_cindex = 4; }
             if (y > 280 && y < 310) { setting_cindex = 5; }
-            draw_background();
+            draw_background_body();
+        }
+        else if (setting_cindex == 1)
+        {
+            int memory_x1 = win_width / 10 * 3 + 402;
+            int memory_y1 = 248;
+            int memory_x2 = memory_x1 + 120;
+            int memory_y2 = memory_y1 + 20;
+
+            if (x >= memory_x1 && x <= memory_x2 &&
+                y >= memory_y1 && y <= memory_y2)
+            {
+                about_memory_show_mb = !about_memory_show_mb;
+                draw_background_body();
+            }
         }
     }
 }

@@ -13,3 +13,10 @@ uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, ui
                          : "rcx", "r11", "memory");
     return ret;
 }
+
+extern "C" uint64_t __stack_chk_guard = 0x5858333830475541ULL;
+
+extern "C" __attribute__((noreturn)) void __stack_chk_fail(void)
+{
+    for (;;) {}
+}

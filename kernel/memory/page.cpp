@@ -1,4 +1,5 @@
 #include <cpu/lock.h>
+#include <cpu/fsgsbase.h>
 #include <cpu/longm.h>
 #include <cpu/regio.h>
 #include <dlinker.h>
@@ -67,6 +68,7 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
     close_interrupt;
     disable_scheduler();
+    tcb_t current_task = get_current_task();
     uint64_t faulting_address;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_address));
 
@@ -78,10 +80,10 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
                                                 : "Unknown";
 
     // 长大后在学习吧！
-    if (get_current_task() != NULL)
+    if (current_task != NULL)
     {
-        pcb_t current_proc = get_current_task()->parent_group;
-        if (current_proc->task_level == TASK_APPLICATION_LEVEL)
+        pcb_t current_proc = current_task->parent_group;
+        if (current_proc != NULL && current_proc->task_level == TASK_APPLICATION_LEVEL)
         {
             errno_t status = lazy_tryalloc(current_proc, faulting_address);
             if (status != 0) { goto err; }
@@ -94,6 +96,7 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
         }
     }
 err:;
+    serial_show_screen_overlay_now();
     write_serial_string("Page fault virtual address (cr2): ");
     write_serial_hex(faulting_address);
     write_serial_string(" ");
@@ -103,9 +106,22 @@ err:;
     write_serial_string("Type: ");
     write_serial_string(error_msg);
     write_serial_string("\n");
+    write_serial_fmt("PF cpu lapic=%d gs=0x%x kgs=0x%x current_cpu=0x%x\n",
+                     lapic_id(),
+                     read_gsbase(),
+                     read_kgsbase(),
+                     (uint64_t)get_current_cpu());
 
-    write_serial_fmt("Fault Thread Name: %s 0x%x\n", get_current_task()->name, (uint64_t)get_current_task());
-    write_serial_fmt("TID: %d\n", get_current_task()->tid);
+    if (current_task != NULL)
+    {
+        write_serial_fmt("Fault Thread Name: %s 0x%x\n", current_task->name, (uint64_t)current_task);
+        write_serial_fmt("TID: %d\n", current_task->tid);
+    }
+    else
+    {
+        write_serial_string("Fault Thread Name: <none>\n");
+        write_serial_string("TID: <none>\n");
+    }
 
     backtrace(frame);
 
@@ -133,6 +149,8 @@ void page_table_clear(page_table_t *table)
 
 bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *out_flags)
 {
+    if (directory == NULL || directory->table == NULL || out_flags == NULL) return false;
+
     uint64_t l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t l3_index = (((addr >> 30)) & 0x1FF);
     uint64_t l2_index = (((addr >> 21)) & 0x1FF);
@@ -147,7 +165,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pdpt = (page_table_t *)(pml4->entries[l4_index].value & PAGE_MASK);
+    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PAGE_MASK);
+    if (pdpt == NULL) return false;
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
     if (pdpt->entries[l3_index].value & PTE_HUGE)
     {
@@ -155,7 +174,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pd = (page_table_t *)(pdpt->entries[l3_index].value & PAGE_MASK);
+    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PAGE_MASK);
+    if (pd == NULL) return false;
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
     if (pd->entries[l2_index].value & PTE_HUGE)
     {
@@ -163,7 +183,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pt = (page_table_t *)(pd->entries[l2_index].value & PAGE_MASK);
+    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PAGE_MASK);
+    if (pt == NULL) return false;
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
     *out_flags = pt->entries[l1_index].value & 0xFFF;
@@ -172,6 +193,8 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
 
 bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_t new_flags)
 {
+    if (directory == NULL || directory->table == NULL) return false;
+
     page_table_t *pml4     = directory->table;
     uint64_t      l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t      l3_index = (((addr >> 30)) & 0x1FF);
@@ -186,7 +209,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
         return true;
     }
 
-    page_table_t *pdpt = (page_table_t *)(pml4->entries[l4_index].value & PAGE_MASK);
+    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PAGE_MASK);
+    if (pdpt == NULL) return false;
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
     if (pdpt->entries[l3_index].value & PTE_HUGE)
     {
@@ -195,7 +219,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
         return true;
     }
 
-    page_table_t *pd = (page_table_t *)(pdpt->entries[l3_index].value & PAGE_MASK);
+    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PAGE_MASK);
+    if (pd == NULL) return false;
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
     if (pd->entries[l2_index].value & PTE_HUGE)
     {
@@ -204,7 +229,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
         return true;
     }
 
-    page_table_t *pt = (page_table_t *)(pd->entries[l2_index].value & PAGE_MASK);
+    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PAGE_MASK);
+    if (pt == NULL) return false;
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
     uint64_t phys               = pt->entries[l1_index].value & PAGE_MASK;
@@ -257,13 +283,27 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
         uint64_t      frame          = alloc_frames(1);
         page_table_t *new_page_table = (page_table_t *)phys_to_virt(frame);
         memcpy(new_page_table, source_table->entries, PAGE_SIZE);
+        for (int i = 0; i < 512; i++)
+        {
+            uint64_t entry = new_page_table->entries[i].value;
+            if ((entry & PTE_PRESENT) && (entry & PTE_FRAME_ALLOCATED))
+            {
+                address_ref(entry & PTE_ADDR_MASK);
+            }
+        }
         return new_page_table;
     }
 
     uint64_t      phy_frame = alloc_frames(1);
     page_table_t *new_table = (page_table_t *)(phys_to_virt(phy_frame));
+    page_table_clear(new_table);
     for (uint64_t i = 0; i < (all_copy ? 512 : (level == 4 ? 256 : 512)); i++)
     {
+        if (!(source_table->entries[i].value & PTE_PRESENT))
+        {
+            new_table->entries[i].value = 0;
+            continue;
+        }
         if (source_table->entries[i].value & PTE_HUGE)
         {
             // 指向一块2M的页
@@ -287,6 +327,15 @@ static void free_page_table_recursive(page_table_t *table, int level)
     if (table == NULL) return;
     if (level == 0)
     {
+        for (int i = 0; i < 512; i++)
+        {
+            uint64_t entry = table->entries[i].value;
+            if ((entry & PTE_PRESENT) && (entry & PTE_FRAME_ALLOCATED))
+            {
+                free_frame(entry & PTE_ADDR_MASK);
+                table->entries[i].value = 0;
+            }
+        }
         free_frame((uint64_t)virt_to_phys((uint64_t)table));
         return;
     }
@@ -461,7 +510,7 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     }
 
     // 获取PDPT表
-    page_table_t      *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PAGE_MASK);
+    page_table_t      *pdpt_table = (page_table_t *)phys_to_virt(pml4_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pdpt_entry = pdpt_table->entries[pdp_index];
 
     // 检查PDPT条目是否存在
@@ -470,12 +519,12 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     // 如果PDPT条目指向的是1GB大页
     if (ARCH_PT_IS_LARGE(pdpt_entry.value))
     {
-        uint64_t base_addr = pdpt_entry.value & ~((1UL << 30) - 1);
+        uint64_t base_addr = pdpt_entry.value & (PTE_ADDR_MASK & ~((1ULL << 30) - 1));
         return base_addr + (virtual_address & ((1UL << 30) - 1));
     }
 
     // 获取PD表
-    page_table_t      *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PAGE_MASK);
+    page_table_t      *pd_table = (page_table_t *)phys_to_virt(pdpt_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pd_entry = pd_table->entries[pd_index];
 
     // 检查PD条目是否存在
@@ -484,19 +533,19 @@ uint64_t translate_address(page_directory_t *page_dir, uint64_t virtual_address)
     // 如果PD条目指向的是2MB大页
     if (ARCH_PT_IS_LARGE(pd_entry.value))
     {
-        uint64_t base_addr = pd_entry.value & ~((1UL << 21) - 1);
+        uint64_t base_addr = pd_entry.value & (PTE_ADDR_MASK & ~((1ULL << 21) - 1));
         return base_addr + (virtual_address & ((1UL << 21) - 1));
     }
 
     // 获取PT表
-    page_table_t      *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PAGE_MASK);
+    page_table_t      *pt_table = (page_table_t *)phys_to_virt(pd_entry.value & PTE_ADDR_MASK);
     page_table_entry_t pt_entry = pt_table->entries[pt_index];
 
     // 检查PT条目是否存在
     if (!(pt_entry.value & PTE_PRESENT)) { return 0; }
 
     // 返回4KB页的物理地址
-    return (pt_entry.value & PAGE_MASK) + (virtual_address & ~PAGE_MASK);
+    return (pt_entry.value & PTE_ADDR_MASK) + (virtual_address & ~PAGE_MASK);
 }
 
 void switch_xsk_page_directory()

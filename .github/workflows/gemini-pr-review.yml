@@ -1,0 +1,110 @@
+name: Gemini PR Review
+
+on:
+  pull_request:
+    branches:
+      - "**"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: string
+      focus:
+        description: Optional review focus, e.g. "重点看网络和并发"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.draft == false
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        github.event.comment.user.type != 'Bot' &&
+        (
+          startsWith(github.event.comment.body, '/gemini review') ||
+          startsWith(github.event.comment.body, '/gemini-review')
+        ) &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve inputs
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_PR: ${{ github.event.issue.number }}
+          PR_FROM_INPUT: ${{ inputs.pr_number }}
+          FOCUS_FROM_INPUT: ${{ inputs.focus }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            pr_number="${PR_FROM_EVENT}"
+            focus=""
+          elif [ "${EVENT_NAME}" = "issue_comment" ]; then
+            pr_number="${COMMENT_PR}"
+            case "${COMMENT_BODY}" in
+              "/gemini review"*)
+                focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini review[[:space:]]*@@')"
+                ;;
+              "/gemini-review"*)
+                focus="$(printf '%s' "${COMMENT_BODY}" | sed -E 's@^/gemini-review[[:space:]]*@@')"
+                ;;
+              *)
+                echo "Unsupported comment command: ${COMMENT_BODY}" >&2
+                exit 1
+                ;;
+            esac
+          elif [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            pr_number="${PR_FROM_INPUT}"
+            focus="${FOCUS_FROM_INPUT}"
+          else
+            echo "Unsupported event: ${EVENT_NAME}" >&2
+            exit 1
+          fi
+
+          {
+            echo "pr_number=${pr_number}"
+            echo "focus<<EOF"
+            printf '%s\n' "${focus}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Run Gemini PR review
+        uses: ./.github/actions/gemini-pr-review
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          pr-number: ${{ steps.resolve.outputs.pr_number }}
+          focus: ${{ steps.resolve.outputs.focus }}

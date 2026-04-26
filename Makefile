@@ -14,7 +14,7 @@ DEBUG_FLAG = -s -S
 endif
 
 ifeq ($(SUDO), 1)
-SUDO_CMD = sudo
+SUDO_CMD = sudo -E env DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY)
 endif
 
 ifeq ($(KVM), 1)
@@ -24,8 +24,17 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+KMOD_DIR := kmod
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -net none -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci -serial file:serial.log -device sb16 $(DEBUG_FLAG) -net nic
+# QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
+# not an X11 DISPLAY string like ":0".
+# Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
+# via SUDO_CMD when needed.
+DISPLAY_BACKEND ?= gtk
+USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
+AUDIO_BACKEND ?= sdl
+HDA_CODEC ?= hda-output
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?= 
 
@@ -48,10 +57,14 @@ NASM_OBJS := $(patsubst ./%.asm, ./$(BUILD_DIR)/%.o, $(NASM_FILES))
 ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
 C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
 CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
+KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
+BUILD_SETTINGS_HEADER := kernel/build_settings.h
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
 PWD := $(shell pwd)
+
+$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER)
 
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
@@ -98,17 +111,18 @@ $(BUILD_DIR)/%.o: %.cpp
 	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $<.clangd_template >> $<.clangd
 	@printf "\033[1;32m[Done]\033[0m $<.clangd was generated.\n"
 
-all: $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS) liballoc-x86_64.a
+all: $(KERNEL_OBJS) liballoc-x86_64.a
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c boot/bootlib.c
 
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
+	@$(OBJC) -I binary -O elf64-x86-64 ./graphics/logo/xj380_2.png ./graphics/logo/xj380_2.o
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(shell find ./out -name "*.o") ./font/hankaku.o liballoc-x86_64.a
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
-	@$(MAKE) -C mod
+	@$(MAKE) -C $(KMOD_DIR)
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
@@ -137,7 +151,7 @@ vdisk: all
 # You must execute the following command with sudo privileges, that's not good...
 	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((258048*512/1024))
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
@@ -148,6 +162,7 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
 	@mkdir -p $(BUILD_DIR)/XJ380/lib/modules
+	@mkdir -p $(BUILD_DIR)/XJ380/system/resources
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -163,11 +178,14 @@ vdisk: all
 
 	@cp -a $(BUILD_DIR)/texter.elf $(BUILD_DIR)/XJ380/system
 
+	@cp -a $(BUILD_DIR)/taskmgr.elf $(BUILD_DIR)/XJ380/system
+
 	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/system
 
 	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
@@ -179,10 +197,13 @@ vdisk: all
 	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
 
 	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system
+# 	@cp -a ./test.wav $(BUILD_DIR)/XJ380/system
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
 	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
+
+	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 	
 # temp test (remember to delete)
 	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop

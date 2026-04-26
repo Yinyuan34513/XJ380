@@ -28,7 +28,7 @@ FILE *fopen(const char *filename, const char *mode)
 {
     vfs_node_t   v    = vfs_open(filename);
     unsigned int flag = 0;
-    FILE        *fp   = (FILE *)malloc(sizeof(FILE));
+    FILE        *fp   = (FILE *)calloc(1,sizeof(FILE));
     fp->read_flag     = 0;
     while (*mode != '\0')
     {

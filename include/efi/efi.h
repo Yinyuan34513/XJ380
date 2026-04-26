@@ -5,6 +5,8 @@
 
 #include <stdint.h>
 
+#pragma pack(push, 8)
+
 typedef uint8_t BOOLEAN;
 
 #define PT_LOAD 1 // PT_LOAD值不变
@@ -19,6 +21,7 @@ enum EFI_ALLOCATE_TYPE
 typedef uint64_t EFI_STATUS;
 typedef void     VOID;
 typedef uint16_t CHAR16;
+typedef uint64_t UINTN;
 
 typedef uint64_t EFI_PHYSICAL_ADDRESS;
 typedef uint64_t EFI_VIRTUAL_ADDRESS;
@@ -162,6 +165,15 @@ typedef struct
     void    *VendorTable;
 } EFI_CONFIGURATION_TABLE;
 
+typedef struct
+{
+    uint64_t Signature;
+    uint32_t Revision;
+    uint32_t HeaderSize;
+    uint32_t CRC32;
+    uint32_t Reserved;
+} EFI_TABLE_HEADER;
+
 struct EFI_BOOT_SERVICES
 {
     char _buf1[24];
@@ -223,16 +235,18 @@ struct EFI_BOOT_SERVICES
 
 struct EFI_RUNTIME_SERVICES
 {
-    char     _buf1[24];
+    EFI_TABLE_HEADER Hdr;
     // Variable Services
     uint64_t _buf2[4];
 
     // Time Services
     EFIAPI   EFI_STATUS (*GetTime)(EFI_TIME *Time, EFI_TIME_CAPABILITIES *Capabilities);
-    uint64_t _buf3[2];
+    uint64_t _buf3[3];
 
     // Virtual Memory Services
     uint64_t _buf4[2];
+
+    EFIAPI EFI_STATUS (*GetNextHighMonotonicCount)(uint32_t *HighCount);
 
     EFIAPI void (*ResetSystem)(EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, uint64_t DataSize, void *ResetData);
     uint64_t _buf5[3];
@@ -240,14 +254,17 @@ struct EFI_RUNTIME_SERVICES
 
 struct EFI_SYSTEM_TABLE
 {
-    char _buf1[44];
+    EFI_TABLE_HEADER Hdr;
+    CHAR16          *FirmwareVendor;
+    uint32_t         FirmwareRevision;
+    EFI_HANDLE       ConsoleInHandle;
     struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL
     {
         uint64_t  Reset;
         EFIAPI    EFI_STATUS (*ReadKeyStroke)(struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL *This, struct EFI_INPUT_KEY *Key);
         EFI_EVENT WaitForKey;
-    }       *ConIn;
-    uint64_t _buf2;
+    }                *ConIn;
+    EFI_HANDLE        ConsoleOutHandle;
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
     {
         uint64_t _buf;
@@ -256,10 +273,11 @@ struct EFI_SYSTEM_TABLE
         uint64_t _buf2[4];
         EFIAPI   EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
     }                           *ConOut;
-    uint64_t                     _buf3[2];
+    EFI_HANDLE                   StandardErrorHandle;
+    struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *StdErr;
     struct EFI_RUNTIME_SERVICES *RuntimeServices; // 此有bug
     struct EFI_BOOT_SERVICES    *BootServices;
-    uint64_t                     NumberOfTableEntries;
+    UINTN                        NumberOfTableEntries;
     EFI_CONFIGURATION_TABLE     *ConfigurationTable;
 };
 struct EFI_SIMPLE_POINTER_STATE; // 用之前声明
@@ -447,4 +465,6 @@ struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL
     uint64_t Revision;
     EFIAPI   EFI_STATUS (*OpenVolume)(struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *This, struct EFI_FILE_PROTOCOL **Root);
 }; // SFSP
+
+#pragma pack(pop)
 #endif

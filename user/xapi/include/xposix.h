@@ -14,5 +14,10 @@
 
 #include "./xposix/unistd.h"
 #include "./xposix/stdio.h"
+#include "./xposix/fcntl.h"
+#include "./xposix/poll.h"
+#include "./xposix/socket.h"
+#include "./xposix/netdb.h"
+#include "./xposix/sys/wait.h"
 #include "./xposix/stdlib.h"
 #include "./liballoc/alloc.h"

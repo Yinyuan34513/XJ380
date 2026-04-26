@@ -3,6 +3,9 @@
 #include "gh_sign.h"
 
 #define CALC_FONT_WIDTH(str) ((strlen(str) - 1) * 10)
+#define TERMINAL_CURSOR_WIDTH 8
+#define TERMINAL_CURSOR_HEIGHT 16
+#define TERMINAL_CURSOR_BLINK_MS 500
 
 char arrow_head[19][12] = {
     "#########",
@@ -43,8 +46,54 @@ char info_logo[6][45] = {
     " ",
 };
 
+static bool terminal_cursor_visible = false;
+static uint64_t terminal_cursor_elapsed_ms = 0;
+
+void hide_terminal_cursor(bool refresh)
+{
+    if (!terminal_cursor_visible) return;
+
+    xapi_DrawRect(handle, cur_x, cur_y, cur_x + TERMINAL_CURSOR_WIDTH, cur_y + TERMINAL_CURSOR_HEIGHT,
+                  BACKGROUND_COLOR, true);
+    terminal_cursor_visible = false;
+
+    if (refresh) { xapi_RefreshWindow(handle); }
+}
+
+void show_terminal_cursor(bool refresh)
+{
+    if (paint_cursor_lock || terminal_cursor_visible) return;
+
+    xapi_DrawRect(handle, cur_x, cur_y, cur_x + TERMINAL_CURSOR_WIDTH, cur_y + TERMINAL_CURSOR_HEIGHT,
+                  TERMINAL_TEXT_COLOR, true);
+    terminal_cursor_visible = true;
+
+    if (refresh) { xapi_RefreshWindow(handle); }
+}
+
+void reset_terminal_cursor_blink()
+{
+    terminal_cursor_elapsed_ms = 0;
+}
+
+void update_terminal_cursor_blink(uint64_t elapsed_ms)
+{
+    if (paint_cursor_lock) return;
+
+    terminal_cursor_elapsed_ms += elapsed_ms;
+    if (terminal_cursor_elapsed_ms < TERMINAL_CURSOR_BLINK_MS) return;
+
+    terminal_cursor_elapsed_ms = 0;
+    if (terminal_cursor_visible) { hide_terminal_cursor(true); }
+    else
+    {
+        show_terminal_cursor(true);
+    }
+}
+
 void paint_arrow_sign(int sx, int sy)
 {
+    hide_terminal_cursor(false);
     front_line_is_arrow = true;
     UserInfo current_user;
     xapi_GetCurrentUser(&current_user);
@@ -100,11 +149,14 @@ void paint_arrow_sign(int sx, int sy)
 
     if (cur_y >= TML_Y - 32) scroll();
 
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(false);
     xapi_RefreshWindow(handle);
 }
 
 void clear_screen()
 {
+    hide_terminal_cursor(false);
     xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, BACKGROUND_COLOR, true);
     cur_x = 8;
     cur_y = 4;
@@ -113,12 +165,14 @@ void clear_screen()
 
 void print_to_console(char *str)
 {
+    hide_terminal_cursor(false);
     xapi_DrawSWText(handle, *ab_x, *ab_y, str, TERMINAL_TEXT_COLOR);
     newline();
 }
 
 void print_to_console_zh(char *str)
 {
+    hide_terminal_cursor(false);
     xapi_DrawSWText(handle, *ab_x, *ab_y, str, TERMINAL_TEXT_COLOR);
     newline();
 }
@@ -138,6 +192,7 @@ void putchar_at_cur(char *ch)
 
 void newline()
 {
+    hide_terminal_cursor(false);
     cur_x                = 8;
     cur_y               += front_line_is_arrow ? 20 : 16;
     front_line_is_arrow  = false;
@@ -147,6 +202,7 @@ void newline()
 void backspace()
 {
     if (p_inbuf == 0) return;
+    hide_terminal_cursor(false);
     if (cur_x != 8) { cur_x -= 9; }
     else
     {
@@ -154,6 +210,8 @@ void backspace()
         cur_y -= 16;
     }
     xapi_DrawRect(handle, cur_x, cur_y, cur_x + 9, cur_y + 16, BACKGROUND_COLOR, true);
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(false);
     xapi_RefreshWindow(handle);
     p_inbuf--;
 }
@@ -172,6 +230,7 @@ void flush_buffer()
         strcpy(temp, char_buffer);
         int temp_pchb = p_chbuffer;
 
+        hide_terminal_cursor(false);
         if (cur_x + temp_pchb * 9 >= TML_X - 8) { newline(); }
 
         p_chbuffer = 0;
@@ -180,12 +239,15 @@ void flush_buffer()
         strcpy(&input_buf[p_inbuf], char_buffer);
         p_inbuf += strlen(char_buffer);
         cur_x += temp_pchb * 9;
+        reset_terminal_cursor_blink();
+        show_terminal_cursor(false);
         xapi_RefreshWindow(handle);
     }
 }
 
 void scroll()
 {
+    hide_terminal_cursor(false);
     XCOLOR winbuf[TML_X * TML_Y];
     xapi_ReadBuffer(handle, 0, 0, TML_X, TML_Y, winbuf);
     xapi_DrawRect(handle, 0, 0, TML_X - 1, TML_Y - 1, BACKGROUND_COLOR, true);

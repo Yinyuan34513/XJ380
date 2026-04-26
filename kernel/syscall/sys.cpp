@@ -4,10 +4,186 @@
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
 #include <mm/lazyalloc.h>
+#include <mm/uaccess.h>
 #include "../build_settings.h"
+#include <net/socket.h>
 #include <pipe.h>
 #include <rtc.h>
+#include <task/ipc.h>
 #include <math.hpp>
+
+static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
+
+static int64_t serial_write_from_user(const uint8_t *buffer, size_t size)
+{
+    if (buffer == NULL) return -EFAULT;
+    if (size == 0) return 0;
+
+    pcb_t process = get_current_task()->parent_group;
+    size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
+    uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
+    if (bounce == NULL) return -ENOMEM;
+
+    size_t total = 0;
+    while (total < size)
+    {
+        size_t chunk = MIN(size - total, bounce_bytes);
+        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EFAULT;
+        }
+
+        for (size_t i = 0; i < chunk; i++)
+        {
+            write_serial((char)bounce[i]);
+        }
+        total += chunk;
+    }
+
+    free(bounce);
+    return (int64_t)total;
+}
+
+static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buffer, size_t size, bool socket_mode)
+{
+    if (handle == NULL || buffer == NULL) return -EINVAL;
+    if (size == 0) return 0;
+
+    pcb_t process = get_current_task()->parent_group;
+    size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
+    uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
+    if (bounce == NULL) return -ENOMEM;
+
+    size_t total = 0;
+    while (total < size)
+    {
+        size_t chunk = MIN(size - total, bounce_bytes);
+        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EFAULT;
+        }
+
+        if (socket_mode)
+        {
+            ssize_t wrote = socket_write(handle->node, bounce, chunk);
+            if (wrote < 0)
+            {
+                free(bounce);
+                return total > 0 ? (int64_t)total : wrote;
+            }
+            total += (size_t)wrote;
+            if ((size_t)wrote < chunk) break;
+            continue;
+        }
+
+        size_t write_offset = (handle->node->type & file_pipe) ? 0 : handle->offset;
+        size_t wrote        = vfs_write(handle->node, bounce, write_offset, chunk);
+        if (wrote == (size_t)VFS_STATUS_FAILED)
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EIO;
+        }
+        if (!(handle->node->type & file_pipe) && handle->node->size != (uint64_t)-1) handle->offset += wrote;
+        total += wrote;
+        if (wrote < chunk) break;
+    }
+
+    free(bounce);
+    if (!socket_mode) vfs_update(handle->node);
+    return (int64_t)total;
+}
+
+static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size)
+{
+    if (size == 0) return true;
+    if (src == NULL) return false;
+    if (!user_range_mapped(pagedir, dst, size)) return false;
+    memcpy(dst, src, size);
+    return true;
+}
+
+static bool wait4_pid_matches(pcb_t child, long pid)
+{
+    if (child == NULL) return false;
+    return pid == -1 ? true : (long)child->pid == pid;
+}
+
+static pcb_t wait4_find_child(pcb_t parent, long pid)
+{
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
+
+    queue_foreach(parent->child_pcb, node)
+    {
+        pcb_t child = (pcb_t)node->data;
+        if (wait4_pid_matches(child, pid)) return child;
+    }
+
+    return NULL;
+}
+
+static pcb_t wait4_find_zombie_child(pcb_t parent, long pid)
+{
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
+
+    queue_foreach(parent->child_pcb, node)
+    {
+        pcb_t child = (pcb_t)node->data;
+        if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid)) return child;
+    }
+
+    return NULL;
+}
+
+static ipc_message_t wait4_pop_exit_message(pcb_t parent, long pid, bool wait)
+{
+    if (parent == NULL || parent->ipc_queue == NULL) return NULL;
+
+    while (true)
+    {
+        size_t remaining = parent->ipc_queue->size;
+        for (size_t i = 0; i < remaining; ++i)
+        {
+            ipc_message_t message = (ipc_message_t)queue_dequeue(parent->ipc_queue);
+            if (message == NULL) break;
+
+            if (message->type == IPC_MSG_TYPE_EPID && (pid == -1 || message->pid == pid)) return message;
+
+            message->index = lock_queue_enqueue(parent->ipc_queue, message);
+        }
+
+        if (!wait) return NULL;
+
+        __asm__ volatile("pause");
+        scheduler_yield();
+    }
+}
+
+static void wait4_discard_exit_message(pcb_t parent, int pid)
+{
+    ipc_message_t message = wait4_pop_exit_message(parent, pid, false);
+    if (message != NULL) free(message);
+}
+
+static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
+{
+    if (parent == NULL || child == NULL) return SYSCALL_FAULT_(ECHILD);
+
+    if (status != NULL)
+    {
+        int wait_status = (child->exit_code & 0xff) << 8;
+        if (!copy_to_user_pagedir(parent->pagedir, status, &wait_status, sizeof(wait_status)))
+        {
+            return SYSCALL_FAULT_(EFAULT);
+        }
+    }
+
+    wait4_discard_exit_message(parent, child->pid);
+    kill_proc(child, child->exit_code, false);
+    return (uint64_t)child->pid;
+}
+
 sys_(exit, int exit_code)
 {
     tcb_t exit_thread = get_current_task();
@@ -49,9 +225,10 @@ next:
     // not_null_assets(fd_handle, "sys_open: null alloc fd");
     fd_handle->offset = flags & O_APPEND ? node->size : 0;
     fd_handle->node   = node;
+    fd_handle->flags  = flags;
+    fd_handle->node->flags = flags;
     int index         = (int)lock_queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
     fd_handle->fd     = index;
-    spin_unlock(&get_current_task()->parent_group->file_open->lock);
     if (index == -1)
     {
         write_serial_fmt("sys_open: open %s failed.\n", normalized_path);
@@ -68,6 +245,7 @@ sys_(close, int fd)
 {
     if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle = (fd_file_handle *)queue_remove_at(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL) return SYSCALL_FAULT_(EBADF);
     vfs_close(handle->node);
     free(handle);
     return 0;
@@ -79,16 +257,20 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     if (unlikely(size == 0)) return 0;
     if (fd == 1 || fd == 2)
     {
-        write_serial_fmt("%s", (char *)buffer);
-        return strlen((char *)buffer);
+        int64_t ret = serial_write_from_user(buffer, size);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
-    size_t ret = vfs_write(handle->node, buffer, handle->offset, size);
-    if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
-    if (handle->node->size != (uint64_t)-1) handle->offset += ret;
-    vfs_update(handle->node);
-    return ret;
+    if (handle->node->type & file_socket)
+    {
+        int64_t ret = write_from_user_buffer(handle, buffer, size, true);
+        if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+        return (uint64_t)ret;
+    }
+    int64_t ret = write_from_user_buffer(handle, buffer, size, false);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+    return (uint64_t)ret;
 }
 
 sys_(read, int fd, uint8_t *buffer, size_t size)
@@ -97,6 +279,20 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     if (unlikely(size == 0)) return 0;
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket)
+    {
+        ssize_t ret = socket_read(handle->node, buffer, size);
+        if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+        return ret;
+    }
+    if (handle->node->type & file_pipe)
+    {
+        vfs_update(handle->node);
+        if (handle->node->size == 0 && handle->flags & O_NONBLOCK) return SYSCALL_FAULT_(EWOULDBLOCK);
+        size_t ret = vfs_read(handle->node, buffer, 0, size);
+        if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
+        return ret;
+    }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)
     {
         return SYSCALL_FAULT_(EWOULDBLOCK);
@@ -141,6 +337,46 @@ pipe:;
 //     return ret_pid;
 // }
 
+sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
+{
+    static constexpr int WNOHANG = 1;
+
+    pcb_t parent = get_current_task()->parent_group;
+    long  pid    = (long)pid_value;
+    (void)rusage;
+
+    if (parent == NULL || parent->child_pcb == NULL) return SYSCALL_FAULT_(ECHILD);
+    if ((options & ~WNOHANG) != 0) return SYSCALL_FAULT_(EINVAL);
+    if (pid < -1 || pid == 0) return SYSCALL_FAULT_(EINVAL);
+    if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
+
+    pcb_t zombie = wait4_find_zombie_child(parent, pid);
+    if (zombie != NULL) return wait4_reap_child(parent, zombie, status);
+    if (options & WNOHANG) return 0;
+
+    while (true)
+    {
+        ipc_message_t message = wait4_pop_exit_message(parent, pid, true);
+        if (message == NULL) continue;
+
+        int exit_code = (int)message->data[0] | ((int)message->data[1] << 8) | ((int)message->data[2] << 16) |
+                        ((int)message->data[3] << 24);
+        int child_pid = message->pid;
+        free(message);
+
+        pcb_t child = wait4_find_child(parent, child_pid);
+        if (child == NULL)
+        {
+            if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
+            continue;
+        }
+
+        child->exit_code = exit_code;
+        child->status    = ZOMBIE;
+        return wait4_reap_child(parent, child, status);
+    }
+}
+
 sys_(sigret)
 {
     return 0;
@@ -152,6 +388,28 @@ sys_(getpid)
                  arg4 == UINT64_MAX))
         return 1;
     return get_current_task()->parent_group->pid;
+}
+
+sys_(socket, int domain, int type, int protocol)
+{
+    int ret = socket_open(domain, type, protocol);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
+sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
+    int ret = socket_connect(fd, addr, addrlen);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
+sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    int ret = socket_accept(fd, addr, addrlen);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
 }
 
 
@@ -249,7 +507,10 @@ sys_(nano_sleep, void *time_handle)
 {
     struct timespec k_req;
     if (unlikely(time_handle == NULL)) return SYSCALL_FAULT_(EINVAL);
-    memcpy(&k_req, time_handle, sizeof(k_req));
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &k_req, time_handle, sizeof(k_req)))
+    {
+        return SYSCALL_FAULT_(EFAULT);
+    }
     if (unlikely(k_req.tv_nsec >= 1000000000L)) return SYSCALL_FAULT_(EINVAL);
     uint64_t nsec = k_req.tv_sec * 1000000000 + k_req.tv_nsec;
     scheduler_nano_sleep(nsec);
@@ -269,16 +530,41 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
     if (unlikely(fd < 0 || iov == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (iovcnt == 0) return 0;
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
+    if (handle->node->type & file_socket)
+    {
+        size_t total = 0;
+        for (int i = 0; i < iovcnt; i++)
+        {
+            struct iovec kiov;
+            if (!copy_from_user_pagedir(pagedir, &kiov, &iov[i], sizeof(kiov)))
+            {
+                return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
+            }
+            int64_t ret = write_from_user_buffer(handle, (const uint8_t *)kiov.iov_base, kiov.iov_len, true);
+            if (ret < 0)
+            {
+                if (total > 0) return total;
+                return SYSCALL_FAULT_((int)-ret);
+            }
+            total += (size_t)ret;
+            if ((size_t)ret < kiov.iov_len) break;
+        }
+        return total;
+    }
     size_t          total  = 0;
     for (int i = 0; i < iovcnt; i++)
     {
-        size_t status = vfs_write(handle->node, iov[i].iov_base, handle->offset, iov[i].iov_len);
-        if (handle->node->size != (uint64_t)-1)
+        struct iovec kiov;
+        if (!copy_from_user_pagedir(pagedir, &kiov, &iov[i], sizeof(kiov)))
         {
-            if (status == (size_t)VFS_STATUS_FAILED) return total;
-            handle->offset += status;
+            return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
         }
-        total += iov[i].iov_len;
+        int64_t status = write_from_user_buffer(handle, (const uint8_t *)kiov.iov_base, kiov.iov_len, false);
+        if (status < 0) return total > 0 ? total : SYSCALL_FAULT_((int)-status);
+        total += (size_t)status;
+        if ((size_t)status < kiov.iov_len) break;
     }
     return total;
 }
@@ -291,6 +577,22 @@ sys_(readv, int fd, struct iovec *iov, int iovcnt0)
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (iovcnt == 0) return 0;
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket)
+    {
+        size_t total = 0;
+        for (size_t i = 0; i < iovcnt; i++)
+        {
+            ssize_t ret = socket_read(handle->node, iov[i].iov_base, iov[i].iov_len);
+            if (ret < 0)
+            {
+                if (total > 0) return total;
+                return SYSCALL_FAULT_((int)-ret);
+            }
+            total += (size_t)ret;
+            if ((size_t)ret < iov[i].iov_len) break;
+        }
+        return total;
+    }
     size_t buf_len = 0;
     for (size_t i = 0; i < iovcnt; i++)
     {
@@ -656,24 +958,35 @@ sys_(getcwd, char *buffer, size_t length)
     if (unlikely(length == 0)) return 0;
     tcb_t  process  = get_current_task();
     char  *cwd      = vfs_get_fullpath(process->cwd);
+    if (unlikely(cwd == NULL)) return SYSCALL_FAULT_(ENOENT);
+
     size_t cwd_leng = strlen(cwd);
-    if (length > cwd_leng) length = cwd_leng;
-    memcpy(buffer, cwd, length);
-    return length;
+    size_t copy_len = cwd_leng;
+    if (copy_len >= length) copy_len = length - 1;
+    memcpy(buffer, cwd, copy_len);
+    buffer[copy_len] = '\0';
+    free(cwd);
+    return copy_len;
 }
 
 sys_(chdir, char *s)
 {
     if (unlikely(s == NULL)) return SYSCALL_FAULT_(EINVAL);
-    pcb_t process = get_current_task()->parent_group;
+    tcb_t current = get_current_task();
 
     char *path;
     char *bpath = NULL;
     if (s[0] == '/') { path = strdup(s); }
     else
     {
-        bpath = vfs_get_fullpath(get_current_task()->cwd);
+        bpath = vfs_get_fullpath(current->cwd);
         path  = pathacat(bpath, s);
+    }
+
+    if (unlikely(path == NULL))
+    {
+        free(bpath);
+        return SYSCALL_FAULT_(ENOMEM);
     }
 
     char *normalized_path = normalize_path(path);
@@ -689,13 +1002,20 @@ sys_(chdir, char *s)
         return SYSCALL_FAULT_(ENOENT);
     }
 
-    if (node->type == file_dir) { get_current_task()->cwd = node; }
-    else
+    if (!(node->type & file_dir))
     {
+        vfs_close(node);
+        free(normalized_path);
         return SYSCALL_FAULT_(ENOTDIR);
     }
 
-    free(normalized_path);
+    if (current->cwd != NULL) vfs_close(current->cwd);
+    current->cwd = node;
+    current->cwd->refcount++;
+
+    if (current->str_cwd != NULL) free(current->str_cwd);
+    current->str_cwd = normalized_path;
+
     return 0;
 }
 
@@ -715,18 +1035,26 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 {
     int      ready      = 0;
     uint64_t start_time = nanoTime();
+    uint64_t timeout_ns = timeout == (size_t)-1 ? (uint64_t)-1 : timeout * 1000000ULL;
     bool     sigexit    = false;
 
     extern vfs_callback_t fs_callbacks[256];
 
     do
     {
-        // 检查每个文件描述符
-        size_t i = 0;
-        queue_foreach(get_current_task()->parent_group->file_open, node0)
+        ready = 0;
+        for (size_t i = 0; i < nfds; i++)
         {
-            if (i >= nfds) break;
-            fd_file_handle *handle = (fd_file_handle *)node0->data;
+            fds_user[i].revents = 0;
+            if (fds_user[i].fd < 0) continue;
+            fd_file_handle *handle =
+                (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fds_user[i].fd);
+            if (handle == NULL)
+            {
+                fds_user[i].revents = POLLNVAL;
+                ready++;
+                continue;
+            }
             vfs_node_t      node   = handle->node;
             if (fs_callbacks[node->fsid]->poll == (void *)empty)
             {
@@ -735,7 +1063,6 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
                     fds_user[i].revents = fds_user[i].events & POLLIN ? POLLIN : POLLOUT;
                     ready++;
                 }
-                i++;
                 continue;
             }
             int revents = (int)epoll_to_poll_comp(vfs_poll(node, poll_to_epoll_comp(fds_user[i].events)));
@@ -744,7 +1071,6 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
                 fds_user[i].revents = (short)revents;
                 ready++;
             }
-            i++;
         }
 
         // sigexit = signals_pending_quick(get_current_task());
@@ -753,7 +1079,7 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 
         open_interrupt;
         __asm__("pause");
-    } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout));
+    } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout_ns));
 
     close_interrupt;
 
@@ -822,7 +1148,13 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
     case F_SETFL:
         {uint32_t valid_flags  = O_APPEND | O_DIRECT | O_NOATIME | O_NONBLOCK;
         handle->node->flags  &= ~valid_flags;
-        handle->node->flags  |= arg & valid_flags;}
+        handle->node->flags  |= arg & valid_flags;
+        handle->flags        &= ~valid_flags;
+        handle->flags        |= arg & valid_flags;
+        if (handle->node->type & file_socket) {
+            int ret = socket_apply_flags(handle->node, handle->node->flags);
+            if (ret < 0) return SYSCALL_FAULT_(-ret);
+        }}
     default: break;
     }
     return 0;
@@ -924,6 +1256,13 @@ sys_(clock_getres)
     return 0;
 }
 
+sys_(shutdown, int fd, int how)
+{
+    int ret = socket_shutdown(fd, how);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
 
 sys_(mkdir, char *name, uint64_t mode)
 {
@@ -934,10 +1273,26 @@ sys_(mkdir, char *name, uint64_t mode)
     return ret;
 }
 
+sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
+    int ret = socket_bind(fd, addr, addrlen);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
+sys_(listen, int fd, int backlog)
+{
+    int ret = socket_listen(fd, backlog);
+    if (ret < 0) return SYSCALL_FAULT_(-ret);
+    return ret;
+}
+
 sys_(lseek, int fd, size_t offset, size_t whence)
 {
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (unlikely(handle == NULL)) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type & file_socket) return SYSCALL_FAULT_(ESPIPE);
 
     int64_t real_offset = (int64_t)offset;
     if (real_offset < 0 && handle->node->type & file_none && whence != SEEK_CUR) return SYSCALL_FAULT_(EBADF);
@@ -1078,6 +1433,7 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
     size_t   read_count    = 0;
     uint64_t offset        = 0;
     vfs_node_t child_node;
+    vfs_child_lock();
     list_foreach(handle->node->child, i)
     {
         if (offset < handle->offset) { goto next; }
@@ -1103,6 +1459,7 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
     next:
         offset += sizeof(struct dirent);
     }
+    vfs_child_unlock();
     return read_count * sizeof(struct dirent);
 }
 

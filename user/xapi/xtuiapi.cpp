@@ -284,6 +284,16 @@ void 	xapi_FlushTime()
 	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);
 }
 
+UINT64 xapi_GetTaskList(XapiTaskInfo *buffer, UINT64 max_count)
+{
+	return enter_syscall(XAPI_GET_TASK_LIST, (uint64_t)buffer, max_count, 0, 0, 0, 0);
+}
+
+UINT64 xapi_KillProcess(UINT64 pid)
+{
+	return enter_syscall(XAPI_KILL_PROCESS, pid, 0, 0, 0, 0, 0);
+}
+
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size)
 {

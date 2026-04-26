@@ -17,23 +17,26 @@ static inline void spin_init(spin_t *lock) {
 }
 
 static inline void spin_lock(spin_t *lock) {
+    long flags;
+    asm volatile("pushfq\n\t"
+                 "pop %0\n\t"
+                 : "=r"(flags)
+                 :
+                 : "memory");
+
+    asm volatile("cli\n\t" ::: "memory");
+
     asm volatile("1:\n\t"
                  "lock btsq $0, %0\n\t" // 测试并设置
-                 "jc 1b\n\t"            // 如果已锁定则重试
+                 "jnc 2f\n\t"
+                 "pause\n\t"
+                 "jmp 1b\n\t"
+                 "2:\n\t"
                  : "+m"(lock->lock)
                  :
                  : "memory", "cc");
 
     asm volatile("mfence" ::: "memory");
-
-    long flags;
-    asm volatile("pushfq\n\t" // 保存RFLAGS
-                 "pop %0\n\t" // 存储到flags变量
-                 : "=r"(flags)
-                 :
-                 : "memory");
-
-    asm volatile("cli\n\t");
 
     lock->rflags = flags; // 保存原始中断状态
 }
@@ -41,7 +44,10 @@ static inline void spin_lock(spin_t *lock) {
 static inline void spin_lock_no_irqsave(spin_t *lock) {
     asm volatile("1:\n\t"
                  "lock btsq $0, %0\n\t" // 测试并设置
-                 "jc 1b\n\t"            // 如果已锁定则重试
+                 "jnc 2f\n\t"
+                 "pause\n\t"
+                 "jmp 1b\n\t"
+                 "2:\n\t"
                  : "+m"(lock->lock)
                  :
                  : "memory", "cc");

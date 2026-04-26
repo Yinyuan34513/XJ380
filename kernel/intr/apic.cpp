@@ -65,14 +65,14 @@ uint64_t lapic_id()
 
 static void ioapic_write(uint32_t reg, uint32_t value)
 {
-    mmio_write32((uint32_t)((uint64_t)ApicInfo.ioApicAddr), reg);
-    mmio_write32((uint32_t)((uint64_t)ApicInfo.ioApicAddr + 0x10), value);
+    mmio_write32(ApicInfo.ioApicAddr, reg);
+    mmio_write32(ApicInfo.ioApicAddr + 0x10, value);
 }
 
 static uint32_t ioapic_read(uint32_t reg)
 {
-    mmio_write32((uint32_t)((uint64_t)ApicInfo.ioApicAddr), reg);
-    return mmio_read32((uint32_t)((uint64_t)ApicInfo.ioApicAddr + 0x10));
+    mmio_write32(ApicInfo.ioApicAddr, reg);
+    return mmio_read32(ApicInfo.ioApicAddr + 0x10);
 }
 
 void ioapic_disable(uint8_t vector)
@@ -148,10 +148,25 @@ void init_lApic()
     lapic_write(LAPIC_REG_TIMER_DIV, 11);
     lapic_write(LAPIC_REG_TIMER_INITCNT, ~((uint32_t)0));
     uint64_t b = nanoTime();
+    uint64_t guard = 0;
     for (;;)
+    {
         if (nanoTime() - b >= 1000000) break;
+        if (++guard >= 50000000ULL)
+        {
+            write_serial_string("APIC timer calibration timeout, using fallback value.\n");
+            lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
+            lapic_write(LAPIC_REG_TIMER_INITCNT, 0x100000);
+            return;
+        }
+    }
     uint64_t lapic_timer              = (~(uint32_t)0) - lapic_read(LAPIC_REG_TIMER_CURCNT);
     uint64_t calibrated_timer_initial = (uint64_t)((uint64_t)(lapic_timer * 1000) / 250);
+    if (calibrated_timer_initial == 0)
+    {
+        write_serial_string("APIC timer calibration produced zero, using fallback value.\n");
+        calibrated_timer_initial = 0x100000;
+    }
     lapic_write(LAPIC_REG_TIMER, lapic_read(LAPIC_REG_TIMER) | 1 << 17);
     lapic_write(LAPIC_REG_TIMER_INITCNT, calibrated_timer_initial);
 }
@@ -205,6 +220,7 @@ void init_apic(uint64_t MADT0)
         {
             MadtIOApic *ioapic  = (MadtIOApic *)((uint64_t)(&madt->entries) + current);
             ApicInfo.ioApicAddr = (uint64_t)ioapic->address + 0xffff800000000000;
+            break;
         }
         current += (uint64_t)header->length;
     }

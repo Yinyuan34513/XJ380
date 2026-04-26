@@ -1,8 +1,120 @@
 #include <proto.hpp>
+#include <dlinker.h>
 #include <syscall/syscall.h>
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
+static volatile bool kb_fifo_ready = false;
+static uint8_t kb_synth_buf[KB_BUF_SIZE];
+static uint8_t *kb_synth_head = kb_synth_buf;
+static uint8_t *kb_synth_tail = kb_synth_buf;
+static volatile uint32_t kb_synth_lock = 0;
+
+#define KB_USB_REPEAT_SLOTS 6
+#define KB_USB_REPEAT_DELAY_NS 500000000ULL
+#define KB_USB_REPEAT_INTERVAL_NS 25000000ULL
+
+struct keyboard_usb_repeat_slot
+{
+    bool active;
+    uint8_t usage;
+    uint8_t value;
+    uint64_t next_repeat_ns;
+};
+
+static keyboard_usb_repeat_slot kb_usb_repeat[KB_USB_REPEAT_SLOTS];
+
+static void kb_synth_lock_acquire()
+{
+    while (__sync_lock_test_and_set(&kb_synth_lock, 1) != 0)
+    {
+        while (kb_synth_lock != 0) { __asm__ volatile("pause"); }
+    }
+}
+
+static void kb_synth_lock_release()
+{
+    __sync_lock_release(&kb_synth_lock);
+}
+
+static bool kb_value_repeatable(uint8_t value)
+{
+    return value == '\b' || value == '\n' || (value >= 32 && value < 127);
+}
+
+static void kb_synth_enqueue_locked(uint8_t value)
+{
+    if (value == 0) return;
+
+    uint8_t *next = kb_synth_head + 1;
+    if (next == kb_synth_buf + KB_BUF_SIZE) { next = kb_synth_buf; }
+
+    if (next == kb_synth_tail) { return; }
+
+    *kb_synth_head = value;
+    kb_synth_head  = next;
+}
+
+static void keyboard_prepare_fifo()
+{
+    if (kb_fifo_ready) return;
+
+    kb_fifo.p_head = kb_fifo.buf;
+    kb_fifo.p_tail = kb_fifo.buf;
+    kb_fifo.count  = 0;
+    kb_fifo.ctrl   = false;
+    kb_fifo.shift  = false;
+    kb_fifo.alt    = false;
+    kb_fifo.caps   = false;
+    memset(kb_fifo.buf, 0, KB_BUF_SIZE);
+    kb_synth_head  = kb_synth_buf;
+    kb_synth_tail  = kb_synth_buf;
+    memset(kb_synth_buf, 0, sizeof(kb_synth_buf));
+    memset(kb_usb_repeat, 0, sizeof(kb_usb_repeat));
+    kb_fifo_ready = true;
+}
+
+static void kb_synth_enqueue(uint8_t value)
+{
+    kb_synth_lock_acquire();
+    kb_synth_enqueue_locked(value);
+    kb_synth_lock_release();
+}
+
+static uint8_t kb_synth_dequeue()
+{
+    uint8_t value = 0;
+
+    kb_synth_lock_acquire();
+    if (kb_synth_tail != kb_synth_head)
+    {
+        value = *kb_synth_tail;
+        kb_synth_tail++;
+        if (kb_synth_tail == kb_synth_buf + KB_BUF_SIZE) {
+            kb_synth_tail = kb_synth_buf;
+        }
+    }
+    kb_synth_lock_release();
+    return value;
+}
+
+static void kb_usb_repeat_service()
+{
+    uint64_t now = nanoTime();
+    if (now == 0) return;
+
+    kb_synth_lock_acquire();
+    for (size_t i = 0; i < KB_USB_REPEAT_SLOTS; ++i)
+    {
+        keyboard_usb_repeat_slot *slot = &kb_usb_repeat[i];
+        if (!slot->active || now < slot->next_repeat_ns) { continue; }
+
+        kb_synth_enqueue_locked(slot->value);
+        slot->next_repeat_ns = now + KB_USB_REPEAT_INTERVAL_NS;
+    }
+    kb_synth_lock_release();
+}
+
 uint8_t keyboard_code[256] = {
     0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
@@ -20,6 +132,8 @@ uint8_t keyboard_code1[256] = {                                                 
 
 extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 {
+    keyboard_prepare_fifo();
+
     uint8_t x;
     x = inb(0x60);
     if (x == 0x2a || x == 0x36)
@@ -50,6 +164,11 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     }
 
     if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_head = kb_fifo.buf; }
+    if (kb_fifo.count >= KB_BUF_SIZE) {
+        kb_fifo.p_tail++;
+        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
+        kb_fifo.count = KB_BUF_SIZE - 1;
+    }
     *kb_fifo.p_head = x;
 
     kb_fifo.count++;
@@ -59,6 +178,14 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 
 uint8_t get_keyboard_input()
 {
+    keyboard_prepare_fifo();
+    kb_usb_repeat_service();
+
+    uint8_t synthetic = kb_synth_dequeue();
+    if (synthetic != 0) {
+        return synthetic;
+    }
+
     if (kb_fifo.p_tail != kb_fifo.p_head)
     {
         // 有没有读的
@@ -90,12 +217,56 @@ void wait_ps2_read()
 
 void keyboard_init()
 {
-    kb_fifo.p_head = kb_fifo.buf;
-    kb_fifo.p_tail = kb_fifo.buf;
-    kb_fifo.count  = 0;
-    memset(kb_fifo.buf, 0, KB_BUF_SIZE);
-    wait_KB_write();
+    keyboard_prepare_fifo();
+    wait_ps2_write();
     outb(PORT_KB_CMD, KBCMD_WRITE_CMD);
-    wait_KB_read();
+    wait_ps2_read();
     outb(PORT_KB_DATA, KB_INIT_MODE);
 }
+
+extern "C" void keyboard_push_input(uint8_t value)
+{
+    kb_synth_enqueue(value);
+}
+
+extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed)
+{
+    keyboard_prepare_fifo();
+
+    kb_synth_lock_acquire();
+    keyboard_usb_repeat_slot *free_slot = NULL;
+    keyboard_usb_repeat_slot *match = NULL;
+
+    for (size_t i = 0; i < KB_USB_REPEAT_SLOTS; ++i)
+    {
+        keyboard_usb_repeat_slot *slot = &kb_usb_repeat[i];
+        if (slot->active && slot->usage == usage) { match = slot; }
+        else if (!slot->active && free_slot == NULL) { free_slot = slot; }
+    }
+
+    if (pressed)
+    {
+        kb_synth_enqueue_locked(value);
+        if (kb_value_repeatable(value))
+        {
+            keyboard_usb_repeat_slot *slot = match ? match : free_slot;
+            if (slot != NULL)
+            {
+                uint64_t now = nanoTime();
+                slot->active = true;
+                slot->usage = usage;
+                slot->value = value;
+                slot->next_repeat_ns = now ? now + KB_USB_REPEAT_DELAY_NS : 0;
+            }
+        }
+    }
+    else if (match != NULL)
+    {
+        match->active = false;
+    }
+
+    kb_synth_lock_release();
+}
+
+EXPORT_SYMBOL(keyboard_push_input);
+EXPORT_SYMBOL(keyboard_usb_key_event);

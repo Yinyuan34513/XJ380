@@ -1,4 +1,5 @@
 #include <x3api.h>
+#include <libsys.h>
 #include <krlibc.h>
 #include "cm_proto.h"
 #include "../../kernel/build_settings.h"
@@ -6,6 +7,7 @@
 int cindex = 1;
 
 bool dont_refresh = false;
+bool about_memory_show_mb = false;
 
 char wdaystr_table[7][20] = {
     "星期日",
@@ -17,11 +19,105 @@ char wdaystr_table[7][20] = {
     "星期六",
 };
 
+static void draw_background_region(UINT64 refresh_x1, UINT64 refresh_y1, UINT64 refresh_x2, UINT64 refresh_y2);
+
+static int ctrlmenu_read_text_file(const char *path, char *buffer, size_t size)
+{
+    if (path == NULL || buffer == NULL || size == 0) return -1;
+
+    int fd = (int)enter_syscall(SYS_OPEN, (uint64_t)path, 0, 0, 0, 0, 0);
+    if (fd < 0) return -1;
+
+    int got = read(fd, buffer, size - 1);
+    close(fd);
+    if (got < 0) return -1;
+
+    buffer[got] = '\0';
+    return got;
+}
+
+static void ctrlmenu_draw_network_status()
+{
+    static char nm_status_path[] = "/run/NetworkManager/status";
+    char        status_text[512];
+    memset(status_text, 0, sizeof(status_text));
+
+    xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "NetworkManager", 16, 0xffffffff);
+    xapi_DrawText(handle, win_width / 10 * 3 + 24, 156, "/run/NetworkManager/status", 11, 0xffc8f7ff);
+
+    int got = ctrlmenu_read_text_file(nm_status_path, status_text, sizeof(status_text));
+    if (got <= 0)
+    {
+        xapi_DrawText(handle, win_width / 10 * 3 + 24, 196, "网络运行态不可用。", 11, 0xffffffff);
+        return;
+    }
+
+    int   y          = 196;
+    char *cursor     = status_text;
+    char  line[160];
+    while (*cursor != '\0' && y < (int)win_height - 24)
+    {
+        size_t len = 0;
+        while (cursor[len] != '\0' && cursor[len] != '\n' && len + 1 < sizeof(line))
+        {
+            line[len] = cursor[len];
+            len++;
+        }
+        line[len] = '\0';
+
+        if (cursor[len] == '\n') cursor += len + 1;
+        else cursor += len;
+
+        if (line[0] == '\0') continue;
+
+        uint32_t color = 0xffffffff;
+        char     draw_line[160];
+        memset(draw_line, 0, sizeof(draw_line));
+
+        if (line[0] == '[')
+        {
+            color = 0x00a2e8ff;
+            size_t line_len = strlen(line);
+            if (line_len >= 2 && line[line_len - 1] == ']')
+            {
+                strncpy(draw_line, line + 1, MIN(line_len - 2, sizeof(draw_line) - 1));
+            }
+            else
+            {
+                strncpy(draw_line, line, sizeof(draw_line) - 1);
+            }
+        }
+        else
+        {
+            strncpy(draw_line, line, sizeof(draw_line) - 1);
+        }
+
+        xapi_DrawText(handle, win_width / 10 * 3 + 24, y, draw_line, 11, color);
+        y += 24;
+    }
+}
+
 void draw_background()
+{
+    draw_background_region(0, 0, win_width, win_height);
+}
+
+void draw_background_body()
+{
+    draw_background_region(0, 121, win_width, win_height);
+}
+
+void draw_background_time()
+{
+    draw_background_region(900, 18, win_width - 8, 68);
+}
+
+static void draw_background_region(UINT64 refresh_x1, UINT64 refresh_y1, UINT64 refresh_x2, UINT64 refresh_y2)
 {
     if (dont_refresh) return;
 
     xapi_DrawRect(handle, 0, 0, win_width - 1, win_height - 1, 0x4d4d4dea, true);
+    xapi_DrawPicture(handle, 0, 0, win_width, win_height, "/system/image/background3.png");
     xapi_DrawText(handle, 30, 18, "控制中心", 40, 0xffffffff);
     xapi_DrawRect(handle, 0, 116, win_width - 1, 120, 0x00a2e8ff, true);
 
@@ -54,7 +150,7 @@ void draw_background()
                     wdaystr_table[tm.tm_wday - 1], tm.tm_hour, tm.tm_min);
     xapi_DrawText(handle, 940, 44, time_str_buffer, 16, 0xffffffff);
 
-    xapi_RefreshWindow(handle);
+    xapi_RefreshPartWindow(handle, refresh_x1, refresh_y1, refresh_x2, refresh_y2);
 }
 
 void draw_mainpage()
@@ -92,10 +188,21 @@ void draw_setting()
         xapi_GetSystemVersion(system_version);
         char cpu_model[64];
         xapi_GetCpuModel(cpu_model);
+        uint64_t memory_kib = xapi_GetMemorySize();
         char memory_size[64];
-        strcat(memory_size, xcr_int2char(xapi_GetMemorySize() / 1024));
-        strcat(memory_size, " GB");
+        memset(memory_size, 0, sizeof(memory_size));
+        if (about_memory_show_mb)
+        {
+            strcat(memory_size, xcr_int2char(memory_kib / 1024));
+            strcat(memory_size, " MB");
+        }
+        else
+        {
+            strcat(memory_size, xcr_int2char(memory_kib / 1024 / 1024));
+            strcat(memory_size, " GB");
+        }
         char fenbianlv[64];
+        memset(fenbianlv, 0, sizeof(fenbianlv));
         strcat(fenbianlv, xcr_int2char(win_width));
         strcat(fenbianlv, "x");
         strcat(fenbianlv, xcr_int2char(win_height));
@@ -109,7 +216,7 @@ void draw_setting()
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 218, cpu_model, 11, 0xffffffff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "运行内存", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffc8f7ff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 278, "内核版本", 11, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 278, KN_VERSION, 11, 0xffffffff);
@@ -126,7 +233,7 @@ void draw_setting()
     else if (setting_cindex == 2)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 166, win_width / 10 * 3 + 8, 196, 0x00a2e8ff, true);
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "未连接至互联网。", 11, 0xffffffff);
+        ctrlmenu_draw_network_status();
     }
     else if (setting_cindex == 3)
     {
@@ -241,7 +348,7 @@ void delete_input_box()
     charbox_buf[charbox_count] = '\0';
     charbox_input_complete = true;
     dont_refresh = false;
-    draw_background();
+    draw_background_body();
 }
 
 bool waiting_change_setting_apps = false;
@@ -298,8 +405,10 @@ void change_clock_hour_offset(int value)
     xapi_CloseFile(f);
 
     xapi_FlushTime();
-    draw_background();
+    draw_background_body();
 }
+
+char background_file_path[256];
 
 char *get_background_file_path()
 {
@@ -313,8 +422,9 @@ char *get_background_file_path()
     XFILE *f = xapi_OpenFile(runfile_path);
     if (!f) return NULL;
     SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
+    strcpy(background_file_path, sdff->BackgroundFilePath);
 
     xapi_CloseFile(f);
 
-    return sdff->BackgroundFilePath;
+    return background_file_path;
 }

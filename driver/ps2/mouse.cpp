@@ -8,6 +8,9 @@
 #include <ps2/mouse.h>
 #include <rtc.h>
 #include <syscall/syscall.h>
+#include <efi/boot.h>
+#include <dlinker.h>
+#include <power.h>
 
 mouse_dec ms_dec;
 int       mouse_x = 0;
@@ -30,10 +33,105 @@ extern bool have_full_screen_app;
 extern bool logo_menu_just_born;
 extern bool logo_menu_is_open;
 extern bool allow_to_flush;
+extern bool desktop_done;
+
+static volatile bool desktop_refresh_pending = false;
+
+static inline int rect_min_int(int a, int b)
+{
+    return a < b ? a : b;
+}
+
+static inline int rect_max_int(int a, int b)
+{
+    return a > b ? a : b;
+}
+
+static void refresh_union_rect(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
+                               int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    if (sht == NULL) {
+        return;
+    }
+    refresh_part_sheet(sht,
+                       rect_min_int(x1, other_x1),
+                       rect_min_int(y1, other_y1),
+                       rect_max_int(x2, other_x2),
+                       rect_max_int(y2, other_y2));
+}
+
+static void refresh_part_sheet_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2)
+{
+    if (sht == NULL) {
+        return;
+    }
+    refresh_part_sheet(sht, x1, y1, x2, y2);
+    flush_sheet_damage_queue(sht);
+}
+
+static void refresh_union_rect_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
+                                   int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    refresh_union_rect(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+    flush_sheet_damage_queue(sht);
+}
+
+static void refresh_part_sheet_deferred_or_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2)
+{
+    if (desktop_done) {
+        refresh_part_sheet(sht, x1, y1, x2, y2);
+        return;
+    }
+    refresh_part_sheet_now(sht, x1, y1, x2, y2);
+}
+
+static void refresh_union_rect_deferred_or_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
+                                               int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    if (desktop_done) {
+        refresh_union_rect(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+        return;
+    }
+    refresh_union_rect_now(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+}
+
+static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, int *y)
+{
+    if (sht == NULL || sheet == NULL || x == NULL || y == NULL) {
+        return;
+    }
+
+    const int visible_title_width = 96;
+    const int visible_title_height = 24;
+
+    int min_x = -(int)sheet->width + visible_title_width;
+    int max_x = (int)sht->scrx - visible_title_width;
+    int min_y = 0;
+    int max_y = (int)sht->scry - visible_title_height;
+
+    if (min_x > max_x) {
+        min_x = max_x;
+    }
+    if (min_y > max_y) {
+        min_y = max_y;
+    }
+
+    if (*x < min_x) *x = min_x;
+    if (*x > max_x) *x = max_x;
+    if (*y < min_y) *y = min_y;
+    if (*y > max_y) *y = max_y;
+}
+
+extern EFI_SYSTEM_TABLE *EFI_ST;
+extern BOOT_CONFIG *EFI_BC;
 
 void process_mouse_button()
 {
+    if (sht_img == NULL) return;
+
     if (!allow_to_flush) return;
+    tbx = get_mouse_x();
+    tby = get_mouse_y();
 
     if (ms_dec.btn & 0x01)
     {
@@ -98,6 +196,7 @@ void process_mouse_button()
                 ms_dec.sht_now         = NULL;
                 tcb_t current_win_task = current_window->w_task;
                 delete_window(xwmii, sht_img, current_window);
+                current_window = NULL;
                 if (current_win_task->window_count == 0) { kill_thread(current_win_task); }
             }
             else if (current_window->type == XWIN_NORMAL &&
@@ -114,92 +213,15 @@ void process_mouse_button()
                 int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
                 // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
                 get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
-                refresh_part_sheet(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
-                                   bx + get_sheet(sht_img, current_window->w_sheet)->width,
-                                   get_sheet(sht_img, current_window->w_sheet)->by +
-                                       get_sheet(sht_img, current_window->w_sheet)->height);
+                refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
+                                                   bx + get_sheet(sht_img, current_window->w_sheet)->width,
+                                                   get_sheet(sht_img, current_window->w_sheet)->by +
+                                                       get_sheet(sht_img, current_window->w_sheet)->height);
             }
         }
-        ms_dec.sht_now = found_sheetmb(sht_img, mouse_x, mouse_y);
-        if (ms_dec.sht_now == NULL)
-        {
-            // 点在了桌面/快捷栏上
-            if (tbx > 24 && tby > sht_img->scry - 24 - 63 && tbx < 24 + 84 && !have_full_screen_app)
-            {
-                create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
-            }
-            else if (tbx > 132 && tby > sht_img->scry - 24 - 63 && !have_full_screen_app)
-            {
-                TDB_t tdb = find_dock_icon((tbx - 132) / 80);
-                if (tdb)
-                {
-                    if (tdb->min_mode)
-                    {
-                        tdb->windowls->w_sheet->bx = tdb->bmx;
-                        tdb->windowls->w_sheet->by = tdb->bmy;
-                        tdb->min_mode              = false;
-                    }
-                    lift_sheet(sht_img, tdb->windowls->w_sheet);
-                    focus_window_dock(tdb->windowls);
-                    refresh_part_sheet(sht_img, tdb->windowls->w_sheet->bx, tdb->windowls->w_sheet->by,
-                                       tdb->windowls->w_sheet->bx + tdb->windowls->w_sheet->width,
-                                       tdb->windowls->w_sheet->by + tdb->windowls->w_sheet->height);
-                }
-            }
-            else if (tby < 24 && !have_full_screen_app)
-            {
-                // 快捷栏
-                int x1 = sht_img->scrx * 0.1875;
-                if (tbx > x1 && tbx < x1 + 32)
-                {
-                    // logo 徽标
-                    draw_logo_menu();
-                }
-                else if (tbx > x1 + 32 && tbx < x1 + 32 + 25 + 8)
-                {
-                    // 文件
-                    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
-                }
-                else if (tbx > x1 + 32 + 25 + 8 && tbx < x1 + 32 + 25 + 8 + 25 + 9)
-                {
-                    // 设置
-                    char *argv[2] = {"shortdock-open-settings", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
-                }
-                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
-                {
-                    // 终端
-                    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
-                }
-                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 && tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
-                {
-                    // 图形
-                    char *argv[2] = {"shortdock-open-graphics", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
-                }
-                else if (tbx > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
-                         tbx < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
-                {
-                    // 关于
-                    char *argv[2] = {"shortdock-open-about", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
-                }
-            }
-            else if (tbx > sht_img->scrx * 0.1875 && tby > 28 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 50 &&
-                     logo_menu_is_open)
-            {
-                // 关机
-            }
-            else if (tbx > sht_img->scrx * 0.1875 && tby > 50 && tbx < sht_img->scrx * 0.1875 + 100 && tby < 72 &&
-                     logo_menu_is_open)
-            {
-                // 刷新
-                init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
-                refresh_sheet(sht_img);
-            }
-        }
-        close_menu(current_window, tbx, tby);
-        delete_logo_menu();
+        ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
+        ms_dec.left_release_window  = current_window;
+        ms_dec.left_release_pending = true;
 
         ms_dec.left          = false;
         ms_dec.win_move_lock = false;
@@ -274,16 +296,19 @@ void process_mouse_button()
         ms_dec.center = false;
     }
 
-    tbx         = getBX(sht_img, mouse_ct_sheet_img);
-    tby         = getBY(sht_img, mouse_ct_sheet_img);
+    int prev_tbx = getBX(sht_img, mouse_ct_sheet_img);
+    int prev_tby = getBY(sht_img, mouse_ct_sheet_img);
     int mouse_x = get_mouse_x();
     int mouse_y = get_mouse_y();
+    int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
+    int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
     move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    refresh_part_sheet(sht_img, tbx, tby, tbx + getXsize(sht_img, mouse_ct_sheet_img),
-                       tby + getYsize(sht_img, mouse_ct_sheet_img));
-    refresh_part_sheet(sht_img, getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
-                       getBX(sht_img, mouse_ct_sheet_img) + getXsize(sht_img, mouse_ct_sheet_img),
-                       getBY(sht_img, mouse_ct_sheet_img) + getYsize(sht_img, mouse_ct_sheet_img));
+    refresh_union_rect_deferred_or_now(sht_img, prev_tbx, prev_tby, prev_tbx + mouse_w, prev_tby + mouse_h,
+                                       getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                                       getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                                       getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+    tbx = mouse_x;
+    tby = mouse_y;
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)
@@ -312,6 +337,15 @@ void process_mouse_button()
             }
         }
     }
+    
+    // 处理滚轮事件
+    int scroll = get_mouse_scroll();
+    if (scroll != 0 && current_window != NULL)
+    {
+        // 发送滚轮消息到当前窗口
+        // MSG_ROLLER 消息格式：参数1 = 滚轮方向（正=向上，负=向下）
+        do_message(MSG_ROLLER, scroll, 0, current_window->WinMPf, current_window->w_task);
+    }
 }
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
@@ -327,12 +361,138 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 
 void process_mouse_info()
 {
+    ms_dec.need_flush = false;
+    process_mouse_button();
+
+    if (desktop_refresh_pending)
+    {
+        desktop_refresh_pending = false;
+        init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
+        refresh_sheet(sht_img);
+        flush_sheet_damage_queue(sht_img);
+    }
+
+    if (ms_dec.left_release_pending)
+    {
+        int  click_x  = get_mouse_x();
+        int  click_y  = get_mouse_y();
+        bool handled  = false;
+        int  menu_x1  = sht_img->scrx * 0.1875;
+        tbx = click_x;
+        tby = click_y;
+
+        if (!have_full_screen_app)
+        {
+            // 底栏和快捷栏点击优先，不依赖 ms_dec.sht_now，避免被错误命中窗口吞掉事件。
+            if (click_x > 24 && click_y > sht_img->scry - 24 - 63 && click_x < 24 + 84)
+            {
+                create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+                handled = true;
+            }
+            else if (click_x > 132 && click_y > sht_img->scry - 24 - 63)
+            {
+                TDB_t tdb = find_dock_icon((click_x - 132) / 80);
+                if (tdb)
+                {
+                    if (tdb->min_mode)
+                    {
+                        tdb->windowls->w_sheet->bx = tdb->bmx;
+                        tdb->windowls->w_sheet->by = tdb->bmy;
+                        tdb->min_mode              = false;
+                    }
+                    lift_sheet(sht_img, tdb->windowls->w_sheet);
+                    ms_dec.sht_now = tdb->windowls->w_sheet;
+                    focus_window_dock(tdb->windowls);
+                    refresh_part_sheet_deferred_or_now(sht_img, tdb->windowls->w_sheet->bx,
+                                                       tdb->windowls->w_sheet->by,
+                                                       tdb->windowls->w_sheet->bx +
+                                                           tdb->windowls->w_sheet->width,
+                                                       tdb->windowls->w_sheet->by +
+                                                           tdb->windowls->w_sheet->height);
+                    handled = true;
+                }
+            }
+            else if (click_y < 24)
+            {
+                if (click_x > menu_x1 && click_x < menu_x1 + 32)
+                {
+                    // logo 徽标
+                    draw_logo_menu();
+                    handled = true;
+                }
+                else if (click_x > menu_x1 + 32 && click_x < menu_x1 + 32 + 25 + 8)
+                {
+                    // 文件
+                    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+                    handled = true;
+                }
+                else if (click_x > menu_x1 + 32 + 25 + 8 && click_x < menu_x1 + 32 + 25 + 8 + 25 + 9)
+                {
+                    // 设置
+                    char *argv[2] = {"shortdock-open-settings", NULL};
+                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    handled = true;
+                }
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
+                {
+                    // 终端
+                    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+                    handled = true;
+                }
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
+                {
+                    // 进程
+                    create_user_process_from_file((char *)"/system/taskmgr.elf", NULL, NULL);
+                    handled = true;
+                }
+                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
+                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
+                {
+                    // 关于
+                    char *argv[2] = {"shortdock-open-about", NULL};
+                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    handled = true;
+                }
+            }
+        }
+
+        if (!handled && logo_menu_is_open && click_x > menu_x1 && click_x < menu_x1 + 100)
+        {
+            if (click_y > 28 && click_y < 50)
+            {
+                // 重启
+                power_reboot(EFI_ST, EFI_BC);
+                handled = true;
+            }
+            else if (click_y > 50 && click_y < 72)
+            {
+                // 关机
+                power_shutdown(EFI_ST, EFI_BC);
+                handled = true;
+            }
+            else if (click_y > 72 && click_y < 94)
+            {
+                // 刷新
+                desktop_refresh_pending = true;
+                handled = true;
+            }
+        }
+
+        (void)handled;
+        close_menu(ms_dec.left_release_window, tbx, tby);
+        delete_logo_menu();
+        ms_dec.left_release_window  = NULL;
+        ms_dec.left_release_pending = false;
+    }
+
     if (ms_dec.left)
     {
         if (!ms_dec.win_move_lock)
         {
-            ms_dec.sht_now = found_sheet_movable(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sht_now == NULL || have_full_screen_app)
+            SHEET *movable_sheet = found_sheet_movable(sht_img, mouse_x, mouse_y);
+            if (movable_sheet == NULL || have_full_screen_app)
             {
                 // 点在了标题栏外
                 ms_dec.win_move_lock = false;
@@ -341,16 +501,16 @@ void process_mouse_info()
             {
                 // 点在了窗口上
                 ms_dec.win_move_lock = true;
-                ms_dec.sht_now       = get_sheet(sht_img, ms_dec.sht_now);
+                ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
                 lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
+                refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
                 ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
                 ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
             }
-            ms_dec.sht_now = found_sheetmb(sht_img, mouse_x, mouse_y);
-            if (ms_dec.sht_now == NULL)
+            SHEET *hover_sheet = found_sheetmb(sht_img, mouse_x, mouse_y);
+            if (hover_sheet == NULL)
             {
                 // 点在了桌面或快捷栏上
                 // do nothing
@@ -362,29 +522,39 @@ void process_mouse_info()
             }
             else
             {
-                ms_dec.sht_now = get_sheet(sht_img, ms_dec.sht_now);
-                if (!have_full_screen_app) lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
+                SHEET *active_sheet = get_sheet(sht_img, hover_sheet);
+                if (!have_full_screen_app) lift_sheet(sht_img, active_sheet);
+                refresh_part_sheet_deferred_or_now(sht_img, active_sheet->bx, active_sheet->by,
+                                                   active_sheet->bx + active_sheet->width,
+                                                   active_sheet->by + active_sheet->height);
 
-                focus_window_dock(sht_found_win(xwmii, sht_img, ms_dec.sht_now));
+                focus_window_dock(sht_found_win(xwmii, sht_img, active_sheet));
             }
         }
         else if (ms_dec.win_move_lock)
         {
+            if (ms_dec.sht_now == NULL)
+            {
+                ms_dec.win_move_lock = false;
+                ms_dec.need_flush = false;
+                return;
+            }
             int his_x = ms_dec.sht_now->bx;
             int his_y = ms_dec.sht_now->by;
             // 移动窗口
-            ms_dec.sht_now->bx = mouse_x - ms_dec.win_x_offset;
-            ms_dec.sht_now->by = mouse_y - ms_dec.win_y_offset;
-            refresh_part_sheet(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                               ms_dec.sht_now->bx + ms_dec.sht_now->width, ms_dec.sht_now->by + ms_dec.sht_now->height);
-            refresh_part_sheet(sht_img, his_x, his_y, his_x + ms_dec.sht_now->width, his_y + ms_dec.sht_now->height);
+            int next_x = mouse_x - ms_dec.win_x_offset;
+            int next_y = mouse_y - ms_dec.win_y_offset;
+            clamp_drag_window_position(sht_img, ms_dec.sht_now, &next_x, &next_y);
+            ms_dec.sht_now->bx = next_x;
+            ms_dec.sht_now->by = next_y;
+            refresh_union_rect_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                               ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                               ms_dec.sht_now->by + ms_dec.sht_now->height,
+                                               his_x, his_y,
+                                               his_x + ms_dec.sht_now->width,
+                                               his_y + ms_dec.sht_now->height);
         }
     }
-
-    ms_dec.need_flush = false;
 }
 
 bool mousedecode(uint8_t data)
@@ -444,6 +614,13 @@ bool mousedecode(uint8_t data)
         if (wheel_delta >= 255) wheel_delta = -1;
 
         ms_dec.scroll = -wheel_delta;
+        // 更新鼠标位置
+        mouse_x += ms_dec.x;
+        mouse_y += ms_dec.y;
+        if (mouse_x < 0) mouse_x = 0;
+        if (mouse_y < 0) mouse_y = 0;
+        if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+        if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
         return true;
     }
     return false;
@@ -458,6 +635,67 @@ int get_mouse_y()
 {
     return mouse_y;
 }
+
+void set_mouse_position(int x, int y)
+{
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > (int)get_hor() - 1) x = (int)get_hor() - 1;
+    if (y > (int)get_ver() - 1) y = (int)get_ver() - 1;
+
+    int old_x = mouse_x;
+    int old_y = mouse_y;
+    mouse_x = x;
+    mouse_y = y;
+
+    ms_dec.win_move_lock = false;
+    ms_dec.sht_now = NULL;
+
+    if (sht_img == NULL || mouse_ct_sheet_img == NULL) {
+        return;
+    }
+
+    int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
+    int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
+    move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
+    refresh_union_rect_deferred_or_now(sht_img, old_x, old_y, old_x + mouse_w, old_y + mouse_h,
+                                       getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                                       getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                                       getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+}
+
+void center_mouse_cursor()
+{
+    set_mouse_position((int)(get_hor() - 16) / 2, (int)(get_ver() - 28 - 29) / 2);
+}
+
+int get_mouse_scroll()
+{
+    int scroll = ms_dec.scroll;
+    ms_dec.scroll = 0;  // 读取后重置
+    return scroll;
+}
+
+extern "C" void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
+{
+    ms_dec.btn = buttons & 0x07;
+    ms_dec.x   = dx;
+    ms_dec.y   = dy;
+    ms_dec.scroll += wheel;
+
+    mouse_x += dx;
+    mouse_y += dy;
+
+    if (mouse_x < 0) mouse_x = 0;
+    if (mouse_y < 0) mouse_y = 0;
+    if (mouse_x > get_hor() - 1) mouse_x = get_hor() - 1;
+    if (mouse_y > get_ver() - 1) mouse_y = get_ver() - 1;
+
+    ms_dec.need_flush = true;
+    process_mouse_button();
+}
+
+EXPORT_SYMBOL(mouse_inject_report);
 
 static bool send_command(uint8_t value)
 {
@@ -522,8 +760,6 @@ static MouseType get_mouse_type()
 // 修正后的 mouse_init()
 void mouse_init()
 {
-    // 1. 禁用中断
-    disable_intr();
 
     // 2. 启用辅助PS/2端口（鼠标）
     wait_KB_write();
@@ -661,15 +897,20 @@ void mouse_init()
     // 14. 初始化状态变量
     mouse_x              = (get_hor() - 16) / 2;
     mouse_y              = (get_ver() - 28 - 29) / 2;
-    ms_dec.phase         = 0;
+    // 所有初始化命令的 ACK 都已经在 mouse_init() 内同步读走了，
+    // 这里应当直接进入首字节等待状态，否则运行期数据包会被一直丢掉。
+    ms_dec.phase         = 1;
     ms_dec.win_move_lock = false;
     ms_dec.sht_now       = NULL;
     ms_dec.need_flush    = false;
     ms_dec.first_click   = false;
     ms_dec.double_click  = false;
-
-    // 15. 启用中断
-    enable_intr();
+    ms_dec.left_release_pending = false;
+    ms_dec.left          = false;
+    ms_dec.left_release_window  = NULL;
+    ms_dec.right         = false;
+    ms_dec.center        = false;
+    ms_dec.scroll        = 0;
 
     printk("Mouse initialized successfully, type: %d\n", type);
 }
