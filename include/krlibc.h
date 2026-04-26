@@ -28,7 +28,9 @@ typedef int errno_t;
 
 #define KERNEL_AREA_MEM        0xf000000000000000       // 内核地址空间起始
 static inline bool check_user_overflow(uint64_t addr, uint64_t size) {
-    return (addr + size) > KERNEL_AREA_MEM;
+    if (size == 0) return false;
+    if (addr >= KERNEL_AREA_MEM) return true;
+    return size > (KERNEL_AREA_MEM - addr);
 }
 
 #define UNUSED(...)                                                                                \

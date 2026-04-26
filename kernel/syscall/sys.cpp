@@ -13,6 +13,141 @@
 #include <math.hpp>
 
 static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
+static constexpr size_t USER_PATH_MAX        = 4096UL;
+static constexpr size_t USER_IOV_MAX         = 1024UL;
+static constexpr size_t USER_POLL_MAX        = FD_SETSIZE;
+
+static bool checked_add_size(size_t a, size_t b, size_t *out)
+{
+    if (out == NULL) return false;
+    if (a > (size_t)-1 - b) return false;
+    *out = a + b;
+    return true;
+}
+
+static bool checked_mul_size(size_t a, size_t b, size_t *out)
+{
+    if (out == NULL) return false;
+    if (a != 0 && b > (size_t)-1 / a) return false;
+    *out = a * b;
+    return true;
+}
+
+static bool align_up_u64(uint64_t value, uint64_t align, uint64_t *out)
+{
+    if (out == NULL || align == 0) return false;
+    uint64_t addend = align - 1;
+    if (value > UINT64_MAX - addend) return false;
+    *out = (value + addend) & ~(align - 1);
+    return true;
+}
+
+static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
+{
+    if (out == NULL) return false;
+    if (nfds > FD_SETSIZE) return false;
+    *out = ((size_t)nfds + 7) / 8;
+    return true;
+}
+
+static page_directory_t *current_user_pagedir()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL) return NULL;
+    return task->parent_group->pagedir;
+}
+
+static int copy_string_from_user(char **out, const char *src, size_t max_len)
+{
+    if (out == NULL) return -EINVAL;
+    *out = NULL;
+    if (src == NULL || max_len == 0) return -EINVAL;
+
+    page_directory_t *pagedir = current_user_pagedir();
+    if (pagedir == NULL) return -EFAULT;
+
+    char *tmp = (char *)malloc(max_len);
+    if (tmp == NULL) return -ENOMEM;
+
+    for (size_t i = 0; i < max_len; i++)
+    {
+        char c = 0;
+        if (!copy_from_user_pagedir(pagedir, &c, src + i, sizeof(c)))
+        {
+            free(tmp);
+            return -EFAULT;
+        }
+        tmp[i] = c;
+        if (c == '\0')
+        {
+            *out = tmp;
+            return 0;
+        }
+    }
+
+    free(tmp);
+    return -ENAMETOOLONG;
+}
+
+static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
+{
+    if (node == NULL || out == NULL) return SYSCALL_FAULT_(EINVAL);
+    memset(out, 0, sizeof(*out));
+    out->st_gid     = (int)node->group;
+    out->st_uid     = (int)node->owner;
+    out->st_ino     = node->inode;
+    out->st_size    = node->size == (uint64_t)-1 ? 0 : (long long int)node->size;
+    out->st_mode    = node->mode | (node->type == file_symlink  ? S_IFLNK
+                                   : node->type == file_dir    ? S_IFDIR
+                                   : node->type == file_block  ? S_IFBLK
+                                   : node->type == file_socket ? S_IFSOCK
+                                   : node->type == file_none   ? S_IFREG
+                                   : node->type == file_stream ? S_IFCHR
+                                                               : S_IFREG);
+    out->st_nlink   = 1;
+    out->st_dev     = (long)node->dev;
+    out->st_rdev    = (long)node->rdev;
+    out->st_blksize = PAGE_SIZE;
+    out->st_blocks  = (node->size == (uint64_t)-1) ? 0 : (node->size + PAGE_SIZE - 1) / PAGE_SIZE;
+    out->st_ctim = out->st_atim = out->st_mtim =
+        (struct timespec){.tv_sec = node->createtime / 1000000000ULL, .tv_nsec = node->createtime % 1000000000ULL};
+    return 0;
+}
+
+static uint64_t stat_kernel_path(const char *path, struct stat *out)
+{
+    if (path == NULL || out == NULL) return SYSCALL_FAULT_(EINVAL);
+    vfs_node_t node = vfs_open(path);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    uint64_t ret = fill_stat_from_node(node, out);
+    vfs_close(node);
+    return ret;
+}
+
+static uint64_t copy_stat_to_user(struct stat *user_stat, const struct stat *kstat)
+{
+    if (user_stat == NULL || kstat == NULL) return SYSCALL_FAULT_(EINVAL);
+    page_directory_t *pagedir = current_user_pagedir();
+    if (!copy_to_user_pagedir(pagedir, user_stat, kstat, sizeof(*kstat))) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
+static int resolve_user_path_at(int dirfd, char *pathname, char **resolved)
+{
+    if (resolved == NULL) return -EINVAL;
+    *resolved = NULL;
+
+    char *kpath = NULL;
+    int ret = copy_string_from_user(&kpath, pathname, USER_PATH_MAX);
+    if (ret < 0) return ret;
+
+    char *path = at_resolve_pathname(dirfd, kpath);
+    free(kpath);
+    if (path == NULL) return -ENOENT;
+
+    *resolved = path;
+    return 0;
+}
 
 static int64_t serial_write_from_user(const uint8_t *buffer, size_t size)
 {
@@ -95,13 +230,56 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     return (int64_t)total;
 }
 
-static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size)
+static int64_t read_to_user_buffer(fd_file_handle *handle, uint8_t *buffer, size_t size, bool socket_mode,
+                                   size_t offset, bool update_offset)
 {
-    if (size == 0) return true;
-    if (src == NULL) return false;
-    if (!user_range_mapped(pagedir, dst, size)) return false;
-    memcpy(dst, src, size);
-    return true;
+    if (handle == NULL || buffer == NULL) return -EINVAL;
+    if (size == 0) return 0;
+
+    page_directory_t *pagedir = current_user_pagedir();
+    size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
+    uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
+    if (bounce == NULL) return -ENOMEM;
+
+    size_t total = 0;
+    while (total < size)
+    {
+        size_t chunk = MIN(size - total, bounce_bytes);
+        ssize_t read_now;
+        if (socket_mode)
+        {
+            read_now = socket_read(handle->node, bounce, chunk);
+            if (read_now < 0)
+            {
+                free(bounce);
+                return total > 0 ? (int64_t)total : read_now;
+            }
+        }
+        else
+        {
+            size_t got = vfs_read(handle->node, bounce, offset + total, chunk);
+            if (got == (size_t)VFS_STATUS_FAILED)
+            {
+                free(bounce);
+                return total > 0 ? (int64_t)total : -EIO;
+            }
+            read_now = (ssize_t)got;
+        }
+
+        if (read_now == 0) break;
+        if (!copy_to_user_pagedir(pagedir, buffer + total, bounce, (size_t)read_now))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EFAULT;
+        }
+
+        total += (size_t)read_now;
+        if ((size_t)read_now < chunk) break;
+    }
+
+    free(bounce);
+    if (update_offset && handle->node->size != (uint64_t)-1) handle->offset += total;
+    return (int64_t)total;
 }
 
 static bool wait4_pid_matches(pcb_t child, long pid)
@@ -194,12 +372,10 @@ sys_(exit, int exit_code)
     return 0;
 }
 
-sys_(open, char *path0, uint64_t flags, uint64_t mode)
+static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
 {
-    if (unlikely(path0 == NULL)) return SYSCALL_FAULT_(EINVAL);
-
     char *normalized_path = strdup(path0);
-
+    if (normalized_path == NULL) return SYSCALL_FAULT_(ENOMEM);
 
     vfs_node_t node = vfs_open(path0);
     if (node == NULL)
@@ -239,6 +415,19 @@ next:
     }
     free(normalized_path);
     return index;
+}
+
+sys_(open, char *path0, uint64_t flags, uint64_t mode)
+{
+    if (unlikely(path0 == NULL)) return SYSCALL_FAULT_(EINVAL);
+
+    char *kpath = NULL;
+    int ret = copy_string_from_user(&kpath, path0, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    uint64_t open_ret = open_kernel_path(kpath, flags, mode);
+    free(kpath);
+    return open_ret;
 }
 
 sys_(close, int fd)
@@ -281,23 +470,20 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     if (!handle) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)
     {
-        ssize_t ret = socket_read(handle->node, buffer, size);
-        if (ret < 0) return SYSCALL_FAULT_((int)-ret);
-        return ret;
+        int64_t ret = read_to_user_buffer(handle, buffer, size, true, 0, false);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     if (handle->node->type & file_pipe)
     {
         vfs_update(handle->node);
         if (handle->node->size == 0 && handle->flags & O_NONBLOCK) return SYSCALL_FAULT_(EWOULDBLOCK);
-        size_t ret = vfs_read(handle->node, buffer, 0, size);
-        if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
-        return ret;
+        int64_t ret = read_to_user_buffer(handle, buffer, size, false, 0, false);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)
     {
         return SYSCALL_FAULT_(EWOULDBLOCK);
     }
-    size_t ret;
     if (handle->node->size != (uint64_t)-1)
     {
         if (handle->offset >= handle->node->size)
@@ -307,10 +493,10 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
         }
     }
 read:;
-    ret = vfs_read(handle->node, buffer, handle->offset, size);
-    if (ret == (size_t)VFS_STATUS_FAILED) return SYSCALL_FAULT_(EIO);
-    if (handle->node->size != (uint64_t)-1) { handle->offset += ret; }
-    return ret;
+    {
+        int64_t read_ret = read_to_user_buffer(handle, buffer, size, false, handle->offset, true);
+        return read_ret < 0 ? SYSCALL_FAULT_((int)-read_ret) : (uint64_t)read_ret;
+    }
 pipe:;
     while (handle->offset >= handle->node->size)
     {
@@ -400,15 +586,31 @@ sys_(socket, int domain, int type, int protocol)
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
-    int ret = socket_connect(fd, addr, addrlen);
+    if (addrlen < sizeof(struct sockaddr) || addrlen > sizeof(struct sockaddr_in6)) return SYSCALL_FAULT_(EINVAL);
+    struct sockaddr_in6 kaddr;
+    memset(&kaddr, 0, sizeof(kaddr));
+    if (!copy_from_user_pagedir(current_user_pagedir(), &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
+    int ret = socket_connect(fd, (const struct sockaddr *)&kaddr, addrlen);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     return ret;
 }
 
 sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    int ret = socket_accept(fd, addr, addrlen);
+    socklen_t kaddrlen = sizeof(struct sockaddr_in6);
+    if (addrlen != NULL && !copy_from_user_pagedir(current_user_pagedir(), &kaddrlen, addrlen, sizeof(kaddrlen)))
+        return SYSCALL_FAULT_(EFAULT);
+    if (addr != NULL && addrlen == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (kaddrlen > sizeof(struct sockaddr_in6)) kaddrlen = sizeof(struct sockaddr_in6);
+
+    struct sockaddr_in6 kaddr;
+    memset(&kaddr, 0, sizeof(kaddr));
+    int ret = socket_accept(fd, addr ? (struct sockaddr *)&kaddr : NULL, addr ? &kaddrlen : NULL);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
+    if (addr != NULL && !copy_to_user_pagedir(current_user_pagedir(), addr, &kaddr, kaddrlen))
+        return SYSCALL_FAULT_(EFAULT);
+    if (addrlen != NULL && !copy_to_user_pagedir(current_user_pagedir(), addrlen, &kaddrlen, sizeof(kaddrlen)))
+        return SYSCALL_FAULT_(EFAULT);
     return ret;
 }
 
@@ -416,29 +618,20 @@ sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
 sys_(stat, char *fn, struct stat *buf)
 {
     if (unlikely(fn == NULL || buf == NULL)) return SYSCALL_FAULT_(EINVAL);
-    char      *path = vfs_cwd_path_build(fn);
-    vfs_node_t node = vfs_open(path);
-    if (node == NULL)
-    {
-        free(path);
-        return SYSCALL_FAULT_(ENOENT);
-    }
-    buf->st_gid   = (int)node->group;
-    buf->st_uid   = (int)node->owner;
-    buf->st_ino   = node->inode;
-    buf->st_size  = (long long int)node->size;
-    buf->st_mode  = node->mode | (node->type == file_symlink  ? S_IFLNK
-                                  : node->type == file_dir    ? S_IFDIR
-                                  : node->type == file_block  ? S_IFBLK
-                                  : node->type == file_socket ? S_IFSOCK
-                                  : node->type == file_none   ? S_IFREG
-                                  : node->type == file_stream ? S_IFCHR
-                                                              : S_IFREG);
-    buf->st_nlink = 1;
-    buf->st_dev   = (long)node->dev;
-    buf->st_rdev  = (long)node->rdev;
+
+    char *user_path = NULL;
+    int ret = copy_string_from_user(&user_path, fn, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    char *path = vfs_cwd_path_build(user_path);
+    free(user_path);
+    if (path == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    struct stat kstat;
+    uint64_t stat_ret = stat_kernel_path(path, &kstat);
     free(path);
-    return 0;
+    if ((int64_t)stat_ret < 0) return stat_ret;
+    return copy_stat_to_user(buf, &kstat);
 }
 
 
@@ -471,14 +664,17 @@ sys_(yield)
 sys_(uname, struct utsname *utsname)
 {
     if (unlikely(utsname == NULL)) return SYSCALL_FAULT_(EINVAL);
+    struct utsname kname;
+    memset(&kname, 0, sizeof(kname));
     char sysname[] = "XJ380OS";
     char machine[] = "x86_64";
     char version[] = "2.1";
-    memcpy(utsname->sysname, sysname, sizeof(sysname));
-    memcpy(utsname->nodename, "localhost", 50); 
-    memcpy(utsname->release, KN_VERSION, sizeof(KN_VERSION));
-    memcpy(utsname->version, version, sizeof(version));
-    memcpy(utsname->machine, machine, sizeof(machine));
+    memcpy(kname.sysname, sysname, sizeof(sysname));
+    memcpy(kname.nodename, "localhost", 10);
+    memcpy(kname.release, KN_VERSION, sizeof(KN_VERSION));
+    memcpy(kname.version, version, sizeof(version));
+    memcpy(kname.machine, machine, sizeof(machine));
+    if (!copy_to_user_pagedir(current_user_pagedir(), utsname, &kname, sizeof(kname))) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
 void scheduler_nano_sleep(uint64_t nano) {
@@ -512,6 +708,7 @@ sys_(nano_sleep, void *time_handle)
         return SYSCALL_FAULT_(EFAULT);
     }
     if (unlikely(k_req.tv_nsec >= 1000000000L)) return SYSCALL_FAULT_(EINVAL);
+    if (k_req.tv_sec > (UINT64_MAX - k_req.tv_nsec) / 1000000000ULL) return SYSCALL_FAULT_(EINVAL);
     uint64_t nsec = k_req.tv_sec * 1000000000 + k_req.tv_nsec;
     scheduler_nano_sleep(nsec);
     return 0;
@@ -528,7 +725,14 @@ sys_(ioctl, int fd, int options, void *arg2)
 sys_(writev, int fd, struct iovec *iov, int iovcnt)
 {
     if (unlikely(fd < 0 || iov == NULL)) return SYSCALL_FAULT_(EINVAL);
+    if (unlikely(iovcnt < 0 || (size_t)iovcnt > USER_IOV_MAX)) return SYSCALL_FAULT_(EINVAL);
     if (iovcnt == 0) return 0;
+    size_t iov_bytes = 0;
+    if (!checked_mul_size((size_t)iovcnt, sizeof(struct iovec), &iov_bytes) ||
+        !user_range_mapped(current_user_pagedir(), iov, iov_bytes))
+    {
+        return SYSCALL_FAULT_(EFAULT);
+    }
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
     page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
@@ -548,7 +752,7 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
                 if (total > 0) return total;
                 return SYSCALL_FAULT_((int)-ret);
             }
-            total += (size_t)ret;
+            if (!checked_add_size(total, (size_t)ret, &total)) return SYSCALL_FAULT_(EINVAL);
             if ((size_t)ret < kiov.iov_len) break;
         }
         return total;
@@ -563,7 +767,7 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
         }
         int64_t status = write_from_user_buffer(handle, (const uint8_t *)kiov.iov_base, kiov.iov_len, false);
         if (status < 0) return total > 0 ? total : SYSCALL_FAULT_((int)-status);
-        total += (size_t)status;
+        if (!checked_add_size(total, (size_t)status, &total)) return SYSCALL_FAULT_(EINVAL);
         if ((size_t)status < kiov.iov_len) break;
     }
     return total;
@@ -572,63 +776,47 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
 sys_(readv, int fd, struct iovec *iov, int iovcnt0)
 {
     if (unlikely(fd < 0 || iov == NULL)) return SYSCALL_FAULT_(EINVAL);
+    if (unlikely(iovcnt0 < 0 || (size_t)iovcnt0 > USER_IOV_MAX)) return SYSCALL_FAULT_(EINVAL);
     if (iovcnt0 == 0) return 0;
-    size_t          iovcnt = iovcnt0;
+    size_t          iovcnt = (size_t)iovcnt0;
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
-    if (iovcnt == 0) return 0;
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
-    if (handle->node->type & file_socket)
+
+    size_t iov_bytes = 0;
+    if (!checked_mul_size(iovcnt, sizeof(struct iovec), &iov_bytes)) return SYSCALL_FAULT_(EFAULT);
+    struct iovec *kiov = (struct iovec *)malloc(iov_bytes);
+    if (kiov == NULL) return SYSCALL_FAULT_(ENOMEM);
+    if (!copy_from_user_pagedir(current_user_pagedir(), kiov, iov, iov_bytes))
     {
-        size_t total = 0;
-        for (size_t i = 0; i < iovcnt; i++)
+        free(kiov);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    size_t total = 0;
+    for (size_t i = 0; i < iovcnt; i++)
+    {
+        if (kiov[i].iov_len == 0) continue;
+        uint64_t ret = sys_read(fd, (uint8_t *)kiov[i].iov_base, kiov[i].iov_len, 0, 0, 0, regs);
+        if ((int64_t)ret < 0)
         {
-            ssize_t ret = socket_read(handle->node, iov[i].iov_base, iov[i].iov_len);
-            if (ret < 0)
-            {
-                if (total > 0) return total;
-                return SYSCALL_FAULT_((int)-ret);
-            }
-            total += (size_t)ret;
-            if ((size_t)ret < iov[i].iov_len) break;
+            free(kiov);
+            return total > 0 ? total : ret;
         }
-        return total;
+        if (!checked_add_size(total, (size_t)ret, &total))
+        {
+            free(kiov);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+        if ((size_t)ret < kiov[i].iov_len) break;
     }
-    size_t buf_len = 0;
-    for (size_t i = 0; i < iovcnt; i++)
-    {
-        buf_len += iov[i].iov_len;
-    }
-    uint8_t *buf = (uint8_t *)malloc(buf_len);
-    if (handle->node->size != (uint64_t)-1)
-    {
-        if (handle->offset > handle->node->size) return 0;
-    }
-    size_t status = vfs_read(handle->node, buf, handle->offset, buf_len);
-    if (status == (size_t)VFS_STATUS_FAILED)
-    {
-        free(buf);
-        return SYSCALL_FAULT_(EIO);
-    }
-    if (handle->node->size != (uint64_t)-1) handle->offset += status;
-    size_t copied = 0;
-    for (size_t i = 0; i < iovcnt; i++)
-    {
-        size_t len = iov[i].iov_len;
-        if (len == 0) continue;
 
-        size_t to_copy = len;
-        if (copied + to_copy > status) { to_copy = status - copied; }
-
-        memcpy(iov[i].iov_base, buf + copied, to_copy);
-        copied += to_copy;
-    }
-    free(buf);
-    return status;
+    free(kiov);
+    return total;
 }
 spin_t mm_op_lock=SPIN_INIT;
 
 uint64_t sys_brk(uint64_t brk) {
-    brk = (brk + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (!align_up_u64(brk, PAGE_SIZE, &brk)) return get_current_task()->parent_group->brk_current;
 
     if (!brk) {
         return get_current_task()->parent_group->brk_start;
@@ -731,7 +919,8 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
 
     addr = addr & (~(PAGE_SIZE - 1));
 
-    uint64_t aligned_len = (length + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    uint64_t aligned_len = 0;
+    if (!align_up_u64(length, PAGE_SIZE, &aligned_len)) { return SYSCALL_FAULT_(EINVAL); }
 
     if (check_user_overflow(addr, aligned_len)) { return -EFAULT; }
 
@@ -757,7 +946,9 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
             }
         } else {
             start_addr = USER_MMAP_START;
-            while (vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) {
+            while (true) {
+                if (check_user_overflow(start_addr, aligned_len)) return SYSCALL_FAULT_(ENOMEM);
+                if (!vma_find_intersection(mgr, start_addr, start_addr + aligned_len)) break;
                 start_addr += PAGE_SIZE;
                 if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
             }
@@ -830,7 +1021,9 @@ sys_(munmap, uint64_t addr, size_t size) {
     if (size == 0) return 0;
 
     addr = addr & (~(PAGE_SIZE - 1));
-    size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    uint64_t aligned_size = 0;
+    if (!align_up_u64(size, PAGE_SIZE, &aligned_size)) return SYSCALL_FAULT_(EINVAL);
+    size = (size_t)aligned_size;
 
     if (check_user_overflow(addr, size)) { return -EFAULT; }
 
@@ -881,8 +1074,13 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
          uint64_t new_addr) {
     old_addr = old_addr & (~(PAGE_SIZE - 1));
     new_addr = new_addr & (~(PAGE_SIZE - 1));
-    old_size = (old_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-    new_size = (new_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    if (!align_up_u64(old_size, PAGE_SIZE, &old_size) ||
+        !align_up_u64(new_size, PAGE_SIZE, &new_size))
+    {
+        return SYSCALL_FAULT_(EINVAL);
+    }
+    if (check_user_overflow(old_addr, old_size) || check_user_overflow(new_addr, new_size))
+        return SYSCALL_FAULT_(EFAULT);
 
     vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
 
@@ -900,6 +1098,7 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
     }
 
     // 如果需要扩大，检查是否有足够空间
+    if (check_user_overflow(vma->vm_start, new_size)) return SYSCALL_FAULT_(ENOMEM);
     uint64_t new_end = vma->vm_start + new_size;
     if (!vma_find_intersection(mgr, vma->vm_end, new_end)) {
         uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
@@ -919,7 +1118,9 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
     if (flags & MREMAP_MAYMOVE) {
         // 简单的地址分配策略：从高地址开始
         uint64_t start_addr = USER_MMAP_START;
-        while (vma_find_intersection(mgr, start_addr, start_addr + new_size)) {
+        while (true) {
+            if (check_user_overflow(start_addr, new_size)) return SYSCALL_FAULT_(ENOMEM);
+            if (!vma_find_intersection(mgr, start_addr, start_addr + new_size)) break;
             start_addr += PAGE_SIZE;
             if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
         }
@@ -956,6 +1157,8 @@ sys_(getcwd, char *buffer, size_t length)
 {
     if (unlikely(buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(length == 0)) return 0;
+    if (!user_range_mapped(current_user_pagedir(), buffer, length)) return SYSCALL_FAULT_(EFAULT);
+
     tcb_t  process  = get_current_task();
     char  *cwd      = vfs_get_fullpath(process->cwd);
     if (unlikely(cwd == NULL)) return SYSCALL_FAULT_(ENOENT);
@@ -963,8 +1166,12 @@ sys_(getcwd, char *buffer, size_t length)
     size_t cwd_leng = strlen(cwd);
     size_t copy_len = cwd_leng;
     if (copy_len >= length) copy_len = length - 1;
-    memcpy(buffer, cwd, copy_len);
-    buffer[copy_len] = '\0';
+    if (!copy_to_user_pagedir(current_user_pagedir(), buffer, cwd, copy_len) ||
+        !copy_to_user_pagedir(current_user_pagedir(), buffer + copy_len, "", 1))
+    {
+        free(cwd);
+        return SYSCALL_FAULT_(EFAULT);
+    }
     free(cwd);
     return copy_len;
 }
@@ -974,14 +1181,19 @@ sys_(chdir, char *s)
     if (unlikely(s == NULL)) return SYSCALL_FAULT_(EINVAL);
     tcb_t current = get_current_task();
 
+    char *user_path = NULL;
+    int copy_ret = copy_string_from_user(&user_path, s, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+
     char *path;
     char *bpath = NULL;
-    if (s[0] == '/') { path = strdup(s); }
+    if (user_path[0] == '/') { path = strdup(user_path); }
     else
     {
         bpath = vfs_get_fullpath(current->cwd);
-        path  = pathacat(bpath, s);
+        path  = pathacat(bpath, user_path);
     }
+    free(user_path);
 
     if (unlikely(path == NULL))
     {
@@ -1031,7 +1243,7 @@ sys_(exit_group, int exit_code)
     cpu_hlt;
 }
 
-sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
+static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t timeout)
 {
     int      ready      = 0;
     uint64_t start_time = nanoTime();
@@ -1085,6 +1297,33 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 
     if (!ready && sigexit) return (size_t)-EINTR;
     return ready;
+}
+
+sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
+{
+    if (nfds == 0) return 0;
+    if (fds_user == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (nfds > USER_POLL_MAX) return SYSCALL_FAULT_(EINVAL);
+
+    size_t fds_bytes = 0;
+    if (!checked_mul_size(nfds, sizeof(struct pollfd), &fds_bytes)) return SYSCALL_FAULT_(EFAULT);
+    struct pollfd *fds = (struct pollfd *)malloc(fds_bytes);
+    if (fds == NULL) return SYSCALL_FAULT_(ENOMEM);
+    if (!copy_from_user_pagedir(current_user_pagedir(), fds, fds_user, fds_bytes))
+    {
+        free(fds);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    uint64_t ret = poll_kernel_fds(fds, nfds, timeout);
+    if ((int64_t)ret >= 0 && !copy_to_user_pagedir(current_user_pagedir(), fds_user, fds, fds_bytes))
+    {
+        free(fds);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    free(fds);
+    return ret;
 }
 
 sys_(sched_getaffinity)
@@ -1207,52 +1446,37 @@ sys_(fstat, int fd, struct stat *buf)
 
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (unlikely(handle == NULL)) return SYSCALL_FAULT_(EBADF);
-    vfs_node_t node = handle->node;
-    buf->st_gid     = (int)node->group;
-    buf->st_uid     = (int)node->owner;
-    buf->st_size    = node->size == (uint64_t)-1 ? 0 : (long long int)node->size;
-    buf->st_mode    = node->type | (node->type == file_symlink  ? S_IFLNK
-                                    : node->type == file_dir    ? S_IFDIR
-                                    : node->type == file_block  ? S_IFBLK
-                                    : node->type == file_socket ? S_IFSOCK
-                                    : node->type == file_none   ? S_IFREG
-                                    : node->type == file_stream ? S_IFCHR
-                                                                : 0);
-    buf->st_nlink   = 1;
-    buf->st_dev     = node->dev;
-    buf->st_rdev    = node->rdev;
-    buf->st_ctim = buf->st_atim = buf->st_ctim = buf->st_mtim =
-        (struct timespec){.tv_sec = node->createtime / 1000000000ULL, .tv_nsec = node->createtime % 1000000000ULL};
-    buf->st_blksize = PAGE_SIZE;
-    buf->st_blocks  = (node->size + PAGE_SIZE - 1) / PAGE_SIZE;
-    buf->st_ino     = node->inode;
-    return 0;
+    struct stat kstat;
+    uint64_t ret = fill_stat_from_node(handle->node, &kstat);
+    if ((int64_t)ret < 0) return ret;
+    return copy_stat_to_user(buf, &kstat);
 }
 
 sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
 {
+    struct timespec kts;
+    memset(&kts, 0, sizeof(kts));
+
     switch (arg0)
     {
     case 1:
     case 6:
     case 4: {
-        if (ts != NULL)
-        {
-            uint64_t nano = nanoTime();
-            ts->tv_sec    = nano / 1000000000ULL;
-            ts->tv_nsec   = nano % 1000000000ULL;
-        }
+        uint64_t nano = nanoTime();
+        kts.tv_sec    = nano / 1000000000ULL;
+        kts.tv_nsec   = nano % 1000000000ULL;
+        if (ts != NULL && !copy_to_user_pagedir(current_user_pagedir(), ts, &kts, sizeof(kts)))
+            return SYSCALL_FAULT_(EFAULT);
         return 0;
     }
     case 0: {
         tm tm;
         time_read(&tm);
         uint64_t timestamp = mktime(&tm);
-        if (ts != NULL)
-        {
-            ts->tv_sec  = timestamp;
-            ts->tv_nsec = 0;
-        }
+        kts.tv_sec  = timestamp;
+        kts.tv_nsec = 0;
+        if (ts != NULL && !copy_to_user_pagedir(current_user_pagedir(), ts, &kts, sizeof(kts)))
+            return SYSCALL_FAULT_(EFAULT);
         return 0;
     }
     case 7: {
@@ -1270,8 +1494,12 @@ sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
 
 sys_(clock_getres)
 {
-    if (arg2 == 0) return SYSCALL_FAULT_(EINVAL);
-    ((struct timespec *)arg2)->tv_nsec = 1000000;
+    struct timespec *ts = (struct timespec *)arg1;
+    if (ts == NULL) return SYSCALL_FAULT_(EINVAL);
+    struct timespec kts;
+    memset(&kts, 0, sizeof(kts));
+    kts.tv_nsec = 1000000;
+    if (!copy_to_user_pagedir(current_user_pagedir(), ts, &kts, sizeof(kts))) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
 
@@ -1286,7 +1514,13 @@ sys_(shutdown, int fd, int how)
 sys_(mkdir, char *name, uint64_t mode)
 {
     if (name == NULL) return SYSCALL_FAULT_(EINVAL);
-    char  *npath = vfs_cwd_path_build(name);
+    char *user_path = NULL;
+    int copy_ret = copy_string_from_user(&user_path, name, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+
+    char  *npath = vfs_cwd_path_build(user_path);
+    free(user_path);
+    if (npath == NULL) return SYSCALL_FAULT_(ENOMEM);
     size_t ret   = vfs_mkdir(npath) == VFS_STATUS_FAILED ? -1 : 0;
     free(npath);
     return ret;
@@ -1295,7 +1529,11 @@ sys_(mkdir, char *name, uint64_t mode)
 sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
-    int ret = socket_bind(fd, addr, addrlen);
+    if (addrlen < sizeof(struct sockaddr) || addrlen > sizeof(struct sockaddr_in6)) return SYSCALL_FAULT_(EINVAL);
+    struct sockaddr_in6 kaddr;
+    memset(&kaddr, 0, sizeof(kaddr));
+    if (!copy_from_user_pagedir(current_user_pagedir(), &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
+    int ret = socket_bind(fd, (const struct sockaddr *)&kaddr, addrlen);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     return ret;
 }
@@ -1336,54 +1574,98 @@ sys_(lseek, int fd, size_t offset, size_t whence)
     return handle->offset;
 }
 
-sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct timeval *timeout)
+static uint64_t select_common(int nfds, uint8_t *read, uint8_t *write, uint8_t *except,
+                              const struct timeval *ktimeout)
 {
-    if (read && check_user_overflow((uint64_t)read, sizeof(struct pollfd))) { return SYSCALL_FAULT_(EFAULT); }
-    if (write && check_user_overflow((uint64_t)write, sizeof(struct pollfd))) { return SYSCALL_FAULT_(EFAULT); }
-    if (except && check_user_overflow((uint64_t)except, sizeof(struct pollfd))) { return SYSCALL_FAULT_(EFAULT); }
+    if (nfds < 0) return SYSCALL_FAULT_(EINVAL);
+    size_t bitmap_bytes = 0;
+    if (!user_bitmap_bytes((uint64_t)nfds, &bitmap_bytes)) return SYSCALL_FAULT_(EINVAL);
+
+    page_directory_t *pagedir = current_user_pagedir();
+    uint8_t *kread = NULL;
+    uint8_t *kwrite = NULL;
+    uint8_t *kexcept = NULL;
+    if (bitmap_bytes > 0)
+    {
+        if (read)
+        {
+            kread = (uint8_t *)malloc(bitmap_bytes);
+            if (kread == NULL) return SYSCALL_FAULT_(ENOMEM);
+            if (!copy_from_user_pagedir(pagedir, kread, read, bitmap_bytes)) { free(kread); return SYSCALL_FAULT_(EFAULT); }
+        }
+        if (write)
+        {
+            kwrite = (uint8_t *)malloc(bitmap_bytes);
+            if (kwrite == NULL) { free(kread); return SYSCALL_FAULT_(ENOMEM); }
+            if (!copy_from_user_pagedir(pagedir, kwrite, write, bitmap_bytes)) { free(kread); free(kwrite); return SYSCALL_FAULT_(EFAULT); }
+        }
+        if (except)
+        {
+            kexcept = (uint8_t *)malloc(bitmap_bytes);
+            if (kexcept == NULL) { free(kread); free(kwrite); return SYSCALL_FAULT_(ENOMEM); }
+            if (!copy_from_user_pagedir(pagedir, kexcept, except, bitmap_bytes)) { free(kread); free(kwrite); free(kexcept); return SYSCALL_FAULT_(EFAULT); }
+        }
+    }
+
     size_t         complength = sizeof(struct pollfd);
     struct pollfd *comp       = (struct pollfd *)malloc(complength);
+    if (comp == NULL) { free(kread); free(kwrite); free(kexcept); return SYSCALL_FAULT_(ENOMEM); }
     memset(comp, 0, complength);
     size_t compIndex = 0;
-    if (read)
+    if (kread)
     {
         for (int i = 0; i < nfds; i++)
         {
-            if (select_bitmap(read, i)) select_add(&comp, &compIndex, &complength, i, POLLIN);
+            if (select_bitmap(kread, i)) select_add(&comp, &compIndex, &complength, i, POLLIN);
         }
     }
-    if (write)
+    if (kwrite)
     {
         for (int i = 0; i < nfds; i++)
         {
-            if (select_bitmap(write, i)) select_add(&comp, &compIndex, &complength, i, POLLOUT);
+            if (select_bitmap(kwrite, i)) select_add(&comp, &compIndex, &complength, i, POLLOUT);
         }
     }
-    if (except)
+    if (kexcept)
     {
         for (int i = 0; i < nfds; i++)
         {
-            if (select_bitmap(except, i)) select_add(&comp, &compIndex, &complength, i, POLLPRI | POLLERR);
+            if (select_bitmap(kexcept, i)) select_add(&comp, &compIndex, &complength, i, POLLPRI | POLLERR);
         }
     }
 
-    //int toZero = (nfds + 8) / 8;
-    int toZero = (nfds + 7) / 8;
-    if (read) memset(read, 0, toZero);
-    if (write) memset(write, 0, toZero);
-    if (except) memset(except, 0, toZero);
+    if (kread) memset(kread, 0, bitmap_bytes);
+    if (kwrite) memset(kwrite, 0, bitmap_bytes);
+    if (kexcept) memset(kexcept, 0, bitmap_bytes);
 
     size_t time = 0;
-    if (timeout == NULL) { time = -1; }
-    else if (timeout->tv_sec == -1 || timeout->tv_usec == -1) { time = -1; }
+    if (ktimeout == NULL) { time = -1; }
+    else if (ktimeout->tv_sec == -1 || ktimeout->tv_usec == -1) { time = -1; }
     else
-        time = (timeout->tv_sec * 1000 + (timeout->tv_usec + 1000) / 1000);
+    {
+        if (ktimeout->tv_sec < 0 || ktimeout->tv_usec < 0 || ktimeout->tv_usec >= 1000000)
+        {
+            free(kread); free(kwrite); free(kexcept); free(comp);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+        size_t sec_ms = 0;
+        size_t usec_with_rounding = 0;
+        size_t usec_ms = 0;
+        if (!checked_mul_size((size_t)ktimeout->tv_sec, 1000, &sec_ms) ||
+            !checked_add_size((size_t)ktimeout->tv_usec, 999, &usec_with_rounding) ||
+            !checked_add_size(sec_ms, usec_with_rounding / 1000, &usec_ms))
+        {
+            free(kread); free(kwrite); free(kexcept); free(comp);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+        time = usec_ms;
+    }
 
-    size_t res = sys_poll(comp, compIndex, time, 0, 0, 0, 0);
+    size_t res = poll_kernel_fds(comp, compIndex, time);
 
     if ((int64_t)res < 0)
     {
-        free(comp);
+        free(kread); free(kwrite); free(kexcept); free(comp);
         return res;
     }
 
@@ -1393,58 +1675,110 @@ sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct ti
         if (!comp[i].revents) continue;
         if (comp[i].events & POLLIN && comp[i].revents & POLLIN)
         {
-            select_bitmap_set(read, comp[i].fd);
+            if (kread) select_bitmap_set(kread, comp[i].fd);
             verify++;
         }
         if (comp[i].events & POLLOUT && comp[i].revents & POLLOUT)
         {
-            select_bitmap_set(write, comp[i].fd);
+            if (kwrite) select_bitmap_set(kwrite, comp[i].fd);
             verify++;
         }
         if ((comp[i].events & POLLPRI && comp[i].revents & POLLPRI))
         {
-            select_bitmap_set(except, comp[i].fd);
+            if (kexcept) select_bitmap_set(kexcept, comp[i].fd);
             verify++;
         }
     }
 
+    if (kread && !copy_to_user_pagedir(pagedir, read, kread, bitmap_bytes))
+    {
+        free(kread); free(kwrite); free(kexcept); free(comp);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    if (kwrite && !copy_to_user_pagedir(pagedir, write, kwrite, bitmap_bytes))
+    {
+        free(kread); free(kwrite); free(kexcept); free(comp);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    if (kexcept && !copy_to_user_pagedir(pagedir, except, kexcept, bitmap_bytes))
+    {
+        free(kread); free(kwrite); free(kexcept); free(comp);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    free(kread);
+    free(kwrite);
+    free(kexcept);
     free(comp);
     return verify;
+}
+
+sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct timeval *timeout)
+{
+    struct timeval ktimeout;
+    const struct timeval *ktimeout_ptr = NULL;
+    if (timeout != NULL)
+    {
+        if (!copy_from_user_pagedir(current_user_pagedir(), &ktimeout, timeout, sizeof(ktimeout)))
+            return SYSCALL_FAULT_(EFAULT);
+        ktimeout_ptr = &ktimeout;
+    }
+
+    return select_common(nfds, read, write, except, ktimeout_ptr);
 }
 
 sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timespec *timeout,
      WeirdPselect6 *weirdPselect6)
 {
-    if (readfds && check_user_overflow((uint64_t)readfds, sizeof(fd_set) * nfds)) { return SYSCALL_FAULT_(EFAULT); }
-    if (writefds && check_user_overflow((uint64_t)writefds, sizeof(fd_set) * nfds)) { return SYSCALL_FAULT_(EFAULT); }
-    if (exceptfds && check_user_overflow((uint64_t)exceptfds, sizeof(fd_set) * nfds)) { return SYSCALL_FAULT_(EFAULT); }
-    size_t    sigsetsize = weirdPselect6->ss_len;
-    sigset_t *sigmask    = weirdPselect6->ss;
-    if (sigsetsize < sizeof(sigset_t)) { return SYSCALL_FAULT_(EINVAL); }
+    size_t bitmap_bytes = 0;
+    if (!user_bitmap_bytes(nfds, &bitmap_bytes)) return SYSCALL_FAULT_(EINVAL);
+    page_directory_t *pagedir = current_user_pagedir();
+    if (readfds && !user_range_mapped(pagedir, readfds, bitmap_bytes)) { return SYSCALL_FAULT_(EFAULT); }
+    if (writefds && !user_range_mapped(pagedir, writefds, bitmap_bytes)) { return SYSCALL_FAULT_(EFAULT); }
+    if (exceptfds && !user_range_mapped(pagedir, exceptfds, bitmap_bytes)) { return SYSCALL_FAULT_(EFAULT); }
+
+    WeirdPselect6 kweird;
+    memset(&kweird, 0, sizeof(kweird));
+    if (weirdPselect6 != NULL &&
+        !copy_from_user_pagedir(pagedir, &kweird, weirdPselect6, sizeof(kweird)))
+    {
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    size_t    sigsetsize = kweird.ss_len;
+    sigset_t *sigmask    = kweird.ss;
+    if (sigmask != NULL && sigsetsize < sizeof(sigset_t)) { return SYSCALL_FAULT_(EINVAL); }
     sigset_t origmask = 0;
     if (sigmask)
     {
         sigset_t requested_mask = 0;
-        if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &requested_mask, sigmask,
-                                    sizeof(requested_mask)))
+        if (!copy_from_user_pagedir(pagedir, &requested_mask, sigmask, sizeof(requested_mask)))
         {
             return SYSCALL_FAULT_(EFAULT);
         }
         signal_setmask(SIG_SETMASK, &requested_mask, &origmask);
     }
     struct timeval timeoutConv;
+    const struct timeval *timeoutPtr = NULL;
     if (timeout)
     {
+        struct timespec ktimeout;
+        if (!copy_from_user_pagedir(pagedir, &ktimeout, timeout, sizeof(ktimeout)))
+        {
+            if (sigmask) { signal_setmask(SIG_SETMASK, &origmask, NULL); }
+            return SYSCALL_FAULT_(EFAULT);
+        }
+        if (ktimeout.tv_sec > (uint64_t)LONG_MAX || ktimeout.tv_nsec >= 1000000000ULL)
+        {
+            if (sigmask) { signal_setmask(SIG_SETMASK, &origmask, NULL); }
+            return SYSCALL_FAULT_(EINVAL);
+        }
         timeoutConv =
-            (struct timeval){.tv_sec = (long)timeout->tv_sec, .tv_usec = (long)(timeout->tv_nsec + 1000l) / 1000};
-    }
-    else
-    {
-        timeoutConv = (struct timeval){.tv_sec = (long)-1, .tv_usec = (long)-1};
+            (struct timeval){.tv_sec = (long)ktimeout.tv_sec, .tv_usec = (long)(ktimeout.tv_nsec / 1000)};
+        timeoutPtr = &timeoutConv;
     }
 
-    size_t ret = sys_select((uint64_t)nfds, (uint8_t *)readfds, (uint8_t *)writefds, (uint8_t *)exceptfds,
-                                &timeoutConv, 0, 0);
+    size_t ret = select_common((int)nfds, (uint8_t *)readfds, (uint8_t *)writefds, (uint8_t *)exceptfds,
+                               timeoutPtr);
     if (sigmask) { signal_setmask(SIG_SETMASK, &origmask, NULL); }
     return ret;
 }
@@ -1452,7 +1786,11 @@ sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptf
 
 sys_(getdents, int fd, struct dirent *dents, size_t size)
 {
-    // if (unlikely(check_user_overflow((uint64_t)dents, size))) { return SYSCALL_FAULT_(EFAULT); }
+    if (size == 0) return 0;
+    if (dents == NULL) return SYSCALL_FAULT_(EINVAL);
+    page_directory_t *pagedir = current_user_pagedir();
+    if (!user_range_mapped(pagedir, dents, size)) return SYSCALL_FAULT_(EFAULT);
+
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (unlikely(handle == NULL)) { return SYSCALL_FAULT_(EBADF); }
     if (handle->node->type != file_dir) { return SYSCALL_FAULT_(ENOTDIR); }
@@ -1467,21 +1805,28 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
         if (offset < handle->offset) { goto next; }
         if (handle->offset >= (child_count * sizeof(struct dirent))) { break; }
         if (read_count >= max_dents_num) { break; }
-        child_node      = (vfs_node_t)i->data;
-        dents[read_count].d_ino    = (long)child_node->inode;
-        dents[read_count].d_off    = (long)handle->offset;
-        dents[read_count].d_reclen = sizeof(struct dirent);
-        if (child_node->type & file_symlink) { dents[read_count].d_type = DT_LNK; }
-        else if (child_node->type & file_none) { dents[read_count].d_type = DT_REG; }
-        else if (child_node->type & file_block) { dents[read_count].d_type = DT_BLK; }
-        else if (child_node->type & file_stream) { dents[read_count].d_type = DT_CHR; }
-        else if (child_node->type & file_socket) { dents[read_count].d_type = DT_SOCK; }
-        else if (child_node->type & file_dir) { dents[read_count].d_type = DT_DIR; }
+        child_node = (vfs_node_t)i->data;
+        struct dirent kd;
+        memset(&kd, 0, sizeof(kd));
+        kd.d_ino    = (long)child_node->inode;
+        kd.d_off    = (long)handle->offset;
+        kd.d_reclen = sizeof(struct dirent);
+        if (child_node->type & file_symlink) { kd.d_type = DT_LNK; }
+        else if (child_node->type & file_none) { kd.d_type = DT_REG; }
+        else if (child_node->type & file_block) { kd.d_type = DT_BLK; }
+        else if (child_node->type & file_stream) { kd.d_type = DT_CHR; }
+        else if (child_node->type & file_socket) { kd.d_type = DT_SOCK; }
+        else if (child_node->type & file_dir) { kd.d_type = DT_DIR; }
         else
         {
-            dents[read_count].d_type = DT_UNKNOWN;
+            kd.d_type = DT_UNKNOWN;
         }
-        strncpy(dents[read_count].d_name, child_node->name, 256);
+        strncpy(kd.d_name, child_node->name, sizeof(kd.d_name) - 1);
+        if (!copy_to_user_pagedir(pagedir, &dents[read_count], &kd, sizeof(kd)))
+        {
+            vfs_child_unlock();
+            return read_count > 0 ? read_count * sizeof(struct dirent) : SYSCALL_FAULT_(EFAULT);
+        }
         handle->offset += sizeof(struct dirent);
         read_count++;
     next:
@@ -1493,48 +1838,58 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
 
 sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
 {
-    char    *resolved = at_resolve_pathname(dirfd, pathname);
-    uint64_t ret      = sys_stat(resolved, buf, 0, 0, 0, 0, 0);
+    if (buf == NULL) return SYSCALL_FAULT_(EINVAL);
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+
+    struct stat kstat;
+    uint64_t ret = stat_kernel_path(resolved, &kstat);
     free(resolved);
-    return ret;
+    if ((int64_t)ret < 0) return ret;
+    return copy_stat_to_user(buf, &kstat);
 }
 
 sys_(statx, int dirfd, char *pathname, uint64_t flags, uint64_t mask, struct statx *buff)
 {
-    // if (unlikely(!pathname || check_user_overflow((uint64_t)pathname, strlen(pathname))))
-    // {
-    //     return SYSCALL_FAULT_(EFAULT);
-    // }
-    // if (unlikely(!buff || check_user_overflow((uint64_t)buff, sizeof(struct statx)))) { return SYSCALL_FAULT_(EFAULT); }
+    if (pathname == NULL || buff == NULL) return SYSCALL_FAULT_(EINVAL);
 
     struct stat simple;
-    memset(&simple, 0, sizeof(struct stat));
-    uint64_t ret = sys_newfstatat(dirfd, pathname, &simple, flags, 0, 0, 0);
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+
+    uint64_t ret = stat_kernel_path(resolved, &simple);
+    free(resolved);
     if ((int64_t)ret < 0) return ret;
 
-    buff->stx_mask            = mask;
-    buff->stx_blksize         = simple.st_blksize;
-    buff->stx_attributes      = 0;
-    buff->stx_nlink           = simple.st_nlink;
-    buff->stx_uid             = simple.st_uid;
-    buff->stx_gid             = simple.st_gid;
-    buff->stx_mode            = simple.st_mode;
-    buff->stx_ino             = simple.st_ino;
-    buff->stx_size            = simple.st_size;
-    buff->stx_blocks          = simple.st_blocks;
-    buff->stx_attributes_mask = 0;
+    struct statx kstatx;
+    memset(&kstatx, 0, sizeof(kstatx));
+    kstatx.stx_mask            = mask;
+    kstatx.stx_blksize         = simple.st_blksize;
+    kstatx.stx_attributes      = 0;
+    kstatx.stx_nlink           = simple.st_nlink;
+    kstatx.stx_uid             = simple.st_uid;
+    kstatx.stx_gid             = simple.st_gid;
+    kstatx.stx_mode            = simple.st_mode;
+    kstatx.stx_ino             = simple.st_ino;
+    kstatx.stx_size            = simple.st_size;
+    kstatx.stx_blocks          = simple.st_blocks;
+    kstatx.stx_attributes_mask = 0;
 
-    buff->stx_atime.tv_sec  = (long)simple.st_atim.tv_sec;
-    buff->stx_atime.tv_nsec = simple.st_atim.tv_nsec;
+    kstatx.stx_atime.tv_sec  = (long)simple.st_atim.tv_sec;
+    kstatx.stx_atime.tv_nsec = simple.st_atim.tv_nsec;
 
-    buff->stx_btime.tv_sec  = (long)simple.st_ctim.tv_sec;
-    buff->stx_btime.tv_nsec = simple.st_ctim.tv_nsec;
+    kstatx.stx_btime.tv_sec  = (long)simple.st_ctim.tv_sec;
+    kstatx.stx_btime.tv_nsec = simple.st_ctim.tv_nsec;
 
-    buff->stx_ctime.tv_sec  = (long)simple.st_ctim.tv_sec;
-    buff->stx_ctime.tv_nsec = simple.st_ctim.tv_nsec;
+    kstatx.stx_ctime.tv_sec  = (long)simple.st_ctim.tv_sec;
+    kstatx.stx_ctime.tv_nsec = simple.st_ctim.tv_nsec;
 
-    buff->stx_mtime.tv_sec  = (long)simple.st_mtim.tv_sec;
-    buff->stx_mtime.tv_nsec = simple.st_mtim.tv_nsec;
+    kstatx.stx_mtime.tv_sec  = (long)simple.st_mtim.tv_sec;
+    kstatx.stx_mtime.tv_nsec = simple.st_mtim.tv_nsec;
+
+    if (!copy_to_user_pagedir(current_user_pagedir(), buff, &kstatx, sizeof(kstatx))) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
 
@@ -1546,6 +1901,10 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     extern int        pipefs_id;
 
     if (pipefs_root == NULL) return SYSCALL_FAULT_(ENOSYS);
+    if (pipefd == NULL) return SYSCALL_FAULT_(EINVAL);
+    bool kernel_pipefd = regs == NULL;
+    if (!kernel_pipefd && !user_range_mapped(current_user_pagedir(), pipefd, sizeof(int) * 2))
+        return SYSCALL_FAULT_(EFAULT);
 
     char buf[16];
     sprintf(buf, "pipe%d", pipefd_id++);
@@ -1597,8 +1956,15 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     handle_out->flags          = flags;
     handle_out->fd             = queue_enqueue(queue, handle_out);
 
-    pipefd[0] = (int)handle_in->fd;
-    pipefd[1] = (int)handle_out->fd;
+    int kpipefd[2] = {(int)handle_in->fd, (int)handle_out->fd};
+    if (kernel_pipefd)
+    {
+        memcpy(pipefd, kpipefd, sizeof(kpipefd));
+    }
+    else if (!copy_to_user_pagedir(current_user_pagedir(), pipefd, kpipefd, sizeof(kpipefd)))
+    {
+        return SYSCALL_FAULT_(EFAULT);
+    }
 
     return 0;
 }
@@ -1612,18 +1978,26 @@ sys_(unlink)
 {
     char *name = (char *)arg0;
     if (name == NULL) return SYSCALL_FAULT_(EINVAL);
-    char      *npath = vfs_cwd_path_build(name);
+    char *user_path = NULL;
+    int copy_ret = copy_string_from_user(&user_path, name, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+
+    char      *npath = vfs_cwd_path_build(user_path);
+    free(user_path);
+    if (npath == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t node  = vfs_open(npath);
-    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    if (node == NULL) { free(npath); return SYSCALL_FAULT_(ENOENT); }
     if (node->type != file_none && node->type != file_symlink)
     {
         vfs_close(node);
+        free(npath);
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret;
     if (node->refcount > 1)
     {
         node->refcount--;
+        free(npath);
         return 0;
     }
     else
@@ -1639,9 +2013,15 @@ sys_(rmdir)
 {
     char *name = (char *)arg0;
     if (name == NULL) return SYSCALL_FAULT_(EINVAL);
-    char      *n_name = vfs_cwd_path_build(name);
+    char *user_path = NULL;
+    int copy_ret = copy_string_from_user(&user_path, name, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+
+    char      *n_name = vfs_cwd_path_build(user_path);
+    free(user_path);
+    if (n_name == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t node   = vfs_open(n_name);
-    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    if (node == NULL) { free(n_name); return SYSCALL_FAULT_(ENOENT); }
     if (node->type != file_dir)
     {
         vfs_close(node);
@@ -1666,21 +2046,56 @@ sys_(unlinkat)
 {
     int   dirfd = (int)arg0;
     char *name  = (char *)arg1;
-    // if (check_user_overflow((uint64_t)name, strlen(name))) { return (uint64_t)-EFAULT; }
-    char *path = at_resolve_pathname(dirfd, (char *)name);
+    if (name == NULL) return SYSCALL_FAULT_(EINVAL);
+    char *path = NULL;
+    int path_ret = resolve_user_path_at(dirfd, name, &path);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
     if (!path) return -ENOENT;
 
-    uint64_t ret = sys_unlink((uint64_t)path, 0, 0, 0, 0, 0, regs);
+    vfs_node_t node = vfs_open(path);
+    if (node == NULL)
+    {
+        free(path);
+        return SYSCALL_FAULT_(ENOENT);
+    }
+    if (node->type != file_none && node->type != file_symlink)
+    {
+        vfs_close(node);
+        free(path);
+        return SYSCALL_FAULT_(ENOTDIR);
+    }
 
+    uint64_t ret;
+    if (node->refcount > 1)
+    {
+        node->refcount--;
+        ret = 0;
+    }
+    else
+    {
+        ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    }
+
+    vfs_close(node);
     free(path);
-
     return ret;
 }
 
 sys_(access, char *filename)
 {
+    if (filename == NULL) return SYSCALL_FAULT_(EINVAL);
+    char *user_path = NULL;
+    int ret = copy_string_from_user(&user_path, filename, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    char *path = vfs_cwd_path_build(user_path);
+    free(user_path);
+    if (path == NULL) return SYSCALL_FAULT_(ENOMEM);
+
     struct stat buf;
-    return sys_stat(filename, &buf, 0, 0, 0, 0, regs);
+    uint64_t stat_ret = stat_kernel_path(path, &buf);
+    free(path);
+    return stat_ret;
 }
 
 sys_(faccessat)
@@ -1688,16 +2103,15 @@ sys_(faccessat)
     int      dirfd    = arg0;
     char    *pathname = (char *)arg1;
     uint64_t mode     = arg2;
-    if (pathname[0] == '\0')
-    { // by fd
-        return 0;
-    }
-    // if (check_user_overflow((uint64_t)pathname, strlen(pathname))) { return SYSCALL_FAULT_(EFAULT); }
+    (void)mode;
+    if (pathname == NULL) return SYSCALL_FAULT_(EINVAL);
 
-    char *resolved = at_resolve_pathname(dirfd, (char *)pathname);
-    if (resolved == NULL) return SYSCALL_FAULT_(ENOENT);
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
-    size_t ret = sys_access(resolved, mode, 0, 0, 0, 0, regs);
+    struct stat buf;
+    uint64_t ret = stat_kernel_path(resolved, &buf);
 
     free(resolved);
 
@@ -1710,16 +2124,16 @@ sys_(faccessat2)
     char    *pathname = (char *)arg1;
     uint64_t mode     = arg2;
     uint64_t flag     = arg3;
-    if (pathname[0] == '\0')
-    { // by fd
-        return 0;
-    }
-    // if (check_user_overflow((uint64_t)pathname, strlen(pathname))) { return SYSCALL_FAULT_(EFAULT); }
+    (void)mode;
+    (void)flag;
+    if (pathname == NULL) return SYSCALL_FAULT_(EINVAL);
 
-    char *resolved = at_resolve_pathname(dirfd, (char *)pathname);
-    if (resolved == NULL) return SYSCALL_FAULT_(ENOENT);
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
-    size_t ret = sys_access(resolved, mode, 0, 0, 0, 0, regs);
+    struct stat buf;
+    uint64_t ret = stat_kernel_path(resolved, &buf);
 
     free(resolved);
 
@@ -1733,11 +2147,11 @@ sys_(openat)
     uint64_t flags = arg2;
     uint64_t mode  = arg3;
 
-    // if (unlikely(!name || check_user_overflow((uint64_t)name, strlen(name)))) { return SYSCALL_FAULT_(EFAULT); }
-    char *path = at_resolve_pathname(dirfd, (char *)name);
-    if (!path) return SYSCALL_FAULT_(ENOMEM);
+    char *path = NULL;
+    int path_ret = resolve_user_path_at(dirfd, name, &path);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
-    uint64_t ret = sys_open(path, flags, mode, 0, 0, 0, regs);
+    uint64_t ret = open_kernel_path(path, flags, mode);
 
     free(path);
 
@@ -1787,7 +2201,13 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
 {
     if (dir_name == NULL) return SYSCALL_FAULT_(EINVAL);
 
-    char      *ndir_name = vfs_cwd_path_build(dir_name);
+    char *udir_name = NULL;
+    int copy_ret = copy_string_from_user(&udir_name, dir_name, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+
+    char      *ndir_name = vfs_cwd_path_build(udir_name);
+    free(udir_name);
+    if (ndir_name == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t dir       = vfs_open((const char *)ndir_name);
     if (!dir)
     {
@@ -1802,7 +2222,13 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
             free(ndir_name);
             return SYSCALL_FAULT_(EINVAL);
         }
-        char      *old_root_p = vfs_cwd_path_build(dev_name);
+        if (dev_name == NULL) { free(ndir_name); return SYSCALL_FAULT_(EINVAL); }
+        char *udev_name = NULL;
+        copy_ret = copy_string_from_user(&udev_name, dev_name, USER_PATH_MAX);
+        if (copy_ret < 0) { free(ndir_name); return SYSCALL_FAULT_((int)-copy_ret); }
+        char      *old_root_p = vfs_cwd_path_build(udev_name);
+        free(udev_name);
+        if (old_root_p == NULL) { free(ndir_name); return SYSCALL_FAULT_(ENOMEM); }
         vfs_node_t old_root   = vfs_open(old_root_p);
         free(old_root_p);
         if (old_root == NULL || !old_root->is_mount) return SYSCALL_FAULT_(EINVAL);
@@ -1829,16 +2255,26 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
 
     if (type == NULL) return SYSCALL_FAULT_(EINVAL);
 
-    char            *ndev_name;
-    vfs_filesystem_t filesystem = get_filesystem(type);
-    if (filesystem == NULL) return SYSCALL_FAULT_(EINVAL);
+    char            *ndev_name = NULL;
+    char            *udev_name = NULL;
+    char            *ktype = NULL;
+    copy_ret = copy_string_from_user(&ktype, type, USER_PATH_MAX);
+    if (copy_ret < 0) { free(ndir_name); return SYSCALL_FAULT_((int)-copy_ret); }
+    vfs_filesystem_t filesystem = get_filesystem(ktype);
+    free(ktype);
+    if (filesystem == NULL) { free(ndir_name); return SYSCALL_FAULT_(EINVAL); }
     if (filesystem->id != 0)
     {
         ndev_name = (char *)filesystem->id;
         goto mount;
     }
 
-    ndev_name = vfs_cwd_path_build(dev_name);
+    if (dev_name == NULL) { free(ndir_name); return SYSCALL_FAULT_(EINVAL); }
+    copy_ret = copy_string_from_user(&udev_name, dev_name, USER_PATH_MAX);
+    if (copy_ret < 0) { free(ndir_name); return SYSCALL_FAULT_((int)-copy_ret); }
+    ndev_name = vfs_cwd_path_build(udev_name);
+    free(udev_name);
+    if (ndev_name == NULL) { free(ndir_name); return SYSCALL_FAULT_(ENOMEM); }
 mount:
     if (vfs_mount((const char *)ndev_name, dir) == VFS_STATUS_FAILED)
     {
@@ -1871,9 +2307,13 @@ sys_(getpgid)
 
 sys_(getgroups, int count, int *gid_list)
 {
+    if (count < 0) return SYSCALL_FAULT_(EINVAL);
     if (count > 0)
     {
-        gid_list[0] = 0;
+        if (gid_list == NULL) return SYSCALL_FAULT_(EINVAL);
+        int gid = 0;
+        if (!copy_to_user_pagedir(current_user_pagedir(), gid_list, &gid, sizeof(gid)))
+            return SYSCALL_FAULT_(EFAULT);
         return 1;
     }
     return 0;
@@ -1902,10 +2342,23 @@ char *get_parent_path(const char *path) {
 sys_(rename, char *oldpath, char *newpath)
 {
     if (!oldpath || !newpath) return SYSCALL_FAULT_(EINVAL);
-    // if (check_user_overflow((uint64_t)oldpath, strlen(oldpath))) { return SYSCALL_FAULT_(EFAULT); }
-    // if (check_user_overflow((uint64_t)newpath, strlen(newpath))) { return SYSCALL_FAULT_(EFAULT); }
-    char      *noldpath = vfs_cwd_path_build(oldpath);
-    char      *nnewpath = vfs_cwd_path_build(newpath);
+    char *uoldpath = NULL;
+    char *unewpath = NULL;
+    int copy_ret = copy_string_from_user(&uoldpath, oldpath, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+    copy_ret = copy_string_from_user(&unewpath, newpath, USER_PATH_MAX);
+    if (copy_ret < 0) { free(uoldpath); return SYSCALL_FAULT_((int)-copy_ret); }
+
+    char      *noldpath = vfs_cwd_path_build(uoldpath);
+    char      *nnewpath = vfs_cwd_path_build(unewpath);
+    free(uoldpath);
+    free(unewpath);
+    if (noldpath == NULL || nnewpath == NULL)
+    {
+        free(noldpath);
+        free(nnewpath);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
     vfs_node_t oldnode  = vfs_open(noldpath);
     if (!oldnode)
     {
@@ -1934,24 +2387,48 @@ end_rename:
 
 sys_(symlink, char *name, char *nw)
 {
-    // if (check_user_overflow((uint64_t)name, strlen(name))) { return SYSCALL_FAULT_(EFAULT); }
-    errno_t ret = vfs_symlink(name, nw);
+    if (name == NULL || nw == NULL) return SYSCALL_FAULT_(EINVAL);
+    char *kname = NULL;
+    char *knw = NULL;
+    int copy_ret = copy_string_from_user(&kname, name, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+    copy_ret = copy_string_from_user(&knw, nw, USER_PATH_MAX);
+    if (copy_ret < 0) { free(kname); return SYSCALL_FAULT_((int)-copy_ret); }
+    errno_t ret = vfs_symlink(kname, knw);
+    free(kname);
+    free(knw);
     return ret;
 }
 
 sys_(link, char *name, char *nw)
 {
-    // if (check_user_overflow((uint64_t)name, strlen(name))) { return SYSCALL_FAULT_(EFAULT); }
-    errno_t ret = vfs_link(name, nw);
+    if (name == NULL || nw == NULL) return SYSCALL_FAULT_(EINVAL);
+    char *kname = NULL;
+    char *knw = NULL;
+    int copy_ret = copy_string_from_user(&kname, name, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+    copy_ret = copy_string_from_user(&knw, nw, USER_PATH_MAX);
+    if (copy_ret < 0) { free(kname); return SYSCALL_FAULT_((int)-copy_ret); }
+    errno_t ret = vfs_link(kname, knw);
+    free(kname);
+    free(knw);
 
     return ret;
 }
 
 sys_(umount2)
 {
-    char   *path   = normalize_path((char *)arg0);
-    int     flags  = arg1;
-    errno_t status = vfs_unmount(path);
+    char *user_path = NULL;
+    int ret = copy_string_from_user(&user_path, (char *)arg0, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    char *path = normalize_path(user_path);
+    free(user_path);
+    int flags = arg1;
+    (void)flags;
+    if (path == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    uint64_t status = vfs_unmount(path);
     if (status == VFS_STATUS_FAILED) status = SYSCALL_FAULT_(EBUSY);
     free(path);
     return status;
@@ -1963,13 +2440,42 @@ sys_(readlink)
     char    *buf  = (char *)arg1;
     uint64_t size = arg2;
     if (path == NULL || buf == NULL || size == 0) { return SYSCALL_FAULT_(EINVAL); }
-    // if (check_user_overflow((uint64_t)buf, size)) { return SYSCALL_FAULT_(EFAULT); }
 
-    vfs_node_t node = vfs_open(path);
+    char *kpath = NULL;
+    int ret = copy_string_from_user(&kpath, path, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    vfs_node_t node = vfs_open(kpath);
+    free(kpath);
     if (node == NULL) { return SYSCALL_FAULT_(ENOENT); }
-    if (!node->linkto) return SYSCALL_FAULT_(EINVAL);
+    if (!node->linkto)
+    {
+        vfs_close(node);
+        return SYSCALL_FAULT_(EINVAL);
+    }
 
-    return vfs_readlink(node, buf, (size_t)size);
+    size_t copy_size = MIN((size_t)size, USER_PATH_MAX);
+    char *kbuf = (char *)malloc(copy_size);
+    if (kbuf == NULL)
+    {
+        vfs_close(node);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    size_t read = vfs_readlink(node, kbuf, copy_size);
+    vfs_close(node);
+    if (read == (size_t)VFS_STATUS_FAILED)
+    {
+        free(kbuf);
+        return SYSCALL_FAULT_(EIO);
+    }
+    if (!copy_to_user_pagedir(current_user_pagedir(), buf, kbuf, read))
+    {
+        free(kbuf);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    free(kbuf);
+    return read;
 }
 
 
@@ -2014,15 +2520,16 @@ sys_(getppid)
 
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 {
-    // if (check_user_overflow(addr, size)) { return SYSCALL_FAULT_(EFAULT); }
-
     if (size == 0) { return 0; }
+    if (check_user_overflow(addr, size)) { return SYSCALL_FAULT_(EFAULT); }
 
     uint64_t start_page = addr & (~(PAGE_SIZE - 1));
     uint64_t end_page   = (addr + size - 1) & (~(PAGE_SIZE - 1));
+    if (end_page < start_page) return SYSCALL_FAULT_(EINVAL);
     uint64_t num_pages  = ((end_page - start_page) / PAGE_SIZE) + 1;
 
-    // if (check_user_overflow(vec, num_pages)) { return SYSCALL_FAULT_(EFAULT); }
+    page_directory_t *pagedir = current_user_pagedir();
+    if (!user_range_mapped(pagedir, (void *)vec, num_pages)) { return SYSCALL_FAULT_(EFAULT); }
 
     spin_lock(&mm_op_lock);
     uint64_t current_addr = start_page;
@@ -2033,7 +2540,11 @@ sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 
         uint8_t resident = (phys_addr != 0) ? 1 : 0;
 
-        memcpy((void *)(vec + i), &resident, sizeof(uint8_t));
+        if (!copy_to_user_pagedir(pagedir, (void *)(vec + i), &resident, sizeof(uint8_t)))
+        {
+            spin_unlock(&mm_op_lock);
+            return SYSCALL_FAULT_(EFAULT);
+        }
 
         current_addr += PAGE_SIZE;
     }
@@ -2071,11 +2582,27 @@ error_pr:
 
 sys_(statfs, char *path, struct statfs *buf)
 {
-    vfs_node_t node = vfs_open(path);
+    if (path == NULL || buf == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    char *kpath = NULL;
+    int ret = copy_string_from_user(&kpath, path, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    vfs_node_t node = vfs_open(kpath);
+    free(kpath);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
     vfs_filesystem_t filesystem = get_filesystem_node(node);
-    if (filesystem == NULL) return SYSCALL_FAULT_(EINVAL);
-    buf->f_type = filesystem->magic;
+    if (filesystem == NULL)
+    {
+        vfs_close(node);
+        return SYSCALL_FAULT_(EINVAL);
+    }
+
+    struct statfs kbuf;
+    memset(&kbuf, 0, sizeof(kbuf));
+    kbuf.f_type = filesystem->magic;
+    vfs_close(node);
+    if (!copy_to_user_pagedir(current_user_pagedir(), buf, &kbuf, sizeof(kbuf))) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
 

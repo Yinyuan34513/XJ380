@@ -172,7 +172,7 @@ size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
     {
         return VFS_STATUS_SUCCESS;
     }
-    if (device.size < offset + size) {
+    if (size > device.size - offset) {
         size = device.size - offset;
     }
     return blk_device_read(device.vdiskid, addr, offset, size);
@@ -202,7 +202,7 @@ size_t devfs_write(void *file, const void *addr, size_t offset, size_t size) {
     {
         return VFS_STATUS_SUCCESS;
     }
-    if (device.size < offset + size) {
+    if (size > device.size - offset) {
         size = device.size - offset;
     }
     return blk_device_write(device, addr, offset, size);

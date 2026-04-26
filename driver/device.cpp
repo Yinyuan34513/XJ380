@@ -146,15 +146,16 @@ static bool blk_user_buffer_valid(const void *buffer, size_t length) {
     }
 
     uint64_t addr = (uint64_t)buffer;
-    if (!check_user_overflow(addr, length)) {
-        tcb_t current = get_current_task();
-        if (current == NULL || current->parent_group == NULL) {
-            return false;
-        }
-        return user_range_mapped(current->parent_group->pagedir, buffer, length);
+    if (addr > (uint64_t)-1 - (length - 1)) {
+        return false;
     }
+    if (addr >= KERNEL_AREA_MEM) return true;
 
-    return true;
+    tcb_t current = get_current_task();
+    if (current == NULL || current->parent_group == NULL) {
+        return false;
+    }
+    return user_range_mapped(current->parent_group->pagedir, buffer, length);
 }
 
 int regist_device(const char *path, device_t vd) {
@@ -231,7 +232,13 @@ size_t rw_device(int drive, size_t lba, uint8_t *buffer, size_t number, int read
     if (device_ctl[indx].flag == 0){return 0;}
 
     size_t   sector_size = device_ctl[indx].sector_size;
+    if (sector_size == 0 || (number != 0 && sector_size > (size_t)-1 / number)) {
+        return 0;
+    }
     size_t   total_size  = number * sector_size;
+    if (total_size > (size_t)-1 - (PAGE_SIZE - 1)) {
+        return 0;
+    }
     size_t   page_size   = PADDING_UP(total_size, PAGE_SIZE) / PAGE_SIZE;
     uint64_t phys        = alloc_frames(page_size);
     if (phys == 0) {
@@ -257,6 +264,10 @@ size_t device_read(size_t lba, size_t number, void *buffer, int drive) {
         if (device_ctl[drive].type == DEVICE_STREAM) {
             return device_ctl[drive].read(drive, (uint8_t*)buffer, number, lba);
         }
+        if (device_ctl[drive].sector_size == 0 ||
+            (number != 0 && device_ctl[drive].sector_size > (size_t)-1 / number)) {
+            return 0;
+        }
         size_t ret_size = 0;
         for (size_t i = 0; i < number; i += SECTORS_ONCE) {
             int sectors  = ((number - i) >= SECTORS_ONCE) ? SECTORS_ONCE : (number - i);
@@ -270,6 +281,10 @@ size_t device_read(size_t lba, size_t number, void *buffer, int drive) {
 }
 size_t device_write(size_t lba, size_t number, const void *buffer, int drive) {
     if (have_vdisk(drive)) {
+        if (device_ctl[drive].sector_size == 0 ||
+            (number != 0 && device_ctl[drive].sector_size > (size_t)-1 / number)) {
+            return 0;
+        }
         size_t ret_size = 0;
         for (size_t i = 0; i < number; i += SECTORS_ONCE) {
             int sectors  = ((number - i) >= SECTORS_ONCE) ? SECTORS_ONCE : (number - i);

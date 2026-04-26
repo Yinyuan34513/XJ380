@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 #include <mm/lazyalloc.h>
+#include <mm/uaccess.h>
 #include <syscall/syscall.h>
 #include <task/ipc.h>
 
@@ -24,6 +25,9 @@
 #define PUSH_STACK(stack, value) *(--stack) = value
 static size_t now_pid         = 0;
 size_t        now_tid         = 0;
+static constexpr size_t EXECVE_STRING_MAX       = 4096;
+static constexpr size_t EXECVE_VECTOR_MAX       = 128;
+static constexpr size_t EXECVE_TOTAL_STRING_MAX = PAGE_SIZE * 4;
 lock_queue   *pcb_group_queue = NULL;
 pcb_t         kernel_group    = NULL;
 
@@ -516,6 +520,92 @@ char **copy_envp(char **envp)
     return new_envp;
 }
 
+static int copy_exec_string_from_user(page_directory_t *pagedir, char **out, const char *src, size_t *total_bytes)
+{
+    if (out == NULL) return -EINVAL;
+    *out = NULL;
+    if (pagedir == NULL || src == NULL) return -EFAULT;
+
+    char *tmp = (char *)malloc(EXECVE_STRING_MAX);
+    if (tmp == NULL) return -ENOMEM;
+
+    for (size_t i = 0; i < EXECVE_STRING_MAX; i++)
+    {
+        char c = 0;
+        if (!copy_from_user_pagedir(pagedir, &c, src + i, sizeof(c)))
+        {
+            free(tmp);
+            return -EFAULT;
+        }
+        tmp[i] = c;
+        if (c == '\0')
+        {
+            size_t used = i + 1;
+            if (total_bytes != NULL)
+            {
+                if (*total_bytes > EXECVE_TOTAL_STRING_MAX - used)
+                {
+                    free(tmp);
+                    return -E2BIG;
+                }
+                *total_bytes += used;
+            }
+            *out = tmp;
+            return 0;
+        }
+    }
+
+    free(tmp);
+    return -ENAMETOOLONG;
+}
+
+static int copy_exec_string_vector_from_user(page_directory_t *pagedir, char **user_vec, char ***out_vec,
+                                             size_t *out_count)
+{
+    if (out_vec == NULL || out_count == NULL) return -EINVAL;
+    *out_vec = NULL;
+    *out_count = 0;
+    if (user_vec == NULL) return 0;
+
+    char **vec = (char **)calloc(EXECVE_VECTOR_MAX + 1, sizeof(char *));
+    if (vec == NULL) return -ENOMEM;
+
+    size_t total_bytes = 0;
+    for (size_t i = 0; i < EXECVE_VECTOR_MAX; i++)
+    {
+        char *user_str = NULL;
+        if (!copy_from_user_pagedir(pagedir, &user_str, &user_vec[i], sizeof(user_str)))
+        {
+            free_envp(vec);
+            return -EFAULT;
+        }
+        if (user_str == NULL)
+        {
+            *out_vec = vec;
+            *out_count = i;
+            return 0;
+        }
+
+        int ret = copy_exec_string_from_user(pagedir, &vec[i], user_str, &total_bytes);
+        if (ret < 0)
+        {
+            free_envp(vec);
+            return ret;
+        }
+    }
+
+    char *extra = NULL;
+    if (copy_from_user_pagedir(pagedir, &extra, &user_vec[EXECVE_VECTOR_MAX], sizeof(extra)) && extra == NULL)
+    {
+        *out_vec = vec;
+        *out_count = EXECVE_VECTOR_MAX;
+        return 0;
+    }
+
+    free_envp(vec);
+    return -E2BIG;
+}
+
 uint64_t process_execve(char *path, char **argv, char **envp)
 {
     // while (true)
@@ -528,9 +618,45 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     if (path == NULL) return (uint64_t)-EINVAL;
 
-    char      *norm_path = strdup(path);
+    tcb_t current_task = get_current_task();
+    if (current_task == NULL || current_task->parent_group == NULL || current_task->parent_group->pagedir == NULL)
+        return (uint64_t)-EFAULT;
+
+    page_directory_t *caller_pagedir = current_task->parent_group->pagedir;
+    char  *kpath = NULL;
+    char **kargv = NULL;
+    char **kenvp = NULL;
+    size_t kargc = 0;
+    size_t kenvc = 0;
+
+    int copy_ret = copy_exec_string_from_user(caller_pagedir, &kpath, path, NULL);
+    if (copy_ret < 0)
+    {
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)copy_ret;
+    }
+    copy_ret = copy_exec_string_vector_from_user(caller_pagedir, argv, &kargv, &kargc);
+    if (copy_ret < 0)
+    {
+        free(kpath);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)copy_ret;
+    }
+    copy_ret = copy_exec_string_vector_from_user(caller_pagedir, envp, &kenvp, &kenvc);
+    if (copy_ret < 0)
+    {
+        free(kpath);
+        free_envp(kargv);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)copy_ret;
+    }
+
+    char      *norm_path = strdup(kpath);
     if (norm_path == NULL)
     {
+        free(kpath);
+        free_envp(kargv);
+        free_envp(kenvp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
@@ -538,6 +664,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     if (node == NULL)
     {
         free(norm_path);
+        free(kpath);
+        free_envp(kargv);
+        free_envp(kenvp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOENT;
     }
@@ -552,6 +681,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     {
         vfs_close(node);
         free(norm_path);
+        free(kpath);
+        free_envp(kargv);
+        free_envp(kenvp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
@@ -559,53 +691,84 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     char cmdline[PAGE_SIZE];
     memset(cmdline, 0, sizeof(cmdline));
     char *cmdline_ptr = cmdline;
-
-    char *old_cmdline = process->cmdline;
-    if (argv != NULL)
+    char *new_cmdline = NULL;
+    if (kargv != NULL)
     {
-        for (int i = 0; argv[i]; i++)
+        for (size_t i = 0; i < kargc; i++)
         {
-            if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, argv[i]))
+            if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, kargv[i]))
             {
                 vfs_close(node);
                 free(norm_path);
+                free(kpath);
+                free_envp(kargv);
+                free_envp(kenvp);
                 free_page_directory(new_page_dir);
                 restore_runtime_state(was_scheduler_enabled, is_sti);
                 return (uint64_t)-E2BIG;
             }
         }
-        process->cmdline = strdup(cmdline);
+        new_cmdline = strdup(cmdline);
     }
     else
     {
-        process->cmdline = strdup("");
+        new_cmdline = strdup("");
     }
-    if (process->cmdline == NULL)
+    if (new_cmdline == NULL)
     {
-        process->cmdline = old_cmdline;
         vfs_close(node);
         free(norm_path);
+        free(kpath);
+        free_envp(kargv);
+        free_envp(kenvp);
         free_page_directory(new_page_dir);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
-    if (old_cmdline != NULL) free(old_cmdline);
 
-    get_thread_name_from_filepath(norm_path, get_current_task()->name);
-    get_thread_name_from_filepath(norm_path, process->name);
-
-    char **old_envp = process->envp;
+    char **new_envp = NULL;
+    size_t new_envc = 0;
     if (envp != NULL)
     {
-        process->envp   = copy_envp(envp);
-        process->envc   = envp_length(envp);
+        new_envp = kenvp;
+        new_envc = kenvc;
+        kenvp = NULL;
     }
     else
     {
-        process->envp = copy_envp(current_user->envp);
-        process->envc = current_user->envc;
+        if (current_user == NULL || current_user->envp == NULL)
+        {
+            vfs_close(node);
+            free(norm_path);
+            free(kpath);
+            free(new_cmdline);
+            free_envp(kargv);
+            free_page_directory(new_page_dir);
+            restore_runtime_state(was_scheduler_enabled, is_sti);
+            return (uint64_t)-EFAULT;
+        }
+        new_envp = copy_envp(current_user->envp);
+        new_envc = current_user->envc;
     }
-    if (old_envp != NULL) free_envp(old_envp);
+    if (new_envp == NULL)
+    {
+        vfs_close(node);
+        free(norm_path);
+        free(kpath);
+        free(new_cmdline);
+        free_envp(kargv);
+        free_envp(kenvp);
+        free_page_directory(new_page_dir);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-ENOMEM;
+    }
+
+    char old_thread_name[sizeof(current_task->name)];
+    char old_process_name[sizeof(process->name)];
+    memcpy(old_thread_name, current_task->name, sizeof(old_thread_name));
+    memcpy(old_process_name, process->name, sizeof(old_process_name));
+    get_thread_name_from_filepath(norm_path, current_task->name);
+    get_thread_name_from_filepath(norm_path, process->name);
 
     if (!process->vfork) vma_manager_exit_cleanup(&process->vma_manager);
 
@@ -614,17 +777,32 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     uint64_t e_entry    = 0;
     uint64_t load_start = 0;
-    e_entry             = (uint64_t)parse_elf_file(path, process);
+    e_entry             = (uint64_t)parse_elf_file(norm_path, process);
     if (e_entry == NULL)
     {
+        memcpy(current_task->name, old_thread_name, sizeof(old_thread_name));
+        memcpy(process->name, old_process_name, sizeof(old_process_name));
         process->pagedir = old_page_dir;
         switch_page_directory(old_page_dir);
         free_page_directory(new_page_dir);
         vfs_close(node);
         free(norm_path);
+        free(kpath);
+        free(new_cmdline);
+        free_envp(kargv);
+        free_envp(new_envp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return 0;
     }
+    char **old_envp = process->envp;
+    char  *old_cmdline = process->cmdline;
+    process->cmdline = new_cmdline;
+    process->envp = new_envp;
+    process->envc = new_envc;
+    new_cmdline = NULL;
+    new_envp = NULL;
+    if (old_cmdline != NULL) free(old_cmdline);
+    if (old_envp != NULL) free_envp(old_envp);
     if (process->vfork)
     {
         ipc_message_t message = (ipc_message_t)calloc(1, sizeof(struct ipc_message));
@@ -669,6 +847,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     process->ipc_queue = queue_init();
 
     free(norm_path);
+    free(kpath);
+    free_envp(kargv);
 
     uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     get_current_task()->user_stack     = stack;

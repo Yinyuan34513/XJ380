@@ -18,6 +18,7 @@
 #include <proto.hpp>
 #include <rtc.h>
 #include <syscall/pxapi.h>
+#include <syscall/xapi_user.h>
 #include <task/pcb.h>
 #include <ttf.h>
 #include <syscall/syscall.h>
@@ -28,11 +29,52 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
+static size_t xapi_strnlen(const char *str, size_t max_len)
+{
+    if (str == NULL) return 0;
+    size_t len = 0;
+    while (len < max_len && str[len] != '\0') len++;
+    return len;
+}
+
+static void xapi_output_kernel(const char *str)
+{
+    if (str == NULL) return;
+
+    pcb_t front_p = get_current_task()->parent_group;
+    while (true)
+    {
+        if (front_p == NULL || front_p == kernel_group)
+        {
+            pr_warn("A program call xapi_Output, but cannot found parent terminal. \n");
+            return;
+        }
+        if (front_p->xtttp_stc->is_shell)
+        {
+            size_t cur = xapi_strnlen(front_p->xtttp_stc->output, sizeof(front_p->xtttp_stc->output));
+            if (cur >= sizeof(front_p->xtttp_stc->output)) cur = 0;
+            size_t space = sizeof(front_p->xtttp_stc->output) - cur - 1;
+            size_t len = xapi_strnlen(str, space);
+            if (len > 0) memcpy(front_p->xtttp_stc->output + cur, str, len);
+            front_p->xtttp_stc->output[cur + len] = '\0';
+            front_p->xtttp_stc->output_lock = false;
+
+            while (true)
+            {
+                if (front_p->xtttp_stc->output_lock) break;
+                scheduler_yield();
+            }
+            memset(front_p->xtttp_stc->output, 0, sizeof(front_p->xtttp_stc->output));
+            return;
+        }
+        front_p = front_p->parent_task;
+    }
+}
+
 void do_xapi_GetSystemVersion(uint64_t str)
 {
-    char *dst = (char *)str;
-    if (dst != NULL)
-        memcpy(dst, OS_VERSION, strlen(OS_VERSION) + 1);
+    if (str == 0) return;
+    copy_to_user_pagedir(xapi_current_pagedir(), (void *)str, OS_VERSION, strlen(OS_VERSION) + 1);
 }
 
 uint64_t do_xapi_GetTime()
@@ -44,39 +86,20 @@ uint64_t do_xapi_GetTime()
 
 void do_xapi_GetCurrentUser(uint64_t dst)
 {
-    xapi_type_UserInfo *dest = (xapi_type_UserInfo *)dst;
-    memcpy(dest->name, current_user->name, strlen(current_user->name));
-    dest->user_type = current_user->user_type;
+    if (dst == 0 || current_user == NULL) return;
+    xapi_type_UserInfo info;
+    memset(&info, 0, sizeof(info));
+    strncpy(info.name, current_user->name, sizeof(info.name) - 1);
+    info.user_type = current_user->user_type;
+    copy_to_user_pagedir(xapi_current_pagedir(), (void *)dst, &info, sizeof(info));
 }
 
 void do_xapi_Output(char *str)
 {
-    pcb_t front_p = get_current_task()->parent_group;
-    // // while(!front_p->parent_task->co)cpu_relax();
-    
-    while (true)
-    {
-        if (front_p == NULL || front_p == kernel_group)
-        {
-            pr_warn("A program call xapi_Output, but cannot found parent terminal. \n");
-            return;
-        }
-        if (front_p->xtttp_stc->is_shell)
-        {
-            // found it!
-            strcat(front_p->xtttp_stc->output, str); // 如果还有怎么办? // ? 怎么会还有呢，这就是一次性输出完的啊
-            front_p->xtttp_stc->output_lock = false;
-            // 等待命令行刷新
-            while (true)
-            {
-                if (front_p->xtttp_stc->output_lock) break;
-                scheduler_yield();
-            }
-            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->output) + 1) * sizeof(uint8_t));
-            return;
-        }
-        front_p = front_p->parent_task;
-    }
+    char *kstr = NULL;
+    if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
+    xapi_output_kernel(kstr);
+    free(kstr);
 }
 
 void do_xapi_Input(char *str)
@@ -98,8 +121,9 @@ void do_xapi_Input(char *str)
                 if (front_p->xtttp_stc->input_lock) break;
                 scheduler_yield();
             }
-            // found it!
-            strcpy(str, front_p->xtttp_stc->input);
+            size_t input_len = xapi_strnlen(front_p->xtttp_stc->input, sizeof(front_p->xtttp_stc->input) - 1);
+            front_p->xtttp_stc->input[input_len] = '\0';
+            copy_to_user_pagedir(xapi_current_pagedir(), str, front_p->xtttp_stc->input, input_len + 1);
             memset(front_p->xtttp_stc->input, 0, sizeof(front_p->xtttp_stc->input));
             front_p->xtttp_stc->input_lock = false;
             front_p->xtttp_stc->wait_for_input = false;
@@ -137,17 +161,26 @@ char do_xapi_Getch()
 
 void do_xapi_Endline()
 {
-    do_xapi_Output("\n");
+    xapi_output_kernel("\n");
 }
 
 void do_xapi_Printline(char *str)
 {
-    do_xapi_Output(strcat(str, "\n"));
+    char *kstr = NULL;
+    if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
+    size_t len = xapi_strnlen(kstr, XAPI_USER_STRING_MAX - 2);
+    kstr[len] = '\n';
+    kstr[len + 1] = '\0';
+    xapi_output_kernel(kstr);
+    free(kstr);
 }
 
 void do_xapi_OutputSerial(char *str)
 {
-    write_serial_string(str);
+    char *kstr = NULL;
+    if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
+    write_serial_string(kstr);
+    free(kstr);
 }
 
 void do_xapi_Printf(char *str)
@@ -157,6 +190,7 @@ void do_xapi_Printf(char *str)
 
 void do_xapi_Sleep(uint64_t ms)
 {
+    if (ms > (uint64_t)-1 / 1000000ULL) return;
     open_interrupt;
     uint64_t old_t = nanoTime();
     while (nanoTime() - old_t <= ms * 1000000)
@@ -169,8 +203,9 @@ void do_xapi_Sleep(uint64_t ms)
 void do_xapi_GetTimeX(uint64_t tt)
 {
     if (!tt) { return; }
-    tm *time_s = (tm *)tt;
-    time_read(time_s);
+    tm time_s;
+    time_read(&time_s);
+    copy_to_user_pagedir(xapi_current_pagedir(), (void *)tt, &time_s, sizeof(time_s));
 }
 
 extern uint64_t memory_total_size;
@@ -183,7 +218,11 @@ uint64_t do_xapi_GetMemorySize()
 void do_xapi_Run(char *path)
 {
     page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
-    char  *fpath = vfs_cwd_path_build((char *)path);
+    char *upath = NULL;
+    if (xapi_copy_string_from_user(&upath, path, XAPI_USER_PATH_MAX) < 0) return;
+    char  *fpath = vfs_cwd_path_build(upath);
+    free(upath);
+    if (fpath == NULL) return;
     runfile(fpath);
     switch_page_directory(caller_pagedir);
     free(fpath);
@@ -192,6 +231,8 @@ void do_xapi_Run(char *path)
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
 {
     uint64_t ret = -1;
+    if (size == 0 || check_user_overflow(ptr, size)) return ret;
+    flags |= PTE_USER;
     if (ptr == NULL)
     {
         ret = page_alloc_random(get_current_task()->parent_group->pagedir, size, flags);
@@ -292,8 +333,12 @@ uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
 {
     if (buffer == 0 || max_count == 0 || pcb_group_queue == NULL) return 0;
 
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return 0;
+
     XapiTaskInfo *out     = (XapiTaskInfo *)buffer;
     uint64_t      written = 0;
+    bool          copy_fault = false;
 
     spin_lock(&pcb_group_queue->lock);
     queue_foreach(pcb_group_queue, pnode)
@@ -308,9 +353,17 @@ uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
         if (process->thread_queue == NULL || thread_count == 0)
         {
             if (written >= max_count) break;
-            taskmgr_fill_info(&out[written++], process, NULL, thread_count, window_count, memory_bytes);
+            XapiTaskInfo info;
+            taskmgr_fill_info(&info, process, NULL, thread_count, window_count, memory_bytes);
+            if (!copy_to_user_pagedir(pagedir, &out[written], &info, sizeof(info)))
+            {
+                copy_fault = true;
+                break;
+            }
+            written++;
             continue;
         }
+        if (copy_fault) break;
 
         spin_lock(&process->thread_queue->lock);
         queue_foreach(process->thread_queue, tnode)
@@ -318,11 +371,18 @@ uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
             if (written >= max_count) break;
             tcb_t thread = (tcb_t)tnode->data;
             if (thread == NULL) continue;
-            taskmgr_fill_info(&out[written++], process, thread, thread_count, window_count, memory_bytes);
+            XapiTaskInfo info;
+            taskmgr_fill_info(&info, process, thread, thread_count, window_count, memory_bytes);
+            if (!copy_to_user_pagedir(pagedir, &out[written], &info, sizeof(info)))
+            {
+                copy_fault = true;
+                break;
+            }
+            written++;
         }
         spin_unlock(&process->thread_queue->lock);
 
-        if (written >= max_count) break;
+        if (written >= max_count || copy_fault) break;
     }
     spin_unlock(&pcb_group_queue->lock);
 

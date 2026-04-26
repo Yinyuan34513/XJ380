@@ -160,8 +160,8 @@ bool signal_deliver_pending(struct X64_REGS *regs)
             return false;
         }
         kill_proc(task->parent_group, 128 + sig, true);
-        task->status = DEATH;
-        return false;
+        open_interrupt;
+        while (true) __asm__ volatile("hlt");
     }
 
     if (action->sa_restorer == NULL) {
