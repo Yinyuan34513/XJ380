@@ -24,7 +24,7 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
-KMOD_DIR := system/kmod
+KMOD_DIR := kmod
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
@@ -156,13 +156,11 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
 	@mkdir -p $(BUILD_DIR)/XJ380/system/font
-	@mkdir -p $(BUILD_DIR)/XJ380/system/image
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
-	@mkdir -p $(BUILD_DIR)/XJ380/lib/modules
-	@mkdir -p $(BUILD_DIR)/XJ380/system/resources
+	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -170,7 +168,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
 
 	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
-	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/image
+	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
 
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/system
 
@@ -190,8 +188,6 @@ vdisk: all
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
 
-	@cp -a ./image/*.* $(BUILD_DIR)/XJ380/system/image
-
 	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
 
 	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
@@ -201,7 +197,7 @@ vdisk: all
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
-	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/lib/modules
+	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/system
 
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 	
