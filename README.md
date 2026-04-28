@@ -25,7 +25,7 @@ XINGJI 工作室 A 级机密 | 保密编号 XSEC202212011-11-A
 - `boot/`: UEFI bootloader code
 - `kernel/`: core kernel subsystems
 - `driver/`: built-in drivers linked into `kernel.elf`
-- `kmod/`: loadable kernel modules built as `.km`
+- `system/kmod/`: loadable kernel modules built as `.km`
 - `user/`: user-space programs and XAPI runtime
 
 Notes:

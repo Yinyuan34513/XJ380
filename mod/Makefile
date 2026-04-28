@@ -1,4 +1,4 @@
 all:
-	@$(MAKE) -C ../kmod
+	@$(MAKE) -C ../system/kmod
 
 .PHONY: all

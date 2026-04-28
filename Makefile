@@ -24,7 +24,7 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
-KMOD_DIR := kmod
+KMOD_DIR := system/kmod
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
