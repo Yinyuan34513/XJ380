@@ -1,7 +1,7 @@
 # Kernel Modules
 
 `system/kmod/` contains loadable kernel modules that are built into `.km` artifacts
-and copied into `/lib/modules` in the disk image.
+and copied into `/system` in the disk image.
 
 Current layout:
 

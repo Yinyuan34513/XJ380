@@ -30,7 +30,7 @@ XINGJI 工作室 A 级机密 | 保密编号 XSEC202212011-11-A
 
 Notes:
 
-- The build still installs kernel modules into `/lib/modules` inside the image.
+- The build still installs kernel modules into `/system` inside the image.
 - `mod/Makefile` is kept as a compatibility wrapper for older build habits.
 
 ## 更新日志
