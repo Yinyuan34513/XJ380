@@ -41,7 +41,7 @@ static int libctest_main_impl()
 
     memcpy(mem, "abcdef", 7);
     memmove(mem + 2, mem, 5);
-    expect(same(mem, "ababcde"), "memmove overlap forward");
+    expect(memcmp(mem, "ababcde", 7) == 0, "memmove overlap forward");
 
     memcpy(mem, "abcdef", 7);
     memmove(mem, mem + 2, 5);
