@@ -115,7 +115,7 @@ void  xapi_DrawRect(
 	bool  	fill
 );
 
-INT32 xapi_drawSvg(
+INT32 xapi_DrawSvg(
 	HDLE  	handle,
 	UINT32  x,
 	UINT32  y,
@@ -124,7 +124,7 @@ INT32 xapi_drawSvg(
 	bool    enableTrans = false
 );
 
-INT32 xapi_drawFA(
+INT32 xapi_DrawFA(
 	HDLE  	handle,
 	UINT32  x,
 	UINT32  y,

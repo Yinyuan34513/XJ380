@@ -1,13 +1,13 @@
 # Kernel Modules
 
-`kmod/` contains loadable kernel modules that are built into `.km` artifacts
-and copied into `/lib/modules` in the disk image.
+`system/kmod/` contains loadable kernel modules that are built into `.km` artifacts
+and copied into `/system` in the disk image.
 
 Current layout:
 
-- `kmod/e1000/`: loadable Intel E1000 network driver
-- `kmod/xhci/`: loadable xHCI host controller driver foundation
-- `kmod/netserver/`: networking module sources and third-party stack code
+- `system/kmod/e1000/`: loadable Intel E1000 network driver
+- `system/kmod/xhci/`: loadable xHCI host controller driver foundation
+- `system/kmod/netserver/`: networking module sources and third-party stack code
 
 Boundary rule:
 

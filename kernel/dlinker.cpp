@@ -402,13 +402,13 @@ cp_module_t *get_module_raw(const char *module_name) {
 }
 
 void module_setup() {
-    vfs_node_t mr = vfs_open("/lib/modules");
+    vfs_node_t mr = vfs_open("/system");
     if (mr == NULL) {
-        write_serial_fmt("kmod: /lib/modules not found\n");
+        write_serial_fmt("kmod: /system not found\n");
         return;
     }
     if (mr->type != file_dir) {
-        write_serial_string("kmod: /lib/modules is not a directory\n");
+        write_serial_string("kmod: /system is not a directory\n");
         vfs_close(mr);
         return;
     }
@@ -421,13 +421,13 @@ void module_setup() {
         if (ch == NULL || ch->name == NULL) {
             continue;
         }
-        size_t path_len = strlen("/lib/modules/") + strlen(ch->name) + 1;
+        size_t path_len = strlen("/system/") + strlen(ch->name) + 1;
         char *buf = (char *)malloc(path_len);
         if (buf == NULL) {
             write_serial_fmt("kmod: no memory for %s\n", ch->name);
             continue;
         }
-        snprintf(buf, path_len, "/lib/modules/%s", ch->name);
+        snprintf(buf, path_len, "/system/%s", ch->name);
         bool exists = false;
         for (size_t j = 0; j < module_count; j++) {
             if (module_ls[j].is_use && strcmp(module_ls[j].raw_name, buf) == 0) {
@@ -1268,7 +1268,7 @@ void* dlopen(const char* filename, int flags) {
     
     // 判断是否是内核模块
     bool is_kernel = false;
-    if (strstr(filename, ".km") || strstr(filename, "/lib/modules/")) {
+    if (strstr(filename, ".km") || strstr(filename, "/system/")) {
         is_kernel = true;
         flags |= RTLD_KERNEL;
     }

@@ -1,6 +1,6 @@
 lwip/core/ipv6/ip6_frag.o: lwip/core/ipv6/ip6_frag.c \
   lwip/include/lwip/opt.h lwip/include/lwipopts.h arch/cc.h \
-  arch/../../../include/stdint.h arch/../../../include/errno.h \
+  arch/../../include/stdint.h arch/../../include/errno.h \
   lwip/include/lwip/debug.h lwip/include/lwip/arch.h \
   ../../include/stdint.h lwip/include/inttypes.h \
   lwip/include/lwip/ip6_frag.h lwip/include/lwip/pbuf.h \
@@ -19,8 +19,8 @@ lwip/core/ipv6/ip6_frag.o: lwip/core/ipv6/ip6_frag.c \
 lwip/include/lwip/opt.h:
 lwip/include/lwipopts.h:
 arch/cc.h:
-arch/../../../include/stdint.h:
-arch/../../../include/errno.h:
+arch/../../include/stdint.h:
+arch/../../include/errno.h:
 lwip/include/lwip/debug.h:
 lwip/include/lwip/arch.h:
 ../../include/stdint.h:
