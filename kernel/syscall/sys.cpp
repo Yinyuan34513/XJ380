@@ -733,9 +733,26 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
     {
         return SYSCALL_FAULT_(EFAULT);
     }
+    page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
+    if (fd == 1 || fd == 2)
+    {
+        size_t total = 0;
+        for (int i = 0; i < iovcnt; i++)
+        {
+            struct iovec kiov;
+            if (!copy_from_user_pagedir(pagedir, &kiov, &iov[i], sizeof(kiov)))
+            {
+                return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
+            }
+            int64_t ret = serial_write_from_user((const uint8_t *)kiov.iov_base, kiov.iov_len);
+            if (ret < 0) return total > 0 ? total : SYSCALL_FAULT_((int)-ret);
+            if (!checked_add_size(total, (size_t)ret, &total)) return SYSCALL_FAULT_(EINVAL);
+            if ((size_t)ret < kiov.iov_len) break;
+        }
+        return total;
+    }
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
-    page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
     if (handle->node->type & file_socket)
     {
         size_t total = 0;
@@ -1015,6 +1032,56 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
     return start_addr;
 
     return addr;
+}
+
+sys_(mprotect, uint64_t addr, size_t length, uint64_t prot)
+{
+    if (length == 0) return 0;
+
+    addr = addr & (~(PAGE_SIZE - 1));
+    uint64_t aligned_len = 0;
+    if (!align_up_u64(length, PAGE_SIZE, &aligned_len)) return SYSCALL_FAULT_(EINVAL);
+    if (check_user_overflow(addr, aligned_len)) return SYSCALL_FAULT_(EFAULT);
+
+    uint64_t start = addr;
+    uint64_t end   = addr + aligned_len;
+    vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
+
+    spin_lock(&mm_op_lock);
+
+    uint64_t cursor = start;
+    while (cursor < end) {
+        vma_t *vma = vma_find(mgr, cursor);
+        if (vma == NULL) {
+            spin_unlock(&mm_op_lock);
+            return SYSCALL_FAULT_(ENOMEM);
+        }
+        cursor = vma->vm_end < end ? vma->vm_end : end;
+    }
+
+    cursor = start;
+    while (cursor < end) {
+        vma_t *vma = vma_find(mgr, cursor);
+        if (vma == NULL) break;
+
+        if (vma->vm_start < start) {
+            vma_split(vma, start);
+            vma = vma_find(mgr, start);
+        }
+        if (vma != NULL && vma->vm_end > end) {
+            vma_split(vma, end);
+        }
+        if (vma != NULL) {
+            vma->vm_flags &= ~(VMA_READ | VMA_WRITE | VMA_EXEC);
+            if (prot & PROT_READ) vma->vm_flags |= VMA_READ;
+            if (prot & PROT_WRITE) vma->vm_flags |= VMA_WRITE;
+            if (prot & PROT_EXEC) vma->vm_flags |= VMA_EXEC;
+            cursor = vma->vm_end;
+        }
+    }
+
+    spin_unlock(&mm_op_lock);
+    return 0;
 }
 
 sys_(munmap, uint64_t addr, size_t size) {

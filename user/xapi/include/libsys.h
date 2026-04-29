@@ -27,11 +27,15 @@
 
 #define SYS_READV 19
 #define SYS_WRITEV 20
+#define SYS_ACCESS 21
 
 #define SYS_PIPE 22
+#define SYS_SELECT 23
+#define SYS_SCHED_YIELD 24
 
 #define SYS_MREMAP 25
 #define SYS_MSYNC 26
+#define SYS_MINCORE 27
 
 #define SYS_DUP 32
 #define SYS_DUP2 33
@@ -41,6 +45,7 @@
 #define SYS_ALARM 37
 
 #define SYS_GETPID 39
+#define SYS_SENDFILE 40
 
 #define SYS_SOCKET 41
 #define SYS_CONNECT 42
@@ -64,6 +69,7 @@
 #define SYS_GETCWD 79
 #define SYS_CHDIR 80
 #define SYS_FCHDIR 81
+#define SYS_RENAME 82
 
 #define SYS_MKDIR 83
 #define SYS_RMDIR 84
@@ -75,9 +81,18 @@
 #define SYS_CHMOD 90
 #define SYS_FCHMOD 91
 
+#define SYS_GETGID 104
+#define SYS_SETPGID 109
+#define SYS_GETPPID 110
+#define SYS_GETGROUPS 115
+#define SYS_GETPGID 121
 #define SYS_MKNOD 133
+#define SYS_STATFS 137
+#define SYS_PIVOT_ROOT 155
 
 #define SYS_ARCH_PRCTL 158
+#define SYS_MOUNT 165
+#define SYS_UMOUNT2 166
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -89,12 +104,23 @@
 #define SYS_SET_TID_ADDRESS 218
 
 #define SYS_CLOCK_GETTIME 228
+#define SYS_CLOCK_GETRES 229
 
 #define SYS_EXIT_GROUP 231
 
+#define SYS_OPENAT 257
+#define SYS_NEWFSTATAT 262
+#define SYS_UNLINKAT 263
+#define SYS_FACCESSAT 269
+#define SYS_PSELECT6 270
 #define SYS_SET_ROBUST_LIST 273
+#define SYS_PIPE2 293
+#define SYS_COPY_FILE_RANGE 326
+#define SYS_STATX 332
 
 #define SYS_RSEQ 334
+#define SYS_FSOPEN 430
+#define SYS_FACCESSAT2 439
 
 
 

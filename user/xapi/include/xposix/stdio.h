@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../stdint.h"
+#include "sys/types.h"
 #include "../krlibc.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int read(int fd, char *buf, uint64_t len);
-int write(int fd, char *buf, uint64_t len);
+ssize_t read(int fd, void *buf, size_t len);
+ssize_t write(int fd, const void *buf, size_t len);
 
 #define READ     0x2
 #define WRITE    0x4
@@ -19,6 +19,8 @@ int write(int fd, char *buf, uint64_t len);
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2
+#define SEEK_DATA 3
+#define SEEK_HOLE 4
 #define BUFSIZ   (4096 * 2)
 #define getchar  getch
 

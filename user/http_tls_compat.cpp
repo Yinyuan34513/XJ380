@@ -451,14 +451,6 @@ extern "C" time_t time(time_t *timer)
     return now;
 }
 
-extern "C" int clock_gettime(int, struct tls_timespec *ts)
-{
-    if (ts == NULL) return -1;
-
-    uint64_t ret = enter_syscall(SYS_CLOCK_GETTIME, 0, (uint64_t)ts, 0, 0, 0, 0);
-    return (int)ret;
-}
-
 extern "C" struct tm *gmtime_r(const time_t *timer, struct tm *result)
 {
     if (result == NULL) return NULL;
@@ -499,31 +491,6 @@ extern "C" int remove(const char *)
     return -1;
 }
 
-extern "C" int rename(const char *, const char *)
-{
-    return -1;
-}
-
-extern "C" void *opendir(const char *)
-{
-    return NULL;
-}
-
-extern "C" void *readdir(void *)
-{
-    return NULL;
-}
-
-extern "C" int closedir(void *)
-{
-    return -1;
-}
-
-extern "C" int stat(const char *, struct tls_stat *)
-{
-    return -1;
-}
-
 extern "C" void *__newlocale(int, const char *, void *base)
 {
     return base;
@@ -556,20 +523,6 @@ extern "C" char *bind_textdomain_codeset(const char *, const char *codeset)
 extern "C" char *dgettext(const char *, const char *msgid)
 {
     return (char *)(msgid == NULL ? "" : msgid);
-}
-
-extern "C" int open(const char *path, int flags, ...)
-{
-    return (int)enter_syscall(SYS_OPEN, (uint64_t)path, (uint64_t)flags, 0, 0, 0, 0);
-}
-
-extern "C" int ioctl(int fd, unsigned long request, ...)
-{
-    va_list ap;
-    va_start(ap, request);
-    uint64_t arg = va_arg(ap, uint64_t);
-    va_end(ap);
-    return (int)enter_syscall(SYS_IOCTL, (uint64_t)fd, request, arg, 0, 0, 0);
 }
 
 extern "C" int __read_chk(int fd, void *buf, size_t nbytes, size_t bufsize)

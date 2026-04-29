@@ -126,3 +126,13 @@
 #define EMEDIUMTYPE     124 /* Wrong medium type */
 
 #define EOK 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern int errno;
+
+#ifdef __cplusplus
+}
+#endif

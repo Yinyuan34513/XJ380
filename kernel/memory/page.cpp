@@ -369,18 +369,33 @@ void free_page_directory(page_directory_t *dir)
 
 void unmap_page(page_directory_t *directory, uint64_t vaddr)
 {
+    if (directory == NULL || directory->table == NULL) return;
+
     uint64_t l4_index = (((vaddr >> 39)) & 0x1FF);
     uint64_t l3_index = (((vaddr >> 30)) & 0x1FF);
     uint64_t l2_index = (((vaddr >> 21)) & 0x1FF);
     uint64_t l1_index = (((vaddr >> 12)) & 0x1FF);
 
     page_table_t *l4_table = directory->table;
+    if (!(l4_table->entries[l4_index].value & PTE_PRESENT)) return;
+    if (l4_table->entries[l4_index].value & PTE_HUGE) return;
+
     page_table_t *l3_table =
         (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value & 0x00007fffffff000));
+    if (l3_table == NULL) return;
+    if (!(l3_table->entries[l3_index].value & PTE_PRESENT)) return;
+    if (l3_table->entries[l3_index].value & PTE_HUGE) return;
+
     page_table_t *l2_table =
         (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value & 0x00007fffffff000));
+    if (l2_table == NULL) return;
+    if (!(l2_table->entries[l2_index].value & PTE_PRESENT)) return;
+    if (l2_table->entries[l2_index].value & PTE_HUGE) return;
+
     page_table_t *l1_table =
         (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x00007fffffff000));
+    if (l1_table == NULL) return;
+    if (!(l1_table->entries[l1_index].value & PTE_PRESENT)) return;
 
     if (l1_table->entries[l1_index].value & PTE_FRAME_ALLOCATED)
         free_frame(l1_table->entries[l1_index].value & 0x00007fffffff000);

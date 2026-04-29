@@ -1,14 +1,15 @@
 #include "./include/x3api.h"
 #include "./include/libsys.h"
+#include "./include/xposix/syscall_ret.h"
 
-extern "C" int read(int fd, char *buf, uint64_t len)
+extern "C" ssize_t read(int fd, void *buf, size_t len)
 {
-    return enter_syscall(SYS_READ, fd, (uint64_t)buf, len, 0, 0, 0);
+    return (ssize_t)__xposix_ret(enter_syscall(SYS_READ, fd, (uint64_t)buf, len, 0, 0, 0));
 }
 
-extern "C" int write(int fd, char *buf, uint64_t len)
+extern "C" ssize_t write(int fd, const void *buf, size_t len)
 {
-    return enter_syscall(SYS_WRITE, fd, (uint64_t)buf, len, 0, 0, 0);
+    return (ssize_t)__xposix_ret(enter_syscall(SYS_WRITE, fd, (uint64_t)buf, len, 0, 0, 0));
 }
 
 #define CANREAD(flag)  ((flag) & READ || (flag) & PLUS)
