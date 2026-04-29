@@ -13,7 +13,11 @@ pid_t vfork();
 pid_t getpid(void);
 pid_t getppid(void);
 pid_t gettid(void);
-int   getgid(void);
+uid_t getuid(void);
+uid_t geteuid(void);
+gid_t getgid(void);
+gid_t getegid(void);
+int   getgroups(int size, gid_t list[]);
 
 int close(int fd);
 ssize_t read(int fd, void *buf, size_t len);
@@ -36,6 +40,8 @@ off_t lseek(int fd, off_t offset, int whence);
 int fsync(int fd);
 unsigned int sleep(unsigned int seconds);
 int usleep(unsigned long usec);
+int isatty(int fd);
+char *ttyname(int fd);
 
 #define F_OK 0
 #define X_OK 1

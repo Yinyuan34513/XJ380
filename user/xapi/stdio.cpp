@@ -141,12 +141,12 @@ int fgetc(FILE *stream)
     }
 }
 
-unsigned int fread(void *buffer, unsigned int size, unsigned int count, FILE *stream)
+size_t fread(void *buffer, size_t size, size_t count, FILE *stream)
 {
     if (CANREAD(stream->mode))
     {
         unsigned char *c_ptr = (unsigned char *)buffer;
-        for (int i = 0; i < size * count; i++)
+        for (size_t i = 0; i < size * count; i++)
         {
             unsigned int ch = fgetc(stream);
             if (ch == EOF) { return i; }

@@ -14,6 +14,10 @@
 
 #include "./xposix/unistd.h"
 #include "./xposix/stdio.h"
+#include "./xposix/stdlib.h"
+#include "./xposix/string.h"
+#include "./xposix/errno.h"
+#include "./xposix/ctype.h"
 #include "./xposix/fcntl.h"
 #include "./xposix/poll.h"
 #include "./xposix/dirent.h"
@@ -27,6 +31,6 @@
 #include "./xposix/sys/time.h"
 #include "./xposix/sys/types.h"
 #include "./xposix/sys/uio.h"
+#include "./xposix/sys/utsname.h"
 #include "./xposix/sys/wait.h"
-#include "./xposix/stdlib.h"
 #include "./liballoc/alloc.h"

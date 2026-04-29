@@ -64,9 +64,9 @@ extern "C" pid_t gettid(void)
     return (pid_t)__xposix_ret(enter_syscall(SYS_GETTID, 0, 0, 0, 0, 0, 0));
 }
 
-extern "C" int getgid(void)
+extern "C" gid_t getgid(void)
 {
-    return (int)__xposix_ret(enter_syscall(SYS_GETGID, 0, 0, 0, 0, 0, 0));
+    return (gid_t)__xposix_ret(enter_syscall(SYS_GETGID, 0, 0, 0, 0, 0, 0));
 }
 
 extern "C" int dup(int fd)

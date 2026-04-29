@@ -207,7 +207,7 @@ static const unsigned short *tls_ctype_table()
     return table + 128;
 }
 
-extern "C" void *memmove(void *dest, const void *src, size_t n)
+extern "C" __attribute__((weak)) void *memmove(void *dest, const void *src, size_t n)
 {
     uint8_t       *d = (uint8_t *)dest;
     const uint8_t *s = (const uint8_t *)src;
@@ -243,7 +243,7 @@ extern "C" int __cxa_atexit(void (*)(void *), void *, void *)
     return 0;
 }
 
-extern "C" void *memchr(const void *src, int ch, size_t len)
+extern "C" __attribute__((weak)) void *memchr(const void *src, int ch, size_t len)
 {
     const unsigned char *bytes = (const unsigned char *)src;
     for (size_t i = 0; i < len; ++i) {
@@ -254,24 +254,24 @@ extern "C" void *memchr(const void *src, int ch, size_t len)
     return NULL;
 }
 
-extern "C" int bcmp(const void *lhs, const void *rhs, size_t len)
+extern "C" __attribute__((weak)) int bcmp(const void *lhs, const void *rhs, size_t len)
 {
     return memcmp(lhs, rhs, len);
 }
 
-extern "C" int tolower(int ch)
+extern "C" __attribute__((weak)) int tolower(int ch)
 {
     if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 'a';
     return ch;
 }
 
-extern "C" int toupper(int ch)
+extern "C" __attribute__((weak)) int toupper(int ch)
 {
     if (ch >= 'a' && ch <= 'z') return ch - 'a' + 'A';
     return ch;
 }
 
-extern "C" int strcasecmp(const char *lhs, const char *rhs)
+extern "C" __attribute__((weak)) int strcasecmp(const char *lhs, const char *rhs)
 {
     while (*lhs != '\0' && *rhs != '\0') {
         const int diff = tolower((unsigned char)*lhs) - tolower((unsigned char)*rhs);
@@ -282,7 +282,7 @@ extern "C" int strcasecmp(const char *lhs, const char *rhs)
     return tolower((unsigned char)*lhs) - tolower((unsigned char)*rhs);
 }
 
-extern "C" int strncasecmp(const char *lhs, const char *rhs, size_t len)
+extern "C" __attribute__((weak)) int strncasecmp(const char *lhs, const char *rhs, size_t len)
 {
     for (size_t i = 0; i < len; ++i) {
         const int lch = tolower((unsigned char)lhs[i]);
@@ -294,7 +294,7 @@ extern "C" int strncasecmp(const char *lhs, const char *rhs, size_t len)
     return 0;
 }
 
-extern "C" char *strdup(const char *str)
+extern "C" __attribute__((weak)) char *strdup(const char *str)
 {
     if (str == NULL) return NULL;
     const size_t len = strlen(str) + 1;
@@ -402,7 +402,7 @@ extern "C" int printf(const char *fmt, ...)
     return ret;
 }
 
-extern "C" int *__errno_location(void)
+extern "C" __attribute__((weak)) int *__errno_location(void)
 {
     static int g_errno = 0;
     return &g_errno;

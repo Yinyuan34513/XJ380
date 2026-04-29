@@ -57,7 +57,16 @@ extern "C" {
 int stat(const char *path, struct stat *buf);
 int lstat(const char *path, struct stat *buf);
 int fstat(int fd, struct stat *buf);
+int fstatat(int dirfd, const char *path, struct stat *buf, int flags);
 int mkdir(const char *path, mode_t mode);
+int chmod(const char *path, mode_t mode);
+int fchmod(int fd, mode_t mode);
+int chown(const char *path, uid_t owner, gid_t group);
+int lchown(const char *path, uid_t owner, gid_t group);
+int fchown(int fd, uid_t owner, gid_t group);
+int truncate(const char *path, off_t length);
+int ftruncate(int fd, off_t length);
+int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags);
 
 #ifdef __cplusplus
 }

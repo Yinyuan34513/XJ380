@@ -85,12 +85,10 @@ void *memset(void *dst, int val, size_t size)
 
 char *strcpy(char *dest, const char *src)
 {
-    do
-    {
-        *dest++ = *src++;
-    } while (*src != 0);
-    *dest = 0;
-    return dest;
+    char *ret = dest;
+    while ((*dest++ = *src++))
+        ;
+    return ret;
 }
 
 size_t strlen(const char *str)
@@ -139,7 +137,8 @@ char *strchrnul(const char *s, int c)
 {
     while (*s)
     {
-        if ((*s++) == c) break;
+        if (*s == (char)c) break;
+        s++;
     }
     return (char *)s;
 }
@@ -169,6 +168,7 @@ char *strchr(const char *s, int c)
 char *strstr(const char *str1, const char *str2)
 {
     const char *s1, *s2, *p = str1;
+    if (*str2 == '\0') { return (char *)str1; }
     while (*p != '\0')
     {
         s1 = p;
