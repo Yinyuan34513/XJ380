@@ -69,6 +69,40 @@ extern "C" gid_t getgid(void)
     return (gid_t)__xposix_ret(enter_syscall(SYS_GETGID, 0, 0, 0, 0, 0, 0));
 }
 
+extern "C" uid_t getuid(void)
+{
+    // 目前 XJ380 还没有完整多用户权限模型；用户态先按 root 身份兼容 POSIX 工具。
+    return 0;
+}
+
+extern "C" uid_t geteuid(void)
+{
+    // 有效 UID 与真实 UID 保持一致，避免 toybox 在权限检查路径上误判失败。
+    return getuid();
+}
+
+extern "C" gid_t getegid(void)
+{
+    // 有效 GID 与真实 GID 保持一致；当前默认组就是 0。
+    return getgid();
+}
+
+extern "C" int getgroups(int size, gid_t list[])
+{
+    // 暂无附加组概念；size 为 0 时返回组数量，非 0 时填入一个 root 组。
+    if (size < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (size == 0) return 1;
+    if (list == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    list[0] = 0;
+    return 1;
+}
+
 extern "C" int dup(int fd)
 {
     return (int)__xposix_ret(enter_syscall(SYS_DUP, fd, 0, 0, 0, 0, 0));
@@ -147,4 +181,20 @@ extern "C" int usleep(unsigned long usec)
 {
     struct timespec ts = {(time_t)(usec / 1000000UL), (long)((usec % 1000000UL) * 1000UL)};
     return nanosleep(&ts, NULL);
+}
+
+extern "C" int isatty(int fd)
+{
+    // 早期终端兼容：标准输入/输出/错误视为 tty，其他 fd 先保守返回不是 tty。
+    if (fd >= 0 && fd <= 2) return 1;
+    errno = ENOTTY;
+    return 0;
+}
+
+extern "C" char *ttyname(int fd)
+{
+    // toybox 只需要一个稳定名字用于提示/诊断；实际终端设备后续再接入 devfs。
+    static char tty[] = "/dev/tty";
+    if (!isatty(fd)) return NULL;
+    return tty;
 }

@@ -27,6 +27,8 @@ int dup2(int fd, int newfd);
 int pipe(int pipefd[2]);
 int pipe2(int pipefd[2], int flags);
 int execve(const char *filename, char *const argv[], char *const envp[]);
+int brk(void *addr);
+void *sbrk(intptr_t increment);
 int chdir(const char *path);
 char *getcwd(char *buffer, size_t length);
 int access(const char *path, int mode);

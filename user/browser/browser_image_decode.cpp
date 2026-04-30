@@ -149,10 +149,10 @@ static void nanosvg_swap_bytes(unsigned char *lhs, unsigned char *rhs, std::size
     }
 }
 
-extern "C" void qsort(void *base,
-                       std::size_t count,
-                       std::size_t size,
-                       int (*compare)(const void *, const void *)) noexcept
+extern "C" __attribute__((weak)) void qsort(void *base,
+                                            std::size_t count,
+                                            std::size_t size,
+                                            int (*compare)(const void *, const void *)) noexcept
 {
     if (size == 0 || count < 2) {
         return;

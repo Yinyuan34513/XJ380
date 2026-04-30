@@ -43,7 +43,6 @@ extern "C" void __wrap_free(void *ptr)
 
     if (!pointer_in_browser_heap(ptr)) {
         log_invalid_free(ptr);
-        return;
     }
 
     __real_free(ptr);

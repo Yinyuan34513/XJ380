@@ -21,7 +21,7 @@ struct tls_stat
 };
 
 static FILE g_tls_fake_file;
-FILE *stderr = &g_tls_fake_file;
+__attribute__((weak)) FILE *stderr = &g_tls_fake_file;
 char __libc_single_threaded = 1;
 extern "C" {
 void *__dso_handle = NULL;
@@ -223,7 +223,7 @@ extern "C" __attribute__((weak)) void *memmove(void *dest, const void *src, size
     return dest;
 }
 
-extern "C" void abort(void)
+extern "C" __attribute__((weak)) void abort(void)
 {
     for (;;) {}
 }
@@ -385,7 +385,7 @@ extern "C" int __sprintf_chk(char *str, int, size_t maxlen, const char *fmt, ...
     return ret;
 }
 
-extern "C" int printf(const char *fmt, ...)
+extern "C" __attribute__((weak)) int printf(const char *fmt, ...)
 {
     char    buffer[512];
     va_list ap;
@@ -463,25 +463,25 @@ extern "C" void setbuf(FILE *, char *)
 {
 }
 
-extern "C" size_t fwrite(const void *, size_t size, size_t count, FILE *)
+extern "C" __attribute__((weak)) size_t fwrite(const void *, size_t size, size_t count, FILE *)
 {
     return size * count;
 }
 
-extern "C" int fputs(const char *str, FILE *stream)
+extern "C" __attribute__((weak)) int fputs(const char *str, FILE *stream)
 {
     if (str == NULL) return -1;
     int len = (int)strlen(str);
     return write(stream == stderr ? 2 : 1, (char *)str, (uint64_t)len);
 }
 
-extern "C" int fputc(int ch, FILE *stream)
+extern "C" __attribute__((weak)) int fputc(int ch, FILE *stream)
 {
     char value = (char)ch;
     return write(stream == stderr ? 2 : 1, &value, 1);
 }
 
-extern "C" char *fgets(char *, int, FILE *)
+extern "C" __attribute__((weak)) char *fgets(char *, int, FILE *)
 {
     return NULL;
 }

@@ -26,6 +26,7 @@ ssize_t write(int fd, const void *buf, size_t len);
 
 typedef struct FILE
 {
+    int            fd;
     unsigned int   mode;
     unsigned int   fileSize;
     unsigned char *buffer;

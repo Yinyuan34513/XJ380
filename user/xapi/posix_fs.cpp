@@ -52,9 +52,85 @@ extern "C" int fstat(int fd, struct stat *buf)
     return (int)__xposix_ret(enter_syscall(SYS_FSTAT, fd, (uint64_t)buf, 0, 0, 0, 0));
 }
 
+extern "C" int fstatat(int dirfd, const char *path, struct stat *buf, int flags)
+{
+    // fstatat 是 stat/openat 系工具的公共入口；内核暂不完整解释 flags，用户态原样转发。
+    return (int)__xposix_ret(enter_syscall(SYS_NEWFSTATAT, dirfd, (uint64_t)path, (uint64_t)buf, flags, 0, 0));
+}
+
 extern "C" int mkdir(const char *path, mode_t mode)
 {
     return (int)__xposix_ret(enter_syscall(SYS_MKDIR, (uint64_t)path, mode, 0, 0, 0, 0));
+}
+
+extern "C" int chmod(const char *path, mode_t mode)
+{
+    // chmod 先接到内核 syscall；若文件系统忽略权限位，也应由内核保持兼容返回。
+    return (int)__xposix_ret(enter_syscall(SYS_CHMOD, (uint64_t)path, mode, 0, 0, 0, 0));
+}
+
+extern "C" int fchmod(int fd, mode_t mode)
+{
+    // fchmod 是 fd 版本权限设置，供 cp/install 等工具链接使用。
+    return (int)__xposix_ret(enter_syscall(SYS_FCHMOD, fd, mode, 0, 0, 0, 0));
+}
+
+extern "C" int chown(const char *path, uid_t owner, gid_t group)
+{
+    // 当前系统没有真实属主模型；只验证参数形态并把 chown 视为成功的兼容空操作。
+    if (path == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    (void)owner;
+    (void)group;
+    return 0;
+}
+
+extern "C" int lchown(const char *path, uid_t owner, gid_t group)
+{
+    // 还没有符号链接属主差异，lchown 与 chown 使用相同兼容行为。
+    return chown(path, owner, group);
+}
+
+extern "C" int fchown(int fd, uid_t owner, gid_t group)
+{
+    // fd 有效性先做最小检查；属主变更仍是兼容空操作。
+    if (fd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    (void)owner;
+    (void)group;
+    return 0;
+}
+
+extern "C" int truncate(const char *path, off_t length)
+{
+    // 还没有通用截断 syscall；明确返回 ENOSYS，方便上层降级或报错。
+    (void)path;
+    (void)length;
+    errno = ENOSYS;
+    return -1;
+}
+
+extern "C" int ftruncate(int fd, off_t length)
+{
+    // fd 截断同样等待 VFS 支持；当前只提供可链接的 POSIX 入口。
+    (void)fd;
+    (void)length;
+    errno = ENOSYS;
+    return -1;
+}
+
+extern "C" int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags)
+{
+    // FAT/当前 VFS 时间戳写入尚不完整；先作为成功空操作兼容 cp -p/touch 的普通路径。
+    (void)dirfd;
+    (void)path;
+    (void)times;
+    (void)flags;
+    return 0;
 }
 
 extern "C" int getdents(int fd, struct dirent *dents, size_t size)

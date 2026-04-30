@@ -297,15 +297,7 @@ UINT64 xapi_KillProcess(UINT64 pid)
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size)
 {
-	void *ret = malloc(size);
-	if (ret == nullptr && size != 0)
-	{
-		void *heap_memory = xapi_MapMemory(NULL, 16 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    	memset(heap_memory, 0, 16 * 1024 * 1024);
-		heap_extend((uint8_t *)heap_memory, 16 * 1024 * 1024);
-		ret = malloc(size);
-	}
-	return ret;
+	return malloc(size);
 }
 
 void    xapi_FreeMemory(void *ptr)

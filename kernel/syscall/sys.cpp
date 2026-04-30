@@ -833,102 +833,78 @@ sys_(readv, int fd, struct iovec *iov, int iovcnt0)
 spin_t mm_op_lock=SPIN_INIT;
 
 uint64_t sys_brk(uint64_t brk) {
-    if (!align_up_u64(brk, PAGE_SIZE, &brk)) return get_current_task()->parent_group->brk_current;
+    pcb_t process = get_current_task()->parent_group;
 
+    // Linux 语义里 brk(0) 用来查询当前 program break，不能返回堆起点。
     if (!brk) {
-        return get_current_task()->parent_group->brk_start;
+        return process->brk_current;
     }
 
-    if (brk < get_current_task()->parent_group->brk_start) {
-        return get_current_task()->parent_group->brk_current;
+    if (!align_up_u64(brk, PAGE_SIZE, &brk)) return process->brk_current;
+
+    // 用户堆只能在装载器预留的 brk 区间里伸缩，越界时保持原 break 不变。
+    if (brk < process->brk_start || brk > process->brk_end) {
+        return process->brk_current;
     }
 
-    if (brk == get_current_task()->parent_group->brk_current) {
-        return get_current_task()->parent_group->brk_current;
+    if (brk == process->brk_current) {
+        return process->brk_current;
+    }
+
+    // VMA 始终描述完整 heap 区间 [brk_start, brk)，避免增长/收缩后留下碎片 VMA。
+    vma_t *new_heap_vma = NULL;
+    if (brk > process->brk_start) {
+        new_heap_vma = vma_alloc();
+        if (!new_heap_vma) return process->brk_current;
+
+        new_heap_vma->vm_start = process->brk_start;
+        new_heap_vma->vm_end = brk;
+        new_heap_vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
+        new_heap_vma->vm_type = VMA_TYPE_ANON;
+        new_heap_vma->vm_name = strdup("[heap]");
+        if (!new_heap_vma->vm_name) {
+            vma_free(new_heap_vma);
+            return process->brk_current;
+        }
     }
 
     spin_lock(&mm_op_lock);
 
-    if (brk > get_current_task()->parent_group->brk_current) {
+    if (brk > process->brk_current) {
+        if (vma_find_intersection(&process->vma_manager, process->brk_current, brk)) {
+            spin_unlock(&mm_op_lock);
+            if (new_heap_vma) vma_free(new_heap_vma);
+            return process->brk_current;
+        }
+
+        // brk 分配的是用户态堆页，必须带 PTE_USER，否则用户态 malloc 会页故障。
         page_map_range_to_random(get_current_directory(),
-                       get_current_task()->parent_group->brk_current,
-                       brk - get_current_task()->parent_group->brk_current,
-                       PTE_FLAG_U | PTE_PRESENT | PTE_WRITEABLE);
-
-        vma_t *vma = vma_alloc();
-        if (!vma) {
-            spin_unlock(&mm_op_lock);
-            return (uint64_t)-ENOMEM;
-        }
-
-        vma->vm_start = get_current_task()->parent_group->brk_current;
-        vma->vm_end = brk;
-        vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
-        vma->vm_type = VMA_TYPE_ANON;
-        vma->vm_name = strdup("[heap]");
-        if (!vma->vm_name) {
-            vma_free(vma);
-            spin_unlock(&mm_op_lock);
-            return (uint64_t)-ENOMEM;
-        }
-
-        vma_t *region =
-            vma_find_intersection(&get_current_task()->parent_group->vma_manager,
-                                  get_current_task()->parent_group->brk_start,
-                                  get_current_task()->parent_group->brk_end);
-
-        if (region) {
-            vma_remove(&get_current_task()->parent_group->vma_manager, region);
-            vma_free(region);
-        }
-
-        if (vma_insert(&get_current_task()->parent_group->vma_manager, vma)) {
-            vma_free(vma);
-            spin_unlock(&mm_op_lock);
-            return (uint64_t)-ENOMEM;
-        }
-
-        get_current_task()->parent_group->brk_current = brk;
+                       process->brk_current,
+                       brk - process->brk_current,
+                       PTE_USER | PTE_PRESENT | PTE_WRITEABLE);
     } else {
-        unmap_page_range(get_current_directory(), brk,
-                         get_current_task()->parent_group->brk_current - brk);
-
-        vma_t *region =
-            vma_find_intersection(&get_current_task()->parent_group->vma_manager,
-                                  get_current_task()->parent_group->brk_start,
-                                  get_current_task()->parent_group->brk_end);
-
-        if (region) {
-            vma_remove(&get_current_task()->parent_group->vma_manager, region);
-            vma_free(region);
-        }
-
-        if (brk > get_current_task()->parent_group->brk_start) {
-            vma_t *vma = vma_alloc();
-            if (!vma) {
-                get_current_task()->parent_group->brk_current = brk;
-                return get_current_task()->parent_group->brk_current;
-            }
-
-            vma->vm_start = get_current_task()->parent_group->brk_start;
-            vma->vm_end = brk;
-            vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
-            vma->vm_type = VMA_TYPE_ANON;
-            vma->vm_name = strdup("[heap]");
-
-            if (vma_insert(&get_current_task()->parent_group->vma_manager,
-                           vma) != 0) {
-                vma_free(vma);
-                // 继续执行，即使VMA插入失败
-            }
-        }
-
-        get_current_task()->parent_group->brk_current = brk;
+        unmap_page_range(get_current_directory(), brk, process->brk_current - brk);
     }
+
+    vma_t *old_heap_vma =
+        vma_find_intersection(&process->vma_manager, process->brk_start, process->brk_end);
+
+    if (old_heap_vma) {
+        vma_remove(&process->vma_manager, old_heap_vma);
+        vma_free(old_heap_vma);
+    }
+
+    if (new_heap_vma && vma_insert(&process->vma_manager, new_heap_vma) != 0) {
+        vma_free(new_heap_vma);
+        spin_unlock(&mm_op_lock);
+        return process->brk_current;
+    }
+
+    process->brk_current = brk;
 
     spin_unlock(&mm_op_lock);
 
-    return get_current_task()->parent_group->brk_current;
+    return process->brk_current;
 }
 
 sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,

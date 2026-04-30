@@ -770,6 +770,13 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     write_serial_fmt("execve process name :%s \n", process->name);
     switch_process_page_directory(new_page_dir);
 
+    uint64_t old_brk_start = process->brk_start;
+    uint64_t old_brk_end = process->brk_end;
+    uint64_t old_brk_current = process->brk_current;
+    process->brk_start = USER_BRK_START;
+    process->brk_end = USER_BRK_END;
+    process->brk_current = process->brk_start;
+
     uint64_t e_entry    = 0;
     uint64_t load_start = 0;
     e_entry             = (uint64_t)parse_elf_file(norm_path, process);
@@ -777,6 +784,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     {
         memcpy(current_task->name, old_thread_name, sizeof(old_thread_name));
         memcpy(process->name, old_process_name, sizeof(old_process_name));
+        process->brk_start = old_brk_start;
+        process->brk_end = old_brk_end;
+        process->brk_current = old_brk_current;
         process->pagedir = old_page_dir;
         switch_page_directory(old_page_dir);
         free_page_directory(new_page_dir);
@@ -892,6 +902,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         free(new_pcb);
         return -ENOMEM;
     }
+    new_pcb->brk_start   = current_pcb->brk_start;
+    new_pcb->brk_end     = current_pcb->brk_end;
+    new_pcb->brk_current = current_pcb->brk_current;
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
     new_pcb->parent_task  = current_pcb;
