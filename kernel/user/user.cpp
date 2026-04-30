@@ -401,6 +401,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
     uint64_t entry = ehdr.e_entry;
     uint64_t phdr_addr = 0;
+    group->linux_abi = ehdr.e_ident[EI_OSABI] == ELFOSABI_LINUX;
 
     elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
     if (mapping_space == NULL)
@@ -612,6 +613,16 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
             }
             argc++;
         }
+    }
+    else if (group->linux_abi)
+    {
+        if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, path))
+        {
+            write_serial_fmt("Create User Process Failed. Reason: Command Line Too Long.\n");
+            kill_proc(group, 0, false);
+            return;
+        }
+        argc++;
     }
 
     char *old_cmdline = group->cmdline;

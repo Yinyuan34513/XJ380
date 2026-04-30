@@ -316,6 +316,8 @@
 #define SYS_UMOUNT2 166
 
 #define SYS_GETTID 186
+#define SYS_TIME 201
+#define SYS_GETDENTS64 217
 
 #define SYS_SET_TID_ADDRESS 218
 
@@ -559,6 +561,7 @@ sys_(get_tid);
 sys_(vfork);
 sys_(execve, char *path, char **argv, char **envp);
 sys_(fstat, int fd, struct stat *buf);
+sys_(time, int64_t *timer);
 sys_(clock_gettime, uint64_t arg0, struct timespec *ts);
 sys_(sendfile, int out_fd, int in_fd, uint64_t *offset_ptr, size_t count);
 sys_(statfs, char *path, struct statfs *buf);
@@ -594,6 +597,7 @@ sys_(pipe2, int *pipefd, uint64_t flags);
 sys_(statx, int dirfd, char *pathname, uint64_t flags, uint64_t mask, struct statx *buff);
 sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags);
 sys_(getdents, int fd, struct dirent *dents, size_t size);
+sys_(getdents64, int fd, void *dents, size_t size);
 sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timespec *timeout,
      WeirdPselect6 *weirdPselect6);
 sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct timeval *timeout);

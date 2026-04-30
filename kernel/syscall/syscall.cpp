@@ -185,6 +185,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_TGKILL: regs->rax = (uint64_t)sys_tgkill(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_GETPID: regs->rax = get_current_task()->parent_group->pid; break;
     case SYS_GETTID: regs->rax = get_current_task()->tid; break;
+    case SYS_TIME: regs->rax = (uint64_t)sys_time((int64_t *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_GETDENTS64:
+        regs->rax = (uint64_t)sys_getdents64(regs->rdi, (void *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_CLOCK_GETTIME:
         regs->rax = (uint64_t)sys_clock_gettime(regs->rdi, (struct timespec *)regs->rsi, 0, 0, 0, 0, regs);
         break;
@@ -248,14 +252,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     // todo
         //     regs->rax = get_current_task()->parent_group->pid;
         //     break;
-        // case SYS_SET_ROBUST_LIST:
-        //     // todo
-        //     regs->rax = 0;
-        //     break;
-        // case SYS_RSEQ:
-        //     // todo
-        //     regs->rax = 0;
-        //     break;
+    case SYS_SET_TID_ADDRESS: regs->rax = get_current_task()->tid; break;
+    case SYS_SET_ROBUST_LIST: regs->rax = 0; break;
+    case SYS_RSEQ: regs->rax = (uint64_t)-ENOSYS; break;
 
     /* XJ380API XAPI Edition */
     case XAPI_OUTPUT: do_xapi_Output((char *)regs->rdi); break;

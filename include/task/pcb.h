@@ -113,6 +113,7 @@ struct process_control_block
     uint64_t    aux_phdr;
     uint64_t    aux_phent;
     uint64_t    aux_phnum;
+    bool        linux_abi;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点

@@ -50,6 +50,17 @@ static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
     return true;
 }
 
+static uint8_t dirent_type_from_node(vfs_node_t node)
+{
+    if (node->type & file_symlink) return DT_LNK;
+    if (node->type & file_none) return DT_REG;
+    if (node->type & file_block) return DT_BLK;
+    if (node->type & file_stream) return DT_CHR;
+    if (node->type & file_socket) return DT_SOCK;
+    if (node->type & file_dir) return DT_DIR;
+    return DT_UNKNOWN;
+}
+
 static page_directory_t *current_user_pagedir()
 {
     tcb_t task = get_current_task();
@@ -1506,6 +1517,16 @@ sys_(fstat, int fd, struct stat *buf)
     return copy_stat_to_user(buf, &kstat);
 }
 
+sys_(time, int64_t *timer)
+{
+    tm tm;
+    time_read(&tm);
+    int64_t timestamp = mktime(&tm);
+    if (timer != NULL && !copy_to_user_pagedir(current_user_pagedir(), timer, &timestamp, sizeof(timestamp)))
+        return SYSCALL_FAULT_(EFAULT);
+    return (uint64_t)timestamp;
+}
+
 sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
 {
     struct timespec kts;
@@ -1865,16 +1886,7 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
         kd.d_ino    = (long)child_node->inode;
         kd.d_off    = (long)handle->offset;
         kd.d_reclen = sizeof(struct dirent);
-        if (child_node->type & file_symlink) { kd.d_type = DT_LNK; }
-        else if (child_node->type & file_none) { kd.d_type = DT_REG; }
-        else if (child_node->type & file_block) { kd.d_type = DT_BLK; }
-        else if (child_node->type & file_stream) { kd.d_type = DT_CHR; }
-        else if (child_node->type & file_socket) { kd.d_type = DT_SOCK; }
-        else if (child_node->type & file_dir) { kd.d_type = DT_DIR; }
-        else
-        {
-            kd.d_type = DT_UNKNOWN;
-        }
+        kd.d_type = dirent_type_from_node(child_node);
         strncpy(kd.d_name, child_node->name, sizeof(kd.d_name) - 1);
         if (!copy_to_user_pagedir(pagedir, &dents[read_count], &kd, sizeof(kd)))
         {
@@ -1888,6 +1900,75 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
     }
     vfs_child_unlock();
     return read_count * sizeof(struct dirent);
+}
+
+struct linux_dirent64 {
+    uint64_t       d_ino;
+    int64_t        d_off;
+    unsigned short d_reclen;
+    unsigned char  d_type;
+    char           d_name[1];
+} __attribute__((packed));
+
+sys_(getdents64, int fd, void *dents, size_t size)
+{
+    if (size == 0) return 0;
+    if (dents == NULL) return SYSCALL_FAULT_(EINVAL);
+    page_directory_t *pagedir = current_user_pagedir();
+    if (!user_range_mapped(pagedir, dents, size)) return SYSCALL_FAULT_(EFAULT);
+
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (unlikely(handle == NULL)) { return SYSCALL_FAULT_(EBADF); }
+    if (handle->node->type != file_dir) { return SYSCALL_FAULT_(ENOTDIR); }
+
+    size_t written = 0;
+    size_t offset = 0;
+    vfs_child_lock();
+    list_foreach(handle->node->child, i)
+    {
+        vfs_node_t child_node = (vfs_node_t)i->data;
+        size_t name_len = strlen(child_node->name);
+        if (name_len > 255) name_len = 255;
+        size_t reclen = offsetof(struct linux_dirent64, d_name) + name_len + 1;
+        uint64_t aligned_reclen = 0;
+        if (!align_up_u64(reclen, 8, &aligned_reclen) || aligned_reclen > sizeof(struct dirent))
+        {
+            vfs_child_unlock();
+            return written > 0 ? written : SYSCALL_FAULT_(EINVAL);
+        }
+        reclen = (size_t)aligned_reclen;
+
+        if (offset < handle->offset)
+        {
+            offset += reclen;
+            continue;
+        }
+        if (written + reclen > size)
+        {
+            vfs_child_unlock();
+            return written > 0 ? written : SYSCALL_FAULT_(EINVAL);
+        }
+
+        char record[sizeof(struct dirent)];
+        memset(record, 0, sizeof(record));
+        struct linux_dirent64 *kd = (struct linux_dirent64 *)record;
+        kd->d_ino = (uint64_t)child_node->inode;
+        kd->d_off = (int64_t)(offset + reclen);
+        kd->d_reclen = (unsigned short)reclen;
+        kd->d_type = dirent_type_from_node(child_node);
+        strncpy(kd->d_name, child_node->name, name_len);
+
+        if (!copy_to_user_pagedir(pagedir, (uint8_t *)dents + written, record, reclen))
+        {
+            vfs_child_unlock();
+            return written > 0 ? written : SYSCALL_FAULT_(EFAULT);
+        }
+        written += reclen;
+        offset += reclen;
+        handle->offset = offset;
+    }
+    vfs_child_unlock();
+    return written;
 }
 
 sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)

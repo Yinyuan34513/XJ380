@@ -81,6 +81,23 @@ void init_cpu()
                          "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
                          "movq %%rax, %%cr4\n\t" ::
                              : "rax");
+
+    uint32_t eax = 0;
+    uint32_t ebx = 0;
+    uint32_t ecx = 0;
+    uint32_t edx = 0;
+    __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1), "c"(0));
+    if (ecx & (1U << 26))
+    {
+        uint64_t cr4 = 0;
+        __asm__ __volatile__("movq %%cr4, %0" : "=r"(cr4));
+        cr4 |= (1ULL << 18); // CR4.OSXSAVE: allow xgetbv/xsetbv/xsave in user-visible CPU feature paths.
+        __asm__ __volatile__("movq %0, %%cr4" ::"r"(cr4) : "memory");
+
+        uint32_t xcr0_lo = 0x3; // x87 + SSE only; context switching still uses fxsave/fxrstor.
+        uint32_t xcr0_hi = 0;
+        __asm__ __volatile__("xsetbv" ::"c"(0), "a"(xcr0_lo), "d"(xcr0_hi) : "memory");
+    }
 }
 
 typedef struct TimerWidgetsData

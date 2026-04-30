@@ -103,6 +103,8 @@
 #define ARCH_GET_GS 0x1005
 
 #define SYS_GETTID 186
+#define SYS_TIME 201
+#define SYS_GETDENTS64 217
 
 #define SYS_SET_TID_ADDRESS 218
 
