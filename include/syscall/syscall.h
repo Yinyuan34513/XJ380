@@ -299,7 +299,10 @@
 #define SYS_CHMOD    90
 #define SYS_FCHMOD   91
 
+#define SYS_GETUID 102
 #define SYS_GETGID 104
+#define SYS_GETEUID 107
+#define SYS_GETEGID 108
 #define SYS_SETPGID 109
 #define SYS_GETPPID 110
 #define SYS_GETGROUPS 115
@@ -320,6 +323,7 @@
 #define SYS_CLOCK_GETRES 229
 
 #define SYS_EXIT_GROUP 231
+#define SYS_TGKILL 234
 
 #define SYS_OPENAT 257
 #define SYS_NEWFSTATAT 262
@@ -546,6 +550,7 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
 sys_(sched_getaffinity);//不支持
 sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
 sys_(kill, int pid, int sig);
+sys_(tgkill, int tgid, int tid, int sig);
 sys_(dup2, int fd, int newfd);
 sys_(dup, int fd);
 sys_(fcntl, int fd, int cmd, uint64_t arg);
@@ -561,7 +566,10 @@ sys_(pivot_root, char *new_root, char *put_old);
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec);
 sys_(getppid);
 sys_(fsopen, char *fsname, uint32_t flags);
+sys_(getuid);
 sys_(getgid);
+sys_(geteuid);
+sys_(getegid);
 sys_(readlink);
 sys_(umount2);
 sys_(link, char *name, char *nw);

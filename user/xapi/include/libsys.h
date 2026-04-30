@@ -81,7 +81,10 @@
 #define SYS_CHMOD 90
 #define SYS_FCHMOD 91
 
+#define SYS_GETUID 102
 #define SYS_GETGID 104
+#define SYS_GETEUID 107
+#define SYS_GETEGID 108
 #define SYS_SETPGID 109
 #define SYS_GETPPID 110
 #define SYS_GETGROUPS 115
@@ -107,6 +110,7 @@
 #define SYS_CLOCK_GETRES 229
 
 #define SYS_EXIT_GROUP 231
+#define SYS_TGKILL 234
 
 #define SYS_OPENAT 257
 #define SYS_NEWFSTATAT 262

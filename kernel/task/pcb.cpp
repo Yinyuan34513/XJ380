@@ -292,6 +292,27 @@ static uint64_t push_slice(uint64_t ustack, uint8_t *slice, uint64_t len)
     return tmp_stack;
 }
 
+static void fill_aux_random(uint8_t random_bytes[16], tcb_t task, uint64_t sp)
+{
+    uint64_t seed = nanoTime() ^ (uint64_t)(uintptr_t)task ^ (sp << 7);
+
+    for (size_t i = 0; i < 16; i++)
+    {
+        seed ^= seed >> 12;
+        seed ^= seed << 25;
+        seed ^= seed >> 27;
+        seed *= 0x2545f4914f6cdd1dULL;
+        random_bytes[i] = (uint8_t)(seed >> ((i & 7U) * 8));
+    }
+}
+
+static uint64_t push_auxv(uint64_t tmp_stack, uint64_t *tmp, uint64_t type, uint64_t value)
+{
+    tmp[0] = type;
+    tmp[1] = value;
+    return push_slice(tmp_stack, (uint8_t *)tmp, 2 * sizeof(uint64_t));
+}
+
 static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, uint64_t link_start, uint8_t *link_data,
                                  size_t link_size, uint64_t *ep)
 {
@@ -316,12 +337,13 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 
     if (envp != NULL)
     {
-        for (env_i = 0; env_i < (task->parent_group->envp ? task->parent_group->envc : current_user->envc); env_i++)
+        size_t env_limit = task->parent_group->envp ? task->parent_group->envc : current_user->envc;
+        for (size_t i = 0; i < env_limit; i++)
         {
-            if (envp[env_i] != NULL)
+            if (envp[i] != NULL)
             {
-                tmp_stack    = push_slice(tmp_stack, (uint8_t *)envp[env_i], strlen(envp[env_i]) + 1);
-                envps[env_i] = tmp_stack;
+                tmp_stack       = push_slice(tmp_stack, (uint8_t *)envp[i], strlen(envp[i]) + 1);
+                envps[env_i++] = tmp_stack;
             }
         }
     }
@@ -332,31 +354,35 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
         argvps[argv_i] = tmp_stack;
     }
 
-    uint64_t total_length = 2 * sizeof(uint64_t) + 7 * 2 * sizeof(uint64_t) + (env_i + 0) * sizeof(uint64_t) +
+    uint8_t aux_random[16];
+    fill_aux_random(aux_random, task, sp);
+    tmp_stack = push_slice(tmp_stack, aux_random, sizeof(aux_random));
+    uint64_t aux_random_ptr = tmp_stack;
+
+    uint64_t total_length = 2 * sizeof(uint64_t) + 16 * 2 * sizeof(uint64_t) + (env_i + 0) * sizeof(uint64_t) +
                             sizeof(uint64_t) + (argv_i + 0) * sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t);
     tmp_stack -= (tmp_stack - total_length) % 0x10;
 
     // push auxv
     uint8_t *tmp = (uint8_t *)malloc(2 * sizeof(uint64_t));
     memset(tmp, 0, 2 * sizeof(uint64_t));
-    tmp_stack = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
+    uint64_t *aux_tmp = (uint64_t *)tmp;
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_NULL, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_SECURE, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_EGID, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_GID, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_EUID, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_UID, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_FLAGS, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_BASE, 0);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_RANDOM, aux_random_ptr);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_ENTRY, entry_point);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_PHNUM, task->parent_group->aux_phnum);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_PHENT, task->parent_group->aux_phent);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_PHDR, task->parent_group->aux_phdr);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_PAGESZ, PAGE_SIZE);
 
-    ((uint64_t *)tmp)[0] = AT_NULL;
-    ((uint64_t *)tmp)[1] = 0;
-
-    ((uint64_t *)tmp)[0] = AT_ENTRY;
-    ((uint64_t *)tmp)[1] = entry_point;
-    tmp_stack            = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
-
-    ((uint64_t *)tmp)[0] = AT_EXECFN;
-    ((uint64_t *)tmp)[1] = execfn_ptr;
-    tmp_stack            = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
-
-    ((uint64_t *)tmp)[0] = AT_PAGESZ;
-    ((uint64_t *)tmp)[1] = PAGE_SIZE;
-    tmp_stack            = push_slice(tmp_stack, tmp, 2 * sizeof(uint64_t));
-
-    memset(tmp, 0, 2 * sizeof(uint64_t));
+    memset(aux_tmp, 0, 2 * sizeof(uint64_t));
 
     tmp_stack = push_slice(tmp_stack, tmp, sizeof(uint64_t));
 

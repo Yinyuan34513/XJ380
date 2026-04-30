@@ -400,6 +400,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     }
 
     uint64_t entry = ehdr.e_entry;
+    uint64_t phdr_addr = 0;
 
     elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
     if (mapping_space == NULL)
@@ -469,6 +470,11 @@ uint64_t parse_elf_file(char *path, pcb_t group)
 
         memcpy((void *)phdrs[i].p_vaddr, (void *)segm_in_file, phdrs[i].p_filesz);
 
+        if (ehdr.e_phoff >= phdrs[i].p_offset && ehdr.e_phoff < phdrs[i].p_offset + phdrs[i].p_filesz)
+        {
+            phdr_addr = phdrs[i].p_vaddr + (ehdr.e_phoff - phdrs[i].p_offset);
+        }
+
         // 清零未初始化数据
         if (phdrs[i].p_memsz > phdrs[i].p_filesz)
         {
@@ -484,6 +490,9 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     // memcpy(buffer, buf, file_size);
 
     group->load_start = mapping_space->load_start;
+    group->aux_phdr   = phdr_addr;
+    group->aux_phent  = ehdr.e_phentsize;
+    group->aux_phnum  = ehdr.e_phnum;
     group->elf_file   = NULL;
     group->elf_size   = file_size;
     // VMA

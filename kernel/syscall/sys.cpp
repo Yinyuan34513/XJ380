@@ -666,12 +666,13 @@ sys_(uname, struct utsname *utsname)
     if (unlikely(utsname == NULL)) return SYSCALL_FAULT_(EINVAL);
     struct utsname kname;
     memset(&kname, 0, sizeof(kname));
-    char sysname[] = "XJ380OS";
+    char sysname[] = "Linux";
     char machine[] = "x86_64";
-    char version[] = "2.1";
+    char release[] = "3.2.0";
+    char version[] = "XJ380OS 2.1";
     memcpy(kname.sysname, sysname, sizeof(sysname));
     memcpy(kname.nodename, "localhost", 10);
-    memcpy(kname.release, KN_VERSION, sizeof(KN_VERSION));
+    memcpy(kname.release, release, sizeof(release));
     memcpy(kname.version, version, sizeof(version));
     memcpy(kname.machine, machine, sizeof(machine));
     if (!copy_to_user_pagedir(current_user_pagedir(), utsname, &kname, sizeof(kname))) return SYSCALL_FAULT_(EFAULT);
@@ -1396,6 +1397,16 @@ sys_(kill, int pid, int sig)
     else return SYSCALL_FAULT_(ENOSYS);
 
     if (target == NULL) return SYSCALL_FAULT_(ESRCH);
+    int ret = signal_send_process(target, sig);
+    return ret < 0 ? (uint64_t)ret : (uint64_t)ret;
+}
+
+sys_(tgkill, int tgid, int tid, int sig)
+{
+    pcb_t target = found_pcb(tgid);
+    if (target == NULL) return SYSCALL_FAULT_(ESRCH);
+    if (tid <= 0 || found_thread(target, tid) == NULL) return SYSCALL_FAULT_(ESRCH);
+
     int ret = signal_send_process(target, sig);
     return ret < 0 ? (uint64_t)ret : (uint64_t)ret;
 }
@@ -2522,9 +2533,26 @@ sys_(readlink)
 }
 
 
+sys_(getuid)
+{
+    // XJ380 does not have a real multi-user permission model yet. Report root
+    // identity for Linux/POSIX compatibility during early userspace bootstrap.
+    return 0;
+}
+
 sys_(getgid)
 {
-    return get_current_task()->parent_group->pid;
+    return 0;
+}
+
+sys_(geteuid)
+{
+    return 0;
+}
+
+sys_(getegid)
+{
+    return 0;
 }
 
 sys_(fsopen, char *fsname, uint32_t flags)

@@ -110,6 +110,9 @@ struct process_control_block
     void       *elf_file;   // 可执行文件指针
     size_t      elf_size;   // 可执行文件大小
     uint64_t    load_start; // 加载起始地址
+    uint64_t    aux_phdr;
+    uint64_t    aux_phent;
+    uint64_t    aux_phnum;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点
@@ -196,3 +199,4 @@ void kill_thread(tcb_t task);
 void kill_thread0(tcb_t task);
 void kill_proc0(pcb_t pcb);
 pcb_t found_pcb(int pid);
+tcb_t found_thread(pcb_t pcb, int tid);
