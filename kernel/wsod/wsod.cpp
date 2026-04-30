@@ -52,6 +52,42 @@ void wsod_divide_error(struct X64_REGS *regs, uint64_t error_code)
 
 void wsod_undefined_opcode(struct X64_REGS *regs, uint64_t error_code)
 {
+    disable_scheduler();
+    serial_show_screen_overlay_now();
+
+    write_serial_string("Undefined opcode at RIP: ");
+    write_serial_hex(regs->rip);
+    write_serial_string(" RSP: ");
+    write_serial_hex(regs->rsp);
+    write_serial_string(" CS: ");
+    write_serial_hex(regs->cs);
+    write_serial_string("\n");
+
+    write_serial_string("Fault Thread Name: ");
+    if (get_current_task() != NULL)
+    {
+        write_serial_string(get_current_task()->name);
+        write_serial_string(" ");
+        write_serial_hex((uint64_t)get_current_task());
+    }
+    else
+    {
+        write_serial_string("<none>");
+    }
+    write_serial_string("\n");
+
+    if (regs->rip >= 8 && (regs->cs & 0x3) == 0x3)
+    {
+        write_serial_string("Opcode bytes: ");
+        uint8_t *code = (uint8_t *)(regs->rip - 8);
+        for (int i = 0; i < 24; i++)
+        {
+            write_serial_hex(code[i]);
+            write_serial_string(" ");
+        }
+        write_serial_string("\n");
+    }
+
     do_wsod("UNDEFINED_OPCODE", regs);
 }
 

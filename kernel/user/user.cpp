@@ -31,6 +31,7 @@
 
 char *current_user_envp[100] = {
     ENVP_SYSTEM_VERSION,
+    (char *)"PATH=/apps:/system:/bin",//像不像
     NULL // 必须以NULL结尾
 };
 
@@ -39,7 +40,7 @@ UserInfo *current_user = NULL;
 UserInfo root_user = {
     .name = "Root",
     .user_type = XUT_Root,
-    .envc = 2,
+    .envc = 3,
     .envp = current_user_envp,
 };
 
@@ -55,17 +56,45 @@ static void restore_runtime_state(bool was_scheduler_enabled, bool was_interrupt
     else close_interrupt;
 }
 
+static bool append_cmdline_char(char *cmdline, size_t cmdline_size, char **cursor, char ch)
+{
+    if (cmdline == NULL || cursor == NULL || *cursor == NULL) return false;
+
+    size_t used = (size_t)(*cursor - cmdline);
+    if (used + 1 >= cmdline_size) return false;
+
+    **cursor = ch;
+    (*cursor)++;
+    **cursor = '\0';
+    return true;
+}
+
 static bool append_cmdline_arg(char *cmdline, size_t cmdline_size, char **cursor, const char *arg)
 {
     if (cmdline == NULL || cursor == NULL || *cursor == NULL || arg == NULL) return false;
 
-    size_t used = (size_t)(*cursor - cmdline);
-    if (used >= cmdline_size) return false;
+    bool quote = arg[0] == '\0';
+    for (const char *p = arg; *p != '\0'; p++)
+    {
+        if (*p == ' ' || *p == '\'' || *p == '"' || *p == '\\')
+        {
+            quote = true;
+            break;
+        }
+    }
 
-    int written = snprintf(*cursor, cmdline_size - used, "%s ", arg);
-    if (written < 0 || (size_t)written >= (cmdline_size - used)) return false;
-
-    *cursor += written;
+    if (quote && !append_cmdline_char(cmdline, cmdline_size, cursor, '"')) return false;
+    for (const char *p = arg; *p != '\0'; p++)
+    {
+        if (quote && (*p == '"' || *p == '\\') &&
+            !append_cmdline_char(cmdline, cmdline_size, cursor, '\\'))
+        {
+            return false;
+        }
+        if (!append_cmdline_char(cmdline, cmdline_size, cursor, *p)) return false;
+    }
+    if (quote && !append_cmdline_char(cmdline, cmdline_size, cursor, '"')) return false;
+    if (!append_cmdline_char(cmdline, cmdline_size, cursor, ' ')) return false;
     return true;
 }
 
@@ -265,7 +294,7 @@ check_password:
     strcpy(current_user->name, urf_data->uinf[current_user_number].name);
     strcpy(current_user->password, urf_data->uinf[current_user_number].password);
     current_user->user_type = urf_data->uinf[current_user_number].user_type;
-    current_user->envc      = 2;
+    current_user->envc      = 3;
     current_user->envp      = current_user_envp;
 
     
@@ -558,12 +587,49 @@ char *getCwd(char *path)
     return strdup(result);
 }
 
-void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
+static char **copy_process_argv(char *path, char *argv[], int argc)
+{
+    if (argc <= 0) return NULL;
+    char **copy = (char **)calloc((size_t)argc + 1, sizeof(char *));
+    if (copy == NULL) return NULL;
+
+    for (int i = 0; i < argc; i++)
+    {
+        const char *src = argv != NULL ? argv[i] : (i == 0 ? path : NULL);
+        if (src == NULL)
+        {
+            for (int j = 0; j < i; j++)
+                free(copy[j]);
+            free(copy);
+            return NULL;
+        }
+        copy[i] = strdup(src);
+        if (copy[i] == NULL)
+        {
+            for (int j = 0; j < i; j++)
+                free(copy[j]);
+            free(copy);
+            return NULL;
+        }
+    }
+    copy[argc] = NULL;
+    return copy;
+}
+
+static void free_process_argv(char **argv)
+{
+    if (argv == NULL) return;
+    for (int i = 0; argv[i] != NULL; i++)
+        free(argv[i]);
+    free(argv);
+}
+
+int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
 {
     if (path == NULL)
     {
         write_serial_fmt("Create User Process Failed. Reason: Empty Path.\n");
-        return;
+        return -EINVAL;
     }
 
     char  process_name[32];
@@ -577,14 +643,14 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     if (new_directory == NULL)
     {
         write_serial_fmt("Create User Process Failed. Reason: Cannot Clone Page Directory.\n");
-        return;
+        return -ENOMEM;
     }
     pcb_t             group         = create_process_group(process_name, pcb, new_directory, (char *)"");
     if (group == NULL)
     {
         free_page_directory(new_directory);
         write_serial_fmt("Create User Process Failed. Reason: Cannot Create Process Group.\n");
-        return;
+        return -ENOMEM;
     }
 
     entry = (void *)parse_elf_file(path, group);
@@ -593,7 +659,7 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     {
         write_serial_fmt("Create User Process Failed. Reason: Cannot Open File.\n");
         kill_proc(group, 0, false);
-        return;
+        return -ENOENT;
     }
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
@@ -605,11 +671,12 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     {
         for (int i = 0; argv[i]; i++)
         {
+            write_serial_fmt("[busybox-debug] create_process argv[%d]=%s\n", i, argv[i]);
             if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, argv[i]))
             {
                 write_serial_fmt("Create User Process Failed. Reason: Command Line Too Long.\n");
                 kill_proc(group, 0, false);
-                return;
+                return -E2BIG;
             }
             argc++;
         }
@@ -620,33 +687,50 @@ void create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         {
             write_serial_fmt("Create User Process Failed. Reason: Command Line Too Long.\n");
             kill_proc(group, 0, false);
-            return;
+            return -E2BIG;
         }
         argc++;
+    }
+    char **thread_argv = copy_process_argv(path, argv, argc);
+    if (argc > 0 && thread_argv == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Copy Argv.\n");
+        kill_proc(group, 0, false);
+        return -ENOMEM;
     }
 
     char *old_cmdline = group->cmdline;
     group->cmdline    = strdup(cmdline);
+    write_serial_fmt("[busybox-debug] create_process cmdline=%s argc=%d linux_abi=%d\n",
+                     cmdline,
+                     argc,
+                     group->linux_abi);
     if (group->cmdline == NULL)
     {
         group->cmdline = old_cmdline;
+        free_process_argv(thread_argv);
         kill_proc(group, 0, false);
-        return;
+        return -ENOMEM;
     }
     if (old_cmdline != NULL) free(old_cmdline);
     char *cwd = getCwd(path);
     if (cwd == NULL)
     {
+        free_process_argv(thread_argv);
         kill_proc(group, 0, false);
-        return;
+        return -ENOMEM;
     }
     write_serial_fmt("CWD: %s\n", cwd);
-    size_t tid = create_user_thread(entry, NULL, argc, process_name, group, cwd);
+    size_t tid = create_user_thread(entry, thread_argv, argc, process_name, group, cwd);
     if ((int64_t)tid < 0)
     {
         free(cwd);
+        free_process_argv(thread_argv);
         kill_proc(group, 0, false);
+        return (int)tid;
     }
+
+    return group->pid;
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

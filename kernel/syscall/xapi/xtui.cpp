@@ -29,6 +29,8 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
+static constexpr size_t XAPI_RUN_ARG_MAX = 32;
+
 static size_t xapi_strnlen(const char *str, size_t max_len)
 {
     if (str == NULL) return 0;
@@ -37,11 +39,12 @@ static size_t xapi_strnlen(const char *str, size_t max_len)
     return len;
 }
 
-static void xapi_output_kernel(const char *str)
+void xapi_output_kernel(const char *str)
 {
     if (str == NULL) return;
 
     pcb_t front_p = get_current_task()->parent_group;
+    pcb_t caller = front_p;
     while (true)
     {
         if (front_p == NULL || front_p == kernel_group)
@@ -69,6 +72,53 @@ static void xapi_output_kernel(const char *str)
         }
         front_p = front_p->parent_task;
     }
+}
+
+static void xapi_free_argv(char **argv)
+{
+    if (argv == NULL) return;
+    for (size_t i = 0; argv[i] != NULL; i++)
+    {
+        free(argv[i]);
+    }
+    free(argv);
+}
+
+static int xapi_copy_argv_from_user(char **user_argv, char ***out)
+{
+    if (out == NULL) return -EINVAL;
+    *out = NULL;
+    if (user_argv == NULL) return 0;
+
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return -EFAULT;
+
+    char **argv = (char **)calloc(XAPI_RUN_ARG_MAX + 1, sizeof(char *));
+    if (argv == NULL) return -ENOMEM;
+
+    for (size_t i = 0; i < XAPI_RUN_ARG_MAX; i++)
+    {
+        char *user_arg = NULL;
+        if (!copy_from_user_pagedir(pagedir, &user_arg, &user_argv[i], sizeof(user_arg)))
+        {
+            xapi_free_argv(argv);
+            return -EFAULT;
+        }
+        if (user_arg == NULL)
+        {
+            *out = argv;
+            return 0;
+        }
+        int ret = xapi_copy_string_from_user(&argv[i], user_arg, XAPI_USER_STRING_MAX);
+        if (ret < 0)
+        {
+            xapi_free_argv(argv);
+            return ret;
+        }
+    }
+
+    xapi_free_argv(argv);
+    return -E2BIG;
 }
 
 void do_xapi_GetSystemVersion(uint64_t str)
@@ -226,6 +276,40 @@ void do_xapi_Run(char *path)
     runfile(fpath);
     switch_page_directory(caller_pagedir);
     free(fpath);
+}
+
+uint64_t do_xapi_RunArgs(char *path, char **argv)
+{
+    page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
+    char *upath = NULL;
+    int ret = xapi_copy_string_from_user(&upath, path, XAPI_USER_PATH_MAX);
+    if (ret < 0) return (uint64_t)ret;
+
+    char *fpath = vfs_cwd_path_build(upath);
+    free(upath);
+    if (fpath == NULL) return (uint64_t)-ENOENT;
+
+    char **kargv = NULL;
+    ret = xapi_copy_argv_from_user(argv, &kargv);
+    if (ret < 0)
+    {
+        free(fpath);
+        return (uint64_t)ret;
+    }
+    write_serial_fmt("[busybox-debug] do_xapi_RunArgs fpath=%s\n", fpath);
+    if (kargv != NULL)
+    {
+        for (int i = 0; kargv[i] != NULL; i++)
+        {
+            write_serial_fmt("[busybox-debug] do_xapi_RunArgs argv[%d]=%s\n", i, kargv[i]);
+        }
+    }
+
+    ret = create_user_process_from_file(fpath, get_current_task()->parent_group, kargv);
+    switch_page_directory(caller_pagedir);
+    xapi_free_argv(kargv);
+    free(fpath);
+    return (uint64_t)ret;
 }
 
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)

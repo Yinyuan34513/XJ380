@@ -7,6 +7,125 @@ uint64_t rp = 0;
 extern bool input_is_enter; // shell_tam.cpp
 extern bool server_mode; // shell_main.cpp
 
+static int build_external_argv(char *exe_path, char *args, char *argv[], int max_argc)
+{
+    int argc = 0;
+    if (max_argc <= 1) return 0;
+
+    argv[argc++] = exe_path;
+    while (args != NULL && *args != '\0' && argc < max_argc - 1)
+    {
+        while (*args == ' ')
+            args++;
+        if (*args == '\0') break;
+
+        char quote = 0;
+        if (*args == '\'' || *args == '"')
+        {
+            quote = *args;
+            args++;
+        }
+
+        argv[argc++] = args;
+        char *out = args;
+        while (*args != '\0')
+        {
+            if (quote)
+            {
+                if (*args == quote)
+                {
+                    args++;
+                    break;
+                }
+            }
+            else if (*args == ' ')
+            {
+                break;
+            }
+
+            if (*args == '\\' && args[1] != '\0') args++;
+            *out++ = *args++;
+        }
+        bool has_more = *args != '\0';
+        *out = '\0';
+        if (!has_more) break;
+        args++;
+    }
+    argv[argc] = NULL;
+    return argc;
+}
+
+static bool append_to_buffer(char *out, size_t out_size, const char *suffix)
+{
+    size_t used = strlen(out);
+    size_t add  = strlen(suffix);
+    if (used + add + 1 > out_size) return false;
+    strcat(out, suffix);
+    return true;
+}
+
+static bool resolve_external_command_path(char *cmd, char *out, size_t out_size)
+{
+    if (cmd == NULL || *cmd == '\0' || out == NULL || out_size == 0) return false;
+
+    out[0] = '\0';
+    if (cmd[0] == '/')
+    {
+        strncpy(out, cmd, out_size - 1);
+        out[out_size - 1] = '\0';
+        normalize_path(out);
+        return true;
+    }
+
+    if (strchr(cmd, '/') != NULL)
+    {
+        strncpy(out, current_path, out_size - 1);
+        out[out_size - 1] = '\0';
+        if (out[strlen(out) - 1] != '/' && !append_to_buffer(out, out_size, "/")) return false;
+        if (!append_to_buffer(out, out_size, cmd)) return false;
+        normalize_path(out);
+        return true;
+    }
+
+    if (check_dir_com(cmd) != 1) return false;
+    strncpy(out, current_path, out_size - 1);
+    out[out_size - 1] = '\0';
+    if (out[strlen(out) - 1] != '/' && !append_to_buffer(out, out_size, "/")) return false;
+    if (!append_to_buffer(out, out_size, cmd)) return false;
+    normalize_path(out);
+    return true;
+}
+
+static int run_external_command(char *cmd, char *args)
+{
+    char runfile_path[512];
+    if (!resolve_external_command_path(cmd, runfile_path, sizeof(runfile_path))) return 0;
+
+    char *argv[32];
+    build_external_argv(runfile_path, args, argv, 32);
+    // xapi_OutputSerial((char *)"[busybox-debug] shell run_external path=");
+    // xapi_OutputSerial(runfile_path);
+    // xapi_OutputSerial((char *)"\n");
+    // for (int i = 0; argv[i] != NULL; i++)
+    // {
+    //     xapi_OutputSerial((char *)"[busybox-debug] shell argv[");
+    //     char idx[16];
+    //     snprintf(idx, sizeof(idx), "%d", i);
+    //     xapi_OutputSerial(idx);
+    //     xapi_OutputSerial((char *)"]=");
+    //     xapi_OutputSerial(argv[i]);
+    //     xapi_OutputSerial((char *)"\n");
+    // }
+
+    int64_t pid = (int64_t)xapi_RunArgs(runfile_path, argv);
+    if (pid < 0)
+    {
+        print_to_console("run failed");
+        return -1;
+    }
+    return (int)pid;
+}
+
 void check_command()
 {
     if (server_mode)
@@ -35,6 +154,8 @@ void check_command()
             break;
         }
     }
+
+    bool paint_prompt = true;
 
     if (strncmp("version", cmd, 7) == 0)
     {
@@ -183,8 +304,9 @@ void check_command()
         print_to_console("  help        - Show this help");
         print_to_console("  edit        - Edit file");
         print_to_console("  taskmgr     - Open task manager");
+        print_to_console("  <program> [args...] - Run executable with arguments");
     }
-    else if (strncmp("../", input_buf, 3) == 0) { change_directory(input_buf); }
+    else if (strncmp("../", cmd, 3) == 0) { change_directory(cmd); }
     else if (strncmp("edit", cmd, 4) == 0)
     {
         // xapi_Execve("/system/shell.elf",NULL,NULL);
@@ -211,19 +333,20 @@ void check_command()
     }
     else
     {
-        if (check_dir_com(input_buf) == 1)
+        int external_pid = run_external_command(cmd, args);
+        if (external_pid > 0)
         {
-            char runfile_path[256];
-            strcat(runfile_path, current_path);
-            strcat(runfile_path, "/");
-            strcat(runfile_path, input_buf);
-            normalize_path(runfile_path);
-            xapi_Run(runfile_path);
+            shell_running_external_pid = external_pid;
+            shell_prompt_pending = true;
+            paint_prompt = false;
         }
-        else if (check_dir_com(input_buf) == 2)
+        else if (external_pid < 0)
+        {
+        }
+        else if (check_dir_com(cmd) == 2)
         {
             strcat(current_path, "/");
-            strcat(current_path, input_buf);
+            strcat(current_path, cmd);
         }
         else if (p_inbuf > 0)
         {
@@ -233,6 +356,6 @@ void check_command()
     }
 
     p_inbuf = 0;
-    paint_arrow_sign(2, cur_y + 4);
+    if (paint_prompt) { paint_arrow_sign(2, cur_y + 4); }
     command_ck_lock = false;
 }

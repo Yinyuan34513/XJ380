@@ -782,6 +782,7 @@ static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) 
     size_t i = 0;
     for (; i < number; i++) {
         char c = (char)get_keyboard_input();
+        if (c == '\0') { break; }
         if (c == 0x7f) { c = '\b'; }
         if (c == 0x9) { c = '\t'; }
         if (c == '\b') {
@@ -792,9 +793,20 @@ static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) 
             continue;
         }
         buffer[i] = c;
+        if (c == '\n') {
+            i++;
+            break;
+        }
     }
 
-    if (!is_sti) open_interrupt;
+    if (!is_sti) close_interrupt;
+
+    pcb_t process = get_current_task() ? get_current_task()->parent_group : NULL;
+    if (process != NULL && process->linux_abi) {
+        // write_serial_fmt("[] stdin_read requested=%llu ret=%llu\n",
+        //                  (unsigned long long)number,
+        //                  (unsigned long long)i);
+    }
 
     return i;
 }

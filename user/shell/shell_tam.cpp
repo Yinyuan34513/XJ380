@@ -15,6 +15,65 @@ char app_input_buffer[1024];
 int  p_input_buffer = 0;
 bool input_is_enter = false;
 
+void terminal_child_putchar(char ch)
+{
+    if (p_input_buffer >= (int)sizeof(app_input_buffer) - 2) return;
+
+    char text[2] = {ch, '\0'};
+    app_input_buffer[p_input_buffer++] = ch;
+    app_input_buffer[p_input_buffer] = '\0';
+    ptt_console_sp(text);
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(false);
+    xapi_RefreshWindow(handle);
+}
+
+void terminal_child_backspace()
+{
+    if (p_input_buffer <= 0) return;
+
+    p_input_buffer--;
+    app_input_buffer[p_input_buffer] = '\0';
+
+    hide_terminal_cursor(false);
+    if (cur_x != 8) { cur_x -= 9; }
+    else
+    {
+        cur_x  = TML_X - 17;
+        cur_y -= 16;
+    }
+    xapi_DrawRect(handle, cur_x, cur_y, cur_x + 9, cur_y + 16, BACKGROUND_COLOR, true);
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(false);
+    xapi_RefreshWindow(handle);
+}
+
+void terminal_child_submit_line()
+{
+    if (p_input_buffer < (int)sizeof(app_input_buffer) - 1)
+    {
+        app_input_buffer[p_input_buffer++] = '\n';
+        app_input_buffer[p_input_buffer] = '\0';
+    }
+    newline();
+    input_is_enter = true;
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(true);
+    xapi_RefreshWindow(handle);
+}
+
+void terminal_child_flush_input_if_requested()
+{
+    if (!check_read_xttp_buffer() || !input_is_enter) return;
+
+    input_is_enter = false;
+    write_xttp_buffer(app_input_buffer);
+    app_input_buffer[0] = '\0';
+    p_input_buffer      = 0;
+    reset_terminal_cursor_blink();
+    show_terminal_cursor(true);
+}
+
 void tam_flush_buffer()
 {
     while (true)
@@ -119,6 +178,7 @@ void tam_main_loop()
 
         // 检查输出缓冲区
         char output_stream[1024];
+        memset(output_stream, 0, sizeof(output_stream));
         read_xttp_buffer(output_stream);
         if (output_stream[0] != '\0') 
         {

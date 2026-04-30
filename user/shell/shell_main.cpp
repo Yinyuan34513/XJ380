@@ -32,6 +32,8 @@ bool putchar_lock        = false;
 bool paint_cursor_lock   = false;
 
 bool server_mode = false;
+bool shell_prompt_pending = false;
+int shell_running_external_pid = -1;
 
 HDLE handle;
 
@@ -39,6 +41,19 @@ int blkc = 0, cf = 0;
 
 void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
+    if (shell_prompt_pending)
+    {
+        switch (Type)
+        {
+        case MSG_CHAR: terminal_child_putchar((char)lData); break;
+        case MSG_SPCHAR:
+            if (lData == '\n') { terminal_child_submit_line(); }
+            if (lData == '\b') { terminal_child_backspace(); }
+            break;
+        }
+        return;
+    }
+
     switch (Type)
     {
     case MSG_CHAR: putchar_at_cur((char *)&lData); break;
@@ -48,6 +63,20 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         break;
     }
     return;
+}
+
+static void poll_external_command_prompt()
+{
+    if (!shell_prompt_pending || shell_running_external_pid <= 0) return;
+
+    int status = 0;
+    int pid = waitpid(shell_running_external_pid, &status, WNOHANG);
+    if (pid == 0) return;
+
+    shell_running_external_pid = -1;
+    shell_prompt_pending = false;
+    if (cur_x != 8) { newline(); }
+    paint_arrow_sign(2, cur_y + 4);
 }
 
 static int shell_main_impl(int argc, char *argv[], char *envp[])
@@ -91,6 +120,22 @@ static int shell_main_impl(int argc, char *argv[], char *envp[])
     {
         // 主循环中检查并刷新缓冲区
         if (p_chbuffer) { flush_buffer(); }
+
+        char output_stream[1024];
+        memset(output_stream, 0, sizeof(output_stream));
+        read_xttp_buffer(output_stream);
+        if (output_stream[0] != '\0')
+        {
+            ptt_console_sp(output_stream);
+            reset_terminal_cursor_blink();
+            show_terminal_cursor(false);
+            xapi_RefreshWindow(handle);
+            terminal_app_mark_finish_output();
+        }
+        if (shell_prompt_pending) { terminal_child_flush_input_if_requested(); }
+
+        poll_external_command_prompt();
+
         update_terminal_cursor_blink(16);
         xapi_Sleep(16);
         __asm__ __volatile__("pause");

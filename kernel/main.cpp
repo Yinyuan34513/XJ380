@@ -477,10 +477,10 @@ skip_timer_widget_init:
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/busybox_amd64", NULL, (char*[3]){"ls","/system",NULL});
+    // create_user_process_from_file((char *)"/apps/busybox_amd64", NULL, (char*[3]){"printf","Hello, World!",NULL});
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -611,7 +611,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: nvme_setup begin\n");
     nvme_setup();
     write_serial_string("BOOT: nvme_setup done\n");
-    
+
     extern void ide_setup(void);
     write_serial_string("BOOT: ide_setup begin\n");
     ide_setup();
@@ -699,7 +699,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_killer();
     write_serial_string("Process Killer is ready\n");
-    
+
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 

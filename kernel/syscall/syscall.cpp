@@ -22,6 +22,68 @@
 #define MSR_LSTAR        0xC0000082 // LSTAR MSR寄存器
 #define MSR_SYSCALL_MASK 0xC0000084 // SYSCALL_MASK MSR寄存器
 #define EFER_NXE         (1 << 11)
+
+static const char *debug_syscall_name(uint64_t nr)
+{
+    switch (nr)
+    {
+    case SYS_READ: return "read";
+    case SYS_WRITE: return "write";
+    case SYS_OPEN: return "open";
+    case SYS_CLOSE: return "close";
+    case SYS_FSTAT: return "fstat";
+    case SYS_IOCTL: return "ioctl";
+    case SYS_POLL: return "poll";
+    case SYS_LSEEK: return "lseek";
+    case SYS_MMAP: return "mmap";
+    case SYS_MPROTECT: return "mprotect";
+    case SYS_MUNMAP: return "munmap";
+    case SYS_BRK: return "brk";
+    case SYS_RT_SIGACTION: return "rt_sigaction";
+    case SYS_RT_SIGPROCMASK: return "rt_sigprocmask";
+    case SYS_ACCESS: return "access";
+    case SYS_PIPE: return "pipe";
+    case SYS_SELECT: return "select";
+    case SYS_NANOSLEEP: return "nanosleep";
+    case SYS_GETPID: return "getpid";
+    case SYS_SOCKET: return "socket";
+    case SYS_CONNECT: return "connect";
+    case SYS_FORK: return "fork";
+    case SYS_VFORK: return "vfork";
+    case SYS_EXECVE: return "execve";
+    case SYS_EXIT: return "exit";
+    case SYS_WAIT4: return "wait4";
+    case SYS_UNAME: return "uname";
+    case SYS_FCNTL: return "fcntl";
+    case SYS_GETCWD: return "getcwd";
+    case SYS_CHDIR: return "chdir";
+    case SYS_GETDENTS64: return "getdents64";
+    case SYS_CLOCK_GETTIME: return "clock_gettime";
+    case SYS_EXIT_GROUP: return "exit_group";
+    case SYS_OPENAT: return "openat";
+    case SYS_NEWFSTATAT: return "newfstatat";
+    case SYS_PSELECT6: return "pselect6";
+    case SYS_PIPE2: return "pipe2";
+    case SYS_ARCH_PRCTL: return "arch_prctl";
+    case SYS_SET_TID_ADDRESS: return "set_tid_address";
+    case SYS_SET_ROBUST_LIST: return "set_robust_list";
+    case SYS_RSEQ: return "rseq";
+    default: return "?";
+    }
+}
+
+static bool debug_trace_linux_syscall()
+{
+    static int trace_budget = 500;
+    if (trace_budget <= 0) return false;
+
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+
+    trace_budget--;
+    return true;
+}
+
 void init_syscall()
 {
     uint64_t efer;
@@ -74,6 +136,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     regs->ss     = SELECTOR_USER_DS;
 
     uint64_t syscall_number = regs->rax;
+    bool trace_syscall = debug_trace_linux_syscall();
+    if (trace_syscall)
+    {
+        tcb_t task = get_current_task();
+    }
 
     switch (syscall_number)
     {
@@ -347,6 +414,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         do_xapi_RefreshPartWindow(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
         break;
     case XAPI_RUN: do_xapi_Run((char *)regs->rdi); break;
+    case XAPI_RUN_ARGS: regs->rax = do_xapi_RunArgs((char *)regs->rdi, (char **)regs->rsi); break;
     case XAPI_GET_PIC_SIZE: GetPictureSize((int *)regs->rdi, (int *)regs->rsi, (char *)regs->rdx); break;
     case XAPI_MAP_MEMORY: regs->rax = do_xapi_MapMemory(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_REMOVEDIR: sys_rmdir(regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -374,6 +442,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         write_serial_dec(syscall_number);
         write_serial_string("\n");
         break;
+    }
+    if (trace_syscall)
+    {
+        tcb_t task = get_current_task();
     }
     signal_deliver_pending(regs);
     return (uint64_t)regs;

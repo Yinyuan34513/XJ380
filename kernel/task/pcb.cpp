@@ -87,17 +87,45 @@ static void restore_runtime_state(bool was_scheduler_enabled, bool was_interrupt
     else close_interrupt;
 }
 
+static bool append_cmdline_char(char *cmdline, size_t cmdline_size, char **cursor, char ch)
+{
+    if (cmdline == NULL || cursor == NULL || *cursor == NULL) return false;
+
+    size_t used = (size_t)(*cursor - cmdline);
+    if (used + 1 >= cmdline_size) return false;
+
+    **cursor = ch;
+    (*cursor)++;
+    **cursor = '\0';
+    return true;
+}
+
 static bool append_cmdline_arg(char *cmdline, size_t cmdline_size, char **cursor, const char *arg)
 {
     if (cmdline == NULL || cursor == NULL || *cursor == NULL || arg == NULL) return false;
 
-    size_t used = (size_t)(*cursor - cmdline);
-    if (used >= cmdline_size) return false;
+    bool quote = arg[0] == '\0';
+    for (const char *p = arg; *p != '\0'; p++)
+    {
+        if (*p == ' ' || *p == '\'' || *p == '"' || *p == '\\')
+        {
+            quote = true;
+            break;
+        }
+    }
 
-    int written = snprintf(*cursor, cmdline_size - used, "%s ", arg);
-    if (written < 0 || (size_t)written >= (cmdline_size - used)) return false;
-
-    *cursor += written;
+    if (quote && !append_cmdline_char(cmdline, cmdline_size, cursor, '"')) return false;
+    for (const char *p = arg; *p != '\0'; p++)
+    {
+        if (quote && (*p == '"' || *p == '\\') &&
+            !append_cmdline_char(cmdline, cmdline_size, cursor, '\\'))
+        {
+            return false;
+        }
+        if (!append_cmdline_char(cmdline, cmdline_size, cursor, *p)) return false;
+    }
+    if (quote && !append_cmdline_char(cmdline, cmdline_size, cursor, '"')) return false;
+    if (!append_cmdline_char(cmdline, cmdline_size, cursor, ' ')) return false;
     return true;
 }
 
@@ -265,6 +293,13 @@ extern void remove_task(tcb_t task);
 void kill_thread0(tcb_t task)
 {
     task->status = OUT;
+    if (task->argv != NULL)
+    {
+        for (size_t i = 0; task->argv[i] != NULL; i++)
+            free(task->argv[i]);
+        free(task->argv);
+        task->argv = NULL;
+    }
     free_frames((uint64_t)virt_to_phys((task->kernel_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
     free_frames((uint64_t)virt_to_phys((task->syscall_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
     remove_task(task);
@@ -319,9 +354,31 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     uint64_t env_i  = 0;
     int      argv_i = 0;
 
-    char     *argv[50];
-    char     *build_cmdline = strdup(task->parent_group->cmdline);
-    const int argc          = cmd_parse(build_cmdline, argv, ' ');
+    char *parsed_argv[50];
+    char **argv = task->argv;
+    int argc = (int)task->argc;
+    bool argv_owned_by_parser = false;
+    char *build_cmdline = NULL;
+    if (argv == NULL || argc <= 0)
+    {
+        build_cmdline = strdup(task->parent_group->cmdline);
+        argc = cmd_parse(build_cmdline, parsed_argv, ' ');
+        argv = parsed_argv;
+        argv_owned_by_parser = true;
+    }
+    write_serial_fmt("[busybox-debug] build_user_stack proc=%s pid=%llu argc=%d argv_source=%s cmdline=%s\n",
+                     task->parent_group ? task->parent_group->name : "(null)",
+                     task->parent_group ? (unsigned long long)task->parent_group->pid : 0ULL,
+                     argc,
+                     argv_owned_by_parser ? "cmdline" : "tcb",
+                     task->parent_group && task->parent_group->cmdline ? task->parent_group->cmdline : "(null)");
+    if (argv != NULL)
+    {
+        for (int i = 0; i < argc && argv[i] != NULL; i++)
+        {
+            write_serial_fmt("[busybox-debug] build_user_stack argv[%d]=%s\n", i, argv[i]);
+        }
+    }
 
     char **envp = task->parent_group->envp ? task->parent_group->envp : current_user->envp;
 
@@ -398,7 +455,11 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     free(envps);
     free(argvps);
     free(link_data);
-    cmd_free(argv, argc);
+    if (argv_owned_by_parser)
+    {
+        cmd_free(argv, argc);
+        free(build_cmdline);
+    }
 
     return tmp_stack;
 }
@@ -417,6 +478,7 @@ void switch_to_user_mode()
     uint64_t argc = *(uint64_t *)rsp;
     char   **argv = (char **)(rsp + 8);
     // char** envp = (char**)ep;
+    uint64_t entry_rdx = get_current_task()->parent_group->linux_abi ? 0 : ep;
 
     get_current_task()->context0.rflags = 0 << 12 | 0b10 | 1 << 9;
     uint64_t func                       = get_current_task()->main;
@@ -461,14 +523,14 @@ void switch_to_user_mode()
                      "pushq %4\n"      // RIP
                      "mov %6, %%rdi\n" // argc (arg1)
                      "mov %7, %%rsi\n" // argv (arg2)
-                     "mov %8, %%rdx\n" // envp (arg3)
+                     "mov %8, %%rdx\n" // XAPI: envp, Linux ELF: rtld_fini
                      "iretq\n"
                      :
                      : "r"((uint64_t)GET_SEL(4 * 8, SA_RPL3)), "r"(rsp), "r"(get_current_task()->context0.rflags),
                        "r"((uint64_t)0x23), "r"(func), "r"((uint64_t)0x1b),
                        "r"(argc),           // %6 -> rdi
                        "r"((uint64_t)argv), // %7 -> rsi
-                       "r"((uint64_t)ep)    // %8 -> rdx
+                       "r"(entry_rdx)        // %8 -> rdx
                      : "memory");
 }
 
@@ -539,6 +601,39 @@ char **copy_envp(char **envp)
     }
     new_envp[count] = NULL;
     return new_envp;
+}
+
+static const char *path_basename_const(const char *path)
+{
+    if (path == NULL) return "";
+    const char *base = path;
+    for (const char *p = path; *p != '\0'; p++)
+    {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    return base;
+}
+
+static bool is_busybox_binary_name(const char *path)
+{
+    const char *base = path_basename_const(path);
+    return strcmp(base, "busybox_amd64") == 0 || strcmp(base, "busybox") == 0;
+}
+
+static char *try_resolve_busybox_applet_path(const char *requested_path, pcb_t process)//什么jb玩意儿，applet真麻烦
+{
+    if (requested_path == NULL || process == NULL || !process->linux_abi) return NULL;
+    if (is_busybox_binary_name(requested_path)) return NULL;
+
+    vfs_node_t busybox = vfs_open("/apps/busybox_amd64");//开！
+    if (busybox == NULL) return NULL;
+    vfs_close(busybox);//判断有没有文件，防止删除了busybox还想当applet，结果找不到文件了
+
+    const char *applet = path_basename_const(requested_path);
+    write_serial_fmt("[busybox-debug] applet fallback requested=%s applet=%s -> /apps/busybox_amd64\n",
+                     requested_path,
+                     applet);
+    return strdup("/apps/busybox_amd64");
 }
 
 static int copy_exec_string_from_user(page_directory_t *pagedir, char **out, const char *src, size_t *total_bytes)
@@ -672,6 +767,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         return (uint64_t)copy_ret;
     }
 
+    pcb_t process = get_current_task()->parent_group;
+
     char      *norm_path = strdup(kpath);
     if (norm_path == NULL)
     {
@@ -684,15 +781,23 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     vfs_node_t node      = vfs_open(norm_path);
     if (node == NULL)
     {
-        free(norm_path);
-        free(kpath);
-        free_envp(kargv);
-        free_envp(kenvp);
-        restore_runtime_state(was_scheduler_enabled, is_sti);
-        return (uint64_t)-ENOENT;
+        char *busybox_path = try_resolve_busybox_applet_path(norm_path, process);
+        if (busybox_path != NULL)
+        {
+            free(norm_path);
+            norm_path = busybox_path;
+            node = vfs_open(norm_path);
+        }
+        if (node == NULL)
+        {
+            free(norm_path);
+            free(kpath);
+            free_envp(kargv);
+            free_envp(kenvp);
+            restore_runtime_state(was_scheduler_enabled, is_sti);
+            return (uint64_t)-ENOENT;
+        }
     }
-
-    pcb_t process = get_current_task()->parent_group;
 
     close_interrupt;
     disable_scheduler();

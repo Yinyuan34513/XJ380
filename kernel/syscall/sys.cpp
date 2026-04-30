@@ -16,6 +16,9 @@ static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
 static constexpr size_t USER_PATH_MAX        = 4096UL;
 static constexpr size_t USER_IOV_MAX         = 1024UL;
 static constexpr size_t USER_POLL_MAX        = FD_SETSIZE;
+static constexpr size_t TERMINAL_IO_CHUNK_BYTES = 1023UL;
+
+extern void xapi_output_kernel(const char *str);
 
 static bool checked_add_size(size_t a, size_t b, size_t *out)
 {
@@ -40,6 +43,15 @@ static bool align_up_u64(uint64_t value, uint64_t align, uint64_t *out)
     if (value > UINT64_MAX - addend) return false;
     *out = (value + addend) & ~(align - 1);
     return true;
+}
+
+static size_t bounded_strlen(const char *str, size_t max_len)
+{
+    if (str == NULL) return 0;
+    size_t len = 0;
+    while (len < max_len && str[len] != '\0')
+        len++;
+    return len;
 }
 
 static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
@@ -189,6 +201,100 @@ static int64_t serial_write_from_user(const uint8_t *buffer, size_t size)
 
     free(bounce);
     return (int64_t)total;
+}
+
+static int64_t stdio_write_from_user(const uint8_t *buffer, size_t size)
+{
+    if (buffer == NULL) return -EFAULT;
+    if (size == 0) return 0;
+
+    pcb_t process = get_current_task()->parent_group;
+    if (process != NULL && process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] stdio_write begin pid=%llu size=%llu\n",
+        //                  (unsigned long long)process->pid,
+        //                  (unsigned long long)size);
+    }
+    size_t bounce_bytes = MIN(size, TERMINAL_IO_CHUNK_BYTES);
+    char *bounce = (char *)malloc(bounce_bytes + 1);
+    if (bounce == NULL) return -ENOMEM;
+
+    size_t total = 0;
+    while (total < size)
+    {
+        size_t chunk = MIN(size - total, bounce_bytes);
+        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EFAULT;
+        }
+        bounce[chunk] = '\0';
+
+        for (size_t i = 0; i < chunk; i++)
+        {
+            write_serial(bounce[i]);
+        }
+        if (process != NULL && process->linux_abi)
+        {
+            // write_serial_fmt("[busybox-debug] stdio_write chunk='%s'\n", bounce);
+        }
+        xapi_output_kernel(bounce);
+        total += chunk;
+    }
+
+    free(bounce);
+    if (process != NULL && process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] stdio_write done pid=%llu total=%llu\n",
+        //                  (unsigned long long)process->pid,
+        //                  (unsigned long long)total);
+    }
+    return (int64_t)total;
+}
+
+static pcb_t find_parent_terminal(pcb_t process)
+{
+    pcb_t front_p = process;
+    while (front_p != NULL && front_p != kernel_group)
+    {
+        if (front_p->xtttp_stc != NULL && front_p->xtttp_stc->is_shell) return front_p;
+        front_p = front_p->parent_task;
+    }
+    return NULL;
+}
+
+static int64_t terminal_read_to_user(uint8_t *buffer, size_t size)
+{
+    if (buffer == NULL) return -EFAULT;
+    if (size == 0) return 0;
+
+    pcb_t process = get_current_task()->parent_group;
+    pcb_t terminal = find_parent_terminal(process);
+    if (terminal == NULL || terminal->xtttp_stc == NULL) return 0;
+
+    terminal->xtttp_stc->wait_for_input = true;
+    while (!terminal->xtttp_stc->input_lock)
+    {
+        scheduler_yield();
+    }
+
+    size_t input_len = bounded_strlen(terminal->xtttp_stc->input, sizeof(terminal->xtttp_stc->input));
+    size_t copy_len = MIN(input_len, size);
+    if (!copy_to_user_pagedir(process->pagedir, buffer, terminal->xtttp_stc->input, copy_len))
+    {
+        terminal->xtttp_stc->input_lock = false;
+        terminal->xtttp_stc->wait_for_input = false;
+        return -EFAULT;
+    }
+
+    memset(terminal->xtttp_stc->input, 0, sizeof(terminal->xtttp_stc->input));
+    terminal->xtttp_stc->input_lock = false;
+    terminal->xtttp_stc->wait_for_input = false;
+
+    write_serial_fmt("[busybox-debug] terminal_read pid=%llu ret=%llu\n",
+                     (unsigned long long)process->pid,
+                     (unsigned long long)copy_len);
+    return (int64_t)copy_len;
 }
 
 static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buffer, size_t size, bool socket_mode)
@@ -453,11 +559,16 @@ sys_(close, int fd)
 
 sys_(write, int fd, uint8_t *buffer, size_t size)
 {
+    pcb_t process = get_current_task()->parent_group;
+    if (process != NULL && process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] sys_write fd=%d size=%llu\n", fd, (unsigned long long)size);
+    }
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return 0;
     if (fd == 1 || fd == 2)
     {
-        int64_t ret = serial_write_from_user(buffer, size);
+        int64_t ret = stdio_write_from_user(buffer, size);
         return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
@@ -475,8 +586,18 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
 
 sys_(read, int fd, uint8_t *buffer, size_t size)
 {
+    pcb_t process = get_current_task()->parent_group;
+    if (process != NULL && process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] sys_read fd=%d size=%llu\n", fd, (unsigned long long)size);
+    }
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return 0;
+    if (fd == 0 && process != NULL && process->linux_abi)
+    {
+        int64_t ret = terminal_read_to_user(buffer, size);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
+    }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)
@@ -541,6 +662,15 @@ sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
     pcb_t parent = get_current_task()->parent_group;
     long  pid    = (long)pid_value;
     (void)rusage;
+    if (parent != NULL)
+    {
+        // write_serial_fmt("[busybox-debug] sys_wait4 parent=%s pid=%llu wait_pid=%ld options=0x%x child_count=%llu\n",
+        //                  parent->name,
+        //                  (unsigned long long)parent->pid,
+        //                  pid,
+        //                  options,
+        //                  parent->child_pcb ? (unsigned long long)parent->child_pcb->size : 0ULL);
+    }
 
     if (parent == NULL || parent->child_pcb == NULL) return SYSCALL_FAULT_(ECHILD);
     if ((options & ~WNOHANG) != 0) return SYSCALL_FAULT_(EINVAL);
@@ -728,9 +858,21 @@ sys_(nano_sleep, void *time_handle)
 
 sys_(ioctl, int fd, int options, void *arg2)
 {
+    pcb_t process = get_current_task()->parent_group;
+    if (process != NULL && process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] sys_ioctl fd=%d req=0x%x arg=0x%llx\n",
+        //                  fd,
+        //                  options,
+        //                  (unsigned long long)(uintptr_t)arg2);
+    }
     if (unlikely(fd < 0 || arg2 == NULL)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     int             ret    = vfs_ioctl(handle->node, options, arg2);
+    if (process != NULL && process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] sys_ioctl ret=%d\n", ret);
+    }
     return ret;
 }
 
@@ -756,7 +898,7 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
             {
                 return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
             }
-            int64_t ret = serial_write_from_user((const uint8_t *)kiov.iov_base, kiov.iov_len);
+            int64_t ret = stdio_write_from_user((const uint8_t *)kiov.iov_base, kiov.iov_len);
             if (ret < 0) return total > 0 ? total : SYSCALL_FAULT_((int)-ret);
             if (!checked_add_size(total, (size_t)ret, &total)) return SYSCALL_FAULT_(EINVAL);
             if ((size_t)ret < kiov.iov_len) break;
@@ -1290,6 +1432,13 @@ sys_(exit_group, int exit_code)
 {
     pcb_t exit_process = get_current_task()->parent_group;
     write_serial_fmt("task: Process %s exit with code %d.\n", exit_process->name, exit_code);
+    if (exit_process != NULL && exit_process->linux_abi)
+    {
+        // write_serial_fmt("[busybox-debug] exit_group pid=%llu code=%d parent=%s\n",
+        //                  (unsigned long long)exit_process->pid,
+        //                  exit_code,
+        //                  exit_process->parent_task ? exit_process->parent_task->name : "(null)");
+    }
     close_interrupt;
     kill_proc(exit_process, exit_code,
               true); // 子进程调用，is_zombie = true，不能在child_pcb中删除当前进程
