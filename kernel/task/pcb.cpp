@@ -709,6 +709,31 @@ static int copy_exec_string_vector_from_user(page_directory_t *pagedir, char **u
     return -E2BIG;
 }
 
+static char **copy_kernel_string_vector(char **argv, size_t argc)
+{
+    if (argv == NULL || argc == 0) return NULL;
+
+    char **copy = (char **)calloc(argc + 1, sizeof(char *));
+    if (copy == NULL) return NULL;
+
+    for (size_t i = 0; i < argc; i++)
+    {
+        if (argv[i] == NULL)
+        {
+            free_envp(copy);
+            return NULL;
+        }
+        copy[i] = strdup(argv[i]);
+        if (copy[i] == NULL)
+        {
+            free_envp(copy);
+            return NULL;
+        }
+    }
+    copy[argc] = NULL;
+    return copy;
+}
+
 //from cops但契合xj380
 
 static constexpr uint64_t CLONE_VM_FLAG             = 0x00000100;//呃呃呃呃呃呃呃呃·
@@ -899,6 +924,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     char **kenvp = NULL;
     size_t kargc = 0;
     size_t kenvc = 0;
+    char **new_task_argv = NULL;
 
     int copy_ret = copy_exec_string_from_user(caller_pagedir, &kpath, path, NULL);
     if (copy_ret < 0)
@@ -954,7 +980,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     close_interrupt;
     disable_scheduler();
     page_directory_t *old_page_dir = process->pagedir;
-    page_directory_t *new_page_dir = clone_page_directory(get_current_directory(), false);
+    page_directory_t *new_page_dir = clone_page_directory(get_kernel_pagedir(), false);
     if (new_page_dir == NULL)
     {
         vfs_close(node);
@@ -1003,6 +1029,22 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
+    if (kargc > 0)
+    {
+        new_task_argv = copy_kernel_string_vector(kargv, kargc);
+        if (new_task_argv == NULL)
+        {
+            vfs_close(node);
+            free(norm_path);
+            free(kpath);
+            free(new_cmdline);
+            free_envp(kargv);
+            free_envp(kenvp);
+            free_page_directory(new_page_dir);
+            restore_runtime_state(was_scheduler_enabled, is_sti);
+            return (uint64_t)-ENOMEM;
+        }
+    }
 
     char **new_envp = NULL;
     size_t new_envc = 0;
@@ -1020,6 +1062,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
             free(norm_path);
             free(kpath);
             free(new_cmdline);
+            free_envp(new_task_argv);
             free_envp(kargv);
             free_page_directory(new_page_dir);
             restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -1034,6 +1077,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(norm_path);
         free(kpath);
         free(new_cmdline);
+        free_envp(new_task_argv);
         free_envp(kargv);
         free_envp(kenvp);
         free_page_directory(new_page_dir);
@@ -1077,6 +1121,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(norm_path);
         free(kpath);
         free(new_cmdline);
+        free_envp(new_task_argv);
         free_envp(kargv);
         free_envp(new_envp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -1138,12 +1183,21 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     free(kpath);
     free_envp(kargv);
 
+    if (get_current_task()->argv != NULL) free_envp(get_current_task()->argv);
+    get_current_task()->argv = new_task_argv;
+    get_current_task()->argc = kargc;
+    new_task_argv = NULL;
+
     uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     get_current_task()->user_stack     = stack;
     get_current_task()->user_stack_top = stack + BIG_USER_STACK;
     get_current_task()->main           = e_entry;
     get_current_task()->hasfscr        = false;
     get_current_task()->winnum         = 0;
+    get_current_task()->fs             = GET_SEL(4 * 8, SA_RPL3);
+    get_current_task()->fs_base        = 0;
+    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(get_current_task()->fs));
+    write_fsbase(0);
 
     if (was_scheduler_enabled) enable_scheduler();
     switch_to_user_mode();

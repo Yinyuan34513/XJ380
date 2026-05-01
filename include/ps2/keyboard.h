@@ -66,7 +66,17 @@ enum special_key_code
     KEY_F11,
     KEY_F12,
     KEY_NUML,
-    KEY_SCROLL
+    KEY_SCROLL,
+    KEY_HOME,
+    KEY_UP,
+    KEY_PAGE_UP,
+    KEY_LEFT,
+    KEY_RIGHT,
+    KEY_END,
+    KEY_DOWN,
+    KEY_PAGE_DOWN,
+    KEY_INSERT,
+    KEY_DELETE
 };
 #    define wait_KB_write() while (inb(PORT_KB_STATUS) & KBSTATUS_IBF)
 

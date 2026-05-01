@@ -250,6 +250,16 @@ static uint8_t xhci_keyboard_translate_usage(uint8_t usage, bool shift,
     case 0x43: return KEY_F10;
     case 0x44: return KEY_F11;
     case 0x45: return KEY_F12;
+    case 0x49: return KEY_INSERT;
+    case 0x4A: return KEY_HOME;
+    case 0x4B: return KEY_PAGE_UP;
+    case 0x4C: return KEY_DELETE;
+    case 0x4D: return KEY_END;
+    case 0x4E: return KEY_PAGE_DOWN;
+    case 0x4F: return KEY_RIGHT;
+    case 0x50: return KEY_LEFT;
+    case 0x51: return KEY_DOWN;
+    case 0x52: return KEY_UP;
     default: return 0;
     }
 }

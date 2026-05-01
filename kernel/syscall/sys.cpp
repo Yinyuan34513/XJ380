@@ -1078,7 +1078,10 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
     spin_lock(&mm_op_lock);
 
     vma_t *vma = vma_alloc();
-    if (!vma) return SYSCALL_FAULT_(ENOMEM);
+    if (!vma) {
+        spin_unlock(&mm_op_lock);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
 
     vma->vm_start = start_addr;
     vma->vm_end   = start_addr + aligned_len;
@@ -1107,6 +1110,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
 
     if (vma_insert(mgr, vma) != 0) {
         vma_free(vma);
+        spin_unlock(&mm_op_lock);
         return SYSCALL_FAULT_(ENOMEM);
     }
 

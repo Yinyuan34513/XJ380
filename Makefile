@@ -189,6 +189,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a ./third_party/busybox-prebuilt/busybox_amd64 $(BUILD_DIR)/XJ380/apps/busybox
+	@cp -a ./nano $(BUILD_DIR)/XJ380/apps/
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
