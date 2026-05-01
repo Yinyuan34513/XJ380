@@ -147,6 +147,12 @@ static uint64_t stat_kernel_path(const char *path, struct stat *out)
     return ret;
 }
 
+static bool busybox_debug_current_linux_abi()
+{
+    tcb_t task = get_current_task();
+    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi;
+}
+
 static uint64_t copy_stat_to_user(struct stat *user_stat, const struct stat *kstat)
 {
     if (user_stat == NULL || kstat == NULL) return SYSCALL_FAULT_(EINVAL);
@@ -1439,11 +1445,11 @@ sys_(exit_group, int exit_code)
         //                  exit_code,
         //                  exit_process->parent_task ? exit_process->parent_task->name : "(null)");
     }
-    close_interrupt;
+    close_interrupt;//applets 已经走到这个
     kill_proc(exit_process, exit_code,
               true); // 子进程调用，is_zombie = true，不能在child_pcb中删除当前进程
     open_interrupt;
-    //scheduler_yield();
+    scheduler_yield();
     cpu_hlt;
 }
 
@@ -1637,11 +1643,25 @@ sys_(fork)
     return process_fork(regs, false, 0);
 }
 
+sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uint64_t tls)
+{
+    return thread_clone(regs, flags, stack, parent_tid, child_tid, tls);
+}
+
 sys_(get_tid)
 {
     return get_current_task()->tid;
 }
 
+sys_(set_tid_address, int *tidptr)
+{
+    tcb_t task = get_current_task();
+    if (task == NULL) return SYSCALL_FAULT_(ESRCH);
+
+    task->clear_child_tid = (uint64_t)tidptr;
+    task->tid_directory   = task->parent_group != NULL ? task->parent_group->pagedir : NULL;
+    return task->tid;
+}
 
 sys_(vfork)
 {
@@ -2129,6 +2149,14 @@ sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
 
     struct stat kstat;
     uint64_t ret = stat_kernel_path(resolved, &kstat);
+    if (busybox_debug_current_linux_abi())
+    {
+        write_serial_fmt("[busybox-debug] newfstatat dirfd=%d path=%s flags=0x%llx ret=%lld\n",
+                         dirfd,
+                         resolved,
+                         (unsigned long long)flags,
+                         (long long)ret);
+    }
     free(resolved);
     if ((int64_t)ret < 0) return ret;
     return copy_stat_to_user(buf, &kstat);
@@ -2378,6 +2406,10 @@ sys_(access, char *filename)
 
     struct stat buf;
     uint64_t stat_ret = stat_kernel_path(path, &buf);
+    if (busybox_debug_current_linux_abi())
+    {
+        write_serial_fmt("[busybox-debug] access path=%s ret=%lld\n", path, (long long)stat_ret);
+    }
     free(path);
     return stat_ret;
 }
@@ -2396,6 +2428,14 @@ sys_(faccessat)
 
     struct stat buf;
     uint64_t ret = stat_kernel_path(resolved, &buf);
+    if (busybox_debug_current_linux_abi())
+    {
+        write_serial_fmt("[busybox-debug] faccessat dirfd=%d path=%s mode=0x%llx ret=%lld\n",
+                         dirfd,
+                         resolved,
+                         (unsigned long long)mode,
+                         (long long)ret);
+    }
 
     free(resolved);
 
@@ -2418,6 +2458,15 @@ sys_(faccessat2)
 
     struct stat buf;
     uint64_t ret = stat_kernel_path(resolved, &buf);
+    if (busybox_debug_current_linux_abi())
+    {
+        write_serial_fmt("[busybox-debug] faccessat2 dirfd=%llu path=%s mode=0x%llx flags=0x%llx ret=%lld\n",
+                         (unsigned long long)dirfd,
+                         resolved,
+                         (unsigned long long)mode,
+                         (unsigned long long)flag,
+                         (long long)ret);
+    }
 
     free(resolved);
 

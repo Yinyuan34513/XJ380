@@ -48,6 +48,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_GETPID: return "getpid";
     case SYS_SOCKET: return "socket";
     case SYS_CONNECT: return "connect";
+    case SYS_CLONE: return "clone";
     case SYS_FORK: return "fork";
     case SYS_VFORK: return "vfork";
     case SYS_EXECVE: return "execve";
@@ -242,6 +243,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_RT_SIGRETURN: regs->rax = (uint64_t)sys_sigret(0, 0, 0, 0, 0, 0, regs); break;
 
+    case SYS_CLONE:
+        regs->rax = (uint64_t)sys_clone(regs->rdi, regs->rsi, (int *)regs->rdx, (int *)regs->r10, regs->r8, 0, regs);
+        break;
     case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
     case SYS_EXECVE:
@@ -319,7 +323,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     // todo
         //     regs->rax = get_current_task()->parent_group->pid;
         //     break;
-    case SYS_SET_TID_ADDRESS: regs->rax = get_current_task()->tid; break;
+    case SYS_SET_TID_ADDRESS: regs->rax = (uint64_t)sys_set_tid_address((int *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_SET_ROBUST_LIST: regs->rax = 0; break;
     case SYS_RSEQ: regs->rax = (uint64_t)-ENOSYS; break;
 

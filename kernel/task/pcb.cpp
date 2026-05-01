@@ -37,6 +37,7 @@ extern UserInfo root_user;
 
 extern bool no_interrupt;
 extern bool is_scheduler;
+spin_t create_thread_lock = SPIN_INIT;
 // pcb.cpp
 #include "task/scheduler.h"
 
@@ -276,6 +277,16 @@ void kill_proc0(pcb_t pcb)
                      vfork ? "true" : "false");
 }
 
+static void clear_child_tid_if_requested(tcb_t task)
+{
+    if (task == NULL || task->clear_child_tid == 0 || task->tid_directory == NULL) return;
+
+    int zero = 0;
+    copy_to_user_pagedir(task->tid_directory, (void *)task->clear_child_tid, &zero, sizeof(zero));
+    task->clear_child_tid = 0;
+    task->tid_directory = NULL;
+}
+
 void kill_thread(tcb_t task)
 {
     if (task == NULL) return;
@@ -284,6 +295,7 @@ void kill_thread(tcb_t task)
         write_serial_fmt("Cannot stop kernel thread.");
         return;
     }
+    clear_child_tid_if_requested(task);
     task->status = DEATH;
     // kill_thread0(task); 瑕佺敤鐨勮В鎺?浣嗗彲鑳借鍔犻攣
 }
@@ -293,6 +305,7 @@ extern void remove_task(tcb_t task);
 void kill_thread0(tcb_t task)
 {
     task->status = OUT;
+    clear_child_tid_if_requested(task);
     if (task->argv != NULL)
     {
         for (size_t i = 0; task->argv[i] != NULL; i++)
@@ -603,39 +616,6 @@ char **copy_envp(char **envp)
     return new_envp;
 }
 
-static const char *path_basename_const(const char *path)
-{
-    if (path == NULL) return "";
-    const char *base = path;
-    for (const char *p = path; *p != '\0'; p++)
-    {
-        if (*p == '/' || *p == '\\') base = p + 1;
-    }
-    return base;
-}
-
-static bool is_busybox_binary_name(const char *path)
-{
-    const char *base = path_basename_const(path);
-    return strcmp(base, "busybox_amd64") == 0 || strcmp(base, "busybox") == 0;
-}
-
-static char *try_resolve_busybox_applet_path(const char *requested_path, pcb_t process)//什么jb玩意儿，applet真麻烦
-{
-    if (requested_path == NULL || process == NULL || !process->linux_abi) return NULL;
-    if (is_busybox_binary_name(requested_path)) return NULL;
-
-    vfs_node_t busybox = vfs_open("/apps/busybox_amd64");//开！
-    if (busybox == NULL) return NULL;
-    vfs_close(busybox);//判断有没有文件，防止删除了busybox还想当applet，结果找不到文件了
-
-    const char *applet = path_basename_const(requested_path);
-    write_serial_fmt("[busybox-debug] applet fallback requested=%s applet=%s -> /apps/busybox_amd64\n",
-                     requested_path,
-                     applet);
-    return strdup("/apps/busybox_amd64");
-}
-
 static int copy_exec_string_from_user(page_directory_t *pagedir, char **out, const char *src, size_t *total_bytes)
 {
     if (out == NULL) return -EINVAL;
@@ -722,6 +702,174 @@ static int copy_exec_string_vector_from_user(page_directory_t *pagedir, char **u
     return -E2BIG;
 }
 
+//from cops但契合xj380
+
+static constexpr uint64_t CLONE_VM_FLAG             = 0x00000100;//呃呃呃呃呃呃呃呃·
+static constexpr uint64_t CLONE_FS_FLAG             = 0x00000200;
+static constexpr uint64_t CLONE_FILES_FLAG          = 0x00000400;
+static constexpr uint64_t CLONE_SIGHAND_FLAG        = 0x00000800;
+static constexpr uint64_t CLONE_VFORK_FLAG          = 0x00004000;
+static constexpr uint64_t CLONE_THREAD_FLAG         = 0x00010000;
+static constexpr uint64_t CLONE_SETTLS_FLAG         = 0x00080000;
+static constexpr uint64_t CLONE_PARENT_SETTID_FLAG  = 0x00100000;
+static constexpr uint64_t CLONE_CHILD_CLEARTID_FLAG = 0x00200000;
+static constexpr uint64_t CLONE_CHILD_SETTID_FLAG   = 0x01000000;
+
+uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid,
+                      uint64_t tls)
+{
+    if (reg == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    if (flags & CLONE_VFORK_FLAG) return process_fork(reg, true, stack);
+    if ((flags & CLONE_THREAD_FLAG) == 0) return process_fork(reg, false, stack);
+
+    const uint64_t required = CLONE_VM_FLAG | CLONE_FS_FLAG | CLONE_FILES_FLAG | CLONE_SIGHAND_FLAG;
+    if ((flags & required) != required) return SYSCALL_FAULT_(EINVAL);
+
+    bool is_sti                = are_interrupts_enabled();
+    bool was_scheduler_enabled = is_scheduler;
+    tcb_t parent_task          = get_current_task();
+    if (parent_task == NULL || parent_task->parent_group == NULL || parent_task->parent_group->pagedir == NULL)
+        return SYSCALL_FAULT_(EFAULT);
+
+    pcb_t process = parent_task->parent_group;
+    page_directory_t *pagedir = process->pagedir;
+
+    if ((flags & CLONE_PARENT_SETTID_FLAG) && parent_tid == NULL) return SYSCALL_FAULT_(EFAULT);
+    if ((flags & (CLONE_CHILD_SETTID_FLAG | CLONE_CHILD_CLEARTID_FLAG)) && child_tid == NULL)
+        return SYSCALL_FAULT_(EFAULT);
+
+    if (!no_interrupt) open_interrupt;
+    spin_lock(&create_thread_lock);
+    close_interrupt;
+    disable_scheduler();
+
+    tcb_t new_task = alloc_zeroed_tcb();
+    if (new_task == NULL)
+    {
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    new_task->task_level = TASK_APPLICATION_LEVEL;
+    new_task->cpu_id     = get_current_cpu()->processor_id;
+    new_task->status     = START;
+    new_task->parent_group = process;
+    strncpy(new_task->name, parent_task->name, sizeof(new_task->name) - 1);
+
+    uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
+    if (kernel_stack_phys == 0)
+    {
+        free(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+    uint64_t syscall_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
+    if (syscall_stack_phys == 0)
+    {
+        free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    new_task->kernel_stack  = (uint64_t)phys_to_virt(kernel_stack_phys) + KERNEL_STACK_SIZE;
+    new_task->syscall_stack = (uint64_t)phys_to_virt(syscall_stack_phys) + KERNEL_STACK_SIZE;
+    new_task->main          = parent_task->main;
+    new_task->user_stack    = stack != 0 ? stack : parent_task->user_stack;
+    new_task->user_stack_top = stack != 0 ? stack : parent_task->user_stack_top;
+
+    new_task->context0.rip    = reg->rcx;
+    new_task->context0.rflags = reg->r11;
+    new_task->context0.cs     = reg->cs;
+    new_task->context0.ss     = reg->ss;
+    new_task->context0.es     = reg->es;
+    new_task->context0.ds     = reg->ds;
+    new_task->context0.rax    = 0;//子进程返回零
+    new_task->context0.rdi    = reg->rdi;
+    new_task->context0.rsi    = reg->rsi;
+    new_task->context0.rdx    = reg->rdx;
+    new_task->context0.r9     = reg->r9;
+    new_task->context0.r8     = reg->r8;
+    new_task->context0.r10    = reg->r10;
+    new_task->context0.r11    = reg->r11;
+    new_task->context0.r12    = reg->r12;
+    new_task->context0.r13    = reg->r13;
+    new_task->context0.r14    = reg->r14;
+    new_task->context0.r15    = reg->r15;
+    new_task->context0.rbx    = reg->rbx;
+    new_task->context0.rbp    = reg->rbp;
+    new_task->context0.rsp    = stack != 0 ? stack : reg->rsp;
+    new_task->context0.rcx    = reg->rcx;
+
+    memcpy(new_task->fpu_context.fxsave_area, parent_task->fpu_context.fxsave_area, 512);
+    memcpy(new_task->actions, parent_task->actions, sizeof(new_task->actions));
+    new_task->blocked = parent_task->blocked;
+    new_task->signal  = 0;
+    new_task->fs      = parent_task->fs;
+    new_task->fs_base = (flags & CLONE_SETTLS_FLAG) ? tls : parent_task->fs_base;
+
+    new_task->cwd = parent_task->cwd;
+    if (new_task->cwd != NULL) new_task->cwd->refcount++;
+    new_task->str_cwd = parent_task->str_cwd != NULL ? strdup(parent_task->str_cwd) : NULL;
+    new_task->user_info = parent_task->user_info;
+    new_task->winnum = 0;
+    new_task->hasfscr = false;
+    new_task->window_count = 0;
+    new_task->tid = now_tid++;
+    int tid = (int)new_task->tid;
+    if ((flags & CLONE_PARENT_SETTID_FLAG) && !copy_to_user_pagedir(pagedir, parent_tid, &tid, sizeof(tid)))
+    {
+        if (new_task->cwd != NULL) vfs_close(new_task->cwd);
+        free(new_task->str_cwd);
+        free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    if ((flags & CLONE_CHILD_SETTID_FLAG) && !copy_to_user_pagedir(pagedir, child_tid, &tid, sizeof(tid)))
+    {
+        if (new_task->cwd != NULL) vfs_close(new_task->cwd);
+        free(new_task->str_cwd);
+        free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    if (flags & CLONE_CHILD_CLEARTID_FLAG)
+    {
+        new_task->clear_child_tid = (uint64_t)child_tid;
+        new_task->tid_directory   = pagedir;
+    }
+
+    new_task->group_index = queue_enqueue(process->thread_queue, new_task);
+    if (new_task->group_index == (size_t)-1)
+    {
+        if (new_task->cwd != NULL) vfs_close(new_task->cwd);
+        free(new_task->str_cwd);
+        free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
+        free(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    add_task(new_task);
+    spin_unlock(&create_thread_lock);
+    restore_runtime_state(was_scheduler_enabled, is_sti);
+    return new_task->tid;
+}
+
+
+
 uint64_t process_execve(char *path, char **argv, char **envp)
 {
     // while (true)
@@ -779,24 +927,21 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         return (uint64_t)-ENOMEM;
     }
     vfs_node_t node      = vfs_open(norm_path);
+    if (process != NULL && process->linux_abi)
+    {
+        write_serial_fmt("[busybox-debug] execve request path=%s argv0=%s open=%s\n",
+                         norm_path,
+                         (kargv != NULL && kargv[0] != NULL) ? kargv[0] : "(null)",
+                         node == NULL ? "miss" : "hit");
+    }
     if (node == NULL)
     {
-        char *busybox_path = try_resolve_busybox_applet_path(norm_path, process);
-        if (busybox_path != NULL)
-        {
-            free(norm_path);
-            norm_path = busybox_path;
-            node = vfs_open(norm_path);
-        }
-        if (node == NULL)
-        {
-            free(norm_path);
-            free(kpath);
-            free_envp(kargv);
-            free_envp(kenvp);
-            restore_runtime_state(was_scheduler_enabled, is_sti);
-            return (uint64_t)-ENOENT;
-        }
+        free(norm_path);
+        free(kpath);
+        free_envp(kargv);
+        free_envp(kenvp);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-ENOENT;
     }
 
     close_interrupt;
@@ -1139,8 +1284,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         ipc_send(current_pcb->parent_task, msg);
     } while (true);
 }
-
-spin_t create_thread_lock = SPIN_INIT;
 
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {

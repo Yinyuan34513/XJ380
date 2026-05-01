@@ -274,6 +274,7 @@
 #define SYS_BIND 49
 #define SYS_LISTEN 50
 
+#define SYS_CLONE  56
 #define SYS_FORK   57
 #define SYS_VFORK  58
 #define SYS_EXECVE 59
@@ -557,7 +558,9 @@ sys_(dup2, int fd, int newfd);
 sys_(dup, int fd);
 sys_(fcntl, int fd, int cmd, uint64_t arg);
 sys_(fork);
+sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uint64_t tls);
 sys_(get_tid);
+sys_(set_tid_address, int *tidptr);
 sys_(vfork);
 sys_(execve, char *path, char **argv, char **envp);
 sys_(fstat, int fd, struct stat *buf);

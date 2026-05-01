@@ -56,6 +56,7 @@
 #define SYS_BIND 49
 #define SYS_LISTEN 50
 
+#define SYS_CLONE 56
 #define SYS_FORK 57
 #define SYS_VFORK 58
 #define SYS_EXECVE 59

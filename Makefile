@@ -161,6 +161,7 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
+	@mkdir -p $(BUILD_DIR)/XJ380/mod
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -201,7 +202,7 @@ vdisk: all
 
 	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
 
-	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/system
+	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/mod
 
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 	

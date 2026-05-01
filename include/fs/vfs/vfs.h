@@ -278,6 +278,8 @@ void vfs_update(vfs_node_t node);
  */
 vfs_node_t vfs_open(const char *str);
 
+errno_t vfs_register_alias(const char *alias_path, const char *target_path);
+
 /**
  * 向一个节点发送 I/O 控制命令
  * @param device 节点设备

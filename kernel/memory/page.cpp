@@ -28,7 +28,8 @@ void            page_init()
 
 page_t *get_page(uint64_t addr)
 {
-    return page_maps ? page_maps + (addr / PAGE_SIZE) : NULL;
+    if (page_maps == NULL || addr >= memory_size) return NULL;
+    return page_maps + (addr / PAGE_SIZE);
 }
 
 void page_ref(page_t *page)
@@ -342,6 +343,10 @@ static void free_page_table_recursive(page_table_t *table, int level)
 
     for (int i = 0; i < (level == 4 ? 256 : 512); i++)
     {
+        uint64_t entry = table->entries[i].value;
+        if (!(entry & PTE_PRESENT)) continue;
+        if (entry & PTE_HUGE) continue;//竟然没有检查,还是保险点吧！！！！
+
         page_table_t *page_table_next = (page_table_t *)(phys_to_virt(table->entries[i].value & 0x00007fffffff000));
         free_page_table_recursive(page_table_next, level - 1);
     }

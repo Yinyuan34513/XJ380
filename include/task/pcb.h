@@ -161,6 +161,8 @@ struct thread_control_block
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
+    uint64_t clear_child_tid;
+    page_directory_t *tid_directory;
 
     vfs_node_t cwd;
     char      *str_cwd;
@@ -186,6 +188,8 @@ size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
 size_t   create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
+uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid,
+                      uint64_t tls);
 void     process_setup();
 void     switch_to_user_mode();
 void get_thread_name_from_filepath(char *path, char *name);

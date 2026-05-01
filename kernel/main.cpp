@@ -61,6 +61,38 @@ extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
 
+static const char *busybox_alias_applets[] = {
+    "[",       "[[",      "ash",      "awk",      "basename", "cat",      "chmod",   "chgrp",
+    "chown",   "clear",   "cmp",      "cp",       "cut",      "date",     "dd",      "df",
+    "dirname", "dmesg",   "du",       "echo",     "egrep",    "env",      "false",   "fgrep",
+    "find",    "free",    "grep",     "gunzip",   "gzip",     "head",     "hexdump", "hostname",
+    "id",      "ifconfig","ip",       "kill",     "killall",  "less",     "ln",      "ls",
+    "mkdir",   "more",    "mount",    "mv",       "nc",       "netstat",  "nslookup","od",
+    "pgrep",   "pidof",   "ping",     "pkill",    "printenv", "printf",   "ps",      "pwd",
+    "readlink","realpath","reset",    "rm",       "rmdir",    "route",    "sed",     "sh",
+    "sleep",   "sort",    "stat",     "stty",     "sync",     "tail",     "tar",     "test",
+    "top",     "touch",   "tr",       "true",     "tty",      "umount",   "uname",   "uniq",
+    "unzip",   "uptime",  "usleep",   "vi",       "wc",       "wget",     "which",   "whoami",
+    "xargs",   "xxd",     "xz",       "xzcat",    "zcat",     NULL,
+};//暴力枚举这一块，好像只能这么做了
+
+static void setup_busybox_vfs_aliases()
+{
+    const char *prefixes[] = {"/apps", "/bin", NULL};
+    for (int p = 0; prefixes[p] != NULL; p++)
+    {
+        for (int i = 0; busybox_alias_applets[i] != NULL; i++)
+        {
+            char alias_path[128];
+            snprintf(alias_path, sizeof(alias_path), "%s/%s", prefixes[p], busybox_alias_applets[i]);
+            if (vfs_register_alias(alias_path, "/apps/busybox_amd64") == EOK)
+            {
+                write_serial_fmt("[busybox-debug] busybox alias %s -> /apps/busybox_amd64\n", alias_path);
+            }
+        }
+    }
+}
+
 extern const uint8_t _binary___graphics_logo_xj380_2_png_start;
 extern const uint8_t _binary___graphics_logo_xj380_2_png_end;
 
@@ -673,6 +705,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
+    setup_busybox_vfs_aliases();
     pipefs_setup();
     socketfs_setup();
     dnsfs_setup();

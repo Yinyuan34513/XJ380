@@ -34,6 +34,17 @@ struct llist_header fs_metadata_list;
 static int fs_nextid = 1;
 static spin_t vfs_child_list_lock = SPIN_INIT;
 
+#define VFS_ALIAS_MAX 256
+
+typedef struct
+{
+    char *alias_path;
+    char *target_path;
+} vfs_alias_entry_t;//就这样吧
+
+static vfs_alias_entry_t vfs_aliases[VFS_ALIAS_MAX];
+static spin_t vfs_alias_lock = SPIN_INIT;
+
 #define callbackof(node, _name_) (fs_callbacks[(node)->fsid]->_name_)
 
 void vfs_child_lock() {
@@ -124,6 +135,69 @@ static vfs_node_t vfs_child_find(vfs_node_t parent, const char *name) {
     vfs_node_t child = (vfs_node_t)list_first(parent->child, data, streq(name, ((vfs_node_t)data)->name));
     vfs_child_unlock();
     return child;
+}
+
+errno_t vfs_register_alias(const char *alias_path, const char *target_path)
+{
+    if (alias_path == NULL || target_path == NULL) return VFS_STATUS_FAILED;
+    if (alias_path[0] != '/' || target_path[0] != '/') return VFS_STATUS_FAILED;
+
+    spin_lock(&vfs_alias_lock);
+    for (size_t i = 0; i < VFS_ALIAS_MAX; i++)
+    {
+        if (vfs_aliases[i].alias_path != NULL && streq(vfs_aliases[i].alias_path, alias_path))
+        {
+            char *new_target = strdup(target_path);
+            if (new_target == NULL)
+            {
+                spin_unlock(&vfs_alias_lock);
+                return VFS_STATUS_FAILED;
+            }
+            free(vfs_aliases[i].target_path);
+            vfs_aliases[i].target_path = new_target;
+            spin_unlock(&vfs_alias_lock);
+            return EOK;
+        }
+    }
+
+    for (size_t i = 0; i < VFS_ALIAS_MAX; i++)
+    {
+        if (vfs_aliases[i].alias_path == NULL)
+        {
+            vfs_aliases[i].alias_path = strdup(alias_path);
+            vfs_aliases[i].target_path = strdup(target_path);
+            if (vfs_aliases[i].alias_path == NULL || vfs_aliases[i].target_path == NULL)
+            {
+                free(vfs_aliases[i].alias_path);
+                free(vfs_aliases[i].target_path);
+                vfs_aliases[i].alias_path = NULL;
+                vfs_aliases[i].target_path = NULL;
+                spin_unlock(&vfs_alias_lock);
+                return VFS_STATUS_FAILED;
+            }
+            spin_unlock(&vfs_alias_lock);
+            return EOK;
+        }
+    }
+
+    spin_unlock(&vfs_alias_lock);
+    return VFS_STATUS_FAILED;
+}
+
+static char *vfs_alias_target_dup(const char *path)
+{
+    char *target = NULL;
+    spin_lock(&vfs_alias_lock);
+    for (size_t i = 0; i < VFS_ALIAS_MAX; i++)
+    {
+        if (vfs_aliases[i].alias_path != NULL && streq(vfs_aliases[i].alias_path, path))
+        {
+            target = strdup(vfs_aliases[i].target_path);
+            break;
+        }
+    }
+    spin_unlock(&vfs_alias_lock);
+    return target;
 }
 
 errno_t vfs_mkdir(const char *name) {
@@ -346,6 +420,14 @@ vfs_node_t vfs_open(const char *str) {
     if (unlikely(str == NULL)) return NULL;
     if (unlikely(str[0] != '/')) return NULL;
     if (str[1] == '\0') return rootdir; // 根目录
+
+    char *alias_target = vfs_alias_target_dup(str);
+    if (alias_target != NULL) {
+        write_serial_fmt("[busybox-debug] vfs_alias_hit %s -> %s\n", str, alias_target);
+        vfs_node_t alias_node = vfs_open(alias_target);
+        free(alias_target);
+        return alias_node;
+    }
 
     char *path = strdup(str + 1);
     if (unlikely(path == NULL)) return NULL;
