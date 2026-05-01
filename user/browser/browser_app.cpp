@@ -1124,11 +1124,12 @@ void BrowserContainer::draw_text(litehtml::uint_ptr hdc,
         return;
     }
 
-    xapi_DrawSWText(static_cast<HDLE>(hdc),
-                    static_cast<std::uint32_t>(pos.x),
-                    static_cast<std::uint32_t>(pos.y),
-                    const_cast<char *>(text),
-                    litehtml_color(color));
+    xapi_DrawText(static_cast<HDLE>(hdc),
+                  static_cast<std::uint32_t>(pos.x),
+                  static_cast<std::uint32_t>(pos.y),
+                  const_cast<char *>(text),
+                  static_cast<std::uint32_t>(font->size),
+                  litehtml_color(color));
 }
 
 void BrowserContainer::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::list_marker &marker)
