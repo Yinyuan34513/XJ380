@@ -245,6 +245,7 @@ void kill_proc0(pcb_t pcb)
     char *cmdline = pcb->cmdline;
     void *elf_file = pcb->elf_file;
     char **envp = pcb->envp;
+    tty_t *tty = pcb->tty;
     xtttp_dtt *xtttp = pcb->xtttp_stc;
     char name[sizeof(pcb->name)];
     memset(name, 0, sizeof(name));
@@ -271,6 +272,7 @@ void kill_proc0(pcb_t pcb)
     free(cmdline);
     free(elf_file);
     if (envp) free_envp(envp);
+    free_tty(tty);
     free(xtttp);
     free(pcb);
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", name, pid,
@@ -1191,8 +1193,16 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->virt_queue   = queue_copy(current_pcb->virt_queue, virt_copy);
     new_pcb->file_open    = queue_copy(current_pcb->file_open, file_copy);
     new_pcb->ipc_queue    = queue_init();
+    new_pcb->tty          = alloc_default_tty();
 
     new_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
+    if (new_pcb->tty == NULL || new_pcb->xtttp_stc == NULL)
+    {
+        free_tty(new_pcb->tty);
+        free(new_pcb->xtttp_stc);
+        free(new_pcb);
+        return (uint64_t)-ENOMEM;
+    }
     memset(new_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
 
     tcb_t parent_task = get_current_task();
@@ -1672,14 +1682,16 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->file_open    = queue_init();
     pcb->virt_queue   = queue_init();
     pcb->ipc_queue    = queue_init();
+    pcb->tty          = alloc_default_tty();
     if (pcb->thread_queue == NULL || pcb->child_pcb == NULL || pcb->file_open == NULL || pcb->virt_queue == NULL ||
-        pcb->ipc_queue == NULL)
+        pcb->ipc_queue == NULL || pcb->tty == NULL)
     {
         if (pcb->thread_queue) queue_destroy(pcb->thread_queue);
         if (pcb->child_pcb) queue_destroy(pcb->child_pcb);
         if (pcb->file_open) queue_destroy(pcb->file_open);
         if (pcb->virt_queue) queue_destroy(pcb->virt_queue);
         if (pcb->ipc_queue) queue_destroy(pcb->ipc_queue);
+        free_tty(pcb->tty);
         queue_remove_at(pcb_group_queue, pcb->queue_index);
         free(pcb);
         return NULL;
@@ -1702,6 +1714,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->file_open);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
+        free_tty(pcb->tty);
         queue_remove_at(pcb_group_queue, pcb->queue_index);
         free(pcb);
         return NULL;
@@ -1716,6 +1729,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->file_open);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
+        free_tty(pcb->tty);
         queue_remove_at(pcb_group_queue, pcb->queue_index);
         free(pcb);
         return NULL;
@@ -1730,6 +1744,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->file_open);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
+        free_tty(pcb->tty);
         queue_remove_at(pcb_group_queue, pcb->queue_index);
         free(pcb);
         return NULL;
@@ -1751,6 +1766,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->file_open);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
+        free_tty(pcb->tty);
         queue_remove_at(pcb_group_queue, pcb->queue_index);
         free(pcb);
         return NULL;

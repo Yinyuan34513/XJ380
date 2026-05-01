@@ -114,53 +114,187 @@ static int utf8_char_len(unsigned char c) {
     return 1;  // 无效，按单字节处理
 }
 
+static UINT32 ansi_color_table[8] = {
+    0x000000ff, // black
+    0xaa0000ff, // red
+    0x00aa00ff, // green
+    0xaa5500ff, // yellow
+    0x0000aaff, // blue
+    0xaa00aaff, // magenta
+    0x00aaaaff, // cyan
+    0xaaaaaaff, // white
+};
+
+static UINT32 ansi_bright_color_table[8] = {
+    0x555555ff, // bright black
+    0xff5555ff, // bright red
+    0x55ff55ff, // bright green
+    0xffff55ff, // bright yellow
+    0x5555ffff, // bright blue
+    0xff55ffff, // bright magenta
+    0x55ffffff, // bright cyan
+    0xffffffff, // bright white
+};
+
+static UINT32 terminal_current_text_color = TERMINAL_TEXT_COLOR;
+static bool terminal_bold_text = false;
+
+static void apply_ansi_sgr_param(int param)
+{
+    if (param == 0)
+    {
+        terminal_current_text_color = TERMINAL_TEXT_COLOR;
+        terminal_bold_text = false;
+    }
+    else if (param == 1)
+    {
+        terminal_bold_text = true;
+    }
+    else if (param == 22)
+    {
+        terminal_bold_text = false;
+    }
+    else if (param == 39)
+    {
+        terminal_current_text_color = TERMINAL_TEXT_COLOR;
+    }
+    else if (param >= 30 && param <= 37)
+    {
+        int idx = param - 30;
+        terminal_current_text_color = terminal_bold_text ? ansi_bright_color_table[idx] : ansi_color_table[idx];
+    }
+    else if (param >= 90 && param <= 97)
+    {
+        terminal_current_text_color = ansi_bright_color_table[param - 90];
+    }
+}
+
+static void apply_ansi_sgr_sequence(const char *params, int len)
+{
+    if (len <= 0)
+    {
+        apply_ansi_sgr_param(0);
+        return;
+    }
+
+    int value = 0;
+    bool have_value = false;
+    for (int i = 0; i <= len; i++)
+    {
+        char c = i < len ? params[i] : ';';
+        if (c >= '0' && c <= '9')
+        {
+            value = value * 10 + (c - '0');
+            have_value = true;
+        }
+        else if (c == ';' || c == ':')
+        {
+            apply_ansi_sgr_param(have_value ? value : 0);
+            value = 0;
+            have_value = false;
+        }
+    }
+}
+
+static char *handle_ansi_escape(char *p)
+{
+    if (*p != '\x1b') return p;
+    p++;
+
+    if (*p == '[')
+    {
+        p++;
+        char *params = p;
+        while (*p != '\0')
+        {
+            unsigned char c = (unsigned char)*p++;
+            if (c >= 0x40 && c <= 0x7e)
+            {
+                if (c == 'm') apply_ansi_sgr_sequence(params, (int)((p - 1) - params));
+                break;
+            }
+        }
+        return p;
+    }
+
+    if (*p == ']')
+    {
+        p++;
+        while (*p != '\0')
+        {
+            if (*p == '\a') return p + 1;
+            if (*p == '\x1b' && p[1] == '\\') return p + 2;
+            p++;
+        }
+        return p;
+    }
+
+    while (*p >= 0x20 && *p <= 0x2f) p++;
+    if (*p != '\0') p++;
+    return p;
+}
+
 void ptt_console_sp(char *str)
 {
     hide_terminal_cursor(false);
     char *p = str;
     while (*p != '\0')
     {
-        if (cur_x + 9 >= TML_X - 8) { newline(); }
+        if (*p == '\x1b')
+        {
+            p = handle_ansi_escape(p);
+            continue;
+        }
 
         if (*p == '\n')
         {
             // 换行
             newline();
+            p++;
+            continue;
+        }
+        else if (*p == '\r')
+        {
+            cur_x = 8;
+            p++;
+            continue;
         }
         else if (*p == '\b')
         {
             // 退格
             backspace();
+            p++;
+            continue;
         }
-        else
+
+        if (cur_x + 9 >= TML_X - 8) { newline(); }
+
+        // 获取UTF-8字符长度
+        int char_len = utf8_char_len((unsigned char)*p);
+
+        if (char_len == 1)
         {
-            // 获取UTF-8字符长度
-            int char_len = utf8_char_len((unsigned char)*p);
-            
-            if (char_len == 1)
-            {
-                // ASCII字符：使用等宽字体
-                char temp_char_buffer[2];
-                temp_char_buffer[0] = *p;
-                temp_char_buffer[1] = '\0';
-                xapi_DrawSWText(handle, *ab_x, *ab_y, temp_char_buffer, TERMINAL_TEXT_COLOR);
-                cur_x += 9;  // 等宽字体每个字符9像素
-            }
-            else
-            {
-                // 中文字符
-                char utf8_char[5] = {0};
-                for (int i = 0; i < char_len && *p != '\0'; i++) {
-                    utf8_char[i] = *p++;
-                }
-                p--; // 退一步
-                
-                // 中文
-                xapi_DrawSWText(handle, *ab_x, *ab_y, utf8_char, TERMINAL_TEXT_COLOR);
-                cur_x += 18;  // 中文字符宽度 = ASCII * 2 （也许）
-            }
+            // ASCII字符：使用等宽字体
+            char temp_char_buffer[2];
+            temp_char_buffer[0] = *p;
+            temp_char_buffer[1] = '\0';
+            xapi_DrawSWText(handle, *ab_x, *ab_y, temp_char_buffer, terminal_current_text_color);
+            cur_x += 9;  // 等宽字体每个字符9像素
+            p++;
+            continue;
         }
-        p++;
+
+        // 中文字符
+        char utf8_char[5] = {0};
+        int copied = 0;
+        for (; copied < char_len && p[copied] != '\0'; copied++) {
+            utf8_char[copied] = p[copied];
+        }
+
+        // 中文
+        xapi_DrawSWText(handle, *ab_x, *ab_y, utf8_char, terminal_current_text_color);
+        cur_x += 18;  // 中文字符宽度 = ASCII * 2 （也许）
+        p += copied;
     }
 }
 void tam_main_loop()

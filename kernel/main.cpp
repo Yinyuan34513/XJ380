@@ -76,6 +76,8 @@ static const char *busybox_alias_applets[] = {
     "xargs",   "xxd",     "xz",       "xzcat",    "zcat",     NULL,
 };//暴力枚举这一块，好像只能这么做了
 
+static const char *busybox_binary_path = "/apps/busybox";
+
 static void setup_busybox_vfs_aliases()
 {
     const char *prefixes[] = {"/apps", "/bin", NULL};
@@ -85,9 +87,9 @@ static void setup_busybox_vfs_aliases()
         {
             char alias_path[128];
             snprintf(alias_path, sizeof(alias_path), "%s/%s", prefixes[p], busybox_alias_applets[i]);
-            if (vfs_register_alias(alias_path, "/apps/busybox_amd64") == EOK)
+            if (vfs_register_alias(alias_path, busybox_binary_path) == EOK)
             {
-                write_serial_fmt("[busybox-debug] busybox alias %s -> /apps/busybox_amd64\n", alias_path);
+                write_serial_fmt("[busybox-debug] busybox alias %s -> %s\n", alias_path, busybox_binary_path);
             }
         }
     }
@@ -509,7 +511,7 @@ skip_timer_widget_init:
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    // create_user_process_from_file((char *)"/apps/busybox_amd64", NULL, (char*[3]){"printf","Hello, World!",NULL});
+    // create_user_process_from_file((char *)"/apps/busybox", NULL, (char*[3]){"printf","Hello, World!",NULL});
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);

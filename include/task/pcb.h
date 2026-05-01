@@ -8,6 +8,7 @@
 #include "lock_queue.h"
 #include "mm/page.h"
 #include "stdint.h"
+#include "tty.h"
 #include "user/user.h"
 #include "user/x3tp.h"
 #include <mm/vma.h>
@@ -121,6 +122,7 @@ struct process_control_block
     uint64_t brk_end;
     uint64_t brk_current ;
 
+    tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
 };
 #define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址

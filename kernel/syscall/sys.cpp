@@ -1,6 +1,7 @@
 #include <syscall/syscall.h>
 #include <proto.hpp>
 #include <fs/vfs/vfs.h>
+#include <ioctl.h>
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
 #include <mm/lazyalloc.h>
@@ -9,6 +10,7 @@
 #include <net/socket.h>
 #include <pipe.h>
 #include <rtc.h>
+#include <tty.h>
 #include <task/ipc.h>
 #include <math.hpp>
 
@@ -16,9 +18,6 @@ static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
 static constexpr size_t USER_PATH_MAX        = 4096UL;
 static constexpr size_t USER_IOV_MAX         = 1024UL;
 static constexpr size_t USER_POLL_MAX        = FD_SETSIZE;
-static constexpr size_t TERMINAL_IO_CHUNK_BYTES = 1023UL;
-
-extern void xapi_output_kernel(const char *str);
 
 static bool checked_add_size(size_t a, size_t b, size_t *out)
 {
@@ -178,131 +177,6 @@ static int resolve_user_path_at(int dirfd, char *pathname, char **resolved)
     return 0;
 }
 
-static int64_t serial_write_from_user(const uint8_t *buffer, size_t size)
-{
-    if (buffer == NULL) return -EFAULT;
-    if (size == 0) return 0;
-
-    pcb_t process = get_current_task()->parent_group;
-    size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
-    uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
-    if (bounce == NULL) return -ENOMEM;
-
-    size_t total = 0;
-    while (total < size)
-    {
-        size_t chunk = MIN(size - total, bounce_bytes);
-        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
-        {
-            free(bounce);
-            return total > 0 ? (int64_t)total : -EFAULT;
-        }
-
-        for (size_t i = 0; i < chunk; i++)
-        {
-            write_serial((char)bounce[i]);
-        }
-        total += chunk;
-    }
-
-    free(bounce);
-    return (int64_t)total;
-}
-
-static int64_t stdio_write_from_user(const uint8_t *buffer, size_t size)
-{
-    if (buffer == NULL) return -EFAULT;
-    if (size == 0) return 0;
-
-    pcb_t process = get_current_task()->parent_group;
-    if (process != NULL && process->linux_abi)
-    {
-        // write_serial_fmt("[busybox-debug] stdio_write begin pid=%llu size=%llu\n",
-        //                  (unsigned long long)process->pid,
-        //                  (unsigned long long)size);
-    }
-    size_t bounce_bytes = MIN(size, TERMINAL_IO_CHUNK_BYTES);
-    char *bounce = (char *)malloc(bounce_bytes + 1);
-    if (bounce == NULL) return -ENOMEM;
-
-    size_t total = 0;
-    while (total < size)
-    {
-        size_t chunk = MIN(size - total, bounce_bytes);
-        if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
-        {
-            free(bounce);
-            return total > 0 ? (int64_t)total : -EFAULT;
-        }
-        bounce[chunk] = '\0';
-
-        for (size_t i = 0; i < chunk; i++)
-        {
-            write_serial(bounce[i]);
-        }
-        if (process != NULL && process->linux_abi)
-        {
-            // write_serial_fmt("[busybox-debug] stdio_write chunk='%s'\n", bounce);
-        }
-        xapi_output_kernel(bounce);
-        total += chunk;
-    }
-
-    free(bounce);
-    if (process != NULL && process->linux_abi)
-    {
-        // write_serial_fmt("[busybox-debug] stdio_write done pid=%llu total=%llu\n",
-        //                  (unsigned long long)process->pid,
-        //                  (unsigned long long)total);
-    }
-    return (int64_t)total;
-}
-
-static pcb_t find_parent_terminal(pcb_t process)
-{
-    pcb_t front_p = process;
-    while (front_p != NULL && front_p != kernel_group)
-    {
-        if (front_p->xtttp_stc != NULL && front_p->xtttp_stc->is_shell) return front_p;
-        front_p = front_p->parent_task;
-    }
-    return NULL;
-}
-
-static int64_t terminal_read_to_user(uint8_t *buffer, size_t size)
-{
-    if (buffer == NULL) return -EFAULT;
-    if (size == 0) return 0;
-
-    pcb_t process = get_current_task()->parent_group;
-    pcb_t terminal = find_parent_terminal(process);
-    if (terminal == NULL || terminal->xtttp_stc == NULL) return 0;
-
-    terminal->xtttp_stc->wait_for_input = true;
-    while (!terminal->xtttp_stc->input_lock)
-    {
-        scheduler_yield();
-    }
-
-    size_t input_len = bounded_strlen(terminal->xtttp_stc->input, sizeof(terminal->xtttp_stc->input));
-    size_t copy_len = MIN(input_len, size);
-    if (!copy_to_user_pagedir(process->pagedir, buffer, terminal->xtttp_stc->input, copy_len))
-    {
-        terminal->xtttp_stc->input_lock = false;
-        terminal->xtttp_stc->wait_for_input = false;
-        return -EFAULT;
-    }
-
-    memset(terminal->xtttp_stc->input, 0, sizeof(terminal->xtttp_stc->input));
-    terminal->xtttp_stc->input_lock = false;
-    terminal->xtttp_stc->wait_for_input = false;
-
-    write_serial_fmt("[busybox-debug] terminal_read pid=%llu ret=%llu\n",
-                     (unsigned long long)process->pid,
-                     (unsigned long long)copy_len);
-    return (int64_t)copy_len;
-}
-
 static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buffer, size_t size, bool socket_mode)
 {
     if (handle == NULL || buffer == NULL) return -EINVAL;
@@ -351,6 +225,69 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     free(bounce);
     if (!socket_mode) vfs_update(handle->node);
     return (int64_t)total;
+}
+
+static size_t ioctl_arg_size(int request)
+{
+    switch (request)
+    {
+    case TCGETS:
+    case TCSETS:
+    case TCSETSW:
+    case TCSETSF:
+        return sizeof(struct termios);
+    case TIOCGWINSZ:
+    case TIOCSWINSZ:
+        return sizeof(struct winsize);
+    case TIOCGPGRP:
+    case TIOCSPGRP:
+    case KDGETMODE:
+    case KDSETMODE:
+    case KDGKBMODE:
+    case KDSKBMODE:
+    case VT_OPENQRY:
+        return sizeof(int);
+    case VT_GETMODE:
+    case VT_SETMODE:
+        return sizeof(struct vt_mode);
+    default:
+        return 0;
+    }
+}
+
+static bool ioctl_writes_user(int request)
+{
+    switch (request)
+    {
+    case TCGETS:
+    case TIOCGWINSZ:
+    case TIOCGPGRP:
+    case KDGETMODE:
+    case KDGKBMODE:
+    case VT_OPENQRY:
+    case VT_GETMODE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool ioctl_reads_user(int request)
+{
+    switch (request)
+    {
+    case TCSETS:
+    case TCSETSW:
+    case TCSETSF:
+    case TIOCSWINSZ:
+    case TIOCSPGRP:
+    case KDSETMODE:
+    case KDSKBMODE:
+    case VT_SETMODE:
+        return true;
+    default:
+        return false;
+    }
 }
 
 static int64_t read_to_user_buffer(fd_file_handle *handle, uint8_t *buffer, size_t size, bool socket_mode,
@@ -572,11 +509,6 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     }
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return 0;
-    if (fd == 1 || fd == 2)
-    {
-        int64_t ret = stdio_write_from_user(buffer, size);
-        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
-    }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)
@@ -599,11 +531,6 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     }
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return 0;
-    if (fd == 0 && process != NULL && process->linux_abi)
-    {
-        int64_t ret = terminal_read_to_user(buffer, size);
-        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
-    }
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)
@@ -872,9 +799,36 @@ sys_(ioctl, int fd, int options, void *arg2)
         //                  options,
         //                  (unsigned long long)(uintptr_t)arg2);
     }
-    if (unlikely(fd < 0 || arg2 == NULL)) return SYSCALL_FAULT_(EINVAL);
+    if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
-    int             ret    = vfs_ioctl(handle->node, options, arg2);
+    if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+
+    size_t arg_size = ioctl_arg_size(options);
+    void *karg = arg2;
+    if (arg_size > 0)
+    {
+        if (arg2 == NULL) return SYSCALL_FAULT_(EFAULT);
+        karg = calloc(1, arg_size);
+        if (karg == NULL) return SYSCALL_FAULT_(ENOMEM);
+        if (ioctl_reads_user(options) && !copy_from_user_pagedir(current_user_pagedir(), karg, arg2, arg_size))
+        {
+            free(karg);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+    }
+    else if (arg2 == NULL)
+    {
+        karg = NULL;
+    }
+
+    int ret = vfs_ioctl(handle->node, options, karg);
+    if (ret == EOK && arg_size > 0 && ioctl_writes_user(options) &&
+        !copy_to_user_pagedir(current_user_pagedir(), arg2, karg, arg_size))
+    {
+        free(karg);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    if (arg_size > 0) free(karg);
     if (process != NULL && process->linux_abi)
     {
         // write_serial_fmt("[busybox-debug] sys_ioctl ret=%d\n", ret);
@@ -894,23 +848,6 @@ sys_(writev, int fd, struct iovec *iov, int iovcnt)
         return SYSCALL_FAULT_(EFAULT);
     }
     page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
-    if (fd == 1 || fd == 2)
-    {
-        size_t total = 0;
-        for (int i = 0; i < iovcnt; i++)
-        {
-            struct iovec kiov;
-            if (!copy_from_user_pagedir(pagedir, &kiov, &iov[i], sizeof(kiov)))
-            {
-                return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
-            }
-            int64_t ret = stdio_write_from_user((const uint8_t *)kiov.iov_base, kiov.iov_len);
-            if (ret < 0) return total > 0 ? total : SYSCALL_FAULT_((int)-ret);
-            if (!checked_add_size(total, (size_t)ret, &total)) return SYSCALL_FAULT_(EINVAL);
-            if ((size_t)ret < kiov.iov_len) break;
-        }
-        return total;
-    }
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)

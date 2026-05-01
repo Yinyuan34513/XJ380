@@ -56,6 +56,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_WAIT4: return "wait4";
     case SYS_UNAME: return "uname";
     case SYS_FCNTL: return "fcntl";
+    case SYS_GETPGRP: return "getpgrp";
     case SYS_GETCWD: return "getcwd";
     case SYS_CHDIR: return "chdir";
     case SYS_GETDENTS64: return "getdents64";
@@ -287,6 +288,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETEUID: regs->rax = (uint64_t)sys_geteuid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETEGID: regs->rax = (uint64_t)sys_getegid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETGROUPS: regs->rax = (uint64_t)sys_getgroups(regs->rdi, (int *)regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_GETPGRP: regs->rax = (uint64_t)sys_getpgid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETPGID: regs->rax = (uint64_t)sys_getpgid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_SETPGID: regs->rax = (uint64_t)sys_setpgid(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_SENDFILE:
@@ -436,7 +438,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SXAH_MARK_IS_TERMINAL: mark_process_is_terminal(); break;
     case SXAH_READ_OUTPUT_BUFFER: read_terminal_app_output_buffer((char *)regs->rdi); break;
     case SXAH_WRITE_INPUT_BUFFER: write_terminal_app_output_buffer((char *)regs->rdi); break;
-    case SXAH_CHECK_INPUT_BUFFER: check_input_waiting_status(); break;
+    case SXAH_CHECK_INPUT_BUFFER: regs->rax = (uint64_t)check_input_waiting_status(); break;
     case SXAH_UNLOCK_OUTPUT_LOCK: terminal_finish_app_output(); break;
     case SXAH_MESSAGE_ASK: regs->rax = message_ask(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
 
