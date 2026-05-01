@@ -23,6 +23,9 @@
 #define MSR_SYSCALL_MASK 0xC0000084 // SYSCALL_MASK MSR寄存器
 #define EFER_NXE         (1 << 11)
 
+sys_(chmod, char *path, uint64_t mode);
+sys_(fchmod, int fd, uint64_t mode);
+
 static const char *debug_syscall_name(uint64_t nr)
 {
     switch (nr)
@@ -56,6 +59,9 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_WAIT4: return "wait4";
     case SYS_UNAME: return "uname";
     case SYS_FCNTL: return "fcntl";
+    case SYS_SYSINFO: return "sysinfo";
+    case SYS_SETUID: return "setuid";
+    case SYS_SETGID: return "setgid";
     case SYS_GETPGRP: return "getpgrp";
     case SYS_GETCWD: return "getcwd";
     case SYS_CHDIR: return "chdir";
@@ -269,6 +275,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_KILL: regs->rax = (uint64_t)sys_kill(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_UNAME: regs->rax = (uint64_t)sys_uname((struct utsname *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_CHMOD: regs->rax = (uint64_t)sys_chmod((char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_FCHMOD: regs->rax = (uint64_t)sys_fchmod(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_BRK: regs->rax = (uint64_t)sys_brk(regs->rdi); break;
     case SYS_MMAP:
         regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9, regs);
@@ -283,8 +291,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_clock_getres(regs->rdi, (uint64_t)regs->rsi, 0, 0, 0, 0, regs);
         break;
     case SYS_GETPPID: regs->rax = (uint64_t)sys_getppid(0, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SYSINFO: regs->rax = (uint64_t)sys_sysinfo((struct sysinfo *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETUID: regs->rax = (uint64_t)sys_getuid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETGID: regs->rax = (uint64_t)sys_getgid(0, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SETUID: regs->rax = (uint64_t)sys_setuid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SETGID: regs->rax = (uint64_t)sys_setgid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETEUID: regs->rax = (uint64_t)sys_geteuid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETEGID: regs->rax = (uint64_t)sys_getegid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETGROUPS: regs->rax = (uint64_t)sys_getgroups(regs->rdi, (int *)regs->rsi, 0, 0, 0, 0, regs); break;

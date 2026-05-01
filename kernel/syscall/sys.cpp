@@ -5,6 +5,7 @@
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
 #include <mm/lazyalloc.h>
+#include <mm/frame.h>
 #include <mm/uaccess.h>
 #include "../build_settings.h"
 #include <net/socket.h>
@@ -13,6 +14,9 @@
 #include <tty.h>
 #include <task/ipc.h>
 #include <math.hpp>
+#include <user/user.h>
+
+extern lock_queue *pcb_group_queue;
 
 static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
 static constexpr size_t USER_PATH_MAX        = 4096UL;
@@ -134,6 +138,23 @@ static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
     out->st_ctim = out->st_atim = out->st_mtim =
         (struct timespec){.tv_sec = node->createtime / 1000000000ULL, .tv_nsec = node->createtime % 1000000000ULL};
     return 0;
+}
+
+static uint32_t current_uid()
+{
+    return user_uid(task_effective_user());
+}
+
+static uint32_t current_gid()
+{
+    return user_gid(task_effective_user());
+}
+
+static void stamp_node_owner(vfs_node_t node)
+{
+    if (node == NULL) return;
+    node->owner = current_uid();
+    node->group = current_gid();
 }
 
 static uint64_t stat_kernel_path(const char *path, struct stat *out)
@@ -448,8 +469,11 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
             node = vfs_open(normalized_path);
             if (node == NULL)
                 goto err;
-            else
+            else {
+                stamp_node_owner(node);
+                if ((mode & 07777) != 0) node->mode = (uint16_t)(mode & 07777);
                 goto next;
+            }
         }
         else
         err:
@@ -590,34 +614,36 @@ pipe:;
 
 sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
 {
-    static constexpr int WNOHANG = 1;
+    static constexpr int LINUX_WNOHANG    = 1;
+    static constexpr int LINUX_WUNTRACED  = 2;
+    static constexpr int LINUX_WCONTINUED = 8;
 
     pcb_t parent = get_current_task()->parent_group;
-    long  pid    = (long)pid_value;
+    long  pid    = (long)(int32_t)(uint32_t)pid_value;
     (void)rusage;
-    if (parent != NULL)
-    {
-        // write_serial_fmt("[busybox-debug] sys_wait4 parent=%s pid=%llu wait_pid=%ld options=0x%x child_count=%llu\n",
-        //                  parent->name,
-        //                  (unsigned long long)parent->pid,
-        //                  pid,
-        //                  options,
-        //                  parent->child_pcb ? (unsigned long long)parent->child_pcb->size : 0ULL);
-    }
-
     if (parent == NULL || parent->child_pcb == NULL) return SYSCALL_FAULT_(ECHILD);
-    if ((options & ~WNOHANG) != 0) return SYSCALL_FAULT_(EINVAL);
+    if ((options & ~(LINUX_WNOHANG | LINUX_WUNTRACED | LINUX_WCONTINUED)) != 0) return SYSCALL_FAULT_(EINVAL);
     if (pid < -1 || pid == 0) return SYSCALL_FAULT_(EINVAL);
     if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
 
     pcb_t zombie = wait4_find_zombie_child(parent, pid);
     if (zombie != NULL) return wait4_reap_child(parent, zombie, status);
-    if (options & WNOHANG) return 0;
+    if (options & LINUX_WNOHANG) return 0;
 
     while (true)
     {
-        ipc_message_t message = wait4_pop_exit_message(parent, pid, true);
-        if (message == NULL) continue;
+        zombie = wait4_find_zombie_child(parent, pid);
+        if (zombie != NULL) return wait4_reap_child(parent, zombie, status);
+
+        if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
+
+        ipc_message_t message = wait4_pop_exit_message(parent, pid, false);
+        if (message == NULL)
+        {
+            __asm__ volatile("pause");
+            scheduler_yield();
+            continue;
+        }
 
         int exit_code = (int)message->data[0] | ((int)message->data[1] << 8) | ((int)message->data[2] << 16) |
                         ((int)message->data[3] << 24);
@@ -1375,13 +1401,6 @@ sys_(exit_group, int exit_code)
 {
     pcb_t exit_process = get_current_task()->parent_group;
     write_serial_fmt("task: Process %s exit with code %d.\n", exit_process->name, exit_code);
-    if (exit_process != NULL && exit_process->linux_abi)
-    {
-        // write_serial_fmt("[busybox-debug] exit_group pid=%llu code=%d parent=%s\n",
-        //                  (unsigned long long)exit_process->pid,
-        //                  exit_code,
-        //                  exit_process->parent_task ? exit_process->parent_task->name : "(null)");
-    }
     close_interrupt;//applets 已经走到这个
     kill_proc(exit_process, exit_code,
               true); // 子进程调用，is_zombie = true，不能在child_pcb中删除当前进程
@@ -1702,7 +1721,17 @@ sys_(mkdir, char *name, uint64_t mode)
     char  *npath = vfs_cwd_path_build(user_path);
     free(user_path);
     if (npath == NULL) return SYSCALL_FAULT_(ENOMEM);
-    size_t ret   = vfs_mkdir(npath) == VFS_STATUS_FAILED ? -1 : 0;
+    size_t ret   = vfs_mkdir(npath) == VFS_STATUS_FAILED ? SYSCALL_FAULT_(EIO) : 0;
+    if (ret == 0)
+    {
+        vfs_node_t node = vfs_open(npath);
+        if (node != NULL)
+        {
+            stamp_node_owner(node);
+            if ((mode & 07777) != 0) node->mode = (uint16_t)(mode & 07777);
+            vfs_close(node);
+        }
+    }
     free(npath);
     return ret;
 }
@@ -2581,12 +2610,12 @@ sys_(getgroups, int count, int *gid_list)
     if (count > 0)
     {
         if (gid_list == NULL) return SYSCALL_FAULT_(EINVAL);
-        int gid = 0;
+        int gid = (int)current_gid();
         if (!copy_to_user_pagedir(current_user_pagedir(), gid_list, &gid, sizeof(gid)))
             return SYSCALL_FAULT_(EFAULT);
         return 1;
     }
-    return 0;
+    return 1;
 }
 char *get_parent_path(const char *path) {
     if (!path || !*path) return strdup(".");
@@ -2751,23 +2780,79 @@ sys_(readlink)
 
 sys_(getuid)
 {
-    // XJ380 does not have a real multi-user permission model yet. Report root
-    // identity for Linux/POSIX compatibility during early userspace bootstrap.
-    return 0;
+    return current_uid();
 }
 
 sys_(getgid)
 {
-    return 0;
+    return current_gid();
+}
+
+sys_(setuid, uint32_t uid)
+{
+    uint32_t euid = current_uid();
+    if (uid == euid || euid == 0) return 0;
+    return SYSCALL_FAULT_(EPERM);
+}
+
+sys_(setgid, uint32_t gid)
+{
+    uint32_t egid = current_gid();
+    if (gid == egid || current_uid() == 0) return 0;
+    return SYSCALL_FAULT_(EPERM);
 }
 
 sys_(geteuid)
 {
-    return 0;
+    return current_uid();
 }
 
 sys_(getegid)
 {
+    return current_gid();
+}
+
+sys_(sysinfo, struct sysinfo *info)
+{
+    if (info == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    struct sysinfo kinfo;
+    memset(&kinfo, 0, sizeof(kinfo));
+    kinfo.uptime   = (int64_t)(nanoTime() / 1000000000ULL);
+    kinfo.totalram = frame_allocator.origin_frames * PAGE_SIZE;
+    kinfo.freeram  = frame_allocator.usable_frames * PAGE_SIZE;
+    kinfo.procs    = pcb_group_queue != NULL && pcb_group_queue->size > UINT16_MAX ? UINT16_MAX :
+                     pcb_group_queue != NULL                                      ? (uint16_t)pcb_group_queue->size
+                                                                                  : 0;
+    kinfo.mem_unit = 1;
+
+    if (!copy_to_user_pagedir(current_user_pagedir(), info, &kinfo, sizeof(kinfo)))
+        return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
+sys_(chmod, char *path, uint64_t mode)
+{
+    if (path == NULL) return SYSCALL_FAULT_(EINVAL);
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(AT_FDCWD, path, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+
+    vfs_node_t node = vfs_open(resolved);
+    free(resolved);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+
+    node->mode = (uint16_t)((node->mode & ~07777) | (mode & 07777));
+    vfs_close(node);
+    return 0;
+}
+
+sys_(fchmod, int fd, uint64_t mode)
+{
+    if (fd < 0) return SYSCALL_FAULT_(EBADF);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    handle->node->mode = (uint16_t)((handle->node->mode & ~07777) | (mode & 07777));
     return 0;
 }
 

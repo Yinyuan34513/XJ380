@@ -585,6 +585,7 @@ extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
 extern int      socketfs_setup();
+extern int      procfs_setup();
 extern int      dnsfs_setup();
 extern int      nmfs_setup();
 EFI_SYSTEM_TABLE *EFI_ST;
@@ -710,6 +711,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     setup_busybox_vfs_aliases();
     pipefs_setup();
     socketfs_setup();
+    procfs_setup();
     dnsfs_setup();
     nmfs_setup();
     stdio_init();

@@ -13,6 +13,7 @@
 #include <fs/vfs/vfs.h>
 #include <mm/lazyalloc.h>
 #include <mm/uaccess.h>
+#include <procfs.h>
 #include <syscall/syscall.h>
 #include <task/ipc.h>
 
@@ -217,6 +218,8 @@ void free_envp(char **envp)
 
 void kill_proc0(pcb_t pcb)
 {
+    procfs_on_exit_task(pcb);
+
     do
     {
         tcb_t thread = NULL;
@@ -441,10 +444,12 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     uint64_t *aux_tmp = (uint64_t *)tmp;
     tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_NULL, 0);
     tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_SECURE, 0);
-    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_EGID, 0);
-    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_GID, 0);
-    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_EUID, 0);
-    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_UID, 0);
+    uint64_t uid = user_uid(task->user_info);
+    uint64_t gid = user_gid(task->user_info);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_EGID, gid);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_GID, gid);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_EUID, uid);
+    tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_UID, uid);
     tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_FLAGS, 0);
     tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_BASE, 0);
     tmp_stack = push_auxv(tmp_stack, aux_tmp, AT_RANDOM, aux_random_ptr);
@@ -1261,6 +1266,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_task->window_count = 0;
 
+    procfs_on_new_task(new_pcb);
     add_task(new_task);
     if (!no_interrupt)
     {
@@ -1499,6 +1505,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     }
     new_task->tid = now_tid++;
 
+    procfs_on_new_task(pcb);
     add_task(new_task);
     spin_unlock(&create_thread_lock);
     restore_runtime_state(was_scheduler_enabled, is_sti);

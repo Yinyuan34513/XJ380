@@ -44,6 +44,62 @@ UserInfo root_user = {
     .envp = current_user_envp,
 };
 
+static uint32_t stable_user_name_id(const char *name)
+{
+    uint32_t hash = 2166136261u;
+    if (name == NULL || name[0] == '\0') return 1000;
+    for (const unsigned char *p = (const unsigned char *)name; *p != '\0'; p++)
+    {
+        hash ^= *p;
+        hash *= 16777619u;
+    }
+    return 1000u + (hash % 60000u);
+}
+
+uint32_t user_uid(const UserInfo *user)
+{
+    if (user == NULL) return 0;
+    switch (user->user_type)
+    {
+    case XUT_Root:
+    case XUT_System:
+        return 0;
+    case XUT_Admin:
+        return 1000;
+    case XUT_Visitor:
+        return 65534;
+    case XUT_Custom:
+    default:
+        return stable_user_name_id(user->name);
+    }
+}
+
+uint32_t user_gid(const UserInfo *user)
+{
+    if (user == NULL) return 0;
+    switch (user->user_type)
+    {
+    case XUT_Root:
+    case XUT_System:
+        return 0;
+    case XUT_Admin:
+        return 1000;
+    case XUT_Visitor:
+        return 65534;
+    case XUT_Custom:
+    default:
+        return user_uid(user);
+    }
+}
+
+UserInfo *task_effective_user()
+{
+    tcb_t task = get_current_task();
+    if (task != NULL && task->user_info != NULL) return task->user_info;
+    if (current_user != NULL) return current_user;
+    return &root_user;
+}
+
 extern SHEET *desktop_ct_sheet;
 extern mouse_dec ms_dec;
 extern bool no_interrupt;

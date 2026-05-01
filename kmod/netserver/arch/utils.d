@@ -5,7 +5,7 @@ arch/utils.o: arch/utils.cpp arch/utils.h arch/../../../include/proto.hpp \
  ../../include/cpu/fpu.h ../../include/lock_queue.h \
  ../../include/cpu/lock.h ../../include/task/scheduler.h \
  ../../include/stdint.h ../../include/mm/page.h ../../include/mm/memory.h \
- ../../include/efi/efi.h ../../include/user/user.h \
+ ../../include/efi/efi.h ../../include/tty.h ../../include/user/user.h \
  ../../include/user/./settings.h ../../include/user/x3tp.h \
  ../../include/mm/vma.h ../../include/syscall/signal.h \
  ../../include/errno.h ../../include/graphics/sheet.h \
@@ -30,6 +30,7 @@ arch/../../../include/fs/vfs/list.h:
 ../../include/mm/page.h:
 ../../include/mm/memory.h:
 ../../include/efi/efi.h:
+../../include/tty.h:
 ../../include/user/user.h:
 ../../include/user/./settings.h:
 ../../include/user/x3tp.h:

@@ -300,8 +300,11 @@
 #define SYS_CHMOD    90
 #define SYS_FCHMOD   91
 
+#define SYS_SYSINFO 99
 #define SYS_GETUID 102
 #define SYS_GETGID 104
+#define SYS_SETUID 105
+#define SYS_SETGID 106
 #define SYS_GETEUID 107
 #define SYS_GETEGID 108
 #define SYS_SETPGID 109
@@ -575,8 +578,11 @@ sys_(getppid);
 sys_(fsopen, char *fsname, uint32_t flags);
 sys_(getuid);
 sys_(getgid);
+sys_(setuid, uint32_t uid);
+sys_(setgid, uint32_t gid);
 sys_(geteuid);
 sys_(getegid);
+sys_(sysinfo, struct sysinfo *info);
 sys_(readlink);
 sys_(umount2);
 sys_(link, char *name, char *nw);

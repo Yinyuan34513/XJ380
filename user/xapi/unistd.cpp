@@ -71,36 +71,26 @@ extern "C" gid_t getgid(void)
 
 extern "C" uid_t getuid(void)
 {
-    // 目前 XJ380 还没有完整多用户权限模型；用户态先按 root 身份兼容 POSIX 工具。
-    return 0;
+    return (uid_t)__xposix_ret(enter_syscall(SYS_GETUID, 0, 0, 0, 0, 0, 0));
 }
 
 extern "C" uid_t geteuid(void)
 {
-    // 有效 UID 与真实 UID 保持一致，避免 toybox 在权限检查路径上误判失败。
-    return getuid();
+    return (uid_t)__xposix_ret(enter_syscall(SYS_GETEUID, 0, 0, 0, 0, 0, 0));
 }
 
 extern "C" gid_t getegid(void)
 {
-    // 有效 GID 与真实 GID 保持一致；当前默认组就是 0。
-    return getgid();
+    return (gid_t)__xposix_ret(enter_syscall(SYS_GETEGID, 0, 0, 0, 0, 0, 0));
 }
 
 extern "C" int getgroups(int size, gid_t list[])
 {
-    // 暂无附加组概念；size 为 0 时返回组数量，非 0 时填入一个 root 组。
     if (size < 0) {
         errno = EINVAL;
         return -1;
     }
-    if (size == 0) return 1;
-    if (list == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-    list[0] = 0;
-    return 1;
+    return (int)__xposix_ret(enter_syscall(SYS_GETGROUPS, size, (uint64_t)list, 0, 0, 0, 0));
 }
 
 extern "C" int dup(int fd)

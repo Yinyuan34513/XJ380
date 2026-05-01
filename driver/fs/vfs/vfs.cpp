@@ -546,7 +546,7 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
     if (parent)
     {
         vfs_child_lock();
-        list_prepend(parent->child, node);
+        parent->child = list_prepend(parent->child, node);
         vfs_child_unlock();
     }
     return node;
@@ -894,6 +894,7 @@ static void tty_kernel_print(tty_t *tty, const char *msg)
 {
     (void)tty;
     write_serial_fmt("%s", msg);
+    xapi_output_kernel(msg);
 }
 
 static void tty_kernel_putc(tty_t *tty, int c)
@@ -1032,9 +1033,18 @@ static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) 
 
 static size_t stdout_write(int drive, uint8_t *buffer, size_t number, size_t lba) {
     tty_t *tty = current_tty();
-    for (size_t i = 0; i < number; i++) {
-        if (tty != NULL && tty->putchar != NULL) tty->putchar(tty, buffer[i]);
-        else write_serial_fmt("%c", buffer[i]);
+    if (tty != NULL && tty->print != NULL)
+    {
+        char *text = (char *)malloc(number + 1);
+        if (text == NULL) return 0;
+        memcpy(text, buffer, number);
+        text[number] = '\0';
+        tty->print(tty, text);
+        free(text);
+    }
+    else
+    {
+        for (size_t i = 0; i < number; i++) write_serial_fmt("%c", buffer[i]);
     }
     return number;
 }
