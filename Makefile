@@ -202,6 +202,7 @@ vdisk: all
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 
 	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps
+	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps
 	
 # temp test (remember to delete)
 	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
