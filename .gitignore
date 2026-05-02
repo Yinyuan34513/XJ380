@@ -19,6 +19,7 @@ out/draw.o
 *.tags
 *.elf
 *.o
+*.d
 *.xz
 *.zip
 2.txt
