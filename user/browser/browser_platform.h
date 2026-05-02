@@ -141,6 +141,7 @@ void     xapi_SetIcon(HDLE handle, WSTR path);
 void     xapi_GetWindowSize(HDLE handle, unsigned long long *width, unsigned long long *height);
 void     xapi_DrawRect(HDLE handle, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int color, bool fill);
 void     xapi_DrawLine(HDLE handle, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int color);
+void     xapi_DrawText(HDLE handle, unsigned int x, unsigned int y, WSTR str, unsigned int size, unsigned int color);
 void     xapi_DrawSWText(HDLE handle, unsigned int x, unsigned int y, WSTR str, unsigned int color);
 unsigned long long xapi_CalcTextWidth(WSTR str, unsigned int size);
 void     xapi_WriteBufferA(HDLE handle,
