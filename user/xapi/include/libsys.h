@@ -39,6 +39,7 @@
 
 #define SYS_DUP 32
 #define SYS_DUP2 33
+#define SYS_DUP3 292
 #define SYS_PAUSE 34
 #define SYS_NANOSLEEP 35
 

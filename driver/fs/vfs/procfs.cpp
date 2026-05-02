@@ -718,7 +718,7 @@ void procfs_on_exit_task(pcb_t task) {
 
     vfs_node_t node = vfs_do_search(procfs_root, name);
     if (node && node->parent) {
-        list_delete(node->parent->child, node);
+        node->parent->child = list_delete(node->parent->child, node);
         vfs_free(node);
         task->procfs_node = NULL;
     }

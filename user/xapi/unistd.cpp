@@ -42,6 +42,11 @@ extern "C" int chdir(const char *path)
     return (int)__xposix_ret(enter_syscall(SYS_CHDIR, (uint64_t)path, 0, 0, 0, 0, 0));
 }
 
+extern "C" int fchdir(int fd)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_FCHDIR, fd, 0, 0, 0, 0, 0));
+}
+
 extern "C" char *getcwd(char *buffer, size_t length)
 {
     if (buffer == NULL || length == 0) return NULL;

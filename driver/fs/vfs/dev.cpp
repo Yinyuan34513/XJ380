@@ -166,7 +166,17 @@ size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
     spin_unlock(&RD_lk);
 
     if (device.type == DEVICE_STREAM) {
-        return device.read(device.vdiskid, (uint8_t *)addr, size, offset);
+        size_t bounce_size = size == 0 ? 1 : size;
+        uint8_t *bounce = (uint8_t *)malloc(bounce_size);
+        if (bounce == NULL) {
+            return VFS_STATUS_FAILED;
+        }
+        size_t got = device.read(device.vdiskid, bounce, size, offset);
+        if (got != (size_t)VFS_STATUS_FAILED) {
+            memcpy(addr, bounce, got);
+        }
+        free(bounce);
+        return got;
     }
     if (offset > device.size)
     {
@@ -300,7 +310,7 @@ errno_t devfs_delete(const char *path) {
         free(buf);
         return -ENOENT;
     }
-    list_delete(node->parent->child, node);
+    node->parent->child = list_delete(node->parent->child, node);
     vfs_free(node);
 }
 

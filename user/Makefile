@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf sigtest.elf posixdemo.elf libctest.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
@@ -193,6 +193,10 @@ libctest.elf: libctest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
+
+dyn-hello: dyn_hello.c
+	@$(CC) -O0 -g -Wall -Wextra $< -o ../out/$@
+	@echo "HOSTLD $< -> ../out/$@"
 
 cp537.elf: cp537.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o

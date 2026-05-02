@@ -242,6 +242,8 @@
 #define SYS_RT_SIGRETURN  15
 
 #define SYS_IOCTL 16
+#define SYS_PREAD64 17
+#define SYS_PWRITE64 18
 
 #define SYS_READV  19
 #define SYS_WRITEV 20
@@ -257,6 +259,7 @@
 
 #define SYS_DUP       32
 #define SYS_DUP2      33
+#define SYS_DUP3      292
 #define SYS_PAUSE     34
 #define SYS_NANOSLEEP 35
 
@@ -570,6 +573,7 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
 sys_(getcwd, char *buffer, size_t length);//nm
 
 sys_(chdir, char *s);
+sys_(fchdir, int fd);
 
 sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
 sys_(exit_group, int exit_code);
@@ -579,6 +583,7 @@ sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
 sys_(kill, int pid, int sig);
 sys_(tgkill, int tgid, int tid, int sig);
 sys_(dup2, int fd, int newfd);
+sys_(dup3, int fd, int newfd, int flags);
 sys_(dup, int fd);
 sys_(fcntl, int fd, int cmd, uint64_t arg);
 sys_(fork);
@@ -626,8 +631,8 @@ sys_(getgroups, int count, int *gid_list);
 sys_(getpgid);
 sys_(setpgid, int pid, int pgid);
 sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *data);
-sys_(pwrite, int fd, uint8_t *buffer);
-sys_(pread, int fd, uint8_t *buffer);
+sys_(pwrite, int fd, uint8_t *buffer, size_t size, uint64_t offset);
+sys_(pread, int fd, uint8_t *buffer, size_t size, uint64_t offset);
 sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags);
 sys_(openat);
 sys_(faccessat2);

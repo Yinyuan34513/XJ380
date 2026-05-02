@@ -114,6 +114,9 @@ struct process_control_block
     uint64_t    aux_phdr;
     uint64_t    aux_phent;
     uint64_t    aux_phnum;
+    uint64_t    aux_base;
+    uint64_t    aux_entry;
+    uint64_t    aux_execfn;
     bool        linux_abi;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
@@ -181,6 +184,7 @@ struct thread_control_block
 };
 
 extern pcb_t kernel_group;
+extern size_t   now_tid;
 
 size_t   add_task(tcb_t task);
 void     enable_scheduler();

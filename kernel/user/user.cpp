@@ -424,193 +424,289 @@ void *aligned_malloc(size_t size, size_t alignment)
 
     return aligned;
 }
-uint64_t parse_elf_file(char *path, pcb_t group)
+
+#define USER_DYN_MAIN_BASE 0x0000000040000000UL
+#define USER_INTERP_BASE   0x0000000060000000UL
+
+typedef struct loaded_user_elf
 {
-    Elf64_Ehdr  ehdr;
-    Elf64_Phdr *phdrs  = nullptr;
-    uint64_t    pos    = 0;
-    int         retval = 0;
-    uint8_t    *buf    = nullptr;
+    uint64_t map_start;
+    uint64_t map_end;
+    uint64_t load_bias;
+    uint64_t entry;
+    uint64_t phdr;
+    uint64_t phent;
+    uint64_t phnum;
+} loaded_user_elf_t;
 
-    vfs_node_t file;
-    file               = vfs_open(path);
+static void free_file_image(uint8_t *buf, uint64_t size)
+{
+    if (buf == NULL || size == 0) return;
+    free_frames((uint64_t)virt_to_phys((uint64_t)buf), (size + PAGE_SIZE - 1) / PAGE_SIZE);
+}
 
-    if (file == NULL)
+static int read_vfs_file(vfs_node_t file, uint8_t **out, uint64_t *out_size)
+{
+    if (file == NULL || out == NULL || out_size == NULL) return -EINVAL;
+    uint64_t size = file->size;
+    if (size == 0) return -ENOEXEC;
+
+    uint64_t pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    uint64_t phys = alloc_frames(pages);
+    if (phys == 0) return -ENOMEM;
+    uint8_t *buf = (uint8_t *)phys_to_virt(phys);
+    if (buf == NULL) return -ENOMEM;
+    memset(buf, 0, pages * PAGE_SIZE);
+
+    size_t got = vfs_read(file, buf, 0, size);
+    if (got != size)
     {
-        return NULL;
+        free_file_image(buf, size);
+        return -EIO;
     }
 
-    uint64_t file_size = file->size;
+    *out = buf;
+    *out_size = size;
+    return 0;
+}
 
+static bool elf_range_in_file(uint64_t offset, uint64_t size, uint64_t file_size)
+{
+    return offset <= file_size && size <= file_size - offset;
+}
+
+static int find_elf_interpreter(uint8_t *buf, uint64_t file_size, char *interp, size_t interp_size)
+{
+    if (buf == NULL || interp == NULL || interp_size == 0) return -EINVAL;
+    interp[0] = '\0';
+
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buf;
+    if (!elf_range_in_file(ehdr->e_phoff, (uint64_t)ehdr->e_phnum * ehdr->e_phentsize, file_size)) return -ENOEXEC;
+
+    Elf64_Phdr *phdrs = (Elf64_Phdr *)(buf + ehdr->e_phoff);
+    for (int i = 0; i < ehdr->e_phnum; i++)
+    {
+        if (phdrs[i].p_type != PT_INTERP) continue;
+        if (phdrs[i].p_filesz == 0 || phdrs[i].p_filesz >= interp_size) return -ENAMETOOLONG;
+        if (!elf_range_in_file(phdrs[i].p_offset, phdrs[i].p_filesz, file_size)) return -ENOEXEC;
+
+        memcpy(interp, buf + phdrs[i].p_offset, phdrs[i].p_filesz);
+        interp[phdrs[i].p_filesz] = '\0';
+        return 0;
+    }
+
+    return 0;
+}
+
+static int load_user_elf_image(uint8_t *buf, uint64_t file_size, pcb_t group, const char *name,
+                               uint64_t dyn_base, loaded_user_elf_t *out)
+{
+    if (buf == NULL || group == NULL || out == NULL) return -EINVAL;
+
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buf;
+    if (!elf_range_in_file(0, sizeof(Elf64_Ehdr), file_size) ||
+        (*(uint32_t *)ehdr->e_ident != 0x464C457F) ||
+        ehdr->e_phentsize != sizeof(Elf64_Phdr) ||
+        !elf_range_in_file(ehdr->e_phoff, (uint64_t)ehdr->e_phnum * ehdr->e_phentsize, file_size))
+    {
+        return -ENOEXEC;
+    }
+
+    if (ehdr->e_type != ET_EXEC && ehdr->e_type != ET_DYN) return -ENOEXEC;
+
+    Elf64_Phdr *phdrs = (Elf64_Phdr *)(buf + ehdr->e_phoff);
+    uint64_t load_bias = ehdr->e_type == ET_DYN ? dyn_base : 0;
+    uint64_t load_start = ~0ULL;
+    uint64_t load_end = 0;
+
+    for (int i = 0; i < ehdr->e_phnum; i++)
+    {
+        if (phdrs[i].p_type != PT_LOAD) continue;
+        if (phdrs[i].p_filesz > phdrs[i].p_memsz ||
+            !elf_range_in_file(phdrs[i].p_offset, phdrs[i].p_filesz, file_size))
+        {
+            return -ENOEXEC;
+        }
+
+        uint64_t seg_start = load_bias + phdrs[i].p_vaddr;
+        uint64_t seg_end = seg_start + phdrs[i].p_memsz;
+        load_start = min(load_start, (uint64_t)PADDING_DOWN(seg_start, PAGE_SIZE));
+        load_end = max(load_end, (uint64_t)PADDING_UP(seg_end, PAGE_SIZE));
+    }
+
+    if (load_start == ~0ULL || load_end <= load_start) return -ENOEXEC;
+
+    page_map_range_to_random(group->pagedir, load_start, load_end - load_start,
+                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    memset((void *)load_start, 0, load_end - load_start);
+
+    uint64_t phdr_addr = 0;
+    for (int i = 0; i < ehdr->e_phnum; i++)
+    {
+        if (phdrs[i].p_type == PT_PHDR)
+        {
+            phdr_addr = load_bias + phdrs[i].p_vaddr;
+            break;
+        }
+    }
+    for (int i = 0; i < ehdr->e_phnum; i++)
+    {
+        if (phdrs[i].p_type != PT_LOAD) continue;
+
+        uint64_t seg_addr = load_bias + phdrs[i].p_vaddr;
+        memcpy((void *)seg_addr, (void *)(buf + phdrs[i].p_offset), phdrs[i].p_filesz);
+        if (phdrs[i].p_memsz > phdrs[i].p_filesz)
+        {
+            memset((void *)(seg_addr + phdrs[i].p_filesz), 0, phdrs[i].p_memsz - phdrs[i].p_filesz);
+        }
+
+        if (phdr_addr == 0 && ehdr->e_phoff >= phdrs[i].p_offset &&
+            ehdr->e_phoff < phdrs[i].p_offset + phdrs[i].p_filesz)
+        {
+            phdr_addr = seg_addr + (ehdr->e_phoff - phdrs[i].p_offset);
+        }
+    }
+
+    vma_t *elf_vma = vma_alloc();
+    if (elf_vma != NULL)
+    {
+        elf_vma->vm_start = load_start;
+        elf_vma->vm_end = load_end;
+        elf_vma->vm_flags |= VMA_READ | VMA_WRITE | VMA_EXEC;
+        elf_vma->vm_type = VMA_TYPE_ANON;
+        elf_vma->vm_name = strdup(name != NULL ? name : "elf");
+        vma_insert(&group->vma_manager, elf_vma);
+    }
+
+    out->map_start = load_start;
+    out->map_end = load_end;
+    out->load_bias = load_bias;
+    out->entry = load_bias + ehdr->e_entry;
+    out->phdr = phdr_addr;
+    out->phent = ehdr->e_phentsize;
+    out->phnum = ehdr->e_phnum;
+    return 0;
+}
+
+uint64_t parse_elf_file(char *path, pcb_t group)
+{
     if (group == NULL)
     {
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   ? Where is your parent group?\n");
-        vfs_close(file);
         return NULL;
     }
 
-    // 读取整个文件
-    buf = (uint8_t *)phys_to_virt(alloc_frames((file_size + PAGE_SIZE - 1) / PAGE_SIZE));
-    if (!buf)
+    vfs_node_t file = vfs_open(path);
+    if (file == NULL) return NULL;
+
+    uint8_t *buf = NULL;
+    uint64_t file_size = 0;
+    int ret = read_vfs_file(file, &buf, &file_size);
+    vfs_close(file);
+    if (ret < 0)
     {
         pr_warn("Parse ELF/EPF file failed.\n");
-        write_serial_fmt("Reason:   Cannot Alloc Memory.\n");
-        vfs_close(file);
-        return NULL;
-    }
-    memset(buf, 0, file_size);
-
-    if (vfs_read(file, buf, 0, file->size) == -1)
-    {
-        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
-        pr_warn("Parse ELF/EPF file failed.\n");
-        write_serial_fmt("Reason:   Cannot Read File.\n");
-        vfs_close(file);
-        return NULL;
+        write_serial_fmt("Reason:   Cannot Read File: %s, ret=%d.\n", path, ret);
+        return (uint64_t)ret;
     }
 
-    // 解析ELF/EPF头
-    ehdr = *(Elf64_Ehdr *)buf;
+    Elf64_Ehdr ehdr = *(Elf64_Ehdr *)buf;
 
     // 验证ELF/EPF魔数 (0x7F,'E','L','F') (0x24, 'E', 'P', 'F')
     if ((*(uint32_t *)ehdr.e_ident != 0x464C457F)     // ELF
         && (*(uint32_t *)ehdr.e_ident != 0x46504524)) // EPF
     {
-        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+        free_file_image(buf, file_size);
         pr_warn("Parse ELF/EPF file failed.\n");
         write_serial_fmt("Reason:   Bad Format.\n");
-        vfs_close(file);
         return NULL;
     }
 
-    uint64_t entry = ehdr.e_entry;
-    uint64_t phdr_addr = 0;
-    group->linux_abi = ehdr.e_ident[EI_OSABI] == ELFOSABI_LINUX;
-    phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
-
-    for (int i = 0; i < ehdr.e_phnum; i++)
+    char interp_path[256];
+    ret = find_elf_interpreter(buf, file_size, interp_path, sizeof(interp_path));
+    if (ret < 0)
     {
-        if (phdrs[i].p_type == PT_INTERP)
+        free_file_image(buf, file_size);
+        write_serial_fmt("Parse ELF file failed. Reason: Bad PT_INTERP in %s, ret=%d\n", path, ret);
+        return (uint64_t)ret;
+    }
+
+    uint8_t *interp_buf = NULL;
+    uint64_t interp_size = 0;
+    if (interp_path[0] != '\0')
+    {
+        vfs_node_t interp_file = vfs_open(interp_path);
+        if (interp_file == NULL)
         {
-            free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
-            vfs_close(file);
-            write_serial_fmt("Parse ELF file failed. Reason: PT_INTERP is not supported: %s\n", path);
-            return (uint64_t)-ENOEXEC;
+            free_file_image(buf, file_size);
+            write_serial_fmt("Parse ELF file failed. Reason: Interpreter not found: %s\n", interp_path);
+            return (uint64_t)-ENOENT;
+        }
+        ret = read_vfs_file(interp_file, &interp_buf, &interp_size);
+        vfs_close(interp_file);
+        if (ret < 0)
+        {
+            free_file_image(buf, file_size);
+            write_serial_fmt("Parse ELF file failed. Reason: Cannot read interpreter %s, ret=%d\n", interp_path, ret);
+            return (uint64_t)ret;
         }
     }
-
-    elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
-    if (mapping_space == NULL)
-    {
-        free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
-        pr_warn("Parse ELF/EPF file failed.\n");
-        write_serial_fmt("Reason:   Cannot Alloc Mapping Space.\n");
-        vfs_close(file);
-        return NULL;
-    }
-    CalcLoadAddressRange((Elf64_Ehdr *)buf, (uint64_t *)&mapping_space->load_start,
-                         (uint64_t *)&mapping_space->load_end);
 
     bool is_sti                = are_interrupts_enabled();
     bool was_scheduler_enabled = is_scheduler;
     if (!no_interrupt) close_interrupt;
     disable_scheduler();
 
-    page_map_range_to_random(group->pagedir, mapping_space->load_start,
-                             mapping_space->load_end - mapping_space->load_start,
-                             PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-
     page_directory_t *current_pagedir = get_current_directory();
-
     switch_page_directory(group->pagedir);
 
-    memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
-
-    // 呃，目前看起来好像没什么用？
-    uint64_t start_code   = ~0ULL, end_code = 0;
-    uint64_t start_data   = ~0ULL, end_data = 0;
-    uint64_t start_rodata = ~0ULL, end_rodata = 0;
-    uint64_t start_brk    = 0, end_brk = 0;
-    uint64_t start_stack  = 0;
-
-    // 遍历并加载程序段
-    for (int i = 0; i < ehdr.e_phnum; i++)
+    loaded_user_elf_t main_elf;
+    memset(&main_elf, 0, sizeof(main_elf));
+    ret = load_user_elf_image(buf, file_size, group, group->name, USER_DYN_MAIN_BASE, &main_elf);
+    loaded_user_elf_t interp_elf;
+    memset(&interp_elf, 0, sizeof(interp_elf));
+    if (ret == 0 && interp_buf != NULL)
     {
-        if (phdrs[i].p_type != PT_LOAD) { continue; }
-
-        // 对齐到页大小
-        uint64_t v_addr = phdrs[i].p_vaddr & ~(PAGE_SIZE - 1);
-        uint64_t v_size = (phdrs[i].p_memsz + (phdrs[i].p_vaddr & (PAGE_SIZE - 1)) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-
-        // 更新内存映射信息
-        if (phdrs[i].p_flags & 0x1)
-        { // 可执行
-            start_code = min(start_code, v_addr);
-            end_code   = max(end_code, v_addr + v_size);
-        }
-        else if (phdrs[i].p_flags & 0x2)
-        { // 可写
-            start_data = min(start_data, v_addr);
-            end_data   = max(end_data, v_addr + v_size);
-        }
-        else
-        {
-            start_rodata = min(start_rodata, v_addr);
-            end_rodata   = max(end_rodata, v_addr + v_size);
-        }
-
-        // 复制段内容
-        uint64_t segm_in_file = (uint64_t)buf + phdrs[i].p_offset;
-
-        memcpy((void *)phdrs[i].p_vaddr, (void *)segm_in_file, phdrs[i].p_filesz);
-
-        if (ehdr.e_phoff >= phdrs[i].p_offset && ehdr.e_phoff < phdrs[i].p_offset + phdrs[i].p_filesz)
-        {
-            phdr_addr = phdrs[i].p_vaddr + (ehdr.e_phoff - phdrs[i].p_offset);
-        }
-
-        // 清零未初始化数据
-        if (phdrs[i].p_memsz > phdrs[i].p_filesz)
-        {
-            memset((void *)(phdrs[i].p_vaddr + phdrs[i].p_filesz), 0, phdrs[i].p_memsz - phdrs[i].p_filesz);
-        }
+        ret = load_user_elf_image(interp_buf, interp_size, group, interp_path, USER_INTERP_BASE, &interp_elf);
     }
-
-    // 何意味
-    // uint64_t buf_len = (file_size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-    // uint8_t *buffer = (uint8_t *)EHDR_START_ADDR;
-    // page_map_range_to_random(get_current_directory(), EHDR_START_ADDR, buf_len,
-    //                          PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    // memcpy(buffer, buf, file_size);
-
-    group->load_start = mapping_space->load_start;
-    group->aux_phdr   = phdr_addr;
-    group->aux_phent  = ehdr.e_phentsize;
-    group->aux_phnum  = ehdr.e_phnum;
-    group->elf_file   = NULL;
-    group->elf_size   = file_size;
-    // VMA
-    vma_t *ld_so_vma = vma_alloc();
-
-    ld_so_vma->vm_start  = mapping_space->load_start;
-    ld_so_vma->vm_end    = mapping_space->load_end;
-    ld_so_vma->vm_flags |= VMA_READ | VMA_WRITE | VMA_EXEC;
-
-    ld_so_vma->vm_type = VMA_TYPE_ANON;
-    ld_so_vma->vm_name = strdup(group->name);
-    vma_insert(&group->vma_manager, ld_so_vma);
 
     switch_page_directory(current_pagedir); // 恢复页表
     restore_runtime_state(was_scheduler_enabled, is_sti);
 
-    free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
-    vfs_close(file);
-    free(mapping_space);
+    if (ret < 0)
+    {
+        free_file_image(interp_buf, interp_size);
+        free_file_image(buf, file_size);
+        write_serial_fmt("Parse ELF file failed. Reason: Cannot map ELF %s, ret=%d\n",
+                         interp_buf != NULL ? interp_path : path, ret);
+        return (uint64_t)ret;
+    }
+
+    group->linux_abi = interp_buf != NULL || ehdr.e_ident[EI_OSABI] == ELFOSABI_LINUX;
+    group->load_start = main_elf.map_start;
+    group->aux_phdr = main_elf.phdr;
+    group->aux_phent = main_elf.phent;
+    group->aux_phnum = main_elf.phnum;
+    group->aux_base = interp_buf != NULL ? interp_elf.load_bias : 0;
+    group->aux_entry = main_elf.entry;
+    group->aux_execfn = 0;
+    group->elf_file = NULL;
+    group->elf_size = file_size;
+
+    uint64_t entry = interp_buf != NULL ? interp_elf.entry : main_elf.entry;
+    if (interp_buf != NULL)
+    {
+        write_serial_fmt("ELF interpreter: %s base=0x%llx entry=0x%llx main_entry=0x%llx\n",
+                         interp_path, interp_elf.load_bias, interp_elf.entry, main_elf.entry);
+    }
+
+    free_file_image(interp_buf, interp_size);
+    free_file_image(buf, file_size);
 
     // 设置程序入口点
     return entry;
-}
+}//超进化吧，宝可梦
 
 void getFileDirectory(const char *path, char *result)
 {

@@ -391,7 +391,19 @@ errno_t vfs_mkfile(const char *name) {
 
 errno_t vfs_delete(vfs_node_t node) {
     if (node == rootdir) return VFS_STATUS_FAILED;
-    node->type |= file_delete;
+    if (node == NULL || node->parent == NULL) return VFS_STATUS_FAILED;
+    if ((node->type & file_dir) && node->child != NULL) return -ENOTEMPTY;
+
+    errno_t res = callbackof(node, del)(node->parent->handle, node);
+    if (res < 0) return res;
+
+    vfs_child_lock();
+    node->parent->child = list_delete(node->parent->child, node);
+    vfs_child_unlock();
+
+    node->parent = NULL;
+    node->handle = NULL;
+    vfs_free(node);
     return VFS_STATUS_SUCCESS;
 }
 
@@ -591,7 +603,7 @@ errno_t vfs_close(vfs_node_t node) {
         if (node->refcount <= 0) {
             if (node->parent != NULL) {
                 vfs_child_lock();
-                list_delete(node->parent->child, node);
+                node->parent->child = list_delete(node->parent->child, node);
                 vfs_child_unlock();
             }
             node->handle = NULL;
@@ -610,7 +622,7 @@ errno_t vfs_close(vfs_node_t node) {
     if (node->type & file_proxy){
          return VFS_STATUS_SUCCESS;
     }
-    if (node->type & file_dir)
+    if ((node->type & file_dir) && !(node->type & file_delete))
     {
         return VFS_STATUS_SUCCESS;
     } 
@@ -618,7 +630,7 @@ errno_t vfs_close(vfs_node_t node) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;
         vfs_child_lock();
-        list_delete(node->parent->child, node);
+        node->parent->child = list_delete(node->parent->child, node);
         vfs_child_unlock();
         node->handle = NULL;
         vfs_free(node);

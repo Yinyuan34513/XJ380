@@ -219,7 +219,7 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
 
     socketfs_handle_t *socket_handle = (socketfs_handle_t *)calloc(1, sizeof(socketfs_handle_t));
     if (socket_handle == NULL) {
-        list_delete(socketfs_root->child, node);
+        socketfs_root->child = list_delete(socketfs_root->child, node);
         free(node->name);
         free(node);
         return -ENOMEM;
@@ -238,7 +238,7 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
     fd_file_handle *fd_handle = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
     if (fd_handle == NULL) {
         socketfs_del(NULL, node);
-        list_delete(socketfs_root->child, node);
+        socketfs_root->child = list_delete(socketfs_root->child, node);
         free(node->name);
         free(node);
         return -ENOMEM;
@@ -251,7 +251,7 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
     if ((int)fd_handle->fd < 0) {
         free(fd_handle);
         socketfs_del(NULL, node);
-        list_delete(socketfs_root->child, node);
+        socketfs_root->child = list_delete(socketfs_root->child, node);
         free(node->name);
         free(node);
         return -EMFILE;

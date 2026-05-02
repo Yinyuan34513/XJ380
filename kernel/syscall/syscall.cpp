@@ -36,6 +36,8 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_CLOSE: return "close";
     case SYS_FSTAT: return "fstat";
     case SYS_IOCTL: return "ioctl";
+    case SYS_PREAD64: return "pread64";
+    case SYS_PWRITE64: return "pwrite64";
     case SYS_POLL: return "poll";
     case SYS_LSEEK: return "lseek";
     case SYS_MMAP: return "mmap";
@@ -46,6 +48,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_RT_SIGPROCMASK: return "rt_sigprocmask";
     case SYS_ACCESS: return "access";
     case SYS_PIPE: return "pipe";
+    case SYS_DUP3: return "dup3";
     case SYS_SELECT: return "select";
     case SYS_NANOSLEEP: return "nanosleep";
     case SYS_GETPID: return "getpid";
@@ -70,6 +73,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_GETSID: return "getsid";
     case SYS_GETCWD: return "getcwd";
     case SYS_CHDIR: return "chdir";
+    case SYS_FCHDIR: return "fchdir";
     case SYS_GETTIMEOFDAY: return "gettimeofday";
     case SYS_GETDENTS64: return "getdents64";
     case SYS_MKDIRAT: return "mkdirat";
@@ -170,6 +174,12 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     case SYS_WRITE: regs->rax = (uint64_t)sys_write(regs->rdi, (uint8_t *)regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_READ: regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_PREAD64:
+        regs->rax = (uint64_t)sys_pread(regs->rdi, (uint8_t *)regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
+        break;
+    case SYS_PWRITE64:
+        regs->rax = (uint64_t)sys_pwrite(regs->rdi, (uint8_t *)regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
+        break;
     case SYS_OPEN: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_CLOSE: regs->rax = (uint64_t)sys_close(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_POLL:
@@ -206,6 +216,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_RMDIR: regs->rax = (uint64_t)sys_rmdir(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_UNLINK: regs->rax = (uint64_t)sys_unlink(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_CHDIR: regs->rax = (uint64_t)sys_chdir((char *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_FCHDIR: regs->rax = (uint64_t)sys_fchdir(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETCWD: regs->rax = (uint64_t)sys_getcwd((char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_LSEEK: regs->rax = (uint64_t)sys_lseek(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_GETDENTS:
@@ -223,6 +234,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_DUP: regs->rax = (uint64_t)sys_dup(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_DUP2: regs->rax = (uint64_t)sys_dup2(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_DUP3: regs->rax = (uint64_t)sys_dup3(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_SHUTDOWN: regs->rax = (uint64_t)sys_shutdown(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_BIND:
         regs->rax = (uint64_t)sys_bind(regs->rdi, (const struct sockaddr *)regs->rsi, regs->rdx, 0, 0, 0, regs);
@@ -243,7 +255,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_clone(regs->rdi, regs->rsi, (int *)regs->rdx, (int *)regs->r10, regs->r8, 0, regs);
         break;
     case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
-    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
+    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case SYS_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
         break;

@@ -1,7 +1,7 @@
 #include "xapi/include/x3api.h"
 
-#define BUSY_WIDTH       720
-#define BUSY_HEIGHT      405
+#define BUSY_WIDTH       1280
+#define BUSY_HEIGHT      768
 #define TERM_LEFT_X      8
 #define TERM_TOP_Y       4
 #define TERM_RIGHT_X     (BUSY_WIDTH - 8)
@@ -25,6 +25,9 @@ enum TerminalKeyCode
 {
     TERM_KEY_ESC = 128,
     TERM_KEY_TAB = 130,
+    TERM_KEY_SHIFT = 133,
+    TERM_KEY_CTRL,
+    TERM_KEY_ALT,
     TERM_KEY_F1 = 136,
     TERM_KEY_F2,
     TERM_KEY_F3,
@@ -51,6 +54,8 @@ enum TerminalKeyCode
     TERM_KEY_DELETE,
 };
 
+static constexpr uint64_t TERM_KEY_CTRL_RELEASE = 0x9d;
+
 static HDLE g_window;
 static int  g_child_pid = -1;
 static int  g_pty_master = -1;
@@ -63,6 +68,7 @@ static int  g_saved_y = TERM_TOP_Y;
 static int  g_parser_state = 0;
 static char g_seq[SEQ_MAX];
 static int  g_seq_len = 0;
+static bool g_ctrl_down = false;
 static UINT32 g_fg = COLOR_FG;
 static UINT32 g_bg = COLOR_BG;
 static XCOLOR g_pixel_buffer[BUSY_WIDTH * BUSY_HEIGHT];
@@ -441,18 +447,71 @@ static void send_key_seq(uint64_t key)
     send_child(seq, (int)strlen(seq));
 }
 
+static bool ctrl_char(char in, char *out)
+{
+    if (out == NULL) return false;
+
+    if (in >= 'a' && in <= 'z')
+    {
+        *out = (char)(in - 'a' + 1);
+        return true;
+    }
+    if (in >= 'A' && in <= 'Z')
+    {
+        *out = (char)(in - 'A' + 1);
+        return true;
+    }
+
+    switch (in)
+    {
+    case ' ': *out = 0x00; return true;
+    case '@': *out = 0x00; return true;
+    case '[': *out = 0x1b; return true;
+    case '\\': *out = 0x1c; return true;
+    case ']': *out = 0x1d; return true;
+    case '^': *out = 0x1e; return true;
+    case '6': *out = 0x1e; return true;
+    case '_': *out = 0x1f; return true;
+    case '-': *out = 0x1f; return true;
+    case '?': *out = 0x7f; return true;
+    default: return false;
+    }
+}
+
 static void busyterm_msg(UINT64 type, UINT64 hData, UINT64 lData)
 {
     (void)hData;
     if (type == MSG_CHAR)
     {
         char c = (char)lData;
+        if (g_ctrl_down)
+        {
+            char ctrl = 0;
+            if (ctrl_char(c, &ctrl))
+            {
+                send_child(&ctrl, 1);
+                g_ctrl_down = false;
+                return;
+            }
+        }
         // terminal_write(&c, 1);
         xapi_RefreshWindow(g_window);
         send_child(&c, 1);
     }
     else if (type == MSG_SPCHAR)
     {
+        if (lData == TERM_KEY_CTRL)
+        {
+            g_ctrl_down = true;
+            return;
+        }
+        if (lData == TERM_KEY_CTRL_RELEASE)
+        {
+            g_ctrl_down = false;
+            return;
+        }
+        if (lData == TERM_KEY_SHIFT || lData == TERM_KEY_ALT) return;
+
         if (lData == '\n')
         {
             char c = '\n';

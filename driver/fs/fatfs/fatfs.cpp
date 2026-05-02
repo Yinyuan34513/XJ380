@@ -432,7 +432,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
                     break;
                 }
             }
-            if (exist != NULL) list_delete(node->child, exist);
+            if (exist != NULL) node->child = list_delete(node->child, exist);//虽然但是，保险点吧
             vfs_child_unlock();
             if (exist == NULL) break;
             vfs_free(exist);

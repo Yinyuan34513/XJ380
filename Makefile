@@ -52,6 +52,7 @@ export LD = $(COMPILER_PREFIX)ld
 export NM = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
+HOST_CC ?= cc
 
 NASM_OBJS := $(patsubst ./%.asm, ./$(BUILD_DIR)/%.o, $(NASM_FILES))
 ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
@@ -59,6 +60,11 @@ C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
 CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
+OPKG_CONF_GEN := $(BUILD_DIR)/tools/xj380_opkg_conf_gen
+OPKG_BIN ?= ../opkg/opkg-0.2.2/src/opkg-cl
+OPKG_LD_LIBRARY_PATH ?=
+OPKG_STAGE_DEPS := tools/stage_elf_deps.sh
+OPKG_FEEDS ?=
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
@@ -127,6 +133,11 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
+$(OPKG_CONF_GEN): tools/xj380_opkg_conf_gen.c
+	@mkdir -p $(@D)
+	@$(HOST_CC) -O2 -Wall -Wextra $< -o $@
+	@echo "HOSTCC $< -> $@"
+
 .PHONY: clean format check gen.clangd
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img
@@ -144,7 +155,7 @@ clean.clangd:
 gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
-vdisk: all
+vdisk: all $(OPKG_CONF_GEN)
 	@rm -rf XJ380.img
 
 	@dd if=/dev/zero of=XJ380.img bs=128M count=1
@@ -160,8 +171,16 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
+	@mkdir -p $(BUILD_DIR)/XJ380/lib64
+	@mkdir -p $(BUILD_DIR)/XJ380/lib/x86_64-linux-gnu
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 	@mkdir -p $(BUILD_DIR)/XJ380/mod
+	@mkdir -p $(BUILD_DIR)/XJ380/etc/opkg
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/lists
+	@mkdir -p $(BUILD_DIR)/XJ380/tmp
+	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
+	@$(OPKG_CONF_GEN) $(BUILD_DIR)/XJ380/etc/opkg $(OPKG_FEEDS)
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -189,9 +208,16 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/sigtest.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/dyn-hello $(BUILD_DIR)/XJ380/apps
+	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(BUILD_DIR)/XJ380/lib64/ld-linux-x86-64.so.2
+	@cp -a /lib/x86_64-linux-gnu/libc.so.6 $(BUILD_DIR)/XJ380/lib/x86_64-linux-gnu/libc.so.6
+	@cp -a /lib/x86_64-linux-gnu/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
 	@cp -a ./third_party/busybox-prebuilt/busybox_amd64 $(BUILD_DIR)/XJ380/apps/busybox
 	@cp -a ./nano $(BUILD_DIR)/XJ380/apps/
 	@cp -a ./bash $(BUILD_DIR)/XJ380/apps/
+	@cp -a $(OPKG_BIN) $(BUILD_DIR)/XJ380/apps/opkg
+	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(BUILD_DIR)/XJ380/apps/opkg
+
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font

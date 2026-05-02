@@ -32,6 +32,7 @@ int execve(const char *filename, char *const argv[], char *const envp[]);
 int brk(void *addr);
 void *sbrk(intptr_t increment);
 int chdir(const char *path);
+int fchdir(int fd);
 char *getcwd(char *buffer, size_t length);
 int access(const char *path, int mode);
 int unlink(const char *path);

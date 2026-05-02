@@ -581,7 +581,7 @@ void init_heap()
     heap_init((uint8_t *)KERNEL_HEAP_START, KERNEL_HEAP_SIZE);
 }
 
-extern size_t   now_tid;
+
 extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
@@ -684,7 +684,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     tcb_t idle_thread            = (tcb_t)aligned_alloc(16, idle_alloc_size);
     if (idle_thread != NULL) memset(idle_thread, 0, sizeof(struct thread_control_block));
     if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
-    idle_thread->tid          = now_tid++;
+    idle_thread->tid          = __atomic_fetch_add(&now_tid, 1, __ATOMIC_SEQ_CST);
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
     idle_thread->status       = RUNNING;
