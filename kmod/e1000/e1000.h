@@ -1,6 +1,6 @@
 #pragma once
 
-extern "C"{
+extern "C" {
     #include "../../include/proto.hpp"
     #include "../../include/pci/pci.h"
 }

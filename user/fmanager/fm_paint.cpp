@@ -40,13 +40,13 @@ void paint_fm_back()
 {
     xapi_DrawRect(handle, 0, 0 , FMR_X - 1, 25, 0xeaeaeaff, true);
     xapi_DrawRect(handle, 52, 4, FMR_X - 5, 22, 0xffffffff, true);
-    xapi_DrawPNG(handle, 0, 26, FMR_X - 1, 94, "/system/image/fm_bg.png");
+    xapi_DrawPNG(handle, 0, 26, FMR_X - 1, 94, "/system/resources/image/fm_bg.png");
     // xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
-    xapi_drawFA(handle, 7, 6, 8, "chevron-left");
-    xapi_drawFA(handle, 31, 6, 8, "chevron-right");
+    xapi_DrawFA(handle, 7, 6, 8, "chevron-left");
+    xapi_DrawFA(handle, 31, 6, 8, "chevron-right");
     //xapi_DrawPNG(handle, 29, 4, 18, 18, "/system/icon/bright.png");
     xapi_DrawText(handle, 56, 2, current_path, 11, 0x000000ff);
-    // xapi_drawSvg(handle, FMR_X - 40, 30, 28, (char *)xapi_demoSvgCheck);
+    // xapi_DrawSvg(handle, FMR_X - 40, 30, 28, (char *)xapi_demoSvgCheck);
     if (need_duopage)
     {
         xapi_DrawPNG(handle, FMR_X - 19, 148, 18, 18, "/system/icon/bup.png");
@@ -62,7 +62,7 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
     xapi_DrawText(handle, 28, 148 + 24 * index - 3, name, 10, 0x000000ff);
     if (is_folder)
     {
-        xapi_drawFA(handle, 8, 150 + 24 * index, 16, "folder-open");
+        xapi_DrawFA(handle, 8, 150 + 24 * index, 16, "folder-open");
         // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
         xapi_DrawText(handle, 240, 148 + 24 * index - 3, "文件夹", 10, 0x6d6d6dff);
     }
@@ -75,37 +75,37 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
             if (strcmp("elf", file_type) == 0 || strcmp("epf", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "可执行文件", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "gear");
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "gear");
             }
             else if (strcmp("txt", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "文本文件", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file-lines");
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-lines");
             }
             else if (strcmp("png", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "PNG 图片文件", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
             }
             else if (strcmp("jpg", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "JPEG 图片文件", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
             }
             else if (strcmp("bmp", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "位图文件", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
             }
             else if (strcmp("svg", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "位图文件", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "矢量图文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
             }
             else if (strcmp("md", file_type) == 0)
             {
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, "Markdown", 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 8, 148 + 24 * index, 16, "markdown");
+                xapi_DrawFA(handle, 8, 148 + 24 * index, 16, "markdown");
             }
             else
             {
@@ -120,13 +120,13 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
                 }
                 strcat(file_type, " 文件");
                 xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
-                xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file");
+                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file");
             }
         }
         else 
         {
             xapi_DrawText(handle, 240, 148 + 24 * index - 3, "未知类型文件", 10, 0x6d6d6dff);
-            xapi_drawFA(handle, 10, 150 + 24 * index, 12, "file");
+            xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file");
             // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
         }
 type_is_found:

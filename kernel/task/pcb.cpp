@@ -218,7 +218,6 @@ void kill_proc0(pcb_t pcb)
     strncpy(name, pcb->name, sizeof(name) - 1);
     int pid = pcb->pid;
     bool vfork = pcb->vfork;
-    page_directory_t *pagedir = pcb->vfork ? NULL : pcb->pagedir;
 
     // 先销毁队列，因为它们需要访问pcb中的指针
     lock_queue *file_open = pcb->file_open;
@@ -243,7 +242,6 @@ void kill_proc0(pcb_t pcb)
     free(pcb);
     write_serial_fmt("task: Freeing process %s (PID: %d) vfork: %s\n", name, pid,
                      vfork ? "true" : "false");
-    if (pagedir) free_page_directory(pagedir);
 }
 
 void kill_thread(tcb_t task)
@@ -265,9 +263,6 @@ void kill_thread0(tcb_t task)
     task->status = OUT;
     free_frames((uint64_t)virt_to_phys((task->kernel_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
     free_frames((uint64_t)virt_to_phys((task->syscall_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
-    page_directory_t *src_dir = get_current_directory();
-    switch_process_page_directory(task->parent_group->pagedir);
-    switch_process_page_directory(src_dir);
     remove_task(task);
 }
 

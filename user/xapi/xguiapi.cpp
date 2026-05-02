@@ -54,16 +54,6 @@ void xapi_DrawRect(
 	}
 }
 
-INT32 xapi_drawSvg(HDLE handle, UINT32 x, UINT32 y, UINT32 width, WSTR svgText, bool enableTrans)
-{
-	return (INT32)enter_syscall(XAPI_DRAW_SVG, handle, x, y, width, (UINT64)svgText, enableTrans ? 1 : 0);
-}
-
-INT32 xapi_drawFA(HDLE handle, UINT32 x, UINT32 y, UINT32 width, char *name, bool enableTrans)
-{
-	return (INT32)enter_syscall(XAPI_DRAW_FA, handle, x, y, width, (UINT64)name, enableTrans ? 1 : 0);
-}
-
 // void xapi_DrawCircle(
 // 	HDLE  	handle,
 // 	UINT32 	x,
@@ -116,6 +106,16 @@ void xapi_DrawSWText(
 UINT64 xapi_CalcTextWidth(WSTR str, UINT32 size)
 {
 	return enter_syscall(XAPI_CALC_TEXT_WIDTH, (uint64_t)str, (uint64_t)size, 0, 0, 0, 0);
+}
+
+INT32 xapi_DrawSvg(HDLE handle, UINT32 x, UINT32 y, UINT32 width, WSTR svgText, bool enableTrans)
+{
+	return (INT32)enter_syscall(XAPI_DRAW_SVG, handle, x, y, width, (UINT64)svgText, enableTrans ? 1 : 0);
+}
+
+INT32 xapi_DrawFA(HDLE handle, UINT32 x, UINT32 y, UINT32 width, char *name, bool enableTrans)
+{
+	return (INT32)enter_syscall(XAPI_DRAW_FA, handle, x, y, width, (UINT64)name, enableTrans ? 1 : 0);
 }
 
 

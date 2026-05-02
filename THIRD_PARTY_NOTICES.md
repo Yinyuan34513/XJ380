@@ -7,7 +7,7 @@ other shipped materials.
 
 ## Included third-party components
 
-- `kmod/netserver/lwip`
+- `system/kmod/netserver/lwip`
   - Upstream: lwIP TCP/IP stack
   - License style: BSD-like redistribution notice carried in individual files
   - Distribution note: binary redistribution must reproduce the upstream notice
@@ -60,5 +60,5 @@ provenance and are intended to be treated as project-local implementations:
 
 - `include/dma.h`
 - `driver/dma.cpp`
-- `kmod/netserver/arch/sys_arch.cpp`
-- `kmod/netserver/arch/utils.cpp`
+- `system/kmod/netserver/arch/sys_arch.cpp`
+- `system/kmod/netserver/arch/utils.cpp`
