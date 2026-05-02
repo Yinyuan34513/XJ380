@@ -496,6 +496,10 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
     nw->flags      = src->flags;
     nw->fd         = src->fd;
     vfs_node_t node = nw->node;
+    if ((node->type & (file_ptmx | file_pts)) && fs_callbacks[node->fsid]->dup != (void *)empty_func) {
+        fs_callbacks[node->fsid]->dup(node);
+        return nw;
+    }
     if ((node->type & file_pipe) && node->handle != NULL) {
         pipe_specific_t *spec = (pipe_specific_t *)node->handle;
         pipe_info_t     *pipe = spec != NULL ? spec->info : NULL;
@@ -557,6 +561,17 @@ errno_t vfs_close(vfs_node_t node) {
     if (node == rootdir) return VFS_STATUS_SUCCESS;
 
     if (node->refcount > 0) node->refcount--;
+
+    if (node->type & (file_ptmx | file_pts)) {
+        if (node->handle != NULL) callbackof(node, close)(node->handle);
+        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
+        node->handle = NULL;
+        if (node->parent == NULL) {
+            free(node->name);
+            free(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
 
     if (node->type & file_pipe) {
         if (node->handle != NULL) {
@@ -987,17 +1002,18 @@ static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) 
             c = (char)get_keyboard_input();
         }
         if (c == '\0') { break; }
-        if (c == 0x7f) { c = '\b'; }
+        tty_t *tty = current_tty();
+        uint32_t lflag = tty != NULL ? tty->termios.c_lflag : 0;
         if (c == 0x9) { c = '\t'; }
-        if (c == '\b') {
-            if (current_tty() != NULL && (current_tty()->termios.c_lflag & ECHO)) write_serial_fmt("\b \b");
+        if (terminal == NULL && (c == 0x7f || c == '\b') && (lflag & ICANON)) {
+            if (tty != NULL && (lflag & ECHO)) write_serial_fmt("\b \b");
             if (i > 0) {
-                buffer[i--] = '\0';
                 i--;
+                buffer[i] = '\0';
             }
             continue;
         }
-        if (current_tty() != NULL && (current_tty()->termios.c_lflag & ECHO)) write_serial_fmt("%c", c);
+        if (tty != NULL && (lflag & ECHO)) write_serial_fmt("%c", c);
         buffer[i] = c;
         if (c == '\n') {
             i++;

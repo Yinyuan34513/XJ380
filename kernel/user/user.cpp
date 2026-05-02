@@ -487,6 +487,18 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     uint64_t entry = ehdr.e_entry;
     uint64_t phdr_addr = 0;
     group->linux_abi = ehdr.e_ident[EI_OSABI] == ELFOSABI_LINUX;
+    phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
+
+    for (int i = 0; i < ehdr.e_phnum; i++)
+    {
+        if (phdrs[i].p_type == PT_INTERP)
+        {
+            free_frames((uint64_t)virt_to_phys((uint64_t)buf), (file_size + PAGE_SIZE - 1) / PAGE_SIZE);
+            vfs_close(file);
+            write_serial_fmt("Parse ELF file failed. Reason: PT_INTERP is not supported: %s\n", path);
+            return (uint64_t)-ENOEXEC;
+        }
+    }
 
     elf_mapping_space *mapping_space = (elf_mapping_space *)aligned_alloc(16, sizeof(elf_mapping_space));
     if (mapping_space == NULL)
@@ -514,9 +526,6 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     switch_page_directory(group->pagedir);
 
     memset((void *)mapping_space->load_start, 0, mapping_space->load_end - mapping_space->load_start);
-
-    // 获取程序头表
-    phdrs = (Elf64_Phdr *)(buf + ehdr.e_phoff);
 
     // 呃，目前看起来好像没什么用？
     uint64_t start_code   = ~0ULL, end_code = 0;
@@ -717,6 +726,13 @@ int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         kill_proc(group, 0, false);
         return -ENOENT;
     }
+    if ((int64_t)entry < 0)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Exec Format Error.\n");
+        int ret = (int)(int64_t)entry;
+        kill_proc(group, 0, false);
+        return ret;
+    }
 
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", process_name);
     char cmdline[PAGE_SIZE];
@@ -793,7 +809,7 @@ void create_user_thread_from_file(char *path, pcb_t pcb)
 {
     char  thread_name[50];
     void *entry = (void *)parse_elf_file(path, pcb);
-    if (entry == NULL) return;
+    if (entry == NULL || (int64_t)entry < 0) return;
     get_thread_name_from_filepath(path, thread_name);
     write_serial_fmt("Creating User Thread. Thread Name: %s\n", thread_name);
     char *cwd = getCwd(path);

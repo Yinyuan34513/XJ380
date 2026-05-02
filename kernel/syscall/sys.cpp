@@ -260,6 +260,9 @@ static size_t ioctl_arg_size(int request)
     case TIOCGWINSZ:
     case TIOCSWINSZ:
         return sizeof(struct winsize);
+    case TIOCGPTN:
+    case TIOCSPTLCK:
+    case TIOCGPTLCK:
     case TIOCGPGRP:
     case TIOCSPGRP:
     case KDGETMODE:
@@ -282,6 +285,8 @@ static bool ioctl_writes_user(int request)
     {
     case TCGETS:
     case TIOCGWINSZ:
+    case TIOCGPTN:
+    case TIOCGPTLCK:
     case TIOCGPGRP:
     case KDGETMODE:
     case KDGKBMODE:
@@ -301,6 +306,7 @@ static bool ioctl_reads_user(int request)
     case TCSETSW:
     case TCSETSF:
     case TIOCSWINSZ:
+    case TIOCSPTLCK:
     case TIOCSPGRP:
     case KDSETMODE:
     case KDSKBMODE:
@@ -481,6 +487,14 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
         return SYSCALL_FAULT_(ENOENT);
     }
 next:
+    vfs_update(node);
+    if (!(node->type & (file_dir | file_symlink)) && node->handle == NULL)
+    {
+        vfs_close(node);
+        free(normalized_path);
+        return SYSCALL_FAULT_(ENODEV);
+    }
+
     fd_file_handle *fd_handle = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
     // not_null_assets(fd_handle, "sys_open: null alloc fd");
     fd_handle->offset = flags & O_APPEND ? node->size : 0;

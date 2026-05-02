@@ -42,6 +42,7 @@ int open(const char *path, int flags, ...);
 int openat(int dirfd, const char *path, int flags, ...);
 int creat(const char *path, unsigned int mode);
 int fcntl(int fd, int cmd, uint64_t arg);
+int posix_openpt(int flags);
 
 #ifdef __cplusplus
 }

@@ -14,6 +14,8 @@ out/draw.o
 /compile_commands.json
 .cache
 
+bash*
+
 *.img
 *.vmdk
 *.tags

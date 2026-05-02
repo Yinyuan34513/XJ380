@@ -26,6 +26,7 @@
 #include <pipe.h>
 #include <power.h>
 #include <proto.hpp>
+#include <pty.h>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <rtc.h>
@@ -514,7 +515,7 @@ skip_timer_widget_init:
     // create_user_process_from_file((char *)"/apps/busybox", NULL, (char*[3]){"printf","Hello, World!",NULL});
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -710,6 +711,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     mount_root();
     setup_busybox_vfs_aliases();
     pipefs_setup();
+    pty_init();
     socketfs_setup();
     procfs_setup();
     dnsfs_setup();

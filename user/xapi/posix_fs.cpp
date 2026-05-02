@@ -7,6 +7,10 @@
 #include "./include/krlibc.h"
 #include "./include/liballoc/alloc.h"
 #include "./include/xposix/stdarg.h"
+#include "./include/sys/ioctl.h"
+
+#define TIOCGPTN   0x80045430
+#define TIOCSPTLCK 0x40045431
 
 extern "C" int open(const char *path, int flags, ...)
 {
@@ -35,6 +39,35 @@ extern "C" int openat(int dirfd, const char *path, int flags, ...)
 extern "C" int creat(const char *path, unsigned int mode)
 {
     return open(path, O_CREAT | O_TRUNC | O_WRONLY, mode);
+}
+
+extern "C" int posix_openpt(int flags)
+{
+    return open("/dev/ptmx", flags);
+}
+
+extern "C" int grantpt(int fd)
+{
+    if (fd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return 0;
+}
+
+extern "C" int unlockpt(int fd)
+{
+    int lock = 0;
+    return ioctl(fd, TIOCSPTLCK, &lock);
+}
+
+extern "C" char *ptsname(int fd)
+{
+    static char path[32];
+    int id = -1;
+    if (ioctl(fd, TIOCGPTN, &id) < 0) return NULL;
+    snprintf(path, sizeof(path), "/dev/pts/%d", id);
+    return path;
 }
 
 extern "C" int stat(const char *path, struct stat *buf)

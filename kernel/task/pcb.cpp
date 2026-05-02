@@ -504,31 +504,35 @@ void switch_to_user_mode()
     uint64_t func                       = get_current_task()->main;
 
     //鐩墠鐪嬭繕涓嶅お濂? 搴旇鏄痠nit鐨勯棶棰?
-    char *new_path = (char *)malloc(strlen("/dev/") + 10);
-    sprintf(new_path, "/dev/stdio");
-    vfs_node_t stdio        = vfs_open(new_path);
-    if (stdio != NULL)
+    bool need_stdio = get_current_task()->parent_group->file_open == NULL ||
+                      queue_get(get_current_task()->parent_group->file_open, 0) == NULL;
+    if (need_stdio)
     {
-        stdio->refcount       += 3;
-        fd_file_handle *stdout = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
-        stdout->node           = stdio;
-        stdout->offset         = 0;
-        fd_file_handle *stdin  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
-        stdin->node            = stdio;
-        stdin->offset          = 0;
-        fd_file_handle *stderr = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
-        stderr->node           = stdio;
-        stderr->offset         = 0;
-        stdin->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
-        stdout->fd             = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
-        stderr->fd             = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
+        char *new_path = (char *)malloc(strlen("/dev/") + 10);
+        sprintf(new_path, "/dev/stdio");
+        vfs_node_t stdio        = vfs_open(new_path);
+        if (stdio != NULL)
+        {
+            stdio->refcount       += 3;
+            fd_file_handle *stdout = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+            stdout->node           = stdio;
+            stdout->offset         = 0;
+            fd_file_handle *stdin  = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+            stdin->node            = stdio;
+            stdin->offset          = 0;
+            fd_file_handle *stderr = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+            stderr->node           = stdio;
+            stderr->offset         = 0;
+            stdin->fd              = queue_enqueue(get_current_task()->parent_group->file_open, stdin);  // stdin
+            stdout->fd             = queue_enqueue(get_current_task()->parent_group->file_open, stdout); // stdout
+            stderr->fd             = queue_enqueue(get_current_task()->parent_group->file_open, stderr); // stderr
+        }
+        else
+        {
+            write_serial_string("Warning: /dev/stdio not available for user task bootstrap.\n");
+        }
+        free(new_path);
     }
-    else
-    {
-        write_serial_string("Warning: /dev/stdio not available for user task bootstrap.\n");
-    }
-
-    free(new_path);
 
     // Keep syscall entry deterministic for first user entry.
     write_kgsbase((uint64_t)get_current_cpu());
@@ -763,6 +767,7 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     tcb_t parent_task          = get_current_task();
     if (parent_task == NULL || parent_task->parent_group == NULL || parent_task->parent_group->pagedir == NULL)
         return SYSCALL_FAULT_(EFAULT);
+    parent_task->fs_base = read_fsbase();
 
     pcb_t process = parent_task->parent_group;
     page_directory_t *pagedir = process->pagedir;
@@ -1107,8 +1112,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     uint64_t e_entry    = 0;
     uint64_t load_start = 0;
     e_entry             = (uint64_t)parse_elf_file(norm_path, process);
-    if (e_entry == NULL)
+    if (e_entry == NULL || (int64_t)e_entry < 0)
     {
+        int exec_ret = e_entry == NULL ? -ENOENT : (int)(int64_t)e_entry;
         memcpy(current_task->name, old_thread_name, sizeof(old_thread_name));
         memcpy(process->name, old_process_name, sizeof(old_process_name));
         process->brk_start = old_brk_start;
@@ -1125,7 +1131,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free_envp(kargv);
         free_envp(new_envp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
-        return 0;
+        return (uint64_t)exec_ret;
     }
     char **old_envp = process->envp;
     char  *old_cmdline = process->cmdline;
@@ -1148,17 +1154,6 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     process->vfork   = false;
 
     vfs_close(node);
-
-    spin_lock(&process->file_open->lock);
-    queue_foreach(process->file_open, node)
-    {
-        fd_file_handle *file_node = (fd_file_handle *)node->data;
-        vfs_close(file_node->node);
-        free(file_node);
-    }
-    spin_unlock(&process->file_open->lock);
-    queue_destroy(process->file_open);
-    process->file_open = queue_init();
     spin_lock(&process->virt_queue->lock);
     queue_foreach(process->virt_queue, node)
     {
@@ -1221,7 +1216,10 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     close_interrupt;
     disable_scheduler();
 
-    pcb_t current_pcb = get_current_task()->parent_group;
+    tcb_t parent_task = get_current_task();
+    parent_task->fs_base = read_fsbase();
+
+    pcb_t current_pcb = parent_task->parent_group;
 
     pcb_t new_pcb = (pcb_t)malloc(sizeof(struct process_control_block));
     memset(new_pcb, 0, sizeof(struct process_control_block));
@@ -1263,8 +1261,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         return (uint64_t)-ENOMEM;
     }
     memset(new_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
-
-    tcb_t parent_task = get_current_task();
 
     tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL) return (uint64_t)-(ENOMEM);
