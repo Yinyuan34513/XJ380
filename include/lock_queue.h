@@ -7,6 +7,7 @@ typedef struct LockNode
 {
     void            *data;
     struct LockNode *next;
+    struct LockNode *prev;
     size_t           index;
 } lock_node;
 
@@ -14,6 +15,7 @@ typedef struct
 {
     lock_node *head;
     lock_node *tail;
+    lock_node *rr_cursor;
     spin_t     lock;
     spin_t     iter_lock;
     size_t     size;
@@ -35,6 +37,15 @@ lock_queue *queue_init();
 size_t queue_enqueue(lock_queue *q, void *data);
 
 /**
+ * 入队并返回节点句柄
+ * @param q 队列
+ * @param data 存储的句柄
+ * @param out_node 返回的节点指针
+ * @return 该节点的索引
+ */
+size_t queue_enqueue_ref(lock_queue *q, void *data, lock_node **out_node);
+
+/**
  * 入队操作(需手动解锁)
  * @param q 队列
  * @param data 存储句柄
@@ -49,6 +60,14 @@ size_t lock_queue_enqueue(lock_queue *q, void *data);
  * @return == NULL ? 找不到节点 : 被删除节点的句柄
  */
 void *queue_remove_at(lock_queue *q, size_t index);
+
+/**
+ * 删除指定节点
+ * @param q 队列
+ * @param node 节点
+ * @return == NULL ? 找不到节点 : 被删除节点的句柄
+ */
+void *queue_remove_node(lock_queue *q, lock_node *node);
 
 /**
  * 出队操作

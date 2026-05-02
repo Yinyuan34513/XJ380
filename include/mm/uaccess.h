@@ -38,3 +38,12 @@ static inline bool copy_from_user_pagedir(page_directory_t *pagedir, void *dst, 
     memcpy(dst, src, size);
     return true;
 }
+
+static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size)
+{
+    if (size == 0) return true;
+    if (src == NULL) return false;
+    if (!user_range_mapped(pagedir, dst, size)) return false;
+    memcpy(dst, src, size);
+    return true;
+}

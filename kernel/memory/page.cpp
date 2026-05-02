@@ -7,6 +7,8 @@
 #include <mm/lazyalloc.h>
 #include <mm/page.h>
 #include <proto.hpp>
+#include <task/pcb.h>
+#include <task/scheduler.h>
 #include <stdint.h>
 
 spin_t page_lock;
@@ -19,6 +21,62 @@ extern uint64_t memory_size;
 uint64_t        double_fault_page = 0;
 page_t         *page_maps;
 void           *early_alloc(size_t size);
+extern lock_queue *pcb_group_queue;
+
+static inline uint64_t page_align_up(uint64_t length)
+{
+    if (length == 0) return 0;
+    return (length + PAGE_SIZE - 1) & PAGE_MASK;
+}
+
+static pcb_t find_process_by_pagedir(page_directory_t *directory)
+{
+    if (directory == NULL || pcb_group_queue == NULL) return NULL;
+
+    pcb_t ret = NULL;
+    spin_lock(&pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, node)
+    {
+        pcb_t pcb = (pcb_t)node->data;
+        if (pcb != NULL && pcb->pagedir == directory)
+        {
+            ret = pcb;
+            break;
+        }
+    }
+    spin_unlock(&pcb_group_queue->lock);
+    return ret;
+}
+
+static uint64_t find_free_user_range(page_directory_t *directory, uint64_t start, uint64_t length)
+{
+    if (directory == NULL || length == 0) return 0;
+
+    uint64_t aligned_length = page_align_up(length);
+    if (aligned_length == 0 || aligned_length >= USER_BRK_START) return 0;
+
+    uint64_t candidate = start < USER_MMAP_START ? USER_MMAP_START : (start & PAGE_MASK);
+    const uint64_t limit = USER_BRK_START - aligned_length;
+
+    while (candidate <= limit)
+    {
+        bool occupied = false;
+        for (uint64_t offset = 0; offset < aligned_length; offset += PAGE_SIZE)
+        {
+            if (translate_address(directory, candidate + offset) != 0)
+            {
+                candidate = ((candidate + offset) & PAGE_MASK) + PAGE_SIZE;
+                occupied = true;
+                break;
+            }
+        }
+
+        if (!occupied) return candidate;
+    }
+
+    return 0;
+}
+
 void            page_init()
 {
     uint64_t page_maps_size = memory_size / PAGE_SIZE * sizeof(page_t);
@@ -128,6 +186,13 @@ err:;
     if (error_code & 0x4)
     {
         ulog_err("Page Fault (0x0000000e)");
+        if (current_task != NULL && current_task->task_level == TASK_APPLICATION_LEVEL)
+        {
+            kill_thread(current_task);
+            enable_scheduler();
+            open_interrupt;
+            scheduler_yield();
+        }
         enable_scheduler();
         open_interrupt;
         return;
@@ -450,12 +515,35 @@ void switch_page_directory(page_directory_t *dir)
 uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags)
 {
     if (length == 0) return -1;
-    size_t   p    = length / PAGE_SIZE;
-    uint64_t addr = alloc_frames(p == 0 ? 1 : p);
-    for (uint64_t i = 0; i < length; i += 0x1000)
+
+    uint64_t aligned_length = page_align_up(length);
+    if (aligned_length == 0) return -1;
+
+    size_t frame_count = aligned_length / PAGE_SIZE;
+    uint64_t frame = alloc_frames(frame_count);
+    if (frame == 0) return -1;
+
+    uint64_t addr = frame;
+    if (flags & PTE_USER)
     {
-        uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, var, flags | PTE_FRAME_ALLOCATED);
+        pcb_t owner = find_process_by_pagedir(directory);
+        uint64_t start = (owner != NULL && owner->mmap_start >= USER_MMAP_START) ? owner->mmap_start : USER_MMAP_START;
+        addr = find_free_user_range(directory, start, aligned_length);
+        if (addr == 0 && start != USER_MMAP_START)
+        {
+            addr = find_free_user_range(directory, USER_MMAP_START, aligned_length);
+        }
+        if (addr == 0)
+        {
+            free_frames(frame, frame_count);
+            return -1;
+        }
+        if (owner != NULL) owner->mmap_start = addr + aligned_length;
+    }
+
+    for (uint64_t i = 0; i < aligned_length; i += PAGE_SIZE)
+    {
+        page_map_to(directory, addr + i, frame + i, flags | PTE_FRAME_ALLOCATED);
     }
     return addr;
 }

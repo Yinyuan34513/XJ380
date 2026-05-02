@@ -142,13 +142,15 @@ struct thread_control_block
     uint64_t      signal;          // 信号位图
     uint64_t kernel_stack;   // 内核栈地址
     size_t   queue_index;    // 调度队列索引
+    lock_node *sched_node;   // 调度队列节点
     size_t   group_index;    // 进程队列索引
     uint64_t main;           // 线程入口地址
     uint64_t user_stack;     // 用户栈
     uint64_t user_stack_top; // 用户栈顶部地址
     
-
+    
     uint64_t syscall_stack;
+    uint64_t syscall_user_rsp;
     
     uint64_t load_start;
     uint64_t load_end;

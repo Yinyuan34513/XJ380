@@ -85,12 +85,13 @@ void *memset(void *dst, int val, size_t size)
 
 char *strcpy(char *dest, const char *src)
 {
+    char *ret = dest;
     do
     {
         *dest++ = *src++;
     } while (*src != 0);
     *dest = 0;
-    return dest;
+    return ret;
 }
 
 size_t strlen(const char *str)

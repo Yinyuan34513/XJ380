@@ -95,15 +95,6 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     return (int64_t)total;
 }
 
-static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size)
-{
-    if (size == 0) return true;
-    if (src == NULL) return false;
-    if (!user_range_mapped(pagedir, dst, size)) return false;
-    memcpy(dst, src, size);
-    return true;
-}
-
 static bool wait4_pid_matches(pcb_t child, long pid)
 {
     if (child == NULL) return false;
@@ -257,6 +248,17 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     if (unlikely(size == 0)) return 0;
     if (fd == 1 || fd == 2)
     {
+        tcb_t task = get_current_task();
+        char preview[17];
+        memset(preview, 0, sizeof(preview));
+        size_t preview_len = MIN(size, sizeof(preview) - 1);
+        copy_from_user_pagedir(get_current_task()->parent_group->pagedir, preview, buffer, preview_len);
+        write_serial_fmt("[sys_write fd=%d task=%s len=%llu ptr=0x%llx preview=\"%s\"] ",
+                         fd,
+                         task != NULL ? task->name : "<none>",
+                         (unsigned long long)size,
+                         (unsigned long long)(uint64_t)buffer,
+                         preview);
         int64_t ret = serial_write_from_user(buffer, size);
         return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
