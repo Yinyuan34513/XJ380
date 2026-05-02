@@ -602,6 +602,7 @@ static struct vfs_callback procfs_self_callbacks = {
     .dup      = (vfs_dup_t)dummy,
     .poll     = (vfs_poll_t)dummy,
     .map      = (vfs_mapfile_t)dummy,
+    .resize   = (vfs_resize_t)dummy,
     .del      = (vfs_del_t)dummy,
     .rename   = (vfs_rename_t)dummy,
 };
@@ -623,6 +624,7 @@ static struct vfs_callback procfs_callbacks = {
     .dup      = procfs_dup,
     .poll     = (vfs_poll_t)dummy,
     .map      = (vfs_mapfile_t)dummy,
+    .resize   = (vfs_resize_t)dummy,
     .del      = (vfs_del_t)dummy,
     .rename   = (vfs_rename_t)dummy,
 };

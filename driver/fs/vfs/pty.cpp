@@ -690,6 +690,7 @@ static struct vfs_callback ptmx_callbacks = {
     .dup      = ptmx_dup,
     .poll     = ptmx_poll,
     .map      = (vfs_mapfile_t)pty_dummy,
+    .resize   = (vfs_resize_t)pty_dummy,
     .del      = (vfs_del_t)pty_dummy,
     .rename   = (vfs_rename_t)pty_dummy,
 };
@@ -711,6 +712,7 @@ static struct vfs_callback pts_callbacks = {
     .dup      = pts_dup,
     .poll     = pts_poll,
     .map      = (vfs_mapfile_t)pty_dummy,
+    .resize   = (vfs_resize_t)pty_dummy,
     .del      = (vfs_del_t)pty_dummy,
     .rename   = (vfs_rename_t)pty_dummy,
 };

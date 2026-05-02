@@ -59,6 +59,16 @@ extern "C" pid_t getppid(void)
     return (pid_t)__xposix_ret(enter_syscall(SYS_GETPPID, 0, 0, 0, 0, 0, 0));
 }
 
+extern "C" pid_t setsid(void)
+{
+    return (pid_t)__xposix_ret(enter_syscall(SYS_SETSID, 0, 0, 0, 0, 0, 0));
+}
+
+extern "C" pid_t getsid(pid_t pid)
+{
+    return (pid_t)__xposix_ret(enter_syscall(SYS_GETSID, pid, 0, 0, 0, 0, 0));
+}
+
 extern "C" pid_t gettid(void)
 {
     return (pid_t)__xposix_ret(enter_syscall(SYS_GETTID, 0, 0, 0, 0, 0, 0));
@@ -134,14 +144,29 @@ extern "C" int rename(const char *oldpath, const char *newpath)
     return (int)__xposix_ret(enter_syscall(SYS_RENAME, (uint64_t)oldpath, (uint64_t)newpath, 0, 0, 0, 0));
 }
 
+extern "C" int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_RENAMEAT, olddirfd, (uint64_t)oldpath, newdirfd, (uint64_t)newpath, 0, 0));
+}
+
 extern "C" int link(const char *oldpath, const char *newpath)
 {
     return (int)__xposix_ret(enter_syscall(SYS_LINK, (uint64_t)oldpath, (uint64_t)newpath, 0, 0, 0, 0));
 }
 
+extern "C" int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_LINKAT, olddirfd, (uint64_t)oldpath, newdirfd, (uint64_t)newpath, flags, 0));
+}
+
 extern "C" int symlink(const char *target, const char *linkpath)
 {
     return (int)__xposix_ret(enter_syscall(SYS_SYMLINK, (uint64_t)target, (uint64_t)linkpath, 0, 0, 0, 0));
+}
+
+extern "C" int symlinkat(const char *target, int newdirfd, const char *linkpath)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_SYMLINKAT, (uint64_t)target, newdirfd, (uint64_t)linkpath, 0, 0, 0));
 }
 
 extern "C" ssize_t readlink(const char *path, char *buf, size_t bufsiz)
@@ -156,8 +181,12 @@ extern "C" off_t lseek(int fd, off_t offset, int whence)
 
 extern "C" int fsync(int fd)
 {
-    (void)fd;
-    return 0;
+    return (int)__xposix_ret(enter_syscall(SYS_FSYNC, fd, 0, 0, 0, 0, 0));
+}
+
+extern "C" int fdatasync(int fd)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_FDATASYNC, fd, 0, 0, 0, 0, 0));
 }
 
 extern "C" unsigned int sleep(unsigned int seconds)

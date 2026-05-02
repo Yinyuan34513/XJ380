@@ -268,6 +268,7 @@
 #define SYS_SOCKET 41
 #define SYS_CONNECT 42
 #define SYS_ACCEPT 43
+#define SYS_SOCKETPAIR 53
 
 #define SYS_SHUTDOWN 48
 
@@ -283,6 +284,7 @@
 #define SYS_KILL   62
 #define SYS_UNAME  63
 #define SYS_FCNTL  72
+#define SYS_FTRUNCATE 77
 
 #define SYS_GETDENTS 78
 #define SYS_GETCWD   79
@@ -299,6 +301,7 @@
 #define SYS_READLINK 89
 #define SYS_CHMOD    90
 #define SYS_FCHMOD   91
+#define SYS_GETTIMEOFDAY 96
 
 #define SYS_SYSINFO 99
 #define SYS_GETUID 102
@@ -310,8 +313,10 @@
 #define SYS_SETPGID 109
 #define SYS_GETPPID 110
 #define SYS_GETPGRP 111
+#define SYS_SETSID 112
 #define SYS_GETGROUPS 115
 #define SYS_GETPGID 121
+#define SYS_GETSID 124
 #define SYS_MKNOD 133
 #define SYS_STATFS 137
 #define SYS_PIVOT_ROOT 155
@@ -333,14 +338,24 @@
 #define SYS_TGKILL 234
 
 #define SYS_OPENAT 257
+#define SYS_MKDIRAT 258
 #define SYS_NEWFSTATAT 262
 #define SYS_UNLINKAT 263
+#define SYS_RENAMEAT 264
+#define SYS_LINKAT 265
+#define SYS_SYMLINKAT 266
+#define SYS_READLINKAT 267
 #define SYS_FACCESSAT 269
 #define SYS_PSELECT6 270
 #define SYS_SET_ROBUST_LIST 273
 #define SYS_PIPE2 293
+#define SYS_PRLIMIT64 302
+#define SYS_GETRANDOM 318
 #define SYS_COPY_FILE_RANGE 326
 #define SYS_STATX 332
+#define SYS_FSTATFS 138
+#define SYS_FSYNC 74
+#define SYS_FDATASYNC 75
 
 #define SYS_RSEQ 334
 #define SYS_FSOPEN 430
@@ -400,6 +415,10 @@ typedef struct {
 struct timeval {
     long tv_sec;
     long tv_usec;
+};
+struct rlimit {
+    uint64_t rlim_cur;
+    uint64_t rlim_max;
 };
 
 struct dirent {
@@ -530,6 +549,7 @@ sys_(getpid);
 sys_(socket, int domain, int type, int protocol);
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen);
 sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen);
+sys_(socketpair, int domain, int type, int protocol, int *sv);
 sys_(stat, char *fn, struct stat *buf);
 sys_(arch_prctl, uint64_t code, uint64_t addr);
 sys_(yield);
@@ -569,12 +589,16 @@ sys_(vfork);
 sys_(execve, char *path, char **argv, char **envp);
 sys_(fstat, int fd, struct stat *buf);
 sys_(time, int64_t *timer);
+sys_(gettimeofday, struct timeval *tv, void *tz);
 sys_(clock_gettime, uint64_t arg0, struct timespec *ts);
 sys_(sendfile, int out_fd, int in_fd, uint64_t *offset_ptr, size_t count);
 sys_(statfs, char *path, struct statfs *buf);
+sys_(fstatfs, int fd, struct statfs *buf);
 sys_(pivot_root, char *new_root, char *put_old);
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec);
 sys_(getppid);
+sys_(setsid);
+sys_(getsid, int pid);
 sys_(fsopen, char *fsname, uint32_t flags);
 sys_(getuid);
 sys_(getgid);
@@ -584,6 +608,16 @@ sys_(geteuid);
 sys_(getegid);
 sys_(sysinfo, struct sysinfo *info);
 sys_(readlink);
+sys_(readlinkat, int dirfd, char *path, char *buf, size_t size);
+sys_(mkdirat, int dirfd, char *pathname, uint64_t mode);
+sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath);
+sys_(linkat, int olddirfd, char *oldpath, int newdirfd, char *newpath, int flags);
+sys_(symlinkat, char *target, int newdirfd, char *linkpath);
+sys_(ftruncate, int fd, uint64_t length);
+sys_(fsync, int fd);
+sys_(fdatasync, int fd);
+sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rlimit *old_limit);
+sys_(getrandom, void *buf, size_t buflen, uint64_t flags);
 sys_(umount2);
 sys_(link, char *name, char *nw);
 sys_(symlink, char *name, char *nw);

@@ -472,6 +472,23 @@ int fatfs_rename(file_t file, const char *nw) {
     return 0;
 }
 
+static void fatfs_resize(file_t file, uint64_t size) {
+    fatfs_lock();
+
+    if (file == NULL || file->is_dir || file->handle == NULL) {
+        fatfs_unlock();
+        return;
+    }
+
+    FIL *fp = (FIL *)file->handle;
+    if (f_lseek(fp, (FSIZE_t)size) == FR_OK) {
+        f_truncate(fp);
+        f_sync(fp);
+    }
+
+    fatfs_unlock();
+}
+
 int fatfs_ioctl(void *file, size_t cmd, void *arg) {
     return -EOPNOTSUPP;
 }
@@ -526,6 +543,7 @@ static struct vfs_callback fatfs_callbacks = {
     .dup      = fatfs_dup,
     .poll     = fatfs_poll,
     .map      = (vfs_mapfile_t)fatfs_map,
+    .resize   = (vfs_resize_t)fatfs_resize,
     .del      = (vfs_del_t)fatfs_delete,
     .rename   = (vfs_rename_t)fatfs_rename,
 };

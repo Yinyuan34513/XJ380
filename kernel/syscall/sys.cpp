@@ -181,6 +181,20 @@ static uint64_t copy_stat_to_user(struct stat *user_stat, const struct stat *kst
     return 0;
 }
 
+static uint64_t statfs_kernel_node(vfs_node_t node, struct statfs *buf)
+{
+    if (node == NULL || buf == NULL) return SYSCALL_FAULT_(EINVAL);
+    vfs_filesystem_t filesystem = get_filesystem_node(node);
+    if (filesystem == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    struct statfs kbuf;
+    memset(&kbuf, 0, sizeof(kbuf));
+    kbuf.f_type = filesystem->magic;
+
+    if (!copy_to_user_pagedir(current_user_pagedir(), buf, &kbuf, sizeof(kbuf))) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
 static int resolve_user_path_at(int dirfd, char *pathname, char **resolved)
 {
     if (resolved == NULL) return -EINVAL;
@@ -692,9 +706,41 @@ sys_(getpid)
 
 sys_(socket, int domain, int type, int protocol)
 {
-    int ret = socket_open(domain, type, protocol);
+    int sock_type = type & SOCK_TYPE_MASK;
+    uint64_t fd_flags = 0;
+    if (type & SOCK_CLOEXEC) fd_flags |= O_CLOEXEC;
+    if (type & SOCK_NONBLOCK) fd_flags |= O_NONBLOCK;
+
+    int ret = socket_open(domain, sock_type, protocol);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
+    if (fd_flags != 0)
+    {
+        fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, ret);
+        if (handle != NULL)
+        {
+            handle->flags |= fd_flags;
+            handle->node->flags |= fd_flags;
+            if (handle->node->type & file_socket)
+            {
+                int flags_ret = socket_apply_flags(handle->node, handle->node->flags);
+                if (flags_ret < 0) return SYSCALL_FAULT_(-flags_ret);
+            }
+        }
+    }
     return ret;
+}
+
+sys_(socketpair, int domain, int type, int protocol, int *sv)
+{
+    (void)protocol;
+    (void)sv;
+    int sock_type = type & SOCK_TYPE_MASK;
+    if (domain == AF_UNIX || domain == AF_LOCAL)
+    {
+        if (sock_type == SOCK_STREAM || sock_type == SOCK_DGRAM) return SYSCALL_FAULT_(EAFNOSUPPORT);
+        return SYSCALL_FAULT_(EAFNOSUPPORT);
+    }
+    return SYSCALL_FAULT_(EAFNOSUPPORT);
 }
 
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
@@ -1670,6 +1716,20 @@ sys_(time, int64_t *timer)
     return (uint64_t)timestamp;
 }
 
+sys_(gettimeofday, struct timeval *tv, void *tz)
+{
+    (void)tz;
+    if (tv == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    struct timeval ktv;
+    tm tm;
+    time_read(&tm);
+    ktv.tv_sec = (long)mktime(&tm);
+    ktv.tv_usec = (long)((nanoTime() % 1000000000ULL) / 1000ULL);
+    if (!copy_to_user_pagedir(current_user_pagedir(), tv, &ktv, sizeof(ktv))) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
 sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
 {
     struct timespec kts;
@@ -2475,6 +2535,20 @@ sys_(openat)
     return ret;
 }
 
+sys_(mkdirat, int dirfd, char *pathname, uint64_t mode)
+{
+    (void)mode;
+    if (pathname == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+
+    errno_t ret = vfs_mkdir(resolved);
+    free(resolved);
+    return ret == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(EIO);
+}
+
 
 
 sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags)
@@ -2610,6 +2684,18 @@ sys_(setpgid, int pid, int pgid)
     if (process == NULL || process->status == DEATH) { return SYSCALL_FAULT_(ESRCH); }
     if (pgid == 0) { pgid = process->pid; }
     process->pid = pgid;
+
+    // Keep the controlling tty foreground pgrp in sync for Linux userland job control.
+    tcb_t current = get_current_task();
+    if (current != NULL && current->parent_group == process)
+    {
+        for (int fd = 0; fd <= 2; fd++)
+        {
+            fd_file_handle *handle = (fd_file_handle *)queue_get(process->file_open, fd);
+            if (handle == NULL || handle->node == NULL) continue;
+            vfs_ioctl(handle->node, TIOCSPGRP, &pgid);
+        }
+    }
     return 0;
 }
 
@@ -2618,6 +2704,20 @@ sys_(getpgid)
     size_t pid     = arg0;
     pcb_t  process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
     if (process == NULL || process->status == DEATH) { return SYSCALL_FAULT_(ESRCH); }
+    return process->pid;
+}
+
+sys_(setsid)
+{
+    pcb_t process = get_current_task()->parent_group;
+    if (process == NULL) return SYSCALL_FAULT_(ESRCH);
+    return process->pid;
+}
+
+sys_(getsid, int pid)
+{
+    pcb_t process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
+    if (process == NULL || process->status == DEATH) return SYSCALL_FAULT_(ESRCH);
     return process->pid;
 }
 
@@ -2702,6 +2802,39 @@ end_rename:
     return ret;
 }
 
+sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath)
+{
+    if (oldpath == NULL || newpath == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    char *resolved_old = NULL;
+    char *resolved_new = NULL;
+    int path_ret = resolve_user_path_at(olddirfd, oldpath, &resolved_old);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+    path_ret = resolve_user_path_at(newdirfd, newpath, &resolved_new);
+    if (path_ret < 0)
+    {
+        free(resolved_old);
+        return SYSCALL_FAULT_((int)-path_ret);
+    }
+
+    vfs_node_t oldnode = vfs_open(resolved_old);
+    if (!oldnode)
+    {
+        free(resolved_old);
+        free(resolved_new);
+        return SYSCALL_FAULT_(ENOENT);
+    }
+
+    vfs_node_t newnode = vfs_open(resolved_new);
+    if (newnode) { vfs_delete(newnode); }
+
+    uint64_t ret = vfs_rename(oldnode, resolved_new) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    vfs_close(oldnode);
+    free(resolved_old);
+    free(resolved_new);
+    return ret;
+}
+
 sys_(symlink, char *name, char *nw)
 {
     if (name == NULL || nw == NULL) return SYSCALL_FAULT_(EINVAL);
@@ -2714,6 +2847,28 @@ sys_(symlink, char *name, char *nw)
     errno_t ret = vfs_symlink(kname, knw);
     free(kname);
     free(knw);
+    return ret;
+}
+
+sys_(symlinkat, char *target, int newdirfd, char *linkpath)
+{
+    if (target == NULL || linkpath == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    char *ktarget = NULL;
+    int copy_ret = copy_string_from_user(&ktarget, target, USER_PATH_MAX);
+    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
+
+    char *klinkpath = NULL;
+    int path_ret = resolve_user_path_at(newdirfd, linkpath, &klinkpath);
+    if (path_ret < 0)
+    {
+        free(ktarget);
+        return SYSCALL_FAULT_((int)-path_ret);
+    }
+
+    errno_t ret = vfs_symlink(ktarget, klinkpath);
+    free(ktarget);
+    free(klinkpath);
     return ret;
 }
 
@@ -2730,6 +2885,28 @@ sys_(link, char *name, char *nw)
     free(kname);
     free(knw);
 
+    return ret;
+}
+
+sys_(linkat, int olddirfd, char *oldpath, int newdirfd, char *newpath, int flags)
+{
+    (void)flags;
+    if (oldpath == NULL || newpath == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    char *resolved_old = NULL;
+    char *resolved_new = NULL;
+    int path_ret = resolve_user_path_at(olddirfd, oldpath, &resolved_old);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+    path_ret = resolve_user_path_at(newdirfd, newpath, &resolved_new);
+    if (path_ret < 0)
+    {
+        free(resolved_old);
+        return SYSCALL_FAULT_((int)-path_ret);
+    }
+
+    errno_t ret = vfs_link(resolved_old, resolved_new);
+    free(resolved_old);
+    free(resolved_new);
     return ret;
 }
 
@@ -2793,6 +2970,145 @@ sys_(readlink)
     }
     free(kbuf);
     return read;
+}
+
+sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
+{
+    if (path == NULL || buf == NULL || size == 0) return SYSCALL_FAULT_(EINVAL);
+
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, path, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+
+    vfs_node_t node = vfs_open(resolved);
+    free(resolved);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    if (!node->linkto)
+    {
+        vfs_close(node);
+        return SYSCALL_FAULT_(EINVAL);
+    }
+
+    size_t copy_size = MIN(size, USER_PATH_MAX);
+    char *kbuf = (char *)malloc(copy_size);
+    if (kbuf == NULL)
+    {
+        vfs_close(node);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    size_t read = vfs_readlink(node, kbuf, copy_size);
+    vfs_close(node);
+    if (read == (size_t)VFS_STATUS_FAILED)
+    {
+        free(kbuf);
+        return SYSCALL_FAULT_(EIO);
+    }
+    if (!copy_to_user_pagedir(current_user_pagedir(), buf, kbuf, read))
+    {
+        free(kbuf);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+    free(kbuf);
+    return read;
+}
+
+sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rlimit *old_limit)
+{
+    (void)resource;
+    if (pid != 0)
+    {
+        pcb_t process = found_pcb(pid);
+        if (process == NULL || process->status == DEATH) return SYSCALL_FAULT_(ESRCH);
+        if (process != get_current_task()->parent_group) return SYSCALL_FAULT_(EPERM);
+    }
+
+    if (new_limit != NULL)
+    {
+        struct rlimit ignored;
+        if (!copy_from_user_pagedir(current_user_pagedir(), &ignored, new_limit, sizeof(ignored)))
+            return SYSCALL_FAULT_(EFAULT);
+    }
+
+    if (old_limit != NULL)
+    {
+        struct rlimit current;
+        current.rlim_cur = 1024ULL * 1024ULL * 1024ULL;
+        current.rlim_max = 1024ULL * 1024ULL * 1024ULL;
+        if (!copy_to_user_pagedir(current_user_pagedir(), old_limit, &current, sizeof(current)))
+            return SYSCALL_FAULT_(EFAULT);
+    }
+
+    return 0;
+}
+
+sys_(ftruncate, int fd, uint64_t length)
+{
+    if (fd < 0) return SYSCALL_FAULT_(EBADF);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type == file_dir) return SYSCALL_FAULT_(EISDIR);
+    if (vfs_resize(handle->node, length) != VFS_STATUS_SUCCESS) return SYSCALL_FAULT_(EIO);
+    if (handle->offset > length) handle->offset = length;
+    return 0;
+}
+
+sys_(fsync, int fd)
+{
+    if (fd < 0) return SYSCALL_FAULT_(EBADF);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    vfs_update(handle->node);
+    return 0;
+}
+
+sys_(fdatasync, int fd)
+{
+    return sys_fsync(fd, 0, 0, 0, 0, 0, regs);
+}
+
+sys_(getrandom, void *buf, size_t buflen, uint64_t flags)
+{
+    (void)flags;
+    if (buf == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (buflen == 0) return 0;
+    if (!user_range_mapped(current_user_pagedir(), buf, buflen)) return SYSCALL_FAULT_(EFAULT);
+
+    size_t bounce_len = MIN(buflen, USER_IO_BOUNCE_BYTES);
+    uint8_t *bounce = (uint8_t *)malloc(bounce_len);
+    if (bounce == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    tm tm;
+    time_read(&tm);
+    uint64_t seed = nanoTime() ^ ((uint64_t)mktime(&tm) << 32);
+    tcb_t task = get_current_task();
+    if (task != NULL)
+    {
+        seed ^= (uint64_t)task->tid;
+        if (task->parent_group != NULL) seed ^= ((uint64_t)task->parent_group->pid << 16);
+    }
+
+    size_t written = 0;
+    while (written < buflen)
+    {
+        size_t chunk = MIN(buflen - written, bounce_len);
+        for (size_t i = 0; i < chunk; i++)
+        {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            bounce[i] = (uint8_t)(seed & 0xffU);
+        }
+        if (!copy_to_user_pagedir(current_user_pagedir(), (uint8_t *)buf + written, bounce, chunk))
+        {
+            free(bounce);
+            return written > 0 ? written : SYSCALL_FAULT_(EFAULT);
+        }
+        written += chunk;
+    }
+
+    free(bounce);
+    return written;
 }
 
 
@@ -2981,19 +3297,17 @@ sys_(statfs, char *path, struct statfs *buf)
     vfs_node_t node = vfs_open(kpath);
     free(kpath);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
-    vfs_filesystem_t filesystem = get_filesystem_node(node);
-    if (filesystem == NULL)
-    {
-        vfs_close(node);
-        return SYSCALL_FAULT_(EINVAL);
-    }
-
-    struct statfs kbuf;
-    memset(&kbuf, 0, sizeof(kbuf));
-    kbuf.f_type = filesystem->magic;
+    uint64_t status = statfs_kernel_node(node, buf);
     vfs_close(node);
-    if (!copy_to_user_pagedir(current_user_pagedir(), buf, &kbuf, sizeof(kbuf))) return SYSCALL_FAULT_(EFAULT);
-    return 0;
+    return status;
+}
+
+sys_(fstatfs, int fd, struct statfs *buf)
+{
+    if (fd < 0 || buf == NULL) return SYSCALL_FAULT_(EINVAL);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    return statfs_kernel_node(handle->node, buf);
 }
 
 

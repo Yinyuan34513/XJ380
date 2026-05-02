@@ -96,6 +96,11 @@ extern "C" int mkdir(const char *path, mode_t mode)
     return (int)__xposix_ret(enter_syscall(SYS_MKDIR, (uint64_t)path, mode, 0, 0, 0, 0));
 }
 
+extern "C" int mkdirat(int dirfd, const char *path, mode_t mode)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_MKDIRAT, dirfd, (uint64_t)path, mode, 0, 0, 0));
+}
+
 extern "C" int chmod(const char *path, mode_t mode)
 {
     // chmod 先接到内核 syscall；若文件系统忽略权限位，也应由内核保持兼容返回。
@@ -140,20 +145,18 @@ extern "C" int fchown(int fd, uid_t owner, gid_t group)
 
 extern "C" int truncate(const char *path, off_t length)
 {
-    // 还没有通用截断 syscall；明确返回 ENOSYS，方便上层降级或报错。
-    (void)path;
-    (void)length;
-    errno = ENOSYS;
-    return -1;
+    int fd = open(path, O_WRONLY);
+    if (fd < 0) return -1;
+    int ret = ftruncate(fd, length);
+    int saved = errno;
+    close(fd);
+    if (ret < 0) errno = saved;
+    return ret;
 }
 
 extern "C" int ftruncate(int fd, off_t length)
 {
-    // fd 截断同样等待 VFS 支持；当前只提供可链接的 POSIX 入口。
-    (void)fd;
-    (void)length;
-    errno = ENOSYS;
-    return -1;
+    return (int)__xposix_ret(enter_syscall(SYS_FTRUNCATE, fd, (uint64_t)length, 0, 0, 0, 0));
 }
 
 extern "C" int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags)

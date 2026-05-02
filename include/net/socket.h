@@ -12,11 +12,16 @@ typedef uint16_t in_port_t;
 typedef uint32_t socklen_t;
 
 #define AF_UNSPEC 0
+#define AF_UNIX   1
+#define AF_LOCAL  AF_UNIX
 #define AF_INET   2
 #define AF_INET6  10
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
+#define SOCK_TYPE_MASK 0xf
+#define SOCK_CLOEXEC 02000000
+#define SOCK_NONBLOCK 00004000
 
 #define SHUT_RD   0
 #define SHUT_WR   1

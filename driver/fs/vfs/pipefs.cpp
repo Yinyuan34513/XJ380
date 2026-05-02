@@ -195,6 +195,7 @@ static struct vfs_callback pipefs_callbacks = {
     .ioctl    = (vfs_ioctl_t)pipefs_ioctl,
     .poll     = pipefs_poll,
     .dup      = (vfs_dup_t)empty,
+    .resize   = (vfs_resize_t)dummy,
 };
 
 void pipefs_setup() {

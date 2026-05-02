@@ -132,6 +132,7 @@ typedef struct vfs_callback { // VFS回调函数
     vfs_dup_t      dup;       // 复制文件节点
     vfs_poll_t     poll;      // 轮询文件状态 (仅 devfs 等特殊文件系统实现)
     vfs_mapfile_t  map;       // 映射文件到内存 (仅 devfs 等特殊文件系统实现)
+    vfs_resize_t   resize;    // 调整文件大小
     vfs_del_t      del;         // 删除文件或文件夹
     vfs_rename_t   rename;      // 重命名文件或文件夹
 } *vfs_callback_t;
@@ -318,6 +319,7 @@ vfs_node_t vfs_do_search(vfs_node_t dir, const char *name);
 void       vfs_free_child(vfs_node_t vfs);
 errno_t    vfs_delete(vfs_node_t node);
 errno_t    vfs_rename(vfs_node_t node, const char *nw);
+errno_t    vfs_resize(vfs_node_t node, uint64_t size);
 errno_t    vfs_poll(vfs_node_t node, size_t event);
 void      *vfs_map(vfs_node_t node, uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags,
                    uint64_t offset);

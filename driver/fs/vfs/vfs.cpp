@@ -12,6 +12,7 @@
 #include "fs/vfs/list.h"
 #include "llist.h"
 #include "pipe.h"
+#include "rtc.h"
 #include "task/pcb.h"
 #include <ioctl.h>
 #include <cpu/lock.h>
@@ -396,6 +397,15 @@ errno_t vfs_delete(vfs_node_t node) {
 
 errno_t vfs_rename(vfs_node_t node, const char *nw) {
     return callbackof(node, rename)(node->handle, nw);
+}
+
+errno_t vfs_resize(vfs_node_t node, uint64_t size) {
+    if (node == NULL) return VFS_STATUS_FAILED;
+    do_update(node);
+    if (node->type == file_dir) return VFS_STATUS_FAILED;
+    callbackof(node, resize)(node->handle, size);
+    do_update(node);
+    return VFS_STATUS_SUCCESS;
 }
 
 int vfs_regist(const char *name, vfs_callback_t callback, int register_id, uint64_t magic) {
@@ -1151,6 +1161,56 @@ static errno_t tty_poll(size_t events)
     return revents;
 }
 
+static size_t null_read(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(buffer);
+    UNUSED(lba);
+    return 0;
+}
+
+static size_t null_write(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(buffer);
+    UNUSED(lba);
+    return number;
+}
+
+static size_t urandom_read(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(lba);
+    if (buffer == NULL) return 0;
+
+    tm tm_now;
+    time_read(&tm_now);
+    uint64_t seed = nanoTime() ^ ((uint64_t)mktime(&tm_now) << 32);
+    tcb_t task = get_current_task();
+    if (task != NULL)
+    {
+        seed ^= (uint64_t)task->tid;
+        if (task->parent_group != NULL) seed ^= ((uint64_t)task->parent_group->pid << 16);
+    }
+
+    for (size_t i = 0; i < number; i++)
+    {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        buffer[i] = (uint8_t)(seed & 0xffU);
+    }
+    return number;
+}
+
+static size_t urandom_write(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(buffer);
+    UNUSED(lba);
+    return number;
+}
+
 void build_tty_device()
 {
     device_t stdio;
@@ -1169,6 +1229,32 @@ void build_tty_device()
     device_t ttydev = stdio;
     strcpy(ttydev.drive_name, "tty");
     regist_device(NULL, ttydev);
+
+    device_t null_dev = {};
+    null_dev.type = DEVICE_STREAM;
+    strcpy(null_dev.drive_name, "null");
+    null_dev.flag        = 1;
+    null_dev.sector_size = 1;
+    null_dev.size        = 0;
+    null_dev.read        = null_read;
+    null_dev.write       = null_write;
+    null_dev.ioctl       = tty_ioctl;
+    null_dev.poll        = tty_poll;
+    null_dev.map         = (mapf)empty;
+    regist_device(NULL, null_dev);
+
+    device_t urandom_dev = {};
+    urandom_dev.type = DEVICE_STREAM;
+    strcpy(urandom_dev.drive_name, "urandom");
+    urandom_dev.flag        = 1;
+    urandom_dev.sector_size = 1;
+    urandom_dev.size        = (size_t)-1;
+    urandom_dev.read        = urandom_read;
+    urandom_dev.write       = urandom_write;
+    urandom_dev.ioctl       = tty_ioctl;
+    urandom_dev.poll        = tty_poll;
+    urandom_dev.map         = (mapf)empty;
+    regist_device(NULL, urandom_dev);
 }
 
 void init_tty()

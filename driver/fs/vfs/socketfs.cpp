@@ -193,6 +193,7 @@ static struct vfs_callback socketfs_callbacks = {
     .dup      = (vfs_dup_t)empty,
     .poll     = socketfs_poll_cb,
     .map      = (vfs_mapfile_t)empty,
+    .resize   = (vfs_resize_t)socketfs_dummy,
     .del      = socketfs_del,
     .rename   = (vfs_rename_t)empty,
 };

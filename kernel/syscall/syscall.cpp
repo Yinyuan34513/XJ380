@@ -51,6 +51,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_GETPID: return "getpid";
     case SYS_SOCKET: return "socket";
     case SYS_CONNECT: return "connect";
+    case SYS_SOCKETPAIR: return "socketpair";
     case SYS_CLONE: return "clone";
     case SYS_FORK: return "fork";
     case SYS_VFORK: return "vfork";
@@ -59,19 +60,33 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_WAIT4: return "wait4";
     case SYS_UNAME: return "uname";
     case SYS_FCNTL: return "fcntl";
+    case SYS_FSYNC: return "fsync";
+    case SYS_FDATASYNC: return "fdatasync";
     case SYS_SYSINFO: return "sysinfo";
     case SYS_SETUID: return "setuid";
     case SYS_SETGID: return "setgid";
     case SYS_GETPGRP: return "getpgrp";
+    case SYS_SETSID: return "setsid";
+    case SYS_GETSID: return "getsid";
     case SYS_GETCWD: return "getcwd";
     case SYS_CHDIR: return "chdir";
+    case SYS_GETTIMEOFDAY: return "gettimeofday";
     case SYS_GETDENTS64: return "getdents64";
+    case SYS_MKDIRAT: return "mkdirat";
+    case SYS_RENAMEAT: return "renameat";
+    case SYS_LINKAT: return "linkat";
+    case SYS_SYMLINKAT: return "symlinkat";
     case SYS_CLOCK_GETTIME: return "clock_gettime";
     case SYS_EXIT_GROUP: return "exit_group";
     case SYS_OPENAT: return "openat";
     case SYS_NEWFSTATAT: return "newfstatat";
+    case SYS_READLINKAT: return "readlinkat";
     case SYS_PSELECT6: return "pselect6";
     case SYS_PIPE2: return "pipe2";
+    case SYS_FTRUNCATE: return "ftruncate";
+    case SYS_FSTATFS: return "fstatfs";
+    case SYS_PRLIMIT64: return "prlimit64";
+    case SYS_GETRANDOM: return "getrandom";
     case SYS_ARCH_PRCTL: return "arch_prctl";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
     case SYS_SET_ROBUST_LIST: return "set_robust_list";
@@ -152,39 +167,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     switch (syscall_number)
     {
-    /* XJ380API POSIX Edition */
-    // case SYS_READ:
-    //     regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx);
-    //     break;
+
     case SYS_WRITE: regs->rax = (uint64_t)sys_write(regs->rdi, (uint8_t *)regs->rsi, regs->rdx, 0, 0, 0, regs); break;
-    // case SYS_OPEN:
-    //     regs->rax = (uint64_t)sys_open((const char *)regs->rdi, regs->rsi, regs->rdx);
-    //     break;
-    // case SYS_CLOSE:
-    //     regs->rax = (uint64_t)sys_close(regs->rdi);
-    //     break;
-    // case SYS_FSTAT:
-    //     regs->rax = (uint64_t)sys_fstat((uint32_t)regs->rdi, (struct stat *)regs->rsi);
-    //     break;
-    // case SYS_IOCTL:
-    //     regs->rax = 0;
-    //     break;
-    // case SYS_READV:
-    // {
-    //     int fd = regs->rdi;
-    //     struct iovec *iovec = (struct iovec *)regs->rsi;
-    //     size_t count = regs->rdx;
-    //     regs->rax = sys_readv(fd, iovec, count);
-    //     break;
-    // }
-    // case SYS_WRITEV:
-    // {
-    //     int fd = regs->rdi;
-    //     struct iovec *iovec = (struct iovec *)regs->rsi;
-    //     size_t count = regs->rdx;
-    //     regs->rax = sys_writev(fd, iovec, count);
-    //     break;
-    // }
     case SYS_READ: regs->rax = (uint64_t)sys_read(regs->rdi, (uint8_t *)regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_OPEN: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_CLOSE: regs->rax = (uint64_t)sys_close(regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -198,6 +182,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_ACCEPT:
         regs->rax =
             (uint64_t)sys_accept(regs->rdi, (struct sockaddr *)regs->rsi, (socklen_t *)regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_SOCKETPAIR:
+        regs->rax = (uint64_t)sys_socketpair(regs->rdi, regs->rsi, regs->rdx, (int *)regs->r10, 0, 0, regs);
         break;
     case SYS_STAT: regs->rax = (uint64_t)sys_stat((char *)regs->rdi, (struct stat *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_LSTAT:
@@ -213,6 +200,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_CREAT: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi, O_CREAT, 0, 0, 0, regs); break;
     case SYS_FCNTL: regs->rax = (uint64_t)sys_fcntl(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_FSYNC: regs->rax = (uint64_t)sys_fsync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_FDATASYNC: regs->rax = (uint64_t)sys_fdatasync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_MKDIR: regs->rax = (uint64_t)sys_mkdir((char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_RMDIR: regs->rax = (uint64_t)sys_rmdir(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_UNLINK: regs->rax = (uint64_t)sys_unlink(regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -264,6 +253,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETPID: regs->rax = get_current_task()->parent_group->pid; break;
     case SYS_GETTID: regs->rax = get_current_task()->tid; break;
     case SYS_TIME: regs->rax = (uint64_t)sys_time((int64_t *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_GETTIMEOFDAY:
+        regs->rax = (uint64_t)sys_gettimeofday((struct timeval *)regs->rdi, (void *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
     case SYS_GETDENTS64:
         regs->rax = (uint64_t)sys_getdents64(regs->rdi, (void *)regs->rsi, regs->rdx, 0, 0, 0, regs);
         break;
@@ -300,6 +292,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETEGID: regs->rax = (uint64_t)sys_getegid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETGROUPS: regs->rax = (uint64_t)sys_getgroups(regs->rdi, (int *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_GETPGRP: regs->rax = (uint64_t)sys_getpgid(0, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SETSID: regs->rax = (uint64_t)sys_setsid(0, 0, 0, 0, 0, 0, regs); break;
+    case SYS_GETSID: regs->rax = (uint64_t)sys_getsid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETPGID: regs->rax = (uint64_t)sys_getpgid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_SETPGID: regs->rax = (uint64_t)sys_setpgid(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_SENDFILE:
@@ -308,8 +302,14 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_STATFS:
         regs->rax = (uint64_t)sys_statfs((char *)regs->rdi, (struct statfs *)regs->rsi, 0, 0, 0, 0, regs);
         break;
+    case SYS_FSTATFS:
+        regs->rax = (uint64_t)sys_fstatfs(regs->rdi, (struct statfs *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
     case SYS_MINCORE: regs->rax = (uint64_t)sys_mincore(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_OPENAT: regs->rax = (uint64_t)sys_openat(regs->rdi, regs->rsi, regs->rdx, regs->r10, 0, 0, regs); break;
+    case SYS_MKDIRAT:
+        regs->rax = (uint64_t)sys_mkdirat(regs->rdi, (char *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_NEWFSTATAT:
         regs->rax =
             (uint64_t)sys_newfstatat(regs->rdi, (char *)regs->rsi, (struct stat *)regs->rdx, regs->r10, 0, 0, regs);
@@ -324,10 +324,30 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_faccessat2(regs->rdi, regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
         break;
     case SYS_UNLINKAT: regs->rax = (uint64_t)sys_unlinkat(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_RENAMEAT:
+        regs->rax = (uint64_t)sys_renameat(regs->rdi, (char *)regs->rsi, regs->rdx, (char *)regs->r10, 0, 0, regs);
+        break;
+    case SYS_LINKAT:
+        regs->rax = (uint64_t)sys_linkat(regs->rdi, (char *)regs->rsi, regs->rdx, (char *)regs->r10, regs->r8, 0, regs);
+        break;
+    case SYS_SYMLINKAT:
+        regs->rax = (uint64_t)sys_symlinkat((char *)regs->rdi, regs->rsi, (char *)regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_READLINK: regs->rax = (uint64_t)sys_readlink(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_READLINKAT:
+        regs->rax = (uint64_t)sys_readlinkat(regs->rdi, (char *)regs->rsi, (char *)regs->rdx, regs->r10, 0, 0, regs);
+        break;
     case SYS_LINK: regs->rax = (uint64_t)sys_link((char *)regs->rdi, (char *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_SYMLINK: regs->rax = (uint64_t)sys_symlink((char *)regs->rdi, (char *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_RENAME: regs->rax = (uint64_t)sys_rename((char *)regs->rdi, (char *)regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_FTRUNCATE: regs->rax = (uint64_t)sys_ftruncate(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_PRLIMIT64:
+        regs->rax =
+            (uint64_t)sys_prlimit64(regs->rdi, regs->rsi, (struct rlimit *)regs->rdx, (struct rlimit *)regs->r10, 0, 0, regs);
+        break;
+    case SYS_GETRANDOM:
+        regs->rax = (uint64_t)sys_getrandom((void *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
 
     case SYS_ARCH_PRCTL:
         regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);

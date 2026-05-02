@@ -10,11 +10,14 @@
 #define CELL_H           16
 #define TERM_COLS        ((TERM_RIGHT_X - TERM_LEFT_X) / CELL_W)
 #define TERM_ROWS        ((TERM_BOTTOM_Y - TERM_TOP_Y) / CELL_H)
-#define COLOR_BG         0xffffffff
-#define COLOR_FG         0x000000ff
+#define COLOR_BG         0x0b0f14ff
+#define COLOR_FG         0xe6edf3ff
 #define SEQ_MAX          128
 #define PARAM_MAX        16
 #define PTY_CHUNK        1024
+#define DEFAULT_USER     "GuoqiFish"
+#define DEFAULT_HOME     "/users/GuoqiFish"
+#define DEFAULT_SHELL    "/apps/bash"
 
 #define TIOCSCTTY        0x540E
 
@@ -65,11 +68,79 @@ static UINT32 g_bg = COLOR_BG;
 static XCOLOR g_pixel_buffer[BUSY_WIDTH * BUSY_HEIGHT];
 
 static UINT32 g_palette[16] = {
-    0x000000ff, 0xaa0000ff, 0x00aa00ff, 0xaa5500ff,
-    0x0000aaff, 0xaa00aaff, 0x00aaaaff, 0xaaaaaaff,
-    0x555555ff, 0xff5555ff, 0x55ff55ff, 0xffff55ff,
-    0x5555ffff, 0xff55ffff, 0x55ffffff, 0xffffffff,
+    0x0b0f14ff, 0xff7b72ff, 0x3fb950ff, 0xd29922ff,
+    0x58a6ffff, 0xbc8cff,   0x39c5cfff, 0xb1bac4ff,
+    0x6e7681ff, 0xffa198ff, 0x56d364ff, 0xe3b341ff,
+    0x79c0ffff, 0xd2a8ffff, 0x56d4ddff, 0xf0f6fcff,
 };
+
+static int env_count(char *envp[])
+{
+    int count = 0;
+    if (envp == NULL) return 0;
+    while (envp[count] != NULL) count++;
+    return count;
+}
+
+static bool env_has_key(char *envp[], const char *key)
+{
+    if (envp == NULL || key == NULL) return false;
+    size_t key_len = strlen(key);
+    for (int i = 0; envp[i] != NULL; i++)
+    {
+        if (strncmp(envp[i], key, key_len) == 0 && envp[i][key_len] == '=') return true;
+    }
+    return false;
+}
+
+static char **build_shell_env(char *envp[])
+{
+    static const char *extra_env[] = {
+        "TERM=xterm-256color",
+        "HOME=" DEFAULT_HOME,
+        "USER=" DEFAULT_USER,
+        "LOGNAME=" DEFAULT_USER,
+        "HOSTNAME=localhost",
+        "PATH=/apps:/system:/bin:/usr/bin",
+        "SHELL=" DEFAULT_SHELL,
+        "PWD=/apps",
+        "PS1=\\[\\033[01;32m\\]" DEFAULT_USER "@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\\\$ ",
+        NULL,
+    };
+
+    int base_count = env_count(envp);
+    int extra_count = 0;
+    for (int i = 0; extra_env[i] != NULL; i++)
+    {
+        const char *eq = strchr(extra_env[i], '=');
+        if (eq == NULL) continue;
+        char key[32];
+        size_t key_len = (size_t)(eq - extra_env[i]);
+        if (key_len >= sizeof(key)) key_len = sizeof(key) - 1;
+        memcpy(key, extra_env[i], key_len);
+        key[key_len] = '\0';
+        if (!env_has_key(envp, key)) extra_count++;
+    }
+
+    char **child_env = (char **)calloc((size_t)(base_count + extra_count + 1), sizeof(char *));
+    if (child_env == NULL) return envp;
+
+    int out = 0;
+    for (int i = 0; i < base_count; i++) child_env[out++] = envp[i];
+    for (int i = 0; extra_env[i] != NULL; i++)
+    {
+        const char *eq = strchr(extra_env[i], '=');
+        if (eq == NULL) continue;
+        char key[32];
+        size_t key_len = (size_t)(eq - extra_env[i]);
+        if (key_len >= sizeof(key)) key_len = sizeof(key) - 1;
+        memcpy(key, extra_env[i], key_len);
+        key[key_len] = '\0';
+        if (!env_has_key(envp, key)) child_env[out++] = (char *)extra_env[i];
+    }
+    child_env[out] = NULL;
+    return child_env;
+}
 
 static int clamp_i(int v, int lo, int hi)
 {
@@ -439,6 +510,7 @@ static int spawn_busybox(char *envp[])
     int pid = fork();
     if (pid == 0)
     {
+        char **child_env = build_shell_env(envp);
         int slave = open(slave_name, O_RDWR | O_NOCTTY);
         if (slave < 0) exit(126);
 
@@ -449,8 +521,10 @@ static int spawn_busybox(char *envp[])
         if (slave > 2) close(slave);
         close(g_pty_master);
 
+        char *bash_argv[] = {(char *)"/apps/bash", (char *)"-i", NULL};
+        execve("/apps/bash", bash_argv, child_env);
         char *argv[] = {(char *)"/apps/busybox", (char *)"sh", (char *)"-i", NULL};
-        execve("/apps/busybox", argv, envp);
+        execve("/apps/busybox", argv, child_env);
         exit(127);
     }
     if (pid < 0)
@@ -501,10 +575,10 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
     (void)argc;
     (void)argv;
     XWINDOW win;
-    win.title = (char *)"BusyBox";
+    win.title = (char *)"Terminal";
     win.width = BUSY_WIDTH;
     win.height = BUSY_HEIGHT;
-    win.sets = XWIN_NORMAL;
+    win.sets = XWIN_FULL_SCR;
     xapi_CreateWindow(&g_window, &win);
     xapi_SetIcon(g_window, "/system/icon/terminal.png");
     SetMsgPrcor(g_window, busyterm_msg);
@@ -514,7 +588,7 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
     if (spawn_busybox(envp) < 0)
     {
         char msg[96];
-        snprintf(msg, sizeof(msg), "busyterm: failed to start /apps/busybox sh at %s errno=%d\n",
+        snprintf(msg, sizeof(msg), "busyterm: failed to start shell at %s errno=%d\n",
                  g_spawn_stage, g_spawn_error);
         terminal_write(msg, (int)strlen(msg));
         xapi_RefreshWindow(g_window);
@@ -530,7 +604,7 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
             if (waitpid(g_child_pid, &status, WNOHANG) == g_child_pid)
             {
                 g_child_pid = -1;
-                const char *msg = "\n[busybox exited]\n";
+                const char *msg = "\n[shell exited]\n";
                 terminal_write(msg, (int)strlen(msg));
                 xapi_RefreshWindow(g_window);
                 if (g_pty_master >= 0)

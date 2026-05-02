@@ -472,6 +472,8 @@ uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_
     if (length == 0) return -1;
     size_t   p    = length / PAGE_SIZE;
     uint64_t addr = alloc_frames(p == 0 ? 1 : p);
+    if (addr == 0) return -1;
+    memset((void *)phys_to_virt(addr), 0, ((p == 0 ? 1 : p) * PAGE_SIZE));
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
@@ -485,7 +487,10 @@ void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, alloc_frames(1), flags | PTE_FRAME_ALLOCATED);
+        uint64_t frame = alloc_frames(1);
+        if (frame == 0) continue;
+        memset((void *)phys_to_virt(frame), 0, PAGE_SIZE);
+        page_map_to(directory, var, frame, flags | PTE_FRAME_ALLOCATED);
     }
 }
 

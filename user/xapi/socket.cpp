@@ -7,6 +7,11 @@ extern "C" int socket(int domain, int type, int protocol)
     return (int)__xposix_ret(enter_syscall(SYS_SOCKET, domain, type, protocol, 0, 0, 0));
 }
 
+extern "C" int socketpair(int domain, int type, int protocol, int sv[2])
+{
+    return (int)__xposix_ret(enter_syscall(SYS_SOCKETPAIR, domain, type, protocol, (uint64_t)sv, 0, 0));
+}
+
 extern "C" int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
     return (int)__xposix_ret(enter_syscall(SYS_BIND, sockfd, (uint64_t)addr, addrlen, 0, 0, 0));

@@ -263,6 +263,7 @@ static struct vfs_callback devfs_callbacks = {
     .symlink  = (vfs_mk_t)dummy,
     .ioctl    = devfs_ioctl,
     .dup      = devfs_dup,
+    .resize   = (vfs_resize_t)dummy,
     .del   = (vfs_del_t)empty,
     .rename   = (vfs_rename_t)empty,
     .poll     = devfs_poll,
