@@ -59,6 +59,8 @@ static int            g_stateCount = 0;
 static xmlv_Line      g_lines[XMLV_LINES_MAX];
 static int            g_lineCount = 0;
 static int            g_scrollTop = 0;
+static UINT64         g_width = XMLV_WINDOW_WIDTH;
+static UINT64         g_height = XMLV_WINDOW_HEIGHT;
 
 static const char *g_defaultXml =
     "<node1><node2 attribute=\"3\"></node2><node3><node4>something</node4><node4>something</node4></node3></node1>";
@@ -101,7 +103,7 @@ static int xmlv_inputX1()
 
 static int xmlv_inputX2()
 {
-    return XMLV_WINDOW_WIDTH - XMLV_PADDING - XMLV_BTN_W * 2 - XMLV_BTN_GAP * 2;
+    return (int)g_width - XMLV_PADDING - XMLV_BTN_W * 2 - XMLV_BTN_GAP * 2;
 }
 
 static int xmlv_parseBtnX1()
@@ -131,7 +133,7 @@ static int xmlv_treeInnerX1()
 
 static int xmlv_treeInnerX2()
 {
-    return XMLV_WINDOW_WIDTH - XMLV_PADDING - 2;
+    return (int)g_width - XMLV_PADDING - 2;
 }
 
 static int xmlv_treeContentY1()
@@ -141,7 +143,7 @@ static int xmlv_treeContentY1()
 
 static int xmlv_treeContentY2()
 {
-    return XMLV_TREE_Y2 - 4;
+    return (int)g_height - XMLV_PADDING - 4;
 }
 
 static int xmlv_scrollUpX1()
@@ -424,9 +426,11 @@ static void xmlv_getInputTail(char *out, int outLen)
 
 static void xmlv_drawUi()
 {
-    xapi_DrawRect(g_handle, 0, 0, XMLV_WINDOW_WIDTH - 1, XMLV_WINDOW_HEIGHT - 1, 0xf6f8faff, true);
+    xapi_GetWindowSize(g_handle, &g_width, &g_height);
+    xmlv_fixScroll();
+    xapi_DrawRect(g_handle, 0, 0, (UINT32)g_width - 1, (UINT32)g_height - 1, 0xf6f8faff, true);
 
-    xapi_DrawRect(g_handle, 0, XMLV_HEADER_Y1, XMLV_WINDOW_WIDTH - 1, XMLV_HEADER_Y2, 0xe4e9efff, true);
+    xapi_DrawRect(g_handle, 0, XMLV_HEADER_Y1, (UINT32)g_width - 1, XMLV_HEADER_Y2, 0xe4e9efff, true);
     xapi_DrawText(g_handle, XMLV_PADDING, 2, (char *)"XML Explorer", 11, 0x0a1929ff);
     xapi_DrawText(g_handle, 150, 2, (char *)"Input XML then press Enter or Parse. Click [+]/[-] lines to fold.", 10,
                   0x2b3a49ff);
@@ -441,7 +445,7 @@ static void xmlv_drawUi()
     xapi_DrawRect(g_handle, xmlv_clearBtnX1(), XMLV_INPUT_Y1, xmlv_clearBtnX2(), XMLV_INPUT_Y2, 0x6c757dff, true);
     xapi_DrawText(g_handle, xmlv_clearBtnX1() + 15, XMLV_INPUT_Y1 + 2, (char *)"Clear", 11, 0xffffffff);
 
-    xapi_DrawRect(g_handle, XMLV_PADDING, XMLV_STATUS_Y1, XMLV_WINDOW_WIDTH - XMLV_PADDING, XMLV_STATUS_Y2, 0xffffffff,
+    xapi_DrawRect(g_handle, XMLV_PADDING, XMLV_STATUS_Y1, (UINT32)g_width - XMLV_PADDING, XMLV_STATUS_Y2, 0xffffffff,
                   true);
     xapi_DrawText(g_handle, XMLV_PADDING + 4, XMLV_STATUS_Y1 + 1, g_status, 10, 0x203040ff);
 
@@ -457,8 +461,8 @@ static void xmlv_drawUi()
         xapi_DrawLine(g_handle, cx, XMLV_INPUT_Y1 + 5, cx, XMLV_INPUT_Y2 - 4, 0x2d8cf0ff);
     }
 
-    xapi_DrawRect(g_handle, XMLV_PADDING, XMLV_TREE_Y1, XMLV_WINDOW_WIDTH - XMLV_PADDING, XMLV_TREE_Y2, 0x00000020, false);
-    xapi_DrawRect(g_handle, XMLV_PADDING + 1, XMLV_TREE_Y1 + 1, XMLV_WINDOW_WIDTH - XMLV_PADDING - 1, XMLV_TREE_Y2 - 1,
+    xapi_DrawRect(g_handle, XMLV_PADDING, XMLV_TREE_Y1, (UINT32)g_width - XMLV_PADDING, (UINT32)g_height - XMLV_PADDING, 0x00000020, false);
+    xapi_DrawRect(g_handle, XMLV_PADDING + 1, XMLV_TREE_Y1 + 1, (UINT32)g_width - XMLV_PADDING - 1, (UINT32)g_height - XMLV_PADDING - 1,
                   0xffffffff, true);
 
     xapi_DrawRect(g_handle, xmlv_scrollUpX1(), xmlv_scrollBtnY1(), xmlv_scrollUpX2(), xmlv_scrollBtnY2(), 0xe4e9efff, true);
@@ -540,7 +544,7 @@ static void xmlv_handleLeftClick(int x, int y)
         return;
     }
 
-    if (xmlv_inRect(x, y, XMLV_PADDING, XMLV_TREE_Y1, XMLV_WINDOW_WIDTH - XMLV_PADDING, XMLV_TREE_Y2))
+    if (xmlv_inRect(x, y, XMLV_PADDING, XMLV_TREE_Y1, (int)g_width - XMLV_PADDING, (int)g_height - XMLV_PADDING))
     {
         g_inputFocus = false;
         xmlv_onTreeClick(x, y);
@@ -608,6 +612,12 @@ void xmlv_messagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
             xmlv_scrollBy(1);
         g_needRedraw = true;
         break;
+    case MSG_RESIZE:
+        g_width = hData;
+        g_height = lData;
+        xmlv_fixScroll();
+        g_needRedraw = true;
+        break;
     default:
         break;
     }
@@ -623,7 +633,7 @@ int main(int argc, char *argv[], char *envp[])
     win.title  = (char *)"XML Explorer";
     win.width  = XMLV_WINDOW_WIDTH;
     win.height = XMLV_WINDOW_HEIGHT;
-    win.sets   = XWIN_NORMAL;
+    win.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
 
     xapi_CreateWindow(&g_handle, &win);
     xapi_SetIcon(g_handle, "/system/icon/texter.png");

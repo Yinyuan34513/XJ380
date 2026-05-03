@@ -218,6 +218,17 @@ void process_mouse_button()
                                                    get_sheet(sht_img, current_window->w_sheet)->by +
                                                        get_sheet(sht_img, current_window->w_sheet)->height);
             }
+            else if (current_window->type == XWIN_NORMAL && current_window->can_maximize &&
+                     current_window->width >= 80 &&
+                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 75 &&
+                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 48 &&
+                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
+                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
+            {
+                // 最大化 / 还原
+                ms_dec.sht_now = current_window->w_sheet;
+                toggle_window_maximized(xwmii, sht_img, current_window);
+            }
         }
         ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
         ms_dec.left_release_window  = current_window;
@@ -337,7 +348,7 @@ void process_mouse_button()
             }
         }
     }
-    
+
     // 处理滚轮事件
     int scroll = get_mouse_scroll();
     if (scroll != 0 && current_window != NULL)
@@ -503,12 +514,20 @@ void process_mouse_info()
                 // 点在了窗口上
                 ms_dec.win_move_lock = true;
                 ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
-                lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
-                ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
-                ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
+                WINDOWLSP moving_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+                if (moving_window != NULL && moving_window->is_maximized)
+                {
+                    ms_dec.win_move_lock = false;
+                }
+                else
+                {
+                    lift_sheet(sht_img, ms_dec.sht_now);
+                    refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
+                    ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
+                    ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
+                }
             }
             SHEET *hover_sheet = found_sheetmb(sht_img, mouse_x, mouse_y);
             if (hover_sheet == NULL)

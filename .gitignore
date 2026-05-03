@@ -13,6 +13,8 @@ out/draw.o
 /open-vmdk-master
 /compile_commands.json
 .cache
+.config
+include/generated/
 
 *.img
 *.vmdk
@@ -33,3 +35,5 @@ scsi.txt
 .clangd
 
 .codex
+
+venv/

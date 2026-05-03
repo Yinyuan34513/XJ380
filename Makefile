@@ -1,13 +1,29 @@
+PYTHON ?= python3
+KCONFIG_CONFIG ?= .config
+KCONFIG_DEFCONFIG ?= configs/xj380_defconfig
+KCONFIG_SCRIPT := tools/kconfig.py
+KCONFIG_AUTOCONF := include/generated/autoconf.h
+KCONFIG_AUTO_CONF := include/generated/auto.conf
+NO_KCONFIG_GOALS := clean clean.clangd gen.clangd defconfig olddefconfig menuconfig savedefconfig
+
+ifeq ($(filter $(NO_KCONFIG_GOALS),$(MAKECMDGOALS)),)
+-include $(KCONFIG_AUTO_CONF)
+endif
+
+.DEFAULT_GOAL := all
+
+KCONFIG_CPPFLAGS := -include generated/autoconf.h
+
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include 
-CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
-BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
+C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include $(KCONFIG_CPPFLAGS)
+CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include $(KCONFIG_CPPFLAGS) -Wno-writable-strings -Wno-c++11-narrowing
+BOOT_C_FLAGS = -g -I ./boot/include -I ./include $(KCONFIG_CPPFLAGS) -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= 1
-SMP ?= 4
-SUDO ?= 1
-KVM ?= 1
+DEBUG ?= $(if $(CONFIG_QEMU_DEBUG),1,0)
+SMP ?= $(or $(CONFIG_QEMU_SMP_CPUS),4)
+SUDO ?= $(if $(CONFIG_QEMU_USE_SUDO),1,0)
+KVM ?= $(if $(CONFIG_QEMU_ENABLE_KVM),1,0)
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
@@ -30,10 +46,10 @@ KMOD_DIR := kmod
 # not an X11 DISPLAY string like ":0".
 # Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
 # via SUDO_CMD when needed.
-DISPLAY_BACKEND ?= gtk
+DISPLAY_BACKEND ?= $(or $(CONFIG_QEMU_DISPLAY_BACKEND),gtk)
 USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
-AUDIO_BACKEND ?= sdl
-HDA_CODEC ?= hda-output
+AUDIO_BACKEND ?= $(or $(CONFIG_QEMU_AUDIO_BACKEND),sdl)
+HDA_CODEC ?= $(or $(CONFIG_QEMU_HDA_CODEC),hda-output)
 QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?= 
@@ -64,7 +80,13 @@ CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
 PWD := $(shell pwd)
 
-$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER)
+$(KCONFIG_CONFIG): Kconfig $(KCONFIG_SCRIPT) $(KCONFIG_DEFCONFIG)
+	@$(PYTHON) $(KCONFIG_SCRIPT) olddefconfig
+
+$(KCONFIG_AUTOCONF) $(KCONFIG_AUTO_CONF): Kconfig $(KCONFIG_SCRIPT) $(KCONFIG_DEFCONFIG) $(KCONFIG_CONFIG)
+	@$(PYTHON) $(KCONFIG_SCRIPT) syncconfig
+
+$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER) $(KCONFIG_AUTOCONF)
 
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
@@ -111,7 +133,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $<.clangd_template >> $<.clangd
 	@printf "\033[1;32m[Done]\033[0m $<.clangd was generated.\n"
 
-all: $(KERNEL_OBJS) liballoc-x86_64.a
+all: $(KCONFIG_AUTO_CONF) $(KERNEL_OBJS) liballoc-x86_64.a
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c boot/bootlib.c
 
@@ -120,16 +142,32 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 
 	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
 
-	@$(MAKE) -C user build_xapi
-	@$(MAKE) -C user
+	@$(MAKE) -C user KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) build_xapi
+	@$(MAKE) -C user KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF)
 	@$(MAKE) -C $(KMOD_DIR)
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd
+.PHONY: clean format check gen.clangd defconfig olddefconfig menuconfig savedefconfig
+
+defconfig:
+	@$(PYTHON) $(KCONFIG_SCRIPT) defconfig --defconfig $(KCONFIG_DEFCONFIG)
+	@echo "Loaded $(KCONFIG_DEFCONFIG)"
+
+olddefconfig:
+	@$(PYTHON) $(KCONFIG_SCRIPT) olddefconfig
+	@echo "Updated $(KCONFIG_CONFIG)"
+
+menuconfig:
+	@$(PYTHON) $(KCONFIG_SCRIPT) menuconfig
+
+savedefconfig:
+	@$(PYTHON) $(KCONFIG_SCRIPT) savedefconfig --output $(KCONFIG_DEFCONFIG)
+	@echo "Saved $(KCONFIG_DEFCONFIG)"
+
 clean:
-	@rm -rf $(BUILD_DIR) ./XJ380.img
+	@rm -rf $(BUILD_DIR) ./XJ380.img include/generated
 	@$(MAKE) -C user clean
 
 format: $(FMT_FILES)
@@ -220,5 +258,5 @@ vmdk: vdisk
 run: vdisk
 	@$(QEMU_CMD)
 
-justrun:
+justrun: $(KCONFIG_AUTO_CONF)
 	@$(QEMU_CMD)

@@ -1,0 +1,77 @@
+mainmenu "XJ380 Configuration"
+
+config XJ380
+	bool
+	default y
+
+menu "Kernel"
+
+choice BUILD_EDITION
+	prompt "Build edition"
+	default BUILD_EDITION_DEBUG
+	help
+	  Select the kernel build edition exported through build_settings.h.
+
+config BUILD_EDITION_DEBUG
+	bool "Debug"
+
+config BUILD_EDITION_RELEASE
+	bool "Release"
+
+endchoice
+
+config OS_VERSION
+	string "OS version string"
+	default "BetaVersion"
+
+config KN_VERSION
+	string "Kernel version string"
+	default "XSK 2.1.0"
+
+config OS_EDITION
+	string "OS edition string"
+	default "XINGJI XJ380 Singularity 1.0.0"
+
+config STACK_SIZE
+	int "Default kernel stack size"
+	default 262144
+	range 4096 16777216
+	help
+	  Default stack size in bytes.
+
+endmenu
+
+menu "QEMU"
+
+config QEMU_DEBUG
+	bool "Enable QEMU GDB stub and pause at startup"
+	default y
+	help
+	  Enables the existing -s -S QEMU flags used for early debugging.
+
+config QEMU_USE_SUDO
+	bool "Run QEMU through sudo"
+	default y
+
+config QEMU_ENABLE_KVM
+	bool "Enable KVM acceleration"
+	default y
+
+config QEMU_SMP_CPUS
+	int "QEMU CPU count"
+	default 4
+	range 1 256
+
+config QEMU_DISPLAY_BACKEND
+	string "QEMU display backend"
+	default "gtk"
+
+config QEMU_AUDIO_BACKEND
+	string "QEMU audio backend"
+	default "sdl"
+
+config QEMU_HDA_CODEC
+	string "QEMU HDA codec device"
+	default "hda-output"
+
+endmenu

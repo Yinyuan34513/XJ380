@@ -6,7 +6,7 @@
 typedef struct WINDOWLS *WINDOWLSP;
 typedef void (*MsgPrcor)(uint64_t Type, uint64_t hData,
                          uint64_t lData); // 别问为什么放在这儿 不放这儿会爆炸
-                         
+
 #include <graphics/sheet.h>
 #include <graphics/components/rb_menu.h>
 
@@ -22,6 +22,12 @@ typedef struct WINDOWLS
     rb_menu_regt_p w_menu;
     WINDOWLSP next;
     uint64_t  type;
+    bool      is_maximized;
+    int       restore_bx;
+    int       restore_by;
+    uint32_t  restore_width;
+    uint32_t  restore_height;
+    bool      can_maximize;
 } WINDOWLS;
 
 typedef struct WIN_THEME
@@ -59,6 +65,8 @@ void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 WINDOWLS *mpf_found_win(MsgPrcor mpf);
+bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+void set_window_maximize_support(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, bool can_maximize);
 
 void resize_theme_width(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t swidth, uint32_t height);
 void resize_theme_height(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t height, uint32_t sheight);

@@ -11,7 +11,6 @@ static const int      CHAT_INPUT_TEXT_MAX   = 68;
 static const int      CHAT_SCROLL_STEP      = 3;
 static const int      CHAT_LINES_TOP        = 60;
 static const int      CHAT_LINE_HEIGHT      = 16;
-static const int      CHAT_VISIBLE_LINES    = 20;
 
 typedef struct chat_line {
     char     text[CHAT_LINE_LENGTH];
@@ -30,6 +29,14 @@ static char        g_status[128]         = "Starting chat...";
 static chat_line_t g_lines[CHAT_MAX_LINES];
 static int         g_line_count          = 0;
 static int         g_scroll_offset       = 0;
+static UINT64      g_width               = CHAT_WIDTH;
+static UINT64      g_height              = CHAT_HEIGHT;
+
+static int chat_visible_lines()
+{
+    int visible = ((int)g_height - CHAT_LINES_TOP - 88) / CHAT_LINE_HEIGHT;
+    return visible < 1 ? 1 : visible;
+}
 
 static void chat_format_head_text(const char *text, char *buffer, int buffer_size, int max_chars)
 {
@@ -79,7 +86,7 @@ static void chat_format_tail_text(const char *text, char *buffer, int buffer_siz
 
 static void chat_clamp_scroll(void)
 {
-    int max_scroll = MAX(0, g_line_count - CHAT_VISIBLE_LINES);
+    int max_scroll = MAX(0, g_line_count - chat_visible_lines());
     if (g_scroll_offset < 0) {
         g_scroll_offset = 0;
     } else if (g_scroll_offset > max_scroll) {
@@ -192,27 +199,29 @@ static void render_chat_window()
 {
     char header_status[CHAT_LINE_LENGTH];
     char input_view[CHAT_LINE_LENGTH];
+    xapi_GetWindowSize(g_window, &g_width, &g_height);
     chat_format_head_text(g_status, header_status, sizeof(header_status), CHAT_HEADER_TEXT_MAX);
     chat_format_tail_text(g_input, input_view, sizeof(input_view), CHAT_INPUT_TEXT_MAX);
 
-    xapi_DrawRect(g_window, 0, 0, CHAT_WIDTH - 1, CHAT_HEIGHT - 1, 0xf4efe6ff, true);
-    xapi_DrawRect(g_window, 0, 0, CHAT_WIDTH - 1, 39, 0x264653ff, true);
-    xapi_DrawRect(g_window, 0, CHAT_HEIGHT - 72, CHAT_WIDTH - 1, CHAT_HEIGHT - 1, 0xe9dcc9ff, true);
-    xapi_DrawRect(g_window, 12, 52, CHAT_WIDTH - 13, CHAT_HEIGHT - 84, 0xfffbf5ff, true);
-    xapi_DrawRect(g_window, 12, CHAT_HEIGHT - 60, CHAT_WIDTH - 13, CHAT_HEIGHT - 16, 0xffffffff, true);
-    xapi_DrawRect(g_window, 12, 52, CHAT_WIDTH - 13, CHAT_HEIGHT - 84, 0xded6caff, false);
-    xapi_DrawRect(g_window, 12, CHAT_HEIGHT - 60, CHAT_WIDTH - 13, CHAT_HEIGHT - 16, 0xd0c4b4ff, false);
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, (UINT32)g_height - 1, 0xf4efe6ff, true);
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, 39, 0x264653ff, true);
+    xapi_DrawRect(g_window, 0, (UINT32)g_height - 72, (UINT32)g_width - 1, (UINT32)g_height - 1, 0xe9dcc9ff, true);
+    xapi_DrawRect(g_window, 12, 52, (UINT32)g_width - 13, (UINT32)g_height - 84, 0xfffbf5ff, true);
+    xapi_DrawRect(g_window, 12, (UINT32)g_height - 60, (UINT32)g_width - 13, (UINT32)g_height - 16, 0xffffffff, true);
+    xapi_DrawRect(g_window, 12, 52, (UINT32)g_width - 13, (UINT32)g_height - 84, 0xded6caff, false);
+    xapi_DrawRect(g_window, 12, (UINT32)g_height - 60, (UINT32)g_width - 13, (UINT32)g_height - 16, 0xd0c4b4ff, false);
 
     xapi_DrawSWText(g_window, 16, 12, (char *)"XJ380 Chat", 0xffffffff);
     xapi_DrawSWText(g_window, 150, 12, header_status, 0xd8f3dcff);
-    xapi_DrawSWText(g_window, CHAT_WIDTH - 184, 12, (char *)"Wheel: scroll history", 0xcfe8e6ff);
-    xapi_DrawSWText(g_window, 16, CHAT_HEIGHT - 54, (char *)"Input:", 0x3d405bff);
-    xapi_DrawSWText(g_window, 72, CHAT_HEIGHT - 54, input_view, 0x111111ff);
+    xapi_DrawSWText(g_window, (UINT32)g_width - 184, 12, (char *)"Wheel: scroll history", 0xcfe8e6ff);
+    xapi_DrawSWText(g_window, 16, (UINT32)g_height - 54, (char *)"Input:", 0x3d405bff);
+    xapi_DrawSWText(g_window, 72, (UINT32)g_height - 54, input_view, 0x111111ff);
 
     chat_clamp_scroll();
-    int max_start = MAX(0, g_line_count - CHAT_VISIBLE_LINES);
+    int visible_lines = chat_visible_lines();
+    int max_start = MAX(0, g_line_count - visible_lines);
     int start     = MAX(0, max_start - g_scroll_offset);
-    int end       = MIN(g_line_count, start + CHAT_VISIBLE_LINES);
+    int end       = MIN(g_line_count, start + visible_lines);
     for (int i = start; i < end; ++i) {
         xapi_DrawSWText(g_window, 20, CHAT_LINES_TOP + (i - start) * CHAT_LINE_HEIGHT, g_lines[i].text, g_lines[i].color);
     }
@@ -400,6 +409,12 @@ static void chat_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
         chat_clamp_scroll();
         g_need_redraw = true;
         break;
+    case MSG_RESIZE:
+        g_width = hData;
+        g_height = lData;
+        chat_clamp_scroll();
+        g_need_redraw = true;
+        break;
     default:
         break;
     }
@@ -415,7 +430,7 @@ static int chat_main_impl(int argc, char *argv[], char *envp[])
     window.title  = (char *)"Chat";
     window.width  = CHAT_WIDTH;
     window.height = CHAT_HEIGHT;
-    window.sets   = XWIN_NORMAL;
+    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
 
     xapi_CreateWindow(&g_window, &window);
     xapi_SetIcon(g_window, "/system/icon/terminal.png");

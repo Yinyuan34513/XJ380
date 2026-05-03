@@ -1062,6 +1062,8 @@ private:
     bool                   suppress_history_record_ = false;
     BrowserNavReason       pending_nav_reason_ = BrowserNavReason::Normal;
     BrowserInputMode       input_mode_ = BrowserInputMode::Url;
+    int                    window_width_ = BROWSER_WIDTH;
+    int                    window_height_ = BROWSER_HEIGHT;
     int                    scroll_y_ = 0;
     int                    text_content_height_ = 0;
     unsigned int           navigation_serial_ = 0;
@@ -1101,12 +1103,12 @@ private:
     const BrowserFetchResult *find_cached_resource(const std::string &url) const;
     void store_cached_resource(const std::string &url, const BrowserFetchResult &result);
     const CachedImage *find_cached_image(const std::string &url) const;
-    int  input_right() const { return BROWSER_WIDTH - BROWSER_MARGIN - 152; }
-    int  find_right() const { return BROWSER_WIDTH - BROWSER_MARGIN - 152; }
+    int  input_right() const { return window_width_ - BROWSER_MARGIN - 152; }
+    int  find_right() const { return window_width_ - BROWSER_MARGIN - 152; }
     int  content_x() const { return BROWSER_MARGIN; }
     int  content_y() const { return BROWSER_HEADER_HEIGHT + BROWSER_MARGIN; }
-    int  content_width() const { return BROWSER_WIDTH - BROWSER_MARGIN * 2 - BROWSER_SCROLLBAR_WIDTH; }
-    int  content_height() const { return BROWSER_HEIGHT - content_y() - BROWSER_MARGIN; }
+    int  content_width() const { return window_width_ - BROWSER_MARGIN * 2 - BROWSER_SCROLLBAR_WIDTH; }
+    int  content_height() const { return window_height_ - content_y() - BROWSER_MARGIN; }
     int  scrollbar_x() const { return content_x() + content_width(); }
     int  scroll_content_height() const;
     void clamp_scroll();
@@ -2011,8 +2013,8 @@ BrowserCommand BrowserApp::command_at(int x, int y) const
         {BrowserCommand::Forward, 58, 16, 96, 44, ">"},
         {BrowserCommand::Reload, 102, 16, 172, 44, "Reload"},
         {BrowserCommand::Stop, 178, 16, 242, 44, "Stop"},
-        {BrowserCommand::FindPrev, BROWSER_WIDTH - 132, 52, BROWSER_WIDTH - 76, 76, "Prev"},
-        {BrowserCommand::FindNext, BROWSER_WIDTH - 70, 52, BROWSER_WIDTH - 14, 76, "Next"},
+        {BrowserCommand::FindPrev, window_width_ - 132, 52, window_width_ - 76, 76, "Prev"},
+        {BrowserCommand::FindNext, window_width_ - 70, 52, window_width_ - 14, 76, "Next"},
     };
 
     for (const BrowserButton &button : buttons) {
@@ -2407,6 +2409,19 @@ void BrowserApp::handle_message(unsigned long long type, unsigned long long hDat
             }
         }
         break;
+    case MSG_RESIZE:
+        window_width_ = static_cast<int>(hData);
+        window_height_ = static_cast<int>(lData);
+        if (document_) {
+            container_.set_viewport(content_width(), content_height());
+            document_->render(static_cast<float>(content_width()));
+        } else if (!page_text_.empty()) {
+            text_lines_ = wrap_text_for_width(page_text_, std::max(120, content_width() - 24));
+            text_content_height_ = static_cast<int>(text_lines_.size()) * BROWSER_TEXT_LINE_HEIGHT + 24;
+        }
+        clamp_scroll();
+        invalidate_all();
+        break;
     default:
         break;
     }
@@ -2546,13 +2561,13 @@ void BrowserApp::load_current_url()
 
 void BrowserApp::render_frame()
 {
-    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEIGHT - 1, COLOR_BG, true);
-    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
+    xapi_DrawRect(window_, 0, 0, window_width_ - 1, window_height_ - 1, COLOR_BG, true);
+    xapi_DrawRect(window_, 0, 0, window_width_ - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
     xapi_DrawRect(window_,
                   BROWSER_MARGIN,
                   BROWSER_HEADER_HEIGHT + 2,
-                  BROWSER_WIDTH - BROWSER_MARGIN,
-                  BROWSER_HEIGHT - BROWSER_MARGIN,
+                  window_width_ - BROWSER_MARGIN,
+                  window_height_ - BROWSER_MARGIN,
                   COLOR_PANEL,
                   true);
     xapi_DrawRect(window_,
@@ -2573,7 +2588,7 @@ void BrowserApp::render_frame()
 
 void BrowserApp::render_header()
 {
-    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
+    xapi_DrawRect(window_, 0, 0, window_width_ - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
     xapi_DrawRect(window_,
                   BROWSER_INPUT_X,
                   BROWSER_INPUT_Y,
@@ -2594,8 +2609,8 @@ void BrowserApp::render_header()
         {BrowserCommand::Forward, 58, 16, 96, 44, ">"},
         {BrowserCommand::Reload, 102, 16, 172, 44, "Reload"},
         {BrowserCommand::Stop, 178, 16, 242, 44, "Stop"},
-        {BrowserCommand::FindPrev, BROWSER_WIDTH - 132, 52, BROWSER_WIDTH - 76, 76, "Prev"},
-        {BrowserCommand::FindNext, BROWSER_WIDTH - 70, 52, BROWSER_WIDTH - 14, 76, "Next"},
+        {BrowserCommand::FindPrev, window_width_ - 132, 52, window_width_ - 76, 76, "Prev"},
+        {BrowserCommand::FindNext, window_width_ - 70, 52, window_width_ - 14, 76, "Next"},
     };
     for (const BrowserButton &button : buttons) {
         draw_button(button);
@@ -2634,11 +2649,11 @@ void BrowserApp::render_header()
     }
 
     const std::string title = page_title_.empty() ? std::string("litehtml browser") : page_title_;
-    xapi_DrawRect(window_, BROWSER_WIDTH - 136, 16, BROWSER_WIDTH - BROWSER_MARGIN, 44, COLOR_HEADER, true);
-    draw_text_clipped(BROWSER_WIDTH - 132, 20, 110, title, COLOR_MUTED);
+    xapi_DrawRect(window_, window_width_ - 136, 16, window_width_ - BROWSER_MARGIN, 44, COLOR_HEADER, true);
+    draw_text_clipped(window_width_ - 132, 20, 110, title, COLOR_MUTED);
 
     if (!hovered_url_.empty()) {
-        draw_text_clipped(180, 82, BROWSER_WIDTH - 200, hovered_url_, COLOR_STATUS);
+        draw_text_clipped(180, 82, window_width_ - 200, hovered_url_, COLOR_STATUS);
     }
 }
 
@@ -2712,7 +2727,7 @@ void BrowserApp::render()
         render_frame();
         render_header();
         render_content();
-        xapi_RefreshPartWindow(window_, 0, 0, BROWSER_WIDTH, BROWSER_HEIGHT);
+        xapi_RefreshPartWindow(window_, 0, 0, window_width_, window_height_);
         frame_dirty_ = false;
         header_dirty_ = false;
         content_dirty_ = false;
@@ -2722,7 +2737,7 @@ void BrowserApp::render()
 
     if (header_dirty_) {
         render_header();
-        xapi_RefreshPartWindow(window_, 0, 0, BROWSER_WIDTH, BROWSER_HEADER_HEIGHT);
+        xapi_RefreshPartWindow(window_, 0, 0, window_width_, BROWSER_HEADER_HEIGHT);
         header_dirty_ = false;
     }
 
@@ -2747,7 +2762,7 @@ int BrowserApp::run()
     window.title = const_cast<char *>("Browser");
     window.width = BROWSER_WIDTH;
     window.height = BROWSER_HEIGHT;
-    window.sets = XWIN_NORMAL;
+    window.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
 
     xapi_CreateWindow(&window_, &window);
     xapi_SetIcon(window_, const_cast<char *>("/system/icon/terminal.png"));
