@@ -51,11 +51,9 @@ MKFS_SIZE_ARG = $(IMAGE_FAT_SECTORS)
 endif
 VMDK_OUTPUT_FORMAT ?= $(or $(CONFIG_VMDK_OUTPUT_FORMAT),vmdk)
 
-ifeq ($(CONFIG_IMAGE_INCLUDE_STARDUST_EXAMPLES),y)
 STARDUST_EXAMPLES := \
 	frameworks/StardustUI/examples/helloworld \
 	frameworks/StardustUI/examples/layout
-endif
 STARDUSTUI_EXAMPLE_DIRS := $(STARDUST_EXAMPLES)
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
@@ -176,7 +174,7 @@ all: $(KCONFIG_AUTO_CONF) $(KERNEL_OBJS) liballoc-x86_64.a
 	@$(MAKE) -C $(KMOD_DIR)
 	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
 		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
-			$(MAKE) -C $$dir copy PLATFORM=xj380 KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) || exit $$?; \
+			$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
 		done; \
 	fi
 
@@ -207,7 +205,7 @@ clean:
 stardustui.examples.copy:
 	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
 		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
-			$(MAKE) -C $$dir copy PLATFORM=xj380 KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) || exit $$?; \
+			$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
 		done; \
 	fi
 
@@ -280,10 +278,8 @@ vdisk: all
 
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 
-ifeq ($(CONFIG_IMAGE_COPY_STARDUST_EXAMPLES),y)
 	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps
 	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps
-endif
 	
 # temp test (remember to delete)
 ifeq ($(CONFIG_IMAGE_INCLUDE_TEST_DESKTOP_FILE),y)
