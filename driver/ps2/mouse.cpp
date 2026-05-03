@@ -350,6 +350,8 @@ void process_mouse_button()
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
+    (void)regs_ptr;
+    (void)error_code;
     send_eoi();
     uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
@@ -362,7 +364,6 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 void process_mouse_info()
 {
     ms_dec.need_flush = false;
-    process_mouse_button();
 
     if (desktop_refresh_pending)
     {

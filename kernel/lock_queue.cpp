@@ -3,22 +3,57 @@
 
 static inline void queue_append_node(lock_queue *q, lock_node *new_node)
 {
+    new_node->next = NULL;
     if (q->head == NULL)
     {
+        new_node->prev = NULL;
         q->head = new_node;
+        q->tail = new_node;
     }
     else
     {
-        lock_node *current = q->head;
-        while (current->next != NULL)
-        {
-            current = current->next;
-        }
-        current->next = new_node;
+        new_node->prev = q->tail;
+        q->tail->next = new_node;
+        q->tail = new_node;
+    }
+    if (q->rr_cursor == NULL)
+    {
+        q->rr_cursor = q->head;
+    }
+    q->size++;
+}
+
+static inline void *queue_remove_locked(lock_queue *q, lock_node *node)
+{
+    if (q == NULL || node == NULL) return NULL;
+
+    lock_node *next_cursor = node->next != NULL ? node->next : q->head;
+
+    if (node->prev != NULL) node->prev->next = node->next;
+    else q->head = node->next;
+
+    if (node->next != NULL) node->next->prev = node->prev;
+    else q->tail = node->prev;
+
+    if (q->rr_cursor == node)
+    {
+        q->rr_cursor = (node->next != NULL) ? node->next : q->head;
     }
 
-    q->tail = new_node;
-    q->size++;
+    if (q->head == NULL)
+    {
+        q->tail      = NULL;
+        q->rr_cursor = NULL;
+    }
+    else if (q->rr_cursor == NULL)
+    {
+        q->rr_cursor = next_cursor != NULL ? next_cursor : q->head;
+    }
+
+    void *handle = node->data;
+    free(node);
+    q->size--;
+    return handle;
 }
 
 lock_queue *queue_init()
@@ -30,6 +65,7 @@ lock_queue *queue_init()
     }
     memset(q, 0, sizeof(lock_queue));
     q->head = q->tail = NULL;
+    q->rr_cursor      = NULL;
     q->next_index     = 0;
     q->size           = 0;
     q->lock           = SPIN_INIT;
@@ -45,6 +81,7 @@ size_t lock_queue_enqueue(lock_queue *q, void *data)
 
     new_node->data  = data;
     new_node->next  = NULL;
+    new_node->prev  = NULL;
 
     spin_lock(&q->lock);
     new_node->index = q->next_index++;
@@ -62,12 +99,34 @@ size_t queue_enqueue(lock_queue *q, void *data)
 
     new_node->data  = data;
     new_node->next  = NULL;
+    new_node->prev  = NULL;
 
     spin_lock(&q->lock);
     new_node->index = q->next_index++;
     queue_append_node(q, new_node);
     spin_unlock(&q->lock);
 
+    return new_node->index;
+}
+
+size_t queue_enqueue_ref(lock_queue *q, void *data, lock_node **out_node)
+{
+    if (out_node != NULL) *out_node = NULL;
+    if (q == NULL) return -1;
+
+    lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
+    if (!new_node) return -1;
+
+    new_node->data = data;
+    new_node->next = NULL;
+    new_node->prev = NULL;
+
+    spin_lock(&q->lock);
+    new_node->index = q->next_index++;
+    queue_append_node(q, new_node);
+    spin_unlock(&q->lock);
+
+    if (out_node != NULL) *out_node = new_node;
     return new_node->index;
 }
 
@@ -79,6 +138,7 @@ size_t queue_enqueue_id(lock_queue *q, void *data, size_t id)
 
     new_node->data  = data;
     new_node->next  = NULL;
+    new_node->prev  = NULL;
 
     spin_lock(&q->lock);
     new_node->index = id;
@@ -112,35 +172,29 @@ void *queue_remove_at(lock_queue *q, size_t index)
     if (q == NULL) return NULL;
     spin_lock(&q->lock);
     lock_node *current  = q->head;
-    lock_node *previous = NULL;
 
     while (current != NULL)
     {
         if (current->index == index)
         {
-            if (previous == NULL)
-            {
-                lock_node *new_head = current->next;
-                q->head             = new_head;
-            }
-            else { previous->next = current->next; }
-
-            if (current == q->tail)
-            {
-                q->tail = previous;
-            }
-
-            void *handle = current->data;
-            free(current);
-            q->size--;
+            void *handle = queue_remove_locked(q, current);
             spin_unlock(&q->lock);
             return handle;
         }
-        previous = current;
         current  = current->next;
     }
     spin_unlock(&q->lock);
     return NULL;
+}
+
+void *queue_remove_node(lock_queue *q, lock_node *node)
+{
+    if (q == NULL || node == NULL) return NULL;
+
+    spin_lock(&q->lock);
+    void *handle = queue_remove_locked(q, node);
+    spin_unlock(&q->lock);
+    return handle;
 }
 
 void *queue_dequeue(lock_queue *q)
@@ -154,7 +208,12 @@ void *queue_dequeue(lock_queue *q)
     lock_node *temp = q->head;
     void      *data = temp->data;
     q->head         = q->head->next;
+    if (q->head != NULL) q->head->prev = NULL;
     if (!q->head) { q->tail = NULL; }
+    if (q->rr_cursor == temp)
+    {
+        q->rr_cursor = q->head;
+    }
     q->size--;
     spin_unlock(&q->lock);
     free(temp);
@@ -187,8 +246,13 @@ lock_queue *queue_copy(lock_queue *src, void *(*data_copy)(void *))
         new_node->data  = data_copy != NULL ? data_copy(current->data) : current->data;
         new_node->index = current->index;
         new_node->next  = NULL;
+        new_node->prev  = new_q->tail;
 
-        if (!new_q->head) { new_q->head = new_q->tail = new_node; }
+        if (!new_q->head)
+        {
+            new_node->prev = NULL;
+            new_q->head = new_q->tail = new_node;
+        }
         else
         {
             new_q->tail->next = new_node;
@@ -227,7 +291,7 @@ void queue_destroy(lock_queue *q)
         free(current);
         current = next;
     }
-    q->head = q->tail = NULL;
+    q->head = q->tail = q->rr_cursor = NULL;
     spin_unlock(&q->lock);
     free(q);
 }

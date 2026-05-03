@@ -14,6 +14,7 @@
 #include <graphics/window/window.h>
 #include <krlibc.h>
 #include <mm/frame.h>
+#include <mm/uaccess.h>
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <rtc.h>
@@ -45,8 +46,13 @@ uint64_t do_xapi_GetTime()
 void do_xapi_GetCurrentUser(uint64_t dst)
 {
     xapi_type_UserInfo *dest = (xapi_type_UserInfo *)dst;
-    memcpy(dest->name, current_user->name, strlen(current_user->name));
-    dest->user_type = current_user->user_type;
+    if (dest == NULL || current_user == NULL) return;
+
+    xapi_type_UserInfo local;
+    memset(&local, 0, sizeof(local));
+    memcpy(local.name, current_user->name, strlen(current_user->name));
+    local.user_type = current_user->user_type;
+    copy_to_user_pagedir(get_current_task()->parent_group->pagedir, dest, &local, sizeof(local));
 }
 
 void do_xapi_Output(char *str)
@@ -147,6 +153,10 @@ void do_xapi_Printline(char *str)
 
 void do_xapi_OutputSerial(char *str)
 {
+    tcb_t task = get_current_task();
+    write_serial_fmt("[xapi-serial task=%s ptr=0x%llx] ",
+                     task != NULL ? task->name : "<none>",
+                     (unsigned long long)(uint64_t)str);
     write_serial_string(str);
 }
 
@@ -169,8 +179,10 @@ void do_xapi_Sleep(uint64_t ms)
 void do_xapi_GetTimeX(uint64_t tt)
 {
     if (!tt) { return; }
-    tm *time_s = (tm *)tt;
-    time_read(time_s);
+    tm local;
+    memset(&local, 0, sizeof(local));
+    time_read(&local);
+    copy_to_user_pagedir(get_current_task()->parent_group->pagedir, (void *)tt, &local, sizeof(local));
 }
 
 extern uint64_t memory_total_size;

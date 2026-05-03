@@ -800,7 +800,16 @@ static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) 
 }
 
 static size_t stdout_write(int drive, uint8_t *buffer, size_t number, size_t lba) {
-    write_serial_fmt((char*)buffer);
+    (void)drive;
+    (void)lba;
+    if (buffer == NULL) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < number; ++i) {
+        write_serial((char)buffer[i]);
+    }
+
     return number;
 }
 
