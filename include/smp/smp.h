@@ -1,7 +1,11 @@
 #ifndef _SMP_H_
 #define _SMP_H_
 
-#define MAX_CPU_NUM 256
+#ifndef CONFIG_MAX_CPU_NUM
+#define CONFIG_MAX_CPU_NUM 256
+#endif
+
+#define MAX_CPU_NUM CONFIG_MAX_CPU_NUM
 
 #include "lock_queue.h"
 #include "task/pcb.h"

@@ -104,7 +104,7 @@ def write_outputs(kconf, kconfiglib, write_config):
     kconf.write_autoconf(str(AUTOCONF_H))
     write_make_auto_conf(kconf, kconfiglib)
     if write_config:
-        kconf.write_config(str(CONFIG_FILE))
+        kconf.write_config(str(CONFIG_FILE), save_old=False)
 
 
 def cmd_defconfig(args):
