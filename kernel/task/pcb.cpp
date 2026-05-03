@@ -583,9 +583,16 @@ void switch_to_user_mode()
 {
     close_interrupt;
 
-    uint64_t rsp = get_current_task()->user_stack_top;
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL)
+    {
+        write_serial_string("switch_to_user_mode: invalid current task\n");
+        process_exit();
+    }
+
+    uint64_t rsp = task->user_stack_top;
     page_directory_t *current_dir = get_current_directory();
-    page_directory_t *target_dir  = get_current_task()->parent_group->pagedir;
+    page_directory_t *target_dir  = task->parent_group->pagedir;
     if (target_dir != NULL && current_dir != target_dir)
     {
         switch_page_directory(target_dir);
@@ -1308,17 +1315,6 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     vfs_close(node);
 
-    spin_lock(&process->file_open->lock);
-    queue_foreach(process->file_open, node)
-    {
-        fd_file_handle *file_node = (fd_file_handle *)node->data;
-        vfs_close(file_node->node);
-        free(file_node);
-    }
-    spin_unlock(&process->file_open->lock);
-    queue_destroy(process->file_open);
-    process->file_open = queue_init();
-    invalidate_process_message_pipes(process);
     spin_lock(&process->virt_queue->lock);
     queue_foreach(process->virt_queue, node)
     {

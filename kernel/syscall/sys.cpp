@@ -1996,7 +1996,7 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
 
 sys_(vfork)
 {
-    return process_fork(regs, false, 0);
+    return process_fork(regs, true, 0);
 }
 
 sys_(execve, char *path, char **argv, char **envp)

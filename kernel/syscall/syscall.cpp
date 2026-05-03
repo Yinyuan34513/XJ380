@@ -315,7 +315,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)-ENOSYS;
         break;
     case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
-    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
+    case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
     case SYS_FUTEX:
         regs->rax = (uint64_t)sys_futex((uint32_t *)regs->rdi, regs->rsi, regs->rdx,
                                         (const struct timespec *)regs->r10, (uint32_t *)regs->r8, regs->r9, regs);

@@ -40,20 +40,10 @@ static size_t xapi_strnlen(const char *str, size_t max_len)
     return len;
 }
 
-void do_xapi_GetCurrentUser(uint64_t dst)
+void xapi_output_kernel(const char *str)
 {
-    xapi_type_UserInfo *dest = (xapi_type_UserInfo *)dst;
-    if (dest == NULL || current_user == NULL) return;
+    if (str == NULL) return;
 
-    xapi_type_UserInfo local;
-    memset(&local, 0, sizeof(local));
-    memcpy(local.name, current_user->name, strlen(current_user->name));
-    local.user_type = current_user->user_type;
-    copy_to_user_pagedir(get_current_task()->parent_group->pagedir, dest, &local, sizeof(local));
-}
-
-void do_xapi_Output(char *str)
-{
     pcb_t front_p = get_current_task()->parent_group;
     pcb_t caller = front_p;
     while (true)

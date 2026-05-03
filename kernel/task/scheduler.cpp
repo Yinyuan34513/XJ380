@@ -14,6 +14,12 @@ extern bool          no_interrupt;
 const uint64_t       TIME_SLICE = 4;
 const uint64_t       MIN_SLICE  = 1;
 
+static bool trace_fsbase_task(tcb_t task)
+{
+    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
+           (strstr(task->name, "opkg") != NULL || strstr(task->parent_group->name, "opkg") != NULL);
+}
+
 void enable_scheduler()
 {
     is_scheduler = true;

@@ -79,12 +79,3 @@ static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, co
     if (!user_range_mapped(pagedir, dst, size)) return false;
     return copy_user_bytes_pagedir(pagedir, dst, src, size, true);
 }
-
-static inline bool copy_to_user_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size)
-{
-    if (size == 0) return true;
-    if (src == NULL) return false;
-    if (!user_range_mapped(pagedir, dst, size)) return false;
-    memcpy(dst, src, size);
-    return true;
-}
