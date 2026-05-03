@@ -142,6 +142,21 @@ static bool append_cmdline_arg(char *cmdline, size_t cmdline_size, char **cursor
     return true;
 }
 
+static void invalidate_process_message_pipes(pcb_t process)
+{
+    if (process == NULL || process->thread_queue == NULL) return;
+
+    spin_lock(&process->thread_queue->lock);
+    queue_foreach(process->thread_queue, node)
+    {
+        tcb_t thread = (tcb_t)node->data;
+        if (thread == NULL) continue;
+        thread->message_pipe_read_fd  = -1;
+        thread->message_pipe_write_fd = -1;
+    }
+    spin_unlock(&process->thread_queue->lock);
+}
+
 pcb_t found_pcb(int pid)
 {
     if (pcb_group_queue == NULL) return NULL;
@@ -568,14 +583,15 @@ void switch_to_user_mode()
 {
     close_interrupt;
 
-    tcb_t task = get_current_task();
-    if (task == NULL || task->parent_group == NULL)
+    uint64_t rsp = get_current_task()->user_stack_top;
+    page_directory_t *current_dir = get_current_directory();
+    page_directory_t *target_dir  = get_current_task()->parent_group->pagedir;
+    if (target_dir != NULL && current_dir != target_dir)
     {
-        write_serial_string("switch_to_user_mode: invalid current task\n");
-        process_exit();
+        switch_page_directory(target_dir);
     }
 
-    uint64_t rsp = task->user_stack_top;
+    // 鏋勫缓鐢ㄦ埛鏍堝苟鑾峰彇 argc 鍜?argv
     uint64_t ep;
     rsp = build_user_stack(task, rsp, task->main, 0, NULL, 0, &ep);
     if (rsp == 0)
@@ -1291,6 +1307,18 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     process->vfork   = false;
 
     vfs_close(node);
+
+    spin_lock(&process->file_open->lock);
+    queue_foreach(process->file_open, node)
+    {
+        fd_file_handle *file_node = (fd_file_handle *)node->data;
+        vfs_close(file_node->node);
+        free(file_node);
+    }
+    spin_unlock(&process->file_open->lock);
+    queue_destroy(process->file_open);
+    process->file_open = queue_init();
+    invalidate_process_message_pipes(process);
     spin_lock(&process->virt_queue->lock);
     queue_foreach(process->virt_queue, node)
     {
@@ -1667,6 +1695,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
     new_task->context0.ss     = 0x10;
     new_task->context0.es     = 0x10;
     new_task->context0.ds     = 0x10;
+    new_task->fs              = 0x10;
     new_task->status          = CREATE;
     new_task->main            = (uint64_t)_start;
     save_fpu_context(&new_task->fpu_context);
@@ -1803,10 +1832,11 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->main           = (uint64_t)_start;
     new_task->context0.cs    = 0x8;
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
+    new_task->fs                                                   = 0;
     new_task->status                                                      = CREATE;
     save_fpu_context(&new_task->fpu_context);
 
-    new_task->fs_base = (uint64_t)new_task;
+    new_task->fs_base = 0;
 
     new_task->window_count = 0;
 
@@ -1939,6 +1969,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     new_task->main           = (uint64_t)_start;
     new_task->context0.cs    = 0x8;
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
+    new_task->fs                                                   = 0;
     new_task->status                                                      = CREATE;
     save_fpu_context(&new_task->fpu_context);
 
@@ -2079,6 +2110,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->brk_start   = USER_BRK_START;
     pcb->brk_end     = USER_BRK_END;
     pcb->brk_current = pcb->brk_start;
+    pcb->mmap_start  = USER_MMAP_START;
     // pcb->msgprci = false;
 
     pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
@@ -2126,6 +2158,7 @@ void process_setup()
     kernel_pcb->file_open    = queue_init();
     kernel_pcb->virt_queue   = queue_init();
     kernel_pcb->ipc_queue    = queue_init();
+    kernel_pcb->mmap_start   = USER_MMAP_START;
 
     kernel_pcb->child_index = 0;
 

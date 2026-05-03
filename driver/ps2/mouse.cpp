@@ -425,7 +425,9 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
     uint8_t status = inb(PS2_CMD_PORT);
     if ((status & PS2_STATUS_OBF) == 0 || (status & PS2_STATUS_AUX) == 0)
     {
-        send_eoi();
+        (void)regs_ptr;
+    (void)error_code;
+    send_eoi();
         return;
     }
 
@@ -441,7 +443,6 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 void process_mouse_info()
 {
     ms_dec.need_flush = false;
-    process_mouse_button();
 
     if (desktop_refresh_pending)
     {

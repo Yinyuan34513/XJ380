@@ -11,12 +11,8 @@ volatile bool        is_scheduler = false;
 extern lock_queue   *pcb_group_queue;
 extern XSK_SMP_INFO *xsi;
 extern bool          no_interrupt;
-
-static bool trace_fsbase_task(tcb_t task)
-{
-    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
-           (strstr(task->name, "opkg") != NULL || strstr(task->parent_group->name, "opkg") != NULL);
-}
+const uint64_t       TIME_SLICE = 4;
+const uint64_t       MIN_SLICE  = 1;
 
 void enable_scheduler()
 {
@@ -105,13 +101,18 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
         // Returning to user mode: keep user GSBASE clear and leave CPU-local
         // data in KGSBASE for the next syscall/swapgs entry.
         write_gsbase(0);
+        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(target->fs));
     } else {
         // Returning to kernel mode (for example, resuming inside a syscall):
         // kernel code expects %gs to point at the current CPU area.
+        uint64_t fs_selector = target->fs;
+        if (target->task_level != TASK_APPLICATION_LEVEL && fs_selector == 0)
+        {
+            fs_selector = 0x10;
+        }
         write_gsbase((uint64_t)get_current_cpu());
+        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(fs_selector));
     }
-
-    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(target->fs));
     write_fsbase(target->fs_base);
 
     save_fpu_context(&current_task0->fpu_context);
@@ -166,6 +167,17 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
 
 spin_t scheduler_lock = SPIN_INIT;
 
+static inline bool is_task_schedulable(tcb_t task, tcb_t current)
+{
+    if (task == NULL) return false;
+    if (task == current) return false;
+    if (task->status == DEATH || task->status == OUT || task->status == FUTEX) return false;
+    if (task->task_level == TASK_IDLE_LEVEL) return false;
+    if (task->parent_group == NULL) return false;
+    if (task->parent_group->status == DEATH || task->parent_group->status == FUTEX) return false;
+    return true;
+}
+
 tcb_t select_next_task_safe()
 {
     spin_lock(&scheduler_lock);
@@ -178,73 +190,32 @@ tcb_t select_next_task_safe()
         return NULL;
     }
     
-    // 如果只有一个任务，直接返回
-    if (queue->size == 1) {
-        tcb_t only_task = (tcb_t)queue->head->data;
+    tcb_t current = get_current_task();
+    if (queue->head == NULL) {
         spin_unlock(&scheduler_lock);
-        
-        // 检查任务状态
-        if (only_task->status == RUNNING || only_task->status == START) {
-            return only_task;
-        }
         return NULL;
     }
-    
-    // 从当前任务开始寻找下一个可运行任务
-    tcb_t current = get_current_task();
-    lock_node *start_node = NULL;
-    lock_node *node = queue->head;
-    
-    // 找到当前任务在队列中的位置
-    while (node != NULL) {
-        if (node->data == current) {
-            start_node = node;
-            break;
-        }
-        node = node->next;
+
+    if (queue->rr_cursor == NULL) {
+        queue->rr_cursor = queue->head;
     }
-    
-    // 如果没找到当前任务，从头开始
-    if (start_node == NULL) {
-        start_node = queue->head;
-    }
-    
-    // 从下一个节点开始循环查找
-    lock_node *current_node = start_node->next ? start_node->next : queue->head;
-    int attempts = 0;
-    const int max_attempts = queue->size * 2; // 防止无限循环
-    
-    while (attempts < max_attempts) {
-        tcb_t candidate = (tcb_t)current_node->data;
-        
-        // 检查任务状态是否可调度
-        if (candidate != current && 
-            candidate->status != DEATH && 
-            candidate->status != OUT && 
-            candidate->status != FUTEX &&
-            candidate->task_level != TASK_IDLE_LEVEL) {
-            
-            // 检查父进程状态
-            if (candidate->parent_group && 
-                candidate->parent_group->status != DEATH && 
-                candidate->parent_group->status != FUTEX) {
-                
-                spin_unlock(&scheduler_lock);
-                return candidate;
-            }
+
+    lock_node *start_node = queue->rr_cursor;
+    lock_node *node = start_node;
+    size_t scanned = 0;
+    while (node != NULL && scanned < queue->size) {
+        tcb_t candidate = (tcb_t)node->data;
+        if (is_task_schedulable(candidate, current)) {
+            queue->rr_cursor = node->next != NULL ? node->next : queue->head;
+            spin_unlock(&scheduler_lock);
+            return candidate;
         }
-        
-        // 移动到下一个节点
-        current_node = current_node->next ? current_node->next : queue->head;
-        attempts++;
-        
-        // 如果又回到起点，说明没找到合适的任务
-        if (current_node == start_node) {
-            break;
-        }
+
+        node = node->next != NULL ? node->next : queue->head;
+        ++scanned;
+        if (node == start_node) break;
     }
-    
-    // 没找到其他任务，返回当前任务或NULL
+
     tcb_t result = (current->status == RUNNING || current->status == START) ? current : NULL;
     spin_unlock(&scheduler_lock);
     return result;
@@ -281,8 +252,24 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         return reg;
     }
 
+    PROCESSOR_INFO *cpu = get_current_cpu();
+    if (current->status == RUNNING &&
+        current->task_level != TASK_IDLE_LEVEL &&
+        current->status != FUTEX &&
+        current->status != DEATH &&
+        current->status != OUT) {
+        cpu->scheduler_ticks++;
+        if (cpu->scheduler_ticks < TIME_SLICE) {
+            send_eoi();
+            return reg;
+        }
+    } else {
+        cpu->scheduler_ticks = 0;
+    }
+
     tcb_t best = select_next_task();
     if (best == NULL || best == current) {
+        cpu->scheduler_ticks = 0;
         send_eoi();
         return reg;
     }
@@ -318,11 +305,13 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         
         // 只有上下文有效的任务才切换
         if (best->context0.rip != 0) {
+            cpu->scheduler_ticks = 0;
             change_proccess(reg, current, best);
-            get_current_cpu()->current_task = best;
+            cpu->current_task = best;
         } else {
             // 如果上下文无效，不切换并恢复状态
             current->status = RUNNING;
+            cpu->scheduler_ticks = 0;
         }
         
         enable_scheduler();
@@ -334,6 +323,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
 void scheduler_yield()
 {
     if (!is_scheduler) return;
+    get_current_cpu()->scheduler_ticks = TIME_SLICE;
     __asm__ volatile("int %0" ::"i"(32));
 }
 EXPORT_SYMBOL(scheduler_yield);
@@ -406,8 +396,8 @@ size_t add_task(tcb_t new_task)
         }
     }
 	    
-    new_task->cpu_id = min_cpu_index;
-    new_task->queue_index = queue_enqueue(min_cpu->scheduler_queue, new_task);
+    new_task->cpu_id      = min_cpu_index;
+    new_task->queue_index = queue_enqueue_ref(min_cpu->scheduler_queue, new_task, &new_task->sched_node);
 
     // debug_sched_queue(min_cpu->scheduler_queue);
     
@@ -423,8 +413,10 @@ void remove_task(tcb_t task) {
         PROCESSOR_INFO *cpu = get_cpu(task->cpu_id);
         if (cpu != NULL &&
             cpu->scheduler_queue != NULL &&
-            queue_get(cpu->scheduler_queue, task->queue_index) == task) {
-            queue_remove_at(cpu->scheduler_queue, task->queue_index);
+            task->sched_node != NULL &&
+            task->sched_node->data == task) {
+            queue_remove_node(cpu->scheduler_queue, task->sched_node);
+            task->sched_node = NULL;
             spin_unlock(&scheduler_lock);
             return;
         }
@@ -433,10 +425,14 @@ void remove_task(tcb_t task) {
     for (size_t i = 0; i < get_cpu_num(); i++) {
         PROCESSOR_INFO *cpu = get_cpu(i);
         if (cpu == NULL || cpu->scheduler_queue == NULL) continue;
-        if (queue_get(cpu->scheduler_queue, task->queue_index) != task) continue;
+        lock_node *node = cpu->scheduler_queue->head;
+        while (node != NULL && node->data != task) node = node->next;
+        if (node == NULL) continue;
 
         task->cpu_id = i;
-        queue_remove_at(cpu->scheduler_queue, task->queue_index);
+        task->sched_node = node;
+        queue_remove_node(cpu->scheduler_queue, task->sched_node);
+        task->sched_node = NULL;
         break;
     }
 

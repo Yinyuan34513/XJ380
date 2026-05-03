@@ -161,9 +161,11 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     apu_idle->parent_group = kernel_group;
     apu_idle->str_cwd      = "/";
     apu_idle->cwd          = rootdir;
+    apu_idle->fs           = 0x10;
+    apu_idle->fs_base      = 0;
 
     info->current_task    = apu_idle;
-    apu_idle->queue_index = queue_enqueue(info->scheduler_queue, apu_idle);
+    apu_idle->queue_index = queue_enqueue_ref(info->scheduler_queue, apu_idle, &apu_idle->sched_node);
 
     get_current_cpu()->current_task = apu_idle;
 

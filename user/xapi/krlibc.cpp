@@ -86,8 +86,11 @@ void *memset(void *dst, int val, size_t size)
 char *strcpy(char *dest, const char *src)
 {
     char *ret = dest;
-    while ((*dest++ = *src++))
-        ;
+    do
+    {
+        *dest++ = *src++;
+    } while (*src != 0);
+    *dest = 0;
     return ret;
 }
 

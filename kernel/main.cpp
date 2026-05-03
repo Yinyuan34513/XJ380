@@ -303,6 +303,7 @@ void components_flusher()
     while (true)
     {
         if (allow_to_flush && desktop_done) break;
+        scheduler_yield();
     }
     write_serial_string("components flusher is running\n");
     while (true)
@@ -336,6 +337,7 @@ void components_flusher()
         }
         if (ms_dec.need_flush) { process_mouse_info(); }
         if (sht_img != NULL) { flush_sheet_damage_queue(sht_img); }
+        scheduler_yield();
     }
 }
 
@@ -569,6 +571,7 @@ skip_timer_widget_init:
         }
 #endif
         flush_sheet_damage_queue(&shtinf);
+        scheduler_yield();
     }
 }
 #define KERNEL_HEAP_START 0xffffc00000000000
@@ -689,10 +692,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     idle_thread->kernel_stack = get_rsp();
     idle_thread->status       = RUNNING;
     strcpy(idle_thread->name, "idle thread");
+    idle_thread->fs           = 0x10;
+    idle_thread->fs_base      = 0;
     idle_thread->group_index  = queue_enqueue(kernel_group->thread_queue, idle_thread);
     idle_thread->context0.rsp = get_rsp();
     set_kernel_stack(get_rsp());
-    idle_thread->queue_index = queue_enqueue(get_current_cpu()->scheduler_queue, idle_thread);
+    idle_thread->queue_index = queue_enqueue_ref(get_current_cpu()->scheduler_queue, idle_thread, &idle_thread->sched_node);
 
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;

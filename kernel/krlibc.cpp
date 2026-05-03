@@ -96,12 +96,13 @@ EXPORT_SYMBOL(memcmp);
 
 char *strcpy(char *dest, const char *src)
 {
+    char *ret = dest;
     do
     {
         *dest++ = *src++;
     } while (*src != 0);
     *dest = 0;
-    return dest;
+    return ret;
 }
 
 EXPORT_SYMBOL(strcpy);
