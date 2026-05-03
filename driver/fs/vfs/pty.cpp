@@ -278,11 +278,12 @@ static size_t ptmx_write(void *file, const void *addr, size_t offset, size_t siz
     UNUSED(offset);
     pty_handle_t *pair = (pty_handle_t *)file;
     if (pair == NULL || addr == NULL) return VFS_STATUS_FAILED;
+    if (size == 0) return 0;
 
     while (true)
     {
         spin_lock(&pair->lock);
-        if (pair->ptr_slave + size < PTY_BUFF_SIZE)
+        if (pair->ptr_slave < PTY_BUFF_SIZE)
         {
             spin_unlock(&pair->lock);
             break;
@@ -292,18 +293,19 @@ static size_t ptmx_write(void *file, const void *addr, size_t offset, size_t siz
     }
 
     spin_lock(&pair->lock);
-    memcpy(pair->slave_buffer + pair->ptr_slave, addr, size);
+    size_t writable = MIN(size, PTY_BUFF_SIZE - pair->ptr_slave);
+    memcpy(pair->slave_buffer + pair->ptr_slave, addr, writable);
     if (pair->term.c_iflag & ICRNL)
     {
-        for (size_t i = 0; i < size; i++)
+        for (size_t i = 0; i < writable; i++)
         {
             if (pair->slave_buffer[pair->ptr_slave + i] == '\r')
                 pair->slave_buffer[pair->ptr_slave + i] = '\n';
         }
     }
-    pair->ptr_slave += size;
+    pair->ptr_slave += writable;
     spin_unlock(&pair->lock);
-    return size;
+    return writable;
 }
 
 static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
@@ -477,13 +479,13 @@ static size_t pts_write_inner(pty_handle_t *pair, const uint8_t *in, size_t size
         uint8_t ch = in[i];
         if (translate && ch == '\n')
         {
-            if (pair->ptr_master + 2 >= PTY_BUFF_SIZE) break;
+            if (pair->ptr_master + 2 > PTY_BUFF_SIZE) break;
             pair->master_buffer[pair->ptr_master++] = '\r';
             pair->master_buffer[pair->ptr_master++] = '\n';
         }
         else
         {
-            if (pair->ptr_master + 1 >= PTY_BUFF_SIZE) break;
+            if (pair->ptr_master + 1 > PTY_BUFF_SIZE) break;
             pair->master_buffer[pair->ptr_master++] = ch;
         }
         written++;
@@ -497,6 +499,9 @@ static size_t pts_write(void *file, const void *addr, size_t offset, size_t size
     UNUSED(offset);
     pty_handle_t *pair = (pty_handle_t *)file;
     if (pair == NULL || addr == NULL) return VFS_STATUS_FAILED;
+    if (size == 0) return 0;
+    bool translate = (pair->term.c_oflag & OPOST) && (pair->term.c_oflag & ONLCR);
+    size_t min_space = translate ? 2 : 1;
 
     while (true)
     {
@@ -506,7 +511,7 @@ static size_t pts_write(void *file, const void *addr, size_t offset, size_t size
             spin_unlock(&pair->lock);
             return (size_t)-EIO;
         }
-        if (pair->ptr_master + size < PTY_BUFF_SIZE)
+        if (PTY_BUFF_SIZE - pair->ptr_master >= min_space)
         {
             spin_unlock(&pair->lock);
             break;

@@ -26,6 +26,12 @@
 sys_(chmod, char *path, uint64_t mode);
 sys_(fchmod, int fd, uint64_t mode);
 
+static bool trace_fsbase_task(tcb_t task)
+{
+    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
+           (strstr(task->name, "opkg") != NULL || strstr(task->parent_group->name, "opkg") != NULL);
+}
+
 static const char *debug_syscall_name(uint64_t nr)
 {
     switch (nr)
@@ -44,6 +50,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_MPROTECT: return "mprotect";
     case SYS_MUNMAP: return "munmap";
     case SYS_BRK: return "brk";
+    case SYS_MADVISE: return "madvise";
     case SYS_RT_SIGACTION: return "rt_sigaction";
     case SYS_RT_SIGPROCMASK: return "rt_sigprocmask";
     case SYS_ACCESS: return "access";
@@ -54,6 +61,12 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_GETPID: return "getpid";
     case SYS_SOCKET: return "socket";
     case SYS_CONNECT: return "connect";
+    case SYS_SENDTO: return "sendto";
+    case SYS_RECVFROM: return "recvfrom";
+    case SYS_GETSOCKNAME: return "getsockname";
+    case SYS_GETPEERNAME: return "getpeername";
+    case SYS_SETSOCKOPT: return "setsockopt";
+    case SYS_GETSOCKOPT: return "getsockopt";
     case SYS_SOCKETPAIR: return "socketpair";
     case SYS_CLONE: return "clone";
     case SYS_FORK: return "fork";
@@ -91,10 +104,12 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_FSTATFS: return "fstatfs";
     case SYS_PRLIMIT64: return "prlimit64";
     case SYS_GETRANDOM: return "getrandom";
+    case SYS_FUTEX: return "futex";
     case SYS_ARCH_PRCTL: return "arch_prctl";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
     case SYS_SET_ROBUST_LIST: return "set_robust_list";
     case SYS_RSEQ: return "rseq";
+    case SYS_CLONE3: return "clone3";
     default: return "?";
     }
 }
@@ -162,6 +177,22 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     regs->rsp    = user_rsp;
     regs->ss     = SELECTOR_USER_DS;
 
+    tcb_t syscall_task = get_current_task();
+    if (syscall_task != NULL && syscall_task->task_level == TASK_APPLICATION_LEVEL)
+    {
+        uint64_t hw_fs_base = read_fsbase();
+        if (hw_fs_base != 0 || syscall_task->fs_base == 0)
+            syscall_task->fs_base = hw_fs_base;
+        else
+        {
+            if (trace_fsbase_task(syscall_task))
+                write_serial_fmt("[fsbase] syscall-entry-restore task=%s tid=%llu nr=%llu tcb=0x%llx hw=0x%llx rip=0x%llx\n",
+                                 syscall_task->name, syscall_task->tid, regs->rax, syscall_task->fs_base,
+                                 hw_fs_base, regs->rcx);
+            write_fsbase(syscall_task->fs_base);
+        }
+    }
+
     uint64_t syscall_number = regs->rax;
     bool trace_syscall = debug_trace_linux_syscall();
     if (trace_syscall)
@@ -193,6 +224,30 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax =
             (uint64_t)sys_accept(regs->rdi, (struct sockaddr *)regs->rsi, (socklen_t *)regs->rdx, 0, 0, 0, regs);
         break;
+    case SYS_SENDTO:
+        regs->rax = (uint64_t)sys_sendto(regs->rdi, (const void *)regs->rsi, regs->rdx, regs->r10,
+                                         (const struct sockaddr *)regs->r8, regs->r9, regs);
+        break;
+    case SYS_RECVFROM:
+        regs->rax = (uint64_t)sys_recvfrom(regs->rdi, (void *)regs->rsi, regs->rdx, regs->r10,
+                                           (struct sockaddr *)regs->r8, (socklen_t *)regs->r9, regs);
+        break;
+    case SYS_SETSOCKOPT:
+        regs->rax = (uint64_t)sys_setsockopt(regs->rdi, regs->rsi, regs->rdx, (const void *)regs->r10,
+                                             regs->r8, 0, regs);
+        break;
+    case SYS_GETSOCKOPT:
+        regs->rax = (uint64_t)sys_getsockopt(regs->rdi, regs->rsi, regs->rdx, (void *)regs->r10,
+                                             (socklen_t *)regs->r8, 0, regs);
+        break;
+    case SYS_GETSOCKNAME:
+        regs->rax = (uint64_t)sys_getsockname(regs->rdi, (struct sockaddr *)regs->rsi,
+                                              (socklen_t *)regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_GETPEERNAME:
+        regs->rax = (uint64_t)sys_getpeername(regs->rdi, (struct sockaddr *)regs->rsi,
+                                             (socklen_t *)regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_SOCKETPAIR:
         regs->rax = (uint64_t)sys_socketpair(regs->rdi, regs->rsi, regs->rdx, (int *)regs->r10, 0, 0, regs);
         break;
@@ -208,7 +263,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_WRITEV:
         regs->rax = (uint64_t)sys_writev(regs->rdi, (struct iovec *)regs->rsi, regs->rdx, 0, 0, 0, regs);
         break;
-    case SYS_CREAT: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi, O_CREAT, 0, 0, 0, regs); break;
+    case SYS_CREAT:
+        regs->rax = (uint64_t)sys_open((char *)regs->rdi, O_CREAT | O_WRONLY | O_TRUNC, regs->rsi, 0, 0, 0, regs);
+        break;
     case SYS_FCNTL: regs->rax = (uint64_t)sys_fcntl(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_FSYNC: regs->rax = (uint64_t)sys_fsync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_FDATASYNC: regs->rax = (uint64_t)sys_fdatasync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -254,8 +311,15 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_CLONE:
         regs->rax = (uint64_t)sys_clone(regs->rdi, regs->rsi, (int *)regs->rdx, (int *)regs->r10, regs->r8, 0, regs);
         break;
+    case SYS_CLONE3:
+        regs->rax = (uint64_t)-ENOSYS;
+        break;
     case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
+    case SYS_FUTEX:
+        regs->rax = (uint64_t)sys_futex((uint32_t *)regs->rdi, regs->rsi, regs->rdx,
+                                        (const struct timespec *)regs->r10, (uint32_t *)regs->r8, regs->r9, regs);
+        break;
     case SYS_EXECVE:
         regs->rax = (uint64_t)process_execve((char *)regs->rdi, (char **)regs->rsi, (char **)regs->rdx);
         break;
@@ -290,6 +354,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_MREMAP:
         regs->rax = (uint64_t)sys_mremap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, 0, regs);
         break;
+    case SYS_MADVISE: regs->rax = (uint64_t)sys_madvise(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_NANOSLEEP: regs->rax = (uint64_t)sys_nano_sleep((void *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_CLOCK_GETRES:
         regs->rax = (uint64_t)sys_clock_getres(regs->rdi, (uint64_t)regs->rsi, 0, 0, 0, 0, regs);
@@ -371,6 +436,16 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_SET_TID_ADDRESS: regs->rax = (uint64_t)sys_set_tid_address((int *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_SET_ROBUST_LIST: regs->rax = 0; break;
     case SYS_RSEQ: regs->rax = (uint64_t)-ENOSYS; break;
+
+
+
+
+
+
+
+
+
+
 
     /* XJ380API XAPI Edition */
     case XAPI_OUTPUT: do_xapi_Output((char *)regs->rdi); break;
@@ -497,5 +572,14 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         tcb_t task = get_current_task();
     }
     signal_deliver_pending(regs);
+    tcb_t return_task = get_current_task();
+    if (return_task != NULL && return_task->task_level == TASK_APPLICATION_LEVEL)
+    {
+        write_fsbase(return_task->fs_base);
+        if (trace_fsbase_task(return_task))
+            write_serial_fmt("[fsbase] syscall-return task=%s tid=%llu nr=%llu fs=0x%llx hw_after=0x%llx rip=0x%llx ret=0x%llx\n",
+                             return_task->name, return_task->tid, syscall_number, return_task->fs_base,
+                             read_fsbase(), regs->rip, regs->rax);
+    }
     return (uint64_t)regs;
 }

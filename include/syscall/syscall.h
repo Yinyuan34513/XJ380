@@ -256,6 +256,7 @@
 #define SYS_MREMAP 25
 #define SYS_MSYNC  26
 #define SYS_MINCORE 27
+#define SYS_MADVISE 28
 
 #define SYS_DUP       32
 #define SYS_DUP2      33
@@ -271,12 +272,18 @@
 #define SYS_SOCKET 41
 #define SYS_CONNECT 42
 #define SYS_ACCEPT 43
+#define SYS_SENDTO 44
+#define SYS_RECVFROM 45
 #define SYS_SOCKETPAIR 53
 
 #define SYS_SHUTDOWN 48
 
 #define SYS_BIND 49
 #define SYS_LISTEN 50
+#define SYS_GETSOCKNAME 51
+#define SYS_GETPEERNAME 52
+#define SYS_SETSOCKOPT 54
+#define SYS_GETSOCKOPT 55
 
 #define SYS_CLONE  56
 #define SYS_FORK   57
@@ -330,6 +337,7 @@
 
 #define SYS_GETTID 186
 #define SYS_TIME 201
+#define SYS_FUTEX 202
 #define SYS_GETDENTS64 217
 
 #define SYS_SET_TID_ADDRESS 218
@@ -362,6 +370,7 @@
 
 #define SYS_RSEQ 334
 #define SYS_FSOPEN 430
+#define SYS_CLONE3 435
 #define SYS_FACCESSAT2 439
 
 struct utsname {
@@ -552,7 +561,13 @@ sys_(getpid);
 sys_(socket, int domain, int type, int protocol);
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen);
 sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen);
+sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const struct sockaddr *addr, socklen_t addrlen);
+sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockaddr *addr, socklen_t *addrlen);
 sys_(socketpair, int domain, int type, int protocol, int *sv);
+sys_(setsockopt, int fd, int level, int optname, const void *optval, socklen_t optlen);
+sys_(getsockopt, int fd, int level, int optname, void *optval, socklen_t *optlen);
+sys_(getsockname, int fd, struct sockaddr *addr, socklen_t *addrlen);
+sys_(getpeername, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(stat, char *fn, struct stat *buf);
 sys_(arch_prctl, uint64_t code, uint64_t addr);
 sys_(yield);
@@ -590,6 +605,7 @@ sys_(fork);
 sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uint64_t tls);
 sys_(get_tid);
 sys_(set_tid_address, int *tidptr);
+sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3);
 sys_(vfork);
 sys_(execve, char *path, char **argv, char **envp);
 sys_(fstat, int fd, struct stat *buf);
@@ -601,6 +617,7 @@ sys_(statfs, char *path, struct statfs *buf);
 sys_(fstatfs, int fd, struct statfs *buf);
 sys_(pivot_root, char *new_root, char *put_old);
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec);
+sys_(madvise, uint64_t addr, size_t length, int advice);
 sys_(getppid);
 sys_(setsid);
 sys_(getsid, int pid);

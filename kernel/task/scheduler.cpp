@@ -12,6 +12,12 @@ extern lock_queue   *pcb_group_queue;
 extern XSK_SMP_INFO *xsi;
 extern bool          no_interrupt;
 
+static bool trace_fsbase_task(tcb_t task)
+{
+    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
+           (strstr(task->name, "opkg") != NULL || strstr(task->parent_group->name, "opkg") != NULL);
+}
+
 void enable_scheduler()
 {
     is_scheduler = true;
@@ -82,7 +88,14 @@ __attribute__((naked)) void save_registers()
 
 void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
 {
-    current_task0->fs_base = read_fsbase();
+    uint64_t current_fs_base = read_fsbase();
+    if (current_fs_base != 0 || current_task0->fs_base == 0)
+        current_task0->fs_base = current_fs_base;
+    else if (trace_fsbase_task(current_task0))
+        write_serial_fmt("[fsbase] switch-save-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx target=%s target_fs=0x%llx\n",
+                         current_task0->name, current_task0->tid, current_task0->fs_base, current_fs_base,
+                         reg != NULL ? reg->rip : 0, target != NULL ? target->name : "(null)",
+                         target != NULL ? target->fs_base : 0);
 
     switch_page_directory(target->parent_group->pagedir);
     set_kernel_stack(target->kernel_stack);
@@ -275,7 +288,13 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     }
 
     // 记录当前线程运行时最新的 FSBASE，避免调度后丢失用户态 TLS 环境。
-    current->fs_base = read_fsbase();
+    uint64_t current_fs_base = read_fsbase();
+    if (current_fs_base != 0 || current->fs_base == 0)
+        current->fs_base = current_fs_base;
+    else if (trace_fsbase_task(current))
+        write_serial_fmt("[fsbase] timer-save-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx next=%s next_fs=0x%llx\n",
+                         current->name, current->tid, current->fs_base, current_fs_base, reg != NULL ? reg->rip : 0,
+                         best != NULL ? best->name : "(null)", best != NULL ? best->fs_base : 0);
 
     // 任务寻父处理
     if (best->parent_group && 

@@ -462,11 +462,29 @@ int fatfs_delete(file_t parent, vfs_node_t node) {
 }
 
 int fatfs_rename(file_t file, const char *nw) {
+    if (file == NULL || file->path == NULL || nw == NULL) {
+        return VFS_STATUS_FAILED;
+    }
+
+    const char *target_path = nw;
+    char       *fat_target  = NULL;
+    if (nw[0] == '/' && file->path[0] != '\0' && file->path[1] == ':') {
+        fat_target = (char *)malloc(strlen(nw) + 3);
+        if (fat_target == NULL) {
+            return VFS_STATUS_FAILED;
+        }
+        fat_target[0] = file->path[0];
+        fat_target[1] = ':';
+        strcpy(fat_target + 2, nw);
+        target_path = fat_target;
+    }
+
     fatfs_lock();
     
-    FRESULT res = f_rename((const char *)file->path, nw);
+    FRESULT res = f_rename((const char *)file->path, target_path);
 
     fatfs_unlock();
+    free(fat_target);
 
     if (res != FR_OK) return -1;
     return 0;

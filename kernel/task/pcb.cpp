@@ -864,7 +864,13 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     tcb_t parent_task          = get_current_task();
     if (parent_task == NULL || parent_task->parent_group == NULL || parent_task->parent_group->pagedir == NULL)
         return SYSCALL_FAULT_(EFAULT);
-    parent_task->fs_base = read_fsbase();
+    uint64_t parent_fs_base = read_fsbase();
+    if (parent_fs_base != 0 || parent_task->fs_base == 0)
+        parent_task->fs_base = parent_fs_base;
+    else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
+             (strstr(parent_task->name, "opkg") != NULL || strstr(parent_task->parent_group->name, "opkg") != NULL))
+        write_serial_fmt("[fsbase] clone-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx flags=0x%llx tls=0x%llx\n",
+                         parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base, flags, tls);
 
     pcb_t process = parent_task->parent_group;
     page_directory_t *pagedir = process->pagedir;
@@ -945,6 +951,9 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     new_task->signal  = 0;
     new_task->fs      = parent_task->fs;
     new_task->fs_base = (flags & CLONE_SETTLS_FLAG) ? tls : parent_task->fs_base;
+    if (process->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(process->name, "opkg") != NULL))
+        write_serial_fmt("[fsbase] clone-child task=%s parent_tid=%llu child_fs=0x%llx parent_fs=0x%llx flags=0x%llx tls=0x%llx\n",
+                         parent_task->name, parent_task->tid, new_task->fs_base, parent_task->fs_base, flags, tls);
 
     new_task->cwd = parent_task->cwd;
     if (new_task->cwd != NULL) new_task->cwd->refcount++;
@@ -1407,7 +1416,14 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     disable_scheduler();
 
     tcb_t parent_task = get_current_task();
-    parent_task->fs_base = read_fsbase();
+    uint64_t parent_fs_base = read_fsbase();
+    if (parent_fs_base != 0 || parent_task->fs_base == 0)
+        parent_task->fs_base = parent_fs_base;
+    else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
+             (strstr(parent_task->name, "opkg") != NULL || strstr(parent_task->parent_group->name, "opkg") != NULL))
+        write_serial_fmt("[fsbase] fork-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx\n",
+                         parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base,
+                         reg != NULL ? reg->rcx : 0);
 
     pcb_t current_pcb = parent_task->parent_group;
 
@@ -1545,6 +1561,10 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 
     new_task->fs      = parent_task->fs;
     new_task->fs_base = parent_task->fs_base;
+    if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
+        write_serial_fmt("[fsbase] fork-child parent=%s parent_tid=%llu child_pid=%llu child_fs=0x%llx parent_fs=0x%llx rip=0x%llx\n",
+                         parent_task->name, parent_task->tid, new_pcb->pid, new_task->fs_base, parent_task->fs_base,
+                         reg != NULL ? reg->rcx : 0);
 
     new_task->parent_group = new_pcb;
     new_task->group_index  = queue_enqueue(new_pcb->thread_queue, new_task);

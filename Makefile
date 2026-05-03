@@ -61,10 +61,10 @@ CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
 OPKG_CONF_GEN := $(BUILD_DIR)/tools/xj380_opkg_conf_gen
-OPKG_BIN ?= ../opkg/opkg-0.2.2/src/opkg-cl
+OPKG_BIN ?= ./opkg-cl
 OPKG_LD_LIBRARY_PATH ?=
 OPKG_STAGE_DEPS := tools/stage_elf_deps.sh
-OPKG_FEEDS ?=
+OPKG_FEEDS ?= openwrt_base http://downloads.openwrt.org/releases/24.10.2/packages/x86_64/base openwrt_packages http://downloads.openwrt.org/releases/24.10.2/packages/x86_64/packages
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
@@ -179,7 +179,9 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/lists
 	@mkdir -p $(BUILD_DIR)/XJ380/tmp
+	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
+	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/status
 	@$(OPKG_CONF_GEN) $(BUILD_DIR)/XJ380/etc/opkg $(OPKG_FEEDS)
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT

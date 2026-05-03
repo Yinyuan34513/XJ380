@@ -117,6 +117,9 @@ err:;
     {
         write_serial_fmt("Fault Thread Name: %s 0x%x\n", current_task->name, (uint64_t)current_task);
         write_serial_fmt("TID: %d\n", current_task->tid);
+        write_serial_fmt("[fsbase] pf task=%s tid=%llu tcb=0x%llx hw=0x%llx fs_sel=0x%llx rip=0x%llx rsp=0x%llx err=0x%llx\n",
+                         current_task->name, current_task->tid, current_task->fs_base, read_fsbase(),
+                         current_task->fs, frame->rip, frame->rsp, error_code);
     }
     else
     {
@@ -129,6 +132,14 @@ err:;
     if (error_code & 0x4)
     {
         ulog_err("Page Fault (0x0000000e)");
+        if (current_task != NULL && current_task->parent_group != NULL)
+        {
+            kill_proc(current_task->parent_group, 128 + 11, true);
+            enable_scheduler();
+            open_interrupt;
+            scheduler_yield();
+            while (1) { __asm__ __volatile__("hlt"); }
+        }
         enable_scheduler();
         open_interrupt;
         return;
@@ -277,20 +288,34 @@ EXPORT_SYMBOL(get_current_directory);
 static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
 {
     if (source_table == NULL) return NULL;
-    if (level == 0)
+    if (level <= 1)
     {
         if (kernel_space) { return source_table; }
 
         uint64_t      frame          = alloc_frames(1);
         page_table_t *new_page_table = (page_table_t *)phys_to_virt(frame);
-        memcpy(new_page_table, source_table->entries, PAGE_SIZE);
+        page_table_clear(new_page_table);
         for (int i = 0; i < 512; i++)
         {
-            uint64_t entry = new_page_table->entries[i].value;
-            if ((entry & PTE_PRESENT) && (entry & PTE_FRAME_ALLOCATED))
+            uint64_t source_entry = source_table->entries[i].value;
+            if (!(source_entry & PTE_PRESENT))
             {
-                address_ref(entry & PTE_ADDR_MASK);
+                new_page_table->entries[i].value = 0;
+                continue;
             }
+
+            if (!(source_entry & PTE_FRAME_ALLOCATED) || (source_entry & PTE_HUGE))
+            {
+                new_page_table->entries[i].value = source_entry;
+                continue;
+            }
+
+            uint64_t source_phys = source_entry & PTE_ADDR_MASK;
+            uint64_t new_phys    = alloc_frames(1);
+            if (new_phys == 0) { continue; }
+
+            memcpy((void *)phys_to_virt(new_phys), (const void *)phys_to_virt(source_phys), PAGE_SIZE);
+            new_page_table->entries[i].value = (source_entry & ~PTE_ADDR_MASK) | new_phys | PTE_FRAME_ALLOCATED;
         }
         return new_page_table;
     }
@@ -326,7 +351,7 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 static void free_page_table_recursive(page_table_t *table, int level)
 {
     if (table == NULL) return;
-    if (level == 0)
+    if (level <= 1)
     {
         for (int i = 0; i < 512; i++)
         {

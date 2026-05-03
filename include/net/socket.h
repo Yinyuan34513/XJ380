@@ -95,8 +95,14 @@ typedef struct socket_provider {
     int     (*close)(void *socket);
     ssize_t (*read)(void *socket, void *buffer, size_t size, uint64_t flags);
     ssize_t (*write)(void *socket, const void *buffer, size_t size, uint64_t flags);
+    ssize_t (*recvfrom)(void *socket, void *buffer, size_t size, uint64_t flags,
+                        struct sockaddr *addr, socklen_t *addrlen);
+    ssize_t (*sendto)(void *socket, const void *buffer, size_t size, uint64_t flags,
+                      const struct sockaddr *addr, socklen_t addrlen);
     int     (*bind)(void *socket, const struct sockaddr *addr, socklen_t addrlen);
     int     (*connect)(void *socket, const struct sockaddr *addr, socklen_t addrlen);
+    int     (*getsockname)(void *socket, struct sockaddr *addr, socklen_t *addrlen);
+    int     (*getpeername)(void *socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*listen)(void *socket, int backlog);
     int     (*accept)(void *socket, void **out_socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*shutdown)(void *socket, int how);
@@ -115,11 +121,16 @@ int     socketfs_setup(void);
 int     socket_open(int domain, int type, int protocol);
 int     socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int     socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
+int     socket_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int     socket_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_listen(int fd, int backlog);
 int     socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_shutdown(int fd, int how);
 ssize_t socket_read(vfs_node_t node, void *buffer, size_t size);
 ssize_t socket_write(vfs_node_t node, const void *buffer, size_t size);
+ssize_t socket_recvfrom(int fd, void *buffer, size_t size, uint64_t flags, struct sockaddr *addr, socklen_t *addrlen);
+ssize_t socket_sendto(int fd, const void *buffer, size_t size, uint64_t flags,
+                      const struct sockaddr *addr, socklen_t addrlen);
 int     socket_apply_flags(vfs_node_t node, uint64_t flags);
 int     socket_resolve_ipv4(const char *hostname, uint32_t *out_addr);
 int     socket_resolve_ipv6(const char *hostname, uint8_t out_addr[16]);

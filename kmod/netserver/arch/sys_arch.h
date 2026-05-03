@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arch/cc.h>
+#include <task/scheduler.h>
 
 #ifndef SPIN_INIT
 typedef struct spinlock {
@@ -18,12 +19,19 @@ static inline void spin_init(spin_t *lock)
 
 static inline void spin_lock(spin_t *lock)
 {
-    asm volatile("1:\n\t"
-                 "lock btsq $0, %0\n\t"
-                 "jc 1b\n\t"
-                 : "+m"(lock->lock)
-                 :
-                 : "memory", "cc");
+    for (;;) {
+        unsigned char busy;
+        asm volatile("lock btsq $0, %1\n\t"
+                     "setc %0\n\t"
+                     : "=q"(busy), "+m"(lock->lock)
+                     :
+                     : "memory", "cc");
+        if (!busy) {
+            break;
+        }
+        scheduler_yield();
+        asm volatile("pause" ::: "memory");
+    }
 
     asm volatile("mfence" ::: "memory");
 

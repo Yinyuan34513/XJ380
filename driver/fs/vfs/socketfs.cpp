@@ -26,6 +26,8 @@ static inline bool socketfs_provider_valid(const socket_provider_t *provider)
 {
     return provider != NULL && provider->create != NULL && provider->close != NULL &&
            provider->read != NULL && provider->write != NULL && provider->bind != NULL &&
+           provider->recvfrom != NULL && provider->sendto != NULL &&
+           provider->getsockname != NULL && provider->getpeername != NULL &&
            provider->connect != NULL && provider->listen != NULL && provider->accept != NULL &&
            provider->shutdown != NULL && provider->poll != NULL && provider->set_flags != NULL &&
            provider->resolve_ipv4 != NULL && provider->resolve_ipv6 != NULL &&
@@ -290,6 +292,10 @@ int socketfs_setup(void)
 
 int socket_open(int domain, int type, int protocol)
 {
+    if (domain != AF_INET) {
+        return -EAFNOSUPPORT;
+    }
+
     socket_provider_t provider = {};
     int               ret      = socketfs_snapshot_provider(&provider);
     if (ret < 0) {
@@ -338,6 +344,36 @@ int socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
     }
 
     return handle->provider.connect(handle->socket, addr, addrlen);
+}
+
+int socket_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle) || addrlen == NULL) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL || handle->provider.getsockname == NULL) {
+        return -EBADF;
+    }
+
+    return handle->provider.getsockname(handle->socket, addr, addrlen);
+}
+
+int socket_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle) || addrlen == NULL) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL || handle->provider.getpeername == NULL) {
+        return -EBADF;
+    }
+
+    return handle->provider.getpeername(handle->socket, addr, addrlen);
 }
 
 int socket_listen(int fd, int backlog)
@@ -407,6 +443,35 @@ ssize_t socket_write(vfs_node_t node, const void *buffer, size_t size)
         return -EBADF;
     }
     return handle->provider.write(handle->socket, buffer, size, node->flags);
+}
+
+ssize_t socket_recvfrom(int fd, void *buffer, size_t size, uint64_t flags, struct sockaddr *addr, socklen_t *addrlen)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle)) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL || buffer == NULL || handle->provider.recvfrom == NULL) {
+        return -EBADF;
+    }
+    return handle->provider.recvfrom(handle->socket, buffer, size, fd_handle->node->flags | flags, addr, addrlen);
+}
+
+ssize_t socket_sendto(int fd, const void *buffer, size_t size, uint64_t flags,
+                      const struct sockaddr *addr, socklen_t addrlen)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle)) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL || buffer == NULL || handle->provider.sendto == NULL) {
+        return -EBADF;
+    }
+    return handle->provider.sendto(handle->socket, buffer, size, fd_handle->node->flags | flags, addr, addrlen);
 }
 
 int socket_apply_flags(vfs_node_t node, uint64_t flags)

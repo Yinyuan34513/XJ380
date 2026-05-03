@@ -101,14 +101,17 @@ static inline char *pathtok(char **sp) {
 }
 
 static inline void do_open(vfs_node_t file) {
+    if (file == NULL) return;
     if (file->handle != NULL) {
         callbackof(file, stat)(file->handle, file);
     } else {
+        if (file->parent == NULL || file->parent->handle == NULL) return;
         callbackof(file, open)(file->parent->handle, file->name, file);
     }
 }
 
 static inline void do_update(vfs_node_t file) {
+    if (file == NULL) return;
     if (file->type & file_none || file->handle == NULL || file->type & file_dir ||
         file->type & file_symlink || file->type & file_pipe)
         do_open(file);
@@ -408,6 +411,9 @@ errno_t vfs_delete(vfs_node_t node) {
 }
 
 errno_t vfs_rename(vfs_node_t node, const char *nw) {
+    if (node == NULL || nw == NULL) return VFS_STATUS_FAILED;
+    do_update(node);
+    if (node->handle == NULL) return VFS_STATUS_FAILED;
     return callbackof(node, rename)(node->handle, nw);
 }
 

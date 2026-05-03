@@ -210,8 +210,8 @@ bool elf_test_head(Elf64_Ehdr *ehdr) {
 
 void load_segment(Elf64_Phdr *phdr, void *elf, page_directory_t *directory, bool is_user,
                   uint64_t offset, uint64_t *load_start) {
-    size_t hi = PADDING_UP(phdr->p_paddr + phdr->p_memsz, 0x1000) + offset;
-    size_t lo = PADDING_DOWN(phdr->p_paddr, 0x1000) + offset;
+    size_t hi = PADDING_UP(phdr->p_vaddr + phdr->p_memsz, 0x1000) + offset;
+    size_t lo = PADDING_DOWN(phdr->p_vaddr, 0x1000) + offset;
     if (load_start != NULL) {
         if (lo < *load_start) { *load_start = lo; }
     }
@@ -1058,6 +1058,14 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
         if (!process_dynamic_relocations(dyn, handle)) {
             write_serial_fmt("Failed to process relocations: %s\n", path);
             return NULL;
+        }
+        if (is_kernel && handle->path && strstr(handle->path, "netserver")) {
+            uint64_t *cyclic_timers = (uint64_t *)(handle->base_addr + 0x2ae70);
+            write_serial_fmt("netserver reloc check base=0x%llx cyclic0={%llu,0x%llx} cyclic1={%llu,0x%llx} cyclic2={%llu,0x%llx}\n",
+                             handle->base_addr,
+                             cyclic_timers[0], cyclic_timers[1],
+                             cyclic_timers[2], cyclic_timers[3],
+                             cyclic_timers[4], cyclic_timers[5]);
         }
         if (!call_dynamic_initializers(handle)) {
             write_serial_fmt("Failed to run initializers: %s\n", path);
