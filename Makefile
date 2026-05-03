@@ -56,6 +56,7 @@ STARDUST_EXAMPLES := \
 	frameworks/StardustUI/examples/helloworld \
 	frameworks/StardustUI/examples/layout
 endif
+STARDUSTUI_EXAMPLE_DIRS := $(STARDUST_EXAMPLES)
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
@@ -106,7 +107,7 @@ BUILD_SETTINGS_HEADER := kernel/build_settings.h
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
-PWD := $(shell pwd)
+PWD := $(CURDIR)
 
 $(KCONFIG_CONFIG): Kconfig $(KCONFIG_SCRIPT) $(KCONFIG_DEFCONFIG)
 	@$(PYTHON) $(KCONFIG_SCRIPT) olddefconfig
@@ -173,11 +174,11 @@ all: $(KCONFIG_AUTO_CONF) $(KERNEL_OBJS) liballoc-x86_64.a
 	@$(MAKE) -C user KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) build_xapi
 	@$(MAKE) -C user KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF)
 	@$(MAKE) -C $(KMOD_DIR)
-ifneq ($(strip $(STARDUST_EXAMPLES)),)
-	@for example in $(STARDUST_EXAMPLES); do \
-		$(MAKE) -C $$example PLATFORM=xj380 KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) copy; \
-	done
-endif
+	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
+		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
+			$(MAKE) -C $$dir copy PLATFORM=xj380 KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) || exit $$?; \
+		done; \
+	fi
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
@@ -202,12 +203,13 @@ savedefconfig:
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img include/generated
 	@$(MAKE) -C user clean
-  @$(MAKE) stardustui.examples.copy
-  
+
 stardustui.examples.copy:
-	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
-		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
-	done
+	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
+		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
+			$(MAKE) -C $$dir copy PLATFORM=xj380 KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) || exit $$?; \
+		done; \
+	fi
 
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
