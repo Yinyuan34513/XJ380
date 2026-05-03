@@ -182,7 +182,7 @@ endif
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd defconfig olddefconfig menuconfig savedefconfig
+.PHONY: clean format check gen.clangd defconfig olddefconfig menuconfig savedefconfig stardustui.examples.copy
 
 defconfig:
 	@$(PYTHON) $(KCONFIG_SCRIPT) defconfig --defconfig $(KCONFIG_DEFCONFIG)
@@ -202,6 +202,12 @@ savedefconfig:
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img include/generated
 	@$(MAKE) -C user clean
+  @$(MAKE) stardustui.examples.copy
+  
+stardustui.examples.copy:
+	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
+		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
+	done
 
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
