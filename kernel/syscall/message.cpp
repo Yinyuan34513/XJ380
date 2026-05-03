@@ -9,6 +9,29 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <mm/frame.h>
+#include <pipe.h>
+
+static bool message_pipe_write_handle_valid(tcb_t task, fd_file_handle **out_handle)
+{
+    if (out_handle != NULL) *out_handle = NULL;
+    if (task == NULL || task->parent_group == NULL || task->message_pipe_write_fd < 0) return false;
+
+    fd_file_handle *handle =
+        (fd_file_handle *)queue_get(task->parent_group->file_open, (size_t)task->message_pipe_write_fd);
+    if (handle == NULL || handle->node == NULL || !(handle->node->type & file_pipe) || handle->node->handle == NULL)
+    {
+        return false;
+    }
+
+    pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
+    if (spec == NULL || !spec->write || spec->info == NULL)
+    {
+        return false;
+    }
+
+    if (out_handle != NULL) *out_handle = handle;
+    return true;
+}
 
 void init_window_message(WINDOWLSP window, MsgPrcor func)
 {
@@ -17,7 +40,15 @@ void init_window_message(WINDOWLSP window, MsgPrcor func)
     tcb_t current  = window->w_task;
     window->WinMPf = func;
 
-    if (current->message_pipe_read_fd >= 0 && current->message_pipe_write_fd >= 0) return;
+    fd_file_handle *existing_handle = NULL;
+    if (current->message_pipe_read_fd >= 0 && current->message_pipe_write_fd >= 0 &&
+        message_pipe_write_handle_valid(current, &existing_handle))
+    {
+        return;
+    }
+
+    current->message_pipe_read_fd  = -1;
+    current->message_pipe_write_fd = -1;
 
     int pipefd[2] = {-1, -1};
     if ((int64_t)sys_pipe2(pipefd, 0, 0, 0, 0, 0, NULL) < 0)
@@ -102,9 +133,16 @@ void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinM
     // 检查是否有注册的信号处理函数
     if (WinMpf != NULL && ftask->message_pipe_write_fd >= 0)
     {
-        fd_file_handle *handle =
-            (fd_file_handle *)queue_get(ftask->parent_group->file_open, (size_t)ftask->message_pipe_write_fd);
-        if (handle == NULL || handle->node == NULL) return;
+        fd_file_handle *handle = NULL;
+        if (!message_pipe_write_handle_valid(ftask, &handle))
+        {
+            WINDOWLSP window = mpf_found_win(WinMpf);
+            if (window != NULL && window->w_task == ftask)
+            {
+                init_window_message(window, WinMpf);
+            }
+            if (!message_pipe_write_handle_valid(ftask, &handle)) return;
+        }
 
         MessageInfoFormat mif;
         mif.WinMpf   = WinMpf;

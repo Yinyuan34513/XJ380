@@ -67,35 +67,95 @@ static ssize_t xfile_write_from_user(vfs_node_t node, const void *buffer, size_t
 uint64_t do_xapi_OpenFile(uint64_t path)
 {
     char  *fpath = vfs_cwd_path_build((char *)path);
-    XFILE *fsptr = (XFILE *)page_alloc_random(get_current_task()->parent_group->pagedir, sizeof(XFILE),  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    memset(fsptr, 0, sizeof(XFILE));
-    strcpy(fsptr->path, fpath);
+    if (fpath == NULL) return 0;
+
+    page_directory_t *pagedir = get_current_task()->parent_group->pagedir;
+    uint64_t fsptr_addr = page_alloc_random(pagedir, sizeof(XFILE), PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    if ((int64_t)fsptr_addr == -1)
+    {
+        free(fpath);
+        return 0;
+    }
+
+    XFILE local;
+    memset(&local, 0, sizeof(local));
+    strcpy(local.path, fpath);
 
     vfs_node_t f = vfs_open(fpath);
     if (!f)
     {
         free(fpath);
-        unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
+        unmap_page_range(pagedir, fsptr_addr, sizeof(XFILE));
         return 0;
     }
     uint64_t length = f->size;
-    fsptr->length   = length;
+    local.length    = length;
     if (length > 0)
     {
-        fsptr->buffer = (void *)page_alloc_random(get_current_task()->parent_group->pagedir, length,  PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-        if ((int64_t)fsptr->buffer == -1)
+        uint64_t buffer_addr = page_alloc_random(pagedir, length, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+        if ((int64_t)buffer_addr == -1)
         {
             vfs_close(f);
             free(fpath);
-            unmap_page_range(get_current_task()->parent_group->pagedir, (uint64_t)fsptr, sizeof(XFILE));
+            unmap_page_range(pagedir, fsptr_addr, sizeof(XFILE));
             return 0;
         }
-        vfs_read(f, fsptr->buffer, 0, length);
+        local.buffer = (void *)buffer_addr;
+
+        size_t bounce_bytes = MIN(length, XFILE_IO_BOUNCE_BYTES);
+        uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
+        if (bounce == NULL)
+        {
+            vfs_close(f);
+            free(fpath);
+            unmap_page_range(pagedir, buffer_addr, length);
+            unmap_page_range(pagedir, fsptr_addr, sizeof(XFILE));
+            return 0;
+        }
+
+        size_t total = 0;
+        while (total < length)
+        {
+            size_t chunk = MIN(length - total, bounce_bytes);
+            ssize_t read = vfs_read(f, bounce, total, chunk);
+            if (read == -1)
+            {
+                free(bounce);
+                vfs_close(f);
+                free(fpath);
+                unmap_page_range(pagedir, buffer_addr, length);
+                unmap_page_range(pagedir, fsptr_addr, sizeof(XFILE));
+                return 0;
+            }
+            if (read == 0) break;
+
+            if (!copy_to_user_pagedir(pagedir, (uint8_t *)local.buffer + total, bounce, (size_t)read))
+            {
+                free(bounce);
+                vfs_close(f);
+                free(fpath);
+                unmap_page_range(pagedir, buffer_addr, length);
+                unmap_page_range(pagedir, fsptr_addr, sizeof(XFILE));
+                return 0;
+            }
+            total += (size_t)read;
+        }
+        free(bounce);
     }
     vfs_close(f);
     free(fpath);
 
-    return (uint64_t)fsptr;
+    if (!copy_to_user_pagedir(pagedir, (void *)fsptr_addr, &local, sizeof(local)))
+    {
+        if (local.length > 0 && local.buffer != NULL)
+        {
+            unmap_page_range(pagedir, (uint64_t)local.buffer, local.length);
+        }
+        unmap_page_range(pagedir, fsptr_addr, sizeof(XFILE));
+        return 0;
+    }
+
+    return fsptr_addr;
 }
 
 void do_xapi_CloseFile(uint64_t ptr)
