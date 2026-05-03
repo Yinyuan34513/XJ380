@@ -25,6 +25,9 @@ endif
 
 BUILD_DIR := out
 KMOD_DIR := kmod
+STARDUSTUI_EXAMPLE_DIRS := \
+	frameworks/StardustUI/examples/helloworld \
+	frameworks/StardustUI/examples/layout
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
@@ -123,14 +126,21 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
 	@$(MAKE) -C $(KMOD_DIR)
+	@$(MAKE) stardustui.examples.copy
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd
+.PHONY: clean format check gen.clangd stardustui.examples.copy
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img
 	@$(MAKE) -C user clean
+	@$(MAKE) stardustui.examples.copy
+
+stardustui.examples.copy:
+	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
+		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
+	done
 
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
