@@ -166,6 +166,7 @@ void check_command()
     else if (strncmp("pwd", cmd, 3) == 0) { print_working_directory(); }
     else if (strncmp("clear", cmd, 5) == 0) { clear_screen(); }
     else if (strncmp("taskmgr", cmd, 7) == 0) { xapi_Run((char *)"/system/taskmgr.elf"); }
+    else if (strncmp("nut", cmd, 3) == 0) { xapi_Run((char *)"/apps/nut.elf"); }
     else if (strncmp("help", cmd, 4) == 0)
     {
         print_to_console("Available commands:");

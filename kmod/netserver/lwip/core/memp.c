@@ -342,7 +342,6 @@ memp_malloc_fn(memp_t type, const char *file, const int line)
 {
     void *memp;
     LWIP_ERROR("memp_malloc: type < MEMP_MAX", (type < MEMP_MAX), return NULL;);
-
 #if MEMP_OVERFLOW_CHECK >= 2
     memp_overflow_check_all();
 #endif /* MEMP_OVERFLOW_CHECK >= 2 */
