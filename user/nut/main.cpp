@@ -11,24 +11,6 @@ typedef struct nut_response_buffer
     int     oom;
 } nut_response_buffer_t;
 
-static void nut_serial_text(const char *text)
-{
-    if (text == NULL) {
-        return;
-    }
-    xapi_OutputSerial((char *)text);
-}
-
-static void nut_serialf(const char *format, ...)
-{
-    char    buffer[256];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-    xapi_OutputSerial(buffer);
-}
-
 static int nut_response_callback(const char *data, int len, void *user_data)
 {
     nut_response_buffer_t *buffer = (nut_response_buffer_t *)user_data;
@@ -86,32 +68,32 @@ static int nut_print_packages_json(const char *json_text)
 
     int parse_result = xapi_parseJson(json_text, &document);
     if (parse_result != XAPI_JSON_PARSE_OK) {
-        nut_serialf("nut: json parse failed: %d\n", parse_result);
+        xapi_Printf((char *)"nut: json parse failed: %d\n", parse_result);
         return -1;
     }
 
     xapi_JsonValue *root = document.root;
     if (root == NULL || root->type != XAPI_JSON_VALUE_OBJECT) {
-        nut_serial_text("nut: root is not object\n");
+        xapi_Printf((char *)"nut: root is not object\n");
         xapi_freeJsonDocument(&document);
         return -1;
     }
 
     xapi_JsonValue *packages = xapi_jsonObjectGet(root, "packages");
     if (packages == NULL || packages->type != XAPI_JSON_VALUE_ARRAY) {
-        nut_serial_text("nut: packages is not array\n");
+        xapi_Printf((char *)"nut: packages is not array\n");
         xapi_freeJsonDocument(&document);
         return -1;
     }
 
-    nut_serial_text("packages:\n");
+    xapi_Printf((char *)"packages:\n");
     int count = xapi_jsonArraySize(packages);
     for (int i = 0; i < count; ++i) {
         xapi_JsonValue *item = xapi_jsonArrayAt(packages, i);
         if (item != NULL && item->type == XAPI_JSON_VALUE_STRING && item->as.stringValue != NULL) {
-            nut_serialf("%d. %s\n", i + 1, item->as.stringValue);
+            xapi_Printf((char *)"%d. %s\n", i + 1, item->as.stringValue);
         } else {
-            nut_serialf("%d. <invalid>\n", i + 1);
+            xapi_Printf((char *)"%d. <invalid>\n", i + 1);
         }
     }
 
@@ -122,12 +104,14 @@ static int nut_print_packages_json(const char *json_text)
 static int nut_main_impl(int argc, char *argv[], char *envp[])
 {
     (void)envp;
+    xapi_OutputSerial("nut is running");
 
-    if (argc < 1 || argv == NULL || argv[0] == NULL || strcmp(argv[0], "fetch") != 0) {
-        nut_serial_text("Hello world\n");
+    if (argc < 2 || argv == NULL || argv[1] == NULL || strcmp(argv[1], "fetch") != 0) {
+        xapi_Printf((char *)"Hello world\n");
         return 0;
     }
 
+    xapi_OutputSerial("nut fetch, right?");
     xhttp_request_t request;
     request.method        = "GET";
     request.host          = "nut.cn-nb1.rains3.com";
@@ -140,20 +124,20 @@ static int nut_main_impl(int argc, char *argv[], char *envp[])
     nut_response_buffer_t response;
     memset(&response, 0, sizeof(response));
 
-    nut_serial_text("nut: fetching packages.json\n");
+    xapi_Printf((char *)"nut: fetching packages.json\n");
     int status = xtls_request(&request, nut_response_callback, &response);
     if (status != XHTTP_OK) {
-        nut_serialf("nut: request failed: %d\n", status);
+        xapi_Printf((char *)"nut: request failed: %d\n", status);
         free(response.data);
         return 1;
     }
     if (response.oom) {
-        nut_serial_text("nut: out of memory while receiving response\n");
+        xapi_Printf((char *)"nut: out of memory while receiving response\n");
         free(response.data);
         return 1;
     }
     if (response.data == NULL || response.size == 0) {
-        nut_serial_text("nut: empty response\n");
+        xapi_Printf((char *)"nut: empty response\n");
         free(response.data);
         return 1;
     }

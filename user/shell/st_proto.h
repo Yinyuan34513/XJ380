@@ -66,6 +66,7 @@ char *editor_read_file(char *filename);
 void  editor_display_help();
 
 void tam_main_loop();
+void ptt_console_sp(char *str);
 
 void mark_terminal();
 void write_xttp_buffer(char *str);

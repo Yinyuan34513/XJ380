@@ -134,9 +134,9 @@ liballoc-x86_64.a:
 .PHONY: clean format check gen.clangd stardustui.examples.copy
 
 clean:
-	# @echo 4
-	@rm -rf $(BUILD_DIR) ./XJ380.img
-	@$(MAKE) -C user clean
+# 事实上直接删out/最简单了
+	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log
+	@echo Removed build files.
 
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \

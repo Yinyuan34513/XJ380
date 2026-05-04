@@ -91,6 +91,19 @@ static int shell_main_impl(int argc, char *argv[], char *envp[])
     {
         // 主循环中检查并刷新缓冲区
         if (p_chbuffer) { flush_buffer(); }
+
+        char output_stream[1024];
+        memset(output_stream, 0, sizeof(output_stream));
+        read_xttp_buffer(output_stream);
+        if (output_stream[0] != '\0')
+        {
+            ptt_console_sp(output_stream);
+            reset_terminal_cursor_blink();
+            show_terminal_cursor(false);
+            xapi_RefreshWindow(handle);
+            terminal_app_mark_finish_output();
+        }
+
         update_terminal_cursor_blink(16);
         xapi_Sleep(16);
         __asm__ __volatile__("pause");

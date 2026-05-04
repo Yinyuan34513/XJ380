@@ -48,11 +48,8 @@ void check_group(pcb_t group)
         tcb_t thread = (tcb_t)front_p->data;
         if (!is_thread_dead(thread))
         {
-            if (strcmp(thread->name, "Window Message Thread") != 0)
-            {
-                // 涓嶆槸娑堟伅绾跨▼鎵嶇畻
-                group_dead = false;
-            }
+            group_dead = false;
+            break;
         }
     }
     spin_unlock(&group->thread_queue->lock);
