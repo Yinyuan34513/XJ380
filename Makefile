@@ -132,10 +132,11 @@ liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
 .PHONY: clean format check gen.clangd stardustui.examples.copy
+
 clean:
+	# @echo 4
 	@rm -rf $(BUILD_DIR) ./XJ380.img
 	@$(MAKE) -C user clean
-	@$(MAKE) stardustui.examples.copy
 
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
