@@ -133,6 +133,18 @@ void init_cpu()
         uint32_t xcr0_hi = 0;
         __asm__ __volatile__("xsetbv" ::"c"(0), "a"(xcr0_lo), "d"(xcr0_hi) : "memory");
     }
+
+    if (has_fsgsbase())
+    {
+        uint64_t cr4 = 0;
+        __asm__ __volatile__("movq %%cr4, %0" : "=r"(cr4));
+        cr4 |= (1ULL << 16);
+        __asm__ __volatile__("movq %0, %%cr4" ::"r"(cr4) : "memory");
+        read_fsbase  = rdfsbase;
+        write_fsbase = wrfsbase;
+        read_gsbase  = rdgsbase;
+        write_gsbase = wrgsbase;
+    }
 }
 
 typedef struct TimerWidgetsData
@@ -717,6 +729,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     setup_busybox_vfs_aliases();
     pipefs_setup();
     pty_init();
+    fsgsbase_init();
     socketfs_setup();
     procfs_setup();
     dnsfs_setup();

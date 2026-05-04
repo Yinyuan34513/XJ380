@@ -37,7 +37,7 @@ DISPLAY_BACKEND ?= gtk
 USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
 AUDIO_BACKEND ?= sdl
 HDA_CODEC ?= hda-output
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 4096 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?= 
 
@@ -146,7 +146,6 @@ $(OPKG_CONF_GEN): tools/xj380_opkg_conf_gen.c
 clean:
 	@rm -rf $(BUILD_DIR) ./XJ380.img
 	@$(MAKE) -C user clean
-	@$(MAKE) stardustui.examples.copy
 
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
@@ -189,6 +188,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/lists
 	@mkdir -p $(BUILD_DIR)/XJ380/tmp
+	@mkdir -p $(BUILD_DIR)/XJ380/var
 	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/status

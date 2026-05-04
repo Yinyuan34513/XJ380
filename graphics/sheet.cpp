@@ -860,27 +860,26 @@ void flush_sheet_damage_queue(SHEET_INFO *sht)
     while (true)
     {
         SHEET_INFO      *pending_sht = NULL;
-        SheetDamageRect  rect        = {0, 0, 0, 0};
-        bool             have_rect   = false;
+        SheetDamageRect  rects[SHEET_DAMAGE_QUEUE_CAPACITY];
+        uint8_t          rect_count  = 0;
 
         spin_lock(&g_sheet_damage_lock);
         if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht && g_sheet_damage_queue.count != 0)
         {
             pending_sht = g_sheet_damage_queue.sht;
-            rect        = g_sheet_damage_queue.rects[0];
-            have_rect   = true;
-            for (uint8_t i = 1; i < g_sheet_damage_queue.count; ++i)
-            {
-                sheet_damage_rect_union_into(&rect, &g_sheet_damage_queue.rects[i]);
-            }
+            rect_count  = g_sheet_damage_queue.count;
+            memcpy(rects, g_sheet_damage_queue.rects, (size_t)rect_count * sizeof(SheetDamageRect));
             g_sheet_damage_queue.count   = 0;
             g_sheet_damage_queue.pending = false;
             g_sheet_damage_queue.sht     = NULL;
         }
         spin_unlock(&g_sheet_damage_lock);
 
-        if (pending_sht == NULL || !have_rect) break;
-        refresh_part_sheet_now(pending_sht, rect.x1, rect.y1, rect.x2, rect.y2);
+        if (pending_sht == NULL || rect_count == 0) break;
+        for (uint8_t i = 0; i < rect_count; ++i)
+        {
+            refresh_part_sheet_now(pending_sht, rects[i].x1, rects[i].y1, rects[i].x2, rects[i].y2);
+        }
     }
     spin_unlock(&g_sheet_flush_lock);
 }

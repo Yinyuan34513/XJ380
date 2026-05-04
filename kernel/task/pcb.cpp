@@ -33,6 +33,13 @@ static constexpr size_t EXECVE_TOTAL_STRING_MAX = PAGE_SIZE * 4;
 lock_queue   *pcb_group_queue = NULL;
 pcb_t         kernel_group    = NULL;
 
+uint64_t task_user_fs_selector(tcb_t task)
+{
+    if (task != NULL && task->parent_group != NULL && task->parent_group->linux_abi && task->fs_base != 0)
+        return 0;
+    return task != NULL ? task->fs : 0;
+}
+
 static size_t alloc_pid()
 {
     return __atomic_fetch_add(&now_pid, 1, __ATOMIC_SEQ_CST);
@@ -1235,9 +1242,11 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     uint64_t old_brk_start = process->brk_start;
     uint64_t old_brk_end = process->brk_end;
     uint64_t old_brk_current = process->brk_current;
+    uint64_t old_mmap_start = process->mmap_start;
     process->brk_start = USER_BRK_START;
     process->brk_end = USER_BRK_END;
     process->brk_current = process->brk_start;
+    process->mmap_start = USER_MMAP_START;
 
     uint64_t e_entry = (uint64_t)parse_elf_file(norm_path, process);
     if (e_entry == NULL || (int64_t)e_entry < 0)
@@ -1248,6 +1257,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->brk_start = old_brk_start;
         process->brk_end = old_brk_end;
         process->brk_current = old_brk_current;
+        process->mmap_start = old_mmap_start;
         process->pagedir = old_page_dir;
         if (!process->vfork)
         {
@@ -1274,6 +1284,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->brk_start = old_brk_start;
         process->brk_end = old_brk_end;
         process->brk_current = old_brk_current;
+        process->mmap_start = old_mmap_start;
         process->pagedir = old_page_dir;
         if (!process->vfork)
         {
@@ -1351,7 +1362,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_current_task()->winnum         = 0;
     get_current_task()->fs             = GET_SEL(4 * 8, SA_RPL3);
     get_current_task()->fs_base        = 0;
-    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(get_current_task()->fs));
+    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(get_current_task())));
     write_fsbase(0);
     if (was_scheduler_enabled) enable_scheduler();
     switch_to_user_mode();
@@ -1424,22 +1435,49 @@ static void free_fork_task(tcb_t task)
     free(task);
 }
 
+static void init_fork_child_context(tcb_t child, const struct X64_REGS *frame, uint64_t user_stack)
+{
+    child->context0.rip    = frame->rcx;
+    child->context0.rflags = frame->r11;
+    child->context0.cs     = frame->cs;
+    child->context0.ss     = frame->ss;
+    child->context0.es     = frame->es;
+    child->context0.ds     = frame->ds;
+    child->context0.rax    = 0;
+    child->context0.rdi    = frame->rdi;
+    child->context0.rsi    = frame->rsi;
+    child->context0.rdx    = frame->rdx;
+    child->context0.r9     = frame->r9;
+    child->context0.r8     = frame->r8;
+    child->context0.r10    = frame->r10;
+    child->context0.r11    = frame->r11;
+    child->context0.r12    = frame->r12;
+    child->context0.r13    = frame->r13;
+    child->context0.r14    = frame->r14;
+    child->context0.r15    = frame->r15;
+    child->context0.rbx    = frame->rbx;
+    child->context0.rbp    = frame->rbp;
+    child->context0.rsp    = user_stack == 0 ? frame->rsp : user_stack;
+    child->context0.rcx    = frame->rcx;
+}
+
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
 {
-    while (true)
-    {
-        if (is_scheduler) break;
-    }
+    if (reg == NULL) return (uint64_t)-EINVAL;
 
     bool is_sti                = are_interrupts_enabled();
     bool was_scheduler_enabled = is_scheduler;
-    if (!no_interrupt) open_interrupt;
-
-    spin_lock(&create_thread_lock);
     close_interrupt;
     disable_scheduler();
 
     tcb_t parent_task = get_current_task();
+    if (parent_task == NULL || parent_task->parent_group == NULL)
+    {
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-EFAULT;
+    }
+
+    struct X64_REGS fork_frame = *reg;
     uint64_t parent_fs_base = read_fsbase();
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
@@ -1450,6 +1488,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
                          reg != NULL ? reg->rcx : 0);
 
     pcb_t current_pcb = parent_task->parent_group;
+
+    spin_lock(&create_thread_lock);
 
     pcb_t new_pcb = (pcb_t)malloc(sizeof(struct process_control_block));
     if (new_pcb == NULL)
@@ -1466,6 +1506,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     write_serial_fmt("fork name: %s\n", new_pcb->name);
     new_pcb->task_level = TASK_APPLICATION_LEVEL;
     new_pcb->status     = START;
+    new_pcb->vfork      = is_vfork;
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
     if (new_pcb->pagedir == NULL)
@@ -1487,23 +1528,20 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->brk_start   = current_pcb->brk_start;
     new_pcb->brk_end     = current_pcb->brk_end;
     new_pcb->brk_current = current_pcb->brk_current;
+    new_pcb->mmap_start  = current_pcb->mmap_start;
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
     new_pcb->thread_queue = queue_init();
     new_pcb->parent_task  = current_pcb;
-    new_pcb->queue_index  = queue_enqueue(pcb_group_queue, new_pcb);
-    new_pcb->vfork        = is_vfork;
     new_pcb->child_pcb    = queue_init();
-    new_pcb->child_index  = queue_enqueue(current_pcb->child_pcb, new_pcb);
     new_pcb->virt_queue   = queue_copy(current_pcb->virt_queue, virt_copy);
     new_pcb->file_open    = queue_copy(current_pcb->file_open, file_copy);
     new_pcb->ipc_queue    = queue_init();
     new_pcb->tty          = alloc_default_tty();
 
     new_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
-    if (new_pcb->cmdline == NULL || new_pcb->thread_queue == NULL || new_pcb->queue_index == (size_t)-1 ||
-        new_pcb->child_pcb == NULL || new_pcb->child_index == (size_t)-1 || new_pcb->virt_queue == NULL ||
-        new_pcb->file_open == NULL || new_pcb->ipc_queue == NULL || new_pcb->tty == NULL ||
-        new_pcb->xtttp_stc == NULL)
+    if (new_pcb->cmdline == NULL || new_pcb->thread_queue == NULL || new_pcb->child_pcb == NULL ||
+        new_pcb->virt_queue == NULL || new_pcb->file_open == NULL || new_pcb->ipc_queue == NULL ||
+        new_pcb->tty == NULL || new_pcb->xtttp_stc == NULL)
     {
         free_partial_process(new_pcb, !is_vfork);
         spin_unlock(&create_thread_lock);
@@ -1511,6 +1549,24 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         return (uint64_t)-ENOMEM;
     }
     memset(new_pcb->xtttp_stc, 0, sizeof(xtttp_dtt));
+
+    new_pcb->queue_index = queue_enqueue(pcb_group_queue, new_pcb);
+    if (new_pcb->queue_index == (size_t)-1)
+    {
+        free_partial_process(new_pcb, !is_vfork);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-ENOMEM;
+    }
+
+    new_pcb->child_index = queue_enqueue(current_pcb->child_pcb, new_pcb);
+    if (new_pcb->child_index == (size_t)-1)
+    {
+        free_partial_process(new_pcb, !is_vfork);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-ENOMEM;
+    }
 
     tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
@@ -1555,28 +1611,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->winnum  = 0;
     new_task->hasfscr = false;
 
-    new_task->context0.rip    = reg->rcx; // syscall 鎸囦护涓?rcx 瀵勫瓨鍣ㄤ负 rip
-    new_task->context0.rflags = reg->r11; // syscall 鎸囦护涓?r11 瀵勫瓨鍣ㄤ负 rflags
-    new_task->context0.cs     = reg->cs;
-    new_task->context0.ss     = reg->ss;
-    new_task->context0.es     = reg->es;
-    new_task->context0.ds     = reg->ds;
-    new_task->context0.rax    = 0; // 瀛愮嚎绋嬭繑鍥?0
-    new_task->context0.rdi    = reg->rdi;
-    new_task->context0.rsi    = reg->rsi;
-    new_task->context0.rdx    = reg->rdx;
-    new_task->context0.r9     = reg->r9;
-    new_task->context0.r8     = reg->r8;
-    new_task->context0.r10    = reg->r10;
-    new_task->context0.r11    = reg->r11;
-    new_task->context0.r12    = reg->r12;
-    new_task->context0.r13    = reg->r13;
-    new_task->context0.r14    = reg->r14;
-    new_task->context0.r15    = reg->r15;
-    new_task->context0.rbx    = reg->rbx;
-    new_task->context0.rbp    = reg->rbp;
-    new_task->context0.rsp    = user_stack == 0 ? reg->rsp : user_stack;
-    new_task->context0.rcx    = reg->rcx;
+    init_fork_child_context(new_task, &fork_frame, user_stack);
 
     memcpy(new_task->fpu_context.fxsave_area, parent_task->fpu_context.fxsave_area, 512);
     memcpy(new_task->actions, parent_task->actions, sizeof(new_task->actions));
@@ -1586,11 +1621,23 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_task->fs      = parent_task->fs;
     new_task->fs_base = parent_task->fs_base;
     if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
+    {
         write_serial_fmt("[fsbase] fork-child parent=%s parent_tid=%llu child_pid=%llu child_fs=0x%llx parent_fs=0x%llx rip=0x%llx\n",
                          parent_task->name, parent_task->tid, new_pcb->pid, new_task->fs_base, parent_task->fs_base,
-                         reg != NULL ? reg->rcx : 0);
+                         fork_frame.rcx);
+        write_serial_fmt("[forkctx] frame_rcx=0x%llx frame_rsp=0x%llx frame_r11=0x%llx child_rip=0x%llx child_rsp=0x%llx child_rflags=0x%llx cs=0x%llx ss=0x%llx ds=0x%llx es=0x%llx rax=0x%llx\n",
+                         fork_frame.rcx, fork_frame.rsp, fork_frame.r11, new_task->context0.rip,
+                         new_task->context0.rsp, new_task->context0.rflags, new_task->context0.cs,
+                         new_task->context0.ss, new_task->context0.ds, new_task->context0.es,
+                         new_task->context0.rax);
+        write_serial_fmt("[forkctx] regs rbx=0x%llx rbp=0x%llx r12=0x%llx r13=0x%llx r14=0x%llx r15=0x%llx rdi=0x%llx rsi=0x%llx rdx=0x%llx\n",
+                         new_task->context0.rbx, new_task->context0.rbp, new_task->context0.r12,
+                         new_task->context0.r13, new_task->context0.r14, new_task->context0.r15,
+                         new_task->context0.rdi, new_task->context0.rsi, new_task->context0.rdx);
+    }
 
     new_task->parent_group = new_pcb;
+    new_task->tid = alloc_tid();
     new_task->group_index  = queue_enqueue(new_pcb->thread_queue, new_task);
     if (new_task->group_index == (size_t)-1)
     {
@@ -1600,7 +1647,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
-    new_task->tid = alloc_tid();
 
     new_task->window_count = 0;
 

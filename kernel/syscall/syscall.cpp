@@ -25,6 +25,11 @@
 
 sys_(chmod, char *path, uint64_t mode);
 sys_(fchmod, int fd, uint64_t mode);
+sys_(chown, char *path, uint32_t owner, uint32_t group);
+sys_(fchown, int fd, uint32_t owner, uint32_t group);
+sys_(fchownat, int dirfd, char *pathname, uint32_t owner, uint32_t group, int flags);
+sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
+sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
 
 static bool trace_fsbase_task(tcb_t task)
 {
@@ -345,6 +350,13 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_UNAME: regs->rax = (uint64_t)sys_uname((struct utsname *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_CHMOD: regs->rax = (uint64_t)sys_chmod((char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_FCHMOD: regs->rax = (uint64_t)sys_fchmod(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_CHOWN:
+    case SYS_LCHOWN:
+        regs->rax = (uint64_t)sys_chown((char *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_FCHOWN:
+        regs->rax = (uint64_t)sys_fchown(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_BRK: regs->rax = (uint64_t)sys_brk(regs->rdi); break;
     case SYS_MMAP:
         regs->rax = (uint64_t)sys_mmap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9, regs);
@@ -390,6 +402,16 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_NEWFSTATAT:
         regs->rax =
             (uint64_t)sys_newfstatat(regs->rdi, (char *)regs->rsi, (struct stat *)regs->rdx, regs->r10, 0, 0, regs);
+        break;
+    case SYS_FCHOWNAT:
+        regs->rax = (uint64_t)sys_fchownat(regs->rdi, (char *)regs->rsi, regs->rdx, regs->r10, regs->r8, 0, regs);
+        break;
+    case SYS_FCHMODAT:
+        regs->rax = (uint64_t)sys_fchmodat(regs->rdi, (char *)regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
+        break;
+    case SYS_UTIMENSAT:
+        regs->rax =
+            (uint64_t)sys_utimensat(regs->rdi, (char *)regs->rsi, (const struct timespec *)regs->rdx, regs->r10, 0, 0, regs);
         break;
     case SYS_STATX:
         regs->rax =
@@ -575,11 +597,13 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     tcb_t return_task = get_current_task();
     if (return_task != NULL && return_task->task_level == TASK_APPLICATION_LEVEL)
     {
+        uint64_t fs_selector = task_user_fs_selector(return_task);
+        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(fs_selector));
         write_fsbase(return_task->fs_base);
-        if (trace_fsbase_task(return_task))
-            write_serial_fmt("[fsbase] syscall-return task=%s tid=%llu nr=%llu fs=0x%llx hw_after=0x%llx rip=0x%llx ret=0x%llx\n",
-                             return_task->name, return_task->tid, syscall_number, return_task->fs_base,
-                             read_fsbase(), regs->rip, regs->rax);
+        // if (trace_fsbase_task(return_task))
+        //     write_serial_fmt("[fsbase] syscall-return task=%s tid=%llu nr=%llu fs=0x%llx hw_after=0x%llx rip=0x%llx ret=0x%llx\n",
+        //                      return_task->name, return_task->tid, syscall_number, return_task->fs_base,
+        //                      read_fsbase(), regs->rip, regs->rax);
     }
     return (uint64_t)regs;
 }

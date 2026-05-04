@@ -311,6 +311,9 @@
 #define SYS_READLINK 89
 #define SYS_CHMOD    90
 #define SYS_FCHMOD   91
+#define SYS_CHOWN    92
+#define SYS_FCHOWN   93
+#define SYS_LCHOWN   94
 #define SYS_GETTIMEOFDAY 96
 
 #define SYS_SYSINFO 99
@@ -350,15 +353,18 @@
 
 #define SYS_OPENAT 257
 #define SYS_MKDIRAT 258
+#define SYS_FCHOWNAT 260
 #define SYS_NEWFSTATAT 262
 #define SYS_UNLINKAT 263
 #define SYS_RENAMEAT 264
 #define SYS_LINKAT 265
 #define SYS_SYMLINKAT 266
 #define SYS_READLINKAT 267
+#define SYS_FCHMODAT 268
 #define SYS_FACCESSAT 269
 #define SYS_PSELECT6 270
 #define SYS_SET_ROBUST_LIST 273
+#define SYS_UTIMENSAT 280
 #define SYS_PIPE2 293
 #define SYS_PRLIMIT64 302
 #define SYS_GETRANDOM 318
@@ -662,6 +668,9 @@ sys_(pipe, int *pipefd);
 sys_(pipe2, int *pipefd, uint64_t flags);
 sys_(statx, int dirfd, char *pathname, uint64_t flags, uint64_t mask, struct statx *buff);
 sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags);
+sys_(fchownat, int dirfd, char *pathname, uint32_t owner, uint32_t group, int flags);
+sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
+sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
 sys_(getdents, int fd, struct dirent *dents, size_t size);
 sys_(getdents64, int fd, void *dents, size_t size);
 sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timespec *timeout,

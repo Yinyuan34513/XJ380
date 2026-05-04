@@ -107,7 +107,7 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
         // Returning to user mode: keep user GSBASE clear and leave CPU-local
         // data in KGSBASE for the next syscall/swapgs entry.
         write_gsbase(0);
-        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(target->fs));
+        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(target)));
     } else {
         // Returning to kernel mode (for example, resuming inside a syscall):
         // kernel code expects %gs to point at the current CPU area.
