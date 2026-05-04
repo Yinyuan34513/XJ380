@@ -33,6 +33,9 @@ constexpr unsigned long long MSG_MBUTTON = 4;
 constexpr unsigned long long MSG_ROLLER = 5;
 constexpr unsigned long long MSG_CRL = 6;
 constexpr unsigned long long MSG_SPCHAR = 7;
+constexpr unsigned long long MSG_RESIZE = 8;
+
+constexpr unsigned char XWIN_SUPPORT_MAXIMIZE = 0x80;
 
 struct in_addr
 {

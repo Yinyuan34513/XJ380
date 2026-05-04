@@ -12,6 +12,8 @@ struct FILE_TYPEINFO_INDEX
 };
 
 extern HDLE handle;
+extern int fmr_width;
+extern int fmr_height;
 extern char current_path[1024];
 extern FILE_TYPEINFO_INDEX file_ti_index[2048];
 
@@ -54,3 +56,5 @@ void delete_typebox();
 
 void reg_lock();
 void reg_unlock();
+
+int fm_visible_rows();

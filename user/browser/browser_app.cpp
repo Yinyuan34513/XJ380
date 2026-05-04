@@ -22,14 +22,23 @@ namespace
 constexpr int BROWSER_WIDTH = 1024;
 constexpr int BROWSER_HEIGHT = 720;
 constexpr int BROWSER_LOOP_SLEEP_MS = 16;
-constexpr int BROWSER_HEADER_HEIGHT = 76;
+constexpr int BROWSER_HEADER_HEIGHT = 102;
 constexpr int BROWSER_MARGIN = 14;
-constexpr int BROWSER_INPUT_X = 94;
+constexpr int BROWSER_INPUT_X = 252;
 constexpr int BROWSER_INPUT_Y = 16;
 constexpr int BROWSER_INPUT_HEIGHT = 28;
+constexpr int BROWSER_FIND_X = 252;
+constexpr int BROWSER_FIND_Y = 52;
+constexpr int BROWSER_FIND_HEIGHT = 24;
+constexpr int BROWSER_SCROLLBAR_WIDTH = 14;
+constexpr int BROWSER_SCROLLBAR_MIN_THUMB = 32;
 constexpr int BROWSER_SCROLL_STEP = 48;
 constexpr int BROWSER_TEXT_LINE_HEIGHT = 20;
+constexpr unsigned char BROWSER_KEY_F3 = 139;
 constexpr bool BROWSER_ENABLE_LITEHTML = true;
+constexpr const char *BROWSER_USER_CSS =
+    "table{font-size:12px;line-height:16px;border-collapse:collapse;}"
+    "td,th{font-size:12px;line-height:16px;padding:2px 4px;}";
 
 constexpr std::uint32_t COLOR_BG = 0xe7ecefff;
 constexpr std::uint32_t COLOR_PANEL = 0xfafaf9ff;
@@ -40,6 +49,9 @@ constexpr std::uint32_t COLOR_MUTED = 0xc7d2daff;
 constexpr std::uint32_t COLOR_STATUS = 0xb8f2e6ff;
 constexpr std::uint32_t COLOR_ERROR = 0xc1121fff;
 constexpr std::uint32_t COLOR_LINK = 0x1976d2ff;
+constexpr std::uint32_t COLOR_BUTTON = 0x244766ff;
+constexpr std::uint32_t COLOR_BUTTON_DISABLED = 0x50667aff;
+constexpr std::uint32_t COLOR_HIGHLIGHT = 0xffe08aff;
 
 static std::uint32_t litehtml_color(const litehtml::web_color &color)
 {
@@ -471,6 +483,42 @@ struct BrowserPreparedDocument
     int         external_scripts = 0;
 };
 
+enum class BrowserInputMode
+{
+    Url,
+    Find,
+};
+
+enum class BrowserNavReason
+{
+    Normal,
+    History,
+    Reload,
+};
+
+enum class BrowserCommand
+{
+    None,
+    Back,
+    Forward,
+    Reload,
+    Stop,
+    FocusUrl,
+    FocusFind,
+    FindPrev,
+    FindNext,
+};
+
+struct BrowserButton
+{
+    BrowserCommand command = BrowserCommand::None;
+    int            x1 = 0;
+    int            y1 = 0;
+    int            x2 = 0;
+    int            y2 = 0;
+    const char    *label = "";
+};
+
 static void set_html_title(std::string &html, const std::string &title)
 {
     if (title.empty()) {
@@ -709,12 +757,28 @@ static std::string html_to_text(std::string html)
             const std::size_t tag_text_start = i + 1;
             const std::size_t tag_text_len = (tag_end == std::string::npos ? html.size() : tag_end) - tag_text_start;
             const std::string tag = lower_copy(trim_copy(html.substr(tag_text_start, tag_text_len)));
+            const bool closing_tag = !tag.empty() && tag.front() == '/';
+            const std::size_t tag_name_start = closing_tag ? 1 : 0;
+            std::size_t tag_name_end = tag_name_start;
+            while (tag_name_end < tag.size() &&
+                   std::isspace(static_cast<unsigned char>(tag[tag_name_end])) == 0 &&
+                   tag[tag_name_end] != '/' &&
+                   tag[tag_name_end] != '>') {
+                ++tag_name_end;
+            }
+            const std::string tag_name = tag.substr(tag_name_start, tag_name_end - tag_name_start);
 
-            if (tag.rfind("br", 0) == 0 || tag == "/p" || tag == "p" || tag == "/div" || tag == "div" ||
-                tag == "/li" || tag == "li" || tag == "/h1" || tag == "h1" || tag == "/h2" || tag == "h2" ||
-                tag == "/h3" || tag == "h3" || tag == "hr") {
+            if (tag_name == "br" || tag_name == "p" || tag_name == "div" || tag_name == "li" ||
+                tag_name == "h1" || tag_name == "h2" || tag_name == "h3" || tag_name == "hr" ||
+                tag_name == "table" || tag_name == "tr") {
                 if (text.empty() || text.back() != '\n') {
                     text.push_back('\n');
+                }
+                last_was_space = false;
+            }
+            if (!closing_tag && (tag_name == "td" || tag_name == "th")) {
+                if (!text.empty() && text.back() != '\n' && text.back() != '\t') {
+                    text.push_back('\t');
                 }
                 last_was_space = false;
             }
@@ -954,6 +1018,7 @@ public:
     {
         std::snprintf(url_input_, sizeof(url_input_), "%s", "http://neverssl.com/");
         input_len_ = static_cast<int>(std::strlen(url_input_));
+        input_cursor_ = input_len_;
         std::snprintf(status_, sizeof(status_), "%s", "Ready");
     }
 
@@ -994,11 +1059,28 @@ private:
     bool                   content_dirty_ = true;
     bool                   load_pending_ = false;
     bool                   startup_guard_ = true;
+    bool                   suppress_history_record_ = false;
+    BrowserNavReason       pending_nav_reason_ = BrowserNavReason::Normal;
+    BrowserInputMode       input_mode_ = BrowserInputMode::Url;
+    int                    window_width_ = BROWSER_WIDTH;
+    int                    window_height_ = BROWSER_HEIGHT;
     int                    scroll_y_ = 0;
     int                    text_content_height_ = 0;
+    unsigned int           navigation_serial_ = 0;
     char                   url_input_[512] {};
     int                    input_len_ = 0;
+    int                    input_cursor_ = 0;
+    char                   find_input_[128] {};
+    int                    find_len_ = 0;
+    int                    find_cursor_ = 0;
+    int                    find_match_index_ = -1;
+    int                    find_match_count_ = 0;
     char                   status_[128] {};
+    std::string            hovered_url_;
+    std::string            page_text_;
+    std::string            current_url_;
+    std::vector<std::string> history_;
+    int                    history_index_ = -1;
     std::vector<std::string> text_lines_;
     std::vector<CachedResource> resource_cache_;
     std::vector<CachedImage> image_cache_;
@@ -1011,6 +1093,7 @@ private:
     void render_frame();
     void render_header();
     void render_content();
+    void refresh_content_view();
     void set_status(const std::string &text);
     void prepare_text_view(const BrowserFetchResult &response);
     BrowserPreparedDocument prepare_document_html(const BrowserFetchResult &response);
@@ -1020,12 +1103,40 @@ private:
     const BrowserFetchResult *find_cached_resource(const std::string &url) const;
     void store_cached_resource(const std::string &url, const BrowserFetchResult &result);
     const CachedImage *find_cached_image(const std::string &url) const;
+    int  input_right() const { return window_width_ - BROWSER_MARGIN - 152; }
+    int  find_right() const { return window_width_ - BROWSER_MARGIN - 152; }
     int  content_x() const { return BROWSER_MARGIN; }
     int  content_y() const { return BROWSER_HEADER_HEIGHT + BROWSER_MARGIN; }
-    int  content_width() const { return BROWSER_WIDTH - BROWSER_MARGIN * 2; }
-    int  content_height() const { return BROWSER_HEIGHT - content_y() - BROWSER_MARGIN; }
+    int  content_width() const { return window_width_ - BROWSER_MARGIN * 2 - BROWSER_SCROLLBAR_WIDTH; }
+    int  content_height() const { return window_height_ - content_y() - BROWSER_MARGIN; }
+    int  scrollbar_x() const { return content_x() + content_width(); }
+    int  scroll_content_height() const;
     void clamp_scroll();
+    void draw_scrollbar();
+    bool handle_scrollbar_click(int x, int y);
     bool hit_content_area(int x, int y) const;
+    bool hit_url_input(int x, int y) const;
+    bool hit_find_input(int x, int y) const;
+    BrowserCommand command_at(int x, int y) const;
+    bool command_enabled(BrowserCommand command) const;
+    void execute_command(BrowserCommand command);
+    void navigate_to(const std::string &url, BrowserNavReason reason = BrowserNavReason::Normal);
+    void record_history(const std::string &url);
+    void go_history(int delta);
+    void reload_current();
+    void stop_loading();
+    void focus_url(bool select_all);
+    void focus_find(bool select_all);
+    void insert_char(char ch);
+    void backspace_input();
+    void update_find_matches();
+    void find_next(int direction);
+    std::string clipped_tail_for_width(const std::string &text, int width) const;
+    int  text_width_px(const std::string &text, unsigned int size) const;
+    void draw_text_clipped(int x, int y, int width, const std::string &text, std::uint32_t color);
+    void draw_input_text(int x, int y, int width, const std::string &text, std::uint32_t color);
+    void draw_button(const BrowserButton &button);
+    std::string href_from_element(litehtml::element::const_ptr element) const;
     void process_pointer_move(int x, int y);
     void process_pointer_click(int x, int y);
 };
@@ -1300,8 +1411,7 @@ void BrowserContainer::on_anchor_click(const char *url, const litehtml::element:
         return;
     }
 
-    litehtml::url resolved = litehtml::resolve(litehtml::url(app_.base_url()), litehtml::url(url));
-    app_.request_navigation(resolved.str());
+    app_.request_navigation(app_.resolve_url(url, app_.base_url()));
 }
 
 void BrowserContainer::import_css(litehtml::string &text, const litehtml::string &url, litehtml::string &baseurl)
@@ -1733,27 +1843,135 @@ const BrowserDecodedImage *BrowserApp::load_image_resource(const std::string &ur
 
 void BrowserApp::request_navigation(const std::string &url)
 {
+    navigate_to(url, BrowserNavReason::Normal);
+}
+
+void BrowserApp::navigate_to(const std::string &url, BrowserNavReason reason)
+{
     if (url.empty()) {
         return;
     }
 
+    ++navigation_serial_;
+    pending_nav_reason_ = reason;
+    suppress_history_record_ = reason != BrowserNavReason::Normal;
     pending_url_ = url;
     std::snprintf(url_input_, sizeof(url_input_), "%s", url.c_str());
     input_len_ = static_cast<int>(std::strlen(url_input_));
+    input_cursor_ = input_len_;
     load_pending_ = true;
     invalidate_header();
 }
 
-void BrowserApp::clamp_scroll()
+void BrowserApp::record_history(const std::string &url)
 {
-    if (!document_) {
-        const int max_scroll = std::max(0, text_content_height_ - content_height());
-        scroll_y_ = std::clamp(scroll_y_, 0, max_scroll);
+    if (url.empty()) {
         return;
     }
 
-    const int max_scroll = std::max(0, static_cast<int>(document_->height()) - content_height());
+    if (history_index_ >= 0 &&
+        history_index_ < static_cast<int>(history_.size()) &&
+        history_[history_index_] == url) {
+        current_url_ = url;
+        return;
+    }
+
+    if (history_index_ + 1 < static_cast<int>(history_.size())) {
+        history_.erase(history_.begin() + history_index_ + 1, history_.end());
+    }
+
+    history_.push_back(url);
+    history_index_ = static_cast<int>(history_.size()) - 1;
+    current_url_ = url;
+}
+
+void BrowserApp::go_history(int delta)
+{
+    const int next_index = history_index_ + delta;
+    if (next_index < 0 || next_index >= static_cast<int>(history_.size())) {
+        return;
+    }
+    history_index_ = next_index;
+    navigate_to(history_[history_index_], BrowserNavReason::History);
+}
+
+void BrowserApp::reload_current()
+{
+    const std::string target = current_url_.empty() ? trim_copy(std::string(url_input_)) : current_url_;
+    if (target.empty()) {
+        return;
+    }
+    navigate_to(target, BrowserNavReason::Reload);
+}
+
+void BrowserApp::stop_loading()
+{
+    if (!load_pending_) {
+        set_status("Ready");
+        return;
+    }
+    load_pending_ = false;
+    pending_url_.clear();
+    set_status("Stopped");
+}
+
+int BrowserApp::scroll_content_height() const
+{
+    if (document_) {
+        return static_cast<int>(document_->height());
+    }
+    return text_content_height_;
+}
+
+void BrowserApp::clamp_scroll()
+{
+    const int max_scroll = std::max(0, scroll_content_height() - content_height());
     scroll_y_ = std::clamp(scroll_y_, 0, max_scroll);
+}
+
+void BrowserApp::draw_scrollbar()
+{
+    const int x1 = scrollbar_x();
+    const int x2 = x1 + BROWSER_SCROLLBAR_WIDTH;
+    const int y1 = content_y();
+    const int y2 = content_y() + content_height();
+    xapi_DrawRect(window_, x1, y1, x2, y2, 0xd4dde4ff, true);
+
+    const int total_height = scroll_content_height();
+    if (total_height <= content_height() || total_height <= 0) {
+        xapi_DrawRect(window_, x1 + 2, y1 + 2, x2 - 2, y2 - 2, 0x9aa8b3ff, true);
+        return;
+    }
+
+    const int track_height = content_height() - 4;
+    const int thumb_height = std::max(BROWSER_SCROLLBAR_MIN_THUMB, (content_height() * track_height) / total_height);
+    const int max_scroll = std::max(1, total_height - content_height());
+    const int thumb_y = y1 + 2 + ((track_height - thumb_height) * scroll_y_) / max_scroll;
+    xapi_DrawRect(window_, x1 + 2, thumb_y, x2 - 2, thumb_y + thumb_height, COLOR_BUTTON, true);
+}
+
+bool BrowserApp::handle_scrollbar_click(int x, int y)
+{
+    if (x < scrollbar_x() || x >= scrollbar_x() + BROWSER_SCROLLBAR_WIDTH ||
+        y < content_y() || y >= content_y() + content_height()) {
+        return false;
+    }
+
+    const int total_height = scroll_content_height();
+    if (total_height <= content_height()) {
+        scroll_y_ = 0;
+        refresh_content_view();
+        return true;
+    }
+
+    const int track_height = std::max(1, content_height() - 4);
+    const int thumb_height = std::max(BROWSER_SCROLLBAR_MIN_THUMB, (content_height() * track_height) / total_height);
+    const int max_scroll = std::max(1, total_height - content_height());
+    const int track_click = std::clamp(y - content_y() - 2 - thumb_height / 2, 0, std::max(1, track_height - thumb_height));
+    scroll_y_ = (track_click * max_scroll) / std::max(1, track_height - thumb_height);
+    clamp_scroll();
+    refresh_content_view();
+    return true;
 }
 
 void BrowserApp::prepare_text_view(const BrowserFetchResult &response)
@@ -1764,8 +1982,10 @@ void BrowserApp::prepare_text_view(const BrowserFetchResult &response)
         text = "Page loaded, but no visible text content was produced.";
     }
 
+    page_text_ = text;
     text_lines_ = wrap_text_for_width(text, std::max(120, content_width() - 24));
     text_content_height_ = static_cast<int>(text_lines_.size()) * BROWSER_TEXT_LINE_HEIGHT + 24;
+    update_find_matches();
 }
 
 bool BrowserApp::hit_content_area(int x, int y) const
@@ -1774,9 +1994,304 @@ bool BrowserApp::hit_content_area(int x, int y) const
            y >= content_y() && y < content_y() + content_height();
 }
 
+bool BrowserApp::hit_url_input(int x, int y) const
+{
+    return x >= BROWSER_INPUT_X && x < input_right() &&
+           y >= BROWSER_INPUT_Y && y < BROWSER_INPUT_Y + BROWSER_INPUT_HEIGHT;
+}
+
+bool BrowserApp::hit_find_input(int x, int y) const
+{
+    return x >= BROWSER_FIND_X && x < find_right() &&
+           y >= BROWSER_FIND_Y && y < BROWSER_FIND_Y + BROWSER_FIND_HEIGHT;
+}
+
+BrowserCommand BrowserApp::command_at(int x, int y) const
+{
+    const BrowserButton buttons[] = {
+        {BrowserCommand::Back, 14, 16, 52, 44, "<"},
+        {BrowserCommand::Forward, 58, 16, 96, 44, ">"},
+        {BrowserCommand::Reload, 102, 16, 172, 44, "Reload"},
+        {BrowserCommand::Stop, 178, 16, 242, 44, "Stop"},
+        {BrowserCommand::FindPrev, window_width_ - 132, 52, window_width_ - 76, 76, "Prev"},
+        {BrowserCommand::FindNext, window_width_ - 70, 52, window_width_ - 14, 76, "Next"},
+    };
+
+    for (const BrowserButton &button : buttons) {
+        if (x >= button.x1 && x < button.x2 && y >= button.y1 && y < button.y2) {
+            return button.command;
+        }
+    }
+    return BrowserCommand::None;
+}
+
+bool BrowserApp::command_enabled(BrowserCommand command) const
+{
+    switch (command) {
+    case BrowserCommand::Back:
+        return history_index_ > 0;
+    case BrowserCommand::Forward:
+        return history_index_ >= 0 && history_index_ + 1 < static_cast<int>(history_.size());
+    case BrowserCommand::Reload:
+        return !current_url_.empty() || input_len_ > 0;
+    case BrowserCommand::Stop:
+        return load_pending_;
+    case BrowserCommand::FindPrev:
+    case BrowserCommand::FindNext:
+        return find_len_ > 0 && find_match_count_ > 0;
+    default:
+        return true;
+    }
+}
+
+void BrowserApp::execute_command(BrowserCommand command)
+{
+    if (!command_enabled(command)) {
+        return;
+    }
+
+    switch (command) {
+    case BrowserCommand::Back:
+        go_history(-1);
+        break;
+    case BrowserCommand::Forward:
+        go_history(1);
+        break;
+    case BrowserCommand::Reload:
+        reload_current();
+        break;
+    case BrowserCommand::Stop:
+        stop_loading();
+        break;
+    case BrowserCommand::FindPrev:
+        find_next(-1);
+        break;
+    case BrowserCommand::FindNext:
+        find_next(1);
+        break;
+    default:
+        break;
+    }
+}
+
+void BrowserApp::focus_url(bool select_all)
+{
+    input_mode_ = BrowserInputMode::Url;
+    if (select_all) {
+        input_len_ = 0;
+        url_input_[0] = '\0';
+    }
+    input_cursor_ = input_len_;
+    startup_guard_ = false;
+    invalidate_header();
+}
+
+void BrowserApp::focus_find(bool select_all)
+{
+    input_mode_ = BrowserInputMode::Find;
+    if (select_all) {
+        find_len_ = 0;
+        find_input_[0] = '\0';
+        find_match_index_ = -1;
+        find_match_count_ = 0;
+    }
+    find_cursor_ = find_len_;
+    startup_guard_ = false;
+    invalidate_header();
+}
+
+void BrowserApp::insert_char(char ch)
+{
+    char *buffer = input_mode_ == BrowserInputMode::Url ? url_input_ : find_input_;
+    int &length = input_mode_ == BrowserInputMode::Url ? input_len_ : find_len_;
+    int &cursor = input_mode_ == BrowserInputMode::Url ? input_cursor_ : find_cursor_;
+    const int capacity = input_mode_ == BrowserInputMode::Url ? static_cast<int>(sizeof(url_input_)) : static_cast<int>(sizeof(find_input_));
+
+    if (length >= capacity - 1) {
+        return;
+    }
+
+    for (int i = length; i >= cursor; --i) {
+        buffer[i + 1] = buffer[i];
+    }
+    buffer[cursor++] = ch;
+    ++length;
+    buffer[length] = '\0';
+
+    if (input_mode_ == BrowserInputMode::Find) {
+        update_find_matches();
+    }
+    invalidate_header();
+}
+
+void BrowserApp::backspace_input()
+{
+    char *buffer = input_mode_ == BrowserInputMode::Url ? url_input_ : find_input_;
+    int &length = input_mode_ == BrowserInputMode::Url ? input_len_ : find_len_;
+    int &cursor = input_mode_ == BrowserInputMode::Url ? input_cursor_ : find_cursor_;
+
+    if (cursor <= 0 || length <= 0) {
+        return;
+    }
+
+    for (int i = cursor - 1; i < length; ++i) {
+        buffer[i] = buffer[i + 1];
+    }
+    --cursor;
+    --length;
+
+    if (input_mode_ == BrowserInputMode::Find) {
+        update_find_matches();
+    }
+    invalidate_header();
+}
+
+void BrowserApp::update_find_matches()
+{
+    find_match_count_ = 0;
+    find_match_index_ = -1;
+    const std::string needle = trim_copy(std::string(find_input_));
+    if (needle.empty() || page_text_.empty()) {
+        return;
+    }
+
+    std::size_t pos = 0;
+    while (pos < page_text_.size()) {
+        pos = find_case_insensitive(page_text_, needle, pos);
+        if (pos == std::string::npos) {
+            break;
+        }
+        ++find_match_count_;
+        pos += std::max<std::size_t>(1, needle.size());
+    }
+
+    if (find_match_count_ > 0) {
+        find_match_index_ = 0;
+    }
+}
+
+void BrowserApp::find_next(int direction)
+{
+    if (find_len_ <= 0) {
+        focus_find(false);
+        return;
+    }
+    update_find_matches();
+    if (find_match_count_ <= 0) {
+        set_status("Find: no match");
+        return;
+    }
+
+    if (find_match_index_ < 0) {
+        find_match_index_ = 0;
+    } else {
+        find_match_index_ = (find_match_index_ + direction + find_match_count_) % find_match_count_;
+    }
+
+    if (!document_) {
+        const std::string needle = trim_copy(std::string(find_input_));
+        int seen = 0;
+        for (int i = 0; i < static_cast<int>(text_lines_.size()); ++i) {
+            if (find_case_insensitive(text_lines_[i], needle) != std::string::npos) {
+                if (seen == find_match_index_) {
+                    scroll_y_ = std::max(0, i * BROWSER_TEXT_LINE_HEIGHT - 24);
+                    clamp_scroll();
+                    break;
+                }
+                ++seen;
+            }
+        }
+    }
+
+    char text[64];
+    std::snprintf(text, sizeof(text), "Find %d/%d", find_match_index_ + 1, find_match_count_);
+    set_status(text);
+    refresh_content_view();
+}
+
+std::string BrowserApp::clipped_tail_for_width(const std::string &text, int width) const
+{
+    if (width <= 0 || text.empty()) {
+        return std::string();
+    }
+
+    std::string visible = text;
+    while (!visible.empty() &&
+           xapi_CalcTextWidth(const_cast<char *>(visible.c_str()), 10) > static_cast<unsigned long long>(width)) {
+        visible.erase(visible.begin());
+    }
+    return visible;
+}
+
+void BrowserApp::draw_text_clipped(int x, int y, int width, const std::string &text, std::uint32_t color)
+{
+    const std::string visible = clipped_tail_for_width(text, width);
+    if (visible.empty()) {
+        return;
+    }
+
+    xapi_DrawSWText(window_, static_cast<unsigned int>(x), static_cast<unsigned int>(y), const_cast<char *>(visible.c_str()), color);
+}
+
+int BrowserApp::text_width_px(const std::string &text, unsigned int size) const
+{
+    if (text.empty()) {
+        return 0;
+    }
+    return static_cast<int>(xapi_CalcTextWidth(const_cast<char *>(text.c_str()), size));
+}
+
+void BrowserApp::draw_input_text(int x, int y, int width, const std::string &text, std::uint32_t color)
+{
+    const std::string visible = clipped_tail_for_width(text, width);
+    if (visible.empty()) {
+        return;
+    }
+
+    xapi_DrawText(window_,
+                  static_cast<unsigned int>(x),
+                  static_cast<unsigned int>(y),
+                  const_cast<char *>(visible.c_str()),
+                  10,
+                  color);
+}
+
+void BrowserApp::draw_button(const BrowserButton &button)
+{
+    const bool enabled = command_enabled(button.command);
+    xapi_DrawRect(window_, button.x1, button.y1, button.x2, button.y2, enabled ? COLOR_BUTTON : COLOR_BUTTON_DISABLED, true);
+    const int label_width = static_cast<int>(xapi_CalcTextWidth(const_cast<char *>(button.label), 10));
+    const int button_width = button.x2 - button.x1;
+    const int text_x = button.x1 + std::max(4, (button_width - label_width) / 2);
+    draw_text_clipped(text_x, button.y1 + 6, button_width - 8, button.label, enabled ? COLOR_MUTED : 0x9aa8b3ff);
+}
+
+std::string BrowserApp::href_from_element(litehtml::element::const_ptr element) const
+{
+    while (element) {
+        const char *href = element->get_attr("href");
+        if (href == nullptr || *href == '\0') {
+            element = element->parent();
+            continue;
+        }
+        return resolve_url(href, base_url_);
+    }
+
+    return std::string();
+}
+
 void BrowserApp::process_pointer_move(int x, int y)
 {
+    if (x >= scrollbar_x() && x < scrollbar_x() + BROWSER_SCROLLBAR_WIDTH &&
+        y >= content_y() && y < content_y() + content_height()) {
+        return;
+    }
+
     if (!document_ || !hit_content_area(x, y)) {
+        if (!hovered_url_.empty()) {
+            hovered_url_.clear();
+            invalidate_header();
+        }
         return;
     }
 
@@ -1788,11 +2303,40 @@ void BrowserApp::process_pointer_move(int x, int y)
                              static_cast<float>(client_x),
                              static_cast<float>(client_y),
                              redraw);
-    invalidate_content();
+
+    const std::string href = href_from_element(document_->get_over_element());
+    if (href != hovered_url_) {
+        hovered_url_ = href;
+        invalidate_header();
+    }
+
+    if (!redraw.empty()) {
+        invalidate_content();
+    }
 }
 
 void BrowserApp::process_pointer_click(int x, int y)
 {
+    if (handle_scrollbar_click(x, y)) {
+        return;
+    }
+
+    const BrowserCommand command = command_at(x, y);
+    if (command != BrowserCommand::None) {
+        execute_command(command);
+        return;
+    }
+
+    if (hit_url_input(x, y)) {
+        focus_url(true);
+        return;
+    }
+
+    if (hit_find_input(x, y)) {
+        focus_find(false);
+        return;
+    }
+
     if (!document_ || !hit_content_area(x, y)) {
         return;
     }
@@ -1800,16 +2344,27 @@ void BrowserApp::process_pointer_click(int x, int y)
     litehtml::position::vector redraw;
     const int client_x = x - content_x();
     const int client_y = y - content_y();
+    const int page_y = client_y + scroll_y_;
+    const unsigned int navigation_before = navigation_serial_;
     document_->on_lbutton_down(static_cast<float>(client_x),
-                               static_cast<float>(client_y + scroll_y_),
+                               static_cast<float>(page_y),
                                static_cast<float>(client_x),
                                static_cast<float>(client_y),
                                redraw);
     document_->on_lbutton_up(static_cast<float>(client_x),
-                             static_cast<float>(client_y + scroll_y_),
+                             static_cast<float>(page_y),
                              static_cast<float>(client_x),
                              static_cast<float>(client_y),
                              redraw);
+
+    if (navigation_serial_ == navigation_before) {
+        const std::string href = href_from_element(document_->get_over_element());
+        if (!href.empty()) {
+            request_navigation(href);
+            return;
+        }
+    }
+
     invalidate_content();
 }
 
@@ -1817,27 +2372,25 @@ void BrowserApp::handle_message(unsigned long long type, unsigned long long hDat
 {
     switch (type) {
     case MSG_CHAR:
-        if (static_cast<char>(lData) >= ' ' && input_len_ < static_cast<int>(sizeof(url_input_) - 1)) {
+        if (static_cast<char>(lData) >= ' ') {
             startup_guard_ = false;
-            url_input_[input_len_++] = static_cast<char>(lData);
-            url_input_[input_len_] = '\0';
-            invalidate_header();
+            insert_char(static_cast<char>(lData));
         }
         break;
     case MSG_SPCHAR:
         if (static_cast<char>(lData) == '\b') {
-            if (input_len_ > 0) {
-                startup_guard_ = false;
-                url_input_[--input_len_] = '\0';
-                invalidate_header();
-            }
+            startup_guard_ = false;
+            backspace_input();
         } else if (static_cast<char>(lData) == '\n') {
-            if (!startup_guard_) {
-                pending_url_ = url_input_;
-                load_pending_ = true;
+            if (input_mode_ == BrowserInputMode::Find) {
+                find_next(1);
+            } else if (!startup_guard_) {
+                navigate_to(url_input_, BrowserNavReason::Normal);
             } else {
                 startup_guard_ = false;
             }
+        } else if (static_cast<unsigned char>(lData) == BROWSER_KEY_F3) {
+            find_next(1);
         }
         break;
     case MSG_MOVE:
@@ -1847,9 +2400,27 @@ void BrowserApp::handle_message(unsigned long long type, unsigned long long hDat
         process_pointer_click(static_cast<int>(hData), static_cast<int>(lData));
         break;
     case MSG_ROLLER:
-        scroll_y_ -= static_cast<int>(hData) * BROWSER_SCROLL_STEP;
+        {
+            const int old_scroll = scroll_y_;
+            scroll_y_ -= static_cast<int>(hData) * BROWSER_SCROLL_STEP;
+            clamp_scroll();
+            if (scroll_y_ != old_scroll) {
+                refresh_content_view();
+            }
+        }
+        break;
+    case MSG_RESIZE:
+        window_width_ = static_cast<int>(hData);
+        window_height_ = static_cast<int>(lData);
+        if (document_) {
+            container_.set_viewport(content_width(), content_height());
+            document_->render(static_cast<float>(content_width()));
+        } else if (!page_text_.empty()) {
+            text_lines_ = wrap_text_for_width(page_text_, std::max(120, content_width() - 24));
+            text_content_height_ = static_cast<int>(text_lines_.size()) * BROWSER_TEXT_LINE_HEIGHT + 24;
+        }
         clamp_scroll();
-        invalidate_content();
+        invalidate_all();
         break;
     default:
         break;
@@ -1883,6 +2454,7 @@ void BrowserApp::load_current_url()
             }
 
             base_url_ = response.final_url.empty() ? target : response.final_url;
+            current_url_ = base_url_;
 
             char info[256];
             std::snprintf(info,
@@ -1925,6 +2497,7 @@ void BrowserApp::load_current_url()
         scroll_y_ = 0;
         document_.reset();
         text_lines_.clear();
+        page_text_.clear();
         text_content_height_ = 0;
 
         bool prepared_fallback = !BROWSER_ENABLE_LITEHTML || prepared.fallback_used;
@@ -1941,10 +2514,16 @@ void BrowserApp::load_current_url()
 
             container_.set_viewport(content_width(), content_height());
             log_line("document create begin");
-            document_ = litehtml::document::createFromString(html, &container_);
+            document_ = litehtml::document::createFromString(html, &container_, litehtml::master_css, BROWSER_USER_CSS);
             if (document_) {
                 log_line("document render begin");
                 document_->render(static_cast<float>(content_width()));
+                page_text_.clear();
+                if (document_->root()) {
+                    document_->root()->get_text(page_text_);
+                    page_text_ = trim_copy(page_text_);
+                    update_find_matches();
+                }
                 log_line("document render done");
             } else {
                 prepared_fallback = true;
@@ -1960,6 +2539,12 @@ void BrowserApp::load_current_url()
         }
         clamp_scroll();
         set_status("Loaded");
+        if (!suppress_history_record_) {
+            record_history(base_url_);
+        } else {
+            current_url_ = base_url_;
+            suppress_history_record_ = false;
+        }
         invalidate_content();
     } catch (const std::exception &ex) {
         log_line(std::string("exception: ") + ex.what());
@@ -1976,43 +2561,100 @@ void BrowserApp::load_current_url()
 
 void BrowserApp::render_frame()
 {
-    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEIGHT - 1, COLOR_BG, true);
-    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
+    xapi_DrawRect(window_, 0, 0, window_width_ - 1, window_height_ - 1, COLOR_BG, true);
+    xapi_DrawRect(window_, 0, 0, window_width_ - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
     xapi_DrawRect(window_,
                   BROWSER_MARGIN,
                   BROWSER_HEADER_HEIGHT + 2,
-                  BROWSER_WIDTH - BROWSER_MARGIN,
-                  BROWSER_HEIGHT - BROWSER_MARGIN,
+                  window_width_ - BROWSER_MARGIN,
+                  window_height_ - BROWSER_MARGIN,
                   COLOR_PANEL,
                   true);
     xapi_DrawRect(window_,
                   BROWSER_INPUT_X,
                   BROWSER_INPUT_Y,
-                  BROWSER_WIDTH - BROWSER_MARGIN,
+                  input_right(),
                   BROWSER_INPUT_Y + BROWSER_INPUT_HEIGHT,
+                  COLOR_INPUT,
+                  true);
+    xapi_DrawRect(window_,
+                  BROWSER_FIND_X,
+                  BROWSER_FIND_Y,
+                  find_right(),
+                  BROWSER_FIND_Y + BROWSER_FIND_HEIGHT,
                   COLOR_INPUT,
                   true);
 }
 
 void BrowserApp::render_header()
 {
-    xapi_DrawRect(window_, 0, 0, BROWSER_WIDTH - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
+    xapi_DrawRect(window_, 0, 0, window_width_ - 1, BROWSER_HEADER_HEIGHT - 1, COLOR_HEADER, true);
     xapi_DrawRect(window_,
                   BROWSER_INPUT_X,
                   BROWSER_INPUT_Y,
-                  BROWSER_WIDTH - BROWSER_MARGIN,
+                  input_right(),
                   BROWSER_INPUT_Y + BROWSER_INPUT_HEIGHT,
                   COLOR_INPUT,
                   true);
+    xapi_DrawRect(window_,
+                  BROWSER_FIND_X,
+                  BROWSER_FIND_Y,
+                  find_right(),
+                  BROWSER_FIND_Y + BROWSER_FIND_HEIGHT,
+                  COLOR_INPUT,
+                  true);
 
-    xapi_DrawSWText(window_, 18, 18, const_cast<char *>("Browser"), COLOR_MUTED);
-    xapi_DrawSWText(window_, 20, 48, const_cast<char *>(status_), COLOR_STATUS);
-    xapi_DrawSWText(window_, 20, 18, const_cast<char *>("URL"), COLOR_MUTED);
-    xapi_DrawSWText(window_, BROWSER_INPUT_X + 8, BROWSER_INPUT_Y + 6, url_input_, COLOR_TEXT);
+    const BrowserButton buttons[] = {
+        {BrowserCommand::Back, 14, 16, 52, 44, "<"},
+        {BrowserCommand::Forward, 58, 16, 96, 44, ">"},
+        {BrowserCommand::Reload, 102, 16, 172, 44, "Reload"},
+        {BrowserCommand::Stop, 178, 16, 242, 44, "Stop"},
+        {BrowserCommand::FindPrev, window_width_ - 132, 52, window_width_ - 76, 76, "Prev"},
+        {BrowserCommand::FindNext, window_width_ - 70, 52, window_width_ - 14, 76, "Next"},
+    };
+    for (const BrowserButton &button : buttons) {
+        draw_button(button);
+    }
+
+    xapi_DrawSWText(window_, 20, 56, const_cast<char *>(status_), COLOR_STATUS);
+    xapi_DrawSWText(window_, BROWSER_INPUT_X - 34, 20, const_cast<char *>("URL"), COLOR_MUTED);
+    xapi_DrawSWText(window_, BROWSER_FIND_X - 48, 56, const_cast<char *>("Find"), COLOR_MUTED);
+    const int url_text_width = input_right() - BROWSER_INPUT_X - 16;
+    const int find_text_width = find_right() - BROWSER_FIND_X - 16;
+    const std::string visible_url = clipped_tail_for_width(url_input_, url_text_width);
+    const std::string visible_find = clipped_tail_for_width(find_input_, find_text_width);
+    draw_input_text(BROWSER_INPUT_X + 8, BROWSER_INPUT_Y + 3, url_text_width, url_input_, COLOR_TEXT);
+    draw_input_text(BROWSER_FIND_X + 8, BROWSER_FIND_Y + 1, find_text_width, find_input_, COLOR_TEXT);
+
+    if (input_mode_ == BrowserInputMode::Url) {
+        const int cursor_in_visible = std::clamp(input_cursor_ - (input_len_ - static_cast<int>(visible_url.size())), 0, static_cast<int>(visible_url.size()));
+        const std::string cursor_prefix = visible_url.substr(0, static_cast<std::size_t>(cursor_in_visible));
+        const int cursor_x = std::min(input_right() - 6, BROWSER_INPUT_X + 8 + text_width_px(cursor_prefix, 10));
+        xapi_DrawLine(window_, cursor_x, BROWSER_INPUT_Y + 5, cursor_x, BROWSER_INPUT_Y + BROWSER_INPUT_HEIGHT - 5, COLOR_LINK);
+    } else {
+        const int cursor_in_visible = std::clamp(find_cursor_ - (find_len_ - static_cast<int>(visible_find.size())), 0, static_cast<int>(visible_find.size()));
+        const std::string cursor_prefix = visible_find.substr(0, static_cast<std::size_t>(cursor_in_visible));
+        const int cursor_x = std::min(find_right() - 6, BROWSER_FIND_X + 8 + text_width_px(cursor_prefix, 10));
+        xapi_DrawLine(window_, cursor_x, BROWSER_FIND_Y + 4, cursor_x, BROWSER_FIND_Y + BROWSER_FIND_HEIGHT - 4, COLOR_LINK);
+    }
+
+    char find_info[32];
+    if (find_len_ > 0) {
+        if (find_match_count_ > 0) {
+            std::snprintf(find_info, sizeof(find_info), "%d/%d", std::max(1, find_match_index_ + 1), find_match_count_);
+        } else {
+            std::snprintf(find_info, sizeof(find_info), "%s", "0/0");
+        }
+        xapi_DrawSWText(window_, find_right() + 8, BROWSER_FIND_Y + 4, find_info, COLOR_STATUS);
+    }
 
     const std::string title = page_title_.empty() ? std::string("litehtml browser") : page_title_;
-    xapi_DrawRect(window_, BROWSER_WIDTH - 360, 18, BROWSER_WIDTH - BROWSER_MARGIN, 36, COLOR_HEADER, true);
-    xapi_DrawSWText(window_, BROWSER_WIDTH - 360, 18, const_cast<char *>(title.c_str()), COLOR_MUTED);
+    xapi_DrawRect(window_, window_width_ - 136, 16, window_width_ - BROWSER_MARGIN, 44, COLOR_HEADER, true);
+    draw_text_clipped(window_width_ - 132, 20, 110, title, COLOR_MUTED);
+
+    if (!hovered_url_.empty()) {
+        draw_text_clipped(180, 82, window_width_ - 200, hovered_url_, COLOR_STATUS);
+    }
 }
 
 void BrowserApp::render_content()
@@ -2020,7 +2662,7 @@ void BrowserApp::render_content()
     xapi_DrawRect(window_,
                   content_x(),
                   content_y(),
-                  content_x() + content_width(),
+                  content_x() + content_width() + BROWSER_SCROLLBAR_WIDTH,
                   content_y() + content_height(),
                   COLOR_PANEL,
                   true);
@@ -2063,6 +2705,20 @@ void BrowserApp::render_content()
     } else {
         xapi_DrawSWText(window_, content_x() + 12, content_y() + 12, const_cast<char *>("No page loaded."), COLOR_ERROR);
     }
+
+    draw_scrollbar();
+}
+
+void BrowserApp::refresh_content_view()
+{
+    render_content();
+    xapi_RefreshPartWindow(window_,
+                           content_x(),
+                           content_y(),
+                           content_x() + content_width() + BROWSER_SCROLLBAR_WIDTH,
+                           content_y() + content_height());
+    content_dirty_ = false;
+    need_redraw_ = header_dirty_ || frame_dirty_;
 }
 
 void BrowserApp::render()
@@ -2071,7 +2727,7 @@ void BrowserApp::render()
         render_frame();
         render_header();
         render_content();
-        xapi_RefreshPartWindow(window_, 0, 0, BROWSER_WIDTH, BROWSER_HEIGHT);
+        xapi_RefreshPartWindow(window_, 0, 0, window_width_, window_height_);
         frame_dirty_ = false;
         header_dirty_ = false;
         content_dirty_ = false;
@@ -2081,7 +2737,7 @@ void BrowserApp::render()
 
     if (header_dirty_) {
         render_header();
-        xapi_RefreshPartWindow(window_, 0, 0, BROWSER_WIDTH, BROWSER_HEADER_HEIGHT);
+        xapi_RefreshPartWindow(window_, 0, 0, window_width_, BROWSER_HEADER_HEIGHT);
         header_dirty_ = false;
     }
 
@@ -2090,7 +2746,7 @@ void BrowserApp::render()
         xapi_RefreshPartWindow(window_,
                                content_x(),
                                content_y(),
-                               content_x() + content_width(),
+                               content_x() + content_width() + BROWSER_SCROLLBAR_WIDTH,
                                content_y() + content_height());
         content_dirty_ = false;
     }
@@ -2106,7 +2762,7 @@ int BrowserApp::run()
     window.title = const_cast<char *>("Browser");
     window.width = BROWSER_WIDTH;
     window.height = BROWSER_HEIGHT;
-    window.sets = XWIN_NORMAL;
+    window.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
 
     xapi_CreateWindow(&window_, &window);
     xapi_SetIcon(window_, const_cast<char *>("/system/icon/terminal.png"));

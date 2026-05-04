@@ -2,10 +2,13 @@ all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf
 
 export CXX ?= g++
 export CC ?= gcc
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -Wno-write-strings
+KCONFIG_AUTOCONF ?= $(abspath ../include/generated/autoconf.h)
+KCONFIG_CPPFLAGS ?= -include $(KCONFIG_AUTOCONF)
+export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include $(KCONFIG_CPPFLAGS) -Wno-write-strings
 XAPI_HEADERS := $(shell find ./xapi/include -type f \( -name "*.h" -o -name "*.hpp" \))
 USER_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \))
 BROWSER_HEADERS := $(shell find ./browser -type f \( -name "*.h" -o -name "*.hpp" \))
+USER_HEADERS += $(KCONFIG_AUTOCONF)
 
 MBEDTLS_SRC_DIR := ../third_party/mbedtls-src
 MBEDTLS_CONFIG_HEADER := mbed_compat/xj380_mbedtls_user_config.h

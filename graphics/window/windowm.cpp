@@ -22,6 +22,132 @@ static bool is_valid_gui_ptr(const void *ptr)
     return ptr != NULL && (uint64_t)ptr >= get_physical_memory_offset();
 }
 
+static uint32_t min_u32(uint32_t a, uint32_t b)
+{
+    return a < b ? a : b;
+}
+
+static void draw_max_button(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *sheet, uint32_t content_width, bool restore_icon)
+{
+    if (xwmi == NULL || sheet == NULL || content_width < 80) return;
+
+    const int x = (int)content_width - 75;
+    const int y = 5;
+    SHEET_BUFFER outline = {0x55, 0x55, 0x55, 0xff};
+
+    copy_buffer_by_id_without_alpha(sht, sheet, xwmi->theme.min, x, y, 26, 18);
+    draw_line(sht, sheet, x + 7, y + 5, x + 18, y + 5, outline);
+    draw_line(sht, sheet, x + 7, y + 5, x + 7, y + 13, outline);
+    draw_line(sht, sheet, x + 18, y + 5, x + 18, y + 13, outline);
+    draw_line(sht, sheet, x + 7, y + 13, x + 18, y + 13, outline);
+
+    if (restore_icon)
+    {
+        draw_line(sht, sheet, x + 10, y + 3, x + 20, y + 3, outline);
+        draw_line(sht, sheet, x + 20, y + 3, x + 20, y + 11, outline);
+        draw_line(sht, sheet, x + 18, y + 11, x + 20, y + 11, outline);
+    }
+}
+
+static void redraw_window_frame(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
+{
+    if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls) || windowls->w_sheet == NULL) return;
+
+    uint32_t width = windowls->width;
+    uint32_t height = windowls->height;
+    SHEET *sheet = windowls->w_sheet;
+
+    SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((width + 24) * 27 * sizeof(SHEET_BUFFER));
+    SHEET_BUFFER *lft = (SHEET_BUFFER *)malloc(height * 12 * sizeof(SHEET_BUFFER));
+    if (top == NULL || lft == NULL)
+    {
+        if (top != NULL) free(top);
+        if (lft != NULL) free(lft);
+        return;
+    }
+
+    resize_theme_width(top, xwmi->theme.top, width + 24, 336, 27);
+    copy_buffer_by_id(sht, sheet, top, 0, 0, width + 24, 27);
+
+    resize_theme_width(top, xwmi->theme.bottom, width + 24, 181, 20);
+    copy_buffer_by_id(sht, sheet, top, 0, height + 27, width + 24, 20);
+
+    resize_theme_height(lft, xwmi->theme.left, 12, height, 600);
+    copy_buffer_by_id(sht, sheet, lft, 0, 27, 12, height);
+
+    resize_theme_height(lft, xwmi->theme.right, 12, height, 600);
+    copy_buffer_by_id(sht, sheet, lft, width + 12, 27, 12, height);
+
+    copy_buffer_by_id_without_alpha(sht, sheet, xwmi->theme.close, width - 21, 5, 41, 18);
+    copy_buffer_by_id_without_alpha(sht, sheet, xwmi->theme.min, width - 48, 5, 26, 18);
+    if (windowls->can_maximize) draw_max_button(xwmi, sht, sheet, width, windowls->is_maximized);
+    print_box_ttf(sht, sheet, windowls->title, BLACK, 12, 4, 11);
+
+    free(top);
+    free(lft);
+}
+
+static bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,
+                                                   int bx, int by, uint32_t width, uint32_t height)
+{
+    if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls) || windowls->type != XWIN_NORMAL ||
+        windowls->w_sheet == NULL)
+    {
+        return false;
+    }
+
+    SHEET *sheet = windowls->w_sheet;
+    int old_bx = sheet->bx;
+    int old_by = sheet->by;
+    uint32_t old_sheet_width = sheet->width;
+    uint32_t old_sheet_height = sheet->height;
+    uint32_t old_content_width = windowls->width;
+    uint32_t old_content_height = windowls->height;
+    void *old_buffer = sheet->buffer;
+
+    SHEET_BUFFER *new_buffer = (SHEET_BUFFER *)calloc((size_t)(width + 24) * (height + 47), sizeof(SHEET_BUFFER));
+    if (new_buffer == NULL) return false;
+
+    SHEET_BUFFER white = {0xff, 0xff, 0xff, 0xff};
+    for (uint32_t y = 27; y < height + 27; y++)
+    {
+        SHEET_BUFFER *row = &new_buffer[y * (width + 24) + 12];
+        for (uint32_t x = 0; x < width; x++)
+        {
+            row[x] = white;
+        }
+    }
+
+    if (is_valid_gui_ptr(old_buffer))
+    {
+        SHEET_BUFFER *old_sheet_buffer = (SHEET_BUFFER *)old_buffer;
+        uint32_t copy_width = min_u32(old_content_width, width);
+        uint32_t copy_height = min_u32(old_content_height, height);
+        for (uint32_t y = 0; y < copy_height; y++)
+        {
+            SHEET_BUFFER *dst = &new_buffer[(y + 27) * (width + 24) + 12];
+            SHEET_BUFFER *src = &old_sheet_buffer[(y + 27) * old_sheet_width + 12];
+            memcpy(dst, src, (size_t)copy_width * sizeof(SHEET_BUFFER));
+        }
+    }
+
+    sheet->buffer = new_buffer;
+    sheet->bx = bx;
+    sheet->by = by;
+    sheet->width = width + 24;
+    sheet->height = height + 47;
+    windowls->width = width;
+    windowls->height = height;
+
+    redraw_window_frame(xwmi, sht, windowls);
+
+    if (is_valid_gui_ptr(old_buffer)) free(old_buffer);
+
+    refresh_part_sheet(sht, old_bx, old_by, old_bx + (int)old_sheet_width, old_by + (int)old_sheet_height);
+    refresh_part_sheet(sht, bx, by, bx + (int)sheet->width, by + (int)sheet->height);
+    return true;
+}
+
 void init_xwm(XWM_INFO *xwmi)
 {
     write_serial_string("Initializing XWM...\n");
@@ -85,7 +211,7 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    // create_sheet(sht, 0, 0, 
+    // create_sheet(sht, 0, 0,
     //              sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, FixedSheetType, -1, new_window->w_sheet);
     new_window->w_sheet = dock_ct_sheet;
     change_sheet_type(sht, new_window->w_sheet, TopWindowSheetType);
@@ -218,6 +344,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     // 关闭 & 最小化按钮
     copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.close, width - 21, 5, 41, 18);
     copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.min, width - 48, 5, 26, 18);
+    if (new_window->can_maximize) draw_max_button(xwmi, sht, new_window->w_sheet, width, false);
 
     // print_box_ttf(sht, new_window->w_sheet, title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
     print_box_ttf(sht, new_window->w_sheet, title, BLACK, 12, 4, 11);
@@ -234,14 +361,92 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
 {
-    SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((windowls->width + 24) * 27 * 4);
-    resize_theme_width(top, xwmi->theme.top, windowls->width + 24, 336, 27);
-    copy_buffer_by_id(sht, windowls->w_sheet, top, 0, 0, windowls->width + 24, 27);
-    print_box_ttf(sht, windowls->w_sheet, title, WHITE, 22, 0, 11);
-    free(top);
+    if (windowls == NULL || windowls->w_sheet == NULL) return;
+
+    strncpy(windowls->title, title, sizeof(windowls->title) - 1);
+    windowls->title[sizeof(windowls->title) - 1] = '\0';
+    redraw_window_frame(xwmi, sht, windowls);
     refresh_part_sheet(sht, getBX(sht, windowls->w_sheet), getBY(sht, windowls->w_sheet),
                        getBX(sht, windowls->w_sheet) + getXsize(sht, windowls->w_sheet) + 10,
                        getBY(sht, windowls->w_sheet) + 22);
+}
+
+bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || !is_valid_gui_ptr(windowls) || windowls->type != XWIN_NORMAL ||
+        windowls->w_sheet == NULL || !windowls->can_maximize)
+    {
+        return false;
+    }
+
+    if (!windowls->is_maximized)
+    {
+        windowls->restore_bx = windowls->w_sheet->bx;
+        windowls->restore_by = windowls->w_sheet->by;
+        windowls->restore_width = windowls->width;
+        windowls->restore_height = windowls->height;
+
+        const int top_reserved = 24;
+        const int bottom_reserved = 87;
+        int work_x = 0;
+        int work_y = top_reserved;
+        int work_w = (int)sht->scrx;
+        int work_h = (int)sht->scry - top_reserved - bottom_reserved;
+
+        if (work_w < 160) work_w = (int)sht->scrx;
+        if (work_h < 120) {
+            work_y = 0;
+            work_h = (int)sht->scry;
+        }
+
+        uint32_t max_width = work_w > 24 ? (uint32_t)(work_w - 24) : 1;
+        uint32_t max_height = work_h > 47 ? (uint32_t)(work_h - 47) : 1;
+
+        if (!resize_window_sheet_preserving_content(xwmi, sht, windowls, work_x, work_y, max_width, max_height))
+        {
+            return false;
+        }
+        windowls->is_maximized = true;
+        redraw_window_frame(xwmi, sht, windowls);
+        refresh_part_sheet(sht, windowls->w_sheet->bx, windowls->w_sheet->by,
+                           windowls->w_sheet->bx + (int)windowls->w_sheet->width,
+                           windowls->w_sheet->by + (int)windowls->w_sheet->height);
+        do_message(MSG_RESIZE, windowls->width, windowls->height, windowls->WinMPf, windowls->w_task);
+        return true;
+    }
+
+    int restore_bx = windowls->restore_bx;
+    int restore_by = windowls->restore_by;
+    uint32_t restore_width = windowls->restore_width ? windowls->restore_width : windowls->width;
+    uint32_t restore_height = windowls->restore_height ? windowls->restore_height : windowls->height;
+
+    if (!resize_window_sheet_preserving_content(xwmi, sht, windowls, restore_bx, restore_by, restore_width,
+                                                restore_height))
+    {
+        return false;
+    }
+    windowls->is_maximized = false;
+    redraw_window_frame(xwmi, sht, windowls);
+    refresh_part_sheet(sht, windowls->w_sheet->bx, windowls->w_sheet->by,
+                       windowls->w_sheet->bx + (int)windowls->w_sheet->width,
+                       windowls->w_sheet->by + (int)windowls->w_sheet->height);
+    do_message(MSG_RESIZE, windowls->width, windowls->height, windowls->WinMPf, windowls->w_task);
+    return true;
+}
+
+void set_window_maximize_support(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, bool can_maximize)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || !is_valid_gui_ptr(windowls) || windowls->type != XWIN_NORMAL ||
+        windowls->w_sheet == NULL)
+    {
+        return;
+    }
+
+    windowls->can_maximize = can_maximize;
+    redraw_window_frame(xwmi, sht, windowls);
+    refresh_part_sheet(sht, windowls->w_sheet->bx, windowls->w_sheet->by,
+                       windowls->w_sheet->bx + (int)windowls->w_sheet->width,
+                       windowls->w_sheet->by + 27);
 }
 
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,

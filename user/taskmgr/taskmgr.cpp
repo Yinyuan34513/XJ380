@@ -6,7 +6,6 @@
 #define TASKMGR_MAX_TASKS 192
 #define TASKMGR_ROW_H 22
 #define TASKMGR_TABLE_Y 96
-#define TASKMGR_VISIBLE_ROWS 18
 
 #define COLOR_BG        0xf4f6f8ff
 #define COLOR_HEADER    0x203040ff
@@ -26,6 +25,8 @@ static int           g_scroll_top = 0;
 static int           g_selected_index = -1;
 static UINT64        g_selected_pid = 0;
 static UINT64        g_selected_tid = 0;
+static UINT64        g_width = TASKMGR_WIDTH;
+static UINT64        g_height = TASKMGR_HEIGHT;
 static char          g_status[128] = "Ready.";
 static bool          g_need_redraw = true;
 
@@ -58,7 +59,9 @@ static const char *level_name(UINT64 level)
 
 static void clamp_scroll()
 {
-    int max_top = (int)g_task_count - TASKMGR_VISIBLE_ROWS;
+    int visible_rows = ((int)g_height - TASKMGR_TABLE_Y - 56) / TASKMGR_ROW_H;
+    if (visible_rows < 1) visible_rows = 1;
+    int max_top = (int)g_task_count - visible_rows;
     if (max_top < 0) max_top = 0;
     if (g_scroll_top < 0) g_scroll_top = 0;
     if (g_scroll_top > max_top) g_scroll_top = max_top;
@@ -115,7 +118,7 @@ static void draw_task_row(int row, int task_index)
     bool selected = task_index == g_selected_index;
     XapiTaskInfo *task = &g_tasks[task_index];
 
-    xapi_DrawRect(g_window, 18, y, TASKMGR_WIDTH - 18, y + TASKMGR_ROW_H - 1,
+    xapi_DrawRect(g_window, 18, y, (UINT32)g_width - 18, y + TASKMGR_ROW_H - 1,
                   selected ? COLOR_SELECTED : COLOR_PANEL, true);
 
     char pid[16], tid[16], cpu[16], wins[16], mem[24], threads[16];
@@ -150,13 +153,15 @@ static void draw_task_row(int row, int task_index)
     xapi_DrawSWText(g_window, 754, y + 5, mem, COLOR_TEXT);
     xapi_DrawSWText(g_window, 816, y + 5, cpu, COLOR_MUTED);
 
-    xapi_DrawLine(g_window, 18, y + TASKMGR_ROW_H - 1, TASKMGR_WIDTH - 18, y + TASKMGR_ROW_H - 1, COLOR_LINE);
+    xapi_DrawLine(g_window, 18, y + TASKMGR_ROW_H - 1, (UINT32)g_width - 18, y + TASKMGR_ROW_H - 1, COLOR_LINE);
 }
 
 static void render()
 {
-    xapi_DrawRect(g_window, 0, 0, TASKMGR_WIDTH - 1, TASKMGR_HEIGHT - 1, COLOR_BG, true);
-    xapi_DrawRect(g_window, 0, 0, TASKMGR_WIDTH - 1, 56, COLOR_HEADER, true);
+    xapi_GetWindowSize(g_window, &g_width, &g_height);
+    clamp_scroll();
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, (UINT32)g_height - 1, COLOR_BG, true);
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, 56, COLOR_HEADER, true);
     xapi_DrawSWText(g_window, 20, 18, (char *)"Task Manager", 0xffffffff);
 
     char summary[96];
@@ -167,11 +172,11 @@ static void render()
     strcat(summary, "    Click a row, then End Process.");
     xapi_DrawSWText(g_window, 160, 18, summary, 0xdce6f2ff);
 
-    draw_button(620, 16, 704, 42, "Refresh", COLOR_PRIMARY);
-    draw_button(716, 16, 836, 42, "End Process", selected_process_can_end() ? COLOR_DANGER : COLOR_DISABLED);
+    draw_button((int)g_width - 240, 16, (int)g_width - 156, 42, "Refresh", COLOR_PRIMARY);
+    draw_button((int)g_width - 144, 16, (int)g_width - 24, 42, "End Process", selected_process_can_end() ? COLOR_DANGER : COLOR_DISABLED);
 
-    xapi_DrawRect(g_window, 18, 70, TASKMGR_WIDTH - 18, TASKMGR_HEIGHT - 48, COLOR_PANEL, true);
-    xapi_DrawRect(g_window, 18, 70, TASKMGR_WIDTH - 18, TASKMGR_HEIGHT - 48, COLOR_LINE, false);
+    xapi_DrawRect(g_window, 18, 70, (UINT32)g_width - 18, (UINT32)g_height - 48, COLOR_PANEL, true);
+    xapi_DrawRect(g_window, 18, 70, (UINT32)g_width - 18, (UINT32)g_height - 48, COLOR_LINE, false);
 
     xapi_DrawSWText(g_window, 26, 78, (char *)"PID", COLOR_MUTED);
     xapi_DrawSWText(g_window, 72, 78, (char *)"TID", COLOR_MUTED);
@@ -184,17 +189,19 @@ static void render()
     xapi_DrawSWText(g_window, 702, 78, (char *)"Win", COLOR_MUTED);
     xapi_DrawSWText(g_window, 754, 78, (char *)"Memory", COLOR_MUTED);
     xapi_DrawSWText(g_window, 816, 78, (char *)"CPU", COLOR_MUTED);
-    xapi_DrawLine(g_window, 18, 93, TASKMGR_WIDTH - 18, 93, COLOR_LINE);
+    xapi_DrawLine(g_window, 18, 93, (UINT32)g_width - 18, 93, COLOR_LINE);
 
+    int visible_rows = ((int)g_height - TASKMGR_TABLE_Y - 56) / TASKMGR_ROW_H;
+    if (visible_rows < 1) visible_rows = 1;
     int visible = (int)g_task_count - g_scroll_top;
-    if (visible > TASKMGR_VISIBLE_ROWS) visible = TASKMGR_VISIBLE_ROWS;
+    if (visible > visible_rows) visible = visible_rows;
     if (visible < 0) visible = 0;
     for (int row = 0; row < visible; ++row)
     {
         draw_task_row(row, g_scroll_top + row);
     }
 
-    xapi_DrawSWText(g_window, 20, TASKMGR_HEIGHT - 34, g_status, COLOR_MUTED);
+    xapi_DrawSWText(g_window, 20, (UINT32)g_height - 34, g_status, COLOR_MUTED);
     xapi_RefreshWindow(g_window);
     g_need_redraw = false;
 }
@@ -242,17 +249,17 @@ static void taskmgr_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     switch (Type)
     {
     case MSG_LBUTTON:
-        if (in_rect(hData, lData, 620, 16, 704, 42))
+        if (in_rect(hData, lData, (int)g_width - 240, 16, (int)g_width - 156, 42))
         {
             load_tasks();
             strcpy(g_status, "Refreshed.");
             g_need_redraw = true;
         }
-        else if (in_rect(hData, lData, 716, 16, 836, 42))
+        else if (in_rect(hData, lData, (int)g_width - 144, 16, (int)g_width - 24, 42))
         {
             end_selected_process();
         }
-        else if (lData >= TASKMGR_TABLE_Y && lData < TASKMGR_TABLE_Y + TASKMGR_VISIBLE_ROWS * TASKMGR_ROW_H)
+        else if (lData >= TASKMGR_TABLE_Y && lData < g_height - 48)
         {
             int row = (int)(lData - TASKMGR_TABLE_Y) / TASKMGR_ROW_H;
             int index = g_scroll_top + row;
@@ -276,6 +283,12 @@ static void taskmgr_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         clamp_scroll();
         g_need_redraw = true;
         break;
+    case MSG_RESIZE:
+        g_width = hData;
+        g_height = lData;
+        clamp_scroll();
+        g_need_redraw = true;
+        break;
     default:
         break;
     }
@@ -291,7 +304,7 @@ static int taskmgr_main_impl(int argc, char *argv[], char *envp[])
     window.title = (char *)"Task Manager";
     window.width = TASKMGR_WIDTH;
     window.height = TASKMGR_HEIGHT;
-    window.sets = XWIN_NORMAL;
+    window.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
     xapi_CreateWindow(&g_window, &window);
     xapi_SetIcon(g_window, "/system/icon/unknowexe.png");
     SetMsgPrcor(g_window, taskmgr_MessagePrcor);

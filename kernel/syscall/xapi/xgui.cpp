@@ -74,18 +74,25 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     *(uint64_t *)(handle)       = (uint64_t)(malloc(sizeof(WINDOW_HANDLE))); // HDLE
     WINDOW_HANDLE *WindowHandle = *(WINDOW_HANDLE **)(handle);
     XWINDOW       *WindowInfo   = (XWINDOW *)(xwin);
-    if (WindowInfo->sets == XWIN_NORMAL || WindowInfo->sets == NULL)
+    uint8_t        window_type  = WindowInfo->sets & XWIN_TYPE_MASK;
+    if (window_type == XWIN_NORMAL || window_type == NULL)
     {
         create_window(xwmii, sht_img, &WindowHandle->WindowNodePtr, WindowInfo->title, WindowInfo->width,
                       WindowInfo->height);
     }
-    else if (WindowInfo->sets == XWIN_FRAME_OFF)
+    else if (window_type == XWIN_FRAME_OFF)
     {
         create_window_fmoff(xwmii, sht_img, &WindowHandle->WindowNodePtr, WindowInfo->width, WindowInfo->height);
     }
     else
     {
         create_window_fscr(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+    }
+
+    if (WindowHandle->WindowNodePtr != NULL)
+    {
+        set_window_maximize_support(xwmii, sht_img, WindowHandle->WindowNodePtr,
+                                    (WindowInfo->sets & XWIN_SUPPORT_MAXIMIZE) != 0);
     }
 
     return true;
@@ -114,7 +121,7 @@ int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 {
     WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
     char          *NewPath      = vfs_cwd_path_build((char *)path);
-    
+
     change_task_dock_icon(WindowHandle->WindowNodePtr, NewPath);
 
     free(NewPath);
@@ -645,7 +652,7 @@ void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t c
     register_right_rb_button_menu(WindowHandle->WindowNodePtr, MenuItems, count);
 }
 
-void do_xapi_DeleteRightButtonMenu(uint64_t handle) 
+void do_xapi_DeleteRightButtonMenu(uint64_t handle)
 {
     WINDOW_HANDLE       *WindowHandle = (WINDOW_HANDLE *)(handle);
 

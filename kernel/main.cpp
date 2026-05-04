@@ -462,7 +462,9 @@ skip_timer_widget_init:
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/browser.elf", NULL, NULL);
+#if defined(CONFIG_KERNEL_AUTO_START_USER_APP)
+    create_user_process_from_file((char *)CONFIG_KERNEL_DEFAULT_USER_APP, NULL, NULL);
+#endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
@@ -500,7 +502,7 @@ skip_timer_widget_init:
             }
         }
 
-#if BUILD_EDITION == DEBUG_VERSION
+#if BUILD_EDITION == DEBUG_VERSION && defined(CONFIG_KERNEL_DESKTOP_DEBUG_INPUT_ECHO)
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
         {
             PrintFont(&shtinf, desktop_ct_sheet, fontx, fonty, k_input, WHITE);
@@ -522,8 +524,8 @@ skip_timer_widget_init:
         scheduler_yield();
     }
 }
-#define KERNEL_HEAP_START 0xffffc00000000000
-#define KERNEL_HEAP_SIZE  (256 * 1024 * 1024)
+#define KERNEL_HEAP_START KERNEL_HEAP_BASE
+#define KERNEL_HEAP_SIZE  KERNEL_HEAP_BYTES
 
 void init_heap()
 {
@@ -565,7 +567,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_hhdm();
     init_frame(BootConfig.MemoryMap);
     init_heap();
+#if defined(CONFIG_KERNEL_BOOT_LOGO)
     draw_boot_progress_logo(*fbc_addr);
+#endif
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 3, 7, {0x00, 0xa2, 0xe8}); // 内存好了来一下
 
@@ -673,7 +677,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     module_setup();
     dlinker_init();
+#if defined(CONFIG_KERNEL_LOAD_MODULES)
     load_all_kernel_module();
+#endif
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -685,20 +691,30 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
+#if defined(CONFIG_KERNEL_ENABLE_PROCESS_KILLER)
     init_killer();
     write_serial_string("Process Killer is ready\n");
+#endif
     
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
     if (ahci_is_qemu_environment()) {
+#if defined(CONFIG_KERNEL_AHCI_QEMU_ACCEL)
         ahci_set_accel(true);
+#else
+        write_serial_string("AHCI: QEMU accelerated IO path disabled by Kconfig\n");
+#endif
     } else {
         write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
     }
+#if defined(CONFIG_KERNEL_START_DESKTOP)
     create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
+#if defined(CONFIG_KERNEL_START_COMPONENT_FLUSHER)
     create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+#endif
+#endif
 
     // delay_s_hp(60);
 
@@ -711,8 +727,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     open_interrupt;
     no_interrupt = false;
 
+#if defined(CONFIG_KERNEL_START_DESKTOP)
     while (!desktop_done)
         cpu_relax();
+#endif
 
     // no_interrupt = true;
     // close_interrupt;
