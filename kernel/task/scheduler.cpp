@@ -2,6 +2,7 @@
 #include "cpu/fsgsbase.h"
 #include "cpu/lock.h"
 #include "dlinker.h"
+#include "krlibc.h"
 #include "lock_queue.h"
 #include "proto.hpp"
 #include "smp/smp.h"
@@ -164,11 +165,35 @@ static inline bool is_task_schedulable(tcb_t task, tcb_t current)
 {
     if (task == NULL) return false;
     if (task == current) return false;
-    if (task->status == DEATH || task->status == OUT || task->status == FUTEX) return false;
+    if (task->status != RUNNING && task->status != START && task->status != CREATE) return false;
     if (task->task_level == TASK_IDLE_LEVEL) return false;
     if (task->parent_group == NULL) return false;
-    if (task->parent_group->status == DEATH || task->parent_group->status == FUTEX) return false;
+    if (task->parent_group->status == DEATH || task->parent_group->status == FUTEX ||
+        task->parent_group->status == OUT || task->parent_group->status == WAIT) {
+        return false;
+    }
     return true;
+}
+
+static inline bool is_current_task_runnable(tcb_t task)
+{
+    if (task == NULL) return false;
+    if (task->status != RUNNING && task->status != START && task->status != CREATE) return false;
+    if (task->parent_group == NULL) return false;
+    if (task->parent_group->status == DEATH || task->parent_group->status == FUTEX ||
+        task->parent_group->status == OUT || task->parent_group->status == WAIT) {
+        return false;
+    }
+    return true;
+}
+
+static inline void wake_sleeping_task(tcb_t task, uint64_t now)
+{
+    if (task == NULL) return;
+    if (task->status == WAIT && task->wakeup_time != 0 && now >= task->wakeup_time) {
+        task->wakeup_time = 0;
+        task->status = START;
+    }
 }
 
 tcb_t select_next_task_safe()
@@ -184,6 +209,8 @@ tcb_t select_next_task_safe()
     }
     
     tcb_t current = get_current_task();
+    uint64_t now = nanoTime();
+    wake_sleeping_task(current, now);
     if (queue->head == NULL) {
         spin_unlock(&scheduler_lock);
         return NULL;
@@ -196,8 +223,13 @@ tcb_t select_next_task_safe()
     lock_node *start_node = queue->rr_cursor;
     lock_node *node = start_node;
     size_t scanned = 0;
+    tcb_t idle = NULL;
     while (node != NULL && scanned < queue->size) {
         tcb_t candidate = (tcb_t)node->data;
+        wake_sleeping_task(candidate, now);
+        if (candidate != current && candidate != NULL && candidate->task_level == TASK_IDLE_LEVEL) {
+            idle = candidate;
+        }
         if (is_task_schedulable(candidate, current)) {
             queue->rr_cursor = node->next != NULL ? node->next : queue->head;
             spin_unlock(&scheduler_lock);
@@ -209,7 +241,7 @@ tcb_t select_next_task_safe()
         if (node == start_node) break;
     }
 
-    tcb_t result = (current->status == RUNNING || current->status == START) ? current : NULL;
+    tcb_t result = is_current_task_runnable(current) ? current : idle;
     spin_unlock(&scheduler_lock);
     return result;
 }
@@ -246,11 +278,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     }
 
     PROCESSOR_INFO *cpu = get_current_cpu();
-    if (current->status == RUNNING &&
-        current->task_level != TASK_IDLE_LEVEL &&
-        current->status != FUTEX &&
-        current->status != DEATH &&
-        current->status != OUT) {
+    if (likely(current->status == RUNNING && current->task_level != TASK_IDLE_LEVEL)) {
         cpu->scheduler_ticks++;
         if (cpu->scheduler_ticks < TIME_SLICE) {
             send_eoi();

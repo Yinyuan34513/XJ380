@@ -143,6 +143,7 @@ struct thread_control_block
     size_t        tid;         // 线程ID
     char          name[32];    // 线程名称
     TaskStatus    status;      // 线程状态
+    uint64_t      wakeup_time;  // WAIT 线程的唤醒时间(ns)，0 表示不按时间唤醒
     size_t        cpu_id;      // 运行的CPU ID
     TaskContext   context0;    // 线程上下文
     fpu_context_t fpu_context; // 浮点寄存器上下文

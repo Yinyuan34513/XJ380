@@ -640,6 +640,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
     idle_thread->tid          = now_tid++;
     idle_thread->parent_group = kernel_group;
+    idle_thread->task_level   = TASK_IDLE_LEVEL;
     idle_thread->kernel_stack = get_rsp();
     idle_thread->status       = RUNNING;
     strcpy(idle_thread->name, "idle thread");
