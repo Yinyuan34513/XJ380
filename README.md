@@ -20,6 +20,16 @@ XINGJI 工作室 A 级机密 | 保密编号 XSEC202212011-11-A
 - qemu
 - 剩下对着 makefile 装吧反正 linux 简单（bushi
 
+### 构建配置
+
+常用构建和 QEMU 参数直接在 Makefile 里配置，也可以在命令行临时覆盖：
+
+- `make run CONFIG_QEMU_USE_SUDO=n`：不通过 sudo 启动 QEMU
+- `make run CONFIG_QEMU_ENABLE_KVM=n`：关闭 KVM
+- `make vmdk CONFIG_VMDK_OUTPUT_FORMAT=qcow2`：输出 qcow2 镜像
+
+编译期 `CONFIG_*` 宏集中在 `kernel/build_settings.h`，需要调整内核配置时直接改这个文件。
+
 ## Source Layout
 
 - `boot/`: UEFI bootloader code

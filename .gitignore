@@ -13,6 +13,8 @@ out/draw.o
 /open-vmdk-master
 /compile_commands.json
 .cache
+.config
+include/generated/
 
 bash-*
 
@@ -35,3 +37,5 @@ scsi.txt
 .clangd
 
 .codex
+
+venv/

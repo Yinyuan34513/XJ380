@@ -5,9 +5,17 @@ HDLE handle;
 
 char file_path[256] = "newfile";
 
+int txr_width = TXR_X;
+int txr_height = TXR_Y;
 int text_offest = 0;
 bool need_flush = false;
 bool need_exit = false;
+
+static int texter_visible_lines()
+{
+    int lines = (txr_height - 20) / 16;
+    return lines < 1 ? 1 : lines;
+}
 
 void texter_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
@@ -15,6 +23,11 @@ void texter_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     {
     case MSG_CHAR:
         process_key((char)lData);
+        break;
+    case MSG_RESIZE:
+        txr_width = (int)hData;
+        txr_height = (int)lData;
+        need_flush = true;
         break;
     }
     return;
@@ -33,7 +46,7 @@ static int texter_main_impl(int argc, char *argv[], char *envp[])
     Winfo.title  = (char *)"文本编辑器";
     Winfo.width  = TXR_X;
     Winfo.height = TXR_Y;
-    Winfo.sets   = XWIN_NORMAL;
+    Winfo.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
     xapi_CreateWindow(&handle, &Winfo);
     xapi_SetIcon(handle, "/system/icon/texter.png");
     SetMsgPrcor(handle, texter_MessagePrcor);
@@ -43,20 +56,21 @@ static int texter_main_impl(int argc, char *argv[], char *envp[])
 
 flush:
 
-    xapi_DrawRect(handle, 0, 0, TXR_X - 1, TXR_Y - 1, 0xffffffff, true);
+    xapi_DrawRect(handle, 0, 0, txr_width - 1, txr_height - 1, 0xffffffff, true);
 
     uint64_t offest = (uint64_t)f->buffer;
+    int visible_lines = texter_visible_lines();
     for (int i = 0; ; i++)
     {
         char file_buffer[256];
         uint64_t begin_offest = offest;
         offest += getline_from_file((void *)offest, file_buffer);
-        if (offest == begin_offest || i - text_offest >= 24) break;
+        if (offest == begin_offest || i - text_offest >= visible_lines) break;
         if (i >= text_offest) xapi_DrawSWText(handle, 4, 4 + (i - text_offest) * 16, file_buffer, 0x000000ff);
     }
 
-    xapi_DrawRect(handle, 0, TXR_Y - 16, TXR_X - 1, TXR_Y - 1, 0xeaeaeaff, true);
-    xapi_DrawText(handle, 2, TXR_Y - 19, file_path, 11, 0x000000ff);
+    xapi_DrawRect(handle, 0, txr_height - 16, txr_width - 1, txr_height - 1, 0xeaeaeaff, true);
+    xapi_DrawText(handle, 2, txr_height - 19, file_path, 11, 0x000000ff);
 
     xapi_RefreshWindow(handle);
 

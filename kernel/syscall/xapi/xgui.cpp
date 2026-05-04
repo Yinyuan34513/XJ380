@@ -125,20 +125,16 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
         if (winRD_lock) { break; }
         scheduler_yield();
     }
-    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)malloc(sizeof(WINDOW_HANDLE));
-    if (WindowHandle == NULL)
-    {
-        free(title);
-        return false;
-    }
-    memset(WindowHandle, 0, sizeof(*WindowHandle));
-
-    if (window_info.sets == XWIN_NORMAL || window_info.sets == NULL)
+    *(uint64_t *)(handle)       = (uint64_t)(malloc(sizeof(WINDOW_HANDLE))); // HDLE
+    WINDOW_HANDLE *WindowHandle = *(WINDOW_HANDLE **)(handle);
+    XWINDOW       *WindowInfo   = (XWINDOW *)(xwin);
+    uint8_t        window_type  = WindowInfo->sets & XWIN_TYPE_MASK;
+    if (window_type == XWIN_NORMAL || window_type == NULL)
     {
         create_window(xwmii, sht_img, &WindowHandle->WindowNodePtr, title ? title : (char *)"", window_info.width,
                       window_info.height);
     }
-    else if (window_info.sets == XWIN_FRAME_OFF)
+    else if (window_type == XWIN_FRAME_OFF)
     {
         create_window_fmoff(xwmii, sht_img, &WindowHandle->WindowNodePtr, window_info.width, window_info.height);
     }
@@ -146,14 +142,11 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     {
         create_window_fscr(xwmii, sht_img, &WindowHandle->WindowNodePtr);
     }
-    free(title);
 
-    uint64_t out_handle = (uint64_t)WindowHandle;
-    if (!copy_to_user_pagedir(pagedir, (void *)handle, &out_handle, sizeof(out_handle)))
+    if (WindowHandle->WindowNodePtr != NULL)
     {
-        if (WindowHandle->WindowNodePtr != NULL) delete_window(xwmii, sht_img, WindowHandle->WindowNodePtr);
-        free(WindowHandle);
-        return false;
+        set_window_maximize_support(xwmii, sht_img, WindowHandle->WindowNodePtr,
+                                    (WindowInfo->sets & XWIN_SUPPORT_MAXIMIZE) != 0);
     }
 
     return true;
@@ -183,10 +176,8 @@ int do_xapi_CloseWindow(uint64_t handle)
 
 int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 {
-    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
-    if (WindowHandle == NULL) return false;
-    char          *NewPath      = xapi_build_gui_path(path);
-    if (NewPath == NULL) return false;
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    char          *NewPath      = vfs_cwd_path_build((char *)path);
 
     change_task_dock_icon(WindowHandle->WindowNodePtr, NewPath);
 

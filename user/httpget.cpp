@@ -5,7 +5,6 @@ static const int      HTTPGET_WIDTH            = 760;
 static const int      HTTPGET_HEIGHT           = 520;
 static const int      HTTPGET_MAX_LINES        = 160;
 static const int      HTTPGET_LINE_LENGTH      = 256;
-static const int      HTTPGET_VISIBLE_LINES    = 24;
 static const int      HTTPGET_LOOP_SLEEP_MS    = 16;
 static const int      HTTPGET_STARTUP_GUARD_TICKS = 32;
 static const uint32_t HTTPGET_COLOR_BG         = 0xf2efe9ff;
@@ -39,6 +38,14 @@ static int            g_input_len   = 24;
 static char           g_status[128] = "Ready";
 static httpget_line_t g_lines[HTTPGET_MAX_LINES];
 static int            g_line_count  = 0;
+static UINT64         g_width       = HTTPGET_WIDTH;
+static UINT64         g_height      = HTTPGET_HEIGHT;
+
+static int httpget_visible_lines()
+{
+    int visible = ((int)g_height - 120 - 84) / 16;
+    return visible < 1 ? 1 : visible;
+}
 
 static void set_status(const char *text)
 {
@@ -160,20 +167,22 @@ static bool httpget_parse_url_target(char *target,
 
 static void render_window()
 {
-    xapi_DrawRect(g_window, 0, 0, HTTPGET_WIDTH - 1, HTTPGET_HEIGHT - 1, HTTPGET_COLOR_BG, true);
-    xapi_DrawRect(g_window, 0, 0, HTTPGET_WIDTH - 1, 39, HTTPGET_COLOR_HEADER, true);
-    xapi_DrawRect(g_window, 12, 52, HTTPGET_WIDTH - 13, HTTPGET_HEIGHT - 84, HTTPGET_COLOR_PANEL, true);
-    xapi_DrawRect(g_window, 12, HTTPGET_HEIGHT - 64, HTTPGET_WIDTH - 13, HTTPGET_HEIGHT - 16, 0xffffffff, true);
+    xapi_GetWindowSize(g_window, &g_width, &g_height);
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, (UINT32)g_height - 1, HTTPGET_COLOR_BG, true);
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, 39, HTTPGET_COLOR_HEADER, true);
+    xapi_DrawRect(g_window, 12, 52, (UINT32)g_width - 13, (UINT32)g_height - 84, HTTPGET_COLOR_PANEL, true);
+    xapi_DrawRect(g_window, 12, (UINT32)g_height - 64, (UINT32)g_width - 13, (UINT32)g_height - 16, 0xffffffff, true);
 
     xapi_DrawSWText(g_window, 16, 12, (char *)"HTTP Client", 0xffffffff);
     xapi_DrawSWText(g_window, 170, 12, g_status, HTTPGET_COLOR_STATUS);
     xapi_DrawSWText(g_window, 18, 56, (char *)"Syntax: METHOD URL [BODY] or METHOD HOST PORT PATH [BODY]", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, 72, (char *)"Methods: GET POST PUT PATCH DELETE HEAD OPTIONS TRACE CONNECT", HTTPGET_COLOR_INFO);
     xapi_DrawSWText(g_window, 18, 88, (char *)"Example: GET https://example.com/  or  POST 10.0.2.2 80 /api hi", HTTPGET_COLOR_INFO);
-    xapi_DrawSWText(g_window, 18, HTTPGET_HEIGHT - 56, (char *)"Request:", HTTPGET_COLOR_INFO);
-    xapi_DrawSWText(g_window, 90, HTTPGET_HEIGHT - 56, g_input, HTTPGET_COLOR_TEXT);
+    xapi_DrawSWText(g_window, 18, (UINT32)g_height - 56, (char *)"Request:", HTTPGET_COLOR_INFO);
+    xapi_DrawSWText(g_window, 90, (UINT32)g_height - 56, g_input, HTTPGET_COLOR_TEXT);
 
-    int start = g_line_count > HTTPGET_VISIBLE_LINES ? g_line_count - HTTPGET_VISIBLE_LINES : 0;
+    int visible_lines = httpget_visible_lines();
+    int start = g_line_count > visible_lines ? g_line_count - visible_lines : 0;
     for (int i = start; i < g_line_count; ++i) {
         xapi_DrawSWText(g_window, 20, 120 + (i - start) * 16, g_lines[i].text, g_lines[i].color);
     }
@@ -394,6 +403,11 @@ static void httpget_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
             g_send_req = true;
         }
         break;
+    case MSG_RESIZE:
+        g_width = hData;
+        g_height = lData;
+        g_need_redraw = true;
+        break;
     default:
         break;
     }
@@ -411,7 +425,7 @@ static int httpget_main_impl(int argc, char *argv[], char *envp[])
     window.title  = (char *)"HTTP Client";
     window.width  = HTTPGET_WIDTH;
     window.height = HTTPGET_HEIGHT;
-    window.sets   = XWIN_NORMAL;
+    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
 
     xapi_CreateWindow(&g_window, &window);
     xapi_OutputSerial((char *)"httpget: window created\n");

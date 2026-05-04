@@ -12,14 +12,8 @@ static const int      NETCFG_HEADER_TEXT_MAX   = 52;
 static const int      NETCFG_INPUT_TEXT_MAX    = 72;
 static const int      NETCFG_SCROLL_STEP       = 3;
 static const int      NETCFG_STATUS_TOP        = 138;
-static const int      NETCFG_STATUS_VISIBLE    = 12;
-static const int      NETCFG_LOG_TOP           = 394;
-static const int      NETCFG_LOG_VISIBLE       = 4;
 static const int      NETCFG_LINE_HEIGHT       = 16;
 static const int      NETCFG_STATUS_PANEL_TOP  = 132;
-static const int      NETCFG_STATUS_PANEL_BTM  = 348;
-static const int      NETCFG_LOG_PANEL_TOP     = 388;
-static const int      NETCFG_LOG_PANEL_BTM     = 468;
 static const uint32_t NETCFG_COLOR_BG          = 0xf4f1ebff;
 static const uint32_t NETCFG_COLOR_PANEL       = 0xfffcf6ff;
 static const uint32_t NETCFG_COLOR_HEADER      = 0x264653ff;
@@ -47,6 +41,41 @@ static int           g_log_line_count       = 0;
 static int           g_status_scroll_top    = 0;
 static int           g_log_scroll_top       = 0;
 static int           g_last_mouse_y         = 0;
+static UINT64        g_width                = NETCFG_WIDTH;
+static UINT64        g_height               = NETCFG_HEIGHT;
+
+static int netcfg_log_panel_top(void)
+{
+    int top = (int)g_height - 152;
+    return top < NETCFG_STATUS_PANEL_TOP + 96 ? NETCFG_STATUS_PANEL_TOP + 96 : top;
+}
+
+static int netcfg_status_panel_bottom(void)
+{
+    return netcfg_log_panel_top() - 40;
+}
+
+static int netcfg_log_panel_bottom(void)
+{
+    return (int)g_height - 72;
+}
+
+static int netcfg_status_visible(void)
+{
+    int visible = (netcfg_status_panel_bottom() - NETCFG_STATUS_TOP - 8) / NETCFG_LINE_HEIGHT;
+    return visible < 1 ? 1 : visible;
+}
+
+static int netcfg_log_top(void)
+{
+    return netcfg_log_panel_top() + 6;
+}
+
+static int netcfg_log_visible(void)
+{
+    int visible = (netcfg_log_panel_bottom() - netcfg_log_top() - 4) / NETCFG_LINE_HEIGHT;
+    return visible < 1 ? 1 : visible;
+}
 
 static void netcfg_log_serial(const char *text)
 {
@@ -121,13 +150,13 @@ static void netcfg_format_tail_text(const char *text, char *buffer, int buffer_s
 
 static void netcfg_clamp_status_scroll(void)
 {
-    int max_scroll = MAX(0, g_status_line_count - NETCFG_STATUS_VISIBLE);
+    int max_scroll = MAX(0, g_status_line_count - netcfg_status_visible());
     g_status_scroll_top = MAX(0, MIN(g_status_scroll_top, max_scroll));
 }
 
 static void netcfg_clamp_log_scroll(void)
 {
-    int max_scroll = MAX(0, g_log_line_count - NETCFG_LOG_VISIBLE);
+    int max_scroll = MAX(0, g_log_line_count - netcfg_log_visible());
     g_log_scroll_top = MAX(0, MIN(g_log_scroll_top, max_scroll));
 }
 
@@ -197,11 +226,11 @@ static void netcfg_append_log(const char *text, uint32_t color)
     }
 
     int old_count = g_log_line_count;
-    bool keep_bottom = (g_log_scroll_top + NETCFG_LOG_VISIBLE) >= old_count;
+    bool keep_bottom = (g_log_scroll_top + netcfg_log_visible()) >= old_count;
 
     netcfg_append_wrapped_line(g_log_lines, &g_log_line_count, NETCFG_MAX_LOG_LINES, text, color);
     if (keep_bottom) {
-        g_log_scroll_top = MAX(0, g_log_line_count - NETCFG_LOG_VISIBLE);
+        g_log_scroll_top = MAX(0, g_log_line_count - netcfg_log_visible());
     }
     netcfg_clamp_log_scroll();
     g_need_redraw = true;
@@ -346,22 +375,27 @@ static void netcfg_render_window(void)
 {
     char header_status[NETCFG_LINE_LENGTH];
     char input_view[NETCFG_LINE_LENGTH];
+    xapi_GetWindowSize(g_window, &g_width, &g_height);
     netcfg_format_head_text(g_status, header_status, sizeof(header_status), NETCFG_HEADER_TEXT_MAX);
     netcfg_format_tail_text(g_input, input_view, sizeof(input_view), NETCFG_INPUT_TEXT_MAX);
 
-    xapi_DrawRect(g_window, 0, 0, NETCFG_WIDTH - 1, NETCFG_HEIGHT - 1, NETCFG_COLOR_BG, true);
-    xapi_DrawRect(g_window, 0, 0, NETCFG_WIDTH - 1, 39, NETCFG_COLOR_HEADER, true);
-    xapi_DrawRect(g_window, 12, 52, NETCFG_WIDTH - 13, 104, 0xf2ebe2ff, true);
-    xapi_DrawRect(g_window, 12, NETCFG_STATUS_PANEL_TOP, NETCFG_WIDTH - 13, NETCFG_STATUS_PANEL_BTM, NETCFG_COLOR_PANEL, true);
-    xapi_DrawRect(g_window, 12, NETCFG_LOG_PANEL_TOP, NETCFG_WIDTH - 13, NETCFG_LOG_PANEL_BTM, 0xf8f9faff, true);
-    xapi_DrawRect(g_window, 12, NETCFG_HEIGHT - 64, NETCFG_WIDTH - 13, NETCFG_HEIGHT - 16, 0xffffffff, true);
-    xapi_DrawRect(g_window, 12, NETCFG_STATUS_PANEL_TOP, NETCFG_WIDTH - 13, NETCFG_STATUS_PANEL_BTM, 0xd7cec2ff, false);
-    xapi_DrawRect(g_window, 12, NETCFG_LOG_PANEL_TOP, NETCFG_WIDTH - 13, NETCFG_LOG_PANEL_BTM, 0xd3d8deff, false);
-    xapi_DrawRect(g_window, 12, NETCFG_HEIGHT - 64, NETCFG_WIDTH - 13, NETCFG_HEIGHT - 16, 0xd9d9d9ff, false);
+    int status_bottom = netcfg_status_panel_bottom();
+    int log_top = netcfg_log_panel_top();
+    int log_bottom = netcfg_log_panel_bottom();
+
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, (UINT32)g_height - 1, NETCFG_COLOR_BG, true);
+    xapi_DrawRect(g_window, 0, 0, (UINT32)g_width - 1, 39, NETCFG_COLOR_HEADER, true);
+    xapi_DrawRect(g_window, 12, 52, (UINT32)g_width - 13, 104, 0xf2ebe2ff, true);
+    xapi_DrawRect(g_window, 12, NETCFG_STATUS_PANEL_TOP, (UINT32)g_width - 13, status_bottom, NETCFG_COLOR_PANEL, true);
+    xapi_DrawRect(g_window, 12, log_top, (UINT32)g_width - 13, log_bottom, 0xf8f9faff, true);
+    xapi_DrawRect(g_window, 12, (UINT32)g_height - 64, (UINT32)g_width - 13, (UINT32)g_height - 16, 0xffffffff, true);
+    xapi_DrawRect(g_window, 12, NETCFG_STATUS_PANEL_TOP, (UINT32)g_width - 13, status_bottom, 0xd7cec2ff, false);
+    xapi_DrawRect(g_window, 12, log_top, (UINT32)g_width - 13, log_bottom, 0xd3d8deff, false);
+    xapi_DrawRect(g_window, 12, (UINT32)g_height - 64, (UINT32)g_width - 13, (UINT32)g_height - 16, 0xd9d9d9ff, false);
 
     xapi_DrawSWText(g_window, 16, 12, (char *)"Network Config", 0xffffffff);
     xapi_DrawSWText(g_window, 164, 12, header_status, NETCFG_COLOR_STATUS);
-    xapi_DrawSWText(g_window, NETCFG_WIDTH - 204, 12, (char *)"Wheel: panel scroll", 0xcfe8e6ff);
+    xapi_DrawSWText(g_window, (UINT32)g_width - 204, 12, (char *)"Wheel: panel scroll", 0xcfe8e6ff);
 
     xapi_DrawSWText(g_window, 18, 56, (char *)"Commands:", NETCFG_COLOR_MUTED);
     xapi_DrawSWText(g_window, 118, 56, (char *)"auto", NETCFG_COLOR_TEXT);
@@ -370,25 +404,25 @@ static void netcfg_render_window(void)
     xapi_DrawSWText(g_window, 470, 56, (char *)"Status file", NETCFG_COLOR_MUTED);
     xapi_DrawSWText(g_window, 470, 72, (char *)"/run/NetworkManager/status", NETCFG_COLOR_TEXT);
     xapi_DrawSWText(g_window, 18, 116, (char *)"Live network state", NETCFG_COLOR_MUTED);
-    xapi_DrawSWText(g_window, 18, 372, (char *)"Recent operations", NETCFG_COLOR_MUTED);
+    xapi_DrawSWText(g_window, 18, log_top - 16, (char *)"Recent operations", NETCFG_COLOR_MUTED);
 
     netcfg_clamp_status_scroll();
     netcfg_clamp_log_scroll();
 
-    int status_end = MIN(g_status_line_count, g_status_scroll_top + NETCFG_STATUS_VISIBLE);
+    int status_end = MIN(g_status_line_count, g_status_scroll_top + netcfg_status_visible());
     for (int i = g_status_scroll_top; i < status_end; ++i) {
         xapi_DrawSWText(g_window, 20, NETCFG_STATUS_TOP + (i - g_status_scroll_top) * NETCFG_LINE_HEIGHT,
                         g_status_lines[i].text, g_status_lines[i].color);
     }
 
-    int log_end = MIN(g_log_line_count, g_log_scroll_top + NETCFG_LOG_VISIBLE);
+    int log_end = MIN(g_log_line_count, g_log_scroll_top + netcfg_log_visible());
     for (int i = g_log_scroll_top; i < log_end; ++i) {
-        xapi_DrawSWText(g_window, 20, NETCFG_LOG_TOP + (i - g_log_scroll_top) * NETCFG_LINE_HEIGHT,
+        xapi_DrawSWText(g_window, 20, netcfg_log_top() + (i - g_log_scroll_top) * NETCFG_LINE_HEIGHT,
                         g_log_lines[i].text, g_log_lines[i].color);
     }
 
-    xapi_DrawSWText(g_window, 18, NETCFG_HEIGHT - 56, (char *)"Input:", NETCFG_COLOR_MUTED);
-    xapi_DrawSWText(g_window, 74, NETCFG_HEIGHT - 56, input_view, NETCFG_COLOR_TEXT);
+    xapi_DrawSWText(g_window, 18, (UINT32)g_height - 56, (char *)"Input:", NETCFG_COLOR_MUTED);
+    xapi_DrawSWText(g_window, 74, (UINT32)g_height - 56, input_view, NETCFG_COLOR_TEXT);
     xapi_RefreshWindow(g_window);
     g_need_redraw = false;
 }
@@ -514,13 +548,20 @@ static void netcfg_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
         g_last_mouse_y = (int)lData;
         break;
     case MSG_ROLLER:
-        if (g_last_mouse_y >= NETCFG_LOG_PANEL_TOP && g_last_mouse_y <= NETCFG_LOG_PANEL_BTM) {
+        if (g_last_mouse_y >= netcfg_log_panel_top() && g_last_mouse_y <= netcfg_log_panel_bottom()) {
             g_log_scroll_top -= (int)hData * NETCFG_SCROLL_STEP;
             netcfg_clamp_log_scroll();
         } else {
             g_status_scroll_top -= (int)hData * NETCFG_SCROLL_STEP;
             netcfg_clamp_status_scroll();
         }
+        g_need_redraw = true;
+        break;
+    case MSG_RESIZE:
+        g_width = hData;
+        g_height = lData;
+        netcfg_clamp_status_scroll();
+        netcfg_clamp_log_scroll();
         g_need_redraw = true;
         break;
     default:
@@ -538,7 +579,7 @@ static int netcfg_main_impl(int argc, char *argv[], char *envp[])
     window.title  = (char *)"Network Config";
     window.width  = NETCFG_WIDTH;
     window.height = NETCFG_HEIGHT;
-    window.sets   = XWIN_NORMAL;
+    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
 
     xapi_CreateWindow(&g_window, &window);
     xapi_SetIcon(g_window, "/system/icon/terminal.png");

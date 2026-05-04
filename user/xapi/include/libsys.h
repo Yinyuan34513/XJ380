@@ -171,7 +171,7 @@
 
 #define XAPI_MAKEDIR        7425
 #define XAPI_CREATE_FILE    7420
-#define XAPI_DELETE_FILE    7421  
+#define XAPI_DELETE_FILE    7421
 #define XAPI_RENAME_FILE    7422
 #define XAPI_READ_FILE      7423
 #define XAPI_WRITE_FILE     7424
@@ -269,6 +269,7 @@ typedef struct
 #define MSG_ROLLER  5
 #define MSG_CRL     6
 #define MSG_SPCHAR  7
+#define MSG_RESIZE  8
 
 // P4.5
 #define XAPI_READBUFFER     7406
@@ -287,5 +288,8 @@ typedef struct
 
 #define XAPI_REG_RB_MENU    7436
 #define XAPI_URG_RB_MENU    7437
+
+#define XWIN_TYPE_MASK         0x0f
+#define XWIN_SUPPORT_MAXIMIZE  0x80
 
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);

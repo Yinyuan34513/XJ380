@@ -128,11 +128,21 @@ struct process_control_block
     tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
 };
-#define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
+#ifndef CONFIG_USER_ELF_HEADER_START
+#define CONFIG_USER_ELF_HEADER_START 0x0000300000000000UL
+#endif
+#ifndef CONFIG_USER_BRK_START
+#define CONFIG_USER_BRK_START 0x0000700000000000UL
+#endif
+#ifndef CONFIG_USER_BRK_END
+#define CONFIG_USER_BRK_END 0x00007ffff0000000UL
+#endif
+
+#define EHDR_START_ADDR CONFIG_USER_ELF_HEADER_START // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);
 uint64_t process_execve(char *path, char **argv, char **envp);
-#define USER_BRK_START 0x0000700000000000
-#define USER_BRK_END 0x00007ffff0000000
+#define USER_BRK_START CONFIG_USER_BRK_START
+#define USER_BRK_END CONFIG_USER_BRK_END
 
 struct thread_control_block
 {

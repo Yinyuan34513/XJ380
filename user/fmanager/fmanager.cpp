@@ -8,6 +8,18 @@ int path_p = 0;
 int path_r = 0;
 
 HDLE handle;
+int fmr_width = FMR_X;
+int fmr_height = FMR_Y;
+
+static int fmanager_dialog_x()
+{
+    return fmr_width / 2 - 100;
+}
+
+static int fmanager_dialog_y()
+{
+    return fmr_height / 2 - 25;
+}
 
 void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
@@ -28,6 +40,17 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_SPCHAR:
         if ((char)(lData) == '\b') { backspace(); }
         else if ((char)(lData) == '\n') { delete_typebox(); }
+        break;
+    case MSG_RESIZE:
+        fmr_width = (int)hData;
+        fmr_height = (int)lData;
+        if (file_count_base + fm_visible_rows() > file_count)
+        {
+            file_count_base = file_count - fm_visible_rows();
+            if (file_count_base < 0) file_count_base = 0;
+        }
+        need_paint = true;
+        break;
     }
     return;
 }
@@ -45,7 +68,7 @@ static int fmanager_main_impl(int argc, char *argv[], char *envp[])
     Winfo.title  = (char *)"文件管理器";
     Winfo.width  = FMR_X;
     Winfo.height = FMR_Y;
-    Winfo.sets = XWIN_NORMAL;
+    Winfo.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
     xapi_CreateWindow(&handle, &Winfo);
     xapi_SetIcon(handle, "/system/icon/folder.png");
     SetMsgPrcor(handle, fmanager_MessagePrcor);
@@ -167,10 +190,12 @@ void draw_typebox()
 {
     memset(typebox_buffer, 0, 256);
     typebox_offset = 0;
+    const int box_x = fmanager_dialog_x();
+    const int box_y = fmanager_dialog_y();
     reg_lock();
-    xapi_DrawRect(handle, FMR_X / 2 - 100, FMR_Y / 2 - 25, FMR_X / 2 + 100, FMR_Y / 2 + 25, 0x007accff, true);
-    xapi_DrawRect(handle, FMR_X / 2 - 100 + 4, FMR_Y / 2 + 25 - 20 - 4, FMR_X / 2 + 100 - 4, FMR_Y / 2 + 25 - 4, 0xffffffff, true);
-    xapi_DrawText(handle, FMR_X / 2 - 100 + 4, FMR_Y / 2 - 25, "请输入文本（回车确定）：", 11, 0xffffffff);
+    xapi_DrawRect(handle, box_x, box_y, box_x + 200, box_y + 50, 0x007accff, true);
+    xapi_DrawRect(handle, box_x + 4, box_y + 50 - 20 - 4, box_x + 200 - 4, box_y + 50 - 4, 0xffffffff, true);
+    xapi_DrawText(handle, box_x + 4, box_y, "请输入文本（回车确定）：", 11, 0xffffffff);
     xapi_RefreshWindow(handle);
 }
 
@@ -179,9 +204,10 @@ void process_key(char ch)
     if (!register_lock || typebox_offset >= 189) return;
 
     char temp[2] = {ch, '\0'};
-    xapi_DrawSWText(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4, temp, 0x000000ff);
-    xapi_RefreshPartWindow(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4,
-                            FMR_X / 2 - 100 + 8 + typebox_offset + 9, FMR_Y / 2 + 25 - 20 - 4 + 16);
+    const int text_x = fmanager_dialog_x() + 8 + typebox_offset;
+    const int text_y = fmanager_dialog_y() + 50 - 20 - 4;
+    xapi_DrawSWText(handle, text_x, text_y, temp, 0x000000ff);
+    xapi_RefreshPartWindow(handle, text_x, text_y, text_x + 9, text_y + 16);
 
     typebox_buffer[typebox_offset / 9] = ch;
 
@@ -196,10 +222,10 @@ void backspace()
 
     typebox_buffer[typebox_offset / 9] = '\0';
 
-    xapi_DrawRect(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4, 
-        FMR_X / 2 - 100 + 8 + typebox_offset + 9, FMR_Y / 2 + 25 - 20 - 4 + 16, 0xffffffff, true);
-    xapi_RefreshPartWindow(handle, FMR_X / 2 - 100 + 8 + typebox_offset, FMR_Y / 2 + 25 - 20 - 4,
-        FMR_X / 2 - 100 + 8 + typebox_offset + 9, FMR_Y / 2 + 25 - 20 - 4 + 16);
+    const int text_x = fmanager_dialog_x() + 8 + typebox_offset;
+    const int text_y = fmanager_dialog_y() + 50 - 20 - 4;
+    xapi_DrawRect(handle, text_x, text_y, text_x + 9, text_y + 16, 0xffffffff, true);
+    xapi_RefreshPartWindow(handle, text_x, text_y, text_x + 9, text_y + 16);
 }
 
 void delete_typebox()
