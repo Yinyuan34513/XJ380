@@ -201,6 +201,15 @@ void do_xapi_Run(char *path)
     free(fpath);
 }
 
+void do_xapi_RunWithArgs(char *path, char **argv)
+{
+    page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
+    char *fpath = vfs_cwd_path_build((char *)path);
+    create_user_process_from_file(fpath, NULL, argv);
+    switch_page_directory(caller_pagedir);
+    free(fpath);
+}
+
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
 {
     uint64_t ret = -1;

@@ -273,6 +273,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_URG_RB_MENU: do_xapi_DeleteRightButtonMenu(regs->rdi); break;
     case XAPI_REFRESH_PART_WINDOW: do_xapi_RefreshPartWindow(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_RUN: do_xapi_Run((char *)regs->rdi); break;
+    case XAPI_RUN_WITH_ARGS: do_xapi_RunWithArgs((char *)regs->rdi, (char **)regs->rsi); break;
     case XAPI_GET_PIC_SIZE: GetPictureSize((int *)regs->rdi, (int *)regs->rsi, (char *)regs->rdx); break;
     case XAPI_MAP_MEMORY: regs->rax = do_xapi_MapMemory(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_REMOVEDIR: sys_rmdir(regs->rdi,0,0,0,0,0,regs); break;

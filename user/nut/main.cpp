@@ -121,9 +121,12 @@ static int nut_print_packages_json(const char *json_text)
 
 static int nut_main_impl(int argc, char *argv[], char *envp[])
 {
-    (void)argc;
-    (void)argv;
     (void)envp;
+
+    if (argc < 1 || argv == NULL || argv[0] == NULL || strcmp(argv[0], "fetch") != 0) {
+        nut_serial_text("Hello world\n");
+        return 0;
+    }
 
     xhttp_request_t request;
     request.method        = "GET";

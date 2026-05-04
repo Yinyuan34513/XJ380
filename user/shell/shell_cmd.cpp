@@ -166,7 +166,46 @@ void check_command()
     else if (strncmp("pwd", cmd, 3) == 0) { print_working_directory(); }
     else if (strncmp("clear", cmd, 5) == 0) { clear_screen(); }
     else if (strncmp("taskmgr", cmd, 7) == 0) { xapi_Run((char *)"/system/taskmgr.elf"); }
-    else if (strncmp("nut", cmd, 3) == 0) { xapi_Run((char *)"/apps/nut.elf"); }
+    else if (strncmp("nut", cmd, 3) == 0)
+    {
+        char *nut_argv[16];
+        int   nut_argc = 0;
+
+        if (args != NULL && *args != '\0')
+        {
+            char *p = args;
+            while (*p != '\0' && nut_argc < 15)
+            {
+                while (*p == ' ')
+                {
+                    p++;
+                }
+
+                if (*p == '\0')
+                {
+                    break;
+                }
+
+                nut_argv[nut_argc++] = p;
+
+                while (*p != '\0' && *p != ' ')
+                {
+                    p++;
+                }
+
+                if (*p == '\0')
+                {
+                    break;
+                }
+
+                *p = '\0';
+                p++;
+            }
+        }
+
+        nut_argv[nut_argc] = NULL;
+        xapi_RunWithArgs("/apps/nut.elf", nut_argv);
+    }
     else if (strncmp("help", cmd, 4) == 0)
     {
         print_to_console("Available commands:");
