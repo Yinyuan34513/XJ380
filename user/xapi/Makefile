@@ -1,8 +1,6 @@
 SRC_FILES := $(shell find . \( -name "*.cpp" -o -name "*.S" \) |grep -v "start.cpp" |grep -v "constart.cpp")
 OBJ_FILES := $(patsubst ./%, ../../out/xapi/%.o, $(SRC_FILES))
 XAPI_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \))
-KCONFIG_AUTOCONF ?= $(abspath ../../include/generated/autoconf.h)
-XAPI_HEADERS += $(KCONFIG_AUTOCONF)
 
 export CXX ?= g++
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include -Wno-write-strings

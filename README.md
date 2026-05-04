@@ -18,19 +18,17 @@ XINGJI 工作室 A 级机密 | 保密编号 XSEC202212011-11-A
 - x86_64-elf-tools
 - make
 - qemu
-- Python 3 + kconfiglib（`python3 -m pip install kconfiglib`）
 - 剩下对着 makefile 装吧反正 linux 简单（bushi
 
-### Kconfig
+### 构建配置
 
-项目使用 Kconfig 管理构建和 QEMU 运行参数：
+常用构建和 QEMU 参数直接在 Makefile 里配置，也可以在命令行临时覆盖：
 
-- `make defconfig`：从 `configs/xj380_defconfig` 生成 `.config`
-- `make menuconfig`：打开配置菜单
-- `make olddefconfig`：按当前 Kconfig 刷新 `.config`
-- `make savedefconfig`：把当前配置保存回默认 defconfig
+- `make run CONFIG_QEMU_USE_SUDO=n`：不通过 sudo 启动 QEMU
+- `make run CONFIG_QEMU_ENABLE_KVM=n`：关闭 KVM
+- `make vmdk CONFIG_VMDK_OUTPUT_FORMAT=qcow2`：输出 qcow2 镜像
 
-生成的配置头文件位于 `include/generated/autoconf.h`，Makefile 同时读取 `include/generated/auto.conf`。
+编译期 `CONFIG_*` 宏集中在 `kernel/build_settings.h`，需要调整内核配置时直接改这个文件。
 
 ## Source Layout
 

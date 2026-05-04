@@ -35,12 +35,6 @@
 #ifndef _BUILD_SETTINGS_H_
 #define _BUILD_SETTINGS_H_
 
-#if defined(__has_include)
-#if __has_include(<generated/autoconf.h>)
-#include <generated/autoconf.h>
-#endif
-#endif
-
 // 编译版本类型
 #define DEBUG_VERSION 0
 #define RELEASE_VERSION 1
@@ -99,6 +93,38 @@
 
 #ifndef CONFIG_KERNEL_DEFAULT_USER_APP
 #define CONFIG_KERNEL_DEFAULT_USER_APP "/apps/browser.elf"
+#endif
+
+#ifndef CONFIG_KERNEL_BOOT_LOGO
+#define CONFIG_KERNEL_BOOT_LOGO 1
+#endif
+
+#ifndef CONFIG_KERNEL_START_DESKTOP
+#define CONFIG_KERNEL_START_DESKTOP 1
+#endif
+
+#ifndef CONFIG_KERNEL_START_COMPONENT_FLUSHER
+#define CONFIG_KERNEL_START_COMPONENT_FLUSHER 1
+#endif
+
+#ifndef CONFIG_KERNEL_AUTO_START_USER_APP
+#define CONFIG_KERNEL_AUTO_START_USER_APP 1
+#endif
+
+#ifndef CONFIG_KERNEL_LOAD_MODULES
+#define CONFIG_KERNEL_LOAD_MODULES 1
+#endif
+
+#ifndef CONFIG_KERNEL_ENABLE_PROCESS_KILLER
+#define CONFIG_KERNEL_ENABLE_PROCESS_KILLER 1
+#endif
+
+#ifndef CONFIG_KERNEL_AHCI_QEMU_ACCEL
+#define CONFIG_KERNEL_AHCI_QEMU_ACCEL 1
+#endif
+
+#ifndef CONFIG_KERNEL_DESKTOP_DEBUG_INPUT_ECHO
+#define CONFIG_KERNEL_DESKTOP_DEBUG_INPUT_ECHO 1
 #endif
 
 #if defined(CONFIG_BUILD_EDITION_RELEASE)

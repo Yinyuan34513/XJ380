@@ -704,7 +704,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 #if defined(CONFIG_KERNEL_AHCI_QEMU_ACCEL)
         ahci_set_accel(true);
 #else
-        write_serial_string("AHCI: QEMU accelerated IO path disabled by Kconfig\n");
+        write_serial_string("AHCI: QEMU accelerated IO path disabled by config\n");
 #endif
     } else {
         write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");

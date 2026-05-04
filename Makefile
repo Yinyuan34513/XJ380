@@ -1,29 +1,37 @@
-PYTHON ?= python3
-KCONFIG_CONFIG ?= .config
-KCONFIG_DEFCONFIG ?= configs/xj380_defconfig
-KCONFIG_SCRIPT := tools/kconfig.py
-KCONFIG_AUTOCONF := include/generated/autoconf.h
-KCONFIG_AUTO_CONF := include/generated/auto.conf
-NO_KCONFIG_GOALS := clean clean.clangd gen.clangd defconfig olddefconfig menuconfig savedefconfig
-
-ifeq ($(filter $(NO_KCONFIG_GOALS),$(MAKECMDGOALS)),)
--include $(KCONFIG_AUTO_CONF)
-endif
-
 .DEFAULT_GOAL := all
 
-KCONFIG_CPPFLAGS := -include generated/autoconf.h
+CONFIG_QEMU_MEMORY_MB ?= 8192
+CONFIG_QEMU_DEBUG ?= y
+CONFIG_QEMU_USE_SUDO ?= y
+CONFIG_QEMU_ENABLE_KVM ?= y
+CONFIG_QEMU_MACHINE ?= q35
+CONFIG_QEMU_BIOS ?= OVMF.fd
+CONFIG_QEMU_CPU_KVM ?= host
+CONFIG_QEMU_CPU_TCG ?= max
+CONFIG_QEMU_SMP_CPUS ?= 4
+CONFIG_QEMU_DISPLAY_BACKEND ?= gtk
+CONFIG_QEMU_AUDIO_BACKEND ?= sdl
+CONFIG_QEMU_HDA_CODEC ?= hda-output
+CONFIG_QEMU_SERIAL_LOG ?= serial.log
+CONFIG_QEMU_ENABLE_USB_INPUT ?= y
+CONFIG_QEMU_ENABLE_E1000 ?= y
+CONFIG_QEMU_HOSTFWD_TELNET ?= y
+CONFIG_IMAGE_SIZE_MB ?= 128
+CONFIG_IMAGE_EFI_PARTITION_START_SECTOR ?= 2048
+CONFIG_IMAGE_FAT_SECTORS ?= 0
+CONFIG_IMAGE_INCLUDE_TEST_DESKTOP_FILE ?= y
+CONFIG_VMDK_OUTPUT_FORMAT ?= vmdk
 
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include $(KCONFIG_CPPFLAGS)
-CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include $(KCONFIG_CPPFLAGS) -Wno-writable-strings -Wno-c++11-narrowing
-BOOT_C_FLAGS = -g -I ./boot/include -I ./include $(KCONFIG_CPPFLAGS) -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
+C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
+CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
+BOOT_C_FLAGS = -g -I ./boot/include -I ./include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= $(if $(CONFIG_QEMU_DEBUG),1,0)
+DEBUG ?= $(if $(filter y,$(CONFIG_QEMU_DEBUG)),1,0)
 SMP ?= $(or $(CONFIG_QEMU_SMP_CPUS),4)
-SUDO ?= $(if $(CONFIG_QEMU_USE_SUDO),1,0)
-KVM ?= $(if $(CONFIG_QEMU_ENABLE_KVM),1,0)
+SUDO ?= $(if $(filter y,$(CONFIG_QEMU_USE_SUDO)),1,0)
+KVM ?= $(if $(filter y,$(CONFIG_QEMU_ENABLE_KVM)),1,0)
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
@@ -107,13 +115,7 @@ CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
 PWD := $(CURDIR)
 
-$(KCONFIG_CONFIG): Kconfig $(KCONFIG_SCRIPT) $(KCONFIG_DEFCONFIG)
-	@$(PYTHON) $(KCONFIG_SCRIPT) olddefconfig
-
-$(KCONFIG_AUTOCONF) $(KCONFIG_AUTO_CONF): Kconfig $(KCONFIG_SCRIPT) $(KCONFIG_DEFCONFIG) $(KCONFIG_CONFIG)
-	@$(PYTHON) $(KCONFIG_SCRIPT) syncconfig
-
-$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER) $(KCONFIG_AUTOCONF)
+$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER)
 
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
@@ -160,7 +162,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $<.clangd_template >> $<.clangd
 	@printf "\033[1;32m[Done]\033[0m $<.clangd was generated.\n"
 
-all: $(KCONFIG_AUTO_CONF) $(KERNEL_OBJS) liballoc-x86_64.a
+all: $(KERNEL_OBJS) liballoc-x86_64.a
 # 针对BOOT和KERNEL进行特殊处理
 	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c boot/bootlib.c
 
@@ -169,8 +171,8 @@ all: $(KCONFIG_AUTO_CONF) $(KERNEL_OBJS) liballoc-x86_64.a
 
 	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
 
-	@$(MAKE) -C user KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF) build_xapi
-	@$(MAKE) -C user KCONFIG_AUTOCONF=$(PWD)/$(KCONFIG_AUTOCONF)
+	@$(MAKE) -C user build_xapi
+	@$(MAKE) -C user
 	@$(MAKE) -C $(KMOD_DIR)
 	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
 		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
@@ -181,25 +183,10 @@ all: $(KCONFIG_AUTO_CONF) $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd defconfig olddefconfig menuconfig savedefconfig stardustui.examples.copy
-
-defconfig:
-	@$(PYTHON) $(KCONFIG_SCRIPT) defconfig --defconfig $(KCONFIG_DEFCONFIG)
-	@echo "Loaded $(KCONFIG_DEFCONFIG)"
-
-olddefconfig:
-	@$(PYTHON) $(KCONFIG_SCRIPT) olddefconfig
-	@echo "Updated $(KCONFIG_CONFIG)"
-
-menuconfig:
-	@$(PYTHON) $(KCONFIG_SCRIPT) menuconfig
-
-savedefconfig:
-	@$(PYTHON) $(KCONFIG_SCRIPT) savedefconfig --output $(KCONFIG_DEFCONFIG)
-	@echo "Saved $(KCONFIG_DEFCONFIG)"
+.PHONY: clean format check gen.clangd stardustui.examples.copy
 
 clean:
-	@rm -rf $(BUILD_DIR) ./XJ380.img include/generated
+	@rm -rf $(BUILD_DIR) ./XJ380.img
 	@$(MAKE) -C user clean
 
 stardustui.examples.copy:
@@ -299,5 +286,5 @@ vmdk: vdisk
 run: vdisk
 	@$(QEMU_CMD)
 
-justrun: $(KCONFIG_AUTO_CONF)
+justrun:
 	@$(QEMU_CMD)
