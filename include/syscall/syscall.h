@@ -335,6 +335,7 @@
 #define SYS_PIVOT_ROOT 155
 
 #define SYS_ARCH_PRCTL 158
+#define SYS_SYNC 162
 #define SYS_MOUNT 165
 #define SYS_UMOUNT2 166
 
@@ -644,6 +645,7 @@ sys_(symlinkat, char *target, int newdirfd, char *linkpath);
 sys_(ftruncate, int fd, uint64_t length);
 sys_(fsync, int fd);
 sys_(fdatasync, int fd);
+sys_(sync);
 sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rlimit *old_limit);
 sys_(getrandom, void *buf, size_t buflen, uint64_t flags);
 sys_(umount2);

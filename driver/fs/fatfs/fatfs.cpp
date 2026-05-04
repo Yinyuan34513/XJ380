@@ -4,6 +4,7 @@
 #include "krlibc.h"
 #include "mutex.h"
 #include <fs/vfs/vfs.h>
+#include <syscall/syscall.h>
 
 static FATFS volume[10];
 static int   fatfs_id = 0;
@@ -542,6 +543,42 @@ vfs_node_t fatfs_dup(vfs_node_t node) {
 
 static int dummy() {
     return -ENOSYS;
+}
+
+errno_t fatfs_statfs(vfs_node_t node, struct statfs *buf)
+{
+    if (node == NULL || buf == NULL) return -EINVAL;
+
+    fatfs_lock();
+
+    file_t file = (file_t)node->handle;
+    const char *path = (file != NULL && file->path != NULL) ? file->path : "0:";
+    u32    free_clusters = 0;
+    FATFS *fs            = NULL;
+    FRESULT res          = f_getfree(path, &free_clusters, &fs);
+    if (res != FR_OK || fs == NULL)
+    {
+        fatfs_unlock();
+        return -EIO;
+    }
+
+    uint64_t sector_size = FF_MAX_SS;
+    uint64_t block_size  = (uint64_t)fs->csize * sector_size;
+    if (block_size == 0) block_size = PAGE_SIZE;
+
+    memset(buf, 0, sizeof(*buf));
+    buf->f_type    = 0x4d44;
+    buf->f_bsize   = block_size;
+    buf->f_frsize  = block_size;
+    buf->f_blocks  = fs->n_fatent > 2 ? fs->n_fatent - 2 : 0;
+    buf->f_bfree   = free_clusters;
+    buf->f_bavail  = free_clusters;
+    buf->f_files   = 1024 * 1024;
+    buf->f_ffree   = 1024 * 1024;
+    buf->f_namelen = 255;
+
+    fatfs_unlock();
+    return EOK;
 }
 
 static struct vfs_callback fatfs_callbacks = {

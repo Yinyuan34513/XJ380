@@ -81,6 +81,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_WAIT4: return "wait4";
     case SYS_UNAME: return "uname";
     case SYS_FCNTL: return "fcntl";
+    case SYS_SYNC: return "sync";
     case SYS_FSYNC: return "fsync";
     case SYS_FDATASYNC: return "fdatasync";
     case SYS_SYSINFO: return "sysinfo";
@@ -272,6 +273,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_open((char *)regs->rdi, O_CREAT | O_WRONLY | O_TRUNC, regs->rsi, 0, 0, 0, regs);
         break;
     case SYS_FCNTL: regs->rax = (uint64_t)sys_fcntl(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_SYNC: regs->rax = (uint64_t)sys_sync(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_FSYNC: regs->rax = (uint64_t)sys_fsync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_FDATASYNC: regs->rax = (uint64_t)sys_fdatasync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_MKDIR: regs->rax = (uint64_t)sys_mkdir((char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;

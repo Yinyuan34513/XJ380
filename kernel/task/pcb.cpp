@@ -255,13 +255,8 @@ void kill_proc0(pcb_t pcb)
 
     do
     {
-        tcb_t thread = NULL;
-        queue_foreach(pcb->thread_queue, thread0)
-        {
-            thread = (tcb_t)thread0->data;
-        }
+        tcb_t thread = (tcb_t)queue_dequeue(pcb->thread_queue);
         if (thread == NULL) break;
-        queue_remove_at(pcb->thread_queue, thread->group_index);
         kill_thread0(thread);
         free(thread);
     } while (true);
@@ -865,6 +860,121 @@ static char **copy_kernel_string_vector(char **argv, size_t argc)
     return copy;
 }
 
+static char *dup_trimmed_slice(const char *start, const char *end)
+{
+    while (start < end && (*start == ' ' || *start == '\t')) start++;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    if (end <= start) return NULL;
+
+    size_t len = (size_t)(end - start);
+    char  *out = (char *)malloc(len + 1);
+    if (out == NULL) return NULL;
+    memcpy(out, start, len);
+    out[len] = '\0';
+    return out;
+}
+
+static int rewrite_shebang_exec(vfs_node_t *node, char **norm_path, char ***argv, size_t *argc)
+{
+    if (node == NULL || *node == NULL || norm_path == NULL || *norm_path == NULL || argv == NULL || argc == NULL)
+        return 0;
+
+    char header[EXECVE_STRING_MAX];
+    memset(header, 0, sizeof(header));
+    size_t got = vfs_read(*node, header, 0, sizeof(header) - 1);
+    if (got < 2 || header[0] != '#' || header[1] != '!') return 0;
+
+    char *line_end = header + 2;
+    char *limit = header + got;
+    while (line_end < limit && *line_end != '\n') line_end++;
+
+    char *cursor = header + 2;
+    while (cursor < line_end && (*cursor == ' ' || *cursor == '\t')) cursor++;
+    char *interp_start = cursor;
+    while (cursor < line_end && *cursor != ' ' && *cursor != '\t' && *cursor != '\r') cursor++;
+    char *interp = dup_trimmed_slice(interp_start, cursor);
+    if (interp == NULL) return -ENOEXEC;
+
+    char *interp_arg = dup_trimmed_slice(cursor, line_end);
+    size_t old_argc = *argc;
+    size_t extra = interp_arg != NULL ? 3 : 2;
+    if (old_argc > EXECVE_VECTOR_MAX - extra)
+    {
+        free(interp);
+        free(interp_arg);
+        return -E2BIG;
+    }
+
+    char **new_argv = (char **)calloc(old_argc + extra + 1, sizeof(char *));
+    if (new_argv == NULL)
+    {
+        free(interp);
+        free(interp_arg);
+        return -ENOMEM;
+    }
+
+    size_t out_i = 0;
+    new_argv[out_i++] = strdup(interp);
+    if (new_argv[out_i - 1] == NULL)
+    {
+        free_envp(new_argv);
+        free(interp);
+        free(interp_arg);
+        return -ENOMEM;
+    }
+    if (interp_arg != NULL)
+    {
+        new_argv[out_i++] = interp_arg;
+        interp_arg = NULL;
+    }
+    new_argv[out_i++] = strdup(*norm_path);
+    if (new_argv[out_i - 1] == NULL)
+    {
+        free_envp(new_argv);
+        free(interp);
+        free(interp_arg);
+        return -ENOMEM;
+    }
+    for (size_t i = 1; i < old_argc; i++)
+    {
+        new_argv[out_i++] = strdup((*argv)[i]);
+        if (new_argv[out_i - 1] == NULL)
+        {
+            free_envp(new_argv);
+            free(interp);
+            free(interp_arg);
+            return -ENOMEM;
+        }
+    }
+    new_argv[out_i] = NULL;
+
+    vfs_node_t interp_node = vfs_open(interp);
+    if (interp_node == NULL)
+    {
+        free_envp(new_argv);
+        free(interp);
+        return -ENOENT;
+    }
+
+    if (get_current_task() != NULL && get_current_task()->parent_group != NULL &&
+        get_current_task()->parent_group->linux_abi)
+    {
+        write_serial_fmt("[busybox-debug] shebang %s -> %s argc=%llu\n",
+                         *norm_path,
+                         interp,
+                         (unsigned long long)out_i);
+    }
+
+    vfs_close(*node);
+    *node = interp_node;
+    free(*norm_path);
+    *norm_path = interp;
+    free_envp(*argv);
+    *argv = new_argv;
+    *argc = out_i;
+    return 0;
+}
+
 //from cops但契合xj380
 
 static constexpr uint64_t CLONE_VM_FLAG             = 0x00000100;//呃呃呃呃呃呃呃呃·
@@ -1116,6 +1226,17 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free_envp(kenvp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOENT;
+    }
+    int shebang_ret = rewrite_shebang_exec(&node, &norm_path, &kargv, &kargc);
+    if (shebang_ret < 0)
+    {
+        vfs_close(node);
+        free(norm_path);
+        free(kpath);
+        free_envp(kargv);
+        free_envp(kenvp);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)shebang_ret;
     }
 
     close_interrupt;

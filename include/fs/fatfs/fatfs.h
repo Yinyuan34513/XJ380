@@ -1,3 +1,6 @@
 #pragma once
 #include "proto.hpp"
-void fatfs_init();
+struct statfs;
+
+void     fatfs_init();
+errno_t  fatfs_statfs(vfs_node_t node, struct statfs *buf);

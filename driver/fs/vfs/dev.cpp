@@ -109,7 +109,8 @@ static errno_t devfs_stat(void *handle, vfs_node_t node) {
     device_handle_t dev_t =  (device_handle_t)handle;
 
     node->handle = dev_t;
-    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream : file_block;
+    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream :
+                   (dev_t->device->type == DEVICE_FB ? file_fbdev : file_block);
     node->size =
         dev_t->device->type == DEVICE_STREAM ? (uint64_t)-1 : disk_size(dev_t->device->vdiskid);
     node->realsize = dev_t->device->sector_size;
@@ -140,7 +141,8 @@ static void devfs_open(void *parent, const char *name, vfs_node_t node) {
     }
 
     node->handle = dev_t;
-    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream : file_block;
+    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream :
+                   (dev_t->device->type == DEVICE_FB ? file_fbdev : file_block);
     node->size =
         dev_t->device->type == DEVICE_STREAM ? (uint64_t)-1 : disk_size(dev_t->device->vdiskid);
     node->fsid     = devfs_id;

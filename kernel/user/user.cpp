@@ -31,7 +31,7 @@
 
 char *current_user_envp[100] = {
     ENVP_SYSTEM_VERSION,
-    (char *)"PATH=/apps:/system:/bin",//像不像
+    (char *)"PATH=/usr/bin:/apps:/system",//像不像
     NULL // 必须以NULL结尾
 };
 

@@ -80,6 +80,34 @@ static UINT32 g_palette[16] = {
     0x79c0ffff, 0xd2a8ffff, 0x56d4ddff, 0xf0f6fcff,
 };
 
+static UINT32 rgb_color(int r, int g, int b)
+{
+    if (r < 0) r = 0;
+    if (r > 255) r = 255;
+    if (g < 0) g = 0;
+    if (g > 255) g = 255;
+    if (b < 0) b = 0;
+    if (b > 255) b = 255;
+    return ((UINT32)r << 24) | ((UINT32)g << 16) | ((UINT32)b << 8) | 0xffU;
+}
+
+static UINT32 xterm_256_color(int index)
+{
+    if (index < 0) index = 0;
+    if (index > 255) index = 255;
+    if (index < 16) return g_palette[index];
+
+    if (index < 232)
+    {
+        static const int levels[6] = {0, 95, 135, 175, 215, 255};
+        int n = index - 16;
+        return rgb_color(levels[n / 36], levels[(n / 6) % 6], levels[n % 6]);
+    }
+
+    int gray = 8 + (index - 232) * 10;
+    return rgb_color(gray, gray, gray);
+}
+
 static int env_count(char *envp[])
 {
     int count = 0;
@@ -308,6 +336,24 @@ static void apply_sgr(int *params, int count)
         else if (p >= 40 && p <= 47) g_bg = g_palette[p - 40];
         else if (p >= 90 && p <= 97) g_fg = g_palette[p - 90 + 8];
         else if (p >= 100 && p <= 107) g_bg = g_palette[p - 100 + 8];
+        else if ((p == 38 || p == 48) && i + 1 < count)
+        {
+            bool foreground = p == 38;
+            int mode = params[++i];
+            if (mode == 5 && i + 1 < count)
+            {
+                UINT32 color = xterm_256_color(params[++i]);
+                if (foreground) g_fg = color;
+                else g_bg = color;
+            }
+            else if (mode == 2 && i + 3 < count)
+            {
+                UINT32 color = rgb_color(params[i + 1], params[i + 2], params[i + 3]);
+                i += 3;
+                if (foreground) g_fg = color;
+                else g_bg = color;
+            }
+        }
     }
 }
 

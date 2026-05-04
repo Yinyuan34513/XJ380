@@ -16,7 +16,7 @@ CONFIG_QEMU_SERIAL_LOG ?= serial.log
 CONFIG_QEMU_ENABLE_USB_INPUT ?= y
 CONFIG_QEMU_ENABLE_E1000 ?= y
 CONFIG_QEMU_HOSTFWD_TELNET ?= y
-CONFIG_IMAGE_SIZE_MB ?= 128
+CONFIG_IMAGE_SIZE_MB ?= 2048
 CONFIG_IMAGE_EFI_PARTITION_START_SECTOR ?= 2048
 CONFIG_IMAGE_FAT_SECTORS ?= 0
 CONFIG_IMAGE_INCLUDE_TEST_DESKTOP_FILE ?= y
@@ -246,7 +246,8 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/var
 	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
-	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/status
+	@cp -a resources/opkg/status $(BUILD_DIR)/XJ380/usr/lib/opkg/status
+	@if [ -d resources/opkg/info ]; then cp -a resources/opkg/info/. $(BUILD_DIR)/XJ380/usr/lib/opkg/info/; fi
 	@$(OPKG_CONF_GEN) $(BUILD_DIR)/XJ380/etc/opkg $(OPKG_FEEDS)
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
@@ -277,11 +278,15 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a $(BUILD_DIR)/libctest.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(BUILD_DIR)/XJ380/apps
 	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(BUILD_DIR)/XJ380/lib64/ld-linux-x86-64.so.2
-	@cp -a /lib/x86_64-linux-gnu/libc.so.6 $(BUILD_DIR)/XJ380/lib/x86_64-linux-gnu/libc.so.6
+
+	@cp -a resources/musl/ld-musl-x86_64.so.1 $(BUILD_DIR)/XJ380/lib/ld-musl-x86_64.so.1
+	@cp -a resources/musl/libc.so $(BUILD_DIR)/XJ380/lib/libc.so
+	@cp -a resources/musl/libc.musl-x86_64.so.1 $(BUILD_DIR)/XJ380/lib/libc.musl-x86_64.so.1
+	@cp -a resources/musl/libgcc_s.so.1 $(BUILD_DIR)/XJ380/lib/libgcc_s.so.1
+
 	@cp -a /lib/x86_64-linux-gnu/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
 	@cp -a ./third_party/busybox-prebuilt/busybox_amd64 $(BUILD_DIR)/XJ380/apps/busybox
-	@cp -a ./nano $(BUILD_DIR)/XJ380/apps/
-	@cp -a ./bash $(BUILD_DIR)/XJ380/apps/
+	@cp -a ./gcc_/lib/* $(BUILD_DIR)/XJ380/lib/x86_64-linux-gnu/
 	@cp -a $(OPKG_BIN) $(BUILD_DIR)/XJ380/apps/opkg
 	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(BUILD_DIR)/XJ380/apps/opkg
 

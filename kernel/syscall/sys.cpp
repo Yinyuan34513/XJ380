@@ -1,6 +1,7 @@
 #include <syscall/syscall.h>
 #include <proto.hpp>
 #include <fs/vfs/vfs.h>
+#include <fs/fatfs/fatfs.h>
 #include <ioctl.h>
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
@@ -203,6 +204,12 @@ static uint64_t statfs_kernel_node(vfs_node_t node, struct statfs *buf)
     kbuf.f_ffree   = 1024 * 1024;
     kbuf.f_namelen = 255;
 
+    if (strcmp(filesystem->name, "fatfs") == 0)
+    {
+        struct statfs fatfs_buf;
+        if (fatfs_statfs(node, &fatfs_buf) == EOK) kbuf = fatfs_buf;
+    }
+
     if (!copy_to_user_pagedir(current_user_pagedir(), buf, &kbuf, sizeof(kbuf))) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
@@ -306,6 +313,12 @@ static size_t ioctl_arg_size(int request)
     case VT_GETMODE:
     case VT_SETMODE:
         return sizeof(struct vt_mode);
+    case FBIOGET_FSCREENINFO:
+        return sizeof(struct fb_fix_screeninfo);
+    case FBIOGET_VSCREENINFO:
+    case FBIOPUT_VSCREENINFO:
+    case FBIOPAN_DISPLAY:
+        return sizeof(struct fb_var_screeninfo);
     default:
         return 0;
     }
@@ -324,6 +337,10 @@ static bool ioctl_writes_user(int request)
     case KDGKBMODE:
     case VT_OPENQRY:
     case VT_GETMODE:
+    case FBIOGET_FSCREENINFO:
+    case FBIOGET_VSCREENINFO:
+    case FBIOPUT_VSCREENINFO:
+    case FBIOPAN_DISPLAY:
         return true;
     default:
         return false;
@@ -343,6 +360,8 @@ static bool ioctl_reads_user(int request)
     case KDSETMODE:
     case KDSKBMODE:
     case VT_SETMODE:
+    case FBIOPUT_VSCREENINFO:
+    case FBIOPAN_DISPLAY:
         return true;
     default:
         return false;
@@ -1260,6 +1279,36 @@ static uint64_t find_user_mmap_range(pcb_t process, uint64_t hint, uint64_t leng
     return 0;
 }
 
+static vma_t *find_heap_vma(pcb_t process)
+{
+    if (process == NULL) return NULL;
+
+    vma_t *vma = process->vma_manager.vma_list;
+    while (vma != NULL)
+    {
+        if (vma->vm_start == process->brk_start && vma->vm_type == VMA_TYPE_ANON &&
+            (vma->vm_flags & VMA_ANON))
+        {
+            return vma;
+        }
+        vma = vma->vm_next;
+    }
+    return NULL;
+}
+
+static bool heap_growth_range_available(pcb_t process, vma_t *heap_vma, uint64_t start, uint64_t end)
+{
+    if (process == NULL || start >= end) return true;
+
+    vma_t *vma = process->vma_manager.vma_list;
+    while (vma != NULL)
+    {
+        if (vma != heap_vma && !(end <= vma->vm_start || start >= vma->vm_end)) return false;
+        vma = vma->vm_next;
+    }
+    return !mapped_page_intersects(process->pagedir, start, end - start);
+}
+
 uint64_t sys_brk(uint64_t brk) {
     pcb_t process = get_current_task()->parent_group;
 
@@ -1267,8 +1316,6 @@ uint64_t sys_brk(uint64_t brk) {
     if (!brk) {
         return process->brk_current;
     }
-
-    if (!align_up_u64(brk, PAGE_SIZE, &brk)) return process->brk_current;
 
     // 用户堆只能在装载器预留的 brk 区间里伸缩，越界时保持原 break 不变。
     if (brk < process->brk_start || brk > process->brk_end) {
@@ -1279,53 +1326,62 @@ uint64_t sys_brk(uint64_t brk) {
         return process->brk_current;
     }
 
-    // VMA 始终描述完整 heap 区间 [brk_start, brk)，避免增长/收缩后留下碎片 VMA。
-    vma_t *new_heap_vma = NULL;
-    if (brk > process->brk_start) {
-        new_heap_vma = vma_alloc();
-        if (!new_heap_vma) return process->brk_current;
-
-        new_heap_vma->vm_start = process->brk_start;
-        new_heap_vma->vm_end = brk;
-        new_heap_vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
-        new_heap_vma->vm_type = VMA_TYPE_ANON;
-        new_heap_vma->vm_name = strdup("[heap]");
-        if (!new_heap_vma->vm_name) {
-            vma_free(new_heap_vma);
-            return process->brk_current;
-        }
-    }
+    uint64_t old_map_end = process->brk_start;
+    uint64_t new_map_end = process->brk_start;
+    if (process->brk_current > process->brk_start &&
+        !align_up_u64(process->brk_current, PAGE_SIZE, &old_map_end))
+        return process->brk_current;
+    if (brk > process->brk_start && !align_up_u64(brk, PAGE_SIZE, &new_map_end)) return process->brk_current;
 
     spin_lock(&mm_op_lock);
 
-    if (brk > process->brk_current) {
-        if (vma_find_intersection(&process->vma_manager, process->brk_current, brk)) {
+    vma_t *heap_vma = find_heap_vma(process);
+
+    if (new_map_end > old_map_end) {
+        if (!heap_growth_range_available(process, heap_vma, old_map_end, new_map_end)) {
             spin_unlock(&mm_op_lock);
-            if (new_heap_vma) vma_free(new_heap_vma);
             return process->brk_current;
         }
 
         // brk 分配的是用户态堆页，必须带 PTE_USER，否则用户态 malloc 会页故障。
         page_map_range_to_random(get_current_directory(),
-                       process->brk_current,
-                       brk - process->brk_current,
+                       old_map_end,
+                       new_map_end - old_map_end,
                        PTE_USER | PTE_PRESENT | PTE_WRITEABLE);
-    } else {
-        unmap_page_range(get_current_directory(), brk, process->brk_current - brk);
+    }
+    else if (new_map_end < old_map_end) {
+        unmap_page_range(get_current_directory(), new_map_end, old_map_end - new_map_end);
     }
 
-    vma_t *old_heap_vma =
-        vma_find_intersection(&process->vma_manager, process->brk_start, process->brk_end);
-
-    if (old_heap_vma) {
-        vma_remove(&process->vma_manager, old_heap_vma);
-        vma_free(old_heap_vma);
+    if (new_map_end > process->brk_start) {
+        if (heap_vma == NULL) {
+            heap_vma = vma_alloc();
+            if (heap_vma == NULL) {
+                spin_unlock(&mm_op_lock);
+                return process->brk_current;
+            }
+            heap_vma->vm_start = process->brk_start;
+            heap_vma->vm_end = new_map_end;
+            heap_vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
+            heap_vma->vm_type = VMA_TYPE_ANON;
+            heap_vma->vm_name = strdup("[heap]");
+            if (heap_vma->vm_name == NULL || vma_insert(&process->vma_manager, heap_vma) != 0) {
+                vma_free(heap_vma);
+                spin_unlock(&mm_op_lock);
+                return process->brk_current;
+            }
+        }
+        else {
+            if (new_map_end > heap_vma->vm_end)
+                process->vma_manager.vm_used += new_map_end - heap_vma->vm_end;
+            else
+                process->vma_manager.vm_used -= heap_vma->vm_end - new_map_end;
+            heap_vma->vm_end = new_map_end;
+        }
     }
-
-    if (new_heap_vma && vma_insert(&process->vma_manager, new_heap_vma) != 0) {
-        vma_free(new_heap_vma);
-        spin_unlock(&mm_op_lock);
-        return process->brk_current;
+    else if (heap_vma != NULL) {
+        vma_remove(&process->vma_manager, heap_vma);
+        vma_free(heap_vma);
     }
 
     process->brk_current = brk;
@@ -3429,6 +3485,12 @@ sys_(fsync, int fd)
 sys_(fdatasync, int fd)
 {
     return sys_fsync(fd, 0, 0, 0, 0, 0, regs);
+}
+
+sys_(sync)
+{
+    if (rootdir != NULL) vfs_update(rootdir);
+    return 0;
 }
 
 sys_(getrandom, void *buf, size_t buflen, uint64_t flags)

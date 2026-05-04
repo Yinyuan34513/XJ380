@@ -11,6 +11,7 @@
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
+#include <fbdev.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -526,9 +527,9 @@ skip_timer_widget_init:
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-#if defined(CONFIG_KERNEL_AUTO_START_USER_APP)
-    create_user_process_from_file((char *)CONFIG_KERNEL_DEFAULT_USER_APP, NULL, NULL);
-#endif
+// #if defined(CONFIG_KERNEL_AUTO_START_USER_APP)
+//     create_user_process_from_file((char *)CONFIG_KERNEL_DEFAULT_USER_APP, NULL, NULL);
+// #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
@@ -650,6 +651,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: devfs_setup begin\n");
     devfs_setup();
     write_serial_string("BOOT: devfs_setup done\n");
+    write_serial_string("BOOT: fbdev_setup begin\n");
+    fbdev_setup(fbc);
+    write_serial_string("BOOT: fbdev_setup done\n");
 
     write_serial_string("BOOT: pci_setup begin\n");
     pci_setup(BootConfig.MCFG);
