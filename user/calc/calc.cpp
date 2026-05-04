@@ -453,7 +453,7 @@ static int calc_main_impl(int argc, char *argv[], char *envp[])
     window.width  = 380;
     window.height = 480;
     window.title  = "计算器";
-    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
 
     xapi_CreateWindow(&window_handle, &window);
     xapi_SetIcon(window_handle, "/system/icon/calc.png");

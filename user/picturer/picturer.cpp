@@ -41,7 +41,7 @@ static int picturer_main_impl(int argc, char *argv[], char *envp[])
 
     XWINDOW Winfo;
     Winfo.title = (char *)"图片查看器";
-    Winfo.sets  = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    Winfo.sets  = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
     Winfo.width = w;
     Winfo.height = h;
     xapi_CreateWindow(&picturer_handle, &Winfo);

@@ -2762,7 +2762,7 @@ int BrowserApp::run()
     window.title = const_cast<char *>("Browser");
     window.width = BROWSER_WIDTH;
     window.height = BROWSER_HEIGHT;
-    window.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    window.sets = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
 
     xapi_CreateWindow(&window_, &window);
     xapi_SetIcon(window_, const_cast<char *>("/system/icon/terminal.png"));

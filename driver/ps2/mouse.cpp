@@ -207,6 +207,33 @@ void process_mouse_button()
                      tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
                      tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
             {
+                if (current_window->can_maximize)
+                {
+                    // 最大化 / 还原
+                    ms_dec.sht_now = current_window->w_sheet;
+                    toggle_window_maximized(xwmii, sht_img, current_window);
+                }
+                else
+                {
+                    // 最小化
+                    ms_dec.sht_now = NULL;
+                    save_window_xy(current_window);
+                    int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
+                    // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
+                    get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
+                    refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
+                                                    bx + get_sheet(sht_img, current_window->w_sheet)->width,
+                                                    get_sheet(sht_img, current_window->w_sheet)->by +
+                                                        get_sheet(sht_img, current_window->w_sheet)->height);
+                }
+            }
+            else if (current_window->type == XWIN_NORMAL && current_window->can_maximize &&
+                     current_window->width >= 80 &&
+                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 75 &&
+                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 48 &&
+                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
+                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
+            {
                 // 最小化
                 ms_dec.sht_now = NULL;
                 save_window_xy(current_window);
@@ -217,17 +244,6 @@ void process_mouse_button()
                                                    bx + get_sheet(sht_img, current_window->w_sheet)->width,
                                                    get_sheet(sht_img, current_window->w_sheet)->by +
                                                        get_sheet(sht_img, current_window->w_sheet)->height);
-            }
-            else if (current_window->type == XWIN_NORMAL && current_window->can_maximize &&
-                     current_window->width >= 80 &&
-                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 75 &&
-                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 48 &&
-                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
-                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
-            {
-                // 最大化 / 还原
-                ms_dec.sht_now = current_window->w_sheet;
-                toggle_window_maximized(xwmii, sht_img, current_window);
             }
         }
         ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
