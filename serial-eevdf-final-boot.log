@@ -1,0 +1,209 @@
+[2J[01;01H[=3h[2J[01;01H[0m[35m[40m[0m[37m[40mBdsDxe: loading Boot0001 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
+
+XJ380 Operating System - Serial Log
+Copyright(C) XINGJI Interacitve Software 2017-2026 All rights reserved.
+OS Version: BuildVersion
+EFI Initialize Success.
+New Page Table Created Success.
+Root Dir Open Success.
+XSK2.1 Kernel Read Success.
+Frame Buffer Phys Addr: 0xFFFF8000C00000P÷Ë
+Video Initialize Success.
+ACPI Table Found Success.
+ACPI Version: 2
+XSDT Address: 0x7FB7D0E8
+SDT Entry 0:
+SDT Address: 0x7FB7D10C
+FACPÙ
+FADT Found Success.
+
+SDT Entry 1:
+SDT Address: 0x7FB7D114
+APICê
+MADT Found Success.
+
+SDT Entry 2:
+SDT Address: 0x7FB7D11C
+HPET8
+HPET Found Success.
+
+SDT Entry 3:
+SDT Address: 0x7FB7D124
+MCFG<
+MCFG Found Success.
+
+SDT Entry 4:
+SDT Address: 0x7FB7D12C
+WAET(
+
+SDT Entry 5:
+SDT Address: 0x7FB7D134
+BGRT8
+
+Initializing IDT...
+IDT Initialize Success.
+GDT Initialize Success.
+Setup acpi hpet table (nano_time: 4939400).
+Initializing APIC...
+Mask 8259A Success.
+Your PC support xAPIC.
+Initializing IOAPIC...
+Setup I/O apic.
+IOAPIC Address: 0xFFFF8000FEC00000
+IOAPIC Initialize Success.
+APIC Initialize Success.
+0x00000000100000~0x00000000800000
+0x00000000808000~0x00000000810000
+0x00000001500000~0x0000007bf1e000
+0x0000007bf3e000~0x0000007dc1d000
+0x0000007fe00000~0x0000007fe6e000
+0x00000100000000~0x00000140000000
+0x00000140053000~0x00000280000000
+Available memory: 8142 MiB
+BOOT: device_manager_init begin
+BOOT: device_manager_init done
+BOOT: vfs_init begin
+Virtual File System initialize.
+BOOT: vfs_init done
+BOOT: fatfs_init begin
+BOOT: fatfs_init done
+BOOT: devfs_setup begin
+BOOT: devfs_setup done
+BOOT: pci_setup begin
+BOOT: pci_setup done
+BOOT: pci_init begin
+Found PCIe device: 0x60000 name: Host Bridge
+Found PCIe device: 0x30000 name: VGA Compatible Controller
+Found PCIe device: 0x20000 name: Ethernet Controller
+Found PCIe device: 0x10601 name: Serial ATA Controller
+Found PCIe device: 0xc0330 name: USB Controller
+Found PCIe device: 0x60100 name: ISA Bridge
+Found PCIe device: 0x10601 name: Serial ATA Controller
+Found PCIe device: 0xc0500 name: SMBus Controller
+PCIE device loaded: 8
+BOOT: pci_init done
+VM hint: QEMU/BOCHS
+BOOT: ahci_setup begin
+AHCI: environment=qemu-like controller=00:03.0 vendor=0x8086 device=0x2922
+AHCI: PCI command before=0x100007 after=0x100007
+AHCI: BAR5=0xc10c5000 size=0x1000 CAP=0xc0141f05 CAP2=0x0 PI=0x3f VS=1.0.0
+AHCI: CAP2=0x0 BOHC(before)=0x0
+AHCI: BIOS/OS handoff not supported
+AHCI: mode enabled CAP=0xc0141f05 CAP2=0x0 ports=6 cmd_slots=32 PI=0x3f
+AHCI: port signature=0x101
+AHCI: ATA device detected, sending IDENTIFY
+AHCI: Device initialized: QEMU HARDDISK                          , blocks: 262144, block_size: 512
+Registers (sata0)device success
+sata0: blk_size=512, blk=0..262144, QEMU HARDDISK                          
+AHCI initialized: online_ports=1 ready_ports=1 implemented_ports=6 version=1.0.0
+BOOT: ahci_setup done
+AHCI: acceleration disabled
+BOOT: nvme_setup begin
+BOOT: nvme_setup done
+BOOT: ide_setup begin
+Initializing IDE controller...
+IDE: No IDE controller found
+BOOT: ide_setup done
+BOOT: partition_init begin
+[XJ380 System Kernel][INFO] PART: /dev/sata0
+[XJ380 System Kernel][INFO] PART: read sata0 sector_size=512 size=0x8000000
+[XJ380 System Kernel][INFO] PART: MBR read attempt=1 signature=55aa type0=ee
+[XJ380 System Kernel][INFO] PART: MBR signature=55aa type0=ee
+[XJ380 System Kernel][INFO] PART: GPT sig=EFI PART rev=0x10000 hdr=92 pe_lba=2 entries=128 entry_size=128
+[XJ380 System Kernel][INFO] GPT Partition(sata0) 1 GUID: B8903AB6-AD25-4BC6-A8EF-3C652EFD934F
+Registers (sata0p0)device success
+[XJ380 System Kernel][INFO] Loading part device...
+Registers (sata0p0)device success
+BOOT: partition_init done
+Cannot find a High Definition Audio controller.
+register hda fault[XJ380 System Kernel][MESSAGE] Standard PS/2 mouse detected
+[XJ380 System Kernel][MESSAGE] Mouse initialized successfully, type: 0
+Setup process <XSK System> PID:0
+Initializing SMP...
+Searching CPUs...
+Start Up APs...
+Initializing CPU 1.
+CPU 1 Initialize Success.
+Initializing CPU 2.
+CPU 2 Initialize Success.
+Initializing CPU 3.
+CPU 3 Initialize Success.
+SMP init with 4 cpus
+/dev/sata0p0
+[XJ380 System Kernel][INFO] Mount root OK!
+Registers (stdio)device success
+XJ380 Message Initialize Success.
+kmod: Module oslog /system/oslog.log
+kmod: Module usereg /system/usereg.dat
+kmod: Module xhci /system/xhci.km
+kmod: Failed to read /system/theme
+kmod: Module texter /system/texter.elf
+kmod: Module taskmgr /system/taskmgr.elf
+kmod: Module shell /system/shell.elf
+kmod: Failed to read /system/resources
+kmod: Module picturer /system/picturer.elf
+kmod: Module netserver /system/netserver.km
+kmod: Failed to read /system/logo
+kmod: Module kernel /system/kernel.elf
+kmod: Failed to read /system/icon
+kmod: Failed to read /system/foxland
+kmod: Failed to read /system/font
+kmod: Module fmanager /system/fmanager.elf
+kmod: Module e1000 /system/e1000.km
+kmod: Module ctrlmenu /system/ctrlmenu.elf
+kmod: Module calc /system/calc.elf
+Found 60 kernel symbols
+Dynamic linker initialized
+Loaded shared object: /system/xhci.km at 0xffffffffb0000000
+find dlmain 
+Version 0 
+[XJ380 System Kernel][INFO] xhci: supported protocol capability discovered
+[XJ380 System Kernel][INFO] xhci: supported protocol capability discovered
+[XJ380 System Kernel][INFO] xhci: spec version 0.0 (raw=0x0000)
+[XJ380 System Kernel][INFO] xhci: controller ready ports=8 slots=64 intrs=16 ctx=32
+[XJ380 System Kernel][MESSAGE] usb: hotplug worker started tid=4
+[XJ380 System Kernel][DEBUG] xhci: probe topology=usb-5 slot=1 parse_rc=0 ifaces=1 parsed-hub=0 parsed-msc=0 active=03/01/01 configured=1
+[XJ380 System Kernel][DEBUG] usb: no driver matched topology=usb-5 vid=0627 pid=0001 ifaces=1
+[XJ380 System Kernel][DEBUG] usb:   iface=0 alt=0 class=03/01/01 eps=1
+[XJ380 System Kernel][INFO] xhci: probe failed topology=usb-5 slot=1 rc=-19 active=03/01/01 ifaces=1
+[XJ380 System Kernel][INFO] xhci: slot 1 root-port=5 parent-slot=0 parent-port=5 level=1 route=0x0 high-speed device VID=0627 PID=0001 class=00/00/00 mps0=64 cfg=1/1
+[XJ380 System Kernel][INFO] xhci: slot 1 config total_len=34 interfaces=1 value=1 max_power=50 iface=03/01/01
+[XJ380 System Kernel][INFO] xhci: slot 1 boot keyboard armed iface=0 ep=0x81 epid=3 mps=8 interval=7
+[XJ380 System Kernel][DEBUG] usb: no driver matched topology=usb-5 vid=0627 pid=0001 ifaces=1
+[XJ380 System Kernel][DEBUG] usb:   iface=0 alt=0 class=03/01/01 eps=1
+[XJ380 System Kernel][DEBUG] usb: hub scan probe failed topology=usb-5 vid=0627 pid=0001 active=03/01/01 ifaces=1
+[XJ380 System Kernel][DEBUG] xhci: probe topology=usb-6 slot=2 parse_rc=0 ifaces=1 parsed-hub=0 parsed-msc=0 active=03/01/02 configured=1
+[XJ380 System Kernel][DEBUG] usb: no driver matched topology=usb-6 vid=0627 pid=0001 ifaces=1
+[XJ380 System Kernel][DEBUG] usb:   iface=0 alt=0 class=03/01/02 eps=1
+[XJ380 System Kernel][INFO] xhci: probe failed topology=usb-6 slot=2 rc=-19 active=03/01/02 ifaces=1
+[XJ380 System Kernel][INFO] xhci: slot 2 root-port=6 parent-slot=0 parent-port=6 level=1 route=0x0 high-speed device VID=0627 PID=0001 class=00/00/00 mps0=64 cfg=1/1
+[XJ380 System Kernel][INFO] xhci: slot 2 config total_len=34 interfaces=1 value=1 max_power=50 iface=03/01/02
+[XJ380 System Kernel][INFO] xhci: slot 2 boot mouse armed iface=0 ep=0x81 epid=3 mps=4 interval=7
+[XJ380 System Kernel][DEBUG] usb: no driver matched topology=usb-6 vid=0627 pid=0001 ifaces=1
+[XJ380 System Kernel][DEBUG] usb:   iface=0 alt=0 class=03/01/02 eps=1
+[XJ380 System Kernel][DEBUG] usb: hub scan probe failed topology=usb-6 vid=0627 pid=0001 active=03/01/02 ifaces=1
+[XJ380 System Kernel][INFO] xhci: service worker started tid=5 hid=yes
+Loaded kernel module: xhci at 0xffffffffb0000000
+Loaded shared object: /system/netserver.km at 0xffffffffb0014000
+find dlmain 
+Loaded kernel module: netserver at 0xffffffffb0014000
+Loaded shared object: /system/e1000.km at 0xffffffffb003f000
+find dlmain 
+Loaded kernel module: e1000 at 0xffffffffb003f000
+Process Killer is ready
+[XJ380 System Kernel][WARNING] XJ380 is running under the QEMU/BOCHS.
+AHCI: acceleration enabled
+[XJ380 System Kernel][MESSAGE] netserver: worker started
+desktop flusher is running
+Initializing Sheet Manager...
+Sheet Manager Initialize Success.
+Initializing Font...
+TTF: loaded '/system/font/XJ380F.ttf' size=10807764 read=70ms init=0ms magic=00010000
+TTF: loaded '/system/font/XJ380C.ttf' size=5448380 read=41ms init=0ms magic=00010000
+TTF Initialize Success.
+PrintPic: cannot open '/system/xj380_2.png'
+Initializing XWM...
+Reading Theme...
+XWM Initializing Success.
+desktop: init_user begin

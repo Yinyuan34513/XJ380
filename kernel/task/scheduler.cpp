@@ -14,6 +14,11 @@ extern XSK_SMP_INFO *xsi;
 extern bool          no_interrupt;
 const uint64_t       TIME_SLICE = 4;
 const uint64_t       MIN_SLICE  = 1;
+static constexpr uint64_t EEVDF_TICK_NS        = 1000000ULL;
+static constexpr uint64_t EEVDF_BASE_SLICE_NS  = TIME_SLICE * EEVDF_TICK_NS;
+static constexpr uint64_t EEVDF_MIN_SLICE_NS   = MIN_SLICE * EEVDF_TICK_NS;
+static constexpr uint64_t EEVDF_WAKEUP_CREDIT  = EEVDF_BASE_SLICE_NS;
+static constexpr uint64_t EEVDF_DEFAULT_WEIGHT = 1024ULL;
 
 void enable_scheduler()
 {
@@ -196,6 +201,93 @@ static inline void wake_sleeping_task(tcb_t task, uint64_t now)
     }
 }
 
+static inline uint64_t task_sched_slice(tcb_t task)
+{
+    if (task == NULL || task->eevdf_slice < EEVDF_MIN_SLICE_NS) return EEVDF_BASE_SLICE_NS;
+    return task->eevdf_slice;
+}
+
+static inline uint64_t vruntime_delta(uint64_t runtime_ns)
+{
+    return (runtime_ns * EEVDF_DEFAULT_WEIGHT) / EEVDF_DEFAULT_WEIGHT;
+}
+
+static inline bool deadline_before(tcb_t left, tcb_t right)
+{
+    if (right == NULL) return true;
+    if (left == NULL) return false;
+    if (left->eevdf_deadline != right->eevdf_deadline) return left->eevdf_deadline < right->eevdf_deadline;
+    return left->eevdf_vruntime < right->eevdf_vruntime;
+}
+
+static void update_current_eevdf_runtime(tcb_t current, uint64_t now, bool charge_tick)
+{
+    if (current == NULL || current->task_level == TASK_IDLE_LEVEL) return;
+    if (current->status != RUNNING) return;
+
+    uint64_t runtime = EEVDF_TICK_NS;
+    if (!charge_tick && current->eevdf_last_start != 0 && now > current->eevdf_last_start) {
+        runtime = now - current->eevdf_last_start;
+    }
+    if (runtime < EEVDF_TICK_NS) runtime = EEVDF_TICK_NS;
+
+    current->eevdf_vruntime += vruntime_delta(runtime);
+    uint64_t slice = task_sched_slice(current);
+    current->eevdf_deadline = current->eevdf_vruntime + slice;
+    current->eevdf_last_start = now;
+}
+
+static uint64_t queue_average_vruntime(lock_queue *queue, tcb_t current, uint64_t now)
+{
+    uint64_t sum = 0;
+    uint64_t count = 0;
+
+    lock_node *node = queue->head;
+    while (node != NULL) {
+        tcb_t candidate = (tcb_t)node->data;
+        wake_sleeping_task(candidate, now);
+        if (candidate == current) {
+            if (is_current_task_runnable(candidate)) {
+                sum += candidate->eevdf_vruntime;
+                count++;
+            }
+        } else if (is_task_schedulable(candidate, current)) {
+            sum += candidate->eevdf_vruntime;
+            count++;
+        }
+        node = node->next;
+    }
+
+    return count == 0 ? 0 : sum / count;
+}
+
+static void init_task_eevdf_entity(tcb_t task, uint64_t base_vruntime, uint64_t now)
+{
+    if (task == NULL) return;
+    uint64_t slice = task_sched_slice(task);
+    task->eevdf_slice = slice;
+    task->eevdf_vruntime = base_vruntime > EEVDF_WAKEUP_CREDIT ? base_vruntime - EEVDF_WAKEUP_CREDIT : 0;
+    task->eevdf_deadline = task->eevdf_vruntime + slice;
+    task->eevdf_last_start = now;
+}
+
+void scheduler_init_task(tcb_t task)
+{
+    init_task_eevdf_entity(task, 0, nanoTime());
+}
+
+static void mark_task_dispatched(tcb_t task, uint64_t now)
+{
+    if (task == NULL) return;
+    if (task->eevdf_slice < EEVDF_MIN_SLICE_NS) {
+        task->eevdf_slice = EEVDF_BASE_SLICE_NS;
+    }
+    if (task->eevdf_deadline == 0) {
+        task->eevdf_deadline = task->eevdf_vruntime + task_sched_slice(task);
+    }
+    task->eevdf_last_start = now;
+}
+
 tcb_t select_next_task_safe()
 {
     spin_lock(&scheduler_lock);
@@ -216,32 +308,32 @@ tcb_t select_next_task_safe()
         return NULL;
     }
 
-    if (queue->rr_cursor == NULL) {
-        queue->rr_cursor = queue->head;
-    }
-
-    lock_node *start_node = queue->rr_cursor;
-    lock_node *node = start_node;
-    size_t scanned = 0;
+    const uint64_t avg_vruntime = queue_average_vruntime(queue, current, now);
+    tcb_t best = NULL;
+    tcb_t fallback = NULL;
     tcb_t idle = NULL;
-    while (node != NULL && scanned < queue->size) {
+
+    lock_node *node = queue->head;
+    while (node != NULL) {
         tcb_t candidate = (tcb_t)node->data;
         wake_sleeping_task(candidate, now);
         if (candidate != current && candidate != NULL && candidate->task_level == TASK_IDLE_LEVEL) {
             idle = candidate;
         }
         if (is_task_schedulable(candidate, current)) {
-            queue->rr_cursor = node->next != NULL ? node->next : queue->head;
-            spin_unlock(&scheduler_lock);
-            return candidate;
+            if (deadline_before(candidate, fallback)) fallback = candidate;
+            if (candidate->eevdf_vruntime <= avg_vruntime && deadline_before(candidate, best)) {
+                best = candidate;
+            }
         }
 
-        node = node->next != NULL ? node->next : queue->head;
-        ++scanned;
-        if (node == start_node) break;
+        node = node->next;
     }
 
-    tcb_t result = is_current_task_runnable(current) ? current : idle;
+    if (best == NULL) best = fallback;
+
+    tcb_t result = best != NULL ? best : (is_current_task_runnable(current) ? current : idle);
+    if (result != NULL) mark_task_dispatched(result, now);
     spin_unlock(&scheduler_lock);
     return result;
 }
@@ -280,6 +372,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     PROCESSOR_INFO *cpu = get_current_cpu();
     if (likely(current->status == RUNNING && current->task_level != TASK_IDLE_LEVEL)) {
         cpu->scheduler_ticks++;
+        update_current_eevdf_runtime(current, nanoTime(), true);
         if (cpu->scheduler_ticks < TIME_SLICE) {
             send_eoi();
             return reg;
@@ -411,6 +504,7 @@ size_t add_task(tcb_t new_task)
         }
     }
 	    
+    init_task_eevdf_entity(new_task, queue_average_vruntime(min_cpu->scheduler_queue, NULL, nanoTime()), nanoTime());
     new_task->cpu_id      = min_cpu_index;
     new_task->queue_index = queue_enqueue_ref(min_cpu->scheduler_queue, new_task, &new_task->sched_node);
 
