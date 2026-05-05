@@ -70,7 +70,24 @@ void do_xapi_Output(char *str)
         if (front_p->xtttp_stc->is_shell)
         {
             // found it!
-            strcat(front_p->xtttp_stc->output, str); // 如果还有怎么办? // ? 怎么会还有呢，这就是一次性输出完的啊
+            if (str == NULL) {
+                return;
+            }
+
+            char  *output    = front_p->xtttp_stc->output;
+            size_t  out_cap  = sizeof(front_p->xtttp_stc->output);
+            size_t  out_len  = strlen(output);
+            size_t  str_len  = strlen(str);
+            size_t  copy_len = str_len;
+
+            if (out_len < out_cap - 1)
+            {
+                size_t avail = out_cap - out_len - 1;
+                if (copy_len > avail) copy_len = avail;
+                memcpy(output + out_len, str, copy_len);
+                output[out_len + copy_len] = '\0';
+            }
+
             front_p->xtttp_stc->output_lock = false;
             // 等待命令行刷新
             while (true)
@@ -78,7 +95,7 @@ void do_xapi_Output(char *str)
                 if (front_p->xtttp_stc->output_lock) break;
                 scheduler_yield();
             }
-            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->output) + 1) * sizeof(uint8_t));
+            memset(front_p->xtttp_stc->output, 0, sizeof(front_p->xtttp_stc->output));
             return;
         }
         front_p = front_p->parent_task;

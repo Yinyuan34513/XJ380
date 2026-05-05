@@ -246,7 +246,7 @@ void process_desktop_find_block(int x, int y)
             // 就是他！
             if (i == 0)
             {
-                create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+                create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, NULL);
             }
         }
     }
@@ -269,7 +269,7 @@ void process_desktop_find_block(int x, int y)
             {
                 // 是文件夹
                 char *argv[2] = {runfile_path, NULL};
-                create_user_process_from_file((char *)"/system/fmanager.elf", NULL, argv);
+                create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, argv);
             }
             else
             {

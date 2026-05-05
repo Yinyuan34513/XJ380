@@ -65,7 +65,7 @@ extern "C" __attribute__((force_align_arg_pointer)) void xapi_start(int argc, ch
     }
 
     char *execve_argv[2] = {"-xj380sys-terminal-app-mode"};
-    xapi_Execve("/system/shell.elf", execve_argv, NULL);
+    xapi_Execve("/apps/system/shell.elf", execve_argv, NULL);
 
     exit(xapi_cpp_main(argc, argv, envp));
 }
