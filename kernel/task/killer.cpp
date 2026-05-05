@@ -9,7 +9,6 @@
 #include <fs/vfs/vfs.h>
 
 extern bool no_interrupt; // 涓簍rue鏃朵唬琛ㄤ弗绂佸紑鍚腑鏂?
-extern bool is_scheduler;
 
 static bool is_thread_dead(tcb_t thread)
 {
@@ -68,16 +67,12 @@ void killer_thread()
 {
     while (true)
     {
-        if (no_interrupt) {
-            if (is_scheduler) scheduler_yield();
-            cpu_relax();
-            continue;
+        if (!no_interrupt)
+        {
+            open_interrupt;
+            enable_scheduler();
         }
-
-        open_interrupt;
-        enable_scheduler();
         check_group(kernel_group);
-        scheduler_yield();
         cpu_relax();
     }
 }

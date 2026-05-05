@@ -205,6 +205,20 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     {
         tcb_t task = get_current_task();
     }
+    if (syscall_task != NULL && trace_fsbase_task(syscall_task) &&
+        (syscall_number == SYS_FORK || syscall_number == SYS_CLONE || syscall_number == SYS_VFORK ||
+         syscall_number == SYS_WAIT4 || syscall_number == SYS_EXECVE || syscall_number == SYS_EXIT_GROUP ||
+         syscall_number == SYS_SET_ROBUST_LIST))
+    {
+        write_serial_fmt("[DEBUG-fork-ret] syscall-entry task=%s pid=%llu tid=%llu nr=%llu rip=0x%llx rsp=0x%llx fs=0x%llx\n",
+                         syscall_task->name,
+                         syscall_task->parent_group != NULL ? syscall_task->parent_group->pid : 0,
+                         syscall_task->tid,
+                         syscall_number,
+                         regs->rip,
+                         regs->rsp,
+                         syscall_task->fs_base);
+    }
 
     switch (syscall_number)
     {
@@ -321,7 +335,20 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_CLONE3:
         regs->rax = (uint64_t)-ENOSYS;
         break;
-    case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
+    case SYS_FORK:
+        regs->rax = (uint64_t)process_fork(regs, false, 0);
+        if (syscall_task != NULL && trace_fsbase_task(syscall_task))
+        {
+            write_serial_fmt("[DEBUG-fork-ret] syscall-return-task=%s pid=%llu tid=%llu ret=0x%llx rip=0x%llx rsp=0x%llx fs=0x%llx\n",
+                             syscall_task->name,
+                             syscall_task->parent_group != NULL ? syscall_task->parent_group->pid : 0,
+                             syscall_task->tid,
+                             regs->rax,
+                             regs->rip,
+                             regs->rsp,
+                             syscall_task->fs_base);
+        }
+        break;
     case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
     case SYS_FUTEX:
         regs->rax = (uint64_t)sys_futex((uint32_t *)regs->rdi, regs->rsi, regs->rdx,

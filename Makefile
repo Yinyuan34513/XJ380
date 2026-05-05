@@ -223,10 +223,9 @@ vdisk: all $(OPKG_CONF_GEN)
 	@rm -rf XJ380.img
 
 	@dd if=/dev/zero of=XJ380.img bs=1M count=$(IMAGE_SIZE_MB)
-# You must execute the following command with sudo privileges, that's not good...
-	@sudo sgdisk XJ380.img -n 1:$(IMAGE_EFI_PARTITION_START_SECTOR) -t 1:ef00
+	@$(SUDO_CMD) sgdisk XJ380.img -n 1:$(IMAGE_EFI_PARTITION_START_SECTOR) -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset $(IMAGE_EFI_PARTITION_START_SECTOR) -S 512 XJ380.img $(MKFS_SIZE_ARG)
+	@$(SUDO_CMD) mkfs.vfat -F 32 --offset $(IMAGE_EFI_PARTITION_START_SECTOR) -S 512 XJ380.img $(MKFS_SIZE_ARG)
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
@@ -240,15 +239,18 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 	@mkdir -p $(BUILD_DIR)/XJ380/mod
 	@mkdir -p $(BUILD_DIR)/XJ380/etc/opkg
+	@mkdir -p $(BUILD_DIR)/XJ380/etc/ssl/certs
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/lists
 	@mkdir -p $(BUILD_DIR)/XJ380/tmp
 	@mkdir -p $(BUILD_DIR)/XJ380/var
+	@mkdir -p $(BUILD_DIR)/XJ380/var/lock
 	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
+	@if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp -a /etc/ssl/certs/ca-certificates.crt $(BUILD_DIR)/XJ380/etc/ssl/certs/ca-certificates.crt; fi
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
 	@cp -a resources/opkg/status $(BUILD_DIR)/XJ380/usr/lib/opkg/status
 	@if [ -d resources/opkg/info ]; then cp -a resources/opkg/info/. $(BUILD_DIR)/XJ380/usr/lib/opkg/info/; fi
-	@$(OPKG_CONF_GEN) $(BUILD_DIR)/XJ380/etc/opkg $(OPKG_FEEDS)
+	@$(OPKG_CONF_GEN) $(BUILD_DIR)/XJ380 $(OPKG_FEEDS)
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
@@ -306,7 +308,6 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/mod
 
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
-
 	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps
 	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps
 	

@@ -50,6 +50,15 @@ static size_t alloc_tid()
     return __atomic_fetch_add(&now_tid, 1, __ATOMIC_SEQ_CST);
 }
 
+static void reserve_tid_value(size_t tid)
+{
+    size_t next = __atomic_load_n(&now_tid, __ATOMIC_SEQ_CST);
+    while (next <= tid &&
+           !__atomic_compare_exchange_n(&now_tid, &next, tid + 1, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    {
+    }
+}
+
 extern UserInfo *current_user;
 
 extern UserInfo root_user;
@@ -255,8 +264,13 @@ void kill_proc0(pcb_t pcb)
 
     do
     {
-        tcb_t thread = (tcb_t)queue_dequeue(pcb->thread_queue);
+        tcb_t thread = NULL;
+        queue_foreach(pcb->thread_queue, thread0)
+        {
+            thread = (tcb_t)thread0->data;
+        }
         if (thread == NULL) break;
+        queue_remove_at(pcb->thread_queue, thread->group_index);
         kill_thread0(thread);
         free(thread);
     } while (true);
@@ -993,8 +1007,8 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
 {
     if (reg == NULL) return SYSCALL_FAULT_(EINVAL);
 
-    if (flags & CLONE_VFORK_FLAG) return process_fork(reg, true, stack);
-    if ((flags & CLONE_THREAD_FLAG) == 0) return process_fork(reg, false, stack);
+    if ((flags & CLONE_THREAD_FLAG) == 0)
+        return process_fork(reg, (flags & CLONE_VFORK_FLAG) != 0, stack, flags, parent_tid, child_tid);
 
     const uint64_t required = CLONE_VM_FLAG | CLONE_FS_FLAG | CLONE_FILES_FLAG | CLONE_SIGHAND_FLAG;
     if ((flags & required) != required) return SYSCALL_FAULT_(EINVAL);
@@ -1582,7 +1596,8 @@ static void init_fork_child_context(tcb_t child, const struct X64_REGS *frame, u
     child->context0.rcx    = frame->rcx;
 }
 
-uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
+uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, uint64_t clone_flags,
+                      int *parent_tid, int *child_tid)
 {
     if (reg == NULL) return (uint64_t)-EINVAL;
 
@@ -1609,6 +1624,16 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
                          reg != NULL ? reg->rcx : 0);
 
     pcb_t current_pcb = parent_task->parent_group;
+    if ((clone_flags & CLONE_PARENT_SETTID_FLAG) && parent_tid == NULL)
+    {
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-EFAULT;
+    }
+    if ((clone_flags & (CLONE_CHILD_SETTID_FLAG | CLONE_CHILD_CLEARTID_FLAG)) && child_tid == NULL)
+    {
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-EFAULT;
+    }
 
     spin_lock(&create_thread_lock);
 
@@ -1628,6 +1653,16 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     new_pcb->task_level = TASK_APPLICATION_LEVEL;
     new_pcb->status     = START;
     new_pcb->vfork      = is_vfork;
+    new_pcb->ppid       = current_pcb->pid;
+    new_pcb->linux_abi  = current_pcb->linux_abi;
+    new_pcb->load_start = current_pcb->load_start;
+    new_pcb->aux_phdr   = current_pcb->aux_phdr;
+    new_pcb->aux_phent  = current_pcb->aux_phent;
+    new_pcb->aux_phnum  = current_pcb->aux_phnum;
+    new_pcb->aux_base   = current_pcb->aux_base;
+    new_pcb->aux_entry  = current_pcb->aux_entry;
+    new_pcb->aux_execfn = current_pcb->aux_execfn;
+    new_pcb->elf_size   = current_pcb->elf_size;
 
     new_pcb->pagedir = is_vfork ? current_pcb->pagedir : clone_page_directory(current_pcb->pagedir, false);
     if (new_pcb->pagedir == NULL)
@@ -1758,7 +1793,32 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     }
 
     new_task->parent_group = new_pcb;
-    new_task->tid = alloc_tid();
+    new_task->tid = new_pcb->pid;
+    reserve_tid_value(new_task->tid);
+    int child_tid_value = (int)new_task->tid;
+    if ((clone_flags & CLONE_PARENT_SETTID_FLAG) &&
+        !copy_to_user_pagedir(current_pcb->pagedir, parent_tid, &child_tid_value, sizeof(child_tid_value)))
+    {
+        free_partial_process(new_pcb, !is_vfork);
+        free_fork_task(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-EFAULT;
+    }
+    if ((clone_flags & CLONE_CHILD_SETTID_FLAG) &&
+        !copy_to_user_pagedir(new_pcb->pagedir, child_tid, &child_tid_value, sizeof(child_tid_value)))
+    {
+        free_partial_process(new_pcb, !is_vfork);
+        free_fork_task(new_task);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-EFAULT;
+    }
+    if (clone_flags & CLONE_CHILD_CLEARTID_FLAG)
+    {
+        new_task->clear_child_tid = (uint64_t)child_tid;
+        new_task->tid_directory   = new_pcb->pagedir;
+    }
     new_task->group_index  = queue_enqueue(new_pcb->thread_queue, new_task);
     if (new_task->group_index == (size_t)-1)
     {
@@ -1785,6 +1845,18 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack)
     restore_runtime_state(was_scheduler_enabled, is_sti);
 
     write_serial_fmt("FORK PID: %d\n", new_pcb->pid);
+    if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
+    {
+        write_serial_fmt("[DEBUG-fork-ret] parent=%s pid=%llu child=%llu sti=%d sched=%d rip=0x%llx rsp=0x%llx\n",
+                         parent_task->name,
+                         current_pcb->pid,
+                         new_pcb->pid,
+                         (int)is_sti,
+                         (int)was_scheduler_enabled,
+                         fork_frame.rcx,
+                         fork_frame.rsp);
+    }
+    scheduler_yield();
     if (!is_vfork) return new_pcb->pid;
 
     while (true)

@@ -206,7 +206,8 @@ uint64_t task_user_fs_selector(tcb_t task);
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
 size_t   create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
-uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
+uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, uint64_t clone_flags = 0,
+                      int *parent_tid = NULL, int *child_tid = NULL);
 uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid,
                       uint64_t tls);
 void     process_setup();
