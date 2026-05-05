@@ -4,63 +4,30 @@
 #include "mm/page.h"
 #include "proto.hpp"
 #include "task/pcb.h"
+#include "task/scheduler.h"
 #include <cpu/longm.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
 
 extern bool no_interrupt; // 涓簍rue鏃朵唬琛ㄤ弗绂佸紑鍚腑鏂?
 
-static bool is_thread_dead(tcb_t thread)
+static pcb_t find_reapable_child(pcb_t parent)
 {
-    return thread == NULL || thread->status == OUT || thread->status == DEATH;
-}
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
 
-void check_group(pcb_t group)
-{
-    if (group == NULL) return;
-
-    // Zombie processes must stay attached to their parent until wait/waitpid reaps them.
-    if (group->status == ZOMBIE) return;
-
-    if (group->child_pcb != NULL)
+    pcb_t target = NULL;
+    spin_lock(&parent->child_pcb->lock);
+    for (lock_node *node = parent->child_pcb->head; node != NULL; node = node->next)
     {
-        for (lock_node *node = group->child_pcb->head; node != NULL;)
+        pcb_t child = (pcb_t)node->data;
+        if (child != NULL && child->status == DEATH)
         {
-            lock_node *next = node->next;
-            check_group((pcb_t)node->data);
-            node = next;
+            target = child;
+            break;
         }
     }
-
-    if (group->thread_queue == NULL) return;
-
-    spin_lock(&group->thread_queue->lock);
-    if (group->thread_queue->size == 0)
-    {
-        spin_unlock(&group->thread_queue->lock);
-        return;
-    }
-
-    lock_node *front_p    = group->thread_queue->head;
-    bool       group_dead = true;
-    for (; front_p != NULL; front_p = front_p->next)
-    {
-        tcb_t thread = (tcb_t)front_p->data;
-        if (!is_thread_dead(thread))
-        {
-            if (strcmp(thread->name, "Window Message Thread") != 0)
-            {
-                // 涓嶆槸娑堟伅绾跨▼鎵嶇畻
-                group_dead = false;
-            }
-        }
-    }
-    spin_unlock(&group->thread_queue->lock);
-
-    if (group_dead)
-    {
-        kill_proc(group, 0, false);
-    }
+    spin_unlock(&parent->child_pcb->lock);
+    return target;
 }
 
 void killer_thread()
@@ -72,8 +39,9 @@ void killer_thread()
             open_interrupt;
             enable_scheduler();
         }
-        check_group(kernel_group);
-        cpu_relax();
+        pcb_t target = find_reapable_child(kernel_group);
+        if (target != NULL) kill_proc(target, 0, false);
+        scheduler_yield();
     }
 }
 

@@ -266,7 +266,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
-        scheduler_yield();
     }
 
     SheetIsCreating  = true;
@@ -591,7 +590,6 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     while (true)
     {
         if (!SheetIsCreating && !SheetIsRefreshing) { break; }
-        scheduler_yield();
     }
 
     SheetIsCreating = true;
@@ -622,12 +620,9 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (!csheet) return;
-    if (csheet->next == NULL) return;
-    if (csheet->front == NULL) return;
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
-        scheduler_yield();
     }
 
     SheetIsCreating  = true;
@@ -865,26 +860,23 @@ void flush_sheet_damage_queue(SHEET_INFO *sht)
     while (true)
     {
         SHEET_INFO      *pending_sht = NULL;
-        SheetDamageRect  rects[SHEET_DAMAGE_QUEUE_CAPACITY];
-        uint8_t          rect_count  = 0;
+        SheetDamageRect  rect        = {0, 0, 0, 0};
 
         spin_lock(&g_sheet_damage_lock);
         if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht && g_sheet_damage_queue.count != 0)
         {
             pending_sht = g_sheet_damage_queue.sht;
-            rect_count  = g_sheet_damage_queue.count;
-            memcpy(rects, g_sheet_damage_queue.rects, (size_t)rect_count * sizeof(SheetDamageRect));
-            g_sheet_damage_queue.count   = 0;
-            g_sheet_damage_queue.pending = false;
-            g_sheet_damage_queue.sht     = NULL;
+            rect = g_sheet_damage_queue.rects[g_sheet_damage_queue.count - 1];
+            g_sheet_damage_queue.count--;
+            g_sheet_damage_queue.pending = g_sheet_damage_queue.count != 0;
+            if (!g_sheet_damage_queue.pending) {
+                g_sheet_damage_queue.sht = NULL;
+            }
         }
         spin_unlock(&g_sheet_damage_lock);
 
-        if (pending_sht == NULL || rect_count == 0) break;
-        for (uint8_t i = 0; i < rect_count; ++i)
-        {
-            refresh_part_sheet_now(pending_sht, rects[i].x1, rects[i].y1, rects[i].x2, rects[i].y2);
-        }
+        if (pending_sht == NULL) break;
+        refresh_part_sheet_now(pending_sht, rect.x1, rect.y1, rect.x2, rect.y2);
     }
     spin_unlock(&g_sheet_flush_lock);
 }

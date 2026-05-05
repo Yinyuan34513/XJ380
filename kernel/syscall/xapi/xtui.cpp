@@ -245,14 +245,9 @@ void do_xapi_Printf(char *str)
 
 void do_xapi_Sleep(uint64_t ms)
 {
-    if (ms > (uint64_t)-1 / 1000000ULL) return;
-    open_interrupt;
-    uint64_t old_t = nanoTime();
-    while (nanoTime() - old_t <= ms * 1000000)
-    {
-        __asm__ volatile("hlt");
-    }
-    close_interrupt;
+    uint64_t nano = ms * 1000000ULL;
+    if (ms != 0 && nano / 1000000ULL != ms) nano = (uint64_t)-1;
+    scheduler_sleep_ns(nano);
 }
 
 void do_xapi_GetTimeX(uint64_t tt)

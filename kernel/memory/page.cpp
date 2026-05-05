@@ -769,14 +769,14 @@ void switch_page_directory(page_directory_t *dir)
 
 uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags)
 {
-    if (length == 0) return -1;
+    if (length == 0) return 0;
 
     uint64_t aligned_length = page_align_up(length);
-    if (aligned_length == 0) return -1;
+    if (aligned_length == 0) return 0;
 
     size_t frame_count = aligned_length / PAGE_SIZE;
     uint64_t frame = alloc_frames(frame_count);
-    if (frame == 0) return -1;
+    if (frame == 0) return 0;
 
     uint64_t addr = frame;
     if (flags & PTE_USER)
@@ -791,7 +791,7 @@ uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_
         if (addr == 0)
         {
             free_frames(frame, frame_count);
-            return -1;
+            return 0;
         }
         if (owner != NULL) owner->mmap_start = addr + aligned_length;
     }

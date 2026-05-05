@@ -194,6 +194,11 @@ struct thread_control_block
     int      message_pipe_write_fd;
 
     uint64_t window_count;
+
+    uint64_t eevdf_vruntime;
+    uint64_t eevdf_deadline;
+    uint64_t eevdf_slice;
+    uint64_t eevdf_last_start;
 };
 
 extern pcb_t kernel_group;

@@ -35,6 +35,7 @@
 #include <syscall/signal.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
+#include <task/scheduler.h>
 #include <ttf.h>
 #include <user/runfile.h>
 #include <hda/vsound.h>
@@ -717,6 +718,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     idle_thread->fs_base      = 0;
     idle_thread->group_index  = queue_enqueue(kernel_group->thread_queue, idle_thread);
     idle_thread->context0.rsp = get_rsp();
+    scheduler_init_task(idle_thread);
     set_kernel_stack(get_rsp());
     idle_thread->queue_index = queue_enqueue_ref(get_current_cpu()->scheduler_queue, idle_thread, &idle_thread->sched_node);
 
