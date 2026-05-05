@@ -29,10 +29,7 @@ typedef struct
 
 static spin_t               g_sheet_damage_lock = SPIN_INIT;
 static spin_t               g_sheet_flush_lock  = SPIN_INIT;
-static spin_t               g_sheet_tree_lock   = SPIN_INIT;
 static SheetDamageQueueState g_sheet_damage_queue = {NULL, {}, 0, false};
-static uint32_t             g_sheet_refresh_readers = 0;
-static SHEET               *g_sheet_deferred_free   = NULL;
 
 static inline int rect_min_int(int a, int b)
 {
@@ -179,85 +176,6 @@ static bool is_valid_sheet_buffer(const void *buffer)
     return buffer != NULL && (uint64_t)buffer >= get_physical_memory_offset();
 }
 
-static bool sheet_is_linked_locked(SHEET_INFO *sht, const SHEET *sheet)
-{
-    if (sht == NULL || sheet == NULL) return false;
-    for (SHEET *st = sht->start; st != NULL; st = st->next) {
-        if (st == sheet) return true;
-    }
-    return false;
-}
-
-static int sheet_count_locked(SHEET_INFO *sht)
-{
-    int count = 0;
-    if (sht == NULL) return 0;
-    for (SHEET *st = sht->start; st != NULL; st = st->next) {
-        count++;
-    }
-    return count;
-}
-
-static void free_sheet_storage(SHEET *sheet)
-{
-    if (sheet == NULL) return;
-    free(sheet->buffer);
-    memset(sheet, 0, sizeof(SHEET));
-    free((void *)sheet);
-}
-
-static void finish_sheet_refresh_reader()
-{
-    SHEET *pending_free = NULL;
-
-    spin_lock(&g_sheet_tree_lock);
-    if (g_sheet_refresh_readers > 0) {
-        g_sheet_refresh_readers--;
-    }
-    if (g_sheet_refresh_readers == 0) {
-        pending_free = g_sheet_deferred_free;
-        g_sheet_deferred_free = NULL;
-    }
-    spin_unlock(&g_sheet_tree_lock);
-
-    while (pending_free != NULL)
-    {
-        SHEET *next = pending_free->next;
-        free_sheet_storage(pending_free);
-        pending_free = next;
-    }
-}
-
-static int snapshot_sheet_tree(SHEET_INFO *sht, SHEET ***out_sheets)
-{
-    if (out_sheets == NULL) return 0;
-    *out_sheets = NULL;
-    if (sht == NULL) return 0;
-
-    spin_lock(&g_sheet_tree_lock);
-    g_sheet_refresh_readers++;
-    int count = sheet_count_locked(sht);
-    spin_unlock(&g_sheet_tree_lock);
-
-    if (count <= 0) return 0;
-
-    SHEET **sheets = (SHEET **)malloc((size_t)count * sizeof(SHEET *));
-    if (sheets == NULL) {
-        finish_sheet_refresh_reader();
-        return 0;
-    }
-
-    spin_lock(&g_sheet_tree_lock);
-    int index = 0;
-    for (SHEET *st = sht->start; st != NULL && index < count; st = st->next) {
-        sheets[index++] = st;
-    }
-    spin_unlock(&g_sheet_tree_lock);
-
-    *out_sheets = sheets;
-    return index;
-}
-
 static bool clip_sheet_copy_region(const SHEET *dst_sheet, int *dst_x, int *dst_y,
                                    int *src_x, int *src_y, int *width, int *height)
 {
@@ -344,22 +262,15 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                   SHEET **sheet)
 {
-    if (sht == NULL || sheet == NULL) return;
+    while (true)
+    {
+        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
+    }
 
+    SheetIsCreating  = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     memset(new_sheet, 0, sizeof(SHEET));
     size_t buffer_bytes = sheet_buffer_bytes(x, y);
-    new_sheet->bx        = bx;
-    new_sheet->by        = by;
-    new_sheet->width     = x;
-    new_sheet->height    = y;
-    new_sheet->type      = type;
-    new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
-    new_sheet->is_change = true;
-    *sheet               = new_sheet;
-
-    spin_lock(&g_sheet_tree_lock);
-    SheetIsCreating = true;
 
     SHEET *front_p = sht->start;
     if (index > 0)
@@ -404,6 +315,17 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 //     front_p = front_p->next;
                 // }
 
+                // 分配
+                *sheet = new_sheet;
+
+                new_sheet->bx        = bx;
+                new_sheet->by        = by;
+                new_sheet->width     = x;
+                new_sheet->height    = y;
+                new_sheet->type      = type;
+                new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
+                new_sheet->is_change = true;
+
                 sht->sheet_num++;
             }
             else
@@ -412,12 +334,34 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->front = front_p;
                 front_p->next    = new_sheet;
 
+                // 分配
+                *sheet = new_sheet;
+
+                new_sheet->bx        = bx;
+                new_sheet->by        = by;
+                new_sheet->width     = x;
+                new_sheet->height    = y;
+                new_sheet->type      = type;
+                new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
+                new_sheet->is_change = true;
+
                 sht->sheet_num++;
             }
         }
         else
         {
             sht->start = new_sheet;
+
+            *sheet = new_sheet;
+
+            new_sheet->bx        = bx;
+            new_sheet->by        = by;
+            new_sheet->width     = x;
+            new_sheet->height    = y;
+            new_sheet->type      = type;
+            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
+            new_sheet->is_change = true;
+
             sht->sheet_num++;
         }
     }
@@ -445,18 +389,37 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
                 new_sheet->front     = front_p;
             }
 
+            *sheet = new_sheet;
+
+            new_sheet->bx        = bx;
+            new_sheet->by        = by;
+            new_sheet->width     = x;
+            new_sheet->height    = y;
+            new_sheet->type      = type;
+            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
+            new_sheet->is_change = true;
+
             sht->sheet_num++;
         }
         else
         {
             sht->start = new_sheet;
 
+            *sheet = new_sheet;
+
+            new_sheet->bx        = bx;
+            new_sheet->by        = by;
+            new_sheet->width     = x;
+            new_sheet->height    = y;
+            new_sheet->type      = type;
+            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
+            new_sheet->is_change = true;
+
             sht->sheet_num++;
         }
     }
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
     SheetIsCreating = false;
-    spin_unlock(&g_sheet_tree_lock);
 }
 
 uint32_t getBX(SHEET_INFO *sht, SHEET *csheet)
@@ -489,7 +452,6 @@ SHEET *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
         return NULL;
     }
 
-    spin_lock(&g_sheet_tree_lock);
     SHEET *front_p = sht->start;
     while (true)
     {
@@ -500,16 +462,11 @@ SHEET *found_sheet(SHEET_INFO *sht, uint32_t x, uint32_t y)
                 if (front_p->bx <= x && front_p->bx + front_p->width >= x && front_p->by <= y &&
                     front_p->by + front_p->height >= y)
                 {
-                    spin_unlock(&g_sheet_tree_lock);
                     return front_p;
                 }
-                else if (front_p->front == NULL) {
-                    spin_unlock(&g_sheet_tree_lock);
-                    return NULL;
-                }
+                else if (front_p->front == NULL) { return NULL; }
                 front_p = front_p->front;
             }
-            spin_unlock(&g_sheet_tree_lock);
             return NULL;
         }
         front_p = front_p->next;
@@ -522,7 +479,6 @@ SHEET *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
         return NULL;
     }
 
-    spin_lock(&g_sheet_tree_lock);
     SHEET *front_p = sht->start;
     while (front_p->next != NULL) {
         front_p = front_p->next;
@@ -545,15 +501,12 @@ SHEET *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y)
 
         if (front_p->type == MovableSheetType || front_p->type == NoEdgeWindowSheetType ||
             front_p->type == TopWindowSheetType) {
-            spin_unlock(&g_sheet_tree_lock);
             return front_p;
         }
         // 顶层非窗口图层（例如底栏）已经遮挡住该点，不应继续穿透到底下窗口。
-        spin_unlock(&g_sheet_tree_lock);
         return NULL;
     }
 
-    spin_unlock(&g_sheet_tree_lock);
     return NULL;
 }
 
@@ -563,7 +516,6 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
         return NULL;
     }
 
-    spin_lock(&g_sheet_tree_lock);
     SHEET *front_p = sht->start;
     while (front_p->next != NULL) {
         front_p = front_p->next;
@@ -589,28 +541,22 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
             if (front_p->bx + 22 <= x && front_p->bx + (int)front_p->width - 32 >= x &&
                 front_p->by <= y && front_p->by + 22 >= y)
             {
-                spin_unlock(&g_sheet_tree_lock);
                 return front_p;
             }
-            spin_unlock(&g_sheet_tree_lock);
             return NULL;
         }
         if (front_p->type == NoEdgeWindowSheetType)
         {
-            spin_unlock(&g_sheet_tree_lock);
             return front_p;
         }
         if (front_p->type == TopWindowSheetType) {
-            spin_unlock(&g_sheet_tree_lock);
             return NULL;
         }
 
         // 被其他可见图层（比如底栏）挡住时，不允许拖动其下层窗口。
-        spin_unlock(&g_sheet_tree_lock);
         return NULL;
     }
 
-    spin_unlock(&g_sheet_tree_lock);
     return NULL;
 }
 
@@ -639,16 +585,13 @@ void setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num)
 
 void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
-    if (sht == NULL || !csheet) return;
-
-    spin_lock(&g_sheet_tree_lock);
-    SheetIsCreating = true;
-
-    if (!sheet_is_linked_locked(sht, csheet)) {
-        SheetIsCreating = false;
-        spin_unlock(&g_sheet_tree_lock);
-        return;
+    if (!csheet) return;
+    while (true)
+    {
+        if (!SheetIsCreating && !SheetIsRefreshing) { break; }
     }
+
+    SheetIsCreating = true;
     
     if (csheet->front == NULL) {
         sht->start = csheet->next;
@@ -662,62 +605,41 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
         csheet->next->front = csheet->front;
     }
     
-    bool defer_free = g_sheet_refresh_readers != 0;
-    if (defer_free) {
-        csheet->next = g_sheet_deferred_free;
-        csheet->front = NULL;
-        g_sheet_deferred_free = csheet;
-    }
+    // 释放内存
+    free(csheet->buffer);
+    memset(csheet, 0, sizeof(SHEET));
+    free((void *)(csheet));
     sht->sheet_num--;
 
     SheetIsCreating = false;
-    spin_unlock(&g_sheet_tree_lock);
-
-    if (!defer_free) {
-        free_sheet_storage(csheet);
-    }
 }
 
 // 这个lift_sheet是将图层提升到倒数第三个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
 // don't touch this
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
-    if (sht == NULL || !csheet) return;
-
-    spin_lock(&g_sheet_tree_lock);
-    if (!sheet_is_linked_locked(sht, csheet) || csheet->next == NULL || csheet->front == NULL ||
-        sht->start == NULL || sheet_count_locked(sht) <= 3)
+    if (!csheet) return;
+    while (true)
     {
-        spin_unlock(&g_sheet_tree_lock);
-        return;
+        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
     }
+
     SheetIsCreating  = true;
     SHEET *front_p = csheet;
+    front_p->next->front = front_p->front;
+    front_p->front->next = front_p->next;
     SHEET *front_p2      = sht->start;
     for (int i = 0; i < sht->sheet_num - 3; i++)
     {
-        if (front_p2 == NULL || front_p2->next == NULL) {
-            SheetIsCreating = false;
-            spin_unlock(&g_sheet_tree_lock);
-            return;
-        }
         front_p2 = front_p2->next; // 寻找最后一个
     }
 
-    if (front_p2 == NULL || front_p2 == front_p || front_p2->next == NULL || front_p2->next == front_p) {
-        SheetIsCreating = false;
-        spin_unlock(&g_sheet_tree_lock);
-        return;
-    }
-    front_p->next->front = front_p->front;
-    front_p->front->next = front_p->next;
     front_p->next        = front_p2->next;
     front_p->next->front = front_p;
     front_p2->next       = front_p;
     front_p->front       = front_p2;
 
     SheetIsCreating = false;
-    spin_unlock(&g_sheet_tree_lock);
 }
 
 bool allow_to_flush = false;
@@ -735,13 +657,6 @@ static bool clip_refresh_region(SHEET_INFO *sht, int *bex1, int *bey1, int *bex2
 
 static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
-    SHEET **sheets = NULL;
-    int sheet_count = snapshot_sheet_tree(sht, &sheets);
-    if (sheet_count <= 0) {
-        finish_sheet_refresh_reader();
-        return;
-    }
-
     SheetIsRefreshing = true;
 
     SHEET_BUFFER *temp_buf_base = (SHEET_BUFFER *)sht->temp_buffer;
@@ -758,8 +673,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
     }
 
     uint16_t layer_index = 1;
-    for (int i = 0; i < sheet_count; i++) {
-        SHEET *st = sheets[i];
+    for (SHEET *st = sht->start; st != nullptr; st = st->next) {
         int vx0 = (bex1 > (int)st->bx) ? bex1 : (int)st->bx;
         int vy0 = (bey1 > (int)st->by) ? bey1 : (int)st->by;
         int vx1 = (bex2 < (int)(st->bx + st->width)) ? bex2 : (int)(st->bx + st->width);
@@ -790,8 +704,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
 
     // 只合成最高不透明像素及其上方的半透明像素；其下方图层不会影响最终颜色。
     layer_index = 1;
-    for (int i = 0; i < sheet_count; i++) {
-        SHEET *st = sheets[i];
+    for (SHEET *st = sht->start; st != nullptr; st = st->next) {
         // 计算当前图层与刷新区域的交集
         int vx0 = (bex1 > (int)st->bx) ? bex1 : (int)st->bx;
         int vy0 = (bey1 > (int)st->by) ? bey1 : (int)st->by;
@@ -917,8 +830,6 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
 
     serial_redraw_screen_overlay_part(bex1, bey1, bex2, bey2);
     SheetIsRefreshing = false;
-    free(sheets);
-    finish_sheet_refresh_reader();
 }
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
@@ -945,25 +856,21 @@ void flush_sheet_damage_queue(SHEET_INFO *sht)
     {
         SHEET_INFO      *pending_sht = NULL;
         SheetDamageRect  rect        = {0, 0, 0, 0};
-        bool             have_rect   = false;
 
         spin_lock(&g_sheet_damage_lock);
         if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht && g_sheet_damage_queue.count != 0)
         {
             pending_sht = g_sheet_damage_queue.sht;
-            rect        = g_sheet_damage_queue.rects[0];
-            have_rect   = true;
-            for (uint8_t i = 1; i < g_sheet_damage_queue.count; ++i)
-            {
-                sheet_damage_rect_union_into(&rect, &g_sheet_damage_queue.rects[i]);
+            rect = g_sheet_damage_queue.rects[g_sheet_damage_queue.count - 1];
+            g_sheet_damage_queue.count--;
+            g_sheet_damage_queue.pending = g_sheet_damage_queue.count != 0;
+            if (!g_sheet_damage_queue.pending) {
+                g_sheet_damage_queue.sht = NULL;
             }
-            g_sheet_damage_queue.count   = 0;
-            g_sheet_damage_queue.pending = false;
-            g_sheet_damage_queue.sht     = NULL;
         }
         spin_unlock(&g_sheet_damage_lock);
 
-        if (pending_sht == NULL || !have_rect) break;
+        if (pending_sht == NULL) break;
         refresh_part_sheet_now(pending_sht, rect.x1, rect.y1, rect.x2, rect.y2);
     }
     spin_unlock(&g_sheet_flush_lock);
