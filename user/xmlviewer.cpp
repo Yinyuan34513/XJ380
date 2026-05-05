@@ -633,7 +633,7 @@ int main(int argc, char *argv[], char *envp[])
     win.title  = (char *)"XML Explorer";
     win.width  = XMLV_WINDOW_WIDTH;
     win.height = XMLV_WINDOW_HEIGHT;
-    win.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    win.sets   = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
 
     xapi_CreateWindow(&g_handle, &win);
     xapi_SetIcon(g_handle, "/system/icon/texter.png");

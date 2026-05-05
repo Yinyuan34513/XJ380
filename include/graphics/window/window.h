@@ -37,8 +37,10 @@ typedef struct WIN_THEME
     SHEET_BUFFER *left;
     SHEET_BUFFER *right;
     SHEET_BUFFER *close;
+    SHEET_BUFFER *max;
     SHEET_BUFFER *min;
     SHEET_BUFFER *close_light;
+    SHEET_BUFFER *max_light;
     SHEET_BUFFER *min_light;
 } WIN_THEME;
 

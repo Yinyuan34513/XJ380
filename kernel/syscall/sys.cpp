@@ -1068,26 +1068,24 @@ sys_(uname, struct utsname *utsname)
     return 0;
 }
 void scheduler_nano_sleep(uint64_t nano) {
-    uint64_t targetTime        = nanoTime();
-    uint64_t after             = 0;
-    get_current_task()->status = WAIT;
-    while(1) {
-        uint64_t n = nanoTime();
-        if (n < targetTime) {
-            after      += UINT64_MAX - targetTime + n;
-            targetTime  = n;
-        } else {
-            after      += n - targetTime;
-            targetTime  = n;
-        }
-        if (after >= nano) {
-            get_current_task()->status = RUNNING;
-            return;
-        }
-        if (nano > 10) {
-            scheduler_yield(); // 让出CPU时间片
-        }
+    if (nano == 0) {
+        scheduler_yield();
+        return;
     }
+
+    tcb_t task = get_current_task();
+    uint64_t now = nanoTime();
+    uint64_t wakeup_time = now + nano;
+    if (wakeup_time < now) wakeup_time = UINT64_MAX;
+
+    task->wakeup_time = wakeup_time;
+    task->status = WAIT;
+
+    do {
+        scheduler_yield();
+    } while (task->status == WAIT);
+
+    if (task->status == START) task->status = RUNNING;
 }
 sys_(nano_sleep, void *time_handle)
 {

@@ -304,7 +304,7 @@ static int taskmgr_main_impl(int argc, char *argv[], char *envp[])
     window.title = (char *)"Task Manager";
     window.width = TASKMGR_WIDTH;
     window.height = TASKMGR_HEIGHT;
-    window.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    window.sets = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
     xapi_CreateWindow(&g_window, &window);
     xapi_SetIcon(g_window, "/system/icon/unknowexe.png");
     SetMsgPrcor(g_window, taskmgr_MessagePrcor);

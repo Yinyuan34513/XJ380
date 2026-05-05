@@ -146,7 +146,7 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     if (WindowHandle->WindowNodePtr != NULL)
     {
         set_window_maximize_support(xwmii, sht_img, WindowHandle->WindowNodePtr,
-                                    (WindowInfo->sets & XWIN_SUPPORT_MAXIMIZE) != 0);
+                                    (WindowInfo->sets & XWIN_SUPPORT_RESIZEABLE) != 0);
     }
 
     return true;

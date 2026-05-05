@@ -46,7 +46,7 @@ static int texter_main_impl(int argc, char *argv[], char *envp[])
     Winfo.title  = (char *)"文本编辑器";
     Winfo.width  = TXR_X;
     Winfo.height = TXR_Y;
-    Winfo.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    Winfo.sets   = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
     xapi_CreateWindow(&handle, &Winfo);
     xapi_SetIcon(handle, "/system/icon/texter.png");
     SetMsgPrcor(handle, texter_MessagePrcor);

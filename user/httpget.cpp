@@ -437,7 +437,7 @@ static int httpget_main_impl(int argc, char *argv[], char *envp[])
     window.title  = (char *)"HTTP Client";
     window.width  = HTTPGET_WIDTH;
     window.height = HTTPGET_HEIGHT;
-    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
 
     xapi_CreateWindow(&g_window, &window);
     xapi_OutputSerial((char *)"httpget: window created\n");

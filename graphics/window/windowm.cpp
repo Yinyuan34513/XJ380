@@ -27,28 +27,6 @@ static uint32_t min_u32(uint32_t a, uint32_t b)
     return a < b ? a : b;
 }
 
-static void draw_max_button(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *sheet, uint32_t content_width, bool restore_icon)
-{
-    if (xwmi == NULL || sheet == NULL || content_width < 80) return;
-
-    const int x = (int)content_width - 75;
-    const int y = 5;
-    SHEET_BUFFER outline = {0x55, 0x55, 0x55, 0xff};
-
-    copy_buffer_by_id_without_alpha(sht, sheet, xwmi->theme.min, x, y, 26, 18);
-    draw_line(sht, sheet, x + 7, y + 5, x + 18, y + 5, outline);
-    draw_line(sht, sheet, x + 7, y + 5, x + 7, y + 13, outline);
-    draw_line(sht, sheet, x + 18, y + 5, x + 18, y + 13, outline);
-    draw_line(sht, sheet, x + 7, y + 13, x + 18, y + 13, outline);
-
-    if (restore_icon)
-    {
-        draw_line(sht, sheet, x + 10, y + 3, x + 20, y + 3, outline);
-        draw_line(sht, sheet, x + 20, y + 3, x + 20, y + 11, outline);
-        draw_line(sht, sheet, x + 18, y + 11, x + 20, y + 11, outline);
-    }
-}
-
 static void redraw_window_frame(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
 {
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls) || windowls->w_sheet == NULL) return;
@@ -80,7 +58,16 @@ static void redraw_window_frame(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windo
 
     copy_buffer_by_id_without_alpha(sht, sheet, xwmi->theme.close, width - 21, 5, 41, 18);
     copy_buffer_by_id_without_alpha(sht, sheet, xwmi->theme.min, width - 48, 5, 26, 18);
-    if (windowls->can_maximize) draw_max_button(xwmi, sht, sheet, width, windowls->is_maximized);
+    if (windowls->can_maximize)
+    {
+        copy_buffer_by_id_without_alpha(sht, windowls->w_sheet, xwmi->theme.max, width - 48, 5, 26, 18);
+        copy_buffer_by_id_without_alpha(sht, windowls->w_sheet, xwmi->theme.min, width - 74, 5, 26, 18);
+    }
+    else
+    {
+        copy_buffer_by_id_without_alpha(sht, windowls->w_sheet, xwmi->theme.min, width - 48, 5, 26, 18);
+    }
+
     print_box_ttf(sht, sheet, windowls->title, BLACK, 12, 4, 11);
 
     free(top);
@@ -157,12 +144,16 @@ void init_xwm(XWM_INFO *xwmi)
     xwmi->start   = tmp_window;
     xwmi->win_num = 0;
     write_serial_string("Reading Theme...\n");
-    LoadPictureOgM(&xwmi->theme.top,      "/system/theme/skyglass/top.png");
-    LoadPictureOgM(&xwmi->theme.bottom,   "/system/theme/skyglass/bottom.png");
-    LoadPictureOgM(&xwmi->theme.left,     "/system/theme/skyglass/left.png");
-    LoadPictureOgM(&xwmi->theme.right,    "/system/theme/skyglass/right.png");
-    LoadPictureOgM(&xwmi->theme.close,    "/system/theme/skyglass/close.png");
-    LoadPictureOgM(&xwmi->theme.min,      "/system/theme/skyglass/min.png");
+    LoadPictureOgM(&xwmi->theme.top,        "/system/theme/skyglass/top.png");
+    LoadPictureOgM(&xwmi->theme.bottom,     "/system/theme/skyglass/bottom.png");
+    LoadPictureOgM(&xwmi->theme.left,       "/system/theme/skyglass/left.png");
+    LoadPictureOgM(&xwmi->theme.right,      "/system/theme/skyglass/right.png");
+    LoadPictureOgM(&xwmi->theme.close,      "/system/theme/skyglass/close.png");
+    LoadPictureOgM(&xwmi->theme.min,        "/system/theme/skyglass/min.png");
+    LoadPictureOgM(&xwmi->theme.max,        "/system/theme/skyglass/max.png");
+    LoadPictureOgM(&xwmi->theme.close_light,"/system/theme/skyglass/close_light.png");
+    LoadPictureOgM(&xwmi->theme.max_light,  "/system/theme/skyglass/max_light.png");
+    LoadPictureOgM(&xwmi->theme.min_light,  "/system/theme/skyglass/min_light.png");
     write_serial_string("XWM Initializing Success.\n");
 }
 
@@ -341,10 +332,17 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     // 右侧
     resize_theme_height(lft, xwmi->theme.right, 12, height, 600);
     copy_buffer_by_id(sht, new_window->w_sheet, lft, width + 12, 27, 12, height);
-    // 关闭 & 最小化按钮
+    // 按钮
     copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.close, width - 21, 5, 41, 18);
-    copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.min, width - 48, 5, 26, 18);
-    if (new_window->can_maximize) draw_max_button(xwmi, sht, new_window->w_sheet, width, false);
+    if (new_window->can_maximize)
+    {
+        copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.max, width - 48, 5, 26, 18);
+        copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.min, width - 74, 5, 26, 18);
+    }
+    else
+    {
+        copy_buffer_by_id_without_alpha(sht, new_window->w_sheet, xwmi->theme.min, width - 48, 5, 26, 18);
+    }
 
     // print_box_ttf(sht, new_window->w_sheet, title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
     print_box_ttf(sht, new_window->w_sheet, title, BLACK, 12, 4, 11);

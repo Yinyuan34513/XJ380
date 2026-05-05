@@ -68,7 +68,7 @@ static int fmanager_main_impl(int argc, char *argv[], char *envp[])
     Winfo.title  = (char *)"文件管理器";
     Winfo.width  = FMR_X;
     Winfo.height = FMR_Y;
-    Winfo.sets = XWIN_NORMAL | XWIN_SUPPORT_MAXIMIZE;
+    Winfo.sets = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
     xapi_CreateWindow(&handle, &Winfo);
     xapi_SetIcon(handle, "/system/icon/folder.png");
     SetMsgPrcor(handle, fmanager_MessagePrcor);
