@@ -18,6 +18,7 @@ static constexpr uint64_t EEVDF_TICK_NS        = 1000000ULL;
 static constexpr uint64_t EEVDF_BASE_SLICE_NS  = TIME_SLICE * EEVDF_TICK_NS;
 static constexpr uint64_t EEVDF_MIN_SLICE_NS   = MIN_SLICE * EEVDF_TICK_NS;
 static constexpr uint64_t EEVDF_WAKEUP_CREDIT  = EEVDF_BASE_SLICE_NS;
+static constexpr uint64_t EEVDF_SLEEPER_CREDIT = EEVDF_BASE_SLICE_NS * 2;
 static constexpr uint64_t EEVDF_DEFAULT_WEIGHT = 1024ULL;
 
 void enable_scheduler()
@@ -192,19 +193,37 @@ static inline bool is_current_task_runnable(tcb_t task)
     return true;
 }
 
-static inline void wake_sleeping_task(tcb_t task, uint64_t now)
-{
-    if (task == NULL) return;
-    if (task->status == WAIT && task->wakeup_time != 0 && now >= task->wakeup_time) {
-        task->wakeup_time = 0;
-        task->status = START;
-    }
-}
-
 static inline uint64_t task_sched_slice(tcb_t task)
 {
     if (task == NULL || task->eevdf_slice < EEVDF_MIN_SLICE_NS) return EEVDF_BASE_SLICE_NS;
     return task->eevdf_slice;
+}
+
+static inline void apply_eevdf_wakeup_credit(tcb_t task, uint64_t base_vruntime)
+{
+    if (task == NULL || task->task_level == TASK_IDLE_LEVEL) return;
+
+    uint64_t credit = task_sched_slice(task);
+    if (credit < EEVDF_WAKEUP_CREDIT) credit = EEVDF_WAKEUP_CREDIT;
+    if (credit > EEVDF_SLEEPER_CREDIT) credit = EEVDF_SLEEPER_CREDIT;
+
+    uint64_t placed_vruntime = base_vruntime > credit ? base_vruntime - credit : 0;
+    if (task->eevdf_vruntime > placed_vruntime) {
+        task->eevdf_vruntime = placed_vruntime;
+    }
+    task->eevdf_deadline = task->eevdf_vruntime + task_sched_slice(task);
+}
+
+static inline bool wake_sleeping_task(tcb_t task, uint64_t now, uint64_t base_vruntime)
+{
+    if (task == NULL) return false;
+    if (task->status == WAIT && task->wakeup_time != 0 && now >= task->wakeup_time) {
+        task->wakeup_time = 0;
+        task->status = START;
+        apply_eevdf_wakeup_credit(task, base_vruntime);
+        return true;
+    }
+    return false;
 }
 
 static inline uint64_t vruntime_delta(uint64_t runtime_ns)
@@ -220,32 +239,32 @@ static inline bool deadline_before(tcb_t left, tcb_t right)
     return left->eevdf_vruntime < right->eevdf_vruntime;
 }
 
-static void update_current_eevdf_runtime(tcb_t current, uint64_t now, bool charge_tick)
+static void charge_current_eevdf_runtime(tcb_t current, uint64_t runtime_ns)
 {
     if (current == NULL || current->task_level == TASK_IDLE_LEVEL) return;
     if (current->status != RUNNING) return;
+    if (runtime_ns == 0) return;
 
-    uint64_t runtime = EEVDF_TICK_NS;
-    if (!charge_tick && current->eevdf_last_start != 0 && now > current->eevdf_last_start) {
-        runtime = now - current->eevdf_last_start;
-    }
-    if (runtime < EEVDF_TICK_NS) runtime = EEVDF_TICK_NS;
-
-    current->eevdf_vruntime += vruntime_delta(runtime);
+    current->eevdf_vruntime += vruntime_delta(runtime_ns);
     uint64_t slice = task_sched_slice(current);
     current->eevdf_deadline = current->eevdf_vruntime + slice;
-    current->eevdf_last_start = now;
 }
 
-static uint64_t queue_average_vruntime(lock_queue *queue, tcb_t current, uint64_t now)
+static uint64_t queue_average_vruntime(lock_queue *queue, tcb_t current, uint64_t now, tcb_t *fallback, tcb_t *idle)
 {
     uint64_t sum = 0;
     uint64_t count = 0;
+    if (fallback != NULL) *fallback = NULL;
+    if (idle != NULL) *idle = NULL;
 
     lock_node *node = queue->head;
     while (node != NULL) {
         tcb_t candidate = (tcb_t)node->data;
-        wake_sleeping_task(candidate, now);
+        uint64_t wake_base = current != NULL ? current->eevdf_vruntime : candidate->eevdf_vruntime;
+        wake_sleeping_task(candidate, now, wake_base);
+        if (candidate != current && candidate != NULL && candidate->task_level == TASK_IDLE_LEVEL && idle != NULL) {
+            *idle = candidate;
+        }
         if (candidate == current) {
             if (is_current_task_runnable(candidate)) {
                 sum += candidate->eevdf_vruntime;
@@ -254,6 +273,9 @@ static uint64_t queue_average_vruntime(lock_queue *queue, tcb_t current, uint64_
         } else if (is_task_schedulable(candidate, current)) {
             sum += candidate->eevdf_vruntime;
             count++;
+            if (fallback != NULL && deadline_before(candidate, *fallback)) {
+                *fallback = candidate;
+            }
         }
         node = node->next;
     }
@@ -290,51 +312,49 @@ static void mark_task_dispatched(tcb_t task, uint64_t now)
 
 tcb_t select_next_task_safe()
 {
-    spin_lock(&scheduler_lock);
-    
     struct PROCESSOR_INFO *cpu = get_current_cpu();
     lock_queue *queue = cpu->scheduler_queue;
     
     if (queue == NULL || queue->size == 0) {
-        spin_unlock(&scheduler_lock);
         return NULL;
     }
+
+    spin_lock(&queue->lock);
     
     tcb_t current = get_current_task();
     uint64_t now = nanoTime();
-    wake_sleeping_task(current, now);
+    wake_sleeping_task(current, now, current != NULL ? current->eevdf_vruntime : 0);
     if (queue->head == NULL) {
-        spin_unlock(&scheduler_lock);
+        spin_unlock(&queue->lock);
         return NULL;
     }
 
-    const uint64_t avg_vruntime = queue_average_vruntime(queue, current, now);
-    tcb_t best = NULL;
     tcb_t fallback = NULL;
     tcb_t idle = NULL;
+    const uint64_t avg_vruntime = queue_average_vruntime(queue, current, now, &fallback, &idle);
+    tcb_t best = NULL;
 
-    lock_node *node = queue->head;
-    while (node != NULL) {
-        tcb_t candidate = (tcb_t)node->data;
-        wake_sleeping_task(candidate, now);
-        if (candidate != current && candidate != NULL && candidate->task_level == TASK_IDLE_LEVEL) {
-            idle = candidate;
-        }
-        if (is_task_schedulable(candidate, current)) {
-            if (deadline_before(candidate, fallback)) fallback = candidate;
-            if (candidate->eevdf_vruntime <= avg_vruntime && deadline_before(candidate, best)) {
-                best = candidate;
+    if (fallback != NULL && fallback->eevdf_vruntime <= avg_vruntime) {
+        best = fallback;
+    }
+
+    if (best == NULL && fallback != NULL) {
+        lock_node *node = queue->head;
+        while (node != NULL) {
+            tcb_t candidate = (tcb_t)node->data;
+            if (is_task_schedulable(candidate, current) && candidate->eevdf_vruntime <= avg_vruntime &&
+                deadline_before(candidate, best)) {
+                    best = candidate;
             }
+            node = node->next;
         }
-
-        node = node->next;
     }
 
     if (best == NULL) best = fallback;
 
     tcb_t result = best != NULL ? best : (is_current_task_runnable(current) ? current : idle);
     if (result != NULL) mark_task_dispatched(result, now);
-    spin_unlock(&scheduler_lock);
+    spin_unlock(&queue->lock);
     return result;
 }
 
@@ -372,7 +392,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     PROCESSOR_INFO *cpu = get_current_cpu();
     if (likely(current->status == RUNNING && current->task_level != TASK_IDLE_LEVEL)) {
         cpu->scheduler_ticks++;
-        update_current_eevdf_runtime(current, nanoTime(), true);
+        charge_current_eevdf_runtime(current, EEVDF_TICK_NS);
         if (cpu->scheduler_ticks < TIME_SLICE) {
             send_eoi();
             return reg;
@@ -451,29 +471,6 @@ void debug_sched_queue(lock_queue *q)
     spin_unlock(&q->lock);
 }
 
-static PROCESSOR_INFO *find_cpu_by_lapic_id(uint64_t lapic_id, size_t *cpu_index)
-{
-    for (size_t i = 0; i < get_cpu_num(); i++) {
-        PROCESSOR_INFO *cpu = get_cpu(i);
-        if (cpu != NULL && cpu->lapic_id == lapic_id) {
-            if (cpu_index != NULL) *cpu_index = i;
-            return cpu;
-        }
-    }
-
-    if (cpu_index != NULL) *cpu_index = 0;
-    return NULL;
-}
-
-static PROCESSOR_INFO *get_bsp_cpu_info(size_t *cpu_index)
-{
-    PROCESSOR_INFO *cpu = find_cpu_by_lapic_id(get_bsp(), cpu_index);
-    if (cpu != NULL) return cpu;
-
-    if (cpu_index != NULL) *cpu_index = 0;
-    return get_cpu(0);
-}
-
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
@@ -488,23 +485,18 @@ size_t add_task(tcb_t new_task)
     struct PROCESSOR_INFO *min_cpu = NULL;
     size_t                 min_cpu_index = 0;
 
-    if (new_task->task_level == TASK_APPLICATION_LEVEL) {
-        // User/message threads are not stable on APs yet. Force them onto the
-        // BSP until per-CPU syscall GS state is reliable on every core.
-        min_cpu = get_bsp_cpu_info(&min_cpu_index);
-    } else {
-        // 内核线程仍然按负载最少分配
-        min_cpu = get_cpu(0);
-        for (int i = 1; i < get_cpu_num(); i++) {
-            struct PROCESSOR_INFO *cpui = get_cpu(i);
-            if (cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) {
-                min_cpu       = cpui;
-                min_cpu_index = i;
-            }
+    min_cpu = get_cpu(0);
+    for (size_t i = 1; i < get_cpu_num(); i++) {
+        struct PROCESSOR_INFO *cpui = get_cpu(i);
+        if (cpui != NULL && cpui->scheduler_queue != NULL &&
+            cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) {
+            min_cpu       = cpui;
+            min_cpu_index = i;
         }
     }
 	    
-    init_task_eevdf_entity(new_task, queue_average_vruntime(min_cpu->scheduler_queue, NULL, nanoTime()), nanoTime());
+    uint64_t now = nanoTime();
+    init_task_eevdf_entity(new_task, queue_average_vruntime(min_cpu->scheduler_queue, NULL, now, NULL, NULL), now);
     new_task->cpu_id      = min_cpu_index;
     new_task->queue_index = queue_enqueue_ref(min_cpu->scheduler_queue, new_task, &new_task->sched_node);
 

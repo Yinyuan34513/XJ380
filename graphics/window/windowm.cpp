@@ -501,25 +501,19 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     }
 
     WindowIsCreating  = true;
-    SHEET    *front_p3 = sht->start;
     int       bx = 0, by = 0, ex = 0, ey = 0;
     bool      need_refresh = false;
 
     unregister_right_rb_button_menu_components(windowls);
     unregister_task_dock(windowls);
 
-    while (front_p3 != NULL)
+    if (windowls->type != XWIN_FULL_SCR && is_valid_gui_ptr(windowls->w_sheet))
     {
-        if (front_p3 == windowls->w_sheet)
-        {
-            bx = front_p3->bx;
-            by = front_p3->by;
-            ex = bx + front_p3->width;
-            ey = by + front_p3->height;
-            need_refresh = true;
-            break;
-        }
-        front_p3 = front_p3->next;
+        bx = windowls->w_sheet->bx;
+        by = windowls->w_sheet->by;
+        ex = bx + windowls->w_sheet->width;
+        ey = by + windowls->w_sheet->height;
+        need_refresh = true;
     }
 
     WINDOWLS *front_p  = xwmi->start;
