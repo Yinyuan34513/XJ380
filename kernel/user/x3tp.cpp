@@ -57,8 +57,18 @@ int check_input_waiting_status()
 void read_terminal_app_output_buffer(char *str)
 {
     tcb_t current = get_current_task();
-    if (current->parent_group->xtttp_stc->output_lock) { return; }
-    strcpy(str, current->parent_group->xtttp_stc->output);
+    if (str == NULL || current == NULL || current->parent_group == NULL || current->parent_group->xtttp_stc == NULL) {
+        return;
+    }
+
+    if (current->parent_group->xtttp_stc->output_lock)
+    {
+        str[0] = '\0';
+        return;
+    }
+
+    strncpy(str, current->parent_group->xtttp_stc->output, 1023);
+    str[1023] = '\0';
 }
 
 void write_terminal_app_output_buffer(char *str)

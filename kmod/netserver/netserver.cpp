@@ -473,7 +473,6 @@ static int xj380_provider_create(int domain, int type, int protocol, void **out_
         printk("netserver: netconn_new failed\n");
         return -ENOMEM;
     }
-    printk("netserver: netconn_new ok conn=%p\n", conn);
 
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)calloc(1, sizeof(xj380_lwip_socket_t));
     if (socket == NULL) {

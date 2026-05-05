@@ -22,6 +22,7 @@ void check_command()
 
     char *cmd  = input_buf;
     char *args = NULL;
+    bool should_paint_prompt = true;
 
     // 分割命令和参数
     for (int i = 0; i < p_inbuf; i++)
@@ -46,7 +47,7 @@ void check_command()
     else if (strncmp("fork", cmd, 4) == 0)
     {
         uint64_t pid = xapi_Fork();
-        xapi_Execve("/system/shell.elf", NULL, NULL);
+        xapi_Execve("/apps/system/shell.elf", NULL, NULL);
     }
     else if (strncmp("mkdir", cmd, 5) == 0)
     {
@@ -165,7 +166,91 @@ void check_command()
     }
     else if (strncmp("pwd", cmd, 3) == 0) { print_working_directory(); }
     else if (strncmp("clear", cmd, 5) == 0) { clear_screen(); }
-    else if (strncmp("taskmgr", cmd, 7) == 0) { xapi_Run((char *)"/system/taskmgr.elf"); }
+    else if (strncmp("taskmgr", cmd, 7) == 0)
+    {
+        should_paint_prompt = false;
+        int status = 0;
+        uint64_t pid = fork();
+        if ((int64_t)pid < 0)
+        {
+            should_paint_prompt = true;
+            print_to_console("taskmgr: failed to start process");
+        }
+        else if (pid == 0)
+        {
+            char *taskmgr_argv[] = {(char *)"/apps/system/taskmgr.elf", NULL};
+            xapi_Execve("/apps/system/taskmgr.elf", taskmgr_argv, NULL);
+            exit(127);
+        }
+        else
+        {
+            waitpid((int)pid, &status, 0);
+        }
+    }
+    else if (strcmp(cmd, "nut") == 0)
+    {
+        char *nut_argv[16] = {0};
+        int   nut_argc = 1;
+
+        nut_argv[0] = (char *)"/apps/builtin/nut.elf";
+
+        if (args != NULL && *args != '\0')
+        {
+            char *p = args;
+            while (*p != '\0' && nut_argc < 15)
+            {
+                while (*p == ' ')
+                {
+                    p++;
+                }
+
+                if (*p == '\0')
+                {
+                    break;
+                }
+
+                nut_argv[nut_argc++] = p;
+
+                while (*p != '\0' && *p != ' ')
+                {
+                    p++;
+                }
+
+                if (*p == '\0')
+                {
+                    break;
+                }
+
+                *p = '\0';
+                p++;
+            }
+        }
+
+        nut_argv[nut_argc] = NULL;
+
+        should_paint_prompt = false;
+        int status = 0;
+        uint64_t pid = fork();
+        if ((int64_t)pid < 0)
+        {
+            should_paint_prompt = true;
+            print_to_console("nut: failed to start process");
+        }
+        else if (pid == 0)
+        {
+            uint64_t exec_ret = xapi_Execve("/apps/builtin/nut.elf", nut_argv, NULL);
+            char     nut_log[128];
+            snprintf(nut_log, sizeof(nut_log), "nut: execve failed ret=%d", (int)((int64_t)exec_ret));
+            xapi_OutputSerial(nut_log);
+            print_to_console(nut_log);
+            exit(127);
+        }
+        else
+        {
+            waitpid((int)pid, &status, 0);
+            should_paint_prompt = true;
+        }
+    }
     else if (strncmp("help", cmd, 4) == 0)
     {
         print_to_console("Available commands:");
@@ -207,18 +292,36 @@ void check_command()
         char buf[1024];
         uint64_to_string(rp,buf,sizeof(buf));
         print_to_console(buf);
-        print_to_console_zh(" 祝你2025 CSP J/S 一等奖!\n");
+        print_to_console_zh(" 祝你2026 CSP J/S 一等奖!\n");
     }
     else
     {
         if (check_dir_com(input_buf) == 1)
         {
             char runfile_path[256];
+            memset(runfile_path, 0, sizeof(runfile_path));
             strcat(runfile_path, current_path);
             strcat(runfile_path, "/");
             strcat(runfile_path, input_buf);
             normalize_path(runfile_path);
-            xapi_Run(runfile_path);
+            should_paint_prompt = false;
+            int status = 0;
+            uint64_t pid = fork();
+            if ((int64_t)pid < 0)
+            {
+                should_paint_prompt = true;
+                print_to_console("run: failed to start process");
+            }
+            else if (pid == 0)
+            {
+                char *run_argv[] = {runfile_path, NULL};
+                xapi_Execve(runfile_path, run_argv, NULL);
+                exit(127);
+            }
+            else
+            {
+                waitpid((int)pid, &status, 0);
+            }
         }
         else if (check_dir_com(input_buf) == 2)
         {
@@ -233,6 +336,9 @@ void check_command()
     }
 
     p_inbuf = 0;
-    paint_arrow_sign(2, cur_y + 4);
+    if (should_paint_prompt)
+    {
+        paint_arrow_sign(2, cur_y + 4);
+    }
     command_ck_lock = false;
 }

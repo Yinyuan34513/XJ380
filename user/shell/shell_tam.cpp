@@ -119,6 +119,7 @@ void tam_main_loop()
 
         // 检查输出缓冲区
         char output_stream[1024];
+        memset(output_stream, 0, sizeof(output_stream));
         read_xttp_buffer(output_stream);
         if (output_stream[0] != '\0') 
         {

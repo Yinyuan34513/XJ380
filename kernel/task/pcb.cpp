@@ -636,7 +636,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     uint64_t e_entry    = 0;
     uint64_t load_start = 0;
-    e_entry             = (uint64_t)parse_elf_file(path, process);
+    e_entry             = (uint64_t)parse_elf_file(norm_path, process);
     if (e_entry == NULL)
     {
         process->pagedir = old_page_dir;

@@ -1,37 +1,13 @@
-.DEFAULT_GOAL := all
-
-CONFIG_QEMU_MEMORY_MB ?= 8192
-CONFIG_QEMU_DEBUG ?= y
-CONFIG_QEMU_USE_SUDO ?= y
-CONFIG_QEMU_ENABLE_KVM ?= y
-CONFIG_QEMU_MACHINE ?= q35
-CONFIG_QEMU_BIOS ?= OVMF.fd
-CONFIG_QEMU_CPU_KVM ?= host
-CONFIG_QEMU_CPU_TCG ?= max
-CONFIG_QEMU_SMP_CPUS ?= 4
-CONFIG_QEMU_DISPLAY_BACKEND ?= gtk
-CONFIG_QEMU_AUDIO_BACKEND ?= sdl
-CONFIG_QEMU_HDA_CODEC ?= hda-output
-CONFIG_QEMU_SERIAL_LOG ?= serial.log
-CONFIG_QEMU_ENABLE_USB_INPUT ?= y
-CONFIG_QEMU_ENABLE_E1000 ?= y
-CONFIG_QEMU_HOSTFWD_TELNET ?= y
-CONFIG_IMAGE_SIZE_MB ?= 128
-CONFIG_IMAGE_EFI_PARTITION_START_SECTOR ?= 2048
-CONFIG_IMAGE_FAT_SECTORS ?= 0
-CONFIG_IMAGE_INCLUDE_TEST_DESKTOP_FILE ?= y
-CONFIG_VMDK_OUTPUT_FORMAT ?= vmdk
-
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
+C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include 
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
-BOOT_C_FLAGS = -g -I ./boot/include -I ./include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
+BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= $(if $(filter y,$(CONFIG_QEMU_DEBUG)),1,0)
-SMP ?= $(or $(CONFIG_QEMU_SMP_CPUS),4)
-SUDO ?= $(if $(filter y,$(CONFIG_QEMU_USE_SUDO)),1,0)
-KVM ?= $(if $(filter y,$(CONFIG_QEMU_ENABLE_KVM)),1,0)
+DEBUG ?= 1
+SMP ?= 4
+SUDO ?= 1
+KVM ?= 1
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
@@ -42,50 +18,26 @@ SUDO_CMD = sudo -E env DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY)
 endif
 
 ifeq ($(KVM), 1)
-KVM_FLAG = --enable-kvm -cpu $(or $(CONFIG_QEMU_CPU_KVM),host)
+KVM_FLAG = --enable-kvm -cpu host
 else
-KVM_FLAG = -cpu $(or $(CONFIG_QEMU_CPU_TCG),max)
+KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
 KMOD_DIR := kmod
-IMAGE_SIZE_MB ?= $(or $(CONFIG_IMAGE_SIZE_MB),128)
-IMAGE_EFI_PARTITION_START_SECTOR ?= $(or $(CONFIG_IMAGE_EFI_PARTITION_START_SECTOR),2048)
-IMAGE_FAT_SECTORS ?= $(or $(CONFIG_IMAGE_FAT_SECTORS),0)
-ifeq ($(IMAGE_FAT_SECTORS),0)
-MKFS_SIZE_ARG = $$((($(IMAGE_SIZE_MB) * 1024 * 1024 / 512) - $(IMAGE_EFI_PARTITION_START_SECTOR)))
-else
-MKFS_SIZE_ARG = $(IMAGE_FAT_SECTORS)
-endif
-VMDK_OUTPUT_FORMAT ?= $(or $(CONFIG_VMDK_OUTPUT_FORMAT),vmdk)
-
-STARDUST_EXAMPLES := \
+STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
 	frameworks/StardustUI/examples/layout
-STARDUSTUI_EXAMPLE_DIRS := $(STARDUST_EXAMPLES)
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
 # Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
 # via SUDO_CMD when needed.
-DISPLAY_BACKEND ?= $(or $(CONFIG_QEMU_DISPLAY_BACKEND),gtk)
-QEMU_MEMORY_MB ?= $(or $(CONFIG_QEMU_MEMORY_MB),8192)
-QEMU_MACHINE ?= $(or $(CONFIG_QEMU_MACHINE),q35)
-QEMU_BIOS ?= $(or $(CONFIG_QEMU_BIOS),OVMF.fd)
+DISPLAY_BACKEND ?= gtk
 USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
-ifeq ($(CONFIG_QEMU_ENABLE_USB_INPUT),y)
-QEMU_USB_INPUT_FLAGS := $(USB_XHCI_DEVICES)
-endif
-AUDIO_BACKEND ?= $(or $(CONFIG_QEMU_AUDIO_BACKEND),sdl)
-HDA_CODEC ?= $(or $(CONFIG_QEMU_HDA_CODEC),hda-output)
-SERIAL_LOG ?= $(or $(CONFIG_QEMU_SERIAL_LOG),serial.log)
-ifeq ($(CONFIG_QEMU_HOSTFWD_TELNET),y)
-QEMU_HOSTFWD_FLAGS := ,hostfwd=tcp::2323-:2323
-endif
-ifeq ($(CONFIG_QEMU_ENABLE_E1000),y)
-QEMU_NET_FLAGS := -netdev user,id=net0$(QEMU_HOSTFWD_FLAGS) -device e1000,netdev=net0
-endif
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M $(QEMU_MACHINE) -bios $(QEMU_BIOS) -m $(QEMU_MEMORY_MB) -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(QEMU_USB_INPUT_FLAGS) -serial file:$(SERIAL_LOG) -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 $(QEMU_NET_FLAGS) $(DEBUG_FLAG) -monitor stdio
+AUDIO_BACKEND ?= sdl
+HDA_CODEC ?= hda-output
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?= 
 
@@ -113,7 +65,7 @@ BUILD_SETTINGS_HEADER := kernel/build_settings.h
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
-PWD := $(CURDIR)
+PWD := $(shell pwd)
 
 $(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER)
 
@@ -174,11 +126,7 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
 	@$(MAKE) -C $(KMOD_DIR)
-	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
-		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
-			$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
-		done; \
-	fi
+	@$(MAKE) stardustui.examples.copy
 
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
@@ -186,15 +134,14 @@ liballoc-x86_64.a:
 .PHONY: clean format check gen.clangd stardustui.examples.copy
 
 clean:
-	@rm -rf $(BUILD_DIR) ./XJ380.img
-	@$(MAKE) -C user clean
+# 事实上直接删out/最简单了
+	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log
+	@echo Removed build files.
 
 stardustui.examples.copy:
-	@if [ -n "$(strip $(STARDUSTUI_EXAMPLE_DIRS))" ]; then \
-		for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
-			$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
-		done; \
-	fi
+	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
+		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
+	done
 
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
@@ -211,11 +158,11 @@ gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 vdisk: all
 	@rm -rf XJ380.img
 
-	@dd if=/dev/zero of=XJ380.img bs=1M count=$(IMAGE_SIZE_MB)
+	@dd if=/dev/zero of=XJ380.img bs=128M count=1
 # You must execute the following command with sudo privileges, that's not good...
-	@sudo sgdisk XJ380.img -n 1:$(IMAGE_EFI_PARTITION_START_SECTOR) -t 1:ef00
+	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset $(IMAGE_EFI_PARTITION_START_SECTOR) -S 512 XJ380.img $(MKFS_SIZE_ARG)
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
@@ -223,31 +170,30 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
-	@mkdir -p $(BUILD_DIR)/XJ380/apps
+	@mkdir -p $(BUILD_DIR)/XJ380/apps/builtin
+	@mkdir -p $(BUILD_DIR)/XJ380/apps/system
+	@mkdir -p $(BUILD_DIR)/XJ380/apps/thirdparty
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
+
+	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
 
-	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
+	@cp -a $(BUILD_DIR)/shell.elf    $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/taskmgr.elf  $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/apps/system
 
-	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
-	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
+	@cp -a $(BUILD_DIR)/calc.elf     $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/texter.elf   $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/nut.elf $(BUILD_DIR)/XJ380/apps/builtin	
 
-	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/calc.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/texter.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/taskmgr.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps
+#	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
+#	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
+#	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
@@ -265,23 +211,21 @@ vdisk: all
 
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 
-	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps
-	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps
+	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps/builtin
 	
 # temp test (remember to delete)
-ifeq ($(CONFIG_IMAGE_INCLUDE_TEST_DESKTOP_FILE),y)
 	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
 	@cp -a ./test.txt $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
-endif
 
-	@mcopy -s -i XJ380.img@@$$(($(IMAGE_EFI_PARTITION_START_SECTOR)*512)) $(BUILD_DIR)/XJ380/* ::
+	@mcopy -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
 	@rm -rf $(BUILD_DIR)/XJ380
 	
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk
-	@qemu-img convert -O $(VMDK_OUTPUT_FORMAT) XJ380.img XJ380.$(VMDK_OUTPUT_FORMAT)
+	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
 
 run: vdisk
 	@$(QEMU_CMD)
