@@ -456,6 +456,49 @@ void scheduler_yield()
 }
 EXPORT_SYMBOL(scheduler_yield);
 
+void scheduler_sleep_ns(uint64_t nano)
+{
+    if (!is_scheduler || nano == 0) {
+        scheduler_yield();
+        return;
+    }
+
+    tcb_t current = get_current_task();
+    if (current == NULL || current->task_level == TASK_IDLE_LEVEL) {
+        scheduler_yield();
+        return;
+    }
+
+    uint64_t now = nanoTime();
+    uint64_t wakeup_time = now + nano;
+    if (wakeup_time < now) wakeup_time = (uint64_t)-1;
+
+    current->wakeup_time = wakeup_time;
+    current->status = WAIT;
+    do {
+        scheduler_yield();
+    } while (current->status == WAIT);
+
+    if (current->status == START) current->status = RUNNING;
+}
+EXPORT_SYMBOL(scheduler_sleep_ns);
+
+void scheduler_wake_task(tcb_t task)
+{
+    if (task == NULL || task->status != WAIT) return;
+
+    uint64_t base_vruntime = 0;
+    tcb_t current = get_current_task();
+    if (current != NULL && current->task_level != TASK_IDLE_LEVEL) {
+        base_vruntime = current->eevdf_vruntime;
+    }
+
+    task->wakeup_time = 0;
+    task->status = START;
+    apply_eevdf_wakeup_credit(task, base_vruntime);
+}
+EXPORT_SYMBOL(scheduler_wake_task);
+
 void debug_sched_queue(lock_queue *q)
 {
     if (q == NULL) return;

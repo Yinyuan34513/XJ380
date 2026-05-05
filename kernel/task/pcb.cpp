@@ -199,6 +199,20 @@ void free_envp(char **envp)
 
 void kill_proc0(pcb_t pcb)
 {
+    queue_foreach(pcb->thread_queue, thread_node)
+    {
+        tcb_t thread = (tcb_t)thread_node->data;
+        if (thread != NULL) thread->status = DEATH;
+    }
+
+    while (1)
+    {
+        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
+        if (handle == NULL) break;
+        vfs_close(handle->node);
+        free(handle);
+    }
+
     do
     {
         tcb_t thread = NULL;
@@ -214,14 +228,6 @@ void kill_proc0(pcb_t pcb)
 
     queue_destroy(pcb->thread_queue);
     queue_remove_at(pcb_group_queue, pcb->queue_index);
-
-    while (1)
-    {
-        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
-        if (handle == NULL) break;
-        vfs_close(handle->node);
-        free(handle);
-    }
 
     // 保存需要在free之后访问的字段
     char *cmdline = pcb->cmdline;
@@ -1023,6 +1029,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->context0.ss = new_task->context0.es = new_task->context0.ds = 0x10;
     new_task->fs                                                   = 0;
     new_task->status                                                      = CREATE;
+    new_task->eevdf_slice = 1000000ULL;
     save_fpu_context(&new_task->fpu_context);
 
     new_task->fs_base = 0;

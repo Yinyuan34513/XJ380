@@ -71,7 +71,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
         if (exit_cm)
             xapi_Exit(0);
             
-        __asm__ __volatile__("pause");
+        xapi_Sleep(1);
 
         TimeType tm;
         xapi_GetTimeX(&tm);

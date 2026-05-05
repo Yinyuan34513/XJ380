@@ -146,8 +146,7 @@ static ipc_message_t wait4_pop_exit_message(pcb_t parent, long pid, bool wait)
 
         if (!wait) return NULL;
 
-        __asm__ volatile("pause");
-        scheduler_yield();
+        scheduler_sleep_ns(1000000ULL);
     }
 }
 
@@ -484,24 +483,7 @@ sys_(uname, struct utsname *utsname)
     return 0;
 }
 void scheduler_nano_sleep(uint64_t nano) {
-    if (nano == 0) {
-        scheduler_yield();
-        return;
-    }
-
-    tcb_t task = get_current_task();
-    uint64_t now = nanoTime();
-    uint64_t wakeup_time = now + nano;
-    if (wakeup_time < now) wakeup_time = UINT64_MAX;
-
-    task->wakeup_time = wakeup_time;
-    task->status = WAIT;
-
-    do {
-        scheduler_yield();
-    } while (task->status == WAIT);
-
-    if (task->status == START) task->status = RUNNING;
+    scheduler_sleep_ns(nano);
 }
 sys_(nano_sleep, void *time_handle)
 {

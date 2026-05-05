@@ -56,7 +56,7 @@ static int picturer_main_impl(int argc, char *argv[], char *envp[])
             picturer_need_redraw = false;
             picturer_redraw();
         }
-        __asm__ __volatile__("pause");
+        xapi_Sleep(1);
     }
 
     return 0;
