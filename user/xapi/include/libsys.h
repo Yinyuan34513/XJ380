@@ -148,7 +148,6 @@
 #define XAPI_SLEEP          7430
 
 #define XAPI_RUN            7439
-#define XAPI_RUN_WITH_ARGS  7450
 
 #define XAPI_FLUSH_TIME     7445
 
