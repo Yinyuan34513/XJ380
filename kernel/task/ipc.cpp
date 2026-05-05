@@ -1,5 +1,6 @@
 #include "task/ipc.h"
 #include "mm/heap.h"
+#include "task/scheduler.h"
 
 void ipc_send(pcb_t process, ipc_message_t message) {
     if (process == NULL || message == NULL) { return; }
@@ -33,8 +34,7 @@ ipc_message_t ipc_recv(uint8_t type) {
 ipc_message_t ipc_recv_wait(uint8_t type) {
     ipc_message_t message = NULL;
     do {
-        __asm__ volatile("pause");
-        scheduler_yield();
+        scheduler_sleep_ns(1000000ULL);
         message = ipc_recv(type);
     } while (message == NULL);
     return message;
@@ -43,8 +43,7 @@ ipc_message_t ipc_recv_wait(uint8_t type) {
 ipc_message_t ipc_recv_wait2(uint8_t type0, uint8_t type1) {
     ipc_message_t message = NULL;
     do {
-        __asm__ volatile("pause");
-        scheduler_yield();
+        scheduler_sleep_ns(1000000ULL);
         message = ipc_recv(type0);
         if (message == NULL) { message = ipc_recv(type1); }
     } while (message == NULL);

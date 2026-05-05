@@ -469,7 +469,7 @@ static int calc_main_impl(int argc, char *argv[], char *envp[])
 
     while (1)
     {
-        __asm__ volatile("pause\n\t");
+        xapi_Sleep(1);
     }
 
     return 0;

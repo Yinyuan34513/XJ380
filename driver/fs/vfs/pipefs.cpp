@@ -9,6 +9,62 @@ vfs_node_t pipefs_root = NULL;
 int        pipefs_id   = 0;
 int        pipefd_id   = 0;
 
+static bool pipe_waiter_contains(task_block_list_t *head, tcb_t task) {
+    task_block_list_t *node = head->next;
+    while (node != NULL) {
+        if (node->thread == task) return true;
+        node = node->next;
+    }
+    return false;
+}
+
+static bool pipe_add_waiter(task_block_list_t *head, tcb_t task) {
+    if (task == NULL) return false;
+    if (pipe_waiter_contains(head, task)) return true;
+
+    task_block_list_t *node = (task_block_list_t *)malloc(sizeof(task_block_list_t));
+    if (node == NULL) return false;
+    node->thread = task;
+    node->next = head->next;
+    head->next = node;
+    return true;
+}
+
+static void pipe_wake_waiters(task_block_list_t *head) {
+    task_block_list_t *node = head->next;
+    head->next = NULL;
+    while (node != NULL) {
+        task_block_list_t *next = node->next;
+        scheduler_wake_task(node->thread);
+        free(node);
+        node = next;
+    }
+}
+
+static void pipe_wait_on(pipe_info_t *pipe, task_block_list_t *head) {
+    tcb_t current = get_current_task();
+    if (current == NULL || current->task_level == TASK_IDLE_LEVEL) {
+        spin_unlock(&pipe->lock);
+        scheduler_yield();
+        return;
+    }
+
+    if (!pipe_add_waiter(head, current)) {
+        spin_unlock(&pipe->lock);
+        scheduler_sleep_ns(1000000ULL);
+        return;
+    }
+
+    current->wakeup_time = 0;
+    current->status = WAIT;
+    spin_unlock(&pipe->lock);
+
+    while (current->status == WAIT) {
+        scheduler_yield();
+    }
+    if (current->status == START) current->status = RUNNING;
+}
+
 void pipefs_open(void *parent, const char *name, vfs_node_t node) {
     (void)parent;
     (void)name;
@@ -33,6 +89,7 @@ size_t pipefs_read(void *file, void *addr, size_t offset, size_t size) {
                 memmove(pipe->buf, pipe->buf + to_read, pipe->ptr - to_read);
             }
             pipe->ptr -= to_read;
+            pipe_wake_waiters(&pipe->blocking_write);
             spin_unlock(&pipe->lock);
             return to_read;
         }
@@ -40,8 +97,7 @@ size_t pipefs_read(void *file, void *addr, size_t offset, size_t size) {
             spin_unlock(&pipe->lock);
             return 0;
         }
-        spin_unlock(&pipe->lock);
-        scheduler_yield();
+        pipe_wait_on(pipe, &pipe->blocking_read);
     }
 }
 
@@ -58,11 +114,11 @@ size_t pipe_write_inner(void *file, const void *addr, size_t size) {
         if ((PIPE_BUFF - pipe->ptr) >= size) {
             memcpy(&pipe->buf[pipe->ptr], addr, size);
             pipe->ptr += size;
+            pipe_wake_waiters(&pipe->blocking_read);
             spin_unlock(&pipe->lock);
             return size;
         }
-        spin_unlock(&pipe->lock);
-        scheduler_yield();
+        pipe_wait_on(pipe, &pipe->blocking_write);
     }
 }
 
@@ -120,9 +176,11 @@ bool pipefs_close(void *current) {
     if (spec->write) {
         if (pipe->write_fds > 0) pipe->write_fds--;
         free_spec = (pipe->write_fds == 0);
+        if (pipe->write_fds == 0) pipe_wake_waiters(&pipe->blocking_read);
     } else {
         if (pipe->read_fds > 0) pipe->read_fds--;
         free_spec = (pipe->read_fds == 0);
+        if (pipe->read_fds == 0) pipe_wake_waiters(&pipe->blocking_write);
     }
     free_pipe = (pipe->write_fds == 0 && pipe->read_fds == 0);
 

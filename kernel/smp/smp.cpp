@@ -11,6 +11,7 @@
 #include <krlibc.h>
 #include <mm/alloc/alloc.h>
 #include <syscall/syscall.h>
+#include <task/scheduler.h>
 
 XSK_SMP_INFO *xsi;
 
@@ -163,6 +164,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     apu_idle->cwd          = rootdir;
     apu_idle->fs           = 0x10;
     apu_idle->fs_base      = 0;
+    scheduler_init_task(apu_idle);
 
     info->current_task    = apu_idle;
     apu_idle->queue_index = queue_enqueue_ref(info->scheduler_queue, apu_idle, &apu_idle->sched_node);
