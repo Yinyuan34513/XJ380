@@ -626,10 +626,8 @@ static int spawn_busybox(char *envp[])
         if (slave > 2) close(slave);
         close(g_pty_master);
 
-        char *bash_argv[] = {(char *)"/apps/bash", (char *)"-i", NULL};
+        char *bash_argv[] = {(char *)"bash", (char *)"-i", NULL};
         execve("/apps/bash", bash_argv, child_env);
-        char *argv[] = {(char *)"/apps/busybox", (char *)"sh", (char *)"-i", NULL};
-        execve("/apps/busybox", argv, child_env);
         exit(127);
     }
     if (pid < 0)

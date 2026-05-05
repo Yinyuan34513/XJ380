@@ -765,7 +765,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-#if defined(CONFIG_KERNEL_ENABLE_PROCESS_KILLER)
+#if CONFIG_KERNEL_ENABLE_PROCESS_KILLER
     init_killer();
     write_serial_string("Process Killer is ready\n");
 #endif

@@ -1332,7 +1332,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     else
     {
-        if (current_user == NULL || current_user->envp == NULL)
+        UserInfo *exec_user = current_user != NULL ? current_user : &root_user;
+        if (exec_user->envp == NULL)
         {
             vfs_close(node);
             free(norm_path);
@@ -1344,8 +1345,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
             restore_runtime_state(was_scheduler_enabled, is_sti);
             return (uint64_t)-EFAULT;
         }
-        new_envp = copy_envp(current_user->envp);
-        new_envc = current_user->envc;
+        new_envp = copy_envp(exec_user->envp);
+        new_envc = exec_user->envc;
     }
     if (new_envp == NULL)
     {
@@ -1368,8 +1369,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     get_thread_name_from_filepath(norm_path, current_task->name);
     get_thread_name_from_filepath(norm_path, process->name);
 
+    bool was_vfork = process->vfork;
     vma_manager_t old_vma_manager = process->vma_manager;
-    if (!process->vfork) memset(&process->vma_manager, 0, sizeof(process->vma_manager));
+    memset(&process->vma_manager, 0, sizeof(process->vma_manager));
 
     write_serial_fmt("execve process name :%s \n", process->name);
     switch_process_page_directory(new_page_dir);
@@ -1394,11 +1396,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->brk_current = old_brk_current;
         process->mmap_start = old_mmap_start;
         process->pagedir = old_page_dir;
-        if (!process->vfork)
-        {
-            vma_manager_exit_cleanup(&process->vma_manager);
-            process->vma_manager = old_vma_manager;
-        }
+        vma_manager_exit_cleanup(&process->vma_manager);
+        process->vma_manager = old_vma_manager;
         switch_page_directory(old_page_dir);
         free_page_directory(new_page_dir);
         vfs_close(node);
@@ -1421,11 +1420,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         process->brk_current = old_brk_current;
         process->mmap_start = old_mmap_start;
         process->pagedir = old_page_dir;
-        if (!process->vfork)
-        {
-            vma_manager_exit_cleanup(&process->vma_manager);
-            process->vma_manager = old_vma_manager;
-        }
+        vma_manager_exit_cleanup(&process->vma_manager);
+        process->vma_manager = old_vma_manager;
         switch_page_directory(old_page_dir);
         free_page_directory(new_page_dir);
         vfs_close(node);
@@ -1447,15 +1443,16 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     new_envp = NULL;
     if (old_cmdline != NULL) free(old_cmdline);
     if (old_envp != NULL) free_envp(old_envp);
-    if (!process->vfork) vma_manager_exit_cleanup(&old_vma_manager);
-    if (process->vfork)
+    vma_manager_exit_cleanup(&old_vma_manager);
+    if (was_vfork)
     {
         ipc_message_t message = (ipc_message_t)calloc(1, sizeof(struct ipc_message));
         message->type         = IPC_MSG_TYPE_EXEC;
         message->pid          = process->pid;
         ipc_send(process->parent_task, message);
     }
-    if (!process->vfork) free_page_directory(old_page_dir);
+    if (current_task->tid_directory == old_page_dir) current_task->tid_directory = process->pagedir;
+    if (!was_vfork) free_page_directory(old_page_dir);
     // process->pagedir = get_current_directory();
     process->vfork   = false;
 
@@ -1856,9 +1853,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
                          fork_frame.rcx,
                          fork_frame.rsp);
     }
-    scheduler_yield();
     if (!is_vfork) return new_pcb->pid;
 
+    scheduler_yield();
     while (true)
     {
         ipc_message_t msg = ipc_recv_wait2(IPC_MSG_TYPE_EXEC, IPC_MSG_TYPE_EPID);
@@ -2291,13 +2288,15 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
 
     if (parent == NULL)
     {
-        pcb->envc = current_user->envc;
-        pcb->envp = copy_envp(current_user->envp);
+        UserInfo *user = current_user != NULL ? current_user : &root_user;
+        pcb->envc = user->envc;
+        pcb->envp = copy_envp(user->envp);
     }
     else
     {
-        pcb->envc = parent->envp == NULL ? current_user->envc : parent->envc;
-        pcb->envp = copy_envp(parent->envp == NULL ? current_user->envp : parent->envp);
+        UserInfo *user = current_user != NULL ? current_user : &root_user;
+        pcb->envc = parent->envp == NULL ? user->envc : parent->envc;
+        pcb->envp = copy_envp(parent->envp == NULL ? user->envp : parent->envp);
     }
     if (pcb->envp == NULL)
     {

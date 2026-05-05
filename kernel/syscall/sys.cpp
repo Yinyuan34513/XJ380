@@ -14,6 +14,7 @@
 #include <rtc.h>
 #include <tty.h>
 #include <task/ipc.h>
+#include <mutex.h>
 #include <math.hpp>
 #include <user/user.h>
 
@@ -64,6 +65,26 @@ static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
     if (nfds > FD_SETSIZE) return false;
     *out = ((size_t)nfds + 7) / 8;
     return true;
+}
+
+static bool process_has_other_live_thread(pcb_t process, tcb_t exiting_thread)
+{
+    if (process == NULL || process->thread_queue == NULL) return false;
+
+    bool has_live_thread = false;
+    spin_lock(&process->thread_queue->lock);
+    queue_foreach(process->thread_queue, node)
+    {
+        tcb_t thread = (tcb_t)node->data;
+        if (thread == NULL || thread == exiting_thread) continue;
+        if (thread->status == DEATH || thread->status == OUT) continue;
+        if (strcmp(thread->name, "Window Message Thread") == 0) continue;
+
+        has_live_thread = true;
+        break;
+    }
+    spin_unlock(&process->thread_queue->lock);
+    return has_live_thread;
 }
 
 static uint8_t dirent_type_from_node(vfs_node_t node)
@@ -486,6 +507,7 @@ static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
 {
     if (parent == NULL || child == NULL) return SYSCALL_FAULT_(ECHILD);
 
+    uint64_t child_pid = child->pid;
     if (status != NULL)
     {
         int wait_status = (child->exit_code & 0xff) << 8;
@@ -495,17 +517,34 @@ static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
         }
     }
 
-    wait4_discard_exit_message(parent, child->pid);
+    wait4_discard_exit_message(parent, child_pid);
     kill_proc(child, child->exit_code, false);
-    return (uint64_t)child->pid;
+    return child_pid;
 }
 
 sys_(exit, int exit_code)
 {
     tcb_t exit_thread = get_current_task();
+    pcb_t  exit_process = exit_thread != NULL ? exit_thread->parent_group : NULL;
+    if (exit_thread == NULL || exit_process == NULL)
+    {
+        open_interrupt;
+        cpu_hlt;
+    }
+
     write_serial_fmt("sys_exit: Thread %s exit with code %d.\n", exit_thread->name, exit_code);
-    kill_thread(exit_thread);
+
+    close_interrupt;
+    if (process_has_other_live_thread(exit_process, exit_thread))
+    {
+        kill_thread(exit_thread);
+    }
+    else
+    {
+        kill_proc(exit_process, exit_code, true);
+    }
     open_interrupt;
+    scheduler_yield();
     cpu_hlt;
     return 0;
 }
@@ -1240,7 +1279,17 @@ sys_(readv, int fd, struct iovec *iov, int iovcnt0)
     free(kiov);
     return total;
 }
-spin_t mm_op_lock=SPIN_INIT;
+static mutex_t mm_op_lock = {SPIN_INIT, MUTEX_UNLOCKED, NULL, NULL, 0, false};
+
+static void mm_op_lock_acquire()
+{
+    mutex_lock(&mm_op_lock);
+}
+
+static void mm_op_lock_release()
+{
+    mutex_unlock(&mm_op_lock);
+}
 
 static bool mapped_page_intersects(page_directory_t *pagedir, uint64_t start, uint64_t length)
 {
@@ -1275,6 +1324,91 @@ static uint64_t find_user_mmap_range(pcb_t process, uint64_t hint, uint64_t leng
     }
 
     return 0;
+}
+
+static uint64_t prot_to_pte_flags(uint64_t prot)
+{
+    uint64_t flags = PTE_USER;
+    if (prot != PROT_NONE) {
+        flags |= PTE_PRESENT;
+        if (prot & PROT_WRITE) flags |= PTE_WRITEABLE;
+        if (!(prot & PROT_EXEC)) flags |= PTE_NO_EXECUTE;
+    }
+    return flags;
+}
+
+static void update_lazy_pte_flags(pcb_t process, uint64_t start, uint64_t end, uint64_t pte_flags)
+{
+    if (process == NULL || process->virt_queue == NULL) return;
+
+    while (true) {
+        mm_virtual_page_t old;
+        memset(&old, 0, sizeof(old));
+        bool found = false;
+        spin_lock(&process->virt_queue->lock);
+        queue_foreach(process->virt_queue, node)
+        {
+            mm_virtual_page_t *candidate = (mm_virtual_page_t *)node->data;
+            if (candidate == NULL) continue;
+
+            uint64_t vpage_start = candidate->start;
+            uint64_t vpage_end   = candidate->start + candidate->count * PAGE_SIZE;
+            if (vpage_end > start && vpage_start < end && candidate->pte_flags != pte_flags) {
+                old = *candidate;
+                found = true;
+                break;
+            }
+        }
+        spin_unlock(&process->virt_queue->lock);
+
+        if (!found) break;
+
+        uint64_t vpage_start = old.start;
+        uint64_t vpage_end   = old.start + old.count * PAGE_SIZE;
+
+        uint64_t overlap_start = max(vpage_start, start);
+        uint64_t overlap_end   = min(vpage_end, end);
+        if (overlap_start == vpage_start && overlap_end == vpage_end) {
+            mm_virtual_page_t *removed = (mm_virtual_page_t *)queue_remove_at(process->virt_queue, old.index);
+            if (removed == NULL) continue;
+            removed->pte_flags = pte_flags;
+            removed->index = queue_enqueue(process->virt_queue, removed);
+            continue;
+        }
+
+        mm_virtual_page_t *removed = (mm_virtual_page_t *)queue_remove_at(process->virt_queue, old.index);
+        if (removed == NULL) continue;
+        free(removed);
+
+        if (vpage_start < overlap_start) {
+            mm_virtual_page_t *left = (mm_virtual_page_t *)malloc(sizeof(mm_virtual_page_t));
+            if (left != NULL) {
+                *left = old;
+                left->start = vpage_start;
+                left->count = (overlap_start - vpage_start) / PAGE_SIZE;
+                left->index = queue_enqueue(process->virt_queue, left);
+            }
+        }
+
+        mm_virtual_page_t *middle = (mm_virtual_page_t *)malloc(sizeof(mm_virtual_page_t));
+        if (middle != NULL) {
+            *middle = old;
+            middle->start = overlap_start;
+            middle->count = (overlap_end - overlap_start) / PAGE_SIZE;
+            middle->pte_flags = pte_flags;
+            middle->index = queue_enqueue(process->virt_queue, middle);
+        }
+
+        if (overlap_end < vpage_end) {
+            mm_virtual_page_t *right = (mm_virtual_page_t *)malloc(sizeof(mm_virtual_page_t));
+            if (right != NULL) {
+                *right = old;
+                right->start = overlap_end;
+                right->count = (vpage_end - overlap_end) / PAGE_SIZE;
+                right->index = queue_enqueue(process->virt_queue, right);
+            }
+        }
+    }
 }
 
 static vma_t *find_heap_vma(pcb_t process)
@@ -1331,13 +1465,13 @@ uint64_t sys_brk(uint64_t brk) {
         return process->brk_current;
     if (brk > process->brk_start && !align_up_u64(brk, PAGE_SIZE, &new_map_end)) return process->brk_current;
 
-    spin_lock(&mm_op_lock);
+    mm_op_lock_acquire();
 
     vma_t *heap_vma = find_heap_vma(process);
 
     if (new_map_end > old_map_end) {
         if (!heap_growth_range_available(process, heap_vma, old_map_end, new_map_end)) {
-            spin_unlock(&mm_op_lock);
+            mm_op_lock_release();
             return process->brk_current;
         }
 
@@ -1355,7 +1489,7 @@ uint64_t sys_brk(uint64_t brk) {
         if (heap_vma == NULL) {
             heap_vma = vma_alloc();
             if (heap_vma == NULL) {
-                spin_unlock(&mm_op_lock);
+                mm_op_lock_release();
                 return process->brk_current;
             }
             heap_vma->vm_start = process->brk_start;
@@ -1365,7 +1499,7 @@ uint64_t sys_brk(uint64_t brk) {
             heap_vma->vm_name = strdup("[heap]");
             if (heap_vma->vm_name == NULL || vma_insert(&process->vma_manager, heap_vma) != 0) {
                 vma_free(heap_vma);
-                spin_unlock(&mm_op_lock);
+                mm_op_lock_release();
                 return process->brk_current;
             }
         }
@@ -1384,7 +1518,7 @@ uint64_t sys_brk(uint64_t brk) {
 
     process->brk_current = brk;
 
-    spin_unlock(&mm_op_lock);
+    mm_op_lock_release();
 
     return process->brk_current;
 }
@@ -1436,11 +1570,11 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
         if (file_handle->node->type == file_dir) return SYSCALL_FAULT_(EACCES);
     }
 
-    spin_lock(&mm_op_lock);
+    mm_op_lock_acquire();
 
     vma_t *vma = vma_alloc();
     if (!vma) {
-        spin_unlock(&mm_op_lock);
+        mm_op_lock_release();
         return SYSCALL_FAULT_(ENOMEM);
     }
 
@@ -1471,7 +1605,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
 
     if (vma_insert(mgr, vma) != 0) {
         vma_free(vma);
-        spin_unlock(&mm_op_lock);
+        mm_op_lock_release();
         return SYSCALL_FAULT_(ENOMEM);
     }
 
@@ -1479,7 +1613,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
 
     if (!(flags & MAP_ANONYMOUS)) {
         uint64_t ret = (uint64_t)vfs_map(file_handle->node, start_addr, aligned_len, prot, flags, offset);
-        spin_unlock(&mm_op_lock);
+        mm_op_lock_release();
         return ret;
     }
 
@@ -1492,7 +1626,7 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
     }
 
     lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags);
-    spin_unlock(&mm_op_lock);
+    mm_op_lock_release();
 
     return start_addr;
 
@@ -1523,15 +1657,17 @@ sys_(mprotect, uint64_t addr, size_t length, uint64_t prot)
 
     uint64_t start = addr;
     uint64_t end   = addr + aligned_len;
-    vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
+    pcb_t process = get_current_task()->parent_group;
+    vma_manager_t *mgr = &process->vma_manager;
+    uint64_t pte_flags = prot_to_pte_flags(prot);
 
-    spin_lock(&mm_op_lock);
+    mm_op_lock_acquire();
 
     uint64_t cursor = start;
     while (cursor < end) {
         vma_t *vma = vma_find(mgr, cursor);
         if (vma == NULL) {
-            spin_unlock(&mm_op_lock);
+            mm_op_lock_release();
             return SYSCALL_FAULT_(ENOMEM);
         }
         cursor = vma->vm_end < end ? vma->vm_end : end;
@@ -1558,7 +1694,13 @@ sys_(mprotect, uint64_t addr, size_t length, uint64_t prot)
         }
     }
 
-    spin_unlock(&mm_op_lock);
+    for (uint64_t page = start; page < end; page += PAGE_SIZE) {
+        if (translate_address(process->pagedir, page) != 0)
+            page_table_update_flags(process->pagedir, page, pte_flags);
+    }
+    update_lazy_pte_flags(process, start, end, pte_flags);
+
+    mm_op_lock_release();
     return 0;
 }
 
@@ -1859,7 +2001,8 @@ static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t tim
         if (ready > 0 || sigexit) break;
 
         open_interrupt;
-        __asm__("pause");
+        scheduler_yield();
+        __asm__ volatile("pause");
     } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout_ns));
 
     close_interrupt;
@@ -3753,7 +3896,7 @@ sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
     page_directory_t *pagedir = current_user_pagedir();
     if (!user_range_mapped(pagedir, (void *)vec, num_pages)) { return SYSCALL_FAULT_(EFAULT); }
 
-    spin_lock(&mm_op_lock);
+    mm_op_lock_acquire();
     uint64_t current_addr = start_page;
 
     for (uint64_t i = 0; i < num_pages; i++)
@@ -3764,14 +3907,14 @@ sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 
         if (!copy_to_user_pagedir(pagedir, (void *)(vec + i), &resident, sizeof(uint8_t)))
         {
-            spin_unlock(&mm_op_lock);
+            mm_op_lock_release();
             return SYSCALL_FAULT_(EFAULT);
         }
 
         current_addr += PAGE_SIZE;
     }
 
-    spin_unlock(&mm_op_lock);
+    mm_op_lock_release();
     return 0;
 }
 

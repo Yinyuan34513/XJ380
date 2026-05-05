@@ -139,18 +139,22 @@ bool pipefs_close(void *current) {
 
 int pipefs_poll(void *file, size_t events) {
     pipe_specific_t *spec = (pipe_specific_t *)file;
+    if (spec == NULL || spec->info == NULL) return EPOLLERR;
+
     pipe_info_t     *pipe = spec->info;
 
     int out = 0;
 
     spin_lock(&pipe->lock);
-    if (events & EPOLLIN) {
-        if (!pipe->write_fds) out |= EPOLLHUP;
-        if (pipe->ptr > 0) out |= EPOLLIN;
+    if (spec->write) {
+        if (pipe->read_fds == 0) out |= EPOLLERR | EPOLLHUP;
+    } else if (pipe->write_fds == 0) {
+        out |= EPOLLHUP;
     }
 
+    if ((events & EPOLLIN) && pipe->ptr > 0) out |= EPOLLIN;
+
     if (events & EPOLLOUT) {
-        if (!pipe->read_fds) out |= EPOLLHUP;
         if (pipe->ptr < PIPE_BUFF) out |= EPOLLOUT;
     }
     spin_unlock(&pipe->lock);

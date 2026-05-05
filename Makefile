@@ -104,6 +104,18 @@ export NM = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 HOST_CC ?= cc
+HOST_GCC ?= gcc
+HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
+HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
+HOST_GCC_REAL := $(shell readlink -f "$$(command -v $(HOST_GCC))" 2>/dev/null)
+HOST_GCC_REAL_NAME := $(notdir $(HOST_GCC_REAL))
+HOST_GCC_LIBDIR := $(patsubst %/,%,$(dir $(shell $(HOST_GCC) -print-file-name=libgcc.a 2>/dev/null)))
+HOST_GCC_CC1 := $(shell $(HOST_GCC) -print-prog-name=cc1 2>/dev/null)
+HOST_GCC_LIBEXECDIR := $(patsubst %/,%,$(dir $(HOST_GCC_CC1)))
+HOST_GCC_AS := $(shell command -v $(HOST_GCC_TRIPLE)-as 2>/dev/null || command -v as 2>/dev/null)
+HOST_GCC_AS_NAME := $(notdir $(HOST_GCC_AS))
+HOST_GCC_LD := $(shell command -v $(HOST_GCC_TRIPLE)-ld.bfd 2>/dev/null || command -v $(HOST_GCC_TRIPLE)-ld 2>/dev/null || command -v ld.bfd 2>/dev/null || command -v ld 2>/dev/null)
+HOST_GCC_LD_NAME := $(notdir $(HOST_GCC_LD))
 
 NASM_OBJS := $(patsubst ./%.asm, ./$(BUILD_DIR)/%.o, $(NASM_FILES))
 ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
@@ -115,7 +127,7 @@ OPKG_CONF_GEN := $(BUILD_DIR)/tools/xj380_opkg_conf_gen
 OPKG_BIN ?= ./opkg-cl
 OPKG_LD_LIBRARY_PATH ?=
 OPKG_STAGE_DEPS := tools/stage_elf_deps.sh
-OPKG_FEEDS ?= openwrt_base http://downloads.openwrt.org/releases/24.10.2/packages/x86_64/base openwrt_packages http://downloads.openwrt.org/releases/24.10.2/packages/x86_64/packages
+OPKG_FEEDS ?= openwrt_base http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/base openwrt_packages http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/packages
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
@@ -221,6 +233,7 @@ gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 
 vdisk: all $(OPKG_CONF_GEN)
 	@rm -rf XJ380.img
+	@rm -rf $(BUILD_DIR)/XJ380
 
 	@dd if=/dev/zero of=XJ380.img bs=1M count=$(IMAGE_SIZE_MB)
 	@$(SUDO_CMD) sgdisk XJ380.img -n 1:$(IMAGE_EFI_PARTITION_START_SECTOR) -t 1:ef00
@@ -235,7 +248,12 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
 	@mkdir -p $(BUILD_DIR)/XJ380/apps
 	@mkdir -p $(BUILD_DIR)/XJ380/lib64
-	@mkdir -p $(BUILD_DIR)/XJ380/lib/x86_64-linux-gnu
+	@mkdir -p $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/bin
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/include
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/gcc/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/libexec/gcc/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 	@mkdir -p $(BUILD_DIR)/XJ380/mod
 	@mkdir -p $(BUILD_DIR)/XJ380/etc/opkg
@@ -286,9 +304,26 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a resources/musl/libc.musl-x86_64.so.1 $(BUILD_DIR)/XJ380/lib/libc.musl-x86_64.so.1
 	@cp -a resources/musl/libgcc_s.so.1 $(BUILD_DIR)/XJ380/lib/libgcc_s.so.1
 
-	@cp -a /lib/x86_64-linux-gnu/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
+	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
+	@cp -a ./bash $(BUILD_DIR)/XJ380/apps/bash
 	@cp -a ./third_party/busybox-prebuilt/busybox_amd64 $(BUILD_DIR)/XJ380/apps/busybox
-	@cp -a ./gcc_/lib/* $(BUILD_DIR)/XJ380/lib/x86_64-linux-gnu/
+	@[ -n "$(HOST_GCC_REAL)" ] && [ -n "$(HOST_GCC_TRIPLE)" ] && [ -n "$(HOST_GCC_VERSION)" ]
+	@cp ./1.c $(BUILD_DIR)/XJ380/apps/1.c
+	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_REAL_NAME)
+	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/gcc-$(HOST_GCC_VERSION)
+	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/gcc
+	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/cc
+	@cp -aL $(HOST_GCC_AS) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_AS_NAME)
+	@cp -aL $(HOST_GCC_AS) $(BUILD_DIR)/XJ380/usr/bin/as
+	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_LD_NAME)
+	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_TRIPLE)-ld
+	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/ld
+	@cp -a $(HOST_GCC_LIBEXECDIR) $(BUILD_DIR)/XJ380/usr/libexec/gcc/$(HOST_GCC_TRIPLE)/
+	@cp -a $(HOST_GCC_LIBDIR) $(BUILD_DIR)/XJ380/usr/lib/gcc/$(HOST_GCC_TRIPLE)/
+	@cp -a /usr/include/. $(BUILD_DIR)/XJ380/usr/include/
+	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)/; done
+	@$(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
+	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)/; done
 	@cp -a $(OPKG_BIN) $(BUILD_DIR)/XJ380/apps/opkg
 	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(BUILD_DIR)/XJ380/apps/opkg
 
@@ -316,8 +351,9 @@ ifeq ($(CONFIG_IMAGE_INCLUDE_TEST_DESKTOP_FILE),y)
 	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
 	@cp -a ./test.txt $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
 endif
-
-	@mcopy -s -i XJ380.img@@$$(($(IMAGE_EFI_PARTITION_START_SECTOR)*512)) $(BUILD_DIR)/XJ380/* ::
+	@find $(BUILD_DIR)/XJ380 -xtype l -delete
+	@find $(BUILD_DIR)/XJ380 -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
+	@mcopy -o -s -i XJ380.img@@$$(($(IMAGE_EFI_PARTITION_START_SECTOR)*512)) $(BUILD_DIR)/XJ380/* ::
 
 	@rm -rf $(BUILD_DIR)/XJ380
 	

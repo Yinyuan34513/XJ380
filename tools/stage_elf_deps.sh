@@ -24,7 +24,7 @@ copy_one()
 
     dst=$root$src
     mkdir -p "$(dirname "$dst")"
-    cp -a "$src" "$dst"
+    cp -aL "$src" "$dst"
 }
 
 for elf in "$@"; do

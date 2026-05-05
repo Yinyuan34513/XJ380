@@ -485,7 +485,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     if (pml4->entries[l4_index].value & PTE_HUGE)
     {
         uint64_t phys                 = pml4->entries[l4_index].value & PTE_ADDR_MASK;
-        pml4->entries[l4_index].value = phys | (new_flags & 0xFFF);
+        pml4->entries[l4_index].value = phys | new_flags;
+        flush_tlb(addr);
         return true;
     }
 
@@ -495,7 +496,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     if (pdpt->entries[l3_index].value & PTE_HUGE)
     {
         uint64_t phys                 = pdpt->entries[l3_index].value & PTE_ADDR_MASK;
-        pdpt->entries[l3_index].value = phys | (new_flags & 0xFFF);
+        pdpt->entries[l3_index].value = phys | new_flags;
+        flush_tlb(addr);
         return true;
     }
 
@@ -505,7 +507,8 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     if (pd->entries[l2_index].value & PTE_HUGE)
     {
         uint64_t phys               = pd->entries[l2_index].value & PTE_ADDR_MASK;
-        pd->entries[l2_index].value = phys | (new_flags & 0xFFF);
+        pd->entries[l2_index].value = phys | new_flags;
+        flush_tlb(addr);
         return true;
     }
 
@@ -514,9 +517,10 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
     uint64_t phys               = pt->entries[l1_index].value & PTE_ADDR_MASK;
-    pt->entries[l1_index].value = phys | (new_flags & 0xFFF);
+    uint64_t keep               = pt->entries[l1_index].value & PTE_FRAME_ALLOCATED;
+    pt->entries[l1_index].value = phys | keep | new_flags;
 
-    __asm__ volatile("invlpg (%0)" ::"r"(addr) : "memory");
+    flush_tlb(addr);
     return true;
 }
 
