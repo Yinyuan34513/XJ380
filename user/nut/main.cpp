@@ -249,7 +249,7 @@ static int nut_install_package(const char *package_name)
     }
 
     xapi_Printf((char *)"Fetching Packages.json\n");
-    char *index_body = http_get("ftp.xingjisoft.com/Packages.json", 443, true);
+    char *index_body = xapi_httpGet("ftp.xingjisoft.com/Packages.json", 443, true);
     if (index_body == NULL) {
         xapi_Printf((char *)"Error request failed\n");
         return -1;
@@ -425,7 +425,7 @@ static int nut_install_package(const char *package_name)
     }
 
     char target_path[512];
-    int  path_len = snprintf(target_path, sizeof(target_path), "/system/%s", selected_filename);
+    int  path_len = snprintf(target_path, sizeof(target_path), "/apps/thirdparty/%s", selected_filename);
     if (path_len <= 0 || (size_t)path_len >= sizeof(target_path)) {
         xapi_Printf((char *)"Error target path too long\n");
         xapi_freeJsonDocument(&document);
@@ -473,7 +473,7 @@ static int nut_main_impl(int argc, char *argv[], char *envp[])
     if (strcmp(command, "fetch") == 0) {
         xapi_OutputSerial("nut fetch, right?");
         xapi_Printf((char *)"Fetching Packages.json\n");
-        char *body = http_get("ftp.xingjisoft.com/Packages.json", 443, true);
+        char *body = xapi_httpGet("ftp.xingjisoft.com/Packages.json", 443, true);
         if (body == NULL) {
             xapi_Printf((char *)"Error request failed\n");
             return 1;

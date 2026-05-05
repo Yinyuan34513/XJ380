@@ -170,32 +170,30 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
-	@mkdir -p $(BUILD_DIR)/XJ380/apps
+	@mkdir -p $(BUILD_DIR)/XJ380/apps/builtin
+	@mkdir -p $(BUILD_DIR)/XJ380/apps/system
+	@mkdir -p $(BUILD_DIR)/XJ380/apps/thirdparty
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
+
+	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
 
-	@cp -a $(BUILD_DIR)/shell.elf $(BUILD_DIR)/XJ380/system
+	@cp -a $(BUILD_DIR)/shell.elf    $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/taskmgr.elf  $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/apps/system
 
-	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/system
-	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
+	@cp -a $(BUILD_DIR)/calc.elf     $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/texter.elf   $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/nut.elf $(BUILD_DIR)/XJ380/apps/builtin	
 
-	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/calc.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/texter.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/taskmgr.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/system
-
-	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/nut.elf $(BUILD_DIR)/XJ380/apps
+#	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
+#	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
+#	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
@@ -213,8 +211,8 @@ vdisk: all
 
 	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
 
-	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps
-	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps
+	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps/builtin
 	
 # temp test (remember to delete)
 	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop

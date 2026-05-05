@@ -424,28 +424,28 @@ void process_mouse_info()
                 else if (click_x > menu_x1 + 32 && click_x < menu_x1 + 32 + 25 + 8)
                 {
                     // 文件
-                    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+                    create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, NULL);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 && click_x < menu_x1 + 32 + 25 + 8 + 25 + 9)
                 {
                     // 设置
                     char *argv[2] = {"shortdock-open-settings", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, argv);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 &&
                          click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
                 {
                     // 终端
-                    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+                    create_user_process_from_file((char *)"/apps/system/shell.elf", NULL, NULL);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 &&
                          click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
                 {
                     // 进程
-                    create_user_process_from_file((char *)"/system/taskmgr.elf", NULL, NULL);
+                    create_user_process_from_file((char *)"/apps/system/taskmgr.elf", NULL, NULL);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
@@ -453,7 +453,7 @@ void process_mouse_info()
                 {
                     // 关于
                     char *argv[2] = {"shortdock-open-about", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, argv);
                     handled = true;
                 }
             }

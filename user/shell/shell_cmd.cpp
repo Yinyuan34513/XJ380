@@ -47,7 +47,7 @@ void check_command()
     else if (strncmp("fork", cmd, 4) == 0)
     {
         uint64_t pid = xapi_Fork();
-        xapi_Execve("/system/shell.elf", NULL, NULL);
+        xapi_Execve("/apps/system/shell.elf", NULL, NULL);
     }
     else if (strncmp("mkdir", cmd, 5) == 0)
     {
@@ -178,8 +178,8 @@ void check_command()
         }
         else if (pid == 0)
         {
-            char *taskmgr_argv[] = {(char *)"/system/taskmgr.elf", NULL};
-            xapi_Execve("/system/taskmgr.elf", taskmgr_argv, NULL);
+            char *taskmgr_argv[] = {(char *)"/apps/system/taskmgr.elf", NULL};
+            xapi_Execve("/apps/system/taskmgr.elf", taskmgr_argv, NULL);
             exit(127);
         }
         else
@@ -192,7 +192,7 @@ void check_command()
         char *nut_argv[16] = {0};
         int   nut_argc = 1;
 
-        nut_argv[0] = (char *)"/apps/nut.elf";
+        nut_argv[0] = (char *)"/apps/builtin/nut.elf";
 
         if (args != NULL && *args != '\0')
         {
@@ -238,7 +238,7 @@ void check_command()
         }
         else if (pid == 0)
         {
-            uint64_t exec_ret = xapi_Execve("/apps/nut.elf", nut_argv, NULL);
+            uint64_t exec_ret = xapi_Execve("/apps/builtin/nut.elf", nut_argv, NULL);
             char     nut_log[128];
             snprintf(nut_log, sizeof(nut_log), "nut: execve failed ret=%d", (int)((int64_t)exec_ret));
             xapi_OutputSerial(nut_log);
@@ -292,7 +292,7 @@ void check_command()
         char buf[1024];
         uint64_to_string(rp,buf,sizeof(buf));
         print_to_console(buf);
-        print_to_console_zh(" 祝你2025 CSP J/S 一等奖!\n");
+        print_to_console_zh(" 祝你2026 CSP J/S 一等奖!\n");
     }
     else
     {
