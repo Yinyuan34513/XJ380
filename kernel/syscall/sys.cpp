@@ -1093,9 +1093,9 @@ sys_(uname, struct utsname *utsname)
     if (unlikely(utsname == NULL)) return SYSCALL_FAULT_(EINVAL);
     struct utsname kname;
     memset(&kname, 0, sizeof(kname));
-    char sysname[] = "Linux";
+    char sysname[] = "XJ380";
     char machine[] = "x86_64";
-    char release[] = "3.2.0";
+    char release[] = "2.1";
     char version[] = "XJ380OS 2.1";
     memcpy(kname.sysname, sysname, sizeof(sysname));
     memcpy(kname.nodename, "localhost", 10);
@@ -2267,7 +2267,7 @@ sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
     case 1:
     case 6:
     case 4: {
-        uint64_t nano = nanoTime();
+        uint64_t nano = bootNanoTime();
         kts.tv_sec    = nano / 1000000000ULL;
         kts.tv_nsec   = nano % 1000000000ULL;
         if (ts != NULL && !copy_to_user_pagedir(current_user_pagedir(), ts, &kts, sizeof(kts)))
@@ -2285,12 +2285,11 @@ sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
         return 0;
     }
     case 7: {
-        // if (ts != NULL)
-        // {
-        //     uint64_t nano = sched_clock();
-        //     ts->tv_sec    = nano / 1000000000ULL;
-        //     ts->tv_nsec   = nano % 1000000000ULL;
-        // }
+        uint64_t nano = bootNanoTime();
+        kts.tv_sec    = nano / 1000000000ULL;
+        kts.tv_nsec   = nano % 1000000000ULL;
+        if (ts != NULL && !copy_to_user_pagedir(current_user_pagedir(), ts, &kts, sizeof(kts)))
+            return SYSCALL_FAULT_(EFAULT);
         return 0;
     }
     default: write_serial_fmt("clock not supported(%d)\n", arg0); return SYSCALL_FAULT_(EINVAL);
@@ -3701,7 +3700,7 @@ sys_(sysinfo, struct sysinfo *info)
 
     struct sysinfo kinfo;
     memset(&kinfo, 0, sizeof(kinfo));
-    kinfo.uptime   = (int64_t)(nanoTime() / 1000000000ULL);
+    kinfo.uptime   = (int64_t)(bootNanoTime() / 1000000000ULL);
     kinfo.totalram = frame_allocator.origin_frames * PAGE_SIZE;
     kinfo.freeram  = frame_allocator.usable_frames * PAGE_SIZE;
     kinfo.procs    = pcb_group_queue != NULL && pcb_group_queue->size > UINT16_MAX ? UINT16_MAX :

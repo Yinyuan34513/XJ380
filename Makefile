@@ -124,10 +124,13 @@ CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
 OPKG_CONF_GEN := $(BUILD_DIR)/tools/xj380_opkg_conf_gen
-OPKG_BIN ?= ./opkg-cl
 OPKG_LD_LIBRARY_PATH ?=
 OPKG_STAGE_DEPS := tools/stage_elf_deps.sh
 OPKG_FEEDS ?= openwrt_base http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/base openwrt_packages http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/packages
+APP_BASH := resources/apps/bash
+APP_BUSYBOX := resources/apps/busybox
+APP_FASTFETCH := resources/apps/fastfetch
+APP_OPKG := resources/apps/opkg
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
@@ -257,6 +260,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 	@mkdir -p $(BUILD_DIR)/XJ380/mod
 	@mkdir -p $(BUILD_DIR)/XJ380/etc/opkg
+	@mkdir -p $(BUILD_DIR)/XJ380/etc
 	@mkdir -p $(BUILD_DIR)/XJ380/etc/ssl/certs
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/lists
@@ -264,6 +268,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/var
 	@mkdir -p $(BUILD_DIR)/XJ380/var/lock
 	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
+	@cp -a resources/etc/os-release $(BUILD_DIR)/XJ380/etc/os-release
 	@if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp -a /etc/ssl/certs/ca-certificates.crt $(BUILD_DIR)/XJ380/etc/ssl/certs/ca-certificates.crt; fi
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
 	@cp -a resources/opkg/status $(BUILD_DIR)/XJ380/usr/lib/opkg/status
@@ -305,8 +310,9 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a resources/musl/libgcc_s.so.1 $(BUILD_DIR)/XJ380/lib/libgcc_s.so.1
 
 	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
-	@cp -a ./bash $(BUILD_DIR)/XJ380/apps/bash
-	@cp -a ./third_party/busybox-prebuilt/busybox_amd64 $(BUILD_DIR)/XJ380/apps/busybox
+	@cp -a $(APP_BASH) $(BUILD_DIR)/XJ380/apps/bash
+	@cp -a $(APP_BUSYBOX) $(BUILD_DIR)/XJ380/apps/busybox
+	@cp -a $(APP_FASTFETCH) $(BUILD_DIR)/XJ380/apps/fastfetch
 	@[ -n "$(HOST_GCC_REAL)" ] && [ -n "$(HOST_GCC_TRIPLE)" ] && [ -n "$(HOST_GCC_VERSION)" ]
 	@cp ./1.c $(BUILD_DIR)/XJ380/apps/1.c
 	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_REAL_NAME)
@@ -324,7 +330,8 @@ vdisk: all $(OPKG_CONF_GEN)
 	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)/; done
 	@$(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
 	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)/; done
-	@cp -a $(OPKG_BIN) $(BUILD_DIR)/XJ380/apps/opkg
+	@$(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(APP_FASTFETCH)
+	@cp -a $(APP_OPKG) $(BUILD_DIR)/XJ380/apps/opkg
 	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(BUILD_DIR)/XJ380/apps/opkg
 
 
