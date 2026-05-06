@@ -92,7 +92,7 @@ void register_hardware_info()
     vfs_node_t v = vfs_open("/system/config/hardware.xtb");
     
     hwr_create_textblock_head("OS Version");
-    hwr_create_textblock_item("version", OS_VERSION);
+    hwr_create_textblock_item("version", OS_EDITION);
     hwr_create_textblock_foot();
 
     hwr_create_textblock_head("Kernel Version");
