@@ -97,7 +97,7 @@ void init_runfile()
 
     // 回收再利用
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/system/usereg.dat");
+    strcat(runfile_setfile_path, "/system/config/usereg.dat");
     vfs_mkfile(runfile_setfile_path);
 
     char  urf_buffer[sizeof(UserRegisterList)];

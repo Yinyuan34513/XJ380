@@ -144,7 +144,7 @@ void init_user()
 {
     char user_reg_data_path[256];
     memset(user_reg_data_path, 0, 256);
-    strcat(user_reg_data_path, "/system/usereg.dat");
+    strcat(user_reg_data_path, "/system/config/usereg.dat");
     vfs_mkfile(user_reg_data_path);
 
     char  urf_buffer[sizeof(UserRegisterList)];

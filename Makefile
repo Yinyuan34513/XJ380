@@ -170,10 +170,11 @@ vdisk: all
 	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
 	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
 	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
+	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
+	@mkdir -p $(BUILD_DIR)/XJ380/system/config
 	@mkdir -p $(BUILD_DIR)/XJ380/apps/builtin
 	@mkdir -p $(BUILD_DIR)/XJ380/apps/system
 	@mkdir -p $(BUILD_DIR)/XJ380/apps/thirdparty
-	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 
 	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
 
