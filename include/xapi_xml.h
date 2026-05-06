@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -54,4 +52,3 @@ void xapi_freeXmlTree(xapi_XmlTree *tree);
 #ifdef __cplusplus
 }
 #endif
-

@@ -713,6 +713,7 @@ struct netconn *netconn_alloc(enum netconn_type t, netconn_callback callback) {
     if (conn == NULL) {
         return NULL;
     }
+    memset(conn, 0, sizeof(*conn));
 
     conn->pending_err = ERR_OK;
     conn->type = t;

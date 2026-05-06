@@ -55,12 +55,25 @@ void xapi_output_kernel(const char *str)
         }
         if (front_p->xtttp_stc->is_shell)
         {
-            size_t cur = xapi_strnlen(front_p->xtttp_stc->output, sizeof(front_p->xtttp_stc->output));
-            if (cur >= sizeof(front_p->xtttp_stc->output)) cur = 0;
-            size_t space = sizeof(front_p->xtttp_stc->output) - cur - 1;
-            size_t len = xapi_strnlen(str, space);
-            if (len > 0) memcpy(front_p->xtttp_stc->output + cur, str, len);
-            front_p->xtttp_stc->output[cur + len] = '\0';
+            // found it!
+            if (str == NULL) {
+                return;
+            }
+
+            char  *output    = front_p->xtttp_stc->output;
+            size_t  out_cap  = sizeof(front_p->xtttp_stc->output);
+            size_t  out_len  = strlen(output);
+            size_t  str_len  = strlen(str);
+            size_t  copy_len = str_len;
+
+            if (out_len < out_cap - 1)
+            {
+                size_t avail = out_cap - out_len - 1;
+                if (copy_len > avail) copy_len = avail;
+                memcpy(output + out_len, str, copy_len);
+                output[out_len + copy_len] = '\0';
+            }
+
             front_p->xtttp_stc->output_lock = false;
 
             while (true)

@@ -47,23 +47,23 @@ void init_runfile()
 
     strcpy(file_format->items[0].exname,   "txt");
     strcpy(file_format->items[0].describe, "文本文件");
-    strcpy(file_format->items[0].runpath,  "/system/texter.elf");
+    strcpy(file_format->items[0].runpath,  "/apps/builtin/texter.elf");
 
     strcpy(file_format->items[1].exname,   "inf");
     strcpy(file_format->items[1].describe, "配置文件");
-    strcpy(file_format->items[1].runpath,  "/system/texter.elf");
+    strcpy(file_format->items[1].runpath,  "/apps/builtin/texter.elf");
 
     strcpy(file_format->items[2].exname,   "png");
     strcpy(file_format->items[2].describe, "PNG 图片文件");
-    strcpy(file_format->items[2].runpath,  "/system/picturer.elf");
+    strcpy(file_format->items[2].runpath,  "/apps/builtin/picturer.elf");
 
     strcpy(file_format->items[3].exname,   "jpg");
     strcpy(file_format->items[3].describe, "JPEG 图片文件");
-    strcpy(file_format->items[3].runpath,  "/system/picturer.elf");
+    strcpy(file_format->items[3].runpath,  "/apps/builtin/picturer.elf");
 
     strcpy(file_format->items[4].exname,   "bmp");
     strcpy(file_format->items[4].describe, "位图文件");
-    strcpy(file_format->items[4].runpath,  "/system/picturer.elf");
+    strcpy(file_format->items[4].runpath,  "/apps/builtin/picturer.elf");
 
     strcpy(file_format->items[5].exname,   "");
 
@@ -97,7 +97,7 @@ void init_runfile()
 
     // 回收再利用
     memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/system/usereg.dat");
+    strcat(runfile_setfile_path, "/system/config/usereg.dat");
     vfs_mkfile(runfile_setfile_path);
 
     char  urf_buffer[sizeof(UserRegisterList)];

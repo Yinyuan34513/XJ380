@@ -87,7 +87,8 @@ void            page_init()
 
 page_t *get_page(uint64_t addr)
 {
-    if (page_maps == NULL || addr >= memory_size) return NULL;
+    if (page_maps == NULL) return NULL;
+    if (addr >= memory_size) return NULL;
     return page_maps + (addr / PAGE_SIZE);
 }
 

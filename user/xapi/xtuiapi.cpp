@@ -278,12 +278,6 @@ void 	xapi_Run(WSTR path)
 {
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
 }
-
-UINT64 xapi_RunArgs(WSTR path, WSTR argv[])
-{
-	return enter_syscall(XAPI_RUN_ARGS, (uint64_t)path, (uint64_t)argv, 0, 0, 0, 0);
-}
-
 void 	xapi_FlushTime()
 {
 	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);

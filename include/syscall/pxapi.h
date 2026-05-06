@@ -33,7 +33,7 @@ typedef struct {
 #define XAPI_OFFEST 380
 
 // 一些隐藏的API，不对外开放，严禁泄露！
-#define SXAH_SYSCALL_RETURN         128956723895689201      // syscall返回
+#define SXAH_SYSCALL_RETURN         128956723895689201      // syscall返回 
 #define SXAH_CREATE_KERNEL_TERMINAL 128956723895689202      // 创建内核态进程
 #define SXAH_CHECK_USER_PASSWORD    128956723895689203      // 检查用户密码
 #define SXAH_MARK_IS_TERMINAL       128956723895689204      // 标记为命令行
@@ -80,7 +80,7 @@ typedef struct {
 
 #define XAPI_MAKEDIR        7425
 #define XAPI_CREATE_FILE    7420
-#define XAPI_DELETE_FILE    7421
+#define XAPI_DELETE_FILE    7421  
 #define XAPI_RENAME_FILE    7422
 #define XAPI_READ_FILE      7423
 #define XAPI_WRITE_FILE     7424

@@ -544,16 +544,17 @@ size_t add_task(tcb_t new_task)
         new_task->status = START;
     }
     
-    struct PROCESSOR_INFO *min_cpu = NULL;
+    struct PROCESSOR_INFO *min_cpu = get_cpu(0);
     size_t                 min_cpu_index = 0;
 
-    min_cpu = get_cpu(0);
-    for (size_t i = 1; i < get_cpu_num(); i++) {
-        struct PROCESSOR_INFO *cpui = get_cpu(i);
-        if (cpui != NULL && cpui->scheduler_queue != NULL &&
-            cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) {
-            min_cpu       = cpui;
-            min_cpu_index = i;
+    if (new_task->task_level != TASK_APPLICATION_LEVEL) {
+        for (size_t i = 1; i < get_cpu_num(); i++) {
+            struct PROCESSOR_INFO *cpui = get_cpu(i);
+            if (cpui != NULL && cpui->scheduler_queue != NULL &&
+                cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) {
+                min_cpu       = cpui;
+                min_cpu_index = i;
+            }
         }
     }
 	    

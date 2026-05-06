@@ -132,9 +132,6 @@ static int shell_main_impl(int argc, char *argv[], char *envp[])
             xapi_RefreshWindow(handle);
             terminal_app_mark_finish_output();
         }
-        if (shell_prompt_pending) { terminal_child_flush_input_if_requested(); }
-
-        poll_external_command_prompt();
 
         update_terminal_cursor_blink(16);
         xapi_Sleep(16);

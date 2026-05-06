@@ -279,33 +279,6 @@ void process_mouse_button()
                      tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
                      tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
             {
-                if (current_window->can_maximize)
-                {
-                    // 最大化 / 还原
-                    ms_dec.sht_now = current_window->w_sheet;
-                    toggle_window_maximized(xwmii, sht_img, current_window);
-                }
-                else
-                {
-                    // 最小化
-                    ms_dec.sht_now = NULL;
-                    save_window_xy(current_window);
-                    int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
-                    // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
-                    get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
-                    refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
-                                                    bx + get_sheet(sht_img, current_window->w_sheet)->width,
-                                                    get_sheet(sht_img, current_window->w_sheet)->by +
-                                                        get_sheet(sht_img, current_window->w_sheet)->height);
-                }
-            }
-            else if (current_window->type == XWIN_NORMAL && current_window->can_maximize &&
-                     current_window->width >= 80 &&
-                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 75 &&
-                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 48 &&
-                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
-                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
-            {
                 // 最小化
                 ms_dec.sht_now = NULL;
                 save_window_xy(current_window);
@@ -436,7 +409,7 @@ void process_mouse_button()
             }
         }
     }
-
+    
     // 处理滚轮事件
     int scroll = get_mouse_scroll();
     if (scroll != 0 && current_window != NULL)
@@ -530,28 +503,28 @@ void process_mouse_info()
                 else if (click_x > menu_x1 + 32 && click_x < menu_x1 + 32 + 25 + 8)
                 {
                     // 文件
-                    create_user_process_from_file((char *)"/system/fmanager.elf", NULL, NULL);
+                    create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, NULL);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 && click_x < menu_x1 + 32 + 25 + 8 + 25 + 9)
                 {
                     // 设置
                     char *argv[2] = {"shortdock-open-settings", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, argv);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 &&
                          click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
                 {
                     // 终端
-                    create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+                    create_user_process_from_file((char *)"/apps/system/shell.elf", NULL, NULL);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 &&
                          click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
                 {
                     // 进程
-                    create_user_process_from_file((char *)"/system/taskmgr.elf", NULL, NULL);
+                    create_user_process_from_file((char *)"/apps/system/taskmgr.elf", NULL, NULL);
                     handled = true;
                 }
                 else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
@@ -559,7 +532,7 @@ void process_mouse_info()
                 {
                     // 关于
                     char *argv[2] = {"shortdock-open-about", NULL};
-                    create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, argv);
+                    create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, argv);
                     handled = true;
                 }
             }
@@ -609,20 +582,12 @@ void process_mouse_info()
                 // 点在了窗口上
                 ms_dec.win_move_lock = true;
                 ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
-                WINDOWLSP moving_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-                if (moving_window != NULL && moving_window->is_maximized)
-                {
-                    ms_dec.win_move_lock = false;
-                }
-                else
-                {
-                    lift_sheet(sht_img, ms_dec.sht_now);
-                    refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
-                    ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
-                    ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
-                }
+                lift_sheet(sht_img, ms_dec.sht_now);
+                refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
+                ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
+                ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
             }
             SHEET *hover_sheet = found_sheetmb(sht_img, mouse_x, mouse_y);
             if (hover_sheet == NULL)
