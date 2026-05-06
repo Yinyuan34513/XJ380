@@ -231,6 +231,10 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }
 
+UINT64  xapi_RunArgs(WSTR path, WSTR argv[]) {
+	return enter_syscall(XAPI_RUN_ARGS, (uint64_t)path, (uint64_t)argv, 0, 0, 0, 0);
+}
+
 void	xapi_Exit(UINT64 value) {
 	enter_syscall(SYS_EXIT, value, 0, 0, 0, 0, 0);
 }

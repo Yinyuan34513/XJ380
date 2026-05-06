@@ -70,6 +70,10 @@ void  editor_display_help();
 
 void tam_main_loop();
 void ptt_console_sp(char *str);
+void terminal_child_putchar(char ch);
+void terminal_child_backspace();
+void terminal_child_submit_line();
+void terminal_child_flush_input_if_requested();
 
 void mark_terminal();
 void write_xttp_buffer(char *str);
