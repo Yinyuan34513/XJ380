@@ -37,6 +37,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 #include <user/runfile.h>
+#include <user/info_register.h>
 #include <hda/vsound.h>
 #include <hda/hda.h>
 
@@ -370,6 +371,8 @@ void desktop_flusher()
     init_runfile();
 
     write_serial_string("desktop flusher is running\n");
+
+    register_hardware_info();
 
     SHEET_INFO shtinf;
     init_sheet(*fbc_addr, &shtinf);

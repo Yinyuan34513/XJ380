@@ -89,8 +89,17 @@ void hwr_create_textblock_foot()
 
 void register_hardware_info()
 {
-    vfs_node_t v = vfs_open("/system/config/hardware.xtb");
-    
+    write_serial_fmt("Reading Hardware Information...\n");
+
+    if (vfs_mkfile("/system/config/hardware.xtb"))
+    {
+        write_serial_fmt("Reading Hardware Information Failed. (Cannot create file)\n");
+        return;
+    }
+
+    hwr_file_v = vfs_open("/system/config/hardware.xtb");
+    hwr_file_offset = 0;
+
     hwr_create_textblock_head("OS Version");
     hwr_create_textblock_item("version", OS_VERSION);
     hwr_create_textblock_foot();
@@ -106,10 +115,6 @@ void register_hardware_info()
     hwr_create_textblock_item("resolution", resolution);
     hwr_create_textblock_foot();
 
-    hwr_create_textblock_head("Cursor Theme");
-    hwr_create_textblock_item("name", "XJ380 Default");
-    hwr_create_textblock_foot();
-
     char cpu_model[128];
     get_cpu_name(cpu_model);
     hwr_create_textblock_head("CPU");
@@ -122,4 +127,8 @@ void register_hardware_info()
     hwr_create_textblock_head("Memory");
     hwr_create_textblock_item("size", memory_size_str);
     hwr_create_textblock_foot();
+
+    vfs_close(hwr_file_v);
+
+    write_serial_fmt("Reading Hardware Information Success.\n");
 }

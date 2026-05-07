@@ -210,7 +210,7 @@ void draw_setting()
         xapi_DrawPicture(handle, win_width / 10 * 3 + 8, 129, 302, 170, "/system/xj380_2.png");
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 128, "XJ380 操作系统", 16, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 158, OS_EDITION, 11, 0xffffffff);
+        xapi_DrawText(handle, win_width / 10 * 3 + 302, 158, OS_VERSION, 11, 0xffffffff);
 
         xapi_DrawText(handle, win_width / 10 * 3 + 302, 218, "处理器", 11, 0xffffffff);
         xapi_DrawText(handle, win_width / 10 * 3 + 402, 218, cpu_model, 11, 0xffffffff);

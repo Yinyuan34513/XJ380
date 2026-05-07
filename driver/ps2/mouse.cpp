@@ -466,7 +466,7 @@ void process_mouse_info()
             // 底栏和快捷栏点击优先，不依赖 ms_dec.sht_now，避免被错误命中窗口吞掉事件。
             if (click_x > 24 && click_y > sht_img->scry - 24 - 63 && click_x < 24 + 84)
             {
-                create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
+                create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, NULL);
                 handled = true;
             }
             else if (click_x > 132 && click_y > sht_img->scry - 24 - 63)
