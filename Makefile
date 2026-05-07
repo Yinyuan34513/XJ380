@@ -185,7 +185,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@rm -rf XJ380.img
 	@rm -rf $(BUILD_DIR)/XJ380
 
-	@dd if=/dev/zero of=XJ380.img bs=128M count=1
+	@dd if=/dev/zero of=XJ380.img bs=1024M count=1
 # You must execute the following command with sudo privileges, that's not good...
 	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
@@ -208,6 +208,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
 	@mkdir -p $(BUILD_DIR)/XJ380/mod
 	@mkdir -p $(BUILD_DIR)/XJ380/etc/opkg
+	@mkdir -p $(BUILD_DIR)/XJ380/etc/fastfetch
 	@mkdir -p $(BUILD_DIR)/XJ380/etc
 	@mkdir -p $(BUILD_DIR)/XJ380/etc/ssl/certs
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
@@ -217,6 +218,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@mkdir -p $(BUILD_DIR)/XJ380/var/lock
 	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
 	@cp -a resources/etc/os-release $(BUILD_DIR)/XJ380/etc/os-release
+	@cp -a resources/etc/fastfetch/. $(BUILD_DIR)/XJ380/etc/fastfetch/
 	@if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp -a /etc/ssl/certs/ca-certificates.crt $(BUILD_DIR)/XJ380/etc/ssl/certs/ca-certificates.crt; fi
 	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
 	@cp -a resources/opkg/status $(BUILD_DIR)/XJ380/usr/lib/opkg/status
@@ -245,7 +247,7 @@ vdisk: all $(OPKG_CONF_GEN)
 
 #	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 #	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
-#	@cp -a $(BUILD_DIR)/busyterm.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/busyterm.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/sigtest.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(BUILD_DIR)/XJ380/apps

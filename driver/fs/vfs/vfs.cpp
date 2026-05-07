@@ -453,7 +453,7 @@ vfs_node_t vfs_do_search(vfs_node_t dir, const char *name) {
     return child;
 }
 
-vfs_node_t vfs_open(const char *str) {
+static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink) {
     if (unlikely(str == NULL)) return NULL;
     if (unlikely(str[0] != '/')) return NULL;
     if (str[1] == '\0') return rootdir; // 根目录
@@ -486,12 +486,47 @@ vfs_node_t vfs_open(const char *str) {
         if (current == NULL) { goto err; }
 
         do_update(current);
+        bool is_final_component = save_ptr == NULL || *save_ptr == '\0';
+        if (is_final_component && !follow_final_symlink) break;
         if (current->type & file_symlink) {
-            if (!current->parent || !current->linkto) { goto err; }
+            if (!current->parent) { goto err; }
 
             current->type = file_symlink | file_proxy;
 
             vfs_node_t target = current->linkto;
+            if (target == NULL)
+            {
+                char target_path[256];
+                size_t len = vfs_readlink(current, target_path, sizeof(target_path) - 1);
+                if (len == (size_t)VFS_STATUS_FAILED || len == 0 || len >= sizeof(target_path)) goto err;
+                target_path[len] = '\0';
+                if (target_path[0] == '/')
+                {
+                    target = vfs_open(target_path);
+                }
+                else
+                {
+                    char *parent_path = vfs_get_fullpath(current->parent);
+                    if (parent_path == NULL) goto err;
+                    size_t parent_len = strlen(parent_path);
+                    size_t target_len = strlen(target_path);
+                    char *joined_target = (char *)malloc(parent_len + target_len + 2);
+                    if (joined_target == NULL)
+                    {
+                        free(parent_path);
+                        goto err;
+                    }
+                    sprintf(joined_target, "%s%s%s", parent_path,
+                            parent_path[parent_len - 1] == '/' ? "" : "/", target_path);
+                    char *full_target = normalize_path(joined_target);
+                    free(joined_target);
+                    free(parent_path);
+                    if (full_target == NULL) goto err;
+                    target = vfs_open(full_target);
+                    free(full_target);
+                }
+                current->linkto = target;
+            }
             if (!target) goto err;
 
             target->refcount++;
@@ -505,6 +540,14 @@ vfs_node_t vfs_open(const char *str) {
 err:
     free(path);
     return NULL;
+}
+
+vfs_node_t vfs_open(const char *str) {
+    return vfs_open_impl(str, true);
+}
+
+vfs_node_t vfs_open_no_follow(const char *str) {
+    return vfs_open_impl(str, false);
 }
 
 void vfs_update(vfs_node_t node) {

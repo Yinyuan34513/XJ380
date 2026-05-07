@@ -5,6 +5,7 @@
 #include <task/pcb.h>
 #include <task/scheduler.h>
 #include <fs/vfs/vfs.h>
+#include <mm/frame.h>
 #include <syscall/syscall.h>
 #include <proto.hpp>
 #include <user/user.h>
@@ -13,6 +14,9 @@ static int procfs_id     = 0;
 static int proc_self_id  = 0;
 vfs_node_t procfs_root   = NULL;
 spin_t     procfs_oplock = SPIN_INIT;
+extern lock_queue   *pcb_group_queue;
+
+static size_t procfs_copy_content(void *addr, size_t offset, size_t size, const char *content, size_t content_len);
 
 const char filesystems_content[] = //"nodev\tsysfs\n"
     "nodev\ttmpfs\n"
@@ -30,9 +34,175 @@ static int udummy() {
     return VFS_STATUS_FAILED;
 }
 
+static bool procfs_node_is_task_dir(vfs_node_t node)
+{
+    if (node == NULL || node->parent != procfs_root || !(node->type & file_dir)) return false;
+    if (node->name == NULL || node->name[0] == '\0') return false;
+    for (const char *p = node->name; *p != '\0'; p++)
+    {
+        if (*p < '0' || *p > '9') return false;
+    }
+    return true;
+}
+
 static const char *procfs_kernel_cmdline()
 {
     return "";
+}
+
+static const char *procfs_kernel_version()
+{
+    return "Linux version 6.6.30 (xj380@localhost) (x86_64-xj380-gcc) #1 SMP PREEMPT_DYNAMIC Wed May 6 00:00:00 CST 2026\n";
+}
+
+static const char *procfs_kernel_ostype()
+{
+    return "Linux\n";
+}
+
+static const char *procfs_kernel_osrelease()
+{
+    return "6.6.30\n";
+}
+
+static const char *procfs_kernel_hostname()
+{
+    return "localhost\n";
+}
+
+static size_t procfs_copy_task_cmdline(pcb_t task, void *addr, size_t offset, size_t size)
+{
+    if (addr == NULL || task == NULL) return VFS_STATUS_FAILED;
+
+    size_t total = 0;
+    if (task->argv != NULL && task->argc > 0)
+    {
+        for (size_t i = 0; i < task->argc && task->argv[i] != NULL; i++)
+            total += strlen(task->argv[i]) + 1;
+    }
+    else if (task->cmdline != NULL)
+    {
+        total = strlen(task->cmdline);
+    }
+
+    if (offset >= total) return 0;
+
+    size_t copied = 0;
+    size_t pos = 0;
+    uint8_t *out = (uint8_t *)addr;
+    if (task->argv != NULL && task->argc > 0)
+    {
+        for (size_t i = 0; i < task->argc && task->argv[i] != NULL && copied < size; i++)
+        {
+            const char *arg = task->argv[i];
+            size_t arg_len = strlen(arg) + 1;
+            if (offset < pos + arg_len)
+            {
+                size_t in_arg = offset > pos ? offset - pos : 0;
+                size_t chunk = MIN(size - copied, arg_len - in_arg);
+                memcpy(out + copied, arg + in_arg, chunk);
+                copied += chunk;
+                offset += chunk;
+            }
+            pos += arg_len;
+        }
+        return copied;
+    }
+
+    return procfs_copy_content(addr, offset, size, task->cmdline ? task->cmdline : "", total);
+}
+
+static size_t procfs_task_cmdline_len(pcb_t task)
+{
+    if (task == NULL) return 0;
+    if (task->argv != NULL && task->argc > 0)
+    {
+        size_t total = 0;
+        for (size_t i = 0; i < task->argc && task->argv[i] != NULL; i++)
+            total += strlen(task->argv[i]) + 1;
+        return total;
+    }
+    return task->cmdline ? strlen(task->cmdline) : 0;
+}
+
+static char *proc_gen_meminfo(size_t *content_len)
+{
+    uint64_t total_kb = (frame_allocator.origin_frames * PAGE_SIZE) / 1024;
+    uint64_t free_kb = (frame_allocator.usable_frames * PAGE_SIZE) / 1024;
+    char *buffer = (char *)malloc(PAGE_SIZE);
+    int len = sprintf(buffer,
+                      "MemTotal:       %llu kB\n"
+                      "MemFree:        %llu kB\n"
+                      "MemAvailable:   %llu kB\n"
+                      "Buffers:        0 kB\n"
+                      "Cached:         0 kB\n"
+                      "SwapCached:     0 kB\n"
+                      "SwapTotal:      0 kB\n"
+                      "SwapFree:       0 kB\n",
+                      (unsigned long long)total_kb,
+                      (unsigned long long)free_kb,
+                      (unsigned long long)free_kb);
+    *content_len = len > 0 ? (size_t)len : 0;
+    return buffer;
+}
+
+static char *proc_gen_uptime(size_t *content_len)
+{
+    uint64_t ns = bootNanoTime();
+    uint64_t sec = ns / 1000000000ULL;
+    uint64_t cent = (ns % 1000000000ULL) / 10000000ULL;
+    char *buffer = (char *)malloc(64);
+    int len = sprintf(buffer, "%llu.%02llu %llu.%02llu\n",
+                      (unsigned long long)sec,
+                      (unsigned long long)cent,
+                      (unsigned long long)sec,
+                      (unsigned long long)cent);
+    *content_len = len > 0 ? (size_t)len : 0;
+    return buffer;
+}
+
+static char *proc_gen_loadavg(size_t *content_len)
+{
+    uint64_t runnable = 0;
+    uint64_t total = pcb_group_queue ? pcb_group_queue->size : 0;
+    if (pcb_group_queue != NULL)
+    {
+        queue_foreach(pcb_group_queue, node)
+        {
+            pcb_t task = (pcb_t)node->data;
+            if (task != NULL && (task->status == RUNNING || task->status == START || task->status == CREATE))
+                runnable++;
+        }
+    }
+
+    char *buffer = (char *)malloc(128);
+    int len = sprintf(buffer, "0.00 0.00 0.00 %llu/%llu %llu\n",
+                      (unsigned long long)runnable,
+                      (unsigned long long)total,
+                      (unsigned long long)(now_tid > 0 ? now_tid - 1 : 0));
+    *content_len = len > 0 ? (size_t)len : 0;
+    return buffer;
+}
+
+static char *proc_gen_root_stat(size_t *content_len)
+{
+    uint64_t procs = pcb_group_queue ? pcb_group_queue->size : 0;
+    uint64_t uptime_ticks = bootNanoTime() / 10000000ULL;
+    char *buffer = (char *)malloc(PAGE_SIZE);
+    int len = sprintf(buffer,
+                      "cpu  0 0 0 %llu 0 0 0 0 0 0\n"
+                      "cpu0 0 0 0 %llu 0 0 0 0 0 0\n"
+                      "intr 0\n"
+                      "ctxt 0\n"
+                      "btime 0\n"
+                      "processes %llu\n"
+                      "procs_running 1\n"
+                      "procs_blocked 0\n",
+                      (unsigned long long)uptime_ticks,
+                      (unsigned long long)uptime_ticks,
+                      (unsigned long long)procs);
+    *content_len = len > 0 ? (size_t)len : 0;
+    return buffer;
 }
 
 static uint32_t proc_task_uid(pcb_t task)
@@ -104,6 +274,17 @@ static char proc_task_state(pcb_t task)
     case DEATH:
     case OUT:
     default: return 'T';
+    }
+}
+
+static const char *proc_task_state_text(pcb_t task)
+{
+    switch (proc_task_state(task))
+    {
+    case 'R': return "R (running)";
+    case 'S': return "S (sleeping)";
+    case 'Z': return "Z (zombie)";
+    default: return "T (stopped)";
     }
 }
 
@@ -236,29 +417,49 @@ char *proc_gen_maps_file(pcb_t task, size_t *content_len) {
 char *proc_gen_status_file(pcb_t task, size_t *content_len) {
     uint32_t uid = proc_task_uid(task);
     uint32_t gid = proc_task_gid(task);
-    const char *state = task->status == RUNNING  ? "R (running)"
-                      : task->status == ZOMBIE ? "Z (zombie)"
-                      : task->status == FUTEX  ? "S (sleeping)"
-                                               : "T (stopped)";
+    uint64_t vsize = task->vma_manager.vm_total;
+    if (vsize == 0 && task->brk_current > task->brk_start) vsize = task->brk_current - task->brk_start;
+    long rss = (long)((task->vma_manager.vm_used + PAGE_SIZE - 1) / PAGE_SIZE);
+    if (rss == 0 && vsize != 0) rss = (long)((vsize + PAGE_SIZE - 1) / PAGE_SIZE);
     char *buffer = (char*)malloc(PAGE_SIZE);
     int len = sprintf(buffer,
                       "Name:\t%s\n"
+                      "Umask:\t0022\n"
                       "Pid:\t%llu\n"
                       "PPid:\t%llu\n"
                       "State:\t%s\n"
+                      "Tgid:\t%llu\n"
                       "Uid:\t%u\t%u\t%u\t%u\n"
                       "Gid:\t%u\t%u\t%u\t%u\n"
                       "Threads:\t%llu\n"
+                      "VmPeak:\t%llu kB\n"
                       "VmSize:\t%llu kB\n",
                       task->name,
                       (unsigned long long)task->pid,
                       (unsigned long long)(task->parent_task ? task->parent_task->pid : 0),
-                      state,
+                      proc_task_state_text(task),
+                      (unsigned long long)task->pid,
                       uid, uid, uid, uid,
                       gid, gid, gid, gid,
                       (unsigned long long)(task->thread_queue ? task->thread_queue->size : 0),
-                      (unsigned long long)(task->vma_manager.vm_total / 1024));
+                      (unsigned long long)(vsize / 1024),
+                      (unsigned long long)(vsize / 1024));
     *content_len = len;
+    return buffer;
+}
+
+char *proc_gen_statm_file(pcb_t task, size_t *content_len)
+{
+    uint64_t vsize = task->vma_manager.vm_total;
+    if (vsize == 0 && task->brk_current > task->brk_start) vsize = task->brk_current - task->brk_start;
+    uint64_t size_pages = (vsize + PAGE_SIZE - 1) / PAGE_SIZE;
+    uint64_t resident = (task->vma_manager.vm_used + PAGE_SIZE - 1) / PAGE_SIZE;
+    if (resident == 0 && size_pages != 0) resident = size_pages;
+    char *buffer = (char *)malloc(128);
+    int len = sprintf(buffer, "%llu %llu 0 0 0 0 0\n",
+                      (unsigned long long)size_pages,
+                      (unsigned long long)resident);
+    *content_len = len > 0 ? (size_t)len : 0;
     return buffer;
 }
 
@@ -374,8 +575,6 @@ char *proc_gen_mounts(size_t *context_len) {
     return strdup(mount_info);
 }
 
-extern lock_queue   *pcb_group_queue;
-
 errno_t procfs_mount(const char *src, vfs_node_t node) {
     if (src != (void *)PROC_REGISTER_ID) return VFS_STATUS_FAILED;
     procfs_root = node;
@@ -392,35 +591,65 @@ errno_t procfs_mount(const char *src, vfs_node_t node) {
     procfs_self->owner     = 0;
     procfs_self->group     = 0;
 
-    vfs_node_t cmdline    = vfs_node_alloc(procfs_root, "cmdline");
-    cmdline->type         = file_none;
-    cmdline->mode         = 0444;
-    cmdline->owner        = 0;
-    cmdline->group        = 0;
-    proc_handle_t *handle = (proc_handle_t*)malloc(sizeof(proc_handle_t));
-    cmdline->handle       = handle;
-    handle->task          = NULL;
-    sprintf(handle->name, "cmdline");
+    struct RootProcFile { const char *name; const char *handle; } root_files[] = {
+        {"cmdline", "cmdline"},
+        {"mounts", "mounts"},
+        {"filesystems", "filesystems"},
+        {"meminfo", "meminfo"},
+        {"uptime", "uptime"},
+        {"loadavg", "loadavg"},
+        {"stat", "stat"},
+        {"version", "version"},
+    };
 
-    vfs_node_t mounts       = vfs_node_alloc(procfs_root, "mounts");
-    mounts->type            = file_none;
-    mounts->mode            = 0444;
-    mounts->owner           = 0;
-    mounts->group           = 0;
-    proc_handle_t *mounts_h = (proc_handle_t*)malloc(sizeof(proc_handle_t));
-    mounts->handle          = mounts_h;
-    mounts_h->task          = NULL;
-    sprintf(mounts_h->name, "mounts");
+    for (size_t i = 0; i < sizeof(root_files) / sizeof(root_files[0]); i++)
+    {
+        vfs_node_t file = vfs_node_alloc(procfs_root, root_files[i].name);
+        file->type = file_none;
+        file->mode = 0444;
+        file->owner = 0;
+        file->group = 0;
+        file->fsid = procfs_id;
+        proc_handle_t *file_handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
+        file->handle = file_handle;
+        file_handle->task = NULL;
+        sprintf(file_handle->name, "%s", root_files[i].handle);
+    }
 
-    vfs_node_t filesystems            = vfs_node_alloc(procfs_root, "filesystems");
-    filesystems->type                 = file_none;
-    filesystems->mode                 = 0444;
-    filesystems->owner                = 0;
-    filesystems->group                = 0;
-    proc_handle_t *filesystems_handle = (proc_handle_t*)malloc(sizeof(proc_handle_t));
-    filesystems->handle               = filesystems_handle;
-    filesystems_handle->task          = NULL;
-    sprintf(filesystems_handle->name, "filesystems");
+    vfs_node_t sys_dir = vfs_node_alloc(procfs_root, "sys");
+    sys_dir->type = file_dir;
+    sys_dir->mode = 0555;
+    sys_dir->owner = 0;
+    sys_dir->group = 0;
+    sys_dir->fsid = procfs_id;
+
+    vfs_node_t kernel_dir = vfs_node_alloc(sys_dir, "kernel");
+    kernel_dir->type = file_dir;
+    kernel_dir->mode = 0555;
+    kernel_dir->owner = 0;
+    kernel_dir->group = 0;
+    kernel_dir->fsid = procfs_id;
+
+    struct SysKernelProcFile { const char *name; const char *handle; } sys_kernel_files[] = {
+        {"ostype", "sys_kernel_ostype"},
+        {"osrelease", "sys_kernel_osrelease"},
+        {"version", "sys_kernel_version"},
+        {"hostname", "sys_kernel_hostname"},
+    };
+
+    for (size_t i = 0; i < sizeof(sys_kernel_files) / sizeof(sys_kernel_files[0]); i++)
+    {
+        vfs_node_t file = vfs_node_alloc(kernel_dir, sys_kernel_files[i].name);
+        file->type = file_none;
+        file->mode = 0444;
+        file->owner = 0;
+        file->group = 0;
+        file->fsid = procfs_id;
+        proc_handle_t *file_handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
+        file->handle = file_handle;
+        file_handle->task = NULL;
+        sprintf(file_handle->name, "%s", sys_kernel_files[i].handle);
+    }
 
     procfs_update_task_list();
 
@@ -430,6 +659,12 @@ errno_t procfs_mount(const char *src, vfs_node_t node) {
 void procfs_open(void *parent, const char *name, vfs_node_t node) {
     UNUSED(parent, name);
     if (node == procfs_root) procfs_update_task_list();
+    if (procfs_node_is_task_dir(node))
+    {
+        int pid = atoi(node->name);
+        pcb_t task = found_pcb(pid);
+        if (task != NULL) procfs_on_new_task(task);
+    }
 }
 
 void procfs_close(void *current) {
@@ -437,8 +672,25 @@ void procfs_close(void *current) {
 }
 
 size_t procfs_readlink(vfs_node_t node, void *addr, size_t offset, size_t size) {
-    UNUSED(node, addr, offset, size);
-    return 0;
+    if (node == NULL || addr == NULL) return VFS_STATUS_FAILED;
+
+    if (node->handle != NULL)
+    {
+        proc_handle_t *handle = (proc_handle_t *)node->handle;
+        if (!strcmp(handle->name, "proc_exe"))
+        {
+            const char *target = handle->task && handle->task->exe_path ? handle->task->exe_path : "";
+            return procfs_copy_content(addr, offset, size, target, strlen(target));
+        }
+    }
+
+    if (node->linkto != NULL)
+    {
+        char target[MAX_PID_NAME_LEN + 8];
+        sprintf(target, "/proc/%s", node->linkto->name);
+        return procfs_copy_content(addr, offset, size, target, strlen(target));
+    }
+    return VFS_STATUS_FAILED;
 }
 
 size_t procfs_write(void *file, const void *addr, size_t offset, size_t size) {
@@ -462,6 +714,45 @@ size_t procfs_read(void *file, void *addr, size_t offset, size_t size) {
     } else if (!strcmp(handle->name, "cmdline")) {
         size_t len = strlen(procfs_kernel_cmdline());
         return procfs_copy_content(addr, offset, size, procfs_kernel_cmdline(), len);
+    } else if (!strcmp(handle->name, "meminfo")) {
+        size_t len = 0;
+        char *content = proc_gen_meminfo(&len);
+        size_t copied = procfs_copy_content(addr, offset, size, content, len);
+        free(content);
+        return copied;
+    } else if (!strcmp(handle->name, "uptime")) {
+        size_t len = 0;
+        char *content = proc_gen_uptime(&len);
+        size_t copied = procfs_copy_content(addr, offset, size, content, len);
+        free(content);
+        return copied;
+    } else if (!strcmp(handle->name, "loadavg")) {
+        size_t len = 0;
+        char *content = proc_gen_loadavg(&len);
+        size_t copied = procfs_copy_content(addr, offset, size, content, len);
+        free(content);
+        return copied;
+    } else if (!strcmp(handle->name, "stat")) {
+        size_t len = 0;
+        char *content = proc_gen_root_stat(&len);
+        size_t copied = procfs_copy_content(addr, offset, size, content, len);
+        free(content);
+        return copied;
+    } else if (!strcmp(handle->name, "version")) {
+        size_t len = strlen(procfs_kernel_version());
+        return procfs_copy_content(addr, offset, size, procfs_kernel_version(), len);
+    } else if (!strcmp(handle->name, "sys_kernel_ostype")) {
+        size_t len = strlen(procfs_kernel_ostype());
+        return procfs_copy_content(addr, offset, size, procfs_kernel_ostype(), len);
+    } else if (!strcmp(handle->name, "sys_kernel_osrelease")) {
+        size_t len = strlen(procfs_kernel_osrelease());
+        return procfs_copy_content(addr, offset, size, procfs_kernel_osrelease(), len);
+    } else if (!strcmp(handle->name, "sys_kernel_version")) {
+        size_t len = strlen(procfs_kernel_version());
+        return procfs_copy_content(addr, offset, size, procfs_kernel_version(), len);
+    } else if (!strcmp(handle->name, "sys_kernel_hostname")) {
+        size_t len = strlen(procfs_kernel_hostname());
+        return procfs_copy_content(addr, offset, size, procfs_kernel_hostname(), len);
     } else if (!strcmp(handle->name, "mounts")) {
         size_t len     = 0;
         char  *contect = proc_gen_mounts(&len);
@@ -469,9 +760,17 @@ size_t procfs_read(void *file, void *addr, size_t offset, size_t size) {
         free(contect);
         return copied;
     } else if (!strcmp(handle->name, "proc_cmdline")) {
-        const char *cmdline = task->cmdline ? task->cmdline : "no_cmdline";
-        ssize_t len     = strlen(cmdline);
-        return procfs_copy_content(addr, offset, size, cmdline, len);
+        return procfs_copy_task_cmdline(task, addr, offset, size);
+    } else if (!strcmp(handle->name, "proc_comm")) {
+        char comm[sizeof(task->name) + 2];
+        int len = sprintf(comm, "%s\n", task->name);
+        return procfs_copy_content(addr, offset, size, comm, len > 0 ? (size_t)len : 0);
+    } else if (!strcmp(handle->name, "proc_statm")) {
+        size_t content_len = 0;
+        char *content = proc_gen_statm_file(task, &content_len);
+        size_t to_copy = procfs_copy_content(addr, offset, size, content, content_len);
+        free(content);
+        return to_copy;
     } else if (!strcmp(handle->name, "proc_maps")) {
         size_t content_len = 0;
         char  *content     = proc_gen_maps_file(handle->task, &content_len);
@@ -494,6 +793,9 @@ size_t procfs_read(void *file, void *addr, size_t offset, size_t size) {
         size_t to_copy = procfs_copy_content(addr, offset, size, content, content_len);
         free(content);
         return to_copy;
+    } else if (!strcmp(handle->name, "proc_exe")) {
+        const char *target = task && task->exe_path ? task->exe_path : "";
+        return procfs_copy_content(addr, offset, size, target, strlen(target));
     }
     return VFS_STATUS_FAILED;
 }
@@ -509,8 +811,49 @@ errno_t procfs_stat(void *file, vfs_node_t node) {
         node->size = strlen(filesystems_content);
     else if (!strcmp(handle->name, "cmdline"))
         node->size = strlen(procfs_kernel_cmdline());
+    else if (!strcmp(handle->name, "meminfo")) {
+        size_t content_len = 0;
+        char *content = proc_gen_meminfo(&content_len);
+        free(content);
+        node->size = content_len;
+    } else if (!strcmp(handle->name, "uptime")) {
+        size_t content_len = 0;
+        char *content = proc_gen_uptime(&content_len);
+        free(content);
+        node->size = content_len;
+    } else if (!strcmp(handle->name, "loadavg")) {
+        size_t content_len = 0;
+        char *content = proc_gen_loadavg(&content_len);
+        free(content);
+        node->size = content_len;
+    } else if (!strcmp(handle->name, "stat")) {
+        size_t content_len = 0;
+        char *content = proc_gen_root_stat(&content_len);
+        free(content);
+        node->size = content_len;
+    } else if (!strcmp(handle->name, "version")) {
+        node->size = strlen(procfs_kernel_version());
+    } else if (!strcmp(handle->name, "sys_kernel_ostype")) {
+        node->size = strlen(procfs_kernel_ostype());
+    } else if (!strcmp(handle->name, "sys_kernel_osrelease")) {
+        node->size = strlen(procfs_kernel_osrelease());
+    } else if (!strcmp(handle->name, "sys_kernel_version")) {
+        node->size = strlen(procfs_kernel_version());
+    } else if (!strcmp(handle->name, "sys_kernel_hostname")) {
+        node->size = strlen(procfs_kernel_hostname());
+    }
     else if (!strcmp(handle->name, "proc_cmdline"))
-        node->size = strlen(handle->task->cmdline ? handle->task->cmdline : "null");
+        node->size = procfs_task_cmdline_len(handle->task);
+    else if (!strcmp(handle->name, "proc_comm"))
+        node->size = strlen(handle->task->name) + 1;
+    else if (!strcmp(handle->name, "proc_exe"))
+        node->size = handle->task && handle->task->exe_path ? strlen(handle->task->exe_path) : 0;
+    else if (!strcmp(handle->name, "proc_statm")) {
+        size_t content_len = 0;
+        char *content = proc_gen_statm_file(handle->task, &content_len);
+        free(content);
+        node->size = content_len;
+    }
     else if (!strcmp(handle->name, "proc_maps")) {
         size_t content_len = 0;
         char  *content     = proc_gen_maps_file(handle->task, &content_len);
@@ -655,58 +998,43 @@ void procfs_on_new_task(pcb_t task) {
     char name[MAX_PID_NAME_LEN];
     sprintf(name, "%llu", (unsigned long long)task->pid);
 
-    vfs_node_t pro = vfs_do_search(procfs_root, name);
-    if (pro != NULL) {
-        task->procfs_node = pro;
-        return;
+    vfs_node_t node = vfs_do_search(procfs_root, name);
+    if (node == NULL) {
+        node       = vfs_child_append(procfs_root, name, NULL);
+        node->type = file_dir;
+        node->mode = 0555;
+        node->fsid = procfs_id;
     }
-
-    vfs_node_t node   = vfs_child_append(procfs_root, name, NULL);
-    node->type        = file_dir;
-    node->mode        = 0555;
-    node->fsid        = procfs_id;
     procfs_set_owner(node, task);
     task->procfs_node = node;
 
-    vfs_node_t cmdline    = vfs_child_append(node, "cmdline", NULL);
-    cmdline->type         = file_none;
-    cmdline->mode         = 0444;
-    cmdline->fsid         = procfs_id;
-    procfs_set_owner(cmdline, task);
-    proc_handle_t *handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
-    cmdline->handle       = handle;
-    handle->task          = task;
-    sprintf(handle->name, "proc_cmdline");
+    struct TaskProcFile { const char *name; const char *handle; uint16_t type; uint16_t mode; } task_files[] = {
+        {"cmdline", "proc_cmdline", file_none, 0444},
+        {"comm", "proc_comm", file_none, 0444},
+        {"exe", "proc_exe", file_symlink, 0777},
+        {"maps", "proc_maps", file_none, 0400},
+        {"stat", "proc_stat", file_none, 0444},
+        {"statm", "proc_statm", file_none, 0444},
+        {"status", "proc_status", file_none, 0444},
+    };
 
-    vfs_node_t mmaps        = vfs_child_append(node, "maps", NULL);
-    mmaps->type             = file_none;
-    mmaps->mode             = 0400;
-    mmaps->fsid             = procfs_id;
-    procfs_set_owner(mmaps, task);
-    proc_handle_t *handle_m = (proc_handle_t *)malloc(sizeof(proc_handle_t));
-    mmaps->handle           = handle_m;
-    handle_m->task          = task;
-    sprintf(handle_m->name, "proc_maps");
-
-    vfs_node_t self_stat            = vfs_child_append(node, "stat", NULL);
-    self_stat->type                 = file_none;
-    self_stat->mode                 = 0444;
-    self_stat->fsid                 = procfs_id;
-    procfs_set_owner(self_stat, task);
-    proc_handle_t *self_stat_handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
-    self_stat->handle               = self_stat_handle;
-    self_stat_handle->task          = task;
-    sprintf(self_stat_handle->name, "proc_stat");
-
-    vfs_node_t status            = vfs_child_append(node, "status", NULL);
-    status->type                 = file_none;
-    status->mode                 = 0444;
-    status->fsid                 = procfs_id;
-    procfs_set_owner(status, task);
-    proc_handle_t *status_handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
-    status->handle               = status_handle;
-    status_handle->task          = task;
-    sprintf(status_handle->name, "proc_status");
+    for (size_t i = 0; i < sizeof(task_files) / sizeof(task_files[0]); i++)
+    {
+        vfs_node_t file = vfs_do_search(node, task_files[i].name);
+        if (file == NULL) file = vfs_child_append(node, task_files[i].name, NULL);
+        file->type = task_files[i].type;
+        file->mode = task_files[i].mode;
+        file->fsid = procfs_id;
+        procfs_set_owner(file, task);
+        proc_handle_t *handle = (proc_handle_t *)file->handle;
+        if (handle == NULL)
+        {
+            handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
+            file->handle = handle;
+        }
+        handle->task = task;
+        sprintf(handle->name, "%s", task_files[i].handle);
+    }
 }
 
 void procfs_on_exit_task(pcb_t task) {

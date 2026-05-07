@@ -3,6 +3,7 @@
 #include "../stdint.h"
 
 #define AT_FDCWD (-100)
+#define AT_SYMLINK_NOFOLLOW 0x100
 
 #define O_RDONLY 0
 #define O_WRONLY 1

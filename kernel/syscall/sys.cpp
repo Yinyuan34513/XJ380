@@ -145,13 +145,13 @@ static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
     out->st_uid     = (int)node->owner;
     out->st_ino     = node->inode;
     out->st_size    = node->size == (uint64_t)-1 ? 0 : (long long int)node->size;
-    out->st_mode    = node->mode | (node->type == file_symlink  ? S_IFLNK
-                                   : node->type == file_dir    ? S_IFDIR
-                                   : node->type == file_block  ? S_IFBLK
-                                   : node->type == file_socket ? S_IFSOCK
-                                   : node->type == file_none   ? S_IFREG
-                                   : node->type == file_stream ? S_IFCHR
-                                                               : S_IFREG);
+    out->st_mode    = node->mode | ((node->type & file_symlink)  ? S_IFLNK
+                                   : (node->type & file_dir)    ? S_IFDIR
+                                   : (node->type & file_block)  ? S_IFBLK
+                                   : (node->type & file_socket) ? S_IFSOCK
+                                   : (node->type & file_none)   ? S_IFREG
+                                   : (node->type & file_stream) ? S_IFCHR
+                                                                : S_IFREG);
     out->st_nlink   = 1;
     out->st_dev     = (long)node->dev;
     out->st_rdev    = (long)node->rdev;
@@ -183,6 +183,16 @@ static uint64_t stat_kernel_path(const char *path, struct stat *out)
 {
     if (path == NULL || out == NULL) return SYSCALL_FAULT_(EINVAL);
     vfs_node_t node = vfs_open(path);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    uint64_t ret = fill_stat_from_node(node, out);
+    vfs_close(node);
+    return ret;
+}
+
+static uint64_t lstat_kernel_path(const char *path, struct stat *out)
+{
+    if (path == NULL || out == NULL) return SYSCALL_FAULT_(EINVAL);
+    vfs_node_t node = vfs_open_no_follow(path);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
     uint64_t ret = fill_stat_from_node(node, out);
     vfs_close(node);
@@ -1095,8 +1105,8 @@ sys_(uname, struct utsname *utsname)
     memset(&kname, 0, sizeof(kname));
     char sysname[] = "XJ380";
     char machine[] = "x86_64";
-    char release[] = "2.1";
-    char version[] = "XJ380OS 2.1";
+    char release[] = "6.6.30";
+    char version[] = "XJ380 OS XSK2.1";
     memcpy(kname.sysname, sysname, sizeof(sysname));
     memcpy(kname.nodename, "localhost", 10);
     memcpy(kname.release, release, sizeof(release));
@@ -2718,7 +2728,9 @@ sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     struct stat kstat;
-    uint64_t ret = stat_kernel_path(resolved, &kstat);
+    uint64_t ret = (flags & AT_SYMLINK_NOFOLLOW) ?
+                   lstat_kernel_path(resolved, &kstat) :
+                   stat_kernel_path(resolved, &kstat);
     if (busybox_debug_current_linux_abi())
     {
         write_serial_fmt("[busybox-debug] newfstatat dirfd=%d path=%s flags=0x%llx ret=%lld\n",
@@ -3481,10 +3493,14 @@ sys_(readlink)
     int ret = copy_string_from_user(&kpath, path, USER_PATH_MAX);
     if (ret < 0) return SYSCALL_FAULT_((int)-ret);
 
-    vfs_node_t node = vfs_open(kpath);
+    char *resolved = vfs_cwd_path_build(kpath);
     free(kpath);
+    if (resolved == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    vfs_node_t node = vfs_open_no_follow(resolved);
+    free(resolved);
     if (node == NULL) { return SYSCALL_FAULT_(ENOENT); }
-    if (!node->linkto)
+    if (!(node->type & file_symlink))
     {
         vfs_close(node);
         return SYSCALL_FAULT_(EINVAL);
@@ -3522,10 +3538,10 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
     int path_ret = resolve_user_path_at(dirfd, path, &resolved);
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
-    vfs_node_t node = vfs_open(resolved);
+    vfs_node_t node = vfs_open_no_follow(resolved);
     free(resolved);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
-    if (!node->linkto)
+    if (!(node->type & file_symlink))
     {
         vfs_close(node);
         return SYSCALL_FAULT_(EINVAL);

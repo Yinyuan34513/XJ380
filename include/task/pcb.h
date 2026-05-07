@@ -106,6 +106,9 @@ struct process_control_block
     int         exit_code;   // 进程退出码
     uint64_t    mmap_start;  // 映射起始地址
     char       *cmdline;
+    char      **argv;
+    size_t      argc;
+    char       *exe_path;
     int         task_level; // 进程等级
     lock_queue *virt_queue; // 虚拟页分配队列
     void       *elf_file;   // 可执行文件指针

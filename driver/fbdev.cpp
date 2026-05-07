@@ -62,6 +62,55 @@ static void fbdev_copy_page_to_gop(uint32_t page)
     fbdev_present_buffer_region(fbdev_page_framebuffer(page), 0, 0, g_fbdev.fbc->horizontal_resolution, height);
 }
 
+static void fbdev_present_page_byte_row(uint32_t page, uint32_t row, size_t byte_x1, size_t byte_x2)
+{
+    if (!g_fbdev.ready || page >= kFbPages) return;
+    if (row >= g_fbdev.fbc->vertical_resolution) return;
+
+    size_t visible_row_bytes = (size_t)g_fbdev.fbc->horizontal_resolution * 4;
+    if (byte_x1 >= visible_row_bytes) return;
+    if (byte_x2 > visible_row_bytes) byte_x2 = visible_row_bytes;
+    if (byte_x1 >= byte_x2) return;
+
+    uint32_t x1 = (uint32_t)(byte_x1 / 4);
+    uint32_t x2 = (uint32_t)((byte_x2 + 3) / 4);
+    fbdev_present_buffer_region(fbdev_page_framebuffer(page), x1, row, x2, row + 1);
+}
+
+static void fbdev_present_page_byte_range(uint32_t page, size_t offset_in_page, size_t bytes)
+{
+    if (!g_fbdev.ready || page >= kFbPages || bytes == 0) return;
+    if (offset_in_page >= g_fbdev.bytes_per_page) return;
+
+    size_t end = offset_in_page + MIN(bytes, g_fbdev.bytes_per_page - offset_in_page);
+    size_t pitch = fbdev_pitch();
+    if (pitch == 0 || end <= offset_in_page) return;
+
+    uint32_t row_start = (uint32_t)(offset_in_page / pitch);
+    uint32_t row_end = (uint32_t)((end - 1) / pitch);
+    if (row_start >= g_fbdev.fbc->vertical_resolution) return;
+    if (row_end >= g_fbdev.fbc->vertical_resolution) row_end = g_fbdev.fbc->vertical_resolution - 1;
+
+    size_t start_byte_x = offset_in_page % pitch;
+    size_t end_byte_x = ((end - 1) % pitch) + 1;
+
+    if (row_start == row_end)
+    {
+        fbdev_present_page_byte_row(page, row_start, start_byte_x, end_byte_x);
+        return;
+    }
+
+    fbdev_present_page_byte_row(page, row_start, start_byte_x, pitch);
+
+    if (row_start + 1 < row_end)
+    {
+        fbdev_present_buffer_region(fbdev_page_framebuffer(page), 0, row_start + 1,
+                                    g_fbdev.fbc->horizontal_resolution, row_end);
+    }
+
+    fbdev_present_page_byte_row(page, row_end, 0, end_byte_x);
+}
+
 static void fbdev_fill_fix(struct fb_fix_screeninfo *fix)
 {
     memset(fix, 0, sizeof(*fix));
@@ -123,7 +172,9 @@ static size_t fbdev_write(int, uint8_t *buffer, size_t number, size_t offset)
     size_t active_end = active_start + g_fbdev.bytes_per_page;
     if (offset < active_end && offset + bytes > active_start)
     {
-        fbdev_copy_page_to_gop(g_fbdev.active_page);
+        size_t dirty_start = offset > active_start ? offset : active_start;
+        size_t dirty_end = offset + bytes < active_end ? offset + bytes : active_end;
+        fbdev_present_page_byte_range(g_fbdev.active_page, dirty_start - active_start, dirty_end - dirty_start);
     }
     return bytes;
 }

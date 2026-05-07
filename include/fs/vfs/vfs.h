@@ -47,6 +47,7 @@ char *normalize_path(const char *path);
 #define DT_WHT     14
 
 #define AT_FDCWD (-100)
+#define AT_SYMLINK_NOFOLLOW 0x100
 
 #define O_RDONLY    0
 #define O_WRONLY    1
@@ -286,6 +287,7 @@ void vfs_update(vfs_node_t node);
  * @return 为NULL代表打开失败
  */
 vfs_node_t vfs_open(const char *str);
+vfs_node_t vfs_open_no_follow(const char *str);
 
 errno_t vfs_register_alias(const char *alias_path, const char *target_path);
 

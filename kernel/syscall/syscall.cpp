@@ -273,7 +273,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_STAT: regs->rax = (uint64_t)sys_stat((char *)regs->rdi, (struct stat *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_LSTAT:
-        regs->rax = (uint64_t)sys_stat((char *)regs->rdi, (struct stat *)regs->rsi, 0, 0, 0, 0, regs);
+        regs->rax =
+            (uint64_t)sys_newfstatat(AT_FDCWD, (char *)regs->rdi, (struct stat *)regs->rsi,
+                                     AT_SYMLINK_NOFOLLOW, 0, 0, regs);
         break;
     case SYS_FSTAT: regs->rax = (uint64_t)sys_fstat(regs->rdi, (struct stat *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_IOCTL: regs->rax = (uint64_t)sys_ioctl(regs->rdi, regs->rsi, (void *)regs->rdx, 0, 0, 0, regs); break;

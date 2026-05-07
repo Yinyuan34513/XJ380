@@ -258,6 +258,29 @@ void free_envp(char **envp)
     free(envp);
 }
 
+static char **copy_kernel_string_vector_owned(char **argv, size_t argc)
+{
+    if (argv == NULL || argc == 0) return NULL;
+    char **copy = (char **)calloc(argc + 1, sizeof(char *));
+    if (copy == NULL) return NULL;
+    for (size_t i = 0; i < argc; i++)
+    {
+        if (argv[i] == NULL)
+        {
+            free_envp(copy);
+            return NULL;
+        }
+        copy[i] = strdup(argv[i]);
+        if (copy[i] == NULL)
+        {
+            free_envp(copy);
+            return NULL;
+        }
+    }
+    copy[argc] = NULL;
+    return copy;
+}
+
 void kill_proc0(pcb_t pcb)
 {
     procfs_on_exit_task(pcb);
@@ -294,6 +317,8 @@ void kill_proc0(pcb_t pcb)
 
     // 保存需要在free之后访问的字段
     char *cmdline = pcb->cmdline;
+    char **argv = pcb->argv;
+    char *exe_path = pcb->exe_path;
     void *elf_file = pcb->elf_file;
     char **envp = pcb->envp;
     tty_t *tty = pcb->tty;
@@ -321,6 +346,8 @@ void kill_proc0(pcb_t pcb)
     if (virt_queue) queue_destroy(virt_queue);
 
     free(cmdline);
+    if (argv) free_envp(argv);
+    free(exe_path);
     free(elf_file);
     if (envp) free_envp(envp);
     free_tty(tty);
@@ -1196,6 +1223,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     size_t kargc = 0;
     size_t kenvc = 0;
     char **new_task_argv = NULL;
+    char **new_process_argv = NULL;
+    char *new_exe_path = NULL;
 
     int copy_ret = copy_exec_string_from_user(caller_pagedir, &kpath, path, NULL);
     if (copy_ret < 0)
@@ -1326,6 +1355,35 @@ uint64_t process_execve(char *path, char **argv, char **envp)
             restore_runtime_state(was_scheduler_enabled, is_sti);
             return (uint64_t)-ENOMEM;
         }
+        new_process_argv = copy_kernel_string_vector_owned(kargv, kargc);
+        if (new_process_argv == NULL)
+        {
+            vfs_close(node);
+            free(norm_path);
+            free(kpath);
+            free(new_cmdline);
+            free_envp(new_task_argv);
+            free_envp(kargv);
+            free_envp(kenvp);
+            free_page_directory(new_page_dir);
+            restore_runtime_state(was_scheduler_enabled, is_sti);
+            return (uint64_t)-ENOMEM;
+        }
+    }
+    new_exe_path = strdup(norm_path);
+    if (new_exe_path == NULL)
+    {
+        vfs_close(node);
+        free(norm_path);
+        free(kpath);
+        free(new_cmdline);
+        free_envp(new_task_argv);
+        free_envp(new_process_argv);
+        free_envp(kargv);
+        free_envp(kenvp);
+        free_page_directory(new_page_dir);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (uint64_t)-ENOMEM;
     }
 
     char **new_envp = NULL;
@@ -1346,6 +1404,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
             free(kpath);
             free(new_cmdline);
             free_envp(new_task_argv);
+            free_envp(new_process_argv);
+            free(new_exe_path);
             free_envp(kargv);
             free_page_directory(new_page_dir);
             restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -1361,6 +1421,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(kpath);
         free(new_cmdline);
         free_envp(new_task_argv);
+        free_envp(new_process_argv);
+        free(new_exe_path);
         free_envp(kargv);
         free_envp(kenvp);
         free_page_directory(new_page_dir);
@@ -1411,6 +1473,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(kpath);
         free(new_cmdline);
         free_envp(new_task_argv);
+        free_envp(new_process_argv);
+        free(new_exe_path);
         free_envp(kargv);
         free_envp(new_envp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -1435,6 +1499,8 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(kpath);
         free(new_cmdline);
         free_envp(new_task_argv);
+        free_envp(new_process_argv);
+        free(new_exe_path);
         free_envp(kargv);
         free_envp(new_envp);
         restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -1442,12 +1508,21 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     char **old_envp = process->envp;
     char  *old_cmdline = process->cmdline;
+    char **old_process_argv = process->argv;
+    char *old_exe_path = process->exe_path;
     process->cmdline = new_cmdline;
+    process->argv = new_process_argv;
+    process->argc = kargc;
+    process->exe_path = new_exe_path;
     process->envp = new_envp;
     process->envc = new_envc;
     new_cmdline = NULL;
+    new_process_argv = NULL;
+    new_exe_path = NULL;
     new_envp = NULL;
     if (old_cmdline != NULL) free(old_cmdline);
+    if (old_process_argv != NULL) free_envp(old_process_argv);
+    free(old_exe_path);
     if (old_envp != NULL) free_envp(old_envp);
     vma_manager_exit_cleanup(&old_vma_manager);
     if (was_vfork)
@@ -1557,6 +1632,8 @@ static void free_partial_process(pcb_t pcb, bool owns_pagedir)
     if (owns_pagedir) free_page_directory(pcb->pagedir);
     free_tty(pcb->tty);
     free(pcb->cmdline);
+    free_envp(pcb->argv);
+    free(pcb->exe_path);
     free(pcb->xtttp_stc);
     free(pcb);
 }
@@ -1689,6 +1766,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_pcb->brk_current = current_pcb->brk_current;
     new_pcb->mmap_start  = current_pcb->mmap_start;
     new_pcb->cmdline      = strdup(current_pcb->cmdline);
+    new_pcb->argv         = copy_kernel_string_vector_owned(current_pcb->argv, current_pcb->argc);
+    new_pcb->argc         = current_pcb->argc;
+    new_pcb->exe_path     = current_pcb->exe_path ? strdup(current_pcb->exe_path) : NULL;
     new_pcb->thread_queue = queue_init();
     new_pcb->parent_task  = current_pcb;
     new_pcb->child_pcb    = queue_init();
@@ -1698,7 +1778,9 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_pcb->tty          = alloc_default_tty();
 
     new_pcb->xtttp_stc = (xtttp_dtt *)malloc(sizeof(xtttp_dtt));
-    if (new_pcb->cmdline == NULL || new_pcb->thread_queue == NULL || new_pcb->child_pcb == NULL ||
+    if (new_pcb->cmdline == NULL || (current_pcb->argc > 0 && new_pcb->argv == NULL) ||
+        (current_pcb->exe_path != NULL && new_pcb->exe_path == NULL) ||
+        new_pcb->thread_queue == NULL || new_pcb->child_pcb == NULL ||
         new_pcb->virt_queue == NULL || new_pcb->file_open == NULL || new_pcb->ipc_queue == NULL ||
         new_pcb->tty == NULL || new_pcb->xtttp_stc == NULL)
     {

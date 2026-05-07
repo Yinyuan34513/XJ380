@@ -881,6 +881,22 @@ int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         return -ENOMEM;
     }
     if (old_cmdline != NULL) free(old_cmdline);
+    group->argv = copy_process_argv(path, argv, argc);
+    if (argc > 0 && group->argv == NULL)
+    {
+        free_process_argv(thread_argv);
+        kill_proc(group, 0, false);
+        return -ENOMEM;
+    }
+    group->argc = argc;
+    group->exe_path = strdup(path);
+    if (group->exe_path == NULL)
+    {
+        free_process_argv(thread_argv);
+        kill_proc(group, 0, false);
+        return -ENOMEM;
+    }
+    group->linux_abi = true;
     char *cwd = getCwd(path);
     if (cwd == NULL)
     {
