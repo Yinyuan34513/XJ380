@@ -30,32 +30,6 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
-void do_xapi_GetSystemVersion(uint64_t str)
-{
-    char *dst = (char *)str;
-    if (dst != NULL)
-        memcpy(dst, OS_EDITION, strlen(OS_EDITION) + 1);
-}
-
-uint64_t do_xapi_GetTime()
-{
-    tm t;
-    time_read(&t);
-    return mktime(&t);
-}
-
-void do_xapi_GetCurrentUser(uint64_t dst)
-{
-    xapi_type_UserInfo *dest = (xapi_type_UserInfo *)dst;
-    if (dest == NULL || current_user == NULL) return;
-
-    xapi_type_UserInfo local;
-    memset(&local, 0, sizeof(local));
-    memcpy(local.name, current_user->name, strlen(current_user->name));
-    local.user_type = current_user->user_type;
-    copy_to_user_pagedir(get_current_task()->parent_group->pagedir, dest, &local, sizeof(local));
-}
-
 void xapi_output_kernel(const char *str)
 {
     if (str == NULL) return;
