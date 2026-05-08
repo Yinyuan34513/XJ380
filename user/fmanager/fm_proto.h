@@ -58,3 +58,4 @@ void reg_lock();
 void reg_unlock();
 
 int fm_visible_rows();
+bool fm_get_selected_file(DirNode *node);

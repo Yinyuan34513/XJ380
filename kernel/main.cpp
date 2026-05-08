@@ -535,7 +535,7 @@ skip_timer_widget_init:
 // #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);

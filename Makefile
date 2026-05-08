@@ -197,6 +197,8 @@ vdisk: all $(OPKG_CONF_GEN)
 
 	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((1024*1024-2048*512/1024))
 
+	@echo "a"
+
 	@mkdir -p $(VDISK_ROOT)/EFI/BOOT
 	@mkdir -p $(VDISK_ROOT)/system
 	@mkdir -p $(VDISK_ROOT)/system/font
@@ -301,7 +303,6 @@ vdisk: all $(OPKG_CONF_GEN)
 	@$(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
 	@cp -a $(APP_OPKG) $(VDISK_ROOT)/apps/opkg
 	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(VDISK_ROOT)/apps/opkg
-
 
 	@cp -a ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font

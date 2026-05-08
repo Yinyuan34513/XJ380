@@ -160,11 +160,8 @@ void process_crl(int CRLid)
     }
     else 
     {
-        uint32_t count = 0;
-        DirNode  fdir[256];
-        memset(fdir, 0, sizeof(DirNode) * 256);
-        xapi_SearchFile(current_path, &count, fdir);
-        if (count == 0 || count == 404)
+        DirNode selected_file;
+        if (!fm_get_selected_file(&selected_file))
         {
             return;
         }
@@ -172,9 +169,9 @@ void process_crl(int CRLid)
         memset(filepath, 0, 256);
         strcat(filepath, current_path);
         strcat(filepath, "/");
-        strcat(filepath, fdir[choosing_index + file_count_base].filename);
+        strcat(filepath, selected_file.filename);
 
-        if (fdir[choosing_index + file_count_base].filetype == 0)
+        if (selected_file.filetype == 0)
             xapi_DeleteFile(filepath);
         else
             xapi_Rmdir(filepath);
@@ -245,19 +242,19 @@ void delete_typebox()
     }
     else if (tb_cop == 2)
     {
-        uint32_t count = 0;
-        DirNode  fdir[256];
-        memset(fdir, 0, sizeof(DirNode) * 256);
-        xapi_SearchFile(current_path, &count, fdir);
-        if (count == 0 || count == 404)
+        DirNode selected_file;
+        if (!fm_get_selected_file(&selected_file))
         {
+            tb_cop = -1;
+            reg_unlock();
+            paint_dir(current_path);
             return;
         }
         char old_path[256];
         memset(old_path, 0, 256);
         strcat(old_path, current_path);
         strcat(old_path, "/");
-        strcat(old_path, fdir[choosing_index + file_count_base].filename);
+        strcat(old_path, selected_file.filename);
         char new_path[256];
         memset(new_path, 0, 256);
         strcat(new_path, current_path);

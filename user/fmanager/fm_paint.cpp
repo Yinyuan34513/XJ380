@@ -2,6 +2,7 @@
 #include <krlibc.h>
 #include "fm_proto.h"
 #include <xguiapi.h>
+#include <xposix/stdlib.h>
 
 char path[1024] = "/";
 
@@ -36,6 +37,74 @@ static bool visible_index_is_valid(int visible_index)
     }
 
     return visible_index >= 0 && visible_index < visible_count;
+}
+
+static int fm_lower_ascii(int ch)
+{
+    if (ch >= 'A' && ch <= 'Z')
+    {
+        return ch + ('a' - 'A');
+    }
+    return ch;
+}
+
+static int fm_compare_filename(const char *a, const char *b)
+{
+    const char *original_a = a;
+    const char *original_b = b;
+
+    while (*a && *b)
+    {
+        int ca = fm_lower_ascii((unsigned char)*a);
+        int cb = fm_lower_ascii((unsigned char)*b);
+        if (ca != cb)
+        {
+            return ca - cb;
+        }
+        a++;
+        b++;
+    }
+
+    int result = fm_lower_ascii((unsigned char)*a) - fm_lower_ascii((unsigned char)*b);
+    return result == 0 ? strcmp(original_a, original_b) : result;
+}
+
+static int fm_compare_dirnode(const void *a, const void *b)
+{
+    const DirNode *left = (const DirNode *)a;
+    const DirNode *right = (const DirNode *)b;
+
+    if (left->filetype != right->filetype)
+    {
+        return left->filetype ? -1 : 1;
+    }
+
+    return fm_compare_filename(left->filename, right->filename);
+}
+
+static void fm_sort_file_cache()
+{
+    if (file_count > 1)
+    {
+        qsort(file_dir_cache, file_count, sizeof(file_dir_cache[0]), fm_compare_dirnode);
+    }
+}
+
+bool fm_get_selected_file(DirNode *node)
+{
+    if (node == NULL || choosing_index < 0)
+    {
+        return false;
+    }
+
+    int file_index = choosing_index + file_count_base;
+    if (file_index < 0 || file_index >= file_count)
+    {
+        return false;
+    }
+
+    *node = file_dir_cache[file_index];
+    return true;
 }
 
 void refresh_fm_part(int x1, int y1, int x2, int y2)
@@ -188,8 +257,10 @@ void paint_dir(char *path)
     xapi_DrawRect(handle, 0, 0, fmr_width - 1, fmr_height - 1, 0xffffffff, true);
     xapi_SearchFile(path, &count, file_dir_cache);
     file_count = (count == 404) ? 0 : (int)count;
+    if (file_count > 255) file_count = 255;
+    fm_sort_file_cache();
 
-    if ((int)count > visible_rows)
+    if (file_count > visible_rows)
     {
         need_duopage = true;
         if (file_count_base + visible_rows > file_count)
@@ -216,7 +287,7 @@ void paint_dir(char *path)
         xapi_DrawText(handle, fmr_width / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
     }
 
-    for (int i = file_count_base; i < (((int)count > visible_rows + file_count_base) ? visible_rows + file_count_base : (int)count); i++)
+    for (int i = file_count_base; i < ((file_count > visible_rows + file_count_base) ? visible_rows + file_count_base : file_count); i++)
     {
         paint_item(i - file_count_base, 
             file_dir_cache[i].filename, 
