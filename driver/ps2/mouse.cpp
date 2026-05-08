@@ -37,78 +37,6 @@ extern bool desktop_done;
 
 static volatile bool desktop_refresh_pending = false;
 
-static constexpr uint8_t PS2_STATUS_OBF = 0x01;
-static constexpr uint8_t PS2_STATUS_IBF = 0x02;
-static constexpr uint8_t PS2_STATUS_AUX = 0x20;
-
-static bool ps2_wait_input_clear(uint64_t timeout_ns = 1000000000ULL)
-{
-    uint64_t start = nanoTime();
-    for (;;)
-    {
-        if ((inb(PS2_CMD_PORT) & PS2_STATUS_IBF) == 0) return true;
-        if (nanoTime() - start >= timeout_ns) return false;
-        __asm__ volatile("pause");
-    }
-}
-
-static bool ps2_wait_output(uint8_t *status, uint64_t timeout_ns = 1000000000ULL)
-{
-    uint64_t start = nanoTime();
-    for (;;)
-    {
-        uint8_t s = inb(PS2_CMD_PORT);
-        if ((s & PS2_STATUS_OBF) != 0)
-        {
-            if (status != NULL) *status = s;
-            return true;
-        }
-        if (nanoTime() - start >= timeout_ns) return false;
-        __asm__ volatile("pause");
-    }
-}
-
-static void ps2_flush_output()
-{
-    for (int i = 0; i < 32 && (inb(PS2_CMD_PORT) & PS2_STATUS_OBF) != 0; ++i)
-    {
-        (void)inb(PS2_DATA_PORT);
-    }
-}
-
-static bool ps2_read_data(uint8_t *value, bool require_aux)
-{
-    for (;;)
-    {
-        uint8_t status = 0;
-        if (!ps2_wait_output(&status)) return false;
-
-        uint8_t data = inb(PS2_DATA_PORT);
-        if (!require_aux || (status & PS2_STATUS_AUX) != 0)
-        {
-            *value = data;
-            return true;
-        }
-    }
-}
-
-static bool ps2_read_controller_config(uint8_t *config)
-{
-    ps2_flush_output();
-    if (!ps2_wait_input_clear()) return false;
-    outb(PS2_CMD_PORT, KBCMD_READ_CMD);
-    return ps2_read_data(config, false);
-}
-
-static bool ps2_write_controller_config(uint8_t config)
-{
-    if (!ps2_wait_input_clear()) return false;
-    outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
-    if (!ps2_wait_input_clear()) return false;
-    outb(PS2_DATA_PORT, config);
-    return true;
-}
-
 static inline int rect_min_int(int a, int b)
 {
     return a < b ? a : b;
@@ -279,6 +207,33 @@ void process_mouse_button()
                      tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
                      tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
             {
+                if (current_window->can_maximize)
+                {
+                    // 最大化 / 还原
+                    ms_dec.sht_now = current_window->w_sheet;
+                    toggle_window_maximized(xwmii, sht_img, current_window);
+                }
+                else
+                {
+                    // 最小化
+                    ms_dec.sht_now = NULL;
+                    save_window_xy(current_window);
+                    int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
+                    // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
+                    get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
+                    refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
+                                                    bx + get_sheet(sht_img, current_window->w_sheet)->width,
+                                                    get_sheet(sht_img, current_window->w_sheet)->by +
+                                                        get_sheet(sht_img, current_window->w_sheet)->height);
+                }
+            }
+            else if (current_window->type == XWIN_NORMAL && current_window->can_maximize &&
+                     current_window->width >= 80 &&
+                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 75 &&
+                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 48 &&
+                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
+                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
+            {
                 // 最小化
                 ms_dec.sht_now = NULL;
                 save_window_xy(current_window);
@@ -409,7 +364,7 @@ void process_mouse_button()
             }
         }
     }
-    
+
     // 处理滚轮事件
     int scroll = get_mouse_scroll();
     if (scroll != 0 && current_window != NULL)
@@ -422,22 +377,15 @@ void process_mouse_button()
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
-    uint8_t status = inb(PS2_CMD_PORT);
-    if ((status & PS2_STATUS_OBF) == 0 || (status & PS2_STATUS_AUX) == 0)
-    {
-        (void)regs_ptr;
+    (void)regs_ptr;
     (void)error_code;
     send_eoi();
-        return;
-    }
-
     uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
     {
         ms_dec.need_flush = true;
         process_mouse_button();
     }
-    send_eoi();
 }
 
 void process_mouse_info()
@@ -582,12 +530,20 @@ void process_mouse_info()
                 // 点在了窗口上
                 ms_dec.win_move_lock = true;
                 ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
-                lift_sheet(sht_img, ms_dec.sht_now);
-                refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
-                                                   ms_dec.sht_now->bx + ms_dec.sht_now->width,
-                                                   ms_dec.sht_now->by + ms_dec.sht_now->height);
-                ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
-                ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
+                WINDOWLSP moving_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+                if (moving_window != NULL && moving_window->is_maximized)
+                {
+                    ms_dec.win_move_lock = false;
+                }
+                else
+                {
+                    lift_sheet(sht_img, ms_dec.sht_now);
+                    refresh_part_sheet_deferred_or_now(sht_img, ms_dec.sht_now->bx, ms_dec.sht_now->by,
+                                                       ms_dec.sht_now->bx + ms_dec.sht_now->width,
+                                                       ms_dec.sht_now->by + ms_dec.sht_now->height);
+                    ms_dec.win_x_offset = mouse_x - ms_dec.sht_now->bx;
+                    ms_dec.win_y_offset = mouse_y - ms_dec.sht_now->by;
+                }
             }
             SHEET *hover_sheet = found_sheetmb(sht_img, mouse_x, mouse_y);
             if (hover_sheet == NULL)
@@ -779,12 +735,11 @@ EXPORT_SYMBOL(mouse_inject_report);
 
 static bool send_command(uint8_t value)
 {
-    if (!ps2_wait_input_clear()) return false;
+    wait_ps2_write();
     outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    if (!ps2_wait_input_clear()) return false;
+    wait_ps2_write();
     outb(PS2_DATA_PORT, value);
-    uint8_t ack = 0;
-    return ps2_read_data(&ack, true) && ack == 0xfa;
+    return inb(PS2_DATA_PORT) != 0xfa;
 }
 
 void mouse_wait(uint8_t a_type)
@@ -808,17 +763,17 @@ void mouse_wait(uint8_t a_type)
 
 void mouse_write(uint8_t write)
 {
-    ps2_wait_input_clear();
+    mouse_wait(1);
     outb(PORT_KB_CMD, KB_SEND2MOUSE);
-    ps2_wait_input_clear();
+    mouse_wait(1);
     outb(PORT_KB_DATA, write);
 }
 
 uint8_t mouse_read()
 {
-    uint8_t value = 0;
-    ps2_read_data(&value, true);
-    return value;
+    mouse_wait(0);
+    char t = inb(PORT_KB_DATA);
+    return t;
 }
 
 static MouseType get_mouse_type()
@@ -843,30 +798,28 @@ void mouse_init()
 {
 
     // 2. 启用辅助PS/2端口（鼠标）
-    ps2_wait_input_clear();
+    wait_KB_write();
     outb(PORT_KB_CMD, 0xA8);
 
     // 3. 清空输出缓冲区
-    ps2_flush_output();
+    inb(PORT_KB_DATA);
 
     // 4. 设置控制器命令字节
-    uint8_t cmd_byte = KB_INIT_MODE;
-    if (!ps2_read_controller_config(&cmd_byte))
-    {
-        printk("Mouse init: failed to read PS/2 controller config\n");
-        return;
-    }
-    // bit0/bit1: enable IRQ1/IRQ12, bit2: system flag,
-    // bit4/bit5: enable first/second PS/2 port,
-    // bit6: keep scan-code translation for the existing keyboard path.
-    cmd_byte |= 0x07;
-    cmd_byte &= (uint8_t)~0x30;
-    cmd_byte |= 0x40;
-    if (!ps2_write_controller_config(cmd_byte))
-    {
-        printk("Mouse init: failed to write PS/2 controller config\n");
-        return;
-    }
+    wait_KB_write();
+    outb(PORT_KB_CMD, 0x60); // 写命令字节命令
+    wait_KB_write();
+
+    // 启用IRQ1（键盘）和IRQ12（鼠标），保留其他位
+    uint8_t cmd_byte = 0x47; // 0110 0111
+    // 位7: 保留
+    // 位6: 翻译键盘扫描码
+    // 位5: 禁用鼠标
+    // 位4: 禁用键盘
+    // 位3: 保留
+    // 位2: 系统标志
+    // 位1: 启用鼠标IRQ
+    // 位0: 启用键盘IRQ
+    outb(PORT_KB_DATA, cmd_byte);
 
     delay_ms(20);
 
