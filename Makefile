@@ -189,7 +189,7 @@ vdisk: all $(OPKG_CONF_GEN)
 # You must execute the following command with sudo privileges, that's not good...
 	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((1024*1024-2048*512/1024))
 
 	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
 	@mkdir -p $(BUILD_DIR)/XJ380/system
@@ -277,7 +277,18 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/ld
 	@cp -a $(HOST_GCC_LIBEXECDIR) $(BUILD_DIR)/XJ380/usr/libexec/gcc/$(HOST_GCC_TRIPLE)/
 	@cp -a $(HOST_GCC_LIBDIR) $(BUILD_DIR)/XJ380/usr/lib/gcc/$(HOST_GCC_TRIPLE)/
-	@cp -a /usr/include/. $(BUILD_DIR)/XJ380/usr/include/
+	@find /usr/include -mindepth 1 | sort | while IFS= read -r src; do \
+		rel=$${src#/usr/include/}; \
+		dst="$(BUILD_DIR)/XJ380/usr/include/$$rel"; \
+		if [ -d "$$src" ] && [ ! -L "$$src" ]; then \
+			mkdir -p "$$dst"; \
+		elif [ -e "$$dst" ] || [ -L "$$dst" ]; then \
+			:; \
+		else \
+			mkdir -p "$$(dirname "$$dst")"; \
+			cp -a "$$src" "$$dst"; \
+		fi; \
+	done
 	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)/; done
 	@$(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
 	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)/; done
