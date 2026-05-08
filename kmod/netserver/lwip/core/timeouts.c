@@ -265,6 +265,23 @@ static
     }
 }
 
+static int
+sys_timeout_handler_known(sys_timeout_handler handler)
+{
+    if (handler == NULL) {
+        return 1;
+    }
+#if LWIP_TCP
+    if (handler == tcpip_tcp_timer) {
+        return 1;
+    }
+#endif
+    if (handler == lwip_cyclic_timer) {
+        return 1;
+    }
+    return 0;
+}
+
 /** Initialize this module */
 void sys_timeouts_init(void) {
     size_t i;
@@ -391,6 +408,11 @@ void sys_check_timeouts(void) {
 #endif /* LWIP_DEBUG_TIMERNAMES */
         memp_free(MEMP_SYS_TIMEOUT, tmptimeout);
         if (handler != NULL) {
+            if (!sys_timeout_handler_known(handler)) {
+                LWIP_PLATFORM_DIAG(("lwIP timeout bad handler=%p arg=%p due=%" U32_F "\n",
+                                    (void *)handler, arg, current_timeout_due_time));
+                continue;
+            }
             handler(arg);
         }
         LWIP_TCPIP_THREAD_ALIVE();

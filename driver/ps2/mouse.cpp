@@ -37,6 +37,78 @@ extern bool desktop_done;
 
 static volatile bool desktop_refresh_pending = false;
 
+static constexpr uint8_t PS2_STATUS_OBF = 0x01;
+static constexpr uint8_t PS2_STATUS_IBF = 0x02;
+static constexpr uint8_t PS2_STATUS_AUX = 0x20;
+
+static bool ps2_wait_input_clear(uint64_t timeout_ns = 1000000000ULL)
+{
+    uint64_t start = nanoTime();
+    for (;;)
+    {
+        if ((inb(PS2_CMD_PORT) & PS2_STATUS_IBF) == 0) return true;
+        if (nanoTime() - start >= timeout_ns) return false;
+        __asm__ volatile("pause");
+    }
+}
+
+static bool ps2_wait_output(uint8_t *status, uint64_t timeout_ns = 1000000000ULL)
+{
+    uint64_t start = nanoTime();
+    for (;;)
+    {
+        uint8_t s = inb(PS2_CMD_PORT);
+        if ((s & PS2_STATUS_OBF) != 0)
+        {
+            if (status != NULL) *status = s;
+            return true;
+        }
+        if (nanoTime() - start >= timeout_ns) return false;
+        __asm__ volatile("pause");
+    }
+}
+
+static void ps2_flush_output()
+{
+    for (int i = 0; i < 32 && (inb(PS2_CMD_PORT) & PS2_STATUS_OBF) != 0; ++i)
+    {
+        (void)inb(PS2_DATA_PORT);
+    }
+}
+
+static bool ps2_read_data(uint8_t *value, bool require_aux)
+{
+    for (;;)
+    {
+        uint8_t status = 0;
+        if (!ps2_wait_output(&status)) return false;
+
+        uint8_t data = inb(PS2_DATA_PORT);
+        if (!require_aux || (status & PS2_STATUS_AUX) != 0)
+        {
+            *value = data;
+            return true;
+        }
+    }
+}
+
+static bool ps2_read_controller_config(uint8_t *config)
+{
+    ps2_flush_output();
+    if (!ps2_wait_input_clear()) return false;
+    outb(PS2_CMD_PORT, KBCMD_READ_CMD);
+    return ps2_read_data(config, false);
+}
+
+static bool ps2_write_controller_config(uint8_t config)
+{
+    if (!ps2_wait_input_clear()) return false;
+    outb(PS2_CMD_PORT, KBCMD_WRITE_CMD);
+    if (!ps2_wait_input_clear()) return false;
+    outb(PS2_DATA_PORT, config);
+    return true;
+}
+
 static inline int rect_min_int(int a, int b)
 {
     return a < b ? a : b;
@@ -350,15 +422,22 @@ void process_mouse_button()
 
 extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 {
-    (void)regs_ptr;
+    uint8_t status = inb(PS2_CMD_PORT);
+    if ((status & PS2_STATUS_OBF) == 0 || (status & PS2_STATUS_AUX) == 0)
+    {
+        (void)regs_ptr;
     (void)error_code;
     send_eoi();
+        return;
+    }
+
     uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
     {
         ms_dec.need_flush = true;
         process_mouse_button();
     }
+    send_eoi();
 }
 
 void process_mouse_info()
@@ -700,11 +779,12 @@ EXPORT_SYMBOL(mouse_inject_report);
 
 static bool send_command(uint8_t value)
 {
-    wait_ps2_write();
+    if (!ps2_wait_input_clear()) return false;
     outb(PS2_CMD_PORT, KB_SEND2MOUSE);
-    wait_ps2_write();
+    if (!ps2_wait_input_clear()) return false;
     outb(PS2_DATA_PORT, value);
-    return inb(PS2_DATA_PORT) != 0xfa;
+    uint8_t ack = 0;
+    return ps2_read_data(&ack, true) && ack == 0xfa;
 }
 
 void mouse_wait(uint8_t a_type)
@@ -728,17 +808,17 @@ void mouse_wait(uint8_t a_type)
 
 void mouse_write(uint8_t write)
 {
-    mouse_wait(1);
+    ps2_wait_input_clear();
     outb(PORT_KB_CMD, KB_SEND2MOUSE);
-    mouse_wait(1);
+    ps2_wait_input_clear();
     outb(PORT_KB_DATA, write);
 }
 
 uint8_t mouse_read()
 {
-    mouse_wait(0);
-    char t = inb(PORT_KB_DATA);
-    return t;
+    uint8_t value = 0;
+    ps2_read_data(&value, true);
+    return value;
 }
 
 static MouseType get_mouse_type()
@@ -763,28 +843,30 @@ void mouse_init()
 {
 
     // 2. 启用辅助PS/2端口（鼠标）
-    wait_KB_write();
+    ps2_wait_input_clear();
     outb(PORT_KB_CMD, 0xA8);
 
     // 3. 清空输出缓冲区
-    inb(PORT_KB_DATA);
+    ps2_flush_output();
 
     // 4. 设置控制器命令字节
-    wait_KB_write();
-    outb(PORT_KB_CMD, 0x60); // 写命令字节命令
-    wait_KB_write();
-
-    // 启用IRQ1（键盘）和IRQ12（鼠标），保留其他位
-    uint8_t cmd_byte = 0x47; // 0110 0111
-    // 位7: 保留
-    // 位6: 翻译键盘扫描码
-    // 位5: 禁用鼠标
-    // 位4: 禁用键盘
-    // 位3: 保留
-    // 位2: 系统标志
-    // 位1: 启用鼠标IRQ
-    // 位0: 启用键盘IRQ
-    outb(PORT_KB_DATA, cmd_byte);
+    uint8_t cmd_byte = KB_INIT_MODE;
+    if (!ps2_read_controller_config(&cmd_byte))
+    {
+        printk("Mouse init: failed to read PS/2 controller config\n");
+        return;
+    }
+    // bit0/bit1: enable IRQ1/IRQ12, bit2: system flag,
+    // bit4/bit5: enable first/second PS/2 port,
+    // bit6: keep scan-code translation for the existing keyboard path.
+    cmd_byte |= 0x07;
+    cmd_byte &= (uint8_t)~0x30;
+    cmd_byte |= 0x40;
+    if (!ps2_write_controller_config(cmd_byte))
+    {
+        printk("Mouse init: failed to write PS/2 controller config\n");
+        return;
+    }
 
     delay_ms(20);
 

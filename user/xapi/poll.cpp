@@ -1,7 +1,8 @@
 #include "./include/xposix/poll.h"
 #include "./include/libsys.h"
+#include "./include/xposix/syscall_ret.h"
 
-extern "C" int poll(struct pollfd *fds, uint64_t nfds, uint64_t timeout_ms)
+extern "C" int poll(struct pollfd *fds, nfds_t nfds, int timeout_ms)
 {
-    return enter_syscall(SYS_POLL, (uint64_t)fds, nfds, timeout_ms, 0, 0, 0);
+    return (int)__xposix_ret(enter_syscall(SYS_POLL, (uint64_t)fds, nfds, (uint64_t)timeout_ms, 0, 0, 0));
 }

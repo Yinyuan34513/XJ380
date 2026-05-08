@@ -109,7 +109,8 @@ static errno_t devfs_stat(void *handle, vfs_node_t node) {
     device_handle_t dev_t =  (device_handle_t)handle;
 
     node->handle = dev_t;
-    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream : file_block;
+    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream :
+                   (dev_t->device->type == DEVICE_FB ? file_fbdev : file_block);
     node->size =
         dev_t->device->type == DEVICE_STREAM ? (uint64_t)-1 : disk_size(dev_t->device->vdiskid);
     node->realsize = dev_t->device->sector_size;
@@ -140,7 +141,8 @@ static void devfs_open(void *parent, const char *name, vfs_node_t node) {
     }
 
     node->handle = dev_t;
-    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream : file_block;
+    node->type   = dev_t->device->type == DEVICE_STREAM ? file_stream :
+                   (dev_t->device->type == DEVICE_FB ? file_fbdev : file_block);
     node->size =
         dev_t->device->type == DEVICE_STREAM ? (uint64_t)-1 : disk_size(dev_t->device->vdiskid);
     node->fsid     = devfs_id;
@@ -166,13 +168,23 @@ size_t devfs_read(void *file, void *addr, size_t offset, size_t size) {
     spin_unlock(&RD_lk);
 
     if (device.type == DEVICE_STREAM) {
-        return device.read(device.vdiskid, (uint8_t *)addr, size, offset);
+        size_t bounce_size = size == 0 ? 1 : size;
+        uint8_t *bounce = (uint8_t *)malloc(bounce_size);
+        if (bounce == NULL) {
+            return VFS_STATUS_FAILED;
+        }
+        size_t got = device.read(device.vdiskid, bounce, size, offset);
+        if (got != (size_t)VFS_STATUS_FAILED) {
+            memcpy(addr, bounce, got);
+        }
+        free(bounce);
+        return got;
     }
     if (offset > device.size)
     {
         return VFS_STATUS_SUCCESS;
     }
-    if (device.size < offset + size) {
+    if (size > device.size - offset) {
         size = device.size - offset;
     }
     return blk_device_read(device.vdiskid, addr, offset, size);
@@ -202,7 +214,7 @@ size_t devfs_write(void *file, const void *addr, size_t offset, size_t size) {
     {
         return VFS_STATUS_SUCCESS;
     }
-    if (device.size < offset + size) {
+    if (size > device.size - offset) {
         size = device.size - offset;
     }
     return blk_device_write(device, addr, offset, size);
@@ -263,6 +275,7 @@ static struct vfs_callback devfs_callbacks = {
     .symlink  = (vfs_mk_t)dummy,
     .ioctl    = devfs_ioctl,
     .dup      = devfs_dup,
+    .resize   = (vfs_resize_t)dummy,
     .del   = (vfs_del_t)empty,
     .rename   = (vfs_rename_t)empty,
     .poll     = devfs_poll,
@@ -299,7 +312,7 @@ errno_t devfs_delete(const char *path) {
         free(buf);
         return -ENOENT;
     }
-    list_delete(node->parent->child, node);
+    node->parent->child = list_delete(node->parent->child, node);
     vfs_free(node);
 }
 

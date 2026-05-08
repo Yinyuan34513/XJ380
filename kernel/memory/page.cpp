@@ -6,6 +6,7 @@
 #include <krlibc.h>
 #include <mm/lazyalloc.h>
 #include <mm/page.h>
+#include <mm/uaccess.h>
 #include <proto.hpp>
 #include <task/pcb.h>
 #include <task/scheduler.h>
@@ -124,6 +125,164 @@ static bool is_huge_page(page_table_entry_t *entry)
     return (((uint64_t)entry->value) & PTE_HUGE) != 0;
 }
 
+static uint64_t page_entry_value(page_directory_t *directory, uint64_t addr)
+{
+    if (directory == NULL || directory->table == NULL) return 0;
+
+    uint64_t l4_index = (addr >> 39) & ENTRY_MASK;
+    uint64_t l3_index = (addr >> 30) & ENTRY_MASK;
+    uint64_t l2_index = (addr >> 21) & ENTRY_MASK;
+    uint64_t l1_index = (addr >> 12) & ENTRY_MASK;
+
+    page_table_t *l4 = directory->table;
+    uint64_t e4 = l4->entries[l4_index].value;
+    if (!(e4 & PTE_PRESENT) || (e4 & PTE_HUGE)) return e4;
+    page_table_t *l3 = (page_table_t *)phys_to_virt(e4 & PTE_ADDR_MASK);
+    uint64_t e3 = l3->entries[l3_index].value;
+    if (!(e3 & PTE_PRESENT) || (e3 & PTE_HUGE)) return e3;
+    page_table_t *l2 = (page_table_t *)phys_to_virt(e3 & PTE_ADDR_MASK);
+    uint64_t e2 = l2->entries[l2_index].value;
+    if (!(e2 & PTE_PRESENT) || (e2 & PTE_HUGE)) return e2;
+    page_table_t *l1 = (page_table_t *)phys_to_virt(e2 & PTE_ADDR_MASK);
+    return l1->entries[l1_index].value;
+}
+
+static void dump_pf_frame_words(struct X64_REGS *frame)
+{
+    const uint64_t *words = (const uint64_t *)frame;
+    write_serial_string("[pf-frame]");
+    for (size_t i = 0; i < sizeof(struct X64_REGS) / sizeof(uint64_t); i++)
+    {
+        if ((i % 4) == 0)
+        {
+            write_serial_string("\n  +");
+            write_serial_hex(i * sizeof(uint64_t));
+            write_serial_string(":");
+        }
+        write_serial_string(" ");
+        write_serial_hex(words[i]);
+    }
+    write_serial_string("\n");
+}
+
+static void dump_user_code_bytes(page_directory_t *pagedir, uint64_t rip)
+{
+    if (pagedir == NULL || rip < 16) return;
+
+    uint64_t start = rip - 16;
+    write_serial_string("[pfcode] start=");
+    write_serial_hex(start);
+    write_serial_string(" bytes:");
+    for (size_t i = 0; i < 48; i++)
+    {
+        uint8_t byte = 0;
+        write_serial_string((i % 16) == 0 ? "\n  " : " ");
+        if (copy_from_user_pagedir(pagedir, &byte, (const void *)(start + i), sizeof(byte)))
+            write_serial_hex(byte);
+        else
+            write_serial_string("??");
+    }
+    write_serial_string("\n");
+}
+
+static void dump_user_qwords(page_directory_t *pagedir, const char *tag, uint64_t addr, size_t count)
+{
+    if (pagedir == NULL || tag == NULL || addr == 0) return;
+
+    write_serial_string(tag);
+    write_serial_string(" start=");
+    write_serial_hex(addr);
+    for (size_t i = 0; i < count; i++)
+    {
+        uint64_t value = 0;
+        write_serial_string((i % 4) == 0 ? "\n  " : " ");
+        write_serial_string("+");
+        write_serial_hex(i * sizeof(uint64_t));
+        write_serial_string("=");
+        if (copy_from_user_pagedir(pagedir, &value, (const void *)(addr + i * sizeof(uint64_t)), sizeof(value)))
+            write_serial_hex(value);
+        else
+            write_serial_string("??");
+    }
+    write_serial_string("\n");
+}
+
+static void dump_user_frame_chain(page_directory_t *pagedir, uint64_t rbp)
+{
+    if (pagedir == NULL || rbp == 0) return;
+
+    write_serial_string("[pf-user-bt] rbp=");
+    write_serial_hex(rbp);
+    write_serial_string("\n");
+
+    uint64_t current = rbp;
+    for (size_t depth = 0; depth < 12; depth++)
+    {
+        uint64_t next = 0;
+        uint64_t ret  = 0;
+        bool ok_next = copy_from_user_pagedir(pagedir, &next, (const void *)current, sizeof(next));
+        bool ok_ret  = copy_from_user_pagedir(pagedir, &ret, (const void *)(current + sizeof(uint64_t)), sizeof(ret));
+
+        write_serial_string("  #");
+        write_serial_dec(depth);
+        write_serial_string(" frame=");
+        write_serial_hex(current);
+        write_serial_string(" next=");
+        if (ok_next) write_serial_hex(next);
+        else write_serial_string("??");
+        write_serial_string(" ret=");
+        if (ok_ret)
+        {
+            write_serial_hex(ret);
+            if (ret >= USER_MMAP_START)
+            {
+                write_serial_string(" off_mmap=");
+                write_serial_hex(ret - USER_MMAP_START);
+            }
+            if (ret >= 0x40000000ULL && ret < USER_MMAP_START)
+            {
+                write_serial_string(" off_main=");
+                write_serial_hex(ret - 0x40000000ULL);
+            }
+        }
+        else
+        {
+            write_serial_string("??");
+        }
+        write_serial_string("\n");
+
+        if (!ok_next || !ok_ret || next <= current || next - current > (1ULL << 20)) break;
+        current = next;
+    }
+}
+
+static void dump_user_mapping_probe(page_directory_t *pagedir, const char *tag, uint64_t addr)
+{
+    if (pagedir == NULL || tag == NULL || addr == 0) return;
+
+    uint64_t phys = translate_address(pagedir, addr);
+    uint64_t pte  = page_entry_value(pagedir, addr);
+    write_serial_string(tag);
+    write_serial_string(" va=");
+    write_serial_hex(addr);
+    write_serial_string(" phys=");
+    write_serial_hex(phys);
+    write_serial_string(" pte=");
+    write_serial_hex(pte);
+    write_serial_string(" bytes=");
+
+    for (size_t i = 0; i < 8; i++)
+    {
+        uint8_t byte = 0;
+        write_serial_string(i == 0 ? "" : " ");
+        if (copy_from_user_pagedir(pagedir, &byte, (const void *)(addr + i), sizeof(byte)))
+            write_serial_hex(byte);
+        else
+            write_serial_string("??");
+    }
+    write_serial_string("\n");
+}
+
 extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
 {
     close_interrupt;
@@ -174,8 +333,55 @@ err:;
 
     if (current_task != NULL)
     {
+        uint16_t fs_selector = 0;
+        __asm__ __volatile__("mov %%fs, %0" : "=r"(fs_selector));
         write_serial_fmt("Fault Thread Name: %s 0x%x\n", current_task->name, (uint64_t)current_task);
         write_serial_fmt("TID: %d\n", current_task->tid);
+        write_serial_string("[pfraw] cr2=");
+        write_serial_hex(faulting_address);
+        write_serial_string(" rip=");
+        write_serial_hex(frame->rip);
+        write_serial_string(" rsp=");
+        write_serial_hex(frame->rsp);
+        write_serial_string(" rax=");
+        write_serial_hex(frame->rax);
+        write_serial_string(" rbx=");
+        write_serial_hex(frame->rbx);
+        write_serial_string(" rdx=");
+        write_serial_hex(frame->rdx);
+        write_serial_string(" rbp=");
+        write_serial_hex(frame->rbp);
+        write_serial_string("\n");
+        write_serial_fmt("[fsbase] pf task=%s tid=%llu tcb=0x%llx hw=0x%llx fs_sel=0x%llx rip=0x%llx rsp=0x%llx err=0x%llx\n",
+                         current_task->name, current_task->tid, current_task->fs_base, read_fsbase(),
+                         fs_selector, frame->rip, frame->rsp, error_code);
+        write_serial_fmt("[pfregs] rax=0x%llx rbx=0x%llx rcx=0x%llx rdx=0x%llx rbp=0x%llx rsi=0x%llx rdi=0x%llx\n",
+                         frame->rax, frame->rbx, frame->rcx, frame->rdx, frame->rbp, frame->rsi, frame->rdi);
+        write_serial_fmt("[pfregs] r8=0x%llx r9=0x%llx r10=0x%llx r11=0x%llx r12=0x%llx r13=0x%llx r14=0x%llx r15=0x%llx\n",
+                         frame->r8, frame->r9, frame->r10, frame->r11, frame->r12, frame->r13, frame->r14,
+                         frame->r15);
+        if (current_task->parent_group != NULL)
+        {
+            uint64_t fs_canary_addr = read_fsbase() + 0x28;
+            uint64_t fs_canary_phys = translate_address(current_task->parent_group->pagedir, fs_canary_addr);
+            uint64_t fs_canary_pte  = page_entry_value(current_task->parent_group->pagedir, fs_canary_addr);
+            uint64_t canary_value   = fs_canary_phys != 0 ? *(uint64_t *)phys_to_virt(fs_canary_phys) : 0;
+            write_serial_fmt("[pfcheck] fs28=0x%llx phys=0x%llx pte=0x%llx val=0x%llx cr2_pte=0x%llx\n",
+                             fs_canary_addr, fs_canary_phys, fs_canary_pte, canary_value,
+                             page_entry_value(current_task->parent_group->pagedir, faulting_address));
+            dump_user_code_bytes(current_task->parent_group->pagedir, frame->rip);
+            dump_user_qwords(current_task->parent_group->pagedir, "[pf-user-rsp]", frame->rsp, 12);
+            if (frame->rbp >= 0x40)
+                dump_user_qwords(current_task->parent_group->pagedir, "[pf-user-rbp]", frame->rbp - 0x40, 16);
+            dump_user_frame_chain(current_task->parent_group->pagedir, frame->rbp);
+            dump_user_mapping_probe(current_task->parent_group->pagedir, "[pf-map-rip]",
+                                    frame->rip & PAGE_MASK);
+            if (frame->rip >= USER_MMAP_START)
+                dump_user_mapping_probe(current_task->parent_group->pagedir, "[pf-map-libc-base]",
+                                        USER_MMAP_START);
+            dump_user_mapping_probe(current_task->parent_group->pagedir, "[pf-map-main-base]", 0x40000000ULL);
+        }
+        dump_pf_frame_words(frame);
     }
     else
     {
@@ -188,6 +394,14 @@ err:;
     if (error_code & 0x4)
     {
         ulog_err("Page Fault (0x0000000e)");
+        if (current_task != NULL && current_task->parent_group != NULL)
+        {
+            kill_proc(current_task->parent_group, 128 + 11, true);
+            enable_scheduler();
+            open_interrupt;
+            scheduler_yield();
+            while (1) { __asm__ __volatile__("hlt"); }
+        }
         if (current_task != NULL && current_task->task_level == TASK_APPLICATION_LEVEL)
         {
             kill_thread(current_task);
@@ -232,7 +446,7 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PAGE_MASK);
+    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PTE_ADDR_MASK);
     if (pdpt == NULL) return false;
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
     if (pdpt->entries[l3_index].value & PTE_HUGE)
@@ -241,7 +455,7 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PAGE_MASK);
+    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PTE_ADDR_MASK);
     if (pd == NULL) return false;
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
     if (pd->entries[l2_index].value & PTE_HUGE)
@@ -250,7 +464,7 @@ bool page_table_get_flags(page_directory_t *directory, uint64_t addr, uint64_t *
         return true;
     }
 
-    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PAGE_MASK);
+    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PTE_ADDR_MASK);
     if (pt == NULL) return false;
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
@@ -271,39 +485,43 @@ bool page_table_update_flags(page_directory_t *directory, uint64_t addr, uint64_
     if (!(pml4->entries[l4_index].value & PTE_PRESENT)) return false;
     if (pml4->entries[l4_index].value & PTE_HUGE)
     {
-        uint64_t phys                 = pml4->entries[l4_index].value & PAGE_MASK;
-        pml4->entries[l4_index].value = phys | (new_flags & 0xFFF);
+        uint64_t phys                 = pml4->entries[l4_index].value & PTE_ADDR_MASK;
+        pml4->entries[l4_index].value = phys | new_flags;
+        flush_tlb(addr);
         return true;
     }
 
-    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PAGE_MASK);
+    page_table_t *pdpt = (page_table_t *)phys_to_virt(pml4->entries[l4_index].value & PTE_ADDR_MASK);
     if (pdpt == NULL) return false;
     if (!(pdpt->entries[l3_index].value & PTE_PRESENT)) return false;
     if (pdpt->entries[l3_index].value & PTE_HUGE)
     {
-        uint64_t phys                 = pdpt->entries[l3_index].value & PAGE_MASK;
-        pdpt->entries[l3_index].value = phys | (new_flags & 0xFFF);
+        uint64_t phys                 = pdpt->entries[l3_index].value & PTE_ADDR_MASK;
+        pdpt->entries[l3_index].value = phys | new_flags;
+        flush_tlb(addr);
         return true;
     }
 
-    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PAGE_MASK);
+    page_table_t *pd = (page_table_t *)phys_to_virt(pdpt->entries[l3_index].value & PTE_ADDR_MASK);
     if (pd == NULL) return false;
     if (!(pd->entries[l2_index].value & PTE_PRESENT)) return false;
     if (pd->entries[l2_index].value & PTE_HUGE)
     {
-        uint64_t phys               = pd->entries[l2_index].value & PAGE_MASK;
-        pd->entries[l2_index].value = phys | (new_flags & 0xFFF);
+        uint64_t phys               = pd->entries[l2_index].value & PTE_ADDR_MASK;
+        pd->entries[l2_index].value = phys | new_flags;
+        flush_tlb(addr);
         return true;
     }
 
-    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PAGE_MASK);
+    page_table_t *pt = (page_table_t *)phys_to_virt(pd->entries[l2_index].value & PTE_ADDR_MASK);
     if (pt == NULL) return false;
     if (!(pt->entries[l1_index].value & PTE_PRESENT)) return false;
 
-    uint64_t phys               = pt->entries[l1_index].value & PAGE_MASK;
-    pt->entries[l1_index].value = phys | (new_flags & 0xFFF);
+    uint64_t phys               = pt->entries[l1_index].value & PTE_ADDR_MASK;
+    uint64_t keep               = pt->entries[l1_index].value & PTE_FRAME_ALLOCATED;
+    pt->entries[l1_index].value = phys | keep | new_flags;
 
-    __asm__ volatile("invlpg (%0)" ::"r"(addr) : "memory");
+    flush_tlb(addr);
     return true;
 }
 
@@ -314,12 +532,12 @@ page_table_t *page_table_create(page_table_entry_t *entry, bool user)
         uint64_t frame = alloc_frames(1);
         // write_serial_fmt("oiiaoiia 0x%x\n",(uint64_t)frame);
         entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | (user ? PTE_USER : 0);
-        page_table_t *table = (page_table_t *)phys_to_virt(entry->value & 0x00007fffffff000);
+        page_table_t *table = (page_table_t *)phys_to_virt(entry->value & PTE_ADDR_MASK);
         page_table_clear(table);
         return table;
     }
     entry->value        |= (user ? PTE_USER : 0);
-    page_table_t *table  = (page_table_t *)phys_to_virt(entry->value & 0x00007fffffff000);
+    page_table_t *table  = (page_table_t *)phys_to_virt(entry->value & PTE_ADDR_MASK);
     return table;
 }
 
@@ -343,20 +561,37 @@ EXPORT_SYMBOL(get_current_directory);
 static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
 {
     if (source_table == NULL) return NULL;
-    if (level == 0)
+    if (level <= 1)
     {
         if (kernel_space) { return source_table; }
 
         uint64_t      frame          = alloc_frames(1);
         page_table_t *new_page_table = (page_table_t *)phys_to_virt(frame);
-        memcpy(new_page_table, source_table->entries, PAGE_SIZE);
+        page_table_clear(new_page_table);
         for (int i = 0; i < 512; i++)
         {
-            uint64_t entry = new_page_table->entries[i].value;
-            if ((entry & PTE_PRESENT) && (entry & PTE_FRAME_ALLOCATED))
+            uint64_t source_entry = source_table->entries[i].value;
+            if (!(source_entry & PTE_PRESENT))
             {
-                address_ref(entry & PTE_ADDR_MASK);
+                new_page_table->entries[i].value = 0;
+                continue;
             }
+
+            if (source_entry & PTE_HUGE)
+            {
+                new_page_table->entries[i].value = source_entry;
+                continue;
+            }
+
+            // fork needs a private snapshot of every present user page. Some
+            // mmap/lazy pages do not carry PTE_FRAME_ALLOCATED, but sharing
+            // them lets the parent corrupt the child's heap/stack view.
+            uint64_t source_phys = source_entry & PTE_ADDR_MASK;
+            uint64_t new_phys    = alloc_frames(1);
+            if (new_phys == 0) { continue; }
+
+            memcpy((void *)phys_to_virt(new_phys), (const void *)phys_to_virt(source_phys), PAGE_SIZE);
+            new_page_table->entries[i].value = (source_entry & ~PTE_ADDR_MASK) | new_phys | PTE_FRAME_ALLOCATED;
         }
         return new_page_table;
     }
@@ -380,11 +615,11 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 
         // 指向一个4K的页表
         page_table_t *source_page_table_next =
-            (page_table_t *)phys_to_virt(source_table->entries[i].value & 0x00007fffffff000);
+            (page_table_t *)phys_to_virt(source_table->entries[i].value & PTE_ADDR_MASK);
         page_table_t *new_page_table = copy_page_table_recursive(source_page_table_next, level - 1, all_copy,
                                                                  level != 4 ? kernel_space : i >= 256);
         new_table->entries[i].value =
-            (uint64_t)virt_to_phys((uint64_t)new_page_table) | (source_table->entries[i].value & 0xFFFF000000000FFF);
+            (uint64_t)virt_to_phys((uint64_t)new_page_table) | (source_table->entries[i].value & ~PTE_ADDR_MASK);
     }
     return new_table;
 }
@@ -392,7 +627,7 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
 static void free_page_table_recursive(page_table_t *table, int level)
 {
     if (table == NULL) return;
-    if (level == 0)
+    if (level <= 1)
     {
         for (int i = 0; i < 512; i++)
         {
@@ -409,7 +644,11 @@ static void free_page_table_recursive(page_table_t *table, int level)
 
     for (int i = 0; i < (level == 4 ? 256 : 512); i++)
     {
-        page_table_t *page_table_next = (page_table_t *)(phys_to_virt(table->entries[i].value & 0x00007fffffff000));
+        uint64_t entry = table->entries[i].value;
+        if (!(entry & PTE_PRESENT)) continue;
+        if (entry & PTE_HUGE) continue;//竟然没有检查,还是保险点吧！！！！
+
+        page_table_t *page_table_next = (page_table_t *)(phys_to_virt(table->entries[i].value & PTE_ADDR_MASK));
         free_page_table_recursive(page_table_next, level - 1);
     }
     free_frame((uint64_t)virt_to_phys((uint64_t)table));
@@ -436,21 +675,36 @@ void free_page_directory(page_directory_t *dir)
 
 void unmap_page(page_directory_t *directory, uint64_t vaddr)
 {
+    if (directory == NULL || directory->table == NULL) return;
+
     uint64_t l4_index = (((vaddr >> 39)) & 0x1FF);
     uint64_t l3_index = (((vaddr >> 30)) & 0x1FF);
     uint64_t l2_index = (((vaddr >> 21)) & 0x1FF);
     uint64_t l1_index = (((vaddr >> 12)) & 0x1FF);
 
     page_table_t *l4_table = directory->table;
+    if (!(l4_table->entries[l4_index].value & PTE_PRESENT)) return;
+    if (l4_table->entries[l4_index].value & PTE_HUGE) return;
+
     page_table_t *l3_table =
-        (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value & 0x00007fffffff000));
+        (page_table_t *)(phys_to_virt((&(l4_table->entries[l4_index]))->value & PTE_ADDR_MASK));
+    if (l3_table == NULL) return;
+    if (!(l3_table->entries[l3_index].value & PTE_PRESENT)) return;
+    if (l3_table->entries[l3_index].value & PTE_HUGE) return;
+
     page_table_t *l2_table =
-        (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value & 0x00007fffffff000));
+        (page_table_t *)(phys_to_virt((&(l3_table->entries[l3_index]))->value & PTE_ADDR_MASK));
+    if (l2_table == NULL) return;
+    if (!(l2_table->entries[l2_index].value & PTE_PRESENT)) return;
+    if (l2_table->entries[l2_index].value & PTE_HUGE) return;
+
     page_table_t *l1_table =
-        (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & 0x00007fffffff000));
+        (page_table_t *)(phys_to_virt((&(l2_table->entries[l2_index]))->value & PTE_ADDR_MASK));
+    if (l1_table == NULL) return;
+    if (!(l1_table->entries[l1_index].value & PTE_PRESENT)) return;
 
     if (l1_table->entries[l1_index].value & PTE_FRAME_ALLOCATED)
-        free_frame(l1_table->entries[l1_index].value & 0x00007fffffff000);
+        free_frame(l1_table->entries[l1_index].value & PTE_ADDR_MASK);
     l1_table->entries[l1_index].value = 0;
     flush_tlb(vaddr);
 }
@@ -477,7 +731,7 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 
     if (!frame) { serial_wprintf("WARNING: Invalid frame addr: 0\n"); }
 
-    l1_table->entries[l1_index].value = (frame & 0x00007fffffff000) | flags;
+    l1_table->entries[l1_index].value = (frame & PTE_ADDR_MASK) | flags;
 
     flush_tlb(addr);
 }
@@ -555,7 +809,10 @@ void page_map_range_to_random(page_directory_t *directory, uint64_t addr, uint64
     for (uint64_t i = 0; i < length; i += 0x1000)
     {
         uint64_t var = (uint64_t)addr + i;
-        page_map_to(directory, var, alloc_frames(1), flags | PTE_FRAME_ALLOCATED);
+        uint64_t frame = alloc_frames(1);
+        if (frame == 0) continue;
+        memset((void *)phys_to_virt(frame), 0, PAGE_SIZE);
+        page_map_to(directory, var, frame, flags | PTE_FRAME_ALLOCATED);
     }
 }
 

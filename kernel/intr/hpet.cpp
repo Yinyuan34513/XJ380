@@ -5,6 +5,7 @@
 
 HpetInfo       *info;
 static uint32_t hpetPeriod = 0;
+static uint64_t hpetBootNano = 0;
 
 uint64_t nanoTime()
 {
@@ -13,6 +14,14 @@ uint64_t nanoTime()
     return mcv * hpetPeriod;
 }
 EXPORT_SYMBOL(nanoTime);
+
+uint64_t bootNanoTime()
+{
+    uint64_t now = nanoTime();
+    if (hpetBootNano == 0 || now < hpetBootNano) return 0;
+    return now - hpetBootNano;
+}
+EXPORT_SYMBOL(bootNanoTime);
 
 void nsleep(uint64_t nano)
 {
@@ -41,6 +50,7 @@ void init_hpet(uint64_t hpet_ptr)
     uint32_t counterClockPeriod  = info->generalCapabilities >> 32;
     hpetPeriod                   = counterClockPeriod / 1000000;
     info->generalConfiguration  |= 1;
+    hpetBootNano                 = nanoTime();
     write_serial_string("Setup acpi hpet table (nano_time: ");
     write_serial_dec((uint64_t)nanoTime());
     write_serial_string(").\n");

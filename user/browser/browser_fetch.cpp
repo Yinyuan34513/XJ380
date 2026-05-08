@@ -10,6 +10,9 @@ namespace
 {
 
 constexpr int HTTP_READ_BUFFER_SIZE = 4096;
+constexpr int XHTTP_ERR_TLS_CA_LOAD = -38;
+constexpr int XHTTP_ERR_TLS_CA_PARSE = -39;
+constexpr int XHTTP_ERR_TLS_VERIFY = -40;
 
 struct ParsedUrl
 {
@@ -399,7 +402,15 @@ static BrowserFetchResult fetch_https(const ParsedUrl &url)
     ResponseAccumulator response;
     const int status = xtls_request(&request, append_response_chunk, &response);
     if (status != 0) {
-        result.error = "tls request failed";
+        if (status == XHTTP_ERR_TLS_CA_LOAD) {
+            result.error = "tls ca bundle missing";
+        } else if (status == XHTTP_ERR_TLS_CA_PARSE) {
+            result.error = "tls ca bundle invalid";
+        } else if (status == XHTTP_ERR_TLS_VERIFY) {
+            result.error = "tls certificate verification failed";
+        } else {
+            result.error = "tls request failed";
+        }
         return result;
     }
 

@@ -361,6 +361,18 @@ static void run_http_request()
         append_line("TLS read failed", HTTPGET_COLOR_ERROR);
         set_status("tls recv failed");
         break;
+    case XHTTP_ERR_TLS_CA_LOAD:
+        append_line("TLS CA bundle not found. Install /etc/ssl/certs/ca-certificates.crt.", HTTPGET_COLOR_ERROR);
+        set_status("tls ca missing");
+        break;
+    case XHTTP_ERR_TLS_CA_PARSE:
+        append_line("TLS CA bundle parse failed.", HTTPGET_COLOR_ERROR);
+        set_status("tls ca invalid");
+        break;
+    case XHTTP_ERR_TLS_VERIFY:
+        append_line("TLS certificate verification failed.", HTTPGET_COLOR_ERROR);
+        set_status("tls verify failed");
+        break;
     default:
         append_line("HTTP request failed.", HTTPGET_COLOR_ERROR);
         set_status("request failed");

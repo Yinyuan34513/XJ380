@@ -1,6 +1,5 @@
 #include "../xapi/include/x3api.h"
 #include "../xapi/include/libsys.h"
-#include "../xapi/include/liballoc/alloc.h"
 
 extern "C" int browser_cpp_main(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
 extern "C" int xtls_prepare_runtime(uint64_t *saved_fs, void **tls_block);
@@ -23,11 +22,8 @@ static void run_init_array(void (**begin)(void), void (**end)(void))
 
 extern "C" __attribute__((force_align_arg_pointer)) void xapi_start(int argc, char *argv[], char *envp[])
 {
-    void *heap_memory = xapi_MapMemory(NULL, 32 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    memset(heap_memory, 0, 32 * 1024 * 1024);
-    g_browser_heap_base = heap_memory;
-    g_browser_heap_size = 32 * 1024 * 1024;
-    heap_init((uint8_t *)heap_memory, 32 * 1024 * 1024);
+    // browser 使用自定义启动器，也需要显式挂接 libc environ。
+    environ = envp;
 
     uint64_t runtime_saved_fs = 0;
     void    *runtime_tls_block = NULL;

@@ -32,6 +32,8 @@ bool putchar_lock        = false;
 bool paint_cursor_lock   = false;
 
 bool server_mode = false;
+bool shell_prompt_pending = false;
+int shell_running_external_pid = -1;
 
 HDLE handle;
 
@@ -39,6 +41,19 @@ int blkc = 0, cf = 0;
 
 void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
+    if (shell_prompt_pending)
+    {
+        switch (Type)
+        {
+        case MSG_CHAR: terminal_child_putchar((char)lData); break;
+        case MSG_SPCHAR:
+            if (lData == '\n') { terminal_child_submit_line(); }
+            if (lData == '\b') { terminal_child_backspace(); }
+            break;
+        }
+        return;
+    }
+
     switch (Type)
     {
     case MSG_CHAR: putchar_at_cur((char *)&lData); break;
@@ -48,6 +63,20 @@ void shell_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         break;
     }
     return;
+}
+
+static void poll_external_command_prompt()
+{
+    if (!shell_prompt_pending || shell_running_external_pid <= 0) return;
+
+    int status = 0;
+    int pid = waitpid(shell_running_external_pid, &status, WNOHANG);
+    if (pid == 0) return;
+
+    shell_running_external_pid = -1;
+    shell_prompt_pending = false;
+    if (cur_x != 8) { newline(); }
+    paint_arrow_sign(2, cur_y + 4);
 }
 
 static int shell_main_impl(int argc, char *argv[], char *envp[])

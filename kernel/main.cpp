@@ -11,6 +11,7 @@
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
 #include <fs/vfs/devfs.h>
+#include <fbdev.h>
 #include <fs/vfs/sys.h>
 #include <fs/vfs/vfs.h>
 #include <global_color.h>
@@ -26,6 +27,7 @@
 #include <pipe.h>
 #include <power.h>
 #include <proto.hpp>
+#include <pty.h>
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <rtc.h>
@@ -62,6 +64,40 @@ extern bool ahci_is_qemu_environment();
 
 extern UserInfo *current_user;
 
+static const char *busybox_alias_applets[] = {
+    "[",       "[[",      "ash",      "awk",      "basename", "cat",      "chmod",   "chgrp",
+    "chown",   "clear",   "cmp",      "cp",       "cut",      "date",     "dd",      "df",
+    "dirname", "dmesg",   "du",       "echo",     "egrep",    "env",      "false",   "fgrep",
+    "find",    "free",    "grep",     "gunzip",   "gzip",     "head",     "hexdump", "hostname",
+    "id",      "ifconfig","ip",       "kill",     "killall",  "less",     "ln",      "ls",
+    "mkdir",   "more",    "mount",    "mv",       "nc",       "netstat",  "nslookup","od",
+    "pgrep",   "pidof",   "ping",     "pkill",    "printenv", "printf",   "ps",      "pwd",
+    "readlink","realpath","reset",    "rm",       "rmdir",    "route",    "sed",     "sh",
+    "sleep",   "sort",    "stat",     "stty",     "sync",     "tail",     "tar",     "test",
+    "top",     "touch",   "tr",       "true",     "tty",      "umount",   "uname",   "uniq",
+    "unzip",   "uptime",  "usleep",   "vi",       "wc",       "wget",     "which",   "whoami",
+    "xargs",   "xxd",     "xz",       "xzcat",    "zcat",     NULL,
+};//暴力枚举这一块，好像只能这么做了
+
+static const char *busybox_binary_path = "/apps/busybox";
+
+static void setup_busybox_vfs_aliases()
+{
+    const char *prefixes[] = {"/apps", "/bin", NULL};
+    for (int p = 0; prefixes[p] != NULL; p++)
+    {
+        for (int i = 0; busybox_alias_applets[i] != NULL; i++)
+        {
+            char alias_path[128];
+            snprintf(alias_path, sizeof(alias_path), "%s/%s", prefixes[p], busybox_alias_applets[i]);
+            if (vfs_register_alias(alias_path, busybox_binary_path) == EOK)
+            {
+                write_serial_fmt("[busybox-debug] busybox alias %s -> %s\n", alias_path, busybox_binary_path);
+            }
+        }
+    }
+}
+
 extern const uint8_t _binary___graphics_logo_xj380_2_png_start;
 extern const uint8_t _binary___graphics_logo_xj380_2_png_end;
 
@@ -82,6 +118,35 @@ void init_cpu()
                          "or $(3 << 9), %%ax\n\t" // set CR4.OSFXSR and CR4.OSXMMEXCPT at the same time
                          "movq %%rax, %%cr4\n\t" ::
                              : "rax");
+
+    uint32_t eax = 0;
+    uint32_t ebx = 0;
+    uint32_t ecx = 0;
+    uint32_t edx = 0;
+    __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1), "c"(0));
+    if (ecx & (1U << 26))
+    {
+        uint64_t cr4 = 0;
+        __asm__ __volatile__("movq %%cr4, %0" : "=r"(cr4));
+        cr4 |= (1ULL << 18); // CR4.OSXSAVE: allow xgetbv/xsetbv/xsave in user-visible CPU feature paths.
+        __asm__ __volatile__("movq %0, %%cr4" ::"r"(cr4) : "memory");
+
+        uint32_t xcr0_lo = 0x3; // x87 + SSE only; context switching still uses fxsave/fxrstor.
+        uint32_t xcr0_hi = 0;
+        __asm__ __volatile__("xsetbv" ::"c"(0), "a"(xcr0_lo), "d"(xcr0_hi) : "memory");
+    }
+
+    if (has_fsgsbase())
+    {
+        uint64_t cr4 = 0;
+        __asm__ __volatile__("movq %%cr4, %0" : "=r"(cr4));
+        cr4 |= (1ULL << 16);
+        __asm__ __volatile__("movq %0, %%cr4" ::"r"(cr4) : "memory");
+        read_fsbase  = rdfsbase;
+        write_fsbase = wrfsbase;
+        read_gsbase  = rdgsbase;
+        write_gsbase = wrgsbase;
+    }
 }
 
 typedef struct TimerWidgetsData
@@ -460,15 +525,17 @@ void desktop_flusher()
 skip_timer_widget_init:
 
     delay_s_hp(1);
-    
-    
+
+
 
     // char *argv[2] = {"/system/icon/folder.png", NULL};
     // create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
-    create_user_process_from_file((char *)"/apps/builtin/browser.elf", NULL, NULL);
+// #if defined(CONFIG_KERNEL_AUTO_START_USER_APP)
+//     create_user_process_from_file((char *)CONFIG_KERNEL_DEFAULT_USER_APP, NULL, NULL);
+// #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/system/shell.elf", NULL, NULL);
+    // create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -535,11 +602,12 @@ void init_heap()
     heap_init((uint8_t *)KERNEL_HEAP_START, KERNEL_HEAP_SIZE);
 }
 
-extern size_t   now_tid;
+
 extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
 extern int      socketfs_setup();
+extern int      procfs_setup();
 extern int      dnsfs_setup();
 extern int      nmfs_setup();
 EFI_SYSTEM_TABLE *EFI_ST;
@@ -584,6 +652,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: devfs_setup begin\n");
     devfs_setup();
     write_serial_string("BOOT: devfs_setup done\n");
+    write_serial_string("BOOT: fbdev_setup begin\n");
+    fbdev_setup(fbc);
+    write_serial_string("BOOT: fbdev_setup done\n");
 
     write_serial_string("BOOT: pci_setup begin\n");
     pci_setup(BootConfig.MCFG);
@@ -603,7 +674,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: nvme_setup begin\n");
     nvme_setup();
     write_serial_string("BOOT: nvme_setup done\n");
-    
+
     extern void ide_setup(void);
     write_serial_string("BOOT: ide_setup begin\n");
     ide_setup();
@@ -640,7 +711,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     tcb_t idle_thread            = (tcb_t)aligned_alloc(16, idle_alloc_size);
     if (idle_thread != NULL) memset(idle_thread, 0, sizeof(struct thread_control_block));
     if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
-    idle_thread->tid          = now_tid++;
+    idle_thread->tid          = __atomic_fetch_add(&now_tid, 1, __ATOMIC_SEQ_CST);
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
     idle_thread->status       = RUNNING;
@@ -667,8 +738,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
+    setup_busybox_vfs_aliases();
     pipefs_setup();
+    pty_init();
+    fsgsbase_init();
     socketfs_setup();
+    procfs_setup();
     dnsfs_setup();
     nmfs_setup();
     stdio_init();
@@ -697,7 +772,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     init_killer();
     write_serial_string("Process Killer is ready\n");
-    
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 

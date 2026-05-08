@@ -74,7 +74,14 @@ void read_terminal_app_output_buffer(char *str)
 void write_terminal_app_output_buffer(char *str)
 {
     tcb_t current = get_current_task();
-    strcpy(current->parent_group->xtttp_stc->input, str);
+    xtttp_dtt *xtttp = current->parent_group->xtttp_stc;
+    size_t cur = strlen(xtttp->input);
+    size_t len = strlen(str);
+    if (cur >= sizeof(xtttp->input)) cur = 0;
+    size_t space = sizeof(xtttp->input) - cur - 1;
+    if (len > space) len = space;
+    if (len > 0) memcpy(xtttp->input + cur, str, len);
+    xtttp->input[cur + len] = '\0';
     current->parent_group->xtttp_stc->input_lock = true;
 }
 

@@ -395,6 +395,7 @@ static struct vfs_callback dnsfs_callbacks = {
     .dup      = (vfs_dup_t)empty,
     .poll     = (vfs_poll_t)empty,
     .map      = (vfs_mapfile_t)empty,
+    .resize   = (vfs_resize_t)dnsfs_dummy,
     .del      = (vfs_del_t)empty,
     .rename   = (vfs_rename_t)empty,
 };

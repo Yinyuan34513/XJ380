@@ -100,6 +100,7 @@ int vma_split(vma_t *vma, unsigned long addr) {
     new_vma->vm_start = addr;
     new_vma->vm_next  = vma->vm_next;
     new_vma->vm_prev  = vma;
+    new_vma->vm_name  = vma->vm_name ? strdup(vma->vm_name) : NULL;
 
     // 调整文件偏移量
     if (vma->vm_type == VMA_TYPE_FILE) { new_vma->vm_offset += addr - vma->vm_start; }

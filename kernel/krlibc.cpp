@@ -348,18 +348,56 @@ int cmd_parse(const char *cmd_str, char **argv, char token)
         while (*next == token)
             next++;
         if (*next == '\0') break;
-        const char *start = next;
-        while (*next && *next != token)
+
+        char *arg = (char *)malloc(strlen(next) + 1);
+        if (!arg)
+        {
+            for (int i = 0; i < argc; i++)
+                free(argv[i]);
+            return -1;
+        }
+
+        char  quote = 0;
+        size_t len  = 0;
+        while (*next)
+        {
+            char c = *next;
+            if (quote)
+            {
+                if (c == quote)
+                {
+                    quote = 0;
+                    next++;
+                    continue;
+                }
+            }
+            else
+            {
+                if (c == token) break;
+                if (c == '\'' || c == '"')
+                {
+                    quote = c;
+                    next++;
+                    continue;
+                }
+            }
+
+            if (c == '\\' && next[1] != '\0')
+            {
+                next++;
+                c = *next;
+            }
+            arg[len++] = c;
             next++;
-        size_t len = next - start;
-        argv[argc] = (char *)malloc(len + 1);
+        }
+
+        argv[argc] = arg;
         if (!argv[argc])
         {
             for (int i = 0; i < argc; i++)
                 free(argv[i]);
             return -1;
         }
-        memcpy(argv[argc], start, len);
         argv[argc][len] = '\0';
 
         argc++;

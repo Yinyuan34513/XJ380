@@ -1,5 +1,6 @@
 #include <graphics/GOP.hpp>
 #include <graphics/sheet.h>
+#include <fbdev.h>
 #include <proto.hpp>
 #include <cpu/lock.h>
 bool SheetIsRefreshing = false;
@@ -801,8 +802,8 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
         }
     }
 
-    // 写入显存 - 优化：使用 memcpy 批量复制
-    uint8_t *frame_buffer = (uint8_t *)sht->fbc->frame_buffer;
+    // 写入活动 framebuffer，再把脏区 present 到 GOP。
+    uint8_t *frame_buffer = fbdev_ready() ? fbdev_kernel_framebuffer() : (uint8_t *)sht->fbc->frame_buffer;
     uint32_t pixels_per_scan_line = sht->fbc->pixels_per_scan_line;
     size_t row_bytes = (size_t)(bex2 - bex1) * sizeof(SHEET_BUFFER);
     
@@ -826,6 +827,10 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
                 dst_line[x * 4 + 3] = 0;
             }
         }
+    }
+
+    if (fbdev_ready()) {
+        fbdev_present_kernel_region((uint32_t)bex1, (uint32_t)bey1, (uint32_t)bex2, (uint32_t)bey2);
     }
 
     serial_redraw_screen_overlay_part(bex1, bey1, bex2, bey2);

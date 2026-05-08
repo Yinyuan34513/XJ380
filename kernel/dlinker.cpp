@@ -210,8 +210,8 @@ bool elf_test_head(Elf64_Ehdr *ehdr) {
 
 void load_segment(Elf64_Phdr *phdr, void *elf, page_directory_t *directory, bool is_user,
                   uint64_t offset, uint64_t *load_start) {
-    size_t hi = PADDING_UP(phdr->p_paddr + phdr->p_memsz, 0x1000) + offset;
-    size_t lo = PADDING_DOWN(phdr->p_paddr, 0x1000) + offset;
+    size_t hi = PADDING_UP(phdr->p_vaddr + phdr->p_memsz, 0x1000) + offset;
+    size_t lo = PADDING_DOWN(phdr->p_vaddr, 0x1000) + offset;
     if (load_start != NULL) {
         if (lo < *load_start) { *load_start = lo; }
     }
@@ -402,13 +402,13 @@ cp_module_t *get_module_raw(const char *module_name) {
 }
 
 void module_setup() {
-    vfs_node_t mr = vfs_open("/system");
+    vfs_node_t mr = vfs_open("/mod");
     if (mr == NULL) {
-        write_serial_fmt("kmod: /system not found\n");
+        write_serial_fmt("kmod: /mod not found\n");
         return;
     }
     if (mr->type != file_dir) {
-        write_serial_string("kmod: /system is not a directory\n");
+        write_serial_string("kmod: /mod is not a directory\n");
         vfs_close(mr);
         return;
     }
@@ -421,13 +421,13 @@ void module_setup() {
         if (ch == NULL || ch->name == NULL) {
             continue;
         }
-        size_t path_len = strlen("/system/") + strlen(ch->name) + 1;
+        size_t path_len = strlen("/mod/") + strlen(ch->name) + 1;
         char *buf = (char *)malloc(path_len);
         if (buf == NULL) {
             write_serial_fmt("kmod: no memory for %s\n", ch->name);
             continue;
         }
-        snprintf(buf, path_len, "/system/%s", ch->name);
+        snprintf(buf, path_len, "/mod/%s", ch->name);
         bool exists = false;
         for (size_t j = 0; j < module_count; j++) {
             if (module_ls[j].is_use && strcmp(module_ls[j].raw_name, buf) == 0) {
@@ -536,6 +536,95 @@ static uint64_t user_so_next_addr = USER_SO_BASE_START;
 
 // ==================== 辅助函数 ====================
 
+static void *dynamic_ptr(dlhandle_t *handle, Elf64_Xword ptr) {
+    if (ptr == 0) {
+        return NULL;
+    }
+    return (void *)(handle->base_addr + ptr);
+}
+
+static bool symbol_is_defined(Elf64_Sym *sym) {
+    return sym != NULL && sym->st_shndx != SHN_UNDEF;
+}
+
+static bool symbol_is_exported(Elf64_Sym *sym) {
+    if (!symbol_is_defined(sym)) {
+        return false;
+    }
+    unsigned char bind = ELF64_ST_BIND(sym->st_info);
+    unsigned char type = ELF64_ST_TYPE(sym->st_info);
+    unsigned char vis  = ELF64_ST_VISIBILITY(sym->st_other);
+    return (bind == STB_GLOBAL || bind == STB_WEAK) &&
+           (type == STT_NOTYPE || type == STT_OBJECT || type == STT_FUNC || type == STT_GNU_IFUNC) &&
+           (vis == STV_DEFAULT || vis == STV_PROTECTED);
+}
+
+static size_t dynsym_count_from_sysv_hash(dlhandle_t *handle, Elf64_Xword ptr) {
+    uint32_t *hash = (uint32_t *)dynamic_ptr(handle, ptr);
+    if (hash == NULL) {
+        return 0;
+    }
+    return hash[1];
+}
+
+static size_t dynsym_count_from_gnu_hash(dlhandle_t *handle, Elf64_Xword ptr) {
+    uint32_t *hash = (uint32_t *)dynamic_ptr(handle, ptr);
+    if (hash == NULL) {
+        return 0;
+    }
+
+    uint32_t nbuckets   = hash[0];
+    uint32_t symoffset  = hash[1];
+    uint32_t bloom_size = hash[2];
+    uint64_t *bloom     = (uint64_t *)(hash + 4);
+    uint32_t *buckets   = (uint32_t *)(bloom + bloom_size);
+    uint32_t *chains    = buckets + nbuckets;
+    uint32_t max_sym    = symoffset;
+
+    for (uint32_t i = 0; i < nbuckets; i++) {
+        uint32_t sym = buckets[i];
+        if (sym == 0) {
+            continue;
+        }
+        while ((chains[sym - symoffset] & 1) == 0) {
+            sym++;
+        }
+        if (sym + 1 > max_sym) {
+            max_sym = sym + 1;
+        }
+    }
+
+    return max_sym;
+}
+
+static size_t dynsym_count_from_sections(dlhandle_t *handle) {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)handle->ehdr;
+    if (ehdr == NULL || ehdr->e_shoff == 0 || ehdr->e_shentsize != sizeof(Elf64_Shdr)) {
+        return 0;
+    }
+
+    Elf64_Shdr *shdrs = (Elf64_Shdr *)((char *)ehdr + ehdr->e_shoff);
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        if (shdrs[i].sh_type == SHT_DYNSYM) {
+            size_t ent = shdrs[i].sh_entsize ? shdrs[i].sh_entsize : sizeof(Elf64_Sym);
+            return shdrs[i].sh_size / ent;
+        }
+    }
+    return 0;
+}
+
+static dlfunc_t *find_export(dlhandle_t *handle, const char *name) {
+    if (handle == NULL || name == NULL) {
+        return NULL;
+    }
+    for (size_t i = 0; i < handle->export_count; i++) {
+        if (strcmp(handle->exports[i].name, name) == 0) {
+            return &handle->exports[i];
+        }
+    }
+    return NULL;
+}
+
 // 查找符号（支持全局查找）
 static void* find_symbol_internal(const char* name, dlhandle_t* exclude) {
     // 1. 先在全局符号表中查找
@@ -547,7 +636,7 @@ static void* find_symbol_internal(const char* name, dlhandle_t* exclude) {
             }
         }
     }
-    
+
     // 2. 在内核符号表中查找
     for (size_t i = 0; i < dlfunc_count; i++) {
         dlfunc_t* entry = &__ksymtab_start[i];
@@ -555,7 +644,7 @@ static void* find_symbol_internal(const char* name, dlhandle_t* exclude) {
             return entry->addr;
         }
     }
-    
+
     // 3. 在指定的动态库中查找（如果提供了句柄）
     if (exclude != NULL) {
         for (size_t i = 0; i < exclude->export_count; i++) {
@@ -578,9 +667,9 @@ static bool add_global_symbol(const char* name, void* addr, dlhandle_t* owner) {
     // 检查是否已存在
     for (size_t i = 0; i < global_symbol_count; i++) {
         if (strcmp(global_symbol_table[i].name, name) == 0) {
-            // 如果已存在，更新地址（后加载的覆盖先加载的）
-            global_symbol_table[i].addr = addr;
-            global_symbol_table[i].owner = owner;
+            if (global_symbol_table[i].owner == owner) {
+                global_symbol_table[i].addr = addr;
+            }
             return true;
         }
     }
@@ -599,36 +688,44 @@ static void extract_exports_from_dynamic(dlhandle_t* handle, Elf64_Dyn* dyn) {
     Elf64_Dyn* entry = dyn;
     while (entry->d_tag != DT_NULL) {
         if (entry->d_tag == DT_SYMTAB) {
-            handle->symtab = (Elf64_Sym*)(entry->d_un.d_ptr + handle->base_addr);
+            handle->symtab = (Elf64_Sym*)dynamic_ptr(handle, entry->d_un.d_ptr);
         } else if (entry->d_tag == DT_STRTAB) {
-            handle->strtab = (char*)(entry->d_un.d_ptr + handle->base_addr);
+            handle->strtab = (char*)dynamic_ptr(handle, entry->d_un.d_ptr);
         } else if (entry->d_tag == DT_SYMENT) {
             handle->symtabsz = entry->d_un.d_val;
+        } else if (entry->d_tag == DT_HASH) {
+            handle->sym_count = dynsym_count_from_sysv_hash(handle, entry->d_un.d_ptr);
+        } else if (entry->d_tag == DT_GNU_HASH) {
+            handle->sym_count = dynsym_count_from_gnu_hash(handle, entry->d_un.d_ptr);
         }
         entry++;
     }
     
-    if (handle->symtab && handle->strtab && handle->symtabsz) {
-        size_t num_symbols = handle->symtabsz / sizeof(Elf64_Sym);
-        
+    if (handle->sym_count == 0) {
+        handle->sym_count = dynsym_count_from_sections(handle);
+    }
+    if (handle->symtabsz == 0) {
+        handle->symtabsz = sizeof(Elf64_Sym);
+    }
+    if (handle->symtab && handle->strtab && handle->sym_count) {
+        size_t num_symbols = handle->sym_count;
+
         // 计算导出符号数量
         size_t export_count = 0;
         for (size_t i = 0; i < num_symbols; i++) {
             Elf64_Sym* sym = &handle->symtab[i];
-            if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
-                sym->st_shndx != SHN_UNDEF) {
+            if (symbol_is_exported(sym)) {
                 export_count++;
             }
         }
-        
+
         // 分配并填充导出表
         handle->exports = (dlfunc_t*)calloc(export_count, sizeof(dlfunc_t));
         handle->export_count = 0;
         
         for (size_t i = 0; i < num_symbols; i++) {
             Elf64_Sym* sym = &handle->symtab[i];
-            if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL &&
-                sym->st_shndx != SHN_UNDEF) {
+            if (symbol_is_exported(sym)) {
                 char* sym_name = &handle->strtab[sym->st_name];
                 
                 handle->exports[handle->export_count].name = strdup(sym_name);
@@ -685,8 +782,10 @@ static bool resolve_dependencies(dlhandle_t* handle, Elf64_Dyn* dyn) {
             if (!dep_handle) {
                 // 构建完整路径
                 char full_path[256];
-                if (handle->is_kernel) {
-                    snprintf(full_path, sizeof(full_path), "/system/%s", lib_name);
+                if (lib_name[0] == '/' || strchr(lib_name, '/')) {
+                    snprintf(full_path, sizeof(full_path), "%s", lib_name);
+                } else if (handle->is_kernel) {
+                    snprintf(full_path, sizeof(full_path), "/lib/modules/%s", lib_name);
                 } else {
                     // 用户态：在当前目录或系统库目录查找
                     snprintf(full_path, sizeof(full_path), "/lib/%s", lib_name);
@@ -708,6 +807,127 @@ static bool resolve_dependencies(dlhandle_t* handle, Elf64_Dyn* dyn) {
     return true;
 }
 
+static void* resolve_relocation_symbol(dlhandle_t* handle, Elf64_Sym* sym) {
+    if (handle == NULL || sym == NULL) {
+        return NULL;
+    }
+
+    if (symbol_is_defined(sym)) {
+        unsigned char bind = ELF64_ST_BIND(sym->st_info);
+        unsigned char vis  = ELF64_ST_VISIBILITY(sym->st_other);
+        if (bind == STB_LOCAL || vis == STV_HIDDEN || vis == STV_INTERNAL || vis == STV_PROTECTED) {
+            return (void *)(handle->base_addr + sym->st_value);
+        }
+    }
+
+    const char *name = handle->strtab ? &handle->strtab[sym->st_name] : NULL;
+    if (name != NULL && name[0] != '\0') {
+        void *addr = find_symbol_internal(name, handle);
+        if (addr != NULL) {
+            return addr;
+        }
+
+        dlfunc_t *self_export = find_export(handle, name);
+        if (self_export != NULL) {
+            return self_export->addr;
+        }
+    }
+
+    if (symbol_is_defined(sym)) {
+        return (void *)(handle->base_addr + sym->st_value);
+    }
+
+    if (ELF64_ST_BIND(sym->st_info) == STB_WEAK) {
+        return NULL;
+    }
+
+    write_serial_fmt("Undefined symbol: %s\n", name ? name : "<noname>");
+    return NULL;
+}
+
+static bool call_dynamic_initializers(dlhandle_t* handle) {
+    if (handle == NULL || handle->dynamic == NULL || handle->init_called) {
+        return true;
+    }
+
+    void (**preinit_array)(void) = NULL;
+    size_t preinit_array_sz = 0;
+    void (*init_func)(void) = NULL;
+    void (**init_array)(void) = NULL;
+    size_t init_array_sz = 0;
+
+    for (Elf64_Dyn *entry = handle->dynamic; entry->d_tag != DT_NULL; entry++) {
+        switch (entry->d_tag) {
+        case DT_PREINIT_ARRAY:
+            preinit_array = (void (**)(void))dynamic_ptr(handle, entry->d_un.d_ptr);
+            break;
+        case DT_PREINIT_ARRAYSZ:
+            preinit_array_sz = entry->d_un.d_val;
+            break;
+        case DT_INIT:
+            init_func = (void (*)(void))dynamic_ptr(handle, entry->d_un.d_ptr);
+            break;
+        case DT_INIT_ARRAY:
+            init_array = (void (**)(void))dynamic_ptr(handle, entry->d_un.d_ptr);
+            break;
+        case DT_INIT_ARRAYSZ:
+            init_array_sz = entry->d_un.d_val;
+            break;
+        }
+    }
+
+    for (size_t i = 0; preinit_array && i < preinit_array_sz / sizeof(void (*)(void)); i++) {
+        if (preinit_array[i]) {
+            preinit_array[i]();
+        }
+    }
+    if (init_func) {
+        init_func();
+    }
+    for (size_t i = 0; init_array && i < init_array_sz / sizeof(void (*)(void)); i++) {
+        if (init_array[i]) {
+            init_array[i]();
+        }
+    }
+
+    handle->init_called = true;
+    return true;
+}
+
+static void call_dynamic_finalizers(dlhandle_t* handle) {
+    if (handle == NULL || handle->dynamic == NULL || !handle->init_called) {
+        return;
+    }
+
+    void (*fini_func)(void) = NULL;
+    void (**fini_array)(void) = NULL;
+    size_t fini_array_sz = 0;
+
+    for (Elf64_Dyn *entry = handle->dynamic; entry->d_tag != DT_NULL; entry++) {
+        switch (entry->d_tag) {
+        case DT_FINI:
+            fini_func = (void (*)(void))dynamic_ptr(handle, entry->d_un.d_ptr);
+            break;
+        case DT_FINI_ARRAY:
+            fini_array = (void (**)(void))dynamic_ptr(handle, entry->d_un.d_ptr);
+            break;
+        case DT_FINI_ARRAYSZ:
+            fini_array_sz = entry->d_un.d_val;
+            break;
+        }
+    }
+
+    for (size_t i = fini_array_sz / sizeof(void (*)(void)); fini_array && i > 0; i--) {
+        if (fini_array[i - 1]) {
+            fini_array[i - 1]();
+        }
+    }
+    if (fini_func) {
+        fini_func();
+    }
+    handle->init_called = false;
+}
+
 // 内部加载函数
 dlhandle_t* load_shared_object_internal(const char* path, int flags, 
                                                page_directory_t* pd) {
@@ -717,6 +937,12 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
     while (current) {
         if (current->path && strcmp(current->path, path) == 0) {
             write_serial_fmt("Reusing shared object: %s at 0x%llx\n", path, current->base_addr);
+            if (current->ref_count == 0) {
+                current->ref_count = 1;
+                call_dynamic_initializers(current);
+            } else {
+                current->ref_count++;
+            }
             return current;
         }
         current = current->next;
@@ -783,6 +1009,7 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
     handle->size = file_size;
     handle->is_kernel = is_kernel;
     handle->pd = pd;
+    handle->ref_count = 1;
     
     // 7. 映射段
     Elf64_Phdr* phdrs = (Elf64_Phdr*)((char*)ehdr + ehdr->e_phoff);
@@ -815,6 +1042,7 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
     
     if (dynamic_phdr) {
         Elf64_Dyn* dyn = (Elf64_Dyn*)(base_addr + dynamic_phdr->p_vaddr);
+        handle->dynamic = dyn;
         
         // 提取符号信息
         extract_exports_from_dynamic(handle, dyn);
@@ -831,13 +1059,18 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
             write_serial_fmt("Failed to process relocations: %s\n", path);
             return NULL;
         }
-    }
-    
-    // 10. 执行初始化函数（如果有）
-    void* init_func = find_symbol_address("_init", ehdr, base_addr);
-    if (init_func) {
-        write_serial_fmt("Calling init function for %s\n", path);
-        ((void (*)())init_func)();
+        if (is_kernel && handle->path && strstr(handle->path, "netserver")) {
+            uint64_t *cyclic_timers = (uint64_t *)(handle->base_addr + 0x2ae70);
+            write_serial_fmt("netserver reloc check base=0x%llx cyclic0={%llu,0x%llx} cyclic1={%llu,0x%llx} cyclic2={%llu,0x%llx}\n",
+                             handle->base_addr,
+                             cyclic_timers[0], cyclic_timers[1],
+                             cyclic_timers[2], cyclic_timers[3],
+                             cyclic_timers[4], cyclic_timers[5]);
+        }
+        if (!call_dynamic_initializers(handle)) {
+            write_serial_fmt("Failed to run initializers: %s\n", path);
+            return NULL;
+        }
     }
     
     // 11. 添加到句柄链表
@@ -858,26 +1091,42 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
 bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle) {
     Elf64_Rela* rela = NULL;
     size_t relasz = 0;
+    size_t relaent = sizeof(Elf64_Rela);
     Elf64_Rela* jmprel = NULL;
     size_t pltrelsz = 0;
+    int pltrel_type = DT_RELA;
     
     Elf64_Dyn* entry = dyn;
     while (entry->d_tag != DT_NULL) {
         switch (entry->d_tag) {
         case DT_RELA:
-            rela = (Elf64_Rela*)(entry->d_un.d_ptr + handle->base_addr);
+            rela = (Elf64_Rela*)dynamic_ptr(handle, entry->d_un.d_ptr);
             break;
         case DT_RELASZ:
             relasz = entry->d_un.d_val;
             break;
+        case DT_RELAENT:
+            relaent = entry->d_un.d_val;
+            break;
         case DT_JMPREL:
-            jmprel = (Elf64_Rela*)(entry->d_un.d_ptr + handle->base_addr);
+            jmprel = (Elf64_Rela*)dynamic_ptr(handle, entry->d_un.d_ptr);
             break;
         case DT_PLTRELSZ:
             pltrelsz = entry->d_un.d_val;
             break;
+        case DT_PLTREL:
+            pltrel_type = entry->d_un.d_val;
+            break;
         }
         entry++;
+    }
+    if (relaent != sizeof(Elf64_Rela)) {
+        write_serial_fmt("Unsupported RELA entry size: %u\n", relaent);
+        return false;
+    }
+    if (pltrel_type != DT_RELA) {
+        write_serial_fmt("Unsupported PLT relocation format: %d\n", pltrel_type);
+        return false;
     }
     
     // 处理普通重定位
@@ -895,13 +1144,13 @@ bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle) {
             }
             
             switch (type) {
+            case R_X86_64_NONE:
+                break;
             case R_X86_64_GLOB_DAT:
             case R_X86_64_JUMP_SLOT: {
                 if (sym) {
-                    char* sym_name = &handle->strtab[sym->st_name];
-                    void* addr = find_symbol_internal(sym_name, handle);
-                    if (!addr) {
-                        write_serial_fmt("Undefined symbol: %s\n", sym_name);
+                    void* addr = resolve_relocation_symbol(handle, sym);
+                    if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
                         return false;
                     }
                     *target = (uint64_t)addr;
@@ -913,12 +1162,71 @@ bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle) {
                 break;
             case R_X86_64_64:
                 if (sym) {
-                    *target = handle->base_addr + sym->st_value + r->r_addend;
+                    void* addr = resolve_relocation_symbol(handle, sym);
+                    if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
+                        return false;
+                    }
+                    *target = (uint64_t)addr + r->r_addend;
                 }
                 break;
+            case R_X86_64_COPY:
+                if (sym) {
+                    void* addr = resolve_relocation_symbol(handle, sym);
+                    if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
+                        return false;
+                    }
+                    if (addr && sym->st_size) {
+                        memcpy(target, addr, sym->st_size);
+                    }
+                }
+                break;
+            case R_X86_64_PC32:
+            case R_X86_64_PLT32:
+                if (sym) {
+                    void* addr = resolve_relocation_symbol(handle, sym);
+                    if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
+                        return false;
+                    }
+                    *(uint32_t *)target = (uint32_t)((uint64_t)addr + r->r_addend - (uint64_t)target);
+                }
+                break;
+            case R_X86_64_PC64:
+                if (sym) {
+                    void* addr = resolve_relocation_symbol(handle, sym);
+                    if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
+                        return false;
+                    }
+                    *target = (uint64_t)addr + r->r_addend - (uint64_t)target;
+                }
+                break;
+            case R_X86_64_32:
+            case R_X86_64_32S:
+                if (sym) {
+                    void* addr = resolve_relocation_symbol(handle, sym);
+                    if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
+                        return false;
+                    }
+                    *(uint32_t *)target = (uint32_t)((uint64_t)addr + r->r_addend);
+                }
+                break;
+            case R_X86_64_SIZE32:
+                if (sym) {
+                    *(uint32_t *)target = (uint32_t)(sym->st_size + r->r_addend);
+                }
+                break;
+            case R_X86_64_SIZE64:
+                if (sym) {
+                    *target = sym->st_size + r->r_addend;
+                }
+                break;
+            case R_X86_64_IRELATIVE: {
+                uint64_t (*resolver)(void) = (uint64_t (*)(void))(handle->base_addr + r->r_addend);
+                *target = resolver();
+                break;
+            }
             default:
                 write_serial_fmt("Unhandled relocation type: %u\n", type);
-                break;
+                return false;
             }
         }
     }
@@ -933,10 +1241,8 @@ bool process_dynamic_relocations(Elf64_Dyn* dyn, dlhandle_t* handle) {
             
             if (sym_idx && handle->symtab) {
                 Elf64_Sym* sym = &handle->symtab[sym_idx];
-                char* sym_name = &handle->strtab[sym->st_name];
-                void* addr = find_symbol_internal(sym_name, handle);
-                if (!addr) {
-                    write_serial_fmt("Undefined PLT symbol: %s\n", sym_name);
+                void* addr = resolve_relocation_symbol(handle, sym);
+                if (!addr && ELF64_ST_BIND(sym->st_info) != STB_WEAK) {
                     return false;
                 }
                 *target = (uint64_t)addr;
@@ -959,9 +1265,13 @@ void* dlopen(const char* filename, int flags) {
     while (current) {
         if (strcmp(current->path, filename) == 0) {
             // 已加载，增加引用计数（TODO）
+            current->ref_count++;
             return current;
         }
         current = current->next;
+    }
+    if (flags & RTLD_NOLOAD) {
+        return NULL;
     }
     
     // 判断是否是内核模块
@@ -984,7 +1294,7 @@ void* dlopen(const char* filename, int flags) {
 void* dlsym(void* handle, const char* symbol) {
     if (!symbol) return NULL;
     
-    if (handle == (void*)0x1) {
+    if (handle == RTLD_DEFAULT || handle == RTLD_NEXT || handle == (void*)0x1) {
         // 全局查找
         return find_symbol_internal(symbol, NULL);
     }
@@ -1017,7 +1327,12 @@ int dlclose(void* handle) {
     
     dlhandle_t* dlhandle = (dlhandle_t*)handle;
     
-    // TODO: 实现引用计数和实际卸载
+    if (dlhandle->ref_count > 1) {
+        dlhandle->ref_count--;
+        return 0;
+    }
+    call_dynamic_finalizers(dlhandle);
+    dlhandle->ref_count = 0;
     
     write_serial_fmt("dlclose: %s \n", dlhandle->path);
     return 0;

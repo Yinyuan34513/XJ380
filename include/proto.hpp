@@ -167,6 +167,7 @@ uint64_t lapic_id();
 
 // kernel/intr/hpet.cpp
 uint64_t nanoTime();
+uint64_t bootNanoTime();
 void     init_hpet(uint64_t hpet_ptr);
 
 /*
@@ -281,7 +282,7 @@ void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
 
 // kernel/task/user.cpp
 void create_user_thread_from_file(char *path, pcb_t pcb);
-void create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
+int create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
 void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);

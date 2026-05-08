@@ -112,7 +112,7 @@ int editor_count_lines(char *buffer)
     return lines;
 }
 
-static inline void *memmove(void *dest, const void *src, size_t n)
+static inline void *editor_memmove(void *dest, const void *src, size_t n)
 {
     uint8_t       *pdest = (uint8_t *)dest;
     const uint8_t *psrc  = (const uint8_t *)src;
@@ -178,8 +178,8 @@ void text_editor(char *filename)
                 int len = strlen(args);
                 if (strlen(editor_buffer) + len < sizeof(editor_buffer) - 1)
                 {
-                    memmove(editor_buffer + editor_cursor + len, editor_buffer + editor_cursor,
-                            strlen(editor_buffer + editor_cursor) + 1);
+                    editor_memmove(editor_buffer + editor_cursor + len, editor_buffer + editor_cursor,
+                                   strlen(editor_buffer + editor_cursor) + 1);
                     memcpy(editor_buffer + editor_cursor, args, len);
                     editor_cursor += len;
 
@@ -232,7 +232,7 @@ void text_editor(char *filename)
                 if (line_end)
                 {
                     int line_len = line_end - editor_buffer;
-                    memmove(editor_buffer, line_end + 1, strlen(line_end + 1) + 1);
+                    editor_memmove(editor_buffer, line_end + 1, strlen(line_end + 1) + 1);
                     editor_cursor = 0;
                     print_to_console_zh("已删除当前行");
                 }
@@ -273,7 +273,7 @@ void text_editor(char *filename)
 
                         if (strlen(editor_buffer) + new_len - old_len < sizeof(editor_buffer) - 1)
                         {
-                            memmove(pos + new_len, pos + old_len, strlen(pos + old_len) + 1);
+                            editor_memmove(pos + new_len, pos + old_len, strlen(pos + old_len) + 1);
                             memcpy(pos, new_text, new_len);
                             print_to_console_zh("已替换文本");
                         }

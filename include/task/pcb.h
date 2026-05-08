@@ -8,6 +8,7 @@
 #include "lock_queue.h"
 #include "mm/page.h"
 #include "stdint.h"
+#include "tty.h"
 #include "user/user.h"
 #include "user/x3tp.h"
 #include <mm/vma.h>
@@ -105,11 +106,21 @@ struct process_control_block
     int         exit_code;   // 进程退出码
     uint64_t    mmap_start;  // 映射起始地址
     char       *cmdline;
+    char      **argv;
+    size_t      argc;
+    char       *exe_path;
     int         task_level; // 进程等级
     lock_queue *virt_queue; // 虚拟页分配队列
     void       *elf_file;   // 可执行文件指针
     size_t      elf_size;   // 可执行文件大小
     uint64_t    load_start; // 加载起始地址
+    uint64_t    aux_phdr;
+    uint64_t    aux_phent;
+    uint64_t    aux_phnum;
+    uint64_t    aux_base;
+    uint64_t    aux_entry;
+    uint64_t    aux_execfn;
+    bool        linux_abi;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点
@@ -117,6 +128,7 @@ struct process_control_block
     uint64_t brk_end;
     uint64_t brk_current ;
 
+    tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
 };
 #ifndef CONFIG_USER_ELF_HEADER_START
@@ -170,6 +182,8 @@ struct thread_control_block
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
+    uint64_t clear_child_tid;
+    page_directory_t *tid_directory;
 
     vfs_node_t cwd;
     char      *str_cwd;
@@ -191,15 +205,20 @@ struct thread_control_block
 };
 
 extern pcb_t kernel_group;
+extern size_t   now_tid;
 
 size_t   add_task(tcb_t task);
 void     enable_scheduler();
 void     disable_scheduler();
 tcb_t    get_current_task();
+uint64_t task_user_fs_selector(tcb_t task);
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
 size_t   create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
-uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
+uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, uint64_t clone_flags = 0,
+                      int *parent_tid = NULL, int *child_tid = NULL);
+uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid,
+                      uint64_t tls);
 void     process_setup();
 void     switch_to_user_mode();
 void get_thread_name_from_filepath(char *path, char *name);
@@ -214,3 +233,4 @@ void kill_thread(tcb_t task);
 void kill_thread0(tcb_t task);
 void kill_proc0(pcb_t pcb);
 pcb_t found_pcb(int pid);
+tcb_t found_thread(pcb_t pcb, int tid);
