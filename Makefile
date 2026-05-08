@@ -183,7 +183,12 @@ gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 
 vdisk: all $(OPKG_CONF_GEN)
 	@rm -rf XJ380.img
-	@rm -rf $(BUILD_DIR)/XJ380
+	@chmod -R u+rwX $(BUILD_DIR)/XJ380 2>/dev/null || true
+	@rm -rf $(BUILD_DIR)/XJ380 || { \
+		echo "Cannot remove $(BUILD_DIR)/XJ380; fix ownership with:"; \
+		echo "  sudo chown -R $$(id -u):$$(id -g) $(BUILD_DIR)/XJ380"; \
+		exit 1; \
+	}
 
 	@dd if=/dev/zero of=XJ380.img bs=1024M count=1
 # You must execute the following command with sudo privileges, that's not good...
@@ -286,7 +291,7 @@ vdisk: all $(OPKG_CONF_GEN)
 			:; \
 		else \
 			mkdir -p "$$(dirname "$$dst")"; \
-			cp -a "$$src" "$$dst"; \
+			cp -RL "$$src" "$$dst"; \
 		fi; \
 	done
 	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)/; done
@@ -323,7 +328,12 @@ vdisk: all $(OPKG_CONF_GEN)
 	@find $(BUILD_DIR)/XJ380 -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
-	@rm -rf $(BUILD_DIR)/XJ380
+	@chmod -R u+rwX $(BUILD_DIR)/XJ380 2>/dev/null || true
+	@rm -rf $(BUILD_DIR)/XJ380 || { \
+		echo "Cannot remove $(BUILD_DIR)/XJ380; fix ownership with:"; \
+		echo "  sudo chown -R $$(id -u):$$(id -g) $(BUILD_DIR)/XJ380"; \
+		exit 1; \
+	}
 	
 
 vmdk: vdisk
