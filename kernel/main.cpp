@@ -592,6 +592,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     pci_init();
     write_serial_string("BOOT: pci_init done\n");
     write_serial_fmt("VM hint: %s\n", BootConfig.is_qemu == 1 ? "QEMU/BOCHS" : "generic/VMware/real hardware");
+    if (BootConfig.boot_flags != 0) write_serial_fmt("Boot option flags: 0x%llx\n", BootConfig.boot_flags);
+    if ((BootConfig.boot_flags & BOOT_FLAG_LAST_KNOWN_GOOD) != 0)
+        write_serial_string("BOOT: last known good configuration selected\n");
     ahci_set_environment(BootConfig.is_qemu == 1);
     write_serial_string("BOOT: ahci_setup begin\n");
     ahci_setup();
@@ -674,9 +677,13 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_message();
 
-    module_setup();
-    dlinker_init();
-    load_all_kernel_module();
+    if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD)) == 0) {
+        module_setup();
+        dlinker_init();
+        load_all_kernel_module();
+    } else {
+        write_serial_string("BOOT: kernel modules skipped by boot menu\n");
+    }
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -695,7 +702,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 
     // create_kernel_thread((void *)tst, NULL, (char *)"1", NULL);
-    if (ahci_is_qemu_environment()) {
+    if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_SAFE_STORAGE_IO)) != 0) {
+        write_serial_string("AHCI: keeping conservative IO path by boot menu\n");
+    } else if (ahci_is_qemu_environment()) {
         ahci_set_accel(true);
     } else {
         write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");

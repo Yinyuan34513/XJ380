@@ -20,6 +20,66 @@ struct EFI_SIMPLE_POINTER_PROTOCOL     *SPP;  // 鼠标
 struct EFI_BATTERY_CHARGING_PROTOCOL   *BAT;  // 电池
 EFI_HANDLE                              IM;
 
+#define EFI_SCAN_UP     0x0001
+#define EFI_SCAN_DOWN   0x0002
+#define EFI_SCAN_DELETE 0x0008
+#define EFI_SCAN_ESC    0x0017
+
+#define BOOT_MENU_WAIT_US 300000
+#define BOOT_MENU_POLL_US 10000
+
+#define BOOT_MENU_OPTION_COUNT 9
+typedef struct
+{
+    const char *title;
+    const char *description;
+    UINT64      flags;
+    int         reboot;
+} BOOT_MENU_OPTION;
+
+static UINT64 BootMenuFlags;
+static char   BootStatusLines[8][80];
+static int    BootStatusCount;
+
+static const BOOT_MENU_OPTION BootMenuOptions[BOOT_MENU_OPTION_COUNT] = {
+    {"Safe Mode",
+     "Start with loadable kernel modules disabled and conservative storage I/O.",
+     BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD | BOOT_FLAG_SAFE_STORAGE_IO,
+     0},
+    {"Safe Mode with Networking",
+     "Start in Safe Mode while keeping the networking stack available.",
+     BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD | BOOT_FLAG_SAFE_STORAGE_IO,
+     0},
+    {"Safe Mode with Command Prompt",
+     "Start in Safe Mode and keep the system on the basic startup path.",
+     BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD | BOOT_FLAG_SAFE_STORAGE_IO,
+     0},
+    {"Enable Boot Logging",
+     "Start normally and write verbose boot diagnostics to the serial log.",
+     BOOT_FLAG_VERBOSE,
+     0},
+    {"Show Boot Progress",
+     "Display bootloader progress and startup stage details.",
+     BOOT_FLAG_SHOW_PROGRESS,
+     0},
+    {"Enable low-resolution video",
+     "Start with a basic 800x600 video mode.",
+     BOOT_FLAG_BASE_VIDEO,
+     0},
+    {"Last Known Good Configuration",
+     "Start with the last stable configuration profile.",
+     BOOT_FLAG_LAST_KNOWN_GOOD | BOOT_FLAG_SAFE_STORAGE_IO,
+     0},
+    {"Disable loadable kernel modules",
+     "Start without loading files from /system as kernel modules.",
+     BOOT_FLAG_DISABLE_KMOD,
+     0},
+    {"Start XJ380 Normally",
+     "Start XJ380 with the standard kernel startup path.",
+     0,
+     0},
+};
+
 void   write_serial_string(char *str);
 char  *strcpy(char *dest, const char *src);
 UINT64 strcmp(char *from_str, char *cmp_str);
@@ -87,6 +147,231 @@ void putc(unsigned short c)
 void puts(unsigned short *s)
 {
     ST->ConOut->OutputString(ST->ConOut, s);
+}
+
+static void puts_ascii(const char *s)
+{
+    while (*s)
+    {
+        putc((unsigned short)*s);
+        s++;
+    }
+}
+
+static void puts_dec(UINT64 value)
+{
+    char  buf[24];
+    UINTN pos = 0;
+    UINTN len = 0;
+
+    if (value == 0)
+    {
+        putc(L'0');
+        return;
+    }
+
+    while (value > 0 && len < sizeof(buf))
+    {
+        buf[len++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+
+    while (pos < len)
+        putc((unsigned short)buf[len - 1 - pos++]);
+}
+
+static void boot_text_status_screen(const char *status)
+{
+    ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
+    ST->ConOut->ClearScreen(ST->ConOut);
+    puts(L"XJ380 Bootloader\r\n");
+    puts(L"\r\n");
+    puts_ascii(status);
+    puts(L"\r\n\r\n");
+    puts(L"[");
+    for (int i = 0; i < 10; i++)
+        puts_ascii(i < BootStatusCount ? "=" : " ");
+    puts(L"]\r\n\r\n");
+
+    for (int i = 0; i < BootStatusCount; i++)
+    {
+        puts_ascii("  ");
+        puts_ascii(BootStatusLines[i]);
+        puts(L"\r\n");
+    }
+}
+
+static void boot_prompt_screen(void)
+{
+    ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
+    ST->ConOut->ClearScreen(ST->ConOut);
+    puts(L"XJ380 Bootloader\r\n");
+    puts(L"\r\n");
+    puts(L"Press DELETE for Advanced Boot Options\r\n");
+}
+
+static void boot_status(const char *status)
+{
+    if (status != NULL)
+    {
+        if (BootStatusCount < 8)
+        {
+            UINTN i = 0;
+            while (status[i] && i < sizeof(BootStatusLines[0]) - 1)
+            {
+                BootStatusLines[BootStatusCount][i] = status[i];
+                i++;
+            }
+            BootStatusLines[BootStatusCount][i] = '\0';
+            BootStatusCount++;
+        }
+        else
+        {
+            for (int line = 1; line < 8; line++)
+                xmemcpy(BootStatusLines[line - 1], BootStatusLines[line], sizeof(BootStatusLines[0]));
+            UINTN i = 0;
+            while (status[i] && i < sizeof(BootStatusLines[0]) - 1)
+            {
+                BootStatusLines[7][i] = status[i];
+                i++;
+            }
+            BootStatusLines[7][i] = '\0';
+        }
+    }
+    if ((BootMenuFlags & BOOT_FLAG_SHOW_PROGRESS) != 0)
+        boot_text_status_screen(status);
+}
+
+static void boot_menu_init_defaults(void)
+{
+    BootMenuFlags = 0;
+    BootStatusCount = 0;
+}
+
+static int read_boot_key(struct EFI_INPUT_KEY *key)
+{
+    xmemset(key, 0, sizeof(*key));
+    return ST->ConIn->ReadKeyStroke(ST->ConIn, key) == EFI_SUCCESS;
+}
+
+static void drain_boot_keys(void)
+{
+    struct EFI_INPUT_KEY key;
+    while (read_boot_key(&key))
+        ;
+}
+
+static int wait_for_boot_menu_key(void)
+{
+    UINTN waited = 0;
+    struct EFI_INPUT_KEY key;
+
+    drain_boot_keys();
+    boot_prompt_screen();
+
+    while (waited < BOOT_MENU_WAIT_US)
+    {
+        if (read_boot_key(&key))
+        {
+            if (key.ScanCode == EFI_SCAN_DELETE) return 1;
+        }
+
+        BS->Stall(BOOT_MENU_POLL_US);
+        waited += BOOT_MENU_POLL_US;
+    }
+
+    return 0;
+}
+
+static void draw_nt6_menu_item(int index, int selected)
+{
+    if (selected)
+    {
+        ST->ConOut->SetAttribute(ST->ConOut, 0x70);
+        puts_ascii(" ");
+        puts_ascii(BootMenuOptions[index].title);
+        puts_ascii(" ");
+        ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
+        puts(L"\r\n");
+    }
+    else
+    {
+        puts_ascii(" ");
+        puts_ascii(BootMenuOptions[index].title);
+        puts(L"\r\n");
+    }
+}
+
+static void draw_boot_menu(int selected)
+{
+    ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
+    ST->ConOut->ClearScreen(ST->ConOut);
+    puts(L"Advanced Boot Options\r\n");
+    puts(L"\r\n");
+    puts(L"Choose Advanced Options for: XJ380 Operating System\r\n");
+    puts(L"\r\n");
+    puts(L"Use the arrow keys to highlight your choice.\r\n");
+    puts(L"\r\n");
+    puts(L"Advanced options:\r\n");
+    puts(L"\r\n");
+
+    for (int i = 0; i < BOOT_MENU_OPTION_COUNT; i++)
+        draw_nt6_menu_item(i, selected == i);
+
+    puts(L"\r\n");
+    puts_ascii(BootMenuOptions[selected].description);
+    puts(L"\r\n\r\n");
+    puts(L"ENTER=Choose    ESC=Start normally\r\n");
+}
+
+static int apply_boot_menu_action(int selected)
+{
+    if (selected < 0 || selected >= BOOT_MENU_OPTION_COUNT) return 0;
+    if (BootMenuOptions[selected].reboot)
+    {
+        ST->RuntimeServices->ResetSystem(EfiResetWarm, EFI_SUCCESS, 0, NULL);
+        return 0;
+    }
+
+    BootMenuFlags = BootMenuOptions[selected].flags;
+    return 1;
+}
+
+static void boot_menu(void)
+{
+    int selected = 0;
+    struct EFI_INPUT_KEY key;
+
+    drain_boot_keys();
+    while (1)
+    {
+        draw_boot_menu(selected);
+        while (!read_boot_key(&key))
+            BS->Stall(BOOT_MENU_POLL_US);
+
+        if (key.ScanCode == EFI_SCAN_UP)
+        {
+            selected = selected == 0 ? BOOT_MENU_OPTION_COUNT - 1 : selected - 1;
+        }
+        else if (key.ScanCode == EFI_SCAN_DOWN)
+        {
+            selected = selected == BOOT_MENU_OPTION_COUNT - 1 ? 0 : selected + 1;
+        }
+        else if (key.ScanCode == EFI_SCAN_ESC)
+        {
+            BootMenuFlags = 0;
+            return;
+        }
+        else if (key.UnicodeChar == L'\r')
+        {
+            if (apply_boot_menu_action(selected)) return;
+        }
+        else if (key.UnicodeChar >= L'1' && key.UnicodeChar <= L'9')
+        {
+            selected = (int)(key.UnicodeChar - L'1');
+            if (apply_boot_menu_action(selected)) return;
+        }
+    }
 }
 
 /**
@@ -326,9 +611,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     write_serial_string("OS Version: BuildVersion\n");
     efi_init(ImageHandle, SystemTable);
     write_serial_string("EFI Initialize Success.\n");
+    boot_menu_init_defaults();
+    boot_status("Initializing firmware services");
+    if (wait_for_boot_menu_key())
+    {
+        write_serial_string("Boot Menu Entered.\n");
+        boot_menu();
+    }
+    boot_status("Preparing boot environment");
 
     CreateAndMapNewPageTable();
     write_serial_string("New Page Table Created Success.\n");
+    boot_status("Loading kernel");
 
     // ST->ConOut->ClearScreen(ST->ConOut);
 
@@ -351,6 +645,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             ;
     }
     write_serial_string("Root Dir Open Success.\n");
+    boot_status("Opening kernel image");
 
     status = root->Open(root, &kernel_file, L"\\system\\kernel.elf", EFI_FILE_MODE_READ, 0);
 
@@ -374,6 +669,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             ;
     }
     write_serial_string("XSK2.1 Kernel Read Success.\n");
+    boot_status("Mapping kernel image");
 
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)kernel_buffer;
     UINT64      kernel_first_addr, kernel_last_addr;                   // 计算的首尾
@@ -386,9 +682,17 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     CopyLoadSegments(ehdr);     // CV
     entry_addr = ehdr->e_entry; // 获取入口点
     // free(kernel_buffer);        // 释放内核文件，丢掉！
+    boot_status("Initializing video");
 
+    if ((BootMenuFlags & BOOT_FLAG_BASE_VIDEO) != 0)
+    {
+        SwitchToResolution(800, 600);
+    }
 #if BUILD_EDITION == DEBUG_VERSION
-    SwitchToResolution(1280, 768); // 切换分辨率
+    else
+    {
+        SwitchToResolution(1280, 768); // 切换分辨率
+    }
 #endif
 
     struct FrameBufferConfig config = {(UINT8 *)(GOP->Mode->FrameBufferBase + 0xffff800000000000),
@@ -412,12 +716,14 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             ;
     }
     write_serial_string("Video Initialize Success.\n");
+    boot_status("Loading ACPI");
 
     BOOT_CONFIG *BootConfig;
     BootConfig = malloc(sizeof(BOOT_CONFIG)) + 0xFFFF800000000000;
     xmemset(BootConfig, 0, sizeof(BOOT_CONFIG));
 
     BootConfig->is_qemu = 0;
+    BootConfig->boot_flags = BootMenuFlags;
 
     // 获取RSDP
     EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;
@@ -498,6 +804,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         }
         SystemConfigTable++;
     }
+    boot_status("Preparing memory map");
 
     if (AcpiTableWasFound == 0)
     {
@@ -524,8 +831,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     BootConfig->MemoryMap.MapKey            = 0;
     BootConfig->MemoryMap.DescriptorSize    = 0;
     BootConfig->MemoryMap.DescriptorVersion = 0;
-
-    GetMMP(&BootConfig->MemoryMap);
 
     BootConfig->saved_mtrrs = NULL;
     UINT32 eax, ebx, ecx, edx;
@@ -555,6 +860,9 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
         xmemset(BootConfig->temp_stack[i],0,STACK_SIZE);
     }
 
+    GetMMP(&BootConfig->MemoryMap);
+    boot_status("Exiting boot services");
+
     __asm__ volatile("mfence" ::: "memory");
     __asm__ volatile("mov %0, %%rsp \n\t" : : "r"(new_stack + STACK_SIZE + 0xFFFF800000000000) : "memory");
     __asm__ volatile("mfence" ::: "memory");
@@ -563,6 +871,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     // say goodbye~
     ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig->MemoryMap.MapKey);
+    if (EFI_ERROR(ExitBSStatus))
+    {
+        GetMMP(&BootConfig->MemoryMap);
+        ExitBSStatus = BS->ExitBootServices(ImageHandle, BootConfig->MemoryMap.MapKey);
+    }
 
     if (EFI_ERROR(ExitBSStatus))
     {
