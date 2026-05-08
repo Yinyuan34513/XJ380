@@ -197,8 +197,6 @@ vdisk: all $(OPKG_CONF_GEN)
 
 	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((1024*1024-2048*512/1024))
 
-	@echo "a"
-
 	@mkdir -p $(VDISK_ROOT)/EFI/BOOT
 	@mkdir -p $(VDISK_ROOT)/system
 	@mkdir -p $(VDISK_ROOT)/system/font
@@ -285,18 +283,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/ld
 	@cp -a $(HOST_GCC_LIBEXECDIR) $(VDISK_ROOT)/usr/libexec/gcc/$(HOST_GCC_TRIPLE)/
 	@cp -a $(HOST_GCC_LIBDIR) $(VDISK_ROOT)/usr/lib/gcc/$(HOST_GCC_TRIPLE)/
-	@find /usr/include -mindepth 1 | sort | while IFS= read -r src; do \
-		rel=$${src#/usr/include/}; \
-		dst="$(VDISK_ROOT)/usr/include/$$rel"; \
-		if [ -d "$$src" ] && [ ! -L "$$src" ]; then \
-			mkdir -p "$$dst"; \
-		elif [ -e "$$dst" ] || [ -L "$$dst" ]; then \
-			:; \
-		else \
-			mkdir -p "$$(dirname "$$dst")"; \
-			cp -RL "$$src" "$$dst"; \
-		fi; \
-	done
+	@cp -aL /usr/include/. $(VDISK_ROOT)/usr/include/
 	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(VDISK_ROOT)/usr/lib/$(HOST_GCC_TRIPLE)/; done
 	@$(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
 	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(VDISK_ROOT)/lib/$(HOST_GCC_TRIPLE)/; done
