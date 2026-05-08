@@ -21,12 +21,6 @@ static constexpr uint64_t EEVDF_WAKEUP_CREDIT  = EEVDF_BASE_SLICE_NS;
 static constexpr uint64_t EEVDF_SLEEPER_CREDIT = EEVDF_BASE_SLICE_NS * 2;
 static constexpr uint64_t EEVDF_DEFAULT_WEIGHT = 1024ULL;
 
-static bool trace_fsbase_task(tcb_t task)
-{
-    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
-           (strstr(task->name, "opkg") != NULL || strstr(task->parent_group->name, "opkg") != NULL);
-}
-
 void enable_scheduler()
 {
     is_scheduler = true;
@@ -97,14 +91,7 @@ __attribute__((naked)) void save_registers()
 
 void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
 {
-    uint64_t current_fs_base = read_fsbase();
-    if (current_fs_base != 0 || current_task0->fs_base == 0)
-        current_task0->fs_base = current_fs_base;
-    else if (trace_fsbase_task(current_task0))
-        write_serial_fmt("[fsbase] switch-save-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx target=%s target_fs=0x%llx\n",
-                         current_task0->name, current_task0->tid, current_task0->fs_base, current_fs_base,
-                         reg != NULL ? reg->rip : 0, target != NULL ? target->name : "(null)",
-                         target != NULL ? target->fs_base : 0);
+    current_task0->fs_base = read_fsbase();
 
     switch_page_directory(target->parent_group->pagedir);
     set_kernel_stack(target->kernel_stack);
@@ -114,7 +101,7 @@ void change_proccess(registers_t *reg, tcb_t current_task0, tcb_t target)
         // Returning to user mode: keep user GSBASE clear and leave CPU-local
         // data in KGSBASE for the next syscall/swapgs entry.
         write_gsbase(0);
-        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(target)));
+        __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(target->fs));
     } else {
         // Returning to kernel mode (for example, resuming inside a syscall):
         // kernel code expects %gs to point at the current CPU area.
@@ -422,13 +409,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
     }
 
     // 记录当前线程运行时最新的 FSBASE，避免调度后丢失用户态 TLS 环境。
-    uint64_t current_fs_base = read_fsbase();
-    if (current_fs_base != 0 || current->fs_base == 0)
-        current->fs_base = current_fs_base;
-    else if (trace_fsbase_task(current))
-        write_serial_fmt("[fsbase] timer-save-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx next=%s next_fs=0x%llx\n",
-                         current->name, current->tid, current->fs_base, current_fs_base, reg != NULL ? reg->rip : 0,
-                         best != NULL ? best->name : "(null)", best != NULL ? best->fs_base : 0);
+    current->fs_base = read_fsbase();
 
     // 任务寻父处理
     if (best->parent_group && 
