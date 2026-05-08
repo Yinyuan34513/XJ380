@@ -28,7 +28,8 @@ VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
-	frameworks/StardustUI/examples/layout
+	frameworks/StardustUI/examples/layout \
+	frameworks/StardustUI/examples/duckchat
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
@@ -309,6 +310,7 @@ vdisk: all $(OPKG_CONF_GEN)
 
 	@cp ./out/helloworld.elf $(VDISK_ROOT)/apps/builtin
 	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
+	@cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin
 
 # temp test (remember to delete)
 	@mkdir -p $(VDISK_ROOT)/users/GuoqiFish/desktop
