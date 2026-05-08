@@ -1,7 +1,7 @@
 #include "xapi/include/x3api.h"
 
-#define BUSY_WIDTH       1280
-#define BUSY_HEIGHT      768
+#define BUSY_WIDTH       720
+#define BUSY_HEIGHT      405
 #define TERM_LEFT_X      8
 #define TERM_TOP_Y       4
 #define TERM_RIGHT_X     (BUSY_WIDTH - 8)
@@ -681,7 +681,7 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
     win.title = (char *)"Terminal";
     win.width = BUSY_WIDTH;
     win.height = BUSY_HEIGHT;
-    win.sets = XWIN_FULL_SCR;
+    win.sets = XWIN_NORMAL;
     xapi_CreateWindow(&g_window, &win);
     xapi_SetIcon(g_window, "/system/icon/terminal.png");
     SetMsgPrcor(g_window, busyterm_msg);
