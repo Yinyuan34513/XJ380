@@ -37,6 +37,25 @@ extern bool desktop_done;
 
 static volatile bool desktop_refresh_pending = false;
 
+enum MouseCursorShape
+{
+    MouseCursorStandard = 0,
+    MouseCursorHorizontal = 1,
+    MouseCursorVertical = 2,
+};
+
+enum WindowResizeEdge
+{
+    WindowResizeLeft = 1,
+    WindowResizeRight = 2,
+    WindowResizeTop = 4,
+    WindowResizeBottom = 8,
+};
+
+static const int WINDOW_RESIZE_HOTZONE = 10;
+static const uint32_t WINDOW_MIN_CONTENT_WIDTH = 80;
+static const uint32_t WINDOW_MIN_CONTENT_HEIGHT = 60;
+
 static inline int rect_min_int(int a, int b)
 {
     return a < b ? a : b;
@@ -122,6 +141,235 @@ static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, in
     if (*y > max_y) *y = max_y;
 }
 
+static uint8_t get_window_resize_edges(WINDOWLS *window, int x, int y)
+{
+    if (window == NULL || window->w_sheet == NULL || window->type != XWIN_NORMAL || !window->can_maximize ||
+        window->is_maximized)
+    {
+        return 0;
+    }
+
+    SHEET *sheet = window->w_sheet;
+    int left = sheet->bx;
+    int top = sheet->by;
+    int right = sheet->bx + (int)sheet->width;
+    int bottom = sheet->by + (int)sheet->height;
+    int content_top = sheet->by + 27;
+    int content_bottom = sheet->by + (int)sheet->height - 20;
+
+    if (x < left - WINDOW_RESIZE_HOTZONE || x > right + WINDOW_RESIZE_HOTZONE ||
+        y < top - WINDOW_RESIZE_HOTZONE || y > bottom + WINDOW_RESIZE_HOTZONE)
+    {
+        return 0;
+    }
+
+    uint8_t edges = 0;
+    if (x >= left - WINDOW_RESIZE_HOTZONE &&
+        (x <= left || (x <= left + 12 && y >= content_top && y <= content_bottom)))
+        edges |= WindowResizeLeft;
+    if (x <= right + WINDOW_RESIZE_HOTZONE &&
+        (x >= right || (x >= right - 12 && y >= content_top && y <= content_bottom)))
+        edges |= WindowResizeRight;
+    if (y >= top - WINDOW_RESIZE_HOTZONE && y <= top) edges |= WindowResizeTop;
+    if (y <= bottom + WINDOW_RESIZE_HOTZONE && y >= bottom - 20) edges |= WindowResizeBottom;
+
+    return edges;
+}
+
+static WINDOWLS *find_resize_window_at(int x, int y, uint8_t *edges_out)
+{
+    if (edges_out != NULL) *edges_out = 0;
+    if (xwmii == NULL || sht_img == NULL || sht_img->start == NULL || have_full_screen_app) return NULL;
+
+    SHEET *front_p = sht_img->start;
+    while (front_p->next != NULL) {
+        front_p = front_p->next;
+    }
+
+    while (front_p != NULL)
+    {
+        if (front_p == mouse_ct_sheet_img)
+        {
+            front_p = front_p->front;
+            continue;
+        }
+
+        WINDOWLS *window = sht_found_win(xwmii, sht_img, front_p);
+        if (window != NULL)
+        {
+            uint8_t edges = get_window_resize_edges(window, x, y);
+            if (edges != 0)
+            {
+                if (edges_out != NULL) *edges_out = edges;
+                return window;
+            }
+
+            if (front_p->bx <= x && x <= front_p->bx + (int)front_p->width &&
+                front_p->by <= y && y <= front_p->by + (int)front_p->height)
+            {
+                return NULL;
+            }
+        }
+        else if (front_p->type != FixedSheetType && front_p->bx <= x && x <= front_p->bx + (int)front_p->width &&
+                 front_p->by <= y && y <= front_p->by + (int)front_p->height)
+        {
+            return NULL;
+        }
+
+        front_p = front_p->front;
+    }
+
+    return NULL;
+}
+
+static void redraw_mouse_cursor(SHEET_INFO *sht, SHEET *csheet, uint8_t shape)
+{
+    if (sht == NULL || csheet == NULL || csheet->buffer == NULL) return;
+
+    SHEET_BUFFER *buffer = (SHEET_BUFFER *)csheet->buffer;
+    memset(buffer, 0, (size_t)csheet->width * csheet->height * sizeof(SHEET_BUFFER));
+
+    int draw_w = 10;
+    int draw_h = 21;
+    if (shape == MouseCursorHorizontal)
+    {
+        draw_w = 25;
+        draw_h = 13;
+    }
+    else if (shape == MouseCursorVertical)
+    {
+        draw_w = 13;
+        draw_h = 25;
+    }
+
+    for (int y = 0; y < draw_h; y++)
+    {
+        for (int x = 0; x < draw_w; x++)
+        {
+            char pixel = '.';
+            if (shape == MouseCursorHorizontal) pixel = mouse_horizontal[y][x];
+            else if (shape == MouseCursorVertical) pixel = mouse_vertical[y][x];
+            else pixel = mouse[y][x];
+
+            if (pixel == '.') { draw_point(sht, csheet, x, y, {0, 0, 0, 0}); }
+            else if (pixel == 'w') { draw_point(sht, csheet, x, y, WHITE); }
+            else if (pixel == '@') { draw_point(sht, csheet, x, y, BLACK); }
+        }
+    }
+}
+
+static uint8_t cursor_shape_for_resize_edges(uint8_t edges)
+{
+    if (edges & (WindowResizeLeft | WindowResizeRight)) return MouseCursorHorizontal;
+    if (edges & (WindowResizeTop | WindowResizeBottom)) return MouseCursorVertical;
+    return MouseCursorStandard;
+}
+
+static void update_mouse_cursor_shape(SHEET_INFO *sht, uint8_t shape)
+{
+    if (sht == NULL || mouse_ct_sheet_img == NULL || ms_dec.cursor_shape == shape) return;
+
+    int old_x = mouse_ct_sheet_img->bx;
+    int old_y = mouse_ct_sheet_img->by;
+    int old_w = (int)mouse_ct_sheet_img->width;
+    int old_h = (int)mouse_ct_sheet_img->height;
+    ms_dec.cursor_shape = shape;
+    redraw_mouse_cursor(sht, mouse_ct_sheet_img, shape);
+    refresh_part_sheet_deferred_or_now(sht, old_x, old_y, old_x + old_w, old_y + old_h);
+}
+
+static void update_hover_resize_cursor()
+{
+    if (ms_dec.left || ms_dec.win_move_lock || ms_dec.win_resize_lock)
+    {
+        if (!ms_dec.win_resize_lock) update_mouse_cursor_shape(sht_img, MouseCursorStandard);
+        return;
+    }
+
+    uint8_t edges = 0;
+    (void)find_resize_window_at(mouse_x, mouse_y, &edges);
+    update_mouse_cursor_shape(sht_img, cursor_shape_for_resize_edges(edges));
+}
+
+static bool begin_window_resize_drag(WINDOWLS *window, uint8_t edges)
+{
+    if (window == NULL || window->w_sheet == NULL || edges == 0) return false;
+
+    ms_dec.win_resize_lock = true;
+    ms_dec.win_move_lock = false;
+    ms_dec.sht_now = window->w_sheet;
+    ms_dec.resize_edges = edges;
+    ms_dec.resize_start_mouse_x = mouse_x;
+    ms_dec.resize_start_mouse_y = mouse_y;
+    ms_dec.resize_start_bx = window->w_sheet->bx;
+    ms_dec.resize_start_by = window->w_sheet->by;
+    ms_dec.resize_start_width = window->width;
+    ms_dec.resize_start_height = window->height;
+
+    lift_sheet(sht_img, window->w_sheet);
+    focus_window_dock(window);
+    update_mouse_cursor_shape(sht_img, cursor_shape_for_resize_edges(edges));
+    refresh_part_sheet_deferred_or_now(sht_img, window->w_sheet->bx, window->w_sheet->by,
+                                       window->w_sheet->bx + window->w_sheet->width,
+                                       window->w_sheet->by + window->w_sheet->height);
+    return true;
+}
+
+static void process_window_resize_drag()
+{
+    WINDOWLS *window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+    if (window == NULL || window->w_sheet == NULL)
+    {
+        ms_dec.win_resize_lock = false;
+        ms_dec.resize_edges = 0;
+        update_mouse_cursor_shape(sht_img, MouseCursorStandard);
+        return;
+    }
+
+    int dx = mouse_x - ms_dec.resize_start_mouse_x;
+    int dy = mouse_y - ms_dec.resize_start_mouse_y;
+    int bx = ms_dec.resize_start_bx;
+    int by = ms_dec.resize_start_by;
+    int width = (int)ms_dec.resize_start_width;
+    int height = (int)ms_dec.resize_start_height;
+
+    if (ms_dec.resize_edges & WindowResizeLeft)
+    {
+        width -= dx;
+        bx += dx;
+    }
+    if (ms_dec.resize_edges & WindowResizeRight) width += dx;
+    if (ms_dec.resize_edges & WindowResizeTop)
+    {
+        height -= dy;
+        by += dy;
+    }
+    if (ms_dec.resize_edges & WindowResizeBottom) height += dy;
+
+    if (width < (int)WINDOW_MIN_CONTENT_WIDTH)
+    {
+        if (ms_dec.resize_edges & WindowResizeLeft) bx -= (int)WINDOW_MIN_CONTENT_WIDTH - width;
+        width = WINDOW_MIN_CONTENT_WIDTH;
+    }
+    if (height < (int)WINDOW_MIN_CONTENT_HEIGHT)
+    {
+        if (ms_dec.resize_edges & WindowResizeTop) by -= (int)WINDOW_MIN_CONTENT_HEIGHT - height;
+        height = WINDOW_MIN_CONTENT_HEIGHT;
+    }
+
+    if (width == (int)window->width && height == (int)window->height && bx == window->w_sheet->bx &&
+        by == window->w_sheet->by)
+    {
+        return;
+    }
+
+    if (resize_window_sheet_preserving_content(xwmii, sht_img, window, bx, by, (uint32_t)width, (uint32_t)height))
+    {
+        window->is_maximized = false;
+        do_message(MSG_RESIZE, window->width, window->height, window->WinMPf, window->w_task);
+    }
+}
+
 extern EFI_SYSTEM_TABLE *EFI_ST;
 extern BOOT_CONFIG *EFI_BC;
 
@@ -140,6 +388,7 @@ void process_mouse_button()
     }
     else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
     {
+        bool was_resizing = ms_dec.win_resize_lock;
         tm time;
         time_read(&time);
         uint64_t click_time = mktime(&time);
@@ -155,7 +404,7 @@ void process_mouse_button()
         }
 
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-        if (current_window != NULL)
+        if (!was_resizing && current_window != NULL)
         {
             if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
                 tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
@@ -247,11 +496,14 @@ void process_mouse_button()
             }
         }
         ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
-        ms_dec.left_release_window  = current_window;
-        ms_dec.left_release_pending = true;
+        ms_dec.left_release_window  = was_resizing ? NULL : current_window;
+        ms_dec.left_release_pending = !was_resizing;
 
         ms_dec.left          = false;
         ms_dec.win_move_lock = false;
+        ms_dec.win_resize_lock = false;
+        ms_dec.resize_edges = 0;
+        update_hover_resize_cursor();
     }
     if (ms_dec.btn & 0x02) { ms_dec.right = true; }
     else if ((ms_dec.btn & 0x02) == 0 && ms_dec.right)
@@ -334,6 +586,7 @@ void process_mouse_button()
                                        getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
                                        getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
                                        getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+    update_hover_resize_cursor();
     tbx = mouse_x;
     tby = mouse_y;
 
@@ -517,8 +770,19 @@ void process_mouse_info()
 
     if (ms_dec.left)
     {
-        if (!ms_dec.win_move_lock)
+        if (ms_dec.win_resize_lock)
         {
+            process_window_resize_drag();
+        }
+        else if (!ms_dec.win_move_lock)
+        {
+            uint8_t resize_edges = 0;
+            WINDOWLS *resize_window = find_resize_window_at(mouse_x, mouse_y, &resize_edges);
+            if (resize_window != NULL && begin_window_resize_drag(resize_window, resize_edges))
+            {
+                return;
+            }
+
             SHEET *movable_sheet = found_sheet_movable(sht_img, mouse_x, mouse_y);
             if (movable_sheet == NULL || have_full_screen_app)
             {
@@ -567,7 +831,7 @@ void process_mouse_info()
                 focus_window_dock(sht_found_win(xwmii, sht_img, active_sheet));
             }
         }
-        else if (ms_dec.win_move_lock)
+        else
         {
             if (ms_dec.sht_now == NULL)
             {
@@ -685,7 +949,10 @@ void set_mouse_position(int x, int y)
     mouse_y = y;
 
     ms_dec.win_move_lock = false;
+    ms_dec.win_resize_lock = false;
     ms_dec.sht_now = NULL;
+    ms_dec.resize_edges = 0;
+    ms_dec.cursor_shape = MouseCursorStandard;
 
     if (sht_img == NULL || mouse_ct_sheet_img == NULL) {
         return;
@@ -937,6 +1204,7 @@ void mouse_init()
     // 这里应当直接进入首字节等待状态，否则运行期数据包会被一直丢掉。
     ms_dec.phase         = 1;
     ms_dec.win_move_lock = false;
+    ms_dec.win_resize_lock = false;
     ms_dec.sht_now       = NULL;
     ms_dec.need_flush    = false;
     ms_dec.first_click   = false;
@@ -947,6 +1215,8 @@ void mouse_init()
     ms_dec.right         = false;
     ms_dec.center        = false;
     ms_dec.scroll        = 0;
+    ms_dec.resize_edges  = 0;
+    ms_dec.cursor_shape  = MouseCursorStandard;
 
     printk("Mouse initialized successfully, type: %d\n", type);
 }
@@ -980,15 +1250,8 @@ void mouse_init()
 
 void draw_mouse(SHEET_INFO *sht, SHEET *csheet)
 {
-    for (int y = 0; y < 21; y++)
-    {
-        for (int x = 0; x < 10; x++)
-        {
-            if (mouse[y][x] == '.') { draw_point(sht, csheet, x, y, {0, 0, 0, 0}); }
-            else if (mouse[y][x] == 'w') { draw_point(sht, csheet, x, y, WHITE); }
-            else if (mouse[y][x] == '@') { draw_point(sht, csheet, x, y, BLACK); }
-        }
-    }
+    ms_dec.cursor_shape = MouseCursorStandard;
+    redraw_mouse_cursor(sht, csheet, MouseCursorStandard);
 }
 
 void move_mouse(SHEET_INFO *sht, SHEET *csheet, int px, int py)

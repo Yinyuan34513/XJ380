@@ -630,7 +630,7 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
     front_p->next->front = front_p->front;
     front_p->front->next = front_p->next;
     SHEET *front_p2      = sht->start;
-    for (int i = 0; i < sht->sheet_num - 3; i++)
+    for (int i = 0; i < sht->sheet_num - 4; i++)
     {
         front_p2 = front_p2->next; // 寻找最后一个
     }

@@ -358,6 +358,7 @@ void components_flusher()
 extern SHEET *mouse_ct_sheet_img;
 SHEET        *desktop_ct_sheet; // 如果SheetTest那行输出的是1145的话那么绝对有问题
 SHEET        *dock_ct_sheet;
+SHEET        *middle_ct_sheet;
 SHEET        *mouse_ct_sheet;
 SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
@@ -382,9 +383,11 @@ void desktop_flusher()
 
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
                  &desktop_ct_sheet);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 9999,
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32700,
                  &dock_ct_sheet);
-    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 10000,
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32766,
+                 &middle_ct_sheet); // 输入法类窗口放这层
+    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 29, 22, FixedSheetType, 32767,
                  &mouse_ct_sheet);
 
     // 草稿纸吗，有点意思

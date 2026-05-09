@@ -74,8 +74,8 @@ static void redraw_window_frame(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windo
     free(lft);
 }
 
-static bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,
-                                                   int bx, int by, uint32_t width, uint32_t height)
+bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,
+                                            int bx, int by, uint32_t width, uint32_t height)
 {
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls) || windowls->type != XWIN_NORMAL ||
         windowls->w_sheet == NULL)
@@ -252,7 +252,7 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
                  width + 24, height + 47, NoEdgeWindowSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
     int refresh_bx = getBX(sht, new_window->w_sheet);
@@ -308,7 +308,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
                  width + 24, height + 47, MovableSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
     int refresh_bx = getBX(sht, new_window->w_sheet);
@@ -480,6 +480,8 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     {
         ms_dec.sht_now       = NULL;
         ms_dec.win_move_lock = false;
+        ms_dec.win_resize_lock = false;
+        ms_dec.resize_edges = 0;
     }
     if (ms_dec.left_release_window == windowls)
     {
