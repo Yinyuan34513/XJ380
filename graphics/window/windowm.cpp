@@ -487,6 +487,8 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         ms_dec.left_release_pending = false;
     }
 
+    bool need_refresh = false;
+
     if (windowls->type == XWIN_FULL_SCR)
     {
         have_full_screen_app = false;
@@ -497,17 +499,17 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             memset(fs_sheet->buffer, 0, sizeof(SHEET_BUFFER) * fs_sheet->width * fs_sheet->height);
             init_dock(sht_img, windowls->w_sheet);
             init_shortcut_dock(sht_img, windowls->w_sheet);
+            need_refresh = true;
         }
     }
 
     WindowIsCreating  = true;
     int       bx = 0, by = 0, ex = 0, ey = 0;
-    bool      need_refresh = false;
 
     unregister_right_rb_button_menu_components(windowls);
     unregister_task_dock(windowls);
 
-    if (windowls->type != XWIN_FULL_SCR && is_valid_gui_ptr(windowls->w_sheet))
+    if (is_valid_gui_ptr(windowls->w_sheet))
     {
         bx = windowls->w_sheet->bx;
         by = windowls->w_sheet->by;
