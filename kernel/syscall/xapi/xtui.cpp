@@ -30,7 +30,17 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
-void xapi_output_kernel(const char *str)
+static constexpr size_t XAPI_RUN_ARG_MAX = 32;
+
+uint64_t do_xapi_GetTime()
+{
+    tm t;
+    time_read(&t);
+    return mktime(&t);
+}
+
+// p 开头的代表 private
+void p_xapi_output_kernel(const char *str)
 {
     if (str == NULL) return;
 
@@ -78,7 +88,7 @@ void xapi_output_kernel(const char *str)
     }
 }
 
-static void xapi_free_argv(char **argv)
+static void p_xapi_free_argv(char **argv)
 {
     if (argv == NULL) return;
     for (size_t i = 0; argv[i] != NULL; i++)
@@ -88,7 +98,7 @@ static void xapi_free_argv(char **argv)
     free(argv);
 }
 
-static int xapi_copy_argv_from_user(char **user_argv, char ***out)
+static int p_xapi_copy_argv_from_user(char **user_argv, char ***out)
 {
     if (out == NULL) return -EINVAL;
     *out = NULL;
@@ -105,7 +115,7 @@ static int xapi_copy_argv_from_user(char **user_argv, char ***out)
         char *user_arg = NULL;
         if (!copy_from_user_pagedir(pagedir, &user_arg, &user_argv[i], sizeof(user_arg)))
         {
-            xapi_free_argv(argv);
+            p_xapi_free_argv(argv);
             return -EFAULT;
         }
         if (user_arg == NULL)
@@ -116,26 +126,27 @@ static int xapi_copy_argv_from_user(char **user_argv, char ***out)
         int ret = xapi_copy_string_from_user(&argv[i], user_arg, XAPI_USER_STRING_MAX);
         if (ret < 0)
         {
-            xapi_free_argv(argv);
+            p_xapi_free_argv(argv);
             return ret;
         }
     }
 
-    xapi_free_argv(argv);
+    p_xapi_free_argv(argv);
     return -E2BIG;
+}
+
+static size_t p_xapi_strnlen(const char *str, size_t max_len)
+{
+    if (str == NULL) return 0;
+    size_t len = 0;
+    while (len < max_len && str[len] != '\0') len++;
+    return len;
 }
 
 void do_xapi_GetSystemVersion(uint64_t str)
 {
     if (str == 0) return;
     copy_to_user_pagedir(xapi_current_pagedir(), (void *)str, OS_VERSION, strlen(OS_VERSION) + 1);
-}
-
-uint64_t do_xapi_GetTime()
-{
-    tm t;
-    time_read(&t);
-    return mktime(&t);
 }
 
 void do_xapi_GetCurrentUser(uint64_t dst)
@@ -152,7 +163,7 @@ void do_xapi_Output(char *str)
 {
     char *kstr = NULL;
     if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
-    xapi_output_kernel(kstr);
+    p_xapi_output_kernel(kstr);
     free(kstr);
 }
 
@@ -175,7 +186,7 @@ void do_xapi_Input(char *str)
                 if (front_p->xtttp_stc->input_lock) break;
                 scheduler_yield();
             }
-            size_t input_len = xapi_strnlen(front_p->xtttp_stc->input, sizeof(front_p->xtttp_stc->input) - 1);
+            size_t input_len = p_xapi_strnlen(front_p->xtttp_stc->input, sizeof(front_p->xtttp_stc->input) - 1);
             front_p->xtttp_stc->input[input_len] = '\0';
             copy_to_user_pagedir(xapi_current_pagedir(), str, front_p->xtttp_stc->input, input_len + 1);
             memset(front_p->xtttp_stc->input, 0, sizeof(front_p->xtttp_stc->input));
@@ -215,17 +226,17 @@ char do_xapi_Getch()
 
 void do_xapi_Endline()
 {
-    xapi_output_kernel("\n");
+    p_xapi_output_kernel("\n");
 }
 
 void do_xapi_Printline(char *str)
 {
     char *kstr = NULL;
     if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
-    size_t len = xapi_strnlen(kstr, XAPI_USER_STRING_MAX - 2);
+    size_t len = p_xapi_strnlen(kstr, XAPI_USER_STRING_MAX - 2);
     kstr[len] = '\n';
     kstr[len + 1] = '\0';
-    xapi_output_kernel(kstr);
+    p_xapi_output_kernel(kstr);
     free(kstr);
 }
 
@@ -294,7 +305,7 @@ uint64_t do_xapi_RunArgs(char *path, char **argv)
     if (fpath == NULL) return (uint64_t)-ENOENT;
 
     char **kargv = NULL;
-    ret = xapi_copy_argv_from_user(argv, &kargv);
+    ret = p_xapi_copy_argv_from_user(argv, &kargv);
     if (ret < 0)
     {
         free(fpath);
@@ -311,7 +322,7 @@ uint64_t do_xapi_RunArgs(char *path, char **argv)
 
     ret = create_user_process_from_file(fpath, get_current_task()->parent_group, kargv);
     switch_page_directory(caller_pagedir);
-    xapi_free_argv(kargv);
+    p_xapi_free_argv(kargv);
     free(fpath);
     return (uint64_t)ret;
 }

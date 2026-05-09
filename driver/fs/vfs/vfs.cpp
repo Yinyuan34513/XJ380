@@ -37,7 +37,7 @@ vfs_callback_t fs_callbacks[256] = {
     [0] = &vfs_empty_callback,
 };
 
-extern void xapi_output_kernel(const char *str);
+extern void p_xapi_output_kernel(const char *str);
 
 struct llist_header fs_metadata_list;
 
@@ -1037,7 +1037,7 @@ static void tty_kernel_print(tty_t *tty, const char *msg)
 {
     (void)tty;
     write_serial_fmt("%s", msg);
-    xapi_output_kernel(msg);
+    p_xapi_output_kernel(msg);
 }
 
 static void tty_kernel_putc(tty_t *tty, int c)
@@ -1045,7 +1045,7 @@ static void tty_kernel_putc(tty_t *tty, int c)
     (void)tty;
     char buf[2] = {(char)c, '\0'};
     write_serial_fmt("%s", buf);
-    xapi_output_kernel(buf);
+    p_xapi_output_kernel(buf);
 }
 
 static void tty_termios_default(termios_t *termios)

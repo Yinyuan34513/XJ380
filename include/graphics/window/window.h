@@ -69,6 +69,8 @@ WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 WINDOWLS *mpf_found_win(MsgPrcor mpf);
 bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 void set_window_maximize_support(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, bool can_maximize);
+bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,
+                                            int bx, int by, uint32_t width, uint32_t height);
 
 void resize_theme_width(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t swidth, uint32_t height);
 void resize_theme_height(SHEET_BUFFER *dst, SHEET_BUFFER *src, uint32_t width, uint32_t height, uint32_t sheight);

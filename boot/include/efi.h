@@ -239,10 +239,12 @@ struct EFI_BOOT_SERVICES
     UINTN _buf5[9];
 
     // Image Services
-    UINTN _buf6[5];
+    UINTN  _buf6[4];
+    EFIAPI EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
 
     // Miscellaneous Services
-    UINTN  _buf7[2];
+    UINTN  _buf7[1];
+    EFIAPI EFI_STATUS (*Stall)(UINTN Microseconds);
     EFIAPI EFI_STATUS (*SetWatchdogTimer)(UINTN Timeout, UINT64 WatchdogCode, UINTN DataSize, CHAR16 *WatchdogData);
 
     // DriverSupport Services
@@ -265,9 +267,7 @@ struct EFI_BOOT_SERVICES
     UINTN _buf11;
 
     // Miscellaneous Services
-    UINTN  _buf12[1];
-    EFIAPI EFI_STATUS (*ExitBootServices)(EFI_HANDLE ImageHandle, UINTN MapKey);
-    UINTN  _buf13[1];
+    UINTN _buf12[3];
 };
 
 struct EFI_RUNTIME_SERVICES
@@ -307,7 +307,8 @@ struct EFI_SYSTEM_TABLE
         UINTN _buf;
         EFIAPI
         EFI_STATUS (*OutputString)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, CHAR16 *String);
-        UINTN  _buf2[4];
+        UINTN  _buf2[3];
+        EFIAPI EFI_STATUS (*SetAttribute)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN Attribute);
         EFIAPI EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
     }                           *ConOut;
     EFI_HANDLE                   StandardErrorHandle;

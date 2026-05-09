@@ -25,10 +25,12 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
-	frameworks/StardustUI/examples/layout
+	frameworks/StardustUI/examples/layout \
+	frameworks/StardustUI/examples/duckchat
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
@@ -185,95 +187,147 @@ gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 
 vdisk: all
 	@rm -rf XJ380.img
-	@rm -rf $(BUILD_DIR)/XJ380
+	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
+	@rm -rf $(VDISK_ROOT) || { \
+		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
+		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
+		exit 1; \
+	}
 
 	@dd if=/dev/zero of=XJ380.img bs=1024M count=1
 # You must execute the following command with sudo privileges, that's not good...
 	@$(VDISK_SUDO) sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
+	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((1024*1024-2048*512/1024))
 
-	@sh $(STAGE_IMAGE_BASE) $(BUILD_DIR)/XJ380
-	@mkdir -p $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/gcc/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/libexec/gcc/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(VDISK_ROOT)/EFI/BOOT
+	@mkdir -p $(VDISK_ROOT)/system
+	@mkdir -p $(VDISK_ROOT)/system/font
+	@mkdir -p $(VDISK_ROOT)/system/theme/skyglass
+	@mkdir -p $(VDISK_ROOT)/system/foxland
+	@mkdir -p $(VDISK_ROOT)/system/icon
+	@mkdir -p $(VDISK_ROOT)/apps
+	@mkdir -p $(VDISK_ROOT)/lib64
+	@mkdir -p $(VDISK_ROOT)/lib/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(VDISK_ROOT)/usr/bin
+	@mkdir -p $(VDISK_ROOT)/usr/include
+	@mkdir -p $(VDISK_ROOT)/usr/lib/gcc/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(VDISK_ROOT)/usr/libexec/gcc/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(VDISK_ROOT)/usr/lib/$(HOST_GCC_TRIPLE)
+	@mkdir -p $(VDISK_ROOT)/system/resources/image
+	@mkdir -p $(VDISK_ROOT)/mod
+	@mkdir -p $(VDISK_ROOT)/etc/opkg
+	@mkdir -p $(VDISK_ROOT)/etc/fastfetch
+	@mkdir -p $(VDISK_ROOT)/etc
+	@mkdir -p $(VDISK_ROOT)/etc/ssl/certs
+	@mkdir -p $(VDISK_ROOT)/usr/lib/opkg/info
+	@mkdir -p $(VDISK_ROOT)/usr/lib/opkg/lists
+	@mkdir -p $(VDISK_ROOT)/tmp
+	@mkdir -p $(VDISK_ROOT)/var
+	@mkdir -p $(VDISK_ROOT)/var/lock
+	@printf "nameserver 223.5.5.5\n" > $(VDISK_ROOT)/etc/resolv.conf
+	@cp -a resources/etc/os-release $(VDISK_ROOT)/etc/os-release
+	@cp -a resources/etc/fastfetch/. $(VDISK_ROOT)/etc/fastfetch/
+	@if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp -a /etc/ssl/certs/ca-certificates.crt $(VDISK_ROOT)/etc/ssl/certs/ca-certificates.crt; fi
+	@touch $(VDISK_ROOT)/usr/lib/opkg/lock
+	@cp -a resources/opkg/status $(VDISK_ROOT)/usr/lib/opkg/status
+	@if [ -d resources/opkg/info ]; then cp -a resources/opkg/info/. $(VDISK_ROOT)/usr/lib/opkg/info/; fi
+	@$(OPKG_CONF_GEN) $(VDISK_ROOT) $(OPKG_FEEDS)
+	@mkdir -p $(VDISK_ROOT)/system/config
+	@mkdir -p $(VDISK_ROOT)/apps/builtin
+	@mkdir -p $(VDISK_ROOT)/apps/system
+	@mkdir -p $(VDISK_ROOT)/apps/thirdparty
 
-	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
+	@cp -a ./user/fmanager/fm_bg.png $(VDISK_ROOT)/system/resources/image
 
-	@cp -a $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/XJ380/EFI/BOOT
-	@cp -a $(BUILD_DIR)/kernel.elf $(BUILD_DIR)/XJ380/system
+	@cp -a $(BUILD_DIR)/BOOTX64.efi $(VDISK_ROOT)/EFI/BOOT
+	@cp -a $(BUILD_DIR)/kernel.elf $(VDISK_ROOT)/system
 
-	@cp -a $(BUILD_DIR)/shell.elf    $(BUILD_DIR)/XJ380/apps/system
-	@cp -a $(BUILD_DIR)/fmanager.elf $(BUILD_DIR)/XJ380/apps/system
-	@cp -a $(BUILD_DIR)/taskmgr.elf  $(BUILD_DIR)/XJ380/apps/system
-	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(BUILD_DIR)/XJ380/apps/system
+	@cp -a $(BUILD_DIR)/shell.elf    $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/taskmgr.elf  $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
 
-	@cp -a $(BUILD_DIR)/calc.elf     $(BUILD_DIR)/XJ380/apps/builtin
-	@cp -a $(BUILD_DIR)/texter.elf   $(BUILD_DIR)/XJ380/apps/builtin
-	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/apps/builtin
-	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps/builtin
-	@cp -a $(BUILD_DIR)/nut.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp -a $(BUILD_DIR)/calc.elf     $(VDISK_ROOT)/apps/builtin
+	@cp -a $(BUILD_DIR)/texter.elf   $(VDISK_ROOT)/apps/builtin
+	@cp -a $(BUILD_DIR)/picturer.elf $(VDISK_ROOT)/apps/builtin
+	@cp -a $(BUILD_DIR)/browser.elf $(VDISK_ROOT)/apps/builtin
+	@cp -a $(BUILD_DIR)/nut.elf $(VDISK_ROOT)/apps/builtin
 
 #	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 #	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/busyterm.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/bcms-sp.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/sigtest.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/posixdemo.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/libctest.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/xjapt.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/dyn-hello $(BUILD_DIR)/XJ380/apps
-	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(BUILD_DIR)/XJ380/lib64/ld-linux-x86-64.so.2
+	@cp -a $(BUILD_DIR)/busyterm.elf $(VDISK_ROOT)/apps
+	@cp -a $(BUILD_DIR)/bcms-sp.elf $(VDISK_ROOT)/apps
+	@cp -a $(BUILD_DIR)/sigtest.elf $(VDISK_ROOT)/apps
+	@cp -a $(BUILD_DIR)/posixdemo.elf $(VDISK_ROOT)/apps
+	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
+	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
+	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
 
-	@cp -a resources/musl/ld-musl-x86_64.so.1 $(BUILD_DIR)/XJ380/lib/ld-musl-x86_64.so.1
-	@cp -a resources/musl/libc.so $(BUILD_DIR)/XJ380/lib/libc.so
-	@cp -a resources/musl/libc.musl-x86_64.so.1 $(BUILD_DIR)/XJ380/lib/libc.musl-x86_64.so.1
-	@cp -a resources/musl/libgcc_s.so.1 $(BUILD_DIR)/XJ380/lib/libgcc_s.so.1
+	@cp -a resources/musl/ld-musl-x86_64.so.1 $(VDISK_ROOT)/lib/ld-musl-x86_64.so.1
+	@cp -a resources/musl/libc.so $(VDISK_ROOT)/lib/libc.so
+	@cp -a resources/musl/libc.musl-x86_64.so.1 $(VDISK_ROOT)/lib/libc.musl-x86_64.so.1
+	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
 
-	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
-	@cp -a $(APP_BASH) $(BUILD_DIR)/XJ380/apps/bash
-	@cp -a $(APP_BUSYBOX) $(BUILD_DIR)/XJ380/apps/busybox
-	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(BUILD_DIR)/XJ380/apps/lolcat.deb; fi
-	@cp -a $(APP_FASTFETCH) $(BUILD_DIR)/XJ380/apps/fastfetch
-	@cp ./1.c $(BUILD_DIR)/XJ380/apps/1.c
-	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(BUILD_DIR)/XJ380
-	@$(STAGE_ELF_DEPS) $(BUILD_DIR)/XJ380 $(APP_FASTFETCH)
-	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "dpkg" ]; then \
-		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_DPKG) $(BUILD_DIR)/XJ380; \
-	elif [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
-		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(BUILD_DIR)/XJ380; \
-	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
-		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected dpkg, xbps, or none)" >&2; \
-		exit 1; \
-	fi
+	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
+	@cp -a $(APP_BASH) $(VDISK_ROOT)/apps/bash
+	@cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox
+	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
+	@[ -n "$(HOST_GCC_REAL)" ] && [ -n "$(HOST_GCC_TRIPLE)" ] && [ -n "$(HOST_GCC_VERSION)" ]
+	@cp ./1.c $(VDISK_ROOT)/apps/1.c
+	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_REAL_NAME)
+	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/gcc-$(HOST_GCC_VERSION)
+	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/gcc
+	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/cc
+	@cp -aL $(HOST_GCC_AS) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_AS_NAME)
+	@cp -aL $(HOST_GCC_AS) $(VDISK_ROOT)/usr/bin/as
+	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_LD_NAME)
+	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_TRIPLE)-ld
+	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/ld
+	@cp -a $(HOST_GCC_LIBEXECDIR) $(VDISK_ROOT)/usr/libexec/gcc/$(HOST_GCC_TRIPLE)/
+	@cp -a $(HOST_GCC_LIBDIR) $(VDISK_ROOT)/usr/lib/gcc/$(HOST_GCC_TRIPLE)/
+	@cp -aL /usr/include/. $(VDISK_ROOT)/usr/include/
+	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(VDISK_ROOT)/usr/lib/$(HOST_GCC_TRIPLE)/; done
+	@$(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
+	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(VDISK_ROOT)/lib/$(HOST_GCC_TRIPLE)/; done
+	@$(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
+	@cp -a $(APP_OPKG) $(VDISK_ROOT)/apps/opkg
+	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(VDISK_ROOT)/apps/opkg
 
+	@cp -a ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font
+	@cp -a ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font
 
-	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
-	@cp -a ./font/ttf/XJ380C.ttf $(BUILD_DIR)/XJ380/system/font
+	@cp -a ./graphics/window/theme/skyglass/*.* $(VDISK_ROOT)/system/theme/skyglass
 
-	@cp -a ./graphics/window/theme/skyglass/*.* $(BUILD_DIR)/XJ380/system/theme/skyglass
+	@cp -a ./graphics/peek.png $(VDISK_ROOT)/system/foxland
 
-	@cp -a ./graphics/peek.png $(BUILD_DIR)/XJ380/system/foxland
-
-	@cp -a ./graphics/logo/*.* $(BUILD_DIR)/XJ380/system
+	@cp -a ./graphics/logo/*.* $(VDISK_ROOT)/system
 # 	@cp -a ./test.wav $(BUILD_DIR)/XJ380/system
 
-	@cp -a ./graphics/icon/*.* $(BUILD_DIR)/XJ380/system/icon
+	@cp -a ./graphics/icon/*.* $(VDISK_ROOT)/system/icon
 
-	@cp -a ./out/*.km $(BUILD_DIR)/XJ380/mod
+	@cp -a ./out/*.km $(VDISK_ROOT)/mod
 
-	@cp -a ./resources/* $(BUILD_DIR)/XJ380/system/resources
+	@cp -a ./resources/* $(VDISK_ROOT)/system/resources
 
-	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps/builtin
-	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps/builtin
+	@cp ./out/helloworld.elf $(VDISK_ROOT)/apps/builtin
+	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
+	@cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin
 
-	@find $(BUILD_DIR)/XJ380 -xtype l -delete
-	@find $(BUILD_DIR)/XJ380 -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
-	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
+# temp test (remember to delete)
+	@mkdir -p $(VDISK_ROOT)/users/GuoqiFish/desktop
+	@cp -a ./test.txt $(VDISK_ROOT)/users/GuoqiFish/desktop
+	@find $(VDISK_ROOT) -xtype l -delete
+	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
+	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
 
-	@rm -rf $(BUILD_DIR)/XJ380
-
+	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
+	@rm -rf $(VDISK_ROOT) || { \
+		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
+		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
+		exit 1; \
+	}
+	
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk

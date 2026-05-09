@@ -27,6 +27,83 @@ static uint32_t min_u32(uint32_t a, uint32_t b)
     return a < b ? a : b;
 }
 
+static int clamp_int(int value, int min_value, int max_value)
+{
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static void blend_pixel_with_white(SHEET_BUFFER *pixel, uint8_t alpha)
+{
+    pixel->r = (uint8_t)(pixel->r + (((int)0xff - pixel->r) * alpha) / 255);
+    pixel->g = (uint8_t)(pixel->g + (((int)0xff - pixel->g) * alpha) / 255);
+    pixel->b = (uint8_t)(pixel->b + (((int)0xff - pixel->b) * alpha) / 255);
+    pixel->a = (uint8_t)(pixel->a + (((int)0xff - pixel->a) * alpha) / 255);
+}
+
+static void draw_title_fog_background(SHEET *sheet, CHAR8 *title, uint32_t frame_width)
+{
+    if (sheet == NULL || sheet->buffer == NULL || title == NULL || title[0] == '\0') return;
+    if (!is_valid_gui_ptr(sheet->buffer)) return;
+
+    const int title_x = 12;
+    const int title_y = 8;
+    const int title_size = 11;
+    const int pad_x = 8;
+    const int pad_y = 3;
+    const int fog_h = 19;
+    const int feather = 10;
+
+    uint32_t title_width = (uint32_t)calc_ttf_length(title, title_size);
+    if (title_width < 12) title_width = 12;
+
+    int left = title_x - pad_x;
+    int top = title_y - pad_y;
+    int right = title_x + (int)title_width + pad_x;
+    int bottom = top + fog_h;
+    int button_left = (int)frame_width - 78;
+    int max_right = (button_left > title_x) ? button_left : ((int)sheet->width - 1);
+
+    left = clamp_int(left, 0, (int)sheet->width - 1);
+    right = clamp_int(right, left, max_right);
+    top = clamp_int(top, 0, (int)sheet->height - 1);
+    bottom = clamp_int(bottom, top, (int)sheet->height - 1);
+
+    SHEET_BUFFER *buffer = (SHEET_BUFFER *)sheet->buffer;
+    for (int y = top; y <= bottom; y++)
+    {
+        int dy = y - top;
+        int v_edge = dy < bottom - y ? dy : bottom - y;
+        for (int x = left; x <= right; x++)
+        {
+            int dx = x - left;
+            int h_edge = dx < right - x ? dx : right - x;
+            int edge = h_edge < v_edge ? h_edge : v_edge;
+            int edge_alpha = clamp_int(edge * 255 / feather, 0, 255);
+            int t2 = edge_alpha * edge_alpha / 255;
+            int t3 = t2 * edge_alpha / 255;
+            int t4 = t3 * edge_alpha / 255;
+            int t5 = t4 * edge_alpha / 255;
+            edge_alpha = clamp_int(6 * t5 - 15 * t4 + 10 * t3, 0, 255);
+
+            int center = (right - left) / 2;
+            int center_dist = dx > center ? dx - center : center - dx;
+            int glow = 44 - (center_dist * 44) / (center + 1);
+            int alpha = 96 + glow;
+            alpha = alpha * edge_alpha / 255;
+
+            blend_pixel_with_white(&buffer[(uint32_t)y * sheet->width + (uint32_t)x], (uint8_t)alpha);
+        }
+    }
+}
+
+static void draw_window_title(SHEET_INFO *sht, SHEET *sheet, CHAR8 *title, uint32_t frame_width)
+{
+    draw_title_fog_background(sheet, title, frame_width);
+    print_box_ttf(sht, sheet, title, BLACK, 12, 4, 11);
+}
+
 static void redraw_window_frame(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
 {
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls) || windowls->w_sheet == NULL) return;
@@ -68,14 +145,14 @@ static void redraw_window_frame(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windo
         copy_buffer_by_id_without_alpha(sht, windowls->w_sheet, xwmi->theme.min, width - 48, 5, 26, 18);
     }
 
-    print_box_ttf(sht, sheet, windowls->title, BLACK, 12, 4, 11);
+    draw_window_title(sht, sheet, windowls->title, width);
 
     free(top);
     free(lft);
 }
 
-static bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,
-                                                   int bx, int by, uint32_t width, uint32_t height)
+bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,
+                                            int bx, int by, uint32_t width, uint32_t height)
 {
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls) || windowls->type != XWIN_NORMAL ||
         windowls->w_sheet == NULL)
@@ -252,7 +329,7 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
                  width + 24, height + 47, NoEdgeWindowSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
     int refresh_bx = getBX(sht, new_window->w_sheet);
@@ -308,7 +385,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    create_sheet(sht, window_create_offest_xy, window_create_offest_xy, 
+    create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
                  width + 24, height + 47, MovableSheetType, -1, &new_window->w_sheet);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
     int refresh_bx = getBX(sht, new_window->w_sheet);
@@ -345,7 +422,7 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     }
 
     // print_box_ttf(sht, new_window->w_sheet, title, {0xd7, 0xd7, 0xd7, 0xff}, 11, 3, 12);
-    print_box_ttf(sht, new_window->w_sheet, title, BLACK, 12, 4, 11);
+    draw_window_title(sht, new_window->w_sheet, title, width);
 
     free(top);
     free(lft);
@@ -480,12 +557,16 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     {
         ms_dec.sht_now       = NULL;
         ms_dec.win_move_lock = false;
+        ms_dec.win_resize_lock = false;
+        ms_dec.resize_edges = 0;
     }
     if (ms_dec.left_release_window == windowls)
     {
         ms_dec.left_release_window  = NULL;
         ms_dec.left_release_pending = false;
     }
+
+    bool need_refresh = false;
 
     if (windowls->type == XWIN_FULL_SCR)
     {
@@ -497,17 +578,17 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             memset(fs_sheet->buffer, 0, sizeof(SHEET_BUFFER) * fs_sheet->width * fs_sheet->height);
             init_dock(sht_img, windowls->w_sheet);
             init_shortcut_dock(sht_img, windowls->w_sheet);
+            need_refresh = true;
         }
     }
 
     WindowIsCreating  = true;
     int       bx = 0, by = 0, ex = 0, ey = 0;
-    bool      need_refresh = false;
 
     unregister_right_rb_button_menu_components(windowls);
     unregister_task_dock(windowls);
 
-    if (windowls->type != XWIN_FULL_SCR && is_valid_gui_ptr(windowls->w_sheet))
+    if (is_valid_gui_ptr(windowls->w_sheet))
     {
         bx = windowls->w_sheet->bx;
         by = windowls->w_sheet->by;

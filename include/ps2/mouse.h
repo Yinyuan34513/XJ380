@@ -16,16 +16,25 @@ typedef struct
     bool      right;
 
     bool      win_move_lock;
+    bool      win_resize_lock;
     bool      need_flush;
 
     int       win_x_offset;
     int       win_y_offset;
+    int       resize_start_mouse_x;
+    int       resize_start_mouse_y;
+    int       resize_start_bx;
+    int       resize_start_by;
+    uint32_t  resize_start_width;
+    uint32_t  resize_start_height;
+    uint8_t   resize_edges;
+    uint8_t   cursor_shape;
 
     bool      first_click;
     bool      double_click;
     uint64_t  click_time;
     bool      left_release_pending;
-    
+
     SHEET    *sht_now;
     WINDOWLSP left_release_window;
 
