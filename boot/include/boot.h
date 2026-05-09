@@ -6,6 +6,14 @@
 
 #define MAX_CPU_NUM 256
 
+#define BOOT_FLAG_SAFE_MODE        (1ULL << 0)
+#define BOOT_FLAG_VERBOSE          (1ULL << 1)
+#define BOOT_FLAG_DISABLE_KMOD     (1ULL << 2)
+#define BOOT_FLAG_SAFE_STORAGE_IO  (1ULL << 3)
+#define BOOT_FLAG_BASE_VIDEO       (1ULL << 4)
+#define BOOT_FLAG_LAST_KNOWN_GOOD  (1ULL << 5)
+#define BOOT_FLAG_SHOW_PROGRESS    (1ULL << 6)
+
 typedef struct
 {
     MEMORY_MAP MemoryMap;
@@ -20,6 +28,8 @@ typedef struct
     void   *temp_stack[MAX_CPU_NUM];
 
     int is_qemu;
+
+    UINT64 boot_flags;
 } BOOT_CONFIG;
 
 #endif

@@ -12,13 +12,21 @@
 #include "fs/vfs/list.h"
 #include "llist.h"
 #include "pipe.h"
+#include "rtc.h"
 #include "task/pcb.h"
+#include <ioctl.h>
 #include <cpu/lock.h>
 // #include "pipefs.h"
 #include <syscall/syscall.h>
 #include <device.h>
+#include <task/poll.h>
 
 vfs_node_t rootdir = NULL;
+
+tty_t *defualt_tty = NULL;
+int    tty_mode = KD_TEXT;
+int    tty_kbmode = K_XLATE;
+struct vt_mode current_vt_mode = {0};
 
 static void empty_func() {}
 
@@ -29,10 +37,23 @@ vfs_callback_t fs_callbacks[256] = {
     [0] = &vfs_empty_callback,
 };
 
+extern void p_xapi_output_kernel(const char *str);
+
 struct llist_header fs_metadata_list;
 
 static int fs_nextid = 1;
 static spin_t vfs_child_list_lock = SPIN_INIT;
+
+#define VFS_ALIAS_MAX 256
+
+typedef struct
+{
+    char *alias_path;
+    char *target_path;
+} vfs_alias_entry_t;//就这样吧
+
+static vfs_alias_entry_t vfs_aliases[VFS_ALIAS_MAX];
+static spin_t vfs_alias_lock = SPIN_INIT;
 
 #define callbackof(node, _name_) (fs_callbacks[(node)->fsid]->_name_)
 
@@ -80,14 +101,17 @@ static inline char *pathtok(char **sp) {
 }
 
 static inline void do_open(vfs_node_t file) {
+    if (file == NULL) return;
     if (file->handle != NULL) {
         callbackof(file, stat)(file->handle, file);
     } else {
+        if (file->parent == NULL || file->parent->handle == NULL) return;
         callbackof(file, open)(file->parent->handle, file->name, file);
     }
 }
 
 static inline void do_update(vfs_node_t file) {
+    if (file == NULL) return;
     if (file->type & file_none || file->handle == NULL || file->type & file_dir ||
         file->type & file_symlink || file->type & file_pipe)
         do_open(file);
@@ -124,6 +148,69 @@ static vfs_node_t vfs_child_find(vfs_node_t parent, const char *name) {
     vfs_node_t child = (vfs_node_t)list_first(parent->child, data, streq(name, ((vfs_node_t)data)->name));
     vfs_child_unlock();
     return child;
+}
+
+errno_t vfs_register_alias(const char *alias_path, const char *target_path)
+{
+    if (alias_path == NULL || target_path == NULL) return VFS_STATUS_FAILED;
+    if (alias_path[0] != '/' || target_path[0] != '/') return VFS_STATUS_FAILED;
+
+    spin_lock(&vfs_alias_lock);
+    for (size_t i = 0; i < VFS_ALIAS_MAX; i++)
+    {
+        if (vfs_aliases[i].alias_path != NULL && streq(vfs_aliases[i].alias_path, alias_path))
+        {
+            char *new_target = strdup(target_path);
+            if (new_target == NULL)
+            {
+                spin_unlock(&vfs_alias_lock);
+                return VFS_STATUS_FAILED;
+            }
+            free(vfs_aliases[i].target_path);
+            vfs_aliases[i].target_path = new_target;
+            spin_unlock(&vfs_alias_lock);
+            return EOK;
+        }
+    }
+
+    for (size_t i = 0; i < VFS_ALIAS_MAX; i++)
+    {
+        if (vfs_aliases[i].alias_path == NULL)
+        {
+            vfs_aliases[i].alias_path = strdup(alias_path);
+            vfs_aliases[i].target_path = strdup(target_path);
+            if (vfs_aliases[i].alias_path == NULL || vfs_aliases[i].target_path == NULL)
+            {
+                free(vfs_aliases[i].alias_path);
+                free(vfs_aliases[i].target_path);
+                vfs_aliases[i].alias_path = NULL;
+                vfs_aliases[i].target_path = NULL;
+                spin_unlock(&vfs_alias_lock);
+                return VFS_STATUS_FAILED;
+            }
+            spin_unlock(&vfs_alias_lock);
+            return EOK;
+        }
+    }
+
+    spin_unlock(&vfs_alias_lock);
+    return VFS_STATUS_FAILED;
+}
+
+static char *vfs_alias_target_dup(const char *path)
+{
+    char *target = NULL;
+    spin_lock(&vfs_alias_lock);
+    for (size_t i = 0; i < VFS_ALIAS_MAX; i++)
+    {
+        if (vfs_aliases[i].alias_path != NULL && streq(vfs_aliases[i].alias_path, path))
+        {
+            target = strdup(vfs_aliases[i].target_path);
+            break;
+        }
+    }
+    spin_unlock(&vfs_alias_lock);
+    return target;
 }
 
 errno_t vfs_mkdir(const char *name) {
@@ -307,12 +394,36 @@ errno_t vfs_mkfile(const char *name) {
 
 errno_t vfs_delete(vfs_node_t node) {
     if (node == rootdir) return VFS_STATUS_FAILED;
-    node->type |= file_delete;
+    if (node == NULL || node->parent == NULL) return VFS_STATUS_FAILED;
+    if ((node->type & file_dir) && node->child != NULL) return -ENOTEMPTY;
+
+    errno_t res = callbackof(node, del)(node->parent->handle, node);
+    if (res < 0) return res;
+
+    vfs_child_lock();
+    node->parent->child = list_delete(node->parent->child, node);
+    vfs_child_unlock();
+
+    node->parent = NULL;
+    node->handle = NULL;
+    vfs_free(node);
     return VFS_STATUS_SUCCESS;
 }
 
 errno_t vfs_rename(vfs_node_t node, const char *nw) {
+    if (node == NULL || nw == NULL) return VFS_STATUS_FAILED;
+    do_update(node);
+    if (node->handle == NULL) return VFS_STATUS_FAILED;
     return callbackof(node, rename)(node->handle, nw);
+}
+
+errno_t vfs_resize(vfs_node_t node, uint64_t size) {
+    if (node == NULL) return VFS_STATUS_FAILED;
+    do_update(node);
+    if (node->type == file_dir) return VFS_STATUS_FAILED;
+    callbackof(node, resize)(node->handle, size);
+    do_update(node);
+    return VFS_STATUS_SUCCESS;
 }
 
 int vfs_regist(const char *name, vfs_callback_t callback, int register_id, uint64_t magic) {
@@ -342,10 +453,18 @@ vfs_node_t vfs_do_search(vfs_node_t dir, const char *name) {
     return child;
 }
 
-vfs_node_t vfs_open(const char *str) {
+static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink) {
     if (unlikely(str == NULL)) return NULL;
     if (unlikely(str[0] != '/')) return NULL;
     if (str[1] == '\0') return rootdir; // 根目录
+
+    char *alias_target = vfs_alias_target_dup(str);
+    if (alias_target != NULL) {
+        write_serial_fmt("[busybox-debug] vfs_alias_hit %s -> %s\n", str, alias_target);
+        vfs_node_t alias_node = vfs_open(alias_target);
+        free(alias_target);
+        return alias_node;
+    }
 
     char *path = strdup(str + 1);
     if (unlikely(path == NULL)) return NULL;
@@ -367,12 +486,47 @@ vfs_node_t vfs_open(const char *str) {
         if (current == NULL) { goto err; }
 
         do_update(current);
+        bool is_final_component = save_ptr == NULL || *save_ptr == '\0';
+        if (is_final_component && !follow_final_symlink) break;
         if (current->type & file_symlink) {
-            if (!current->parent || !current->linkto) { goto err; }
+            if (!current->parent) { goto err; }
 
             current->type = file_symlink | file_proxy;
 
             vfs_node_t target = current->linkto;
+            if (target == NULL)
+            {
+                char target_path[256];
+                size_t len = vfs_readlink(current, target_path, sizeof(target_path) - 1);
+                if (len == (size_t)VFS_STATUS_FAILED || len == 0 || len >= sizeof(target_path)) goto err;
+                target_path[len] = '\0';
+                if (target_path[0] == '/')
+                {
+                    target = vfs_open(target_path);
+                }
+                else
+                {
+                    char *parent_path = vfs_get_fullpath(current->parent);
+                    if (parent_path == NULL) goto err;
+                    size_t parent_len = strlen(parent_path);
+                    size_t target_len = strlen(target_path);
+                    char *joined_target = (char *)malloc(parent_len + target_len + 2);
+                    if (joined_target == NULL)
+                    {
+                        free(parent_path);
+                        goto err;
+                    }
+                    sprintf(joined_target, "%s%s%s", parent_path,
+                            parent_path[parent_len - 1] == '/' ? "" : "/", target_path);
+                    char *full_target = normalize_path(joined_target);
+                    free(joined_target);
+                    free(parent_path);
+                    if (full_target == NULL) goto err;
+                    target = vfs_open(full_target);
+                    free(full_target);
+                }
+                current->linkto = target;
+            }
             if (!target) goto err;
 
             target->refcount++;
@@ -386,6 +540,14 @@ vfs_node_t vfs_open(const char *str) {
 err:
     free(path);
     return NULL;
+}
+
+vfs_node_t vfs_open(const char *str) {
+    return vfs_open_impl(str, true);
+}
+
+vfs_node_t vfs_open_no_follow(const char *str) {
+    return vfs_open_impl(str, false);
 }
 
 void vfs_update(vfs_node_t node) {
@@ -405,6 +567,10 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
     nw->flags      = src->flags;
     nw->fd         = src->fd;
     vfs_node_t node = nw->node;
+    if ((node->type & (file_ptmx | file_pts)) && fs_callbacks[node->fsid]->dup != (void *)empty_func) {
+        fs_callbacks[node->fsid]->dup(node);
+        return nw;
+    }
     if ((node->type & file_pipe) && node->handle != NULL) {
         pipe_specific_t *spec = (pipe_specific_t *)node->handle;
         pipe_info_t     *pipe = spec != NULL ? spec->info : NULL;
@@ -455,7 +621,7 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
     if (parent)
     {
         vfs_child_lock();
-        list_prepend(parent->child, node);
+        parent->child = list_prepend(parent->child, node);
         vfs_child_unlock();
     }
     return node;
@@ -467,6 +633,17 @@ errno_t vfs_close(vfs_node_t node) {
 
     if (node->refcount > 0) node->refcount--;
 
+    if (node->type & (file_ptmx | file_pts)) {
+        if (node->handle != NULL) callbackof(node, close)(node->handle);
+        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
+        node->handle = NULL;
+        if (node->parent == NULL) {
+            free(node->name);
+            free(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
     if (node->type & file_pipe) {
         if (node->handle != NULL) {
             callbackof(node, close)(node->handle);
@@ -475,7 +652,7 @@ errno_t vfs_close(vfs_node_t node) {
         if (node->refcount <= 0) {
             if (node->parent != NULL) {
                 vfs_child_lock();
-                list_delete(node->parent->child, node);
+                node->parent->child = list_delete(node->parent->child, node);
                 vfs_child_unlock();
             }
             node->handle = NULL;
@@ -494,7 +671,7 @@ errno_t vfs_close(vfs_node_t node) {
     if (node->type & file_proxy){
          return VFS_STATUS_SUCCESS;
     }
-    if (node->type & file_dir)
+    if ((node->type & file_dir) && !(node->type & file_delete))
     {
         return VFS_STATUS_SUCCESS;
     } 
@@ -502,7 +679,7 @@ errno_t vfs_close(vfs_node_t node) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;
         vfs_child_lock();
-        list_delete(node->parent->child, node);
+        node->parent->child = list_delete(node->parent->child, node);
         vfs_child_unlock();
         node->handle = NULL;
         vfs_free(node);
@@ -775,36 +952,327 @@ bool vfs_init() {
     return true;
 }
 
+static tty_t *current_tty()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || task->parent_group->tty == NULL) return get_default_tty();
+    return task->parent_group->tty;
+}
+
+static xtttp_dtt *current_xtttp_terminal()
+{
+    tcb_t task = get_current_task();
+    pcb_t process = task != NULL ? task->parent_group : NULL;
+    while (process != NULL && process != kernel_group)
+    {
+        if (process->xtttp_stc != NULL && process->xtttp_stc->is_shell) return process->xtttp_stc;
+        process = process->parent_task;
+    }
+    return NULL;
+}
+
+static void tty_kernel_flush(tty_t *tty)
+{
+    (void)tty;
+}
+
+static void tty_kernel_print(tty_t *tty, const char *msg)
+{
+    (void)tty;
+    write_serial_fmt("%s", msg);
+    p_xapi_output_kernel(msg);
+}
+
+static void tty_kernel_putc(tty_t *tty, int c)
+{
+    (void)tty;
+    char buf[2] = {(char)c, '\0'};
+    write_serial_fmt("%s", buf);
+    p_xapi_output_kernel(buf);
+}
+
+static void tty_termios_default(termios_t *termios)
+{
+    memset(termios, 0, sizeof(*termios));
+    termios->c_lflag = ECHO | ICANON | IEXTEN | ISIG;
+    termios->c_iflag = BRKINT | ICRNL | INPCK | ISTRIP | IXON;
+    termios->c_oflag = OPOST;
+    termios->c_cflag = CS8 | CREAD | CLOCAL;
+    termios->c_line = 0;
+    termios->c_cc[VINTR] = 3;
+    termios->c_cc[VQUIT] = 28;
+    termios->c_cc[VERASE] = 0x7F;
+    termios->c_cc[VKILL] = 21;
+    termios->c_cc[VEOF] = 4;
+    termios->c_cc[VTIME] = 0;
+    termios->c_cc[VMIN] = 1;
+    termios->c_cc[VSTART] = 17;
+    termios->c_cc[VSTOP] = 19;
+    termios->c_cc[VSUSP] = 26;
+    termios->c_cc[VREPRINT] = 18;
+    termios->c_cc[VDISCARD] = 15;
+    termios->c_cc[VWERASE] = 23;
+    termios->c_cc[VLNEXT] = 22;
+}
+
+tty_t *alloc_default_tty()
+{
+    tty_t *tty = (tty_t *)malloc(sizeof(tty_t));
+    if (tty == NULL) return NULL;
+    memset(tty, 0, sizeof(*tty));
+    tty->width = 720;
+    tty->height = 400;
+    tty->print = tty_kernel_print;
+    tty->putchar = tty_kernel_putc;
+    tty->flush = tty_kernel_flush;
+    tty_termios_default(&tty->termios);
+    tty->is_sigterm = false;
+    return tty;
+}
+
+void free_tty(tty_t *tty)
+{
+    if (tty == NULL || tty == defualt_tty) return;
+    free(tty);
+}
+
+tty_t *get_default_tty()
+{
+    return defualt_tty;
+}
+
 static size_t stdin_read(int drive, uint8_t *buffer, size_t number, size_t lba) {
     bool is_sti = are_interrupts_enabled();
     open_interrupt;
 
+    xtttp_dtt *terminal = current_xtttp_terminal();
+    if (terminal != NULL)
+    {
+        terminal->wait_for_input = true;
+        while (!terminal->input_lock)
+        {
+            scheduler_yield();
+        }
+    }
+
     size_t i = 0;
     for (; i < number; i++) {
-        char c = (char)get_keyboard_input();
-        if (c == 0x7f) { c = '\b'; }
+        char c;
+        if (terminal != NULL)
+        {
+            c = terminal->input[0];
+            if (c == '\0') break;
+            size_t remaining = strlen(terminal->input);
+            if (remaining > 0)
+            {
+                memmove(terminal->input, terminal->input + 1, remaining);
+            }
+        }
+        else
+        {
+            c = (char)get_keyboard_input();
+        }
+        if (c == '\0') { break; }
+        tty_t *tty = current_tty();
+        uint32_t lflag = tty != NULL ? tty->termios.c_lflag : 0;
         if (c == 0x9) { c = '\t'; }
-        if (c == '\b') {
+        if (terminal == NULL && (c == 0x7f || c == '\b') && (lflag & ICANON)) {
+            if (tty != NULL && (lflag & ECHO)) write_serial_fmt("\b \b");
             if (i > 0) {
-                buffer[i--] = '\0';
                 i--;
+                buffer[i] = '\0';
             }
             continue;
         }
+        if (tty != NULL && (lflag & ECHO)) write_serial_fmt("%c", c);
         buffer[i] = c;
+        if (c == '\n') {
+            i++;
+            break;
+        }
     }
 
-    if (!is_sti) open_interrupt;
+    if (terminal != NULL)
+    {
+        if (terminal->input[0] == '\0')
+        {
+            terminal->input_lock = false;
+            terminal->wait_for_input = false;
+        }
+        else
+        {
+            terminal->input_lock = true;
+            terminal->wait_for_input = false;
+        }
+    }
+
+    if (!is_sti) close_interrupt;
+
+    pcb_t process = get_current_task() ? get_current_task()->parent_group : NULL;
+    if (process != NULL && process->linux_abi) {
+        // write_serial_fmt("[] stdin_read requested=%llu ret=%llu\n",
+        //                  (unsigned long long)number,
+        //                  (unsigned long long)i);
+    }
 
     return i;
 }
 
 static size_t stdout_write(int drive, uint8_t *buffer, size_t number, size_t lba) {
-    write_serial_fmt((char*)buffer);
+    tty_t *tty = current_tty();
+    if (tty != NULL && tty->print != NULL)
+    {
+        char *text = (char *)malloc(number + 1);
+        if (text == NULL) return 0;
+        memcpy(text, buffer, number);
+        text[number] = '\0';
+        tty->print(tty, text);
+        free(text);
+    }
+    else
+    {
+        for (size_t i = 0; i < number; i++) write_serial_fmt("%c", buffer[i]);
+    }
     return number;
 }
 
-void stdio_init()
+static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
+{
+    (void)device;
+    tty_t *tty = current_tty();
+    if (tty == NULL) return -ENOTTY;
+
+    switch (req)
+    {
+    case TIOCGWINSZ:
+    {
+        struct winsize *ws = (struct winsize *)arg;
+        if (ws != NULL)
+        {
+            ws->ws_row = 25;
+            ws->ws_col = 80;
+            ws->ws_xpixel = (unsigned short)tty->width;
+            ws->ws_ypixel = (unsigned short)tty->height;
+        }
+        break;
+    }
+    case TCGETS:
+    {
+        struct termios *termios = (struct termios *)arg;
+        if (termios == NULL) return -EFAULT;
+        memcpy(termios, &tty->termios, sizeof(struct termios));
+        break;
+    }
+    case TCSETS:
+    case TCSETSF:
+    case TCSETSW:
+    {
+        const struct termios *termios = (const struct termios *)arg;
+        if (termios == NULL) return -EFAULT;
+        memcpy(&tty->termios, termios, sizeof(struct termios));
+        break;
+    }
+    case TIOCGPGRP:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = get_current_task()->parent_group->pid;
+        tty->is_sigterm = true;
+        break;
+    case TIOCSPGRP:
+    case TIOCSCTTY:
+        break;
+    case KDGETMODE:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = tty_mode;
+        break;
+    case KDSETMODE:
+        if (arg == NULL) return -EFAULT;
+        tty_mode = *(int *)arg;
+        break;
+    case KDGKBMODE:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = tty_kbmode;
+        break;
+    case KDSKBMODE:
+        if (arg == NULL) return -EFAULT;
+        tty_kbmode = *(int *)arg;
+        break;
+    case VT_SETMODE:
+        if (arg == NULL) return -EFAULT;
+        memcpy(&current_vt_mode, arg, sizeof(current_vt_mode));
+        break;
+    case VT_GETMODE:
+        if (arg == NULL) return -EFAULT;
+        memcpy(arg, &current_vt_mode, sizeof(current_vt_mode));
+        break;
+    case VT_OPENQRY:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = 1;
+        break;
+    default:
+        return -ENOTTY;
+    }
+    return EOK;
+}
+
+static errno_t tty_poll(size_t events)
+{
+    int revents = 0;
+    if (events & POLLIN) revents |= POLLIN;
+    if (events & POLLOUT) revents |= POLLOUT;
+    return revents;
+}
+
+static size_t null_read(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(buffer);
+    UNUSED(lba);
+    return 0;
+}
+
+static size_t null_write(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(buffer);
+    UNUSED(lba);
+    return number;
+}
+
+static size_t urandom_read(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(lba);
+    if (buffer == NULL) return 0;
+
+    tm tm_now;
+    time_read(&tm_now);
+    uint64_t seed = nanoTime() ^ ((uint64_t)mktime(&tm_now) << 32);
+    tcb_t task = get_current_task();
+    if (task != NULL)
+    {
+        seed ^= (uint64_t)task->tid;
+        if (task->parent_group != NULL) seed ^= ((uint64_t)task->parent_group->pid << 16);
+    }
+
+    for (size_t i = 0; i < number; i++)
+    {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        buffer[i] = (uint8_t)(seed & 0xffU);
+    }
+    return number;
+}
+
+static size_t urandom_write(int drive, uint8_t *buffer, size_t number, size_t lba)
+{
+    UNUSED(drive);
+    UNUSED(buffer);
+    UNUSED(lba);
+    return number;
+}
+
+void build_tty_device()
 {
     device_t stdio;
     stdio.type = DEVICE_STREAM;
@@ -814,8 +1282,49 @@ void stdio_init()
     stdio.size        = 1;
     stdio.read        = stdin_read;
     stdio.write       = stdout_write;
-    stdio.ioctl       = (ioctlf)empty;
-    stdio.poll        = (pollf)empty;
+    stdio.ioctl       = tty_ioctl;
+    stdio.poll        = tty_poll;
     stdio.map         = (mapf)empty;
     regist_device(NULL, stdio);
+
+    device_t ttydev = stdio;
+    strcpy(ttydev.drive_name, "tty");
+    regist_device(NULL, ttydev);
+
+    device_t null_dev = {};
+    null_dev.type = DEVICE_STREAM;
+    strcpy(null_dev.drive_name, "null");
+    null_dev.flag        = 1;
+    null_dev.sector_size = 1;
+    null_dev.size        = 0;
+    null_dev.read        = null_read;
+    null_dev.write       = null_write;
+    null_dev.ioctl       = tty_ioctl;
+    null_dev.poll        = tty_poll;
+    null_dev.map         = (mapf)empty;
+    regist_device(NULL, null_dev);
+
+    device_t urandom_dev = {};
+    urandom_dev.type = DEVICE_STREAM;
+    strcpy(urandom_dev.drive_name, "urandom");
+    urandom_dev.flag        = 1;
+    urandom_dev.sector_size = 1;
+    urandom_dev.size        = (size_t)-1;
+    urandom_dev.read        = urandom_read;
+    urandom_dev.write       = urandom_write;
+    urandom_dev.ioctl       = tty_ioctl;
+    urandom_dev.poll        = tty_poll;
+    urandom_dev.map         = (mapf)empty;
+    regist_device(NULL, urandom_dev);
+}
+
+void init_tty()
+{
+    defualt_tty = alloc_default_tty();
+    build_tty_device();
+}
+
+void stdio_init()
+{
+    init_tty();
 }

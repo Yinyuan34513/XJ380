@@ -1,7 +1,11 @@
 #ifndef _SMP_H_
 #define _SMP_H_
 
-#define MAX_CPU_NUM 256
+#ifndef CONFIG_MAX_CPU_NUM
+#define CONFIG_MAX_CPU_NUM 256
+#endif
+
+#define MAX_CPU_NUM CONFIG_MAX_CPU_NUM
 
 #include "lock_queue.h"
 #include "task/pcb.h"
@@ -39,6 +43,7 @@ struct PROCESSOR_INFO
     tcb_t               current_task;    // 当前核心运行的任务
     lock_queue         *scheduler_queue; // 该核心的调度队列
     lock_node          *iter_node;       // 该核心当前调度迭代的节点
+    uint64_t            scheduler_ticks; // 当前时间片已运行的 tick 数
     uint64_t            syscall_user_rsp;
     uint64_t            syscall_user_rax;
 };

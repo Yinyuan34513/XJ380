@@ -46,7 +46,7 @@
 #define MAXSIG 32
 
 #define HAS_SIGNAL(sigset, signum) (sigset & (1ULL << signum))
-#define SIGMASK(sig)               (1 << (sig))
+#define SIGMASK(sig)               (1ULL << (sig))
 
 #define SIG_DFL ((sighandler_t)0) // 默认的信号处理程序（信号句柄）
 #define SIG_IGN ((sighandler_t)1) // 忽略信号的处理程序
@@ -70,7 +70,7 @@ struct signal_block {
     void (*signal_handlers[MAX_SIGNALS])(int); // 每个信号对应的用户处理器
     uint64_t    pending_signals;               // 用 bitmap 表示待处理信号
     uint64_t    blocked;                       // 屏蔽的信号
-    sigaction_t actions[MAXSIG];
+    sigaction_t actions[MAXSIG + 1];
 } __attribute__((packed));
 
 typedef enum signal_internal {
@@ -178,8 +178,12 @@ typedef struct thread_control_block  *tcb_t;
 typedef struct process_control_block *pcb_t;
 
 bool signals_pending_quick(tcb_t task);
+int  signal_setmask(int how, const sigset_t *nset, sigset_t *oset);
 int  syscall_ssetmask(int how, sigset_t *nset, sigset_t *oset);
 int  syscall_sig_action(int sig, sigaction_t *action, sigaction_t *oldaction);
+int  signal_send_process(pcb_t process, int sig);
+bool signal_deliver_pending(struct X64_REGS *regs);
+uint64_t signal_return(struct X64_REGS *regs);
 
 void register_signal(pcb_t task, int sig, void (*handler)(int));
 void check_pending_signals(pcb_t proc, tcb_t thread);

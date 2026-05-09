@@ -25,6 +25,18 @@ typedef struct
 
 CalculatorState calc_state;
 HDLE            window_handle = 0;
+int             calc_window_width = 380;
+int             calc_window_height = 480;
+
+static int calc_origin_x()
+{
+    return calc_window_width > 380 ? (calc_window_width - 380) / 2 : 0;
+}
+
+static int calc_origin_y()
+{
+    return calc_window_height > 480 ? (calc_window_height - 480) / 2 : 0;
+}
 
 // 字符串转换辅助函数
 long long str_to_int(const char *str)
@@ -111,19 +123,21 @@ void init_calculator()
 // 更新显示
 void update_display(HDLE handle)
 {
+    const int ox = calc_origin_x();
+    const int oy = calc_origin_y();
     // 绘制显示区域背景
-    xapi_DrawRect(handle, 20, 20, 340, 90, COLOR_DISPLAY_BG, true);
-    xapi_DrawRect(handle, 20, 20, 340, 90, COLOR_DISPLAY_BORDER, false);
+    xapi_DrawRect(handle, ox + 20, oy + 20, ox + 340, oy + 90, COLOR_DISPLAY_BG, true);
+    xapi_DrawRect(handle, ox + 20, oy + 20, ox + 340, oy + 90, COLOR_DISPLAY_BORDER, false);
 
     // 计算文本位置（右对齐）
     // 文本大小24，将文本垂直居中（显示区域高度70，文本高度约24）
     // 垂直位置 = 20(上边距) + (70-24)/2 + 文本基线调整
-    UINT32 text_y = 20 + (70 - 24) / 2-10;
+    UINT32 text_y = oy + 20 + (70 - 24) / 2-10;
 
     // 右对齐文本
     int    text_len = strlen(calc_state.display);
-    UINT32 text_x   = 340 - text_len * 18; // 每个字符约14像素宽
-    if (text_x < 30) text_x = 30;
+    UINT32 text_x   = ox + 340 - text_len * 18; // 每个字符约14像素宽
+    if (text_x < (UINT32)(ox + 30)) text_x = ox + 30;
 
     // 显示文本
     xapi_DrawText(handle, text_x, text_y, calc_state.display, 24, COLOR_TEXT_DARK);
@@ -235,6 +249,8 @@ void handle_negate()
 // 绘制按钮
 void draw_button(HDLE handle, UINT64 id, int x, int y, const char *text, UINT32 bg_color, UINT32 text_color)
 {
+    x += calc_origin_x();
+    y += calc_origin_y();
     int width  = 75;
     int height = 60;
 
@@ -256,6 +272,8 @@ void draw_button(HDLE handle, UINT64 id, int x, int y, const char *text, UINT32 
 
 void draw_wide_button(HDLE handle, UINT64 id, int x, int y, const char *text, UINT32 bg_color, UINT32 text_color)
 {
+    x += calc_origin_x();
+    y += calc_origin_y();
     int width  = 160;
     int height = 60;
 
@@ -280,12 +298,14 @@ void draw_wide_button(HDLE handle, UINT64 id, int x, int y, const char *text, UI
 // 绘制计算器界面
 void draw_calculator_interface(HDLE handle)
 {
+    const int ox = calc_origin_x();
+    const int oy = calc_origin_y();
     // 清除背景
-    xapi_DrawRect(handle, 0, 0, 380, 480, COLOR_BACKGROUND, true);
+    xapi_DrawRect(handle, 0, 0, calc_window_width - 1, calc_window_height - 1, COLOR_BACKGROUND, true);
 
     // 绘制标题
-    UINT32 title_y = 10;
-    xapi_DrawText(handle, 120, title_y, "Calculator", 20, COLOR_TEXT_DARK);
+    UINT32 title_y = oy + 10;
+    xapi_DrawText(handle, ox + 120, title_y, "Calculator", 20, COLOR_TEXT_DARK);
 
     // 更新显示区域
     update_display(handle);
@@ -320,6 +340,8 @@ void draw_calculator_interface(HDLE handle)
 }
 UINT64 get_btid(int x, int y)
 {
+    x -= calc_origin_x();
+    y -= calc_origin_y();
     if (x >= 20 && x <= 20 + 75 && y >= 110 && y <= 110 + 60) return 300; //C
     if (x >= 105 && x <= 105 + 75 && y >= 110 && y <= 110 + 60) return 301; //C
     if (x >= 190 && x <= 190 + 75 && y >= 110 && y <= 110 + 60) return 302; //C
@@ -411,6 +433,12 @@ void message_handler(UINT64 Type, UINT64 hData, UINT64 lData)
         if(lData=='\b'){handle_backspace();update_display(window_handle);xapi_RefreshWindow(window_handle);}
         if(lData=='\n'){if (calc_state.operation != '\0') { perform_calculation(); }update_display(window_handle);xapi_RefreshWindow(window_handle);}
         break;
+    case MSG_RESIZE:
+        calc_window_width = (int)hData;
+        calc_window_height = (int)lData;
+        draw_calculator_interface(window_handle);
+        xapi_RefreshWindow(window_handle);
+        break;
     default:
         break;
     }
@@ -425,7 +453,7 @@ static int calc_main_impl(int argc, char *argv[], char *envp[])
     window.width  = 380;
     window.height = 480;
     window.title  = "计算器";
-    window.sets   = XWIN_NORMAL;
+    window.sets   = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
 
     xapi_CreateWindow(&window_handle, &window);
     xapi_SetIcon(window_handle, "/system/icon/calc.png");
@@ -441,7 +469,7 @@ static int calc_main_impl(int argc, char *argv[], char *envp[])
 
     while (1)
     {
-        __asm__ volatile("pause\n\t");
+        xapi_Sleep(1);
     }
 
     return 0;

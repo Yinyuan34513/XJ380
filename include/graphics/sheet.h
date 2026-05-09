@@ -39,7 +39,7 @@ struct FoxLandPeek
 {
     SHEET_BUFFER    *fl_peek_buffer;
     uint8_t         *peek_sign;
-    uint8_t         *opaque_count;
+    uint16_t        *opaque_layer;
 };
 
 typedef struct SHEET *SHEETP;

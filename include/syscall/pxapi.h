@@ -109,6 +109,7 @@ typedef struct {
 #define XAPI_SLEEP          7430
 
 #define XAPI_RUN            7439
+#define XAPI_RUN_ARGS       7450
 
 #define XAPI_FLUSH_TIME     7445
 
@@ -159,6 +160,7 @@ typedef struct {
 #define MSG_ROLLER  5
 #define MSG_CRL     6
 #define MSG_SPCHAR  7
+#define MSG_RESIZE  8
 
 // P4.5
 #define XAPI_READBUFFER     7406
@@ -183,6 +185,8 @@ typedef struct {
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
+#define XWIN_TYPE_MASK          0x0f
+#define XWIN_SUPPORT_RESIZEABLE 0x80
 
 // 当前最大号：7449
 
@@ -256,6 +260,7 @@ void do_xapi_RegisterRightButtonMenu(uint64_t handle, uint64_t items, uint64_t c
 void do_xapi_DeleteRightButtonMenu(uint64_t handle);
 int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2);
 void do_xapi_Run(char *path);
+uint64_t do_xapi_RunArgs(char *path, char **argv);
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 void do_xapi_FlushTime();
 uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count);

@@ -4,6 +4,7 @@
 #include "krlibc.h"
 #include "mutex.h"
 #include <fs/vfs/vfs.h>
+#include <syscall/syscall.h>
 
 static FATFS volume[10];
 static int   fatfs_id = 0;
@@ -432,7 +433,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
                     break;
                 }
             }
-            if (exist != NULL) list_delete(node->child, exist);
+            if (exist != NULL) node->child = list_delete(node->child, exist);//虽然但是，保险点吧
             vfs_child_unlock();
             if (exist == NULL) break;
             vfs_free(exist);
@@ -462,14 +463,49 @@ int fatfs_delete(file_t parent, vfs_node_t node) {
 }
 
 int fatfs_rename(file_t file, const char *nw) {
+    if (file == NULL || file->path == NULL || nw == NULL) {
+        return VFS_STATUS_FAILED;
+    }
+
+    const char *target_path = nw;
+    char       *fat_target  = NULL;
+    if (nw[0] == '/' && file->path[0] != '\0' && file->path[1] == ':') {
+        fat_target = (char *)malloc(strlen(nw) + 3);
+        if (fat_target == NULL) {
+            return VFS_STATUS_FAILED;
+        }
+        fat_target[0] = file->path[0];
+        fat_target[1] = ':';
+        strcpy(fat_target + 2, nw);
+        target_path = fat_target;
+    }
+
     fatfs_lock();
     
-    FRESULT res = f_rename((const char *)file->path, nw);
+    FRESULT res = f_rename((const char *)file->path, target_path);
 
     fatfs_unlock();
+    free(fat_target);
 
     if (res != FR_OK) return -1;
     return 0;
+}
+
+static void fatfs_resize(file_t file, uint64_t size) {
+    fatfs_lock();
+
+    if (file == NULL || file->is_dir || file->handle == NULL) {
+        fatfs_unlock();
+        return;
+    }
+
+    FIL *fp = (FIL *)file->handle;
+    if (f_lseek(fp, (FSIZE_t)size) == FR_OK) {
+        f_truncate(fp);
+        f_sync(fp);
+    }
+
+    fatfs_unlock();
 }
 
 int fatfs_ioctl(void *file, size_t cmd, void *arg) {
@@ -509,6 +545,42 @@ static int dummy() {
     return -ENOSYS;
 }
 
+errno_t fatfs_statfs(vfs_node_t node, struct statfs *buf)
+{
+    if (node == NULL || buf == NULL) return -EINVAL;
+
+    fatfs_lock();
+
+    file_t file = (file_t)node->handle;
+    const char *path = (file != NULL && file->path != NULL) ? file->path : "0:";
+    u32    free_clusters = 0;
+    FATFS *fs            = NULL;
+    FRESULT res          = f_getfree(path, &free_clusters, &fs);
+    if (res != FR_OK || fs == NULL)
+    {
+        fatfs_unlock();
+        return -EIO;
+    }
+
+    uint64_t sector_size = FF_MAX_SS;
+    uint64_t block_size  = (uint64_t)fs->csize * sector_size;
+    if (block_size == 0) block_size = PAGE_SIZE;
+
+    memset(buf, 0, sizeof(*buf));
+    buf->f_type    = 0x4d44;
+    buf->f_bsize   = block_size;
+    buf->f_frsize  = block_size;
+    buf->f_blocks  = fs->n_fatent > 2 ? fs->n_fatent - 2 : 0;
+    buf->f_bfree   = free_clusters;
+    buf->f_bavail  = free_clusters;
+    buf->f_files   = 1024 * 1024;
+    buf->f_ffree   = 1024 * 1024;
+    buf->f_namelen = 255;
+
+    fatfs_unlock();
+    return EOK;
+}
+
 static struct vfs_callback fatfs_callbacks = {
     .mount    = fatfs_mount,
     .unmount  = fatfs_unmount,
@@ -526,6 +598,7 @@ static struct vfs_callback fatfs_callbacks = {
     .dup      = fatfs_dup,
     .poll     = fatfs_poll,
     .map      = (vfs_mapfile_t)fatfs_map,
+    .resize   = (vfs_resize_t)fatfs_resize,
     .del      = (vfs_del_t)fatfs_delete,
     .rename   = (vfs_rename_t)fatfs_rename,
 };

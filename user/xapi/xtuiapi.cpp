@@ -231,6 +231,10 @@ UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]) {
 	return enter_syscall(XAPI_EXECVE, (uint64_t)filename, (uint64_t)argv, (uint64_t)envp, 0, 0, 0);
 }
 
+UINT64  xapi_RunArgs(WSTR path, WSTR argv[]) {
+	return enter_syscall(XAPI_RUN_ARGS, (uint64_t)path, (uint64_t)argv, 0, 0, 0, 0);
+}
+
 void	xapi_Exit(UINT64 value) {
 	enter_syscall(SYS_EXIT, value, 0, 0, 0, 0, 0);
 }
@@ -278,7 +282,6 @@ void 	xapi_Run(WSTR path)
 {
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
 }
-
 void 	xapi_FlushTime()
 {
 	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);
@@ -297,15 +300,7 @@ UINT64 xapi_KillProcess(UINT64 pid)
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size)
 {
-	void *ret = malloc(size);
-	if (ret == nullptr && size != 0)
-	{
-		void *heap_memory = xapi_MapMemory(NULL, 16 * 1024 * 1024, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
-    	memset(heap_memory, 0, 16 * 1024 * 1024);
-		heap_extend((uint8_t *)heap_memory, 16 * 1024 * 1024);
-		ret = malloc(size);
-	}
-	return ret;
+	return malloc(size);
 }
 
 void    xapi_FreeMemory(void *ptr)

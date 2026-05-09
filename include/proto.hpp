@@ -2,8 +2,18 @@
 #define _PROTO_H_
 
 #include "fs/vfs/list.h"
-#define KERNEL_STACK_SIZE 1048576UL            // 任务内核栈地址
-#define BIG_USER_STACK    (16UL * 1024 * 1024) // 用户栈大小，要对齐到页
+#ifndef CONFIG_KERNEL_TASK_STACK_SIZE
+#define CONFIG_KERNEL_TASK_STACK_SIZE 1048576
+#endif
+#ifndef CONFIG_USER_STACK_SIZE
+#define CONFIG_USER_STACK_SIZE 16777216
+#endif
+#ifndef CONFIG_USER_MMAP_START
+#define CONFIG_USER_MMAP_START 0x0000400000000000UL
+#endif
+
+#define KERNEL_STACK_SIZE (CONFIG_KERNEL_TASK_STACK_SIZE * 1UL) // 任务内核栈地址
+#define BIG_USER_STACK    (CONFIG_USER_STACK_SIZE * 1UL)        // 用户栈大小，要对齐到页
 
 #include <graphics/window/window.h>
 #include <ps2/keyboard.h>
@@ -157,6 +167,7 @@ uint64_t lapic_id();
 
 // kernel/intr/hpet.cpp
 uint64_t nanoTime();
+uint64_t bootNanoTime();
 void     init_hpet(uint64_t hpet_ptr);
 
 /*
@@ -204,7 +215,7 @@ void    *virt_to_phys(uint64_t virt_addr);
 void    *driver_phys_to_virt(uint64_t phys_addr);
 void    *driver_virt_to_phys(uint64_t virt_addr);
 uint64_t page_virt_to_phys(uint64_t va);
-#define USER_MMAP_START 0x0000400000000000UL // 用户堆映射起始地址
+#define USER_MMAP_START CONFIG_USER_MMAP_START // 用户堆映射起始地址
 // kernel/memory/page.cpp
 #include <mm/page.h>
 
@@ -271,7 +282,7 @@ void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
 
 // kernel/task/user.cpp
 void create_user_thread_from_file(char *path, pcb_t pcb);
-void create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
+int create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
 void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);

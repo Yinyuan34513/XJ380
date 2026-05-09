@@ -159,15 +159,20 @@ struct netconn *netconn_new_with_proto_and_callback(enum netconn_type t,
                                                     netconn_callback callback) {
     struct netconn *conn;
     API_MSG_VAR_DECLARE(msg);
+    LWIP_PLATFORM_DIAG(("netserver: netconn_new api enter type=%d\n", (int)t));
     API_MSG_VAR_ALLOC_RETURN_NULL(msg);
+    LWIP_PLATFORM_DIAG(("netserver: netconn_new api msg alloc ok\n"));
 
     conn = netconn_alloc(t, callback);
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc ret=%p\n", (void *)conn));
     if (conn != NULL) {
         err_t err;
 
         API_MSG_VAR_REF(msg).msg.n.proto = proto;
         API_MSG_VAR_REF(msg).conn = conn;
+        LWIP_PLATFORM_DIAG(("netserver: netconn_apimsg begin conn=%p\n", (void *)conn));
         err = netconn_apimsg(lwip_netconn_do_newconn, &API_MSG_VAR_REF(msg));
+        LWIP_PLATFORM_DIAG(("netserver: netconn_apimsg ret=%d msg_err=%d\n", (int)err, (int)API_MSG_VAR_REF(msg).err));
         if (err != ERR_OK) {
             LWIP_ASSERT("freeing conn without freeing pcb",
                         conn->pcb.tcp == NULL);

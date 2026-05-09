@@ -19,6 +19,8 @@ extern bool front_line_is_arrow;
 extern bool command_ck_lock;
 extern bool putchar_lock;
 extern bool paint_cursor_lock;
+extern bool shell_prompt_pending;
+extern int shell_running_external_pid;
 
 #define TML_X 720
 #define TML_Y 405
@@ -35,6 +37,7 @@ void putchar_at_cur(char *ch);
 void paint_arrow_sign(int sx, int sy);
 void hide_terminal_cursor(bool refresh);
 void show_terminal_cursor(bool refresh);
+void set_terminal_cursor_enabled(bool enabled, bool refresh);
 void reset_terminal_cursor_blink();
 void update_terminal_cursor_blink(uint64_t elapsed_ms);
 void flush_buffer();
@@ -66,6 +69,11 @@ char *editor_read_file(char *filename);
 void  editor_display_help();
 
 void tam_main_loop();
+void ptt_console_sp(char *str);
+void terminal_child_putchar(char ch);
+void terminal_child_backspace();
+void terminal_child_submit_line();
+void terminal_child_flush_input_if_requested();
 
 void mark_terminal();
 void write_xttp_buffer(char *str);

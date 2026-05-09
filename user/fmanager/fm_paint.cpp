@@ -2,6 +2,7 @@
 #include <krlibc.h>
 #include "fm_proto.h"
 #include <xguiapi.h>
+#include <xposix/stdlib.h>
 
 char path[1024] = "/";
 
@@ -20,15 +21,90 @@ static const char *xapi_demoSvgCheck =
     "<path d=\"M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z\"/>"
     "</svg>";*/
 
+int fm_visible_rows()
+{
+    int rows = (fmr_height - 148 - 8) / 24;
+    return rows < 1 ? 1 : rows;
+}
+
 static bool visible_index_is_valid(int visible_index)
 {
     int visible_count = file_count - file_count_base;
-    if (visible_count > 12)
+    int visible_rows = fm_visible_rows();
+    if (visible_count > visible_rows)
     {
-        visible_count = 12;
+        visible_count = visible_rows;
     }
 
     return visible_index >= 0 && visible_index < visible_count;
+}
+
+static int fm_lower_ascii(int ch)
+{
+    if (ch >= 'A' && ch <= 'Z')
+    {
+        return ch + ('a' - 'A');
+    }
+    return ch;
+}
+
+static int fm_compare_filename(const char *a, const char *b)
+{
+    const char *original_a = a;
+    const char *original_b = b;
+
+    while (*a && *b)
+    {
+        int ca = fm_lower_ascii((unsigned char)*a);
+        int cb = fm_lower_ascii((unsigned char)*b);
+        if (ca != cb)
+        {
+            return ca - cb;
+        }
+        a++;
+        b++;
+    }
+
+    int result = fm_lower_ascii((unsigned char)*a) - fm_lower_ascii((unsigned char)*b);
+    return result == 0 ? strcmp(original_a, original_b) : result;
+}
+
+static int fm_compare_dirnode(const void *a, const void *b)
+{
+    const DirNode *left = (const DirNode *)a;
+    const DirNode *right = (const DirNode *)b;
+
+    if (left->filetype != right->filetype)
+    {
+        return left->filetype ? -1 : 1;
+    }
+
+    return fm_compare_filename(left->filename, right->filename);
+}
+
+static void fm_sort_file_cache()
+{
+    if (file_count > 1)
+    {
+        qsort(file_dir_cache, file_count, sizeof(file_dir_cache[0]), fm_compare_dirnode);
+    }
+}
+
+bool fm_get_selected_file(DirNode *node)
+{
+    if (node == NULL || choosing_index < 0)
+    {
+        return false;
+    }
+
+    int file_index = choosing_index + file_count_base;
+    if (file_index < 0 || file_index >= file_count)
+    {
+        return false;
+    }
+
+    *node = file_dir_cache[file_index];
+    return true;
 }
 
 void refresh_fm_part(int x1, int y1, int x2, int y2)
@@ -38,9 +114,9 @@ void refresh_fm_part(int x1, int y1, int x2, int y2)
 
 void paint_fm_back()
 {
-    xapi_DrawRect(handle, 0, 0 , FMR_X - 1, 25, 0xeaeaeaff, true);
-    xapi_DrawRect(handle, 52, 4, FMR_X - 5, 22, 0xffffffff, true);
-    xapi_DrawPNG(handle, 0, 26, FMR_X - 1, 94, "/system/resources/image/fm_bg.png");
+    xapi_DrawRect(handle, 0, 0 , fmr_width - 1, 25, 0xeaeaeaff, true);
+    xapi_DrawRect(handle, 52, 4, fmr_width - 5, 22, 0xffffffff, true);
+    xapi_DrawPNG(handle, 0, 26, fmr_width - 1, 94, "/system/resources/image/fm_bg.png");
     // xapi_DrawPNG(handle, 5, 4, 18, 18, "/system/icon/bleft.png");
     xapi_DrawFA(handle, 7, 6, 8, "chevron-left");
     xapi_DrawFA(handle, 31, 6, 8, "chevron-right");
@@ -49,15 +125,15 @@ void paint_fm_back()
     // xapi_DrawSvg(handle, FMR_X - 40, 30, 28, (char *)xapi_demoSvgCheck);
     if (need_duopage)
     {
-        xapi_DrawPNG(handle, FMR_X - 19, 148, 18, 18, "/system/icon/bup.png");
-        xapi_DrawPNG(handle, FMR_X - 19, 170, 18, 18, "/system/icon/bdown.png");
+        xapi_DrawPNG(handle, fmr_width - 19, 148, 18, 18, "/system/icon/bup.png");
+        xapi_DrawPNG(handle, fmr_width - 19, 170, 18, 18, "/system/icon/bdown.png");
     }
 }
 
 void paint_item(int index, char *name, bool is_folder, int size, bool is_choosing)
 {
-    xapi_DrawRect(handle, 4, 148 + 24 * index - 4, FMR_X / 10 * 8, 148 + 24 * index + 24 - 4, 0xffffffff, true);
-    if (is_choosing) xapi_DrawRect(handle, 4, 148 + 24 * index - 4, FMR_X / 10 * 8, 148 + 24 * index + 24 - 4, 0xe5f3ffff, true);
+    xapi_DrawRect(handle, 4, 148 + 24 * index - 4, fmr_width / 10 * 8, 148 + 24 * index + 24 - 4, 0xffffffff, true);
+    if (is_choosing) xapi_DrawRect(handle, 4, 148 + 24 * index - 4, fmr_width / 10 * 8, 148 + 24 * index + 24 - 4, 0xe5f3ffff, true);
 
     xapi_DrawText(handle, 28, 148 + 24 * index - 3, name, 10, 0x000000ff);
     if (is_folder)
@@ -151,7 +227,7 @@ static void refresh_visible_item(int visible_index)
         file_dir_cache[file_index].filetype,
         file_dir_cache[file_index].length,
         (choosing_index == visible_index));
-    refresh_fm_part(4, 148 + 24 * visible_index - 4, FMR_X - 1, 148 + 24 * visible_index + 20);
+    refresh_fm_part(4, 148 + 24 * visible_index - 4, fmr_width - 1, 148 + 24 * visible_index + 20);
 }
 
 void refresh_choose_change(int old_visible_index, int new_visible_index)
@@ -176,14 +252,22 @@ void paint_dir(char *path)
     reg_lock();
 
     uint32_t count = 0;
+    const int visible_rows = fm_visible_rows();
     memset(file_dir_cache, 0, sizeof(DirNode) * 256);
-    xapi_DrawRect(handle, 0, 0, FMR_X - 1, FMR_Y - 1, 0xffffffff, true);
+    xapi_DrawRect(handle, 0, 0, fmr_width - 1, fmr_height - 1, 0xffffffff, true);
     xapi_SearchFile(path, &count, file_dir_cache);
     file_count = (count == 404) ? 0 : (int)count;
+    if (file_count > 255) file_count = 255;
+    fm_sort_file_cache();
 
-    if (count > 12)
+    if (file_count > visible_rows)
     {
         need_duopage = true;
+        if (file_count_base + visible_rows > file_count)
+        {
+            file_count_base = file_count - visible_rows;
+            if (file_count_base < 0) file_count_base = 0;
+        }
     }
     else 
     {
@@ -193,17 +277,17 @@ void paint_dir(char *path)
 
     paint_fm_back();
     
-    xapi_DrawLine(handle, 0, 141, FMR_X - 1, 141, 0xc4c4c4ff);
+    xapi_DrawLine(handle, 0, 141, fmr_width - 1, 141, 0xc4c4c4ff);
     xapi_DrawText(handle, 16, 120, "文件名称", 10, 0x000000ff);
     xapi_DrawText(handle, 240, 120, "类型", 10, 0x000000ff);
     xapi_DrawText(handle, 400, 120, "大小", 10, 0x000000ff);
     if (count == 0 || count == 404) 
     {
         // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
-        xapi_DrawText(handle, FMR_X / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
+        xapi_DrawText(handle, fmr_width / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
     }
 
-    for (int i = file_count_base; i < ((count > 12 + file_count_base) ? 12 + file_count_base : count); i++)
+    for (int i = file_count_base; i < ((file_count > visible_rows + file_count_base) ? visible_rows + file_count_base : file_count); i++)
     {
         paint_item(i - file_count_base, 
             file_dir_cache[i].filename, 
@@ -211,7 +295,7 @@ void paint_dir(char *path)
             file_dir_cache[i].length, 
             (choosing_index == i - file_count_base));
     }
-    refresh_fm_part(0, 0, FMR_X - 1, FMR_Y - 1);
+    refresh_fm_part(0, 0, fmr_width - 1, fmr_height - 1);
 
     reg_unlock();
 }

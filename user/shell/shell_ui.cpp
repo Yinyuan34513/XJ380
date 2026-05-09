@@ -47,6 +47,7 @@ char info_logo[6][45] = {
 };
 
 static bool terminal_cursor_visible = false;
+static bool terminal_cursor_enabled = true;
 static uint64_t terminal_cursor_elapsed_ms = 0;
 
 void hide_terminal_cursor(bool refresh)
@@ -62,13 +63,24 @@ void hide_terminal_cursor(bool refresh)
 
 void show_terminal_cursor(bool refresh)
 {
-    if (paint_cursor_lock || terminal_cursor_visible) return;
+    if (!terminal_cursor_enabled || paint_cursor_lock || terminal_cursor_visible) return;
 
     xapi_DrawRect(handle, cur_x, cur_y, cur_x + TERMINAL_CURSOR_WIDTH, cur_y + TERMINAL_CURSOR_HEIGHT,
                   TERMINAL_TEXT_COLOR, true);
     terminal_cursor_visible = true;
 
     if (refresh) { xapi_RefreshWindow(handle); }
+}
+
+void set_terminal_cursor_enabled(bool enabled, bool refresh)
+{
+    terminal_cursor_enabled = enabled;
+    if (!enabled) { hide_terminal_cursor(refresh); }
+    else if (refresh)
+    {
+        reset_terminal_cursor_blink();
+        show_terminal_cursor(true);
+    }
 }
 
 void reset_terminal_cursor_blink()
@@ -78,7 +90,7 @@ void reset_terminal_cursor_blink()
 
 void update_terminal_cursor_blink(uint64_t elapsed_ms)
 {
-    if (paint_cursor_lock) return;
+    if (!terminal_cursor_enabled || paint_cursor_lock) return;
 
     terminal_cursor_elapsed_ms += elapsed_ms;
     if (terminal_cursor_elapsed_ms < TERMINAL_CURSOR_BLINK_MS) return;

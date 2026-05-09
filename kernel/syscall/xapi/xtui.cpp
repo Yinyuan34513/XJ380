@@ -14,10 +14,12 @@
 #include <graphics/window/window.h>
 #include <krlibc.h>
 #include <mm/frame.h>
+#include <mm/uaccess.h>
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <rtc.h>
 #include <syscall/pxapi.h>
+#include <syscall/xapi_user.h>
 #include <task/pcb.h>
 #include <ttf.h>
 #include <syscall/syscall.h>
@@ -28,12 +30,7 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
-void do_xapi_GetSystemVersion(uint64_t str)
-{
-    char *dst = (char *)str;
-    if (dst != NULL)
-        memcpy(dst, OS_VERSION, strlen(OS_VERSION) + 1);
-}
+static constexpr size_t XAPI_RUN_ARG_MAX = 32;
 
 uint64_t do_xapi_GetTime()
 {
@@ -42,18 +39,13 @@ uint64_t do_xapi_GetTime()
     return mktime(&t);
 }
 
-void do_xapi_GetCurrentUser(uint64_t dst)
+// p 开头的代表 private
+void p_xapi_output_kernel(const char *str)
 {
-    xapi_type_UserInfo *dest = (xapi_type_UserInfo *)dst;
-    memcpy(dest->name, current_user->name, strlen(current_user->name));
-    dest->user_type = current_user->user_type;
-}
+    if (str == NULL) return;
 
-void do_xapi_Output(char *str)
-{
     pcb_t front_p = get_current_task()->parent_group;
-    // // while(!front_p->parent_task->co)cpu_relax();
-    
+    pcb_t caller = front_p;
     while (true)
     {
         if (front_p == NULL || front_p == kernel_group)
@@ -64,19 +56,115 @@ void do_xapi_Output(char *str)
         if (front_p->xtttp_stc->is_shell)
         {
             // found it!
-            strcat(front_p->xtttp_stc->output, str); // 如果还有怎么办? // ? 怎么会还有呢，这就是一次性输出完的啊
+            if (str == NULL) {
+                return;
+            }
+
+            char  *output    = front_p->xtttp_stc->output;
+            size_t  out_cap  = sizeof(front_p->xtttp_stc->output);
+            size_t  out_len  = strlen(output);
+            size_t  str_len  = strlen(str);
+            size_t  copy_len = str_len;
+
+            if (out_len < out_cap - 1)
+            {
+                size_t avail = out_cap - out_len - 1;
+                if (copy_len > avail) copy_len = avail;
+                memcpy(output + out_len, str, copy_len);
+                output[out_len + copy_len] = '\0';
+            }
+
             front_p->xtttp_stc->output_lock = false;
-            // 等待命令行刷新
+
             while (true)
             {
                 if (front_p->xtttp_stc->output_lock) break;
                 scheduler_yield();
             }
-            memset(front_p->xtttp_stc->output, 0, (strlen(front_p->xtttp_stc->output) + 1) * sizeof(uint8_t));
+            memset(front_p->xtttp_stc->output, 0, sizeof(front_p->xtttp_stc->output));
             return;
         }
         front_p = front_p->parent_task;
     }
+}
+
+static void p_xapi_free_argv(char **argv)
+{
+    if (argv == NULL) return;
+    for (size_t i = 0; argv[i] != NULL; i++)
+    {
+        free(argv[i]);
+    }
+    free(argv);
+}
+
+static int p_xapi_copy_argv_from_user(char **user_argv, char ***out)
+{
+    if (out == NULL) return -EINVAL;
+    *out = NULL;
+    if (user_argv == NULL) return 0;
+
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return -EFAULT;
+
+    char **argv = (char **)calloc(XAPI_RUN_ARG_MAX + 1, sizeof(char *));
+    if (argv == NULL) return -ENOMEM;
+
+    for (size_t i = 0; i < XAPI_RUN_ARG_MAX; i++)
+    {
+        char *user_arg = NULL;
+        if (!copy_from_user_pagedir(pagedir, &user_arg, &user_argv[i], sizeof(user_arg)))
+        {
+            p_xapi_free_argv(argv);
+            return -EFAULT;
+        }
+        if (user_arg == NULL)
+        {
+            *out = argv;
+            return 0;
+        }
+        int ret = xapi_copy_string_from_user(&argv[i], user_arg, XAPI_USER_STRING_MAX);
+        if (ret < 0)
+        {
+            p_xapi_free_argv(argv);
+            return ret;
+        }
+    }
+
+    p_xapi_free_argv(argv);
+    return -E2BIG;
+}
+
+static size_t p_xapi_strnlen(const char *str, size_t max_len)
+{
+    if (str == NULL) return 0;
+    size_t len = 0;
+    while (len < max_len && str[len] != '\0') len++;
+    return len;
+}
+
+void do_xapi_GetSystemVersion(uint64_t str)
+{
+    if (str == 0) return;
+    copy_to_user_pagedir(xapi_current_pagedir(), (void *)str, OS_VERSION, strlen(OS_VERSION) + 1);
+}
+
+void do_xapi_GetCurrentUser(uint64_t dst)
+{
+    if (dst == 0 || current_user == NULL) return;
+    xapi_type_UserInfo info;
+    memset(&info, 0, sizeof(info));
+    strncpy(info.name, current_user->name, sizeof(info.name) - 1);
+    info.user_type = current_user->user_type;
+    copy_to_user_pagedir(xapi_current_pagedir(), (void *)dst, &info, sizeof(info));
+}
+
+void do_xapi_Output(char *str)
+{
+    char *kstr = NULL;
+    if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
+    p_xapi_output_kernel(kstr);
+    free(kstr);
 }
 
 void do_xapi_Input(char *str)
@@ -98,8 +186,9 @@ void do_xapi_Input(char *str)
                 if (front_p->xtttp_stc->input_lock) break;
                 scheduler_yield();
             }
-            // found it!
-            strcpy(str, front_p->xtttp_stc->input);
+            size_t input_len = p_xapi_strnlen(front_p->xtttp_stc->input, sizeof(front_p->xtttp_stc->input) - 1);
+            front_p->xtttp_stc->input[input_len] = '\0';
+            copy_to_user_pagedir(xapi_current_pagedir(), str, front_p->xtttp_stc->input, input_len + 1);
             memset(front_p->xtttp_stc->input, 0, sizeof(front_p->xtttp_stc->input));
             front_p->xtttp_stc->input_lock = false;
             front_p->xtttp_stc->wait_for_input = false;
@@ -137,17 +226,30 @@ char do_xapi_Getch()
 
 void do_xapi_Endline()
 {
-    do_xapi_Output("\n");
+    p_xapi_output_kernel("\n");
 }
 
 void do_xapi_Printline(char *str)
 {
-    do_xapi_Output(strcat(str, "\n"));
+    char *kstr = NULL;
+    if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
+    size_t len = p_xapi_strnlen(kstr, XAPI_USER_STRING_MAX - 2);
+    kstr[len] = '\n';
+    kstr[len + 1] = '\0';
+    p_xapi_output_kernel(kstr);
+    free(kstr);
 }
 
 void do_xapi_OutputSerial(char *str)
 {
-    write_serial_string(str);
+    char *kstr = NULL;
+    if (xapi_copy_string_from_user(&kstr, str, XAPI_USER_STRING_MAX) < 0) return;
+    tcb_t task = get_current_task();
+    write_serial_fmt("[xapi-serial task=%s ptr=0x%llx] ",
+                     task != NULL ? task->name : "<none>",
+                     (unsigned long long)(uint64_t)str);
+    write_serial_string(kstr);
+    free(kstr);
 }
 
 void do_xapi_Printf(char *str)
@@ -157,20 +259,18 @@ void do_xapi_Printf(char *str)
 
 void do_xapi_Sleep(uint64_t ms)
 {
-    open_interrupt;
-    uint64_t old_t = nanoTime();
-    while (nanoTime() - old_t <= ms * 1000000)
-    {
-        __asm__ volatile("hlt");
-    }
-    close_interrupt;
+    uint64_t nano = ms * 1000000ULL;
+    if (ms != 0 && nano / 1000000ULL != ms) nano = (uint64_t)-1;
+    scheduler_sleep_ns(nano);
 }
 
 void do_xapi_GetTimeX(uint64_t tt)
 {
     if (!tt) { return; }
-    tm *time_s = (tm *)tt;
-    time_read(time_s);
+    tm local;
+    memset(&local, 0, sizeof(local));
+    time_read(&local);
+    copy_to_user_pagedir(get_current_task()->parent_group->pagedir, (void *)tt, &local, sizeof(local));
 }
 
 extern uint64_t memory_total_size;
@@ -183,15 +283,55 @@ uint64_t do_xapi_GetMemorySize()
 void do_xapi_Run(char *path)
 {
     page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
-    char  *fpath = vfs_cwd_path_build((char *)path);
+    char *upath = NULL;
+    if (xapi_copy_string_from_user(&upath, path, XAPI_USER_PATH_MAX) < 0) return;
+    char  *fpath = vfs_cwd_path_build(upath);
+    free(upath);
+    if (fpath == NULL) return;
     runfile(fpath);
     switch_page_directory(caller_pagedir);
     free(fpath);
 }
 
+uint64_t do_xapi_RunArgs(char *path, char **argv)
+{
+    page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
+    char *upath = NULL;
+    int ret = xapi_copy_string_from_user(&upath, path, XAPI_USER_PATH_MAX);
+    if (ret < 0) return (uint64_t)ret;
+
+    char *fpath = vfs_cwd_path_build(upath);
+    free(upath);
+    if (fpath == NULL) return (uint64_t)-ENOENT;
+
+    char **kargv = NULL;
+    ret = p_xapi_copy_argv_from_user(argv, &kargv);
+    if (ret < 0)
+    {
+        free(fpath);
+        return (uint64_t)ret;
+    }
+    write_serial_fmt("[busybox-debug] do_xapi_RunArgs fpath=%s\n", fpath);
+    if (kargv != NULL)
+    {
+        for (int i = 0; kargv[i] != NULL; i++)
+        {
+            write_serial_fmt("[busybox-debug] do_xapi_RunArgs argv[%d]=%s\n", i, kargv[i]);
+        }
+    }
+
+    ret = create_user_process_from_file(fpath, get_current_task()->parent_group, kargv);
+    switch_page_directory(caller_pagedir);
+    p_xapi_free_argv(kargv);
+    free(fpath);
+    return (uint64_t)ret;
+}
+
 uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
 {
     uint64_t ret = -1;
+    if (size == 0 || check_user_overflow(ptr, size)) return ret;
+    flags |= PTE_USER;
     if (ptr == NULL)
     {
         ret = page_alloc_random(get_current_task()->parent_group->pagedir, size, flags);
@@ -292,8 +432,12 @@ uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
 {
     if (buffer == 0 || max_count == 0 || pcb_group_queue == NULL) return 0;
 
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return 0;
+
     XapiTaskInfo *out     = (XapiTaskInfo *)buffer;
     uint64_t      written = 0;
+    bool          copy_fault = false;
 
     spin_lock(&pcb_group_queue->lock);
     queue_foreach(pcb_group_queue, pnode)
@@ -308,9 +452,17 @@ uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
         if (process->thread_queue == NULL || thread_count == 0)
         {
             if (written >= max_count) break;
-            taskmgr_fill_info(&out[written++], process, NULL, thread_count, window_count, memory_bytes);
+            XapiTaskInfo info;
+            taskmgr_fill_info(&info, process, NULL, thread_count, window_count, memory_bytes);
+            if (!copy_to_user_pagedir(pagedir, &out[written], &info, sizeof(info)))
+            {
+                copy_fault = true;
+                break;
+            }
+            written++;
             continue;
         }
+        if (copy_fault) break;
 
         spin_lock(&process->thread_queue->lock);
         queue_foreach(process->thread_queue, tnode)
@@ -318,11 +470,18 @@ uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count)
             if (written >= max_count) break;
             tcb_t thread = (tcb_t)tnode->data;
             if (thread == NULL) continue;
-            taskmgr_fill_info(&out[written++], process, thread, thread_count, window_count, memory_bytes);
+            XapiTaskInfo info;
+            taskmgr_fill_info(&info, process, thread, thread_count, window_count, memory_bytes);
+            if (!copy_to_user_pagedir(pagedir, &out[written], &info, sizeof(info)))
+            {
+                copy_fault = true;
+                break;
+            }
+            written++;
         }
         spin_unlock(&process->thread_queue->lock);
 
-        if (written >= max_count) break;
+        if (written >= max_count || copy_fault) break;
     }
     spin_unlock(&pcb_group_queue->lock);
 

@@ -61,6 +61,8 @@ typedef struct
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
+#define XWIN_TYPE_MASK         0x0f
+#define XWIN_SUPPORT_RESIZEABLE  0x80
 
 void  xapi_CreateWindow(
 	HDLE*		handle,

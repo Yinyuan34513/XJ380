@@ -49,7 +49,7 @@ static inline void sys_restore_rflags(sys_prot_t flags)
 
 static inline void sys_cpu_relax()
 {
-    asm volatile("pause" ::: "memory");
+    __asm__ volatile("pause" ::: "memory");
 }
 
 static inline u32_t sys_elapsed_since(u32_t start)
@@ -99,17 +99,21 @@ sys_prot_t sys_arch_protect(void)
         return g_protect_flags;
     }
 
-    sys_prot_t flags = sys_read_rflags();
-    asm volatile("cli" ::: "memory");
+    for (;;) {
+        sys_prot_t flags = sys_read_rflags();
+        __asm__ volatile("cli" ::: "memory");
 
-    while (!__sync_bool_compare_and_swap(&g_protect_lock, 0, 1)) {
+        if (__sync_bool_compare_and_swap(&g_protect_lock, 0, 1)) {
+            g_protect_owner = owner;
+            g_protect_depth = 1;
+            g_protect_flags = flags;
+            return flags;
+        }
+
+        sys_restore_rflags(flags);
+        scheduler_yield();
         sys_cpu_relax();
     }
-
-    g_protect_owner = owner;
-    g_protect_depth = 1;
-    g_protect_flags = flags;
-    return flags;
 }
 
 void sys_arch_unprotect(sys_prot_t pval)
@@ -153,6 +157,8 @@ void sys_mutex_lock(sys_mutex_t *mutex)
     }
 
     void *current = sys_current_task();
+    u32_t start = sys_now();
+    bool waiting_logged = false;
     for (;;) {
         if (!mutex->valid) {
             return;
@@ -169,6 +175,11 @@ void sys_mutex_lock(sys_mutex_t *mutex)
             return;
         }
 
+        if (!waiting_logged && sys_elapsed_since(start) >= 1000) {
+            waiting_logged = true;
+            printk("netserver: sys_mutex_lock waiting mutex=%p owner=%p current=%p state=%ld depth=%u\n",
+                   mutex, mutex->owner, current, mutex->state, (unsigned int)mutex->depth);
+        }
         scheduler_yield();
         sys_cpu_relax();
     }
@@ -281,9 +292,9 @@ void sys_sem_set_invalid(sys_sem_t *sem)
         return;
     }
 
-    spin_lock(&sem->lock);
+    sem->lock = SPIN_INIT;
+    sem->cnt = 0;
     sem->invalid = true;
-    spin_unlock(&sem->lock);
 }
 
 int sys_sem_valid(sys_sem_t *sem)
@@ -346,9 +357,12 @@ void sys_mbox_set_invalid(sys_mbox_t *mbox)
         return;
     }
 
-    spin_lock(&mbox->lock);
+    mbox->lock = SPIN_INIT;
+    mbox->msges = nullptr;
+    mbox->size = 0;
+    mbox->ptrRead = 0;
+    mbox->ptrWrite = 0;
     mbox->invalid = true;
-    spin_unlock(&mbox->lock);
 }
 
 int sys_mbox_valid(sys_mbox_t *mbox)

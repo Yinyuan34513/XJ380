@@ -4,6 +4,12 @@
 #include <mbedtls/ssl.h>
 #include <mbedtls/ssl_ciphersuites.h>
 #include <mbedtls/net_sockets.h>
+#include <mbedtls/x509_crt.h>
+#include <mbedtls/x509.h>
+
+#include "xposix/fcntl.h"
+#include "xposix/sys/stat.h"
+#include "xposix/unistd.h"
 
 extern "C" int xtls_prepare_runtime(uint64_t *saved_fs, void **tls_block);
 extern "C" void xtls_restore_runtime(uint64_t saved_fs, void *tls_block);
@@ -12,6 +18,21 @@ typedef struct xtls_seed_state
 {
     uint64_t state;
 } xtls_seed_state_t;
+
+typedef struct xtls_ca_bundle
+{
+    unsigned char *data;
+    size_t         len;
+    const char    *path;
+} xtls_ca_bundle_t;
+
+static const char *const g_xtls_ca_paths[] = {
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/ssl/cert.pem",
+    "/system/ssl/certs/ca-certificates.crt",
+    "/system/ssl/cert.pem",
+    NULL
+};
 
 static uint64_t xtls_rdtsc()
 {
@@ -46,6 +67,89 @@ static int xtls_entropy(void *ctx, unsigned char *output, size_t len)
 static int xtls_connect_socket(const xhttp_request_t *request)
 {
     return xhttp_connect_socket_fd(request->host, request->port);
+}
+
+static int xtls_read_file_all(const char *path, unsigned char **out_data, size_t *out_len)
+{
+    if (path == NULL || out_data == NULL || out_len == NULL) {
+        return XHTTP_ERR_BAD_ARGUMENT;
+    }
+
+    *out_data = NULL;
+    *out_len  = 0;
+
+    struct stat st;
+    if (stat(path, &st) != 0 || st.st_size <= 0) {
+        return XHTTP_ERR_TLS_CA_LOAD;
+    }
+
+    size_t len = (size_t)st.st_size;
+    unsigned char *data = (unsigned char *)malloc(len + 1);
+    if (data == NULL) {
+        return XHTTP_ERR_TLS_CA_LOAD;
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        free(data);
+        return XHTTP_ERR_TLS_CA_LOAD;
+    }
+
+    size_t offset = 0;
+    while (offset < len) {
+        int got = read(fd, data + offset, len - offset);
+        if (got <= 0) {
+            close(fd);
+            free(data);
+            return XHTTP_ERR_TLS_CA_LOAD;
+        }
+        offset += (size_t)got;
+    }
+    close(fd);
+
+    data[len] = '\0';
+    *out_data = data;
+    *out_len  = len + 1;
+    return XHTTP_OK;
+}
+
+static int xtls_load_ca_bundle(xtls_ca_bundle_t *bundle)
+{
+    if (bundle == NULL) {
+        return XHTTP_ERR_BAD_ARGUMENT;
+    }
+
+    memset(bundle, 0, sizeof(*bundle));
+
+    for (int i = 0; g_xtls_ca_paths[i] != NULL; ++i) {
+        unsigned char *data = NULL;
+        size_t         len  = 0;
+        int status = xtls_read_file_all(g_xtls_ca_paths[i], &data, &len);
+        if (status == XHTTP_OK) {
+            bundle->data = data;
+            bundle->len  = len;
+            bundle->path = g_xtls_ca_paths[i];
+            char logbuf[160];
+            snprintf(logbuf, sizeof(logbuf), "xtls: loaded ca bundle %s len=%u\n",
+                     bundle->path, (unsigned int)bundle->len);
+            xapi_OutputSerial(logbuf);
+            return XHTTP_OK;
+        }
+    }
+
+    xapi_OutputSerial((char *)"xtls: no ca bundle found\n");
+    return XHTTP_ERR_TLS_CA_LOAD;
+}
+
+static void xtls_free_ca_bundle(xtls_ca_bundle_t *bundle)
+{
+    if (bundle == NULL) {
+        return;
+    }
+    if (bundle->data != NULL) {
+        free(bundle->data);
+    }
+    memset(bundle, 0, sizeof(*bundle));
 }
 
 static int xtls_socket_send(void *ctx, const unsigned char *buf, size_t len)
@@ -201,6 +305,8 @@ static int xtls_request_once(const xhttp_request_t *request,
     mbedtls_ssl_context      ssl;
     mbedtls_ssl_config       conf;
     mbedtls_ctr_drbg_context drbg;
+    mbedtls_x509_crt         ca_chain;
+    xtls_ca_bundle_t         ca_bundle;
     const char              *path = NULL;
     const char              *body = NULL;
     const char              *content_type = NULL;
@@ -214,6 +320,8 @@ static int xtls_request_once(const xhttp_request_t *request,
     mbedtls_ssl_init(&ssl);
     mbedtls_ssl_config_init(&conf);
     mbedtls_ctr_drbg_init(&drbg);
+    mbedtls_x509_crt_init(&ca_chain);
+    memset(&ca_bundle, 0, sizeof(ca_bundle));
 
     static const char personal[] = "xj380-httpget-tls";
 
@@ -244,7 +352,23 @@ static int xtls_request_once(const xhttp_request_t *request,
     mbedtls_ssl_conf_max_tls_version(&conf, max_tls_version);
     mbedtls_ssl_conf_session_tickets(&conf, MBEDTLS_SSL_SESSION_TICKETS_DISABLED);
 
-    mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
+    status = xtls_load_ca_bundle(&ca_bundle);
+    if (status != XHTTP_OK) {
+        goto cleanup;
+    }
+
+    ret = mbedtls_x509_crt_parse(&ca_chain, ca_bundle.data, ca_bundle.len);
+    if (ret < 0) {
+        char logbuf[128];
+        snprintf(logbuf, sizeof(logbuf), "xtls: ca parse ret=%d path=%s\n",
+                 ret, ca_bundle.path ? ca_bundle.path : "(null)");
+        xapi_OutputSerial(logbuf);
+        status = XHTTP_ERR_TLS_CA_PARSE;
+        goto cleanup;
+    }
+
+    mbedtls_ssl_conf_ca_chain(&conf, &ca_chain, NULL);
+    mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_REQUIRED);
     mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &drbg);
 
     ret = mbedtls_ssl_setup(&ssl, &conf);
@@ -271,6 +395,17 @@ static int xtls_request_once(const xhttp_request_t *request,
         xtls_log_mbedtls_error("handshake", ret);
         if (ret == MBEDTLS_ERR_SSL_TIMEOUT) {
             status = XHTTP_ERR_TIMEOUT;
+        } else if (ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {
+            uint32_t verify_flags = mbedtls_ssl_get_verify_result(&ssl);
+            if (verify_flags != 0) {
+                char verify_info[256];
+                mbedtls_x509_crt_verify_info(verify_info, sizeof(verify_info), "  ! ", verify_flags);
+                char logbuf[384];
+                snprintf(logbuf, sizeof(logbuf), "xtls: certificate verify failed flags=0x%x %s\n",
+                         (unsigned int)verify_flags, verify_info);
+                xapi_OutputSerial(logbuf);
+            }
+            status = XHTTP_ERR_TLS_VERIFY;
         } else {
             status = XHTTP_ERR_TLS_HANDSHAKE;
         }
@@ -282,6 +417,19 @@ static int xtls_request_once(const xhttp_request_t *request,
                  mbedtls_ssl_get_version(&ssl),
                  mbedtls_ssl_get_ciphersuite(&ssl));
         xapi_OutputSerial(logbuf);
+    }
+    {
+        uint32_t verify_flags = mbedtls_ssl_get_verify_result(&ssl);
+        if (verify_flags != 0) {
+            char verify_info[256];
+            mbedtls_x509_crt_verify_info(verify_info, sizeof(verify_info), "  ! ", verify_flags);
+            char logbuf[384];
+            snprintf(logbuf, sizeof(logbuf), "xtls: certificate verify failed flags=0x%x %s\n",
+                     (unsigned int)verify_flags, verify_info);
+            xapi_OutputSerial(logbuf);
+            status = XHTTP_ERR_TLS_VERIFY;
+            goto cleanup;
+        }
     }
 
     path          = request->path[0] ? request->path : "/";
@@ -339,6 +487,8 @@ cleanup:
     mbedtls_ssl_free(&ssl);
     mbedtls_ssl_config_free(&conf);
     mbedtls_ctr_drbg_free(&drbg);
+    mbedtls_x509_crt_free(&ca_chain);
+    xtls_free_ca_bundle(&ca_bundle);
     xtls_restore_runtime(tls_saved_fs, tls_block);
     shutdown(sockfd, SHUT_RDWR);
     close(sockfd);

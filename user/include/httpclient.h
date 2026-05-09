@@ -213,6 +213,13 @@ static inline int xhttp_connect_socket_fd(const char *host, uint16_t port)
         return XHTTP_ERR_BAD_ARGUMENT;
     }
 
+    {
+        char logbuf[160];
+        snprintf(logbuf, sizeof(logbuf), "xhttp: connect begin host=%s port=%u\n",
+                 host, (unsigned int)port);
+        xapi_OutputSerial(logbuf);
+    }
+
     char port_buffer[16];
     snprintf(port_buffer, sizeof(port_buffer), "%u", (unsigned int)port);
 
@@ -223,11 +230,13 @@ static inline int xhttp_connect_socket_fd(const char *host, uint16_t port)
 
     struct addrinfo *result = NULL;
     if (getaddrinfo(host, port_buffer, &hints, &result) != 0 || result == NULL) {
+        xapi_OutputSerial((char *)"xhttp: getaddrinfo failed\n");
         if (result != NULL) {
             freeaddrinfo(result);
         }
         return XHTTP_ERR_BAD_HOST;
     }
+    xapi_OutputSerial((char *)"xhttp: getaddrinfo ok\n");
 
     int status = XHTTP_ERR_CONNECT;
     for (struct addrinfo *it = result; it != NULL; it = it->ai_next) {
@@ -235,18 +244,50 @@ static inline int xhttp_connect_socket_fd(const char *host, uint16_t port)
             continue;
         }
 
+        {
+            char logbuf[160];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: try ai_family=%d socktype=%d addrlen=%u\n",
+                     it->ai_family, it->ai_socktype, (unsigned int)it->ai_addrlen);
+            xapi_OutputSerial(logbuf);
+        }
+
         int sockfd = socket(it->ai_family, SOCK_STREAM, 0);
         if (sockfd < 0) {
+            {
+                char logbuf[96];
+                snprintf(logbuf, sizeof(logbuf), "xhttp: socket failed ret=%d\n", sockfd);
+                xapi_OutputSerial(logbuf);
+            }
             status = XHTTP_ERR_SOCKET;
             continue;
         }
-
-        int original_flags = fcntl(sockfd, F_GETFL, 0);
-        if (original_flags >= 0) {
-            fcntl(sockfd, F_SETFL, (uint64_t)(original_flags | O_NONBLOCK));
+        {
+            char logbuf[96];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: socket ok fd=%d\n", sockfd);
+            xapi_OutputSerial(logbuf);
         }
 
+        int original_flags = fcntl(sockfd, F_GETFL, 0);
+        {
+            char logbuf[96];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: fcntl getfl=%d\n", original_flags);
+            xapi_OutputSerial(logbuf);
+        }
+        if (original_flags >= 0) {
+            int setfl_ret = fcntl(sockfd, F_SETFL, (uint64_t)(original_flags | O_NONBLOCK));
+            char logbuf[96];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: fcntl setfl ret=%d new=0x%x\n",
+                     setfl_ret, (unsigned int)(original_flags | O_NONBLOCK));
+            xapi_OutputSerial(logbuf);
+        }
+
+        xapi_OutputSerial((char *)"xhttp: before connect\n");
         int connect_ret = connect(sockfd, it->ai_addr, it->ai_addrlen);
+        {
+            char logbuf[96];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: connect ret=%d\n", connect_ret);
+            xapi_OutputSerial(logbuf);
+        }
         if (connect_ret < 0 && connect_ret != -EINPROGRESS &&
             connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
             close(sockfd);
@@ -254,12 +295,27 @@ static inline int xhttp_connect_socket_fd(const char *host, uint16_t port)
             continue;
         }
 
+        xapi_OutputSerial((char *)"xhttp: before poll wait\n");
         int wait_status = xhttp_wait_fd(sockfd, POLLOUT, XHTTP_IO_TIMEOUT_MS);
+        {
+            char logbuf[96];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: poll wait ret=%d\n", wait_status);
+            xapi_OutputSerial(logbuf);
+        }
         if (original_flags >= 0) {
-            fcntl(sockfd, F_SETFL, (uint64_t)original_flags);
+            int restore_ret = fcntl(sockfd, F_SETFL, (uint64_t)original_flags);
+            char logbuf[96];
+            snprintf(logbuf, sizeof(logbuf), "xhttp: fcntl restore ret=%d flags=0x%x\n",
+                     restore_ret, (unsigned int)original_flags);
+            xapi_OutputSerial(logbuf);
         }
         if (wait_status == XHTTP_OK) {
             freeaddrinfo(result);
+            {
+                char logbuf[96];
+                snprintf(logbuf, sizeof(logbuf), "xhttp: connect success fd=%d\n", sockfd);
+                xapi_OutputSerial(logbuf);
+            }
             return sockfd;
         }
 

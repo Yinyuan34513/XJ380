@@ -21,7 +21,7 @@ struct tls_stat
 };
 
 static FILE g_tls_fake_file;
-FILE *stderr = &g_tls_fake_file;
+__attribute__((weak)) FILE *stderr = &g_tls_fake_file;
 char __libc_single_threaded = 1;
 extern "C" {
 void *__dso_handle = NULL;
@@ -207,7 +207,7 @@ static const unsigned short *tls_ctype_table()
     return table + 128;
 }
 
-extern "C" void *memmove(void *dest, const void *src, size_t n)
+extern "C" __attribute__((weak)) void *memmove(void *dest, const void *src, size_t n)
 {
     uint8_t       *d = (uint8_t *)dest;
     const uint8_t *s = (const uint8_t *)src;
@@ -223,7 +223,7 @@ extern "C" void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
-extern "C" void abort(void)
+extern "C" __attribute__((weak)) void abort(void)
 {
     for (;;) {}
 }
@@ -243,7 +243,7 @@ extern "C" int __cxa_atexit(void (*)(void *), void *, void *)
     return 0;
 }
 
-extern "C" void *memchr(const void *src, int ch, size_t len)
+extern "C" __attribute__((weak)) void *memchr(const void *src, int ch, size_t len)
 {
     const unsigned char *bytes = (const unsigned char *)src;
     for (size_t i = 0; i < len; ++i) {
@@ -254,24 +254,24 @@ extern "C" void *memchr(const void *src, int ch, size_t len)
     return NULL;
 }
 
-extern "C" int bcmp(const void *lhs, const void *rhs, size_t len)
+extern "C" __attribute__((weak)) int bcmp(const void *lhs, const void *rhs, size_t len)
 {
     return memcmp(lhs, rhs, len);
 }
 
-extern "C" int tolower(int ch)
+extern "C" __attribute__((weak)) int tolower(int ch)
 {
     if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 'a';
     return ch;
 }
 
-extern "C" int toupper(int ch)
+extern "C" __attribute__((weak)) int toupper(int ch)
 {
     if (ch >= 'a' && ch <= 'z') return ch - 'a' + 'A';
     return ch;
 }
 
-extern "C" int strcasecmp(const char *lhs, const char *rhs)
+extern "C" __attribute__((weak)) int strcasecmp(const char *lhs, const char *rhs)
 {
     while (*lhs != '\0' && *rhs != '\0') {
         const int diff = tolower((unsigned char)*lhs) - tolower((unsigned char)*rhs);
@@ -282,7 +282,7 @@ extern "C" int strcasecmp(const char *lhs, const char *rhs)
     return tolower((unsigned char)*lhs) - tolower((unsigned char)*rhs);
 }
 
-extern "C" int strncasecmp(const char *lhs, const char *rhs, size_t len)
+extern "C" __attribute__((weak)) int strncasecmp(const char *lhs, const char *rhs, size_t len)
 {
     for (size_t i = 0; i < len; ++i) {
         const int lch = tolower((unsigned char)lhs[i]);
@@ -294,7 +294,7 @@ extern "C" int strncasecmp(const char *lhs, const char *rhs, size_t len)
     return 0;
 }
 
-extern "C" char *strdup(const char *str)
+extern "C" __attribute__((weak)) char *strdup(const char *str)
 {
     if (str == NULL) return NULL;
     const size_t len = strlen(str) + 1;
@@ -385,7 +385,7 @@ extern "C" int __sprintf_chk(char *str, int, size_t maxlen, const char *fmt, ...
     return ret;
 }
 
-extern "C" int printf(const char *fmt, ...)
+extern "C" __attribute__((weak)) int printf(const char *fmt, ...)
 {
     char    buffer[512];
     va_list ap;
@@ -402,7 +402,7 @@ extern "C" int printf(const char *fmt, ...)
     return ret;
 }
 
-extern "C" int *__errno_location(void)
+extern "C" __attribute__((weak)) int *__errno_location(void)
 {
     static int g_errno = 0;
     return &g_errno;
@@ -451,14 +451,6 @@ extern "C" time_t time(time_t *timer)
     return now;
 }
 
-extern "C" int clock_gettime(int, struct tls_timespec *ts)
-{
-    if (ts == NULL) return -1;
-
-    uint64_t ret = enter_syscall(SYS_CLOCK_GETTIME, 0, (uint64_t)ts, 0, 0, 0, 0);
-    return (int)ret;
-}
-
 extern "C" struct tm *gmtime_r(const time_t *timer, struct tm *result)
 {
     if (result == NULL) return NULL;
@@ -471,55 +463,30 @@ extern "C" void setbuf(FILE *, char *)
 {
 }
 
-extern "C" size_t fwrite(const void *, size_t size, size_t count, FILE *)
+extern "C" __attribute__((weak)) size_t fwrite(const void *, size_t size, size_t count, FILE *)
 {
     return size * count;
 }
 
-extern "C" int fputs(const char *str, FILE *stream)
+extern "C" __attribute__((weak)) int fputs(const char *str, FILE *stream)
 {
     if (str == NULL) return -1;
     int len = (int)strlen(str);
     return write(stream == stderr ? 2 : 1, (char *)str, (uint64_t)len);
 }
 
-extern "C" int fputc(int ch, FILE *stream)
+extern "C" __attribute__((weak)) int fputc(int ch, FILE *stream)
 {
     char value = (char)ch;
     return write(stream == stderr ? 2 : 1, &value, 1);
 }
 
-extern "C" char *fgets(char *, int, FILE *)
+extern "C" __attribute__((weak)) char *fgets(char *, int, FILE *)
 {
     return NULL;
 }
 
 extern "C" int remove(const char *)
-{
-    return -1;
-}
-
-extern "C" int rename(const char *, const char *)
-{
-    return -1;
-}
-
-extern "C" void *opendir(const char *)
-{
-    return NULL;
-}
-
-extern "C" void *readdir(void *)
-{
-    return NULL;
-}
-
-extern "C" int closedir(void *)
-{
-    return -1;
-}
-
-extern "C" int stat(const char *, struct tls_stat *)
 {
     return -1;
 }
@@ -556,20 +523,6 @@ extern "C" char *bind_textdomain_codeset(const char *, const char *codeset)
 extern "C" char *dgettext(const char *, const char *msgid)
 {
     return (char *)(msgid == NULL ? "" : msgid);
-}
-
-extern "C" int open(const char *path, int flags, ...)
-{
-    return (int)enter_syscall(SYS_OPEN, (uint64_t)path, (uint64_t)flags, 0, 0, 0, 0);
-}
-
-extern "C" int ioctl(int fd, unsigned long request, ...)
-{
-    va_list ap;
-    va_start(ap, request);
-    uint64_t arg = va_arg(ap, uint64_t);
-    va_end(ap);
-    return (int)enter_syscall(SYS_IOCTL, (uint64_t)fd, request, arg, 0, 0, 0);
 }
 
 extern "C" int __read_chk(int fd, void *buf, size_t nbytes, size_t bufsize)

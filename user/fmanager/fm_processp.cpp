@@ -38,16 +38,17 @@ bool need_paint = false;
 
 static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_index)
 {
-    if (x < 4 || x > FMR_X / 10 * 8 || y < 148)
+    if (x < 4 || x > fmr_width / 10 * 8 || y < 148)
     {
         return false;
     }
 
     int current_visible_index = (y - 148) / 24;
     int visible_count = file_count - file_count_base;
-    if (visible_count > 12)
+    int visible_rows = fm_visible_rows();
+    if (visible_count > visible_rows)
     {
-        visible_count = 12;
+        visible_count = visible_rows;
     }
 
     if (visible_count <= 0 || current_visible_index < 0 || current_visible_index >= visible_count)
@@ -127,14 +128,14 @@ void register_click(int x, int y)
     
     if (need_duopage)
     {
-        if (x > FMR_X - 19)
+        if (x > fmr_width - 19)
         {
             if (y > 148 && y < 166 && file_count_base > 0)
             {
                 file_count_base--;
                 need_paint = true;
             }
-            else if (y > 170 && y < 188 && file_count_base + 13 <= file_count)
+            else if (y > 170 && y < 188 && file_count_base + fm_visible_rows() < file_count)
             {
                 file_count_base++;
                 need_paint = true;

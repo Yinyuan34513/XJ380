@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf nut.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
@@ -179,6 +179,30 @@ init.elf: init.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 # 	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
+sigtest.elf: sigtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CPPLD $< -> ../out/$@"
+
+posixdemo.elf: posixdemo.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CPPLD $< -> ../out/$@"
+
+libctest.elf: libctest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CPPLD $< -> ../out/$@"
+
+fbtest.elf: fbtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CPPLD $< -> ../out/$@"
+
+dyn-hello: dyn_hello.c
+	@$(CC) -O0 -g -Wall -Wextra $< -o ../out/$@
+	@echo "HOSTLD $< -> ../out/$@"
+
 cp537.elf: cp537.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
@@ -204,11 +228,33 @@ netcfg.elf: netcfg.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 HTTPGET_SOURCES := ./httpget.cpp ./https_client.cpp ./http_tls_compat.cpp
 HTTPGET_OBJECTS := $(patsubst ./%.cpp, ../out/httpget/%.o, $(HTTPGET_SOURCES))
 
+NUT_SOURCES := ./nut/main.cpp ./https_client.cpp ./http_tls_compat.cpp
+NUT_OBJECTS := ../out/nut/main.o ../out/nut/https_client.o ../out/nut/http_tls_compat.o
+
 httpget.elf: $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(HTTPGET_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS) $(BROWSER_BUILTINS) -o ../out/$@
 	@echo "LINK httpget objects -> ../out/$@"
 
+nut.elf: $(NUT_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(NUT_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS) $(BROWSER_BUILTINS) -o ../out/$@
+	@echo "LINK nut objects -> ../out/$@"
+
 ../out/httpget/%.o: ./%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/nut/main.o: ./nut/main.cpp $(XAPI_HEADERS) $(USER_HEADERS) ../include/xapi_json.h ../lib/xapi_json_impl.inc
+	@mkdir -p $(@D)
+	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/nut/https_client.o: ./https_client.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+../out/nut/http_tls_compat.o: ./http_tls_compat.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
@@ -256,6 +302,11 @@ bcms-sp.elf: bcms-sp.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "start.cpp.o" |grep -v "constart.cpp.o") ../out/xapi/constart.cpp.o ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
+	@echo "CPPLD $< -> ../out/$@"
+
+busyterm.elf: busyterm.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
 
 
@@ -354,4 +405,4 @@ taskmgr.elf: $(TASKMGR_OBJECTS)
 
 .PHONY: clean
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/taskmgr.* ../out/taskmgr/*.* ../out/picturer.* ../out/netcfg.* 
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/taskmgr.* ../out/taskmgr/*.* ../out/picturer.* ../out/netcfg.* ../out/helloworld.* ../out/sigtest.*

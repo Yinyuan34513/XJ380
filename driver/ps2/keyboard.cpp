@@ -9,6 +9,7 @@ static uint8_t kb_synth_buf[KB_BUF_SIZE];
 static uint8_t *kb_synth_head = kb_synth_buf;
 static uint8_t *kb_synth_tail = kb_synth_buf;
 static volatile uint32_t kb_synth_lock = 0;
+static bool kb_e0_prefix = false;
 
 #define KB_USB_REPEAT_SLOTS 6
 #define KB_USB_REPEAT_DELAY_NS 500000000ULL
@@ -136,6 +137,13 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 
     uint8_t x;
     x = inb(0x60);
+    if (x == 0xe0)
+    {
+        kb_e0_prefix = true;
+        send_eoi();
+        return;
+    }
+
     if (x == 0x2a || x == 0x36)
     { // Shift按下
         kb_fifo.shift = 1;
@@ -169,6 +177,29 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
         kb_fifo.count = KB_BUF_SIZE - 1;
     }
+    if (kb_e0_prefix && x < 0x80)
+    {
+        switch (x)
+        {
+        case 0x47: x = KEY_HOME; break;
+        case 0x48: x = KEY_UP; break;
+        case 0x49: x = KEY_PAGE_UP; break;
+        case 0x4b: x = KEY_LEFT; break;
+        case 0x4d: x = KEY_RIGHT; break;
+        case 0x4f: x = KEY_END; break;
+        case 0x50: x = KEY_DOWN; break;
+        case 0x51: x = KEY_PAGE_DOWN; break;
+        case 0x52: x = KEY_INSERT; break;
+        case 0x53: x = KEY_DELETE; break;
+        default: x = 0; break;
+        }
+    }
+    kb_e0_prefix = false;
+    if (x == 0)
+    {
+        send_eoi();
+        return;
+    }
     *kb_fifo.p_head = x;
 
     kb_fifo.count++;
@@ -189,8 +220,9 @@ uint8_t get_keyboard_input()
     if (kb_fifo.p_tail != kb_fifo.p_head)
     {
         // 有没有读的
-        uint8_t temp = keyboard_code[*kb_fifo.p_tail];
-        if (kb_fifo.shift == 1 || kb_fifo.caps == 1) { temp = keyboard_code1[*kb_fifo.p_tail]; }
+        uint8_t raw = *kb_fifo.p_tail;
+        uint8_t temp = raw >= 128 ? raw : keyboard_code[raw];
+        if (raw < 128 && (kb_fifo.shift == 1 || kb_fifo.caps == 1)) { temp = keyboard_code1[raw]; }
 
         if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
         kb_fifo.p_tail++;

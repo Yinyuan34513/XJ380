@@ -8,6 +8,7 @@
 #include "lock_queue.h"
 #include "mm/page.h"
 #include "stdint.h"
+#include "tty.h"
 #include "user/user.h"
 #include "user/x3tp.h"
 #include <mm/vma.h>
@@ -105,11 +106,21 @@ struct process_control_block
     int         exit_code;   // 进程退出码
     uint64_t    mmap_start;  // 映射起始地址
     char       *cmdline;
+    char      **argv;
+    size_t      argc;
+    char       *exe_path;
     int         task_level; // 进程等级
     lock_queue *virt_queue; // 虚拟页分配队列
     void       *elf_file;   // 可执行文件指针
     size_t      elf_size;   // 可执行文件大小
     uint64_t    load_start; // 加载起始地址
+    uint64_t    aux_phdr;
+    uint64_t    aux_phent;
+    uint64_t    aux_phnum;
+    uint64_t    aux_base;
+    uint64_t    aux_entry;
+    uint64_t    aux_execfn;
+    bool        linux_abi;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点
@@ -117,13 +128,24 @@ struct process_control_block
     uint64_t brk_end;
     uint64_t brk_current ;
 
+    tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
 };
-#define EHDR_START_ADDR 0x0000300000000000 // ELF头起始地址
+#ifndef CONFIG_USER_ELF_HEADER_START
+#define CONFIG_USER_ELF_HEADER_START 0x0000300000000000UL
+#endif
+#ifndef CONFIG_USER_BRK_START
+#define CONFIG_USER_BRK_START 0x0000700000000000UL
+#endif
+#ifndef CONFIG_USER_BRK_END
+#define CONFIG_USER_BRK_END 0x00007ffff0000000UL
+#endif
+
+#define EHDR_START_ADDR CONFIG_USER_ELF_HEADER_START // ELF头起始地址
 uint64_t parse_elf_file(char *path, pcb_t group);
 uint64_t process_execve(char *path, char **argv, char **envp);
-#define USER_BRK_START 0x0000700000000000
-#define USER_BRK_END 0x00007ffff0000000
+#define USER_BRK_START CONFIG_USER_BRK_START
+#define USER_BRK_END CONFIG_USER_BRK_END
 
 struct thread_control_block
 {
@@ -133,6 +155,7 @@ struct thread_control_block
     size_t        tid;         // 线程ID
     char          name[32];    // 线程名称
     TaskStatus    status;      // 线程状态
+    uint64_t      wakeup_time;  // WAIT 线程的唤醒时间(ns)，0 表示不按时间唤醒
     size_t        cpu_id;      // 运行的CPU ID
     TaskContext   context0;    // 线程上下文
     fpu_context_t fpu_context; // 浮点寄存器上下文
@@ -142,13 +165,15 @@ struct thread_control_block
     uint64_t      signal;          // 信号位图
     uint64_t kernel_stack;   // 内核栈地址
     size_t   queue_index;    // 调度队列索引
+    lock_node *sched_node;   // 调度队列节点
     size_t   group_index;    // 进程队列索引
     uint64_t main;           // 线程入口地址
     uint64_t user_stack;     // 用户栈
     uint64_t user_stack_top; // 用户栈顶部地址
     
-
+    
     uint64_t syscall_stack;
+    uint64_t syscall_user_rsp;
     
     uint64_t load_start;
     uint64_t load_end;
@@ -157,6 +182,8 @@ struct thread_control_block
 
     uint64_t fs_base; // FS段基址
     uint64_t fs;
+    uint64_t clear_child_tid;
+    page_directory_t *tid_directory;
 
     vfs_node_t cwd;
     char      *str_cwd;
@@ -170,18 +197,28 @@ struct thread_control_block
     int      message_pipe_write_fd;
 
     uint64_t window_count;
+
+    uint64_t eevdf_vruntime;
+    uint64_t eevdf_deadline;
+    uint64_t eevdf_slice;
+    uint64_t eevdf_last_start;
 };
 
 extern pcb_t kernel_group;
+extern size_t   now_tid;
 
 size_t   add_task(tcb_t task);
 void     enable_scheduler();
 void     disable_scheduler();
 tcb_t    get_current_task();
+uint64_t task_user_fs_selector(tcb_t task);
 size_t   create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb);
 size_t   create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd);
 pcb_t    create_process_group(const char *name, pcb_t parent, page_directory_t *directory, char *cmdline);
-uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack);
+uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, uint64_t clone_flags = 0,
+                      int *parent_tid = NULL, int *child_tid = NULL);
+uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid,
+                      uint64_t tls);
 void     process_setup();
 void     switch_to_user_mode();
 void get_thread_name_from_filepath(char *path, char *name);
@@ -196,3 +233,4 @@ void kill_thread(tcb_t task);
 void kill_thread0(tcb_t task);
 void kill_proc0(pcb_t pcb);
 pcb_t found_pcb(int pid);
+tcb_t found_thread(pcb_t pcb, int tid);

@@ -18,11 +18,15 @@ char *normalize_path(const char *path);
 #define F_SETFD         2
 #define F_GETFL         3
 #define F_SETFL         4
+#define F_GETLK         5
+#define F_SETLK         6
+#define F_SETLKW        7
 #define F_SETOWN        8
 #define F_GETOWN        9
 #define F_SETSIG        10
 #define F_GETSIG        11
 #define F_DUPFD_CLOEXEC 1030
+#define FD_CLOEXEC      1
 
 #define SEEK_SET  0 /* Seek from beginning of file.  */
 #define SEEK_CUR  1 /* Seek from current position.  */
@@ -43,7 +47,12 @@ char *normalize_path(const char *path);
 #define DT_WHT     14
 
 #define AT_FDCWD (-100)
+#define AT_SYMLINK_NOFOLLOW 0x100
 
+#define O_RDONLY    0
+#define O_WRONLY    1
+#define O_RDWR      2
+#define O_ACCMODE   3
 #define O_CREAT     0100
 #define O_EXCL      0200
 #define O_NOCTTY    0400
@@ -132,6 +141,7 @@ typedef struct vfs_callback { // VFS回调函数
     vfs_dup_t      dup;       // 复制文件节点
     vfs_poll_t     poll;      // 轮询文件状态 (仅 devfs 等特殊文件系统实现)
     vfs_mapfile_t  map;       // 映射文件到内存 (仅 devfs 等特殊文件系统实现)
+    vfs_resize_t   resize;    // 调整文件大小
     vfs_del_t      del;         // 删除文件或文件夹
     vfs_rename_t   rename;      // 重命名文件或文件夹
 } *vfs_callback_t;
@@ -277,6 +287,9 @@ void vfs_update(vfs_node_t node);
  * @return 为NULL代表打开失败
  */
 vfs_node_t vfs_open(const char *str);
+vfs_node_t vfs_open_no_follow(const char *str);
+
+errno_t vfs_register_alias(const char *alias_path, const char *target_path);
 
 /**
  * 向一个节点发送 I/O 控制命令
@@ -316,6 +329,7 @@ vfs_node_t vfs_do_search(vfs_node_t dir, const char *name);
 void       vfs_free_child(vfs_node_t vfs);
 errno_t    vfs_delete(vfs_node_t node);
 errno_t    vfs_rename(vfs_node_t node, const char *nw);
+errno_t    vfs_resize(vfs_node_t node, uint64_t size);
 errno_t    vfs_poll(vfs_node_t node, size_t event);
 void      *vfs_map(vfs_node_t node, uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags,
                    uint64_t offset);

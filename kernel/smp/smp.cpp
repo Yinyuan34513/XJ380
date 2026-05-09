@@ -11,6 +11,7 @@
 #include <krlibc.h>
 #include <mm/alloc/alloc.h>
 #include <syscall/syscall.h>
+#include <task/scheduler.h>
 
 XSK_SMP_INFO *xsi;
 
@@ -151,7 +152,7 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     tcb_t apu_idle         = alloc_zeroed_tcb();
     if (apu_idle == NULL) while (true) { asm volatile("hlt"); }
     apu_idle->task_level   = TASK_IDLE_LEVEL;
-    apu_idle->tid          = now_tid++;
+    apu_idle->tid          = __atomic_fetch_add(&now_tid, 1, __ATOMIC_SEQ_CST);
     apu_idle->kernel_stack = apu_idle->context0.rsp = get_rsp();
     set_kernel_stack(apu_idle->kernel_stack);
     apu_idle->context0.rflags = get_rflags() | 0x200;
@@ -161,9 +162,12 @@ extern "C" void apu_entry(uint64_t cpu_id, uint64_t tr)
     apu_idle->parent_group = kernel_group;
     apu_idle->str_cwd      = "/";
     apu_idle->cwd          = rootdir;
+    apu_idle->fs           = 0x10;
+    apu_idle->fs_base      = 0;
+    scheduler_init_task(apu_idle);
 
     info->current_task    = apu_idle;
-    apu_idle->queue_index = queue_enqueue(info->scheduler_queue, apu_idle);
+    apu_idle->queue_index = queue_enqueue_ref(info->scheduler_queue, apu_idle, &apu_idle->sched_node);
 
     get_current_cpu()->current_task = apu_idle;
 

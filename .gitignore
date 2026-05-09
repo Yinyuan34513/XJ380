@@ -1,7 +1,7 @@
 .vscode
 out
 esp
-serial.log
+serial*
 .vs
 .idea/
 .trae
@@ -13,12 +13,17 @@ out/draw.o
 /open-vmdk-master
 /compile_commands.json
 .cache
+.config
+include/generated/
+
+bash-*
 
 *.img
 *.vmdk
 *.tags
 *.elf
 *.o
+*.d
 *.xz
 *.zip
 2.txt
@@ -32,3 +37,5 @@ scsi.txt
 .clangd
 
 .codex
+
+venv/

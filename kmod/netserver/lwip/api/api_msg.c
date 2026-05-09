@@ -707,10 +707,13 @@ struct netconn *netconn_alloc(enum netconn_type t, netconn_callback callback) {
     int size;
     u8_t init_flags = 0;
 
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc memp begin type=%d\n", (int)t));
     conn = (struct netconn *)memp_malloc(MEMP_NETCONN);
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc memp ret=%p\n", (void *)conn));
     if (conn == NULL) {
         return NULL;
     }
+    memset(conn, 0, sizeof(*conn));
 
     conn->pending_err = ERR_OK;
     conn->type = t;
@@ -745,18 +748,25 @@ struct netconn *netconn_alloc(enum netconn_type t, netconn_callback callback) {
         goto free_and_return;
     }
 
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc recvmbox begin size=%d\n", size));
     if (sys_mbox_new(&conn->recvmbox, size) != ERR_OK) {
+        LWIP_PLATFORM_DIAG(("netserver: netconn_alloc recvmbox failed\n"));
         goto free_and_return;
     }
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc recvmbox ok\n"));
 #if !LWIP_NETCONN_SEM_PER_THREAD
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc sem begin\n"));
     if (sys_sem_new(&conn->op_completed, 0) != ERR_OK) {
         sys_mbox_free(&conn->recvmbox);
         goto free_and_return;
     }
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc sem ok\n"));
 #endif
 
 #if LWIP_TCP
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc acceptmbox invalid begin\n"));
     sys_mbox_set_invalid(&conn->acceptmbox);
+    LWIP_PLATFORM_DIAG(("netserver: netconn_alloc acceptmbox invalid ok\n"));
 #endif
     conn->state = NETCONN_NONE;
     /* initialize socket to -1 since 0 is a valid socket */

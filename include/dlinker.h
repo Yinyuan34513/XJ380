@@ -92,6 +92,10 @@ typedef struct dlhandle {
     Elf64_Sym*      symtab;
     char*           strtab;
     size_t          symtabsz;
+    size_t          sym_count;
+    Elf64_Dyn*      dynamic;
+    size_t          ref_count;
+    bool            init_called;
     
     // 导出符号表
     dlfunc_t*       exports;
