@@ -24,7 +24,8 @@ static constexpr uint64_t EEVDF_DEFAULT_WEIGHT = 1024ULL;
 static bool trace_fsbase_task(tcb_t task)
 {
     return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
-           (strstr(task->name, "opkg") != NULL || strstr(task->parent_group->name, "opkg") != NULL);
+           (strstr(task->name, "dpkg") != NULL || strstr(task->parent_group->name, "dpkg") != NULL ||
+            strstr(task->name, "xjapt") != NULL || strstr(task->parent_group->name, "xjapt") != NULL);
 }
 
 void enable_scheduler()

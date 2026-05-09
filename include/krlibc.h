@@ -237,6 +237,7 @@ static inline void *memmove(void *dest, const void *src, size_t n)
 
 void cmd_free(char **argv, int argc);
 int cmd_parse(const char *cmd_str, char **argv, char token);
+int cmd_parse_limit(const char *cmd_str, char **argv, char token, int max_argc);
 
 #ifdef __cplusplus
 } // extern "C"

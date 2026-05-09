@@ -97,6 +97,7 @@ struct process_control_block
     lock_queue       *ipc_queue;   // 进程消息队列
 
     lock_queue *file_open; // 文件句柄占用队列
+    size_t     *file_open_shared_refs;
     char      **envp;      // 环境变量指针
     size_t      envc;      // 环境变量数量
 
@@ -121,6 +122,7 @@ struct process_control_block
     uint64_t    aux_entry;
     uint64_t    aux_execfn;
     bool        linux_abi;
+    uint16_t    umask;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点

@@ -1,12 +1,13 @@
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include 
+C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
 SMP ?= 4
 SUDO ?= 1
+VDISK_SUDO ?= sudo
 KVM ?= 1
 
 ifeq ($(DEBUG), 1)
@@ -39,7 +40,7 @@ AUDIO_BACKEND ?= sdl
 HDA_CODEC ?= hda-output
 QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
-COMPILER_PREFIX ?= 
+COMPILER_PREFIX ?=
 
 # FILES
 NASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.asm")
@@ -57,6 +58,12 @@ export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 HOST_CC ?= cc
 HOST_GCC ?= gcc
+HOST_CLANG ?= clang
+HOST_CLANGXX ?= clang++
+HOST_LLVM_AR ?= llvm-ar
+HOST_LLVM_RANLIB ?= llvm-ranlib
+IMAGE_TOOLCHAIN ?= clang
+IMAGE_PACKAGE_MANAGER ?= dpkg
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
 HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
 HOST_GCC_REAL := $(shell readlink -f "$$(command -v $(HOST_GCC))" 2>/dev/null)
@@ -75,14 +82,14 @@ C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
 CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
-OPKG_CONF_GEN := $(BUILD_DIR)/tools/xj380_opkg_conf_gen
-OPKG_LD_LIBRARY_PATH ?=
-OPKG_STAGE_DEPS := tools/stage_elf_deps.sh
-OPKG_FEEDS ?= openwrt_base http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/base openwrt_packages http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/packages
+STAGE_ELF_DEPS := tools/stage_elf_deps.sh
+STAGE_IMAGE_BASE := tools/stage_image_base.sh
+STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
+STAGE_IMAGE_DPKG := tools/stage_image_dpkg.sh
+STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
 APP_BASH := resources/apps/bash
 APP_BUSYBOX := resources/apps/busybox
 APP_FASTFETCH := resources/apps/fastfetch
-APP_OPKG := resources/apps/opkg
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
@@ -152,11 +159,6 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-$(OPKG_CONF_GEN): tools/xj380_opkg_conf_gen.c
-	@mkdir -p $(@D)
-	@$(HOST_CC) -O2 -Wall -Wextra $< -o $@
-	@echo "HOSTCC $< -> $@"
-
 .PHONY: clean format check gen.clangd stardustui.examples.copy
 
 clean:
@@ -181,53 +183,21 @@ clean.clangd:
 gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
-vdisk: all $(OPKG_CONF_GEN)
+vdisk: all
 	@rm -rf XJ380.img
 	@rm -rf $(BUILD_DIR)/XJ380
 
 	@dd if=/dev/zero of=XJ380.img bs=1024M count=1
 # You must execute the following command with sudo privileges, that's not good...
-	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
+	@$(VDISK_SUDO) sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
+	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
 
-	@mkdir -p $(BUILD_DIR)/XJ380/EFI/BOOT
-	@mkdir -p $(BUILD_DIR)/XJ380/system
-	@mkdir -p $(BUILD_DIR)/XJ380/system/font
-	@mkdir -p $(BUILD_DIR)/XJ380/system/theme/skyglass
-	@mkdir -p $(BUILD_DIR)/XJ380/system/foxland
-	@mkdir -p $(BUILD_DIR)/XJ380/system/icon
-	@mkdir -p $(BUILD_DIR)/XJ380/apps
-	@mkdir -p $(BUILD_DIR)/XJ380/lib64
+	@sh $(STAGE_IMAGE_BASE) $(BUILD_DIR)/XJ380
 	@mkdir -p $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/bin
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/include
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/gcc/$(HOST_GCC_TRIPLE)
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/libexec/gcc/$(HOST_GCC_TRIPLE)
 	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(BUILD_DIR)/XJ380/system/resources/image
-	@mkdir -p $(BUILD_DIR)/XJ380/mod
-	@mkdir -p $(BUILD_DIR)/XJ380/etc/opkg
-	@mkdir -p $(BUILD_DIR)/XJ380/etc/fastfetch
-	@mkdir -p $(BUILD_DIR)/XJ380/etc
-	@mkdir -p $(BUILD_DIR)/XJ380/etc/ssl/certs
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/info
-	@mkdir -p $(BUILD_DIR)/XJ380/usr/lib/opkg/lists
-	@mkdir -p $(BUILD_DIR)/XJ380/tmp
-	@mkdir -p $(BUILD_DIR)/XJ380/var
-	@mkdir -p $(BUILD_DIR)/XJ380/var/lock
-	@printf "nameserver 223.5.5.5\n" > $(BUILD_DIR)/XJ380/etc/resolv.conf
-	@cp -a resources/etc/os-release $(BUILD_DIR)/XJ380/etc/os-release
-	@cp -a resources/etc/fastfetch/. $(BUILD_DIR)/XJ380/etc/fastfetch/
-	@if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp -a /etc/ssl/certs/ca-certificates.crt $(BUILD_DIR)/XJ380/etc/ssl/certs/ca-certificates.crt; fi
-	@touch $(BUILD_DIR)/XJ380/usr/lib/opkg/lock
-	@cp -a resources/opkg/status $(BUILD_DIR)/XJ380/usr/lib/opkg/status
-	@if [ -d resources/opkg/info ]; then cp -a resources/opkg/info/. $(BUILD_DIR)/XJ380/usr/lib/opkg/info/; fi
-	@$(OPKG_CONF_GEN) $(BUILD_DIR)/XJ380 $(OPKG_FEEDS)
-	@mkdir -p $(BUILD_DIR)/XJ380/system/config
-	@mkdir -p $(BUILD_DIR)/XJ380/apps/builtin
-	@mkdir -p $(BUILD_DIR)/XJ380/apps/system
-	@mkdir -p $(BUILD_DIR)/XJ380/apps/thirdparty
 
 	@cp -a ./user/fmanager/fm_bg.png $(BUILD_DIR)/XJ380/system/resources/image
 
@@ -243,7 +213,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a $(BUILD_DIR)/texter.elf   $(BUILD_DIR)/XJ380/apps/builtin
 	@cp -a $(BUILD_DIR)/picturer.elf $(BUILD_DIR)/XJ380/apps/builtin
 	@cp -a $(BUILD_DIR)/browser.elf $(BUILD_DIR)/XJ380/apps/builtin
-	@cp -a $(BUILD_DIR)/nut.elf $(BUILD_DIR)/XJ380/apps/builtin	
+	@cp -a $(BUILD_DIR)/nut.elf $(BUILD_DIR)/XJ380/apps/builtin
 
 #	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
 #	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
@@ -252,6 +222,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a $(BUILD_DIR)/sigtest.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(BUILD_DIR)/XJ380/apps
+	@cp -a $(BUILD_DIR)/xjapt.elf $(BUILD_DIR)/XJ380/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(BUILD_DIR)/XJ380/apps
 	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(BUILD_DIR)/XJ380/lib64/ld-linux-x86-64.so.2
 
@@ -263,27 +234,19 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(BUILD_DIR)/XJ380/lib64/libc.so.6
 	@cp -a $(APP_BASH) $(BUILD_DIR)/XJ380/apps/bash
 	@cp -a $(APP_BUSYBOX) $(BUILD_DIR)/XJ380/apps/busybox
+	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(BUILD_DIR)/XJ380/apps/lolcat.deb; fi
 	@cp -a $(APP_FASTFETCH) $(BUILD_DIR)/XJ380/apps/fastfetch
-	@[ -n "$(HOST_GCC_REAL)" ] && [ -n "$(HOST_GCC_TRIPLE)" ] && [ -n "$(HOST_GCC_VERSION)" ]
 	@cp ./1.c $(BUILD_DIR)/XJ380/apps/1.c
-	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_REAL_NAME)
-	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/gcc-$(HOST_GCC_VERSION)
-	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/gcc
-	@cp -aL $(HOST_GCC_REAL) $(BUILD_DIR)/XJ380/usr/bin/cc
-	@cp -aL $(HOST_GCC_AS) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_AS_NAME)
-	@cp -aL $(HOST_GCC_AS) $(BUILD_DIR)/XJ380/usr/bin/as
-	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_LD_NAME)
-	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/$(HOST_GCC_TRIPLE)-ld
-	@cp -aL $(HOST_GCC_LD) $(BUILD_DIR)/XJ380/usr/bin/ld
-	@cp -a $(HOST_GCC_LIBEXECDIR) $(BUILD_DIR)/XJ380/usr/libexec/gcc/$(HOST_GCC_TRIPLE)/
-	@cp -a $(HOST_GCC_LIBDIR) $(BUILD_DIR)/XJ380/usr/lib/gcc/$(HOST_GCC_TRIPLE)/
-	@cp -a /usr/include/. $(BUILD_DIR)/XJ380/usr/include/
-	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/usr/lib/$(HOST_GCC_TRIPLE)/; done
-	@$(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
-	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(BUILD_DIR)/XJ380/lib/$(HOST_GCC_TRIPLE)/; done
-	@$(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(APP_FASTFETCH)
-	@cp -a $(APP_OPKG) $(BUILD_DIR)/XJ380/apps/opkg
-	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(BUILD_DIR)/XJ380 $(BUILD_DIR)/XJ380/apps/opkg
+	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(BUILD_DIR)/XJ380
+	@$(STAGE_ELF_DEPS) $(BUILD_DIR)/XJ380 $(APP_FASTFETCH)
+	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "dpkg" ]; then \
+		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_DPKG) $(BUILD_DIR)/XJ380; \
+	elif [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
+		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(BUILD_DIR)/XJ380; \
+	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
+		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected dpkg, xbps, or none)" >&2; \
+		exit 1; \
+	fi
 
 
 	@cp -a ./font/ttf/XJ380F.ttf $(BUILD_DIR)/XJ380/system/font
@@ -304,16 +267,13 @@ vdisk: all $(OPKG_CONF_GEN)
 
 	@cp ./out/helloworld.elf $(BUILD_DIR)/XJ380/apps/builtin
 	@cp ./out/layout.elf $(BUILD_DIR)/XJ380/apps/builtin
-	
-# temp test (remember to delete)
-	@mkdir -p $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
-	@cp -a ./test.txt $(BUILD_DIR)/XJ380/users/GuoqiFish/desktop
+
 	@find $(BUILD_DIR)/XJ380 -xtype l -delete
 	@find $(BUILD_DIR)/XJ380 -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(BUILD_DIR)/XJ380/* ::
 
 	@rm -rf $(BUILD_DIR)/XJ380
-	
+
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk

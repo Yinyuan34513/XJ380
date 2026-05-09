@@ -44,8 +44,8 @@ static constexpr uint32_t kDefaultDnsServer = ((uint32_t)5U << 24) |
                                               ((uint32_t)5U << 8) |
                                               223U; // 223.5.5.5
 static bool         g_dns_manual_override = true;
-static uint32_t     g_rx_log_count        = 0;
-static uint32_t     g_tx_log_count        = 0;
+static uint32_t     g_rx_log_count        = 24;
+static uint32_t     g_tx_log_count        = 24;
 static uint32_t     g_connect_log_count   = 0;
 static uint32_t     g_write_log_count     = 0;
 static uint32_t     g_dns_manual_addr     = kDefaultDnsServer;

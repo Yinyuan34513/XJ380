@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf nut.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf dyn-hello
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf nut.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf xjapt.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
@@ -195,6 +195,11 @@ libctest.elf: libctest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@echo "CPPLD $< -> ../out/$@"
 
 fbtest.elf: fbtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CPPLD $< -> ../out/$@"
+
+xjapt.elf: xjapt.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"

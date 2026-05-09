@@ -42,6 +42,10 @@
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
 
+#define SS_ONSTACK 1
+#define SS_DISABLE 2
+#define MINSIGSTKSZ 2048
+
 #define MINSIG 1
 #define MAXSIG 32
 
@@ -65,6 +69,12 @@ typedef struct sigaction {
     void (*sa_restorer)(void);
     sigset_t sa_mask;
 } sigaction_t;
+
+typedef struct sigaltstack {
+    void  *ss_sp;
+    int    ss_flags;
+    size_t ss_size;
+} stack_t;
 
 struct signal_block {
     void (*signal_handlers[MAX_SIGNALS])(int); // 每个信号对应的用户处理器
@@ -181,6 +191,7 @@ bool signals_pending_quick(tcb_t task);
 int  signal_setmask(int how, const sigset_t *nset, sigset_t *oset);
 int  syscall_ssetmask(int how, sigset_t *nset, sigset_t *oset);
 int  syscall_sig_action(int sig, sigaction_t *action, sigaction_t *oldaction);
+int  syscall_sigaltstack(stack_t *ss, stack_t *old_ss);
 int  signal_send_process(pcb_t process, int sig);
 bool signal_deliver_pending(struct X64_REGS *regs);
 uint64_t signal_return(struct X64_REGS *regs);

@@ -48,6 +48,10 @@ char *normalize_path(const char *path);
 
 #define AT_FDCWD (-100)
 #define AT_SYMLINK_NOFOLLOW 0x100
+#define AT_EMPTY_PATH 0x1000
+
+#define UTIME_NOW  ((1L << 30) - 1L)
+#define UTIME_OMIT ((1L << 30) - 2L)
 
 #define O_RDONLY    0
 #define O_WRONLY    1

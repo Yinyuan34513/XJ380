@@ -72,6 +72,9 @@ spin_t create_thread_lock = SPIN_INIT;
 extern spin_t scheduler_lock;
 extern void message_thread(uint64_t arg);
 extern uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);
+static void close_exec_file_descriptors(pcb_t process);
+static void close_process_file_table(pcb_t pcb);
+static bool fd_table_unref(pcb_t pcb);
 
 static tcb_t alloc_zeroed_tcb(void)
 {
@@ -220,6 +223,7 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
 
     if (is_zombie)
     {
+        close_process_file_table(pcb);
         pcb->status = ZOMBIE;
         if (pcb->thread_queue->size > 0)
         {
@@ -291,13 +295,7 @@ void kill_proc0(pcb_t pcb)
         if (thread != NULL) thread->status = DEATH;
     }
 
-    while (1)
-    {
-        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
-        if (handle == NULL) break;
-        vfs_close(handle->node);
-        free(handle);
-    }
+    close_process_file_table(pcb);
 
     do
     {
@@ -330,7 +328,6 @@ void kill_proc0(pcb_t pcb)
     bool vfork = pcb->vfork;
 
     // 先销毁队列，因为它们需要访问pcb中的指针
-    lock_queue *file_open = pcb->file_open;
     lock_queue *ipc_queue = pcb->ipc_queue;
     lock_queue *virt_queue = pcb->virt_queue;
 
@@ -341,7 +338,6 @@ void kill_proc0(pcb_t pcb)
     pcb->virt_queue = NULL;
 
     // 现在销毁队列
-    if (file_open) queue_destroy(file_open);
     if (ipc_queue) queue_destroy(ipc_queue);
     if (virt_queue) queue_destroy(virt_queue);
 
@@ -450,7 +446,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     int      argv_i = 0;
     bool     ok     = true;
 
-    char *parsed_argv[51];
+    char *parsed_argv[EXECVE_VECTOR_MAX + 1];
     char **argv = task->argv;
     int argc = (int)task->argc;
     bool argv_owned_by_parser = false;
@@ -458,7 +454,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     if (argv == NULL || argc <= 0)
     {
         build_cmdline = strdup(task->parent_group->cmdline);
-        argc = cmd_parse(build_cmdline, parsed_argv, ' ');
+        argc = cmd_parse_limit(build_cmdline, parsed_argv, ' ', EXECVE_VECTOR_MAX);
         argv = parsed_argv;
         argv_owned_by_parser = true;
     }
@@ -467,7 +463,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
         if (build_cmdline != NULL) free(build_cmdline);
         return 0;
     }
-    if (argc > 50) argc = 50;
+    if (argc > (int)EXECVE_VECTOR_MAX) argc = (int)EXECVE_VECTOR_MAX;
     write_serial_fmt("[busybox-debug] build_user_stack proc=%s pid=%llu argc=%d argv_source=%s cmdline=%s\n",
                      task->parent_group ? task->parent_group->name : "(null)",
                      task->parent_group ? (unsigned long long)task->parent_group->pid : 0ULL,
@@ -1055,7 +1051,7 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
     else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
-             (strstr(parent_task->name, "opkg") != NULL || strstr(parent_task->parent_group->name, "opkg") != NULL))
+             (strstr(parent_task->name, "dpkg") != NULL || strstr(parent_task->parent_group->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(parent_task->parent_group->name, "xjapt") != NULL))
         write_serial_fmt("[fsbase] clone-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx flags=0x%llx tls=0x%llx\n",
                          parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base, flags, tls);
 
@@ -1138,7 +1134,7 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     new_task->signal  = 0;
     new_task->fs      = parent_task->fs;
     new_task->fs_base = (flags & CLONE_SETTLS_FLAG) ? tls : parent_task->fs_base;
-    if (process->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(process->name, "opkg") != NULL))
+    if (process->linux_abi && (strstr(parent_task->name, "dpkg") != NULL || strstr(process->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(process->name, "xjapt") != NULL))
         write_serial_fmt("[fsbase] clone-child task=%s parent_tid=%llu child_fs=0x%llx parent_fs=0x%llx flags=0x%llx tls=0x%llx\n",
                          parent_task->name, parent_task->tid, new_task->fs_base, parent_task->fs_base, flags, tls);
 
@@ -1250,7 +1246,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     pcb_t process = get_current_task()->parent_group;
 
-    char      *norm_path = strdup(kpath);
+    char      *norm_path = vfs_cwd_path_build(kpath);
     if (norm_path == NULL)
     {
         free(kpath);
@@ -1532,6 +1528,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         message->pid          = process->pid;
         ipc_send(process->parent_task, message);
     }
+    close_exec_file_descriptors(process);
     if (current_task->tid_directory == old_page_dir) current_task->tid_directory = process->pagedir;
     if (!was_vfork) free_page_directory(old_page_dir);
     // process->pagedir = get_current_directory();
@@ -1589,6 +1586,39 @@ static void *file_copy(void *ptr)
     return fd_dup(src);
 }
 
+static void close_exec_file_descriptors(pcb_t process)
+{
+    if (process == NULL || process->file_open == NULL) return;
+
+    while (true)
+    {
+        size_t fd_to_close = (size_t)-1;
+
+        spin_lock(&process->file_open->lock);
+        lock_node *node = process->file_open->head;
+        while (node != NULL)
+        {
+            fd_file_handle *handle = (fd_file_handle *)node->data;
+            if (handle != NULL && (handle->flags & O_CLOEXEC))
+            {
+                fd_to_close = node->index;
+                break;
+            }
+            node = node->next;
+        }
+        spin_unlock(&process->file_open->lock);
+
+        if (fd_to_close == (size_t)-1) break;
+
+        fd_file_handle *handle = (fd_file_handle *)queue_remove_at(process->file_open, fd_to_close);
+        if (handle != NULL)
+        {
+            vfs_close(handle->node);
+            free(handle);
+        }
+    }
+}
+
 static void free_fd_handle_queue(lock_queue *queue)
 {
     if (queue == NULL) return;
@@ -1600,6 +1630,53 @@ static void free_fd_handle_queue(lock_queue *queue)
         free(handle);
     }
     queue_destroy(queue);
+}
+
+static size_t *alloc_fd_table_ref(void)
+{
+    size_t *refs = (size_t *)malloc(sizeof(size_t));
+    if (refs != NULL) *refs = 1;
+    return refs;
+}
+
+static void fd_table_ref(pcb_t pcb)
+{
+    if (pcb == NULL || pcb->file_open_shared_refs == NULL) return;
+    __atomic_fetch_add(pcb->file_open_shared_refs, 1, __ATOMIC_SEQ_CST);
+}
+
+static bool fd_table_unref(pcb_t pcb)
+{
+    if (pcb == NULL || pcb->file_open_shared_refs == NULL) return true;
+    size_t old = __atomic_fetch_sub(pcb->file_open_shared_refs, 1, __ATOMIC_SEQ_CST);
+    if (old <= 1)
+    {
+        free(pcb->file_open_shared_refs);
+        pcb->file_open_shared_refs = NULL;
+        return true;
+    }
+    pcb->file_open_shared_refs = NULL;
+    return false;
+}
+
+static void close_process_file_table(pcb_t pcb)
+{
+    if (pcb == NULL || pcb->file_open == NULL) return;
+
+    lock_queue *file_open = pcb->file_open;
+    bool close_fd_table = fd_table_unref(pcb);
+    pcb->file_open = NULL;
+
+    if (!close_fd_table) return;
+
+    while (true)
+    {
+        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(file_open);
+        if (handle == NULL) break;
+        vfs_close(handle->node);
+        free(handle);
+    }
+    queue_destroy(file_open);
 }
 
 static void free_owned_pointer_queue(lock_queue *queue)
@@ -1625,7 +1702,7 @@ static void free_partial_process(pcb_t pcb, bool owns_pagedir)
 
     if (pcb->thread_queue) queue_destroy(pcb->thread_queue);
     if (pcb->child_pcb) queue_destroy(pcb->child_pcb);
-    free_fd_handle_queue(pcb->file_open);
+    if (fd_table_unref(pcb)) free_fd_handle_queue(pcb->file_open);
     free_owned_pointer_queue(pcb->virt_queue);
     free_owned_pointer_queue(pcb->ipc_queue);
     vma_manager_exit_cleanup(&pcb->vma_manager);
@@ -1698,7 +1775,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
     else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
-             (strstr(parent_task->name, "opkg") != NULL || strstr(parent_task->parent_group->name, "opkg") != NULL))
+             (strstr(parent_task->name, "dpkg") != NULL || strstr(parent_task->parent_group->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(parent_task->parent_group->name, "xjapt") != NULL))
         write_serial_fmt("[fsbase] fork-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx\n",
                          parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base,
                          reg != NULL ? reg->rcx : 0);
@@ -1773,7 +1850,17 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_pcb->parent_task  = current_pcb;
     new_pcb->child_pcb    = queue_init();
     new_pcb->virt_queue   = queue_copy(current_pcb->virt_queue, virt_copy);
-    new_pcb->file_open    = queue_copy(current_pcb->file_open, file_copy);
+    if (clone_flags & CLONE_FILES_FLAG)
+    {
+        new_pcb->file_open = current_pcb->file_open;
+        new_pcb->file_open_shared_refs = current_pcb->file_open_shared_refs;
+        fd_table_ref(new_pcb);
+    }
+    else
+    {
+        new_pcb->file_open = queue_copy(current_pcb->file_open, file_copy);
+        new_pcb->file_open_shared_refs = alloc_fd_table_ref();
+    }
     new_pcb->ipc_queue    = queue_init();
     new_pcb->tty          = alloc_default_tty();
 
@@ -1781,7 +1868,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     if (new_pcb->cmdline == NULL || (current_pcb->argc > 0 && new_pcb->argv == NULL) ||
         (current_pcb->exe_path != NULL && new_pcb->exe_path == NULL) ||
         new_pcb->thread_queue == NULL || new_pcb->child_pcb == NULL ||
-        new_pcb->virt_queue == NULL || new_pcb->file_open == NULL || new_pcb->ipc_queue == NULL ||
+        new_pcb->virt_queue == NULL || new_pcb->file_open == NULL || new_pcb->file_open_shared_refs == NULL ||
+        new_pcb->ipc_queue == NULL ||
         new_pcb->tty == NULL || new_pcb->xtttp_stc == NULL)
     {
         free_partial_process(new_pcb, !is_vfork);
@@ -1861,7 +1949,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
 
     new_task->fs      = parent_task->fs;
     new_task->fs_base = parent_task->fs_base;
-    if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
+    if (current_pcb->linux_abi && (strstr(parent_task->name, "dpkg") != NULL || strstr(current_pcb->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(current_pcb->name, "xjapt") != NULL))
     {
         write_serial_fmt("[fsbase] fork-child parent=%s parent_tid=%llu child_pid=%llu child_fs=0x%llx parent_fs=0x%llx rip=0x%llx\n",
                          parent_task->name, parent_task->tid, new_pcb->pid, new_task->fs_base, parent_task->fs_base,
@@ -1930,7 +2018,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     restore_runtime_state(was_scheduler_enabled, is_sti);
 
     write_serial_fmt("FORK PID: %d\n", new_pcb->pid);
-    if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
+    if (current_pcb->linux_abi && (strstr(parent_task->name, "dpkg") != NULL || strstr(current_pcb->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(current_pcb->name, "xjapt") != NULL))
     {
         write_serial_fmt("[DEBUG-fork-ret] parent=%s pid=%llu child=%llu sti=%d sched=%d rip=0x%llx rsp=0x%llx\n",
                          parent_task->name,
@@ -2358,15 +2446,17 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
     pcb->file_open    = queue_init();
+    pcb->file_open_shared_refs = alloc_fd_table_ref();
     pcb->virt_queue   = queue_init();
     pcb->ipc_queue    = queue_init();
     pcb->tty          = alloc_default_tty();
-    if (pcb->thread_queue == NULL || pcb->child_pcb == NULL || pcb->file_open == NULL || pcb->virt_queue == NULL ||
-        pcb->ipc_queue == NULL || pcb->tty == NULL)
+    if (pcb->thread_queue == NULL || pcb->child_pcb == NULL || pcb->file_open == NULL ||
+        pcb->file_open_shared_refs == NULL || pcb->virt_queue == NULL || pcb->ipc_queue == NULL || pcb->tty == NULL)
     {
         if (pcb->thread_queue) queue_destroy(pcb->thread_queue);
         if (pcb->child_pcb) queue_destroy(pcb->child_pcb);
         if (pcb->file_open) queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         if (pcb->virt_queue) queue_destroy(pcb->virt_queue);
         if (pcb->ipc_queue) queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2392,6 +2482,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->thread_queue);
         queue_destroy(pcb->child_pcb);
         queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2407,6 +2498,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->thread_queue);
         queue_destroy(pcb->child_pcb);
         queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2422,6 +2514,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->thread_queue);
         queue_destroy(pcb->child_pcb);
         queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2479,6 +2572,7 @@ void process_setup()
     kernel_pcb->child_pcb    = queue_init();
     kernel_pcb->xtttp_stc    = (xtttp_dtt *)calloc(1,sizeof(xtttp_dtt));
     kernel_pcb->file_open    = queue_init();
+    kernel_pcb->file_open_shared_refs = alloc_fd_table_ref();
     kernel_pcb->virt_queue   = queue_init();
     kernel_pcb->ipc_queue    = queue_init();
     kernel_pcb->mmap_start   = USER_MMAP_START;

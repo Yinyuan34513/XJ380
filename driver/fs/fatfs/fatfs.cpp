@@ -200,6 +200,12 @@ size_t fatfs_writefile(file_t file, const void *addr, size_t offset, size_t size
 
 static uint64_t ino = 2;
 
+static bool fatfs_should_prune_child(vfs_node_t node) {
+    if (node == NULL) return false;
+    if (node->is_mount) return false;
+    return (node->type & (file_none | file_dir)) != 0;
+}
+
 void fatfs_open(void *parent, const char *name, vfs_node_t node) {
     fatfs_lock();
     
@@ -428,7 +434,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
             vfs_child_lock();
             list_foreach(node->child, child_node0) {
                 vfs_node_t e_child = (vfs_node_t)child_node0->data;
-                if (!e_child->visited) {
+                if (!e_child->visited && fatfs_should_prune_child(e_child)) {
                     exist = e_child;
                     break;
                 }

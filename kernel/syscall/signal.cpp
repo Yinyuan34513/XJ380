@@ -108,6 +108,32 @@ int syscall_sig_action(int sig, sigaction_t *action, sigaction_t *oldaction) {
     return 0;
 }
 
+int syscall_sigaltstack(stack_t *ss, stack_t *old_ss)
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL) return -ESRCH;
+
+    page_directory_t *pagedir = task->parent_group->pagedir;
+    if (old_ss != NULL)
+    {
+        stack_t current;
+        current.ss_sp    = NULL;
+        current.ss_flags = SS_DISABLE;
+        current.ss_size  = 0;
+        if (!signal_copy_to_user(pagedir, old_ss, &current, sizeof(current))) return -EFAULT;
+    }
+
+    if (ss != NULL)
+    {
+        stack_t requested;
+        if (!signal_copy_from_user(pagedir, &requested, ss, sizeof(requested))) return -EFAULT;
+        if ((requested.ss_flags & ~(SS_DISABLE)) != 0) return -EINVAL;
+        if (!(requested.ss_flags & SS_DISABLE) && requested.ss_size < MINSIGSTKSZ) return -ENOMEM;
+    }
+
+    return 0;
+}
+
 int signal_send_process(pcb_t process, int sig)
 {
     if (process == NULL) return -EINVAL;
