@@ -26,6 +26,8 @@ bash-*
 *.d
 *.xz
 *.zip
+!Bf/
+!Bf/**
 2.txt
 out.txt
 nvme.txt

@@ -1274,7 +1274,18 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
 static errno_t tty_poll(size_t events)
 {
     int revents = 0;
-    if (events & POLLIN) revents |= POLLIN;
+    if (events & POLLIN)
+    {
+        xtttp_dtt *terminal = current_xtttp_terminal();
+        if (terminal != NULL)
+        {
+            if (terminal->input[0] != '\0') revents |= POLLIN;
+        }
+        else
+        {
+            revents |= POLLIN;
+        }
+    }
     if (events & POLLOUT) revents |= POLLOUT;
     return revents;
 }

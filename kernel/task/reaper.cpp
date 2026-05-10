@@ -30,7 +30,7 @@ static pcb_t find_reapable_child(pcb_t parent)
     return target;
 }
 
-void killer_thread()
+void reaper_thread()
 {
     while (true)
     {
@@ -45,7 +45,7 @@ void killer_thread()
     }
 }
 
-void init_killer()
+void init_reaper()
 {
-    create_kernel_thread((void *)killer_thread, NULL, "Process Killer", NULL);
+    create_kernel_thread((void *)reaper_thread, NULL, "Process Reaper", NULL);
 }

@@ -3,6 +3,7 @@
 #include "fs/fatfs/ff.h"
 #include "krlibc.h"
 #include "mutex.h"
+#include "rtc.h"
 #include <fs/vfs/vfs.h>
 #include <syscall/syscall.h>
 
@@ -206,6 +207,41 @@ static bool fatfs_should_prune_child(vfs_node_t node) {
     return (node->type & (file_none | file_dir)) != 0;
 }
 
+static uint64_t fatfs_time_to_ns(const FILINFO *fno) {
+    if (fno == NULL || fno->fdate == 0) return realtime_ns();
+
+    int year  = 1980 + ((fno->fdate >> 9) & 0x7f);
+    int month = (fno->fdate >> 5) & 0x0f;
+    int day   = fno->fdate & 0x1f;
+    int hour  = (fno->ftime >> 11) & 0x1f;
+    int min   = (fno->ftime >> 5) & 0x3f;
+    int sec   = (fno->ftime & 0x1f) * 2;
+    if (year < 1980 || month < 1 || month > 12 || day < 1 || day > 31 ||
+        hour > 23 || min > 59 || sec > 59) {
+        return realtime_ns();
+    }
+
+    tm time;
+    memset(&time, 0, sizeof(time));
+    time.tm_year = year;
+    time.tm_mon  = month;
+    time.tm_mday = day;
+    time.tm_hour = hour;
+    time.tm_min  = min;
+    time.tm_sec  = sec;
+    int64_t seconds = mktime(&time);
+    if (seconds < 0) return realtime_ns();
+    return (uint64_t)seconds * 1000000000ULL;
+}
+
+static void fatfs_apply_filinfo(vfs_node_t node, const FILINFO *fno) {
+    if (node == NULL || fno == NULL) return;
+    uint64_t ns = fatfs_time_to_ns(fno);
+    node->createtime = ns;
+    node->readtime   = ns;
+    node->writetime  = ns;
+}
+
 void fatfs_open(void *parent, const char *name, vfs_node_t node) {
     fatfs_lock();
     
@@ -216,6 +252,13 @@ void fatfs_open(void *parent, const char *name, vfs_node_t node) {
     void   *fp = NULL;
     FILINFO fno;
     FRESULT res = f_stat(new_path, &fno);
+    if (res != FR_OK) {
+        free(new_path);
+        free(nw);
+        fatfs_unlock();
+        return;
+    }
+    fatfs_apply_filinfo(node, &fno);
     if (fno.fattrib & AM_DIR) {
         // node.
         node->type = file_dir;
@@ -243,6 +286,7 @@ void fatfs_open(void *parent, const char *name, vfs_node_t node) {
             child_node->inode     = ino++;
             child_node->size      = fno.fsize;
             child_node->dev       = child_node->root->dev;
+            fatfs_apply_filinfo(child_node, &fno);
         }
         if (node->inode == 0) node->inode = ino++;
         node->blksz = PAGE_SIZE;
@@ -254,6 +298,7 @@ void fatfs_open(void *parent, const char *name, vfs_node_t node) {
         if (node->inode == 0) node->inode = ino++;
         node->size  = f_size((FIL *)fp);
         node->blksz = PAGE_SIZE;
+        fatfs_apply_filinfo(node, &fno);
     }
     node->dev    = node->root->dev;
     nw->handle  = fp;
@@ -327,6 +372,10 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
     node->fsid  = fatfs_id;
     node->inode = 1;
     node->root  = node;
+    uint64_t mounted_at = realtime_ns();
+    node->createtime = mounted_at;
+    node->readtime   = mounted_at;
+    node->writetime  = mounted_at;
 
     FILINFO fno;
     FRESULT res;
@@ -347,6 +396,7 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
         vfs_child_unlock();
         if (exist) {
             exist->visited = true;
+            fatfs_apply_filinfo(exist, &fno);
             continue;
         }
         vfs_node_t child_node = vfs_child_append(node, fno.fname, NULL);
@@ -355,6 +405,7 @@ errno_t fatfs_mount(const char *src, vfs_node_t node) {
         child_node->size      = fno.fsize;
         child_node->visited   = true;
         child_node->dev       = child_node->root->dev;
+        fatfs_apply_filinfo(child_node, &fno);
     }
     // node->inode  = ino++;
     node->handle = f;
@@ -391,6 +442,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
         return -1;
     }
     node->dev = node->root->dev;
+    fatfs_apply_filinfo(node, &fno);
     if (fno.fattrib & AM_DIR) {
         node->type = file_dir;
         DIR *fp    = (DIR*)malloc(sizeof(DIR));
@@ -419,6 +471,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
             vfs_child_unlock();
             if (exist) {
                 exist->visited = true;
+                fatfs_apply_filinfo(exist, &fno);
                 continue;
             }
             vfs_node_t child_node = vfs_child_append(node, fno.fname, NULL);
@@ -427,6 +480,7 @@ int fatfs_stat(void *handle, vfs_node_t node) {
             child_node->size      = fno.fsize;
             child_node->visited   = true;
             child_node->dev       = child_node->root->dev;
+            fatfs_apply_filinfo(child_node, &fno);
         }
         free(fp);
         do {
@@ -447,7 +501,6 @@ int fatfs_stat(void *handle, vfs_node_t node) {
     } else {
         node->type = file_none;
         node->size = fno.fsize;
-        // node->createtime = fno.ftime
     }
     
     fatfs_unlock();

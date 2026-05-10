@@ -69,7 +69,8 @@ static const char *busybox_alias_applets[] = {
     "chown",   "clear",   "cmp",      "cp",       "cut",      "date",     "dd",      "df",
     "dirname", "dmesg",   "du",       "echo",     "egrep",    "env",      "false",   "fgrep",
     "find",    "free",    "grep",     "gunzip",   "gzip",     "head",     "hexdump", "hostname",
-    "id",      "ifconfig","ip",       "kill",     "killall",  "less",     "ln",      "ls",
+    "id",      "ifconfig","install",  "ip",       "kill",     "killall",  "less",    "ln",
+    "ls",
     "mkdir",   "more",    "mount",    "mv",       "nc",       "netstat",  "nslookup","od",
     "pgrep",   "pidof",   "ping",     "pkill",    "printenv", "printf",   "ps",      "pwd",
     "readlink","realpath","reset",    "rm",       "rmdir",    "route",    "sed",     "sh",
@@ -80,6 +81,19 @@ static const char *busybox_alias_applets[] = {
 };//暴力枚举这一块，好像只能这么做了
 
 static const char *busybox_binary_path = "/apps/busybox";
+
+static void setup_xbps_vfs_aliases()
+{
+    static const char *xbps_void_key_alias =
+        "/var/db/xbps/keys/60:ae:0c:d6:f0:95:17:80:bc:93:46:7a:89:af:a3:2d.plist";
+    static const char *xbps_void_key_target =
+        "/var/db/xbps/keys/60_ae_0c_d6_f0_95_17_80_bc_93_46_7a_89_af_a3_2d.plist";
+
+    if (vfs_register_alias(xbps_void_key_alias, xbps_void_key_target) == EOK)
+    {
+        write_serial_fmt("[xbps-debug] key alias %s -> %s\n", xbps_void_key_alias, xbps_void_key_target);
+    }
+}
 
 static void setup_busybox_vfs_aliases()
 {
@@ -538,7 +552,7 @@ skip_timer_widget_init:
 // #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -743,6 +757,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     mount_root();
     setup_busybox_vfs_aliases();
+    setup_xbps_vfs_aliases();
     tmpfs_setup();
     pipefs_setup();
     pty_init();
@@ -775,8 +790,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    init_killer();
-    write_serial_string("Process Killer is ready\n");
+    init_reaper();
+    write_serial_string("Process Reaper is ready\n");
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 

@@ -2222,7 +2222,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->argv = (char **)args;
     new_task->argc = argc;
 
-    new_task->user_info = current_user;
+    new_task->user_info = current_user != NULL ? current_user : &root_user;
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     if (new_task->user_stack == 0)

@@ -128,6 +128,7 @@ void terminal_child_submit_line()
     }
     newline();
     input_is_enter = true;
+    terminal_child_flush_input_if_requested();
     reset_terminal_cursor_blink();
     show_terminal_cursor(true);
     xapi_RefreshWindow(handle);

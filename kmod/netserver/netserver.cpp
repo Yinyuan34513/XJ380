@@ -15,12 +15,15 @@ extern "C" {
 #include "lwip/ethip6.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/ip6_addr.h"
+#include "lwip/ip.h"
 #include "lwip/netbuf.h"
 #include "lwip/netif.h"
 #include "lwip/netifapi.h"
 #include "lwip/pbuf.h"
 #include "lwip/prot/dhcp.h"
+#include "lwip/tcp.h"
 #include "lwip/tcpip.h"
+#include "lwip/sockets.h"
 #include "netif/ethernet.h"
 }
 
@@ -48,6 +51,9 @@ static uint32_t     g_rx_log_count        = 24;
 static uint32_t     g_tx_log_count        = 24;
 static uint32_t     g_connect_log_count   = 0;
 static uint32_t     g_write_log_count     = 0;
+static uint32_t     g_read_log_count      = 0;
+static uint32_t     g_poll_log_count      = 0;
+static uint32_t     g_getsockopt_log_count = 0;
 static uint32_t     g_dns_manual_addr     = kDefaultDnsServer;
 static uint32_t     g_manual_ipv4_addr    = 0;
 static uint32_t     g_manual_ipv4_netmask = 0;
@@ -414,10 +420,35 @@ static ssize_t xj380_socket_read_impl(xj380_lwip_socket_t *socket, void *buffer,
         api_flags |= NETCONN_DONTBLOCK;
     }
 
+    if (g_read_log_count < 32) {
+        printk("[DEBUG-xbps-net] read begin socket=%p size=%u flags=0x%x api_flags=0x%x state=%d pending_err=%d rx_buf=%p recv_ready=%d nonblock=%d\n",
+               socket,
+               (unsigned int)size,
+               (unsigned int)flags,
+               (unsigned int)api_flags,
+               socket != NULL && socket->conn != NULL ? (int)socket->conn->state : -1,
+               socket != NULL && socket->conn != NULL ? (int)socket->conn->pending_err : -1,
+               socket != NULL ? socket->rx_buf : NULL,
+               socket != NULL && socket->conn != NULL ? (int)xj380_mbox_has_data(&socket->conn->recvmbox) : -1,
+               socket != NULL && socket->conn != NULL ? (int)netconn_is_nonblocking(socket->conn) : -1);
+        g_read_log_count++;
+    }
+
     while (left > 0) {
         struct pbuf *p = socket->rx_buf;
         if (p == NULL) {
             err_t err = netconn_recv_tcp_pbuf_flags(socket->conn, &p, api_flags);
+            if (g_read_log_count < 64) {
+                printk("[DEBUG-xbps-net] read recv err=%d p=%p tot=%u len=%u state=%d pending_err=%d recvd=%lld\n",
+                       (int)err,
+                       p,
+                       p != NULL ? (unsigned int)p->tot_len : 0,
+                       p != NULL ? (unsigned int)p->len : 0,
+                       (int)socket->conn->state,
+                       (int)socket->conn->pending_err,
+                       (long long)recvd);
+                g_read_log_count++;
+            }
             if (err != ERR_OK) {
                 if (recvd > 0) {
                     break;
@@ -443,13 +474,23 @@ static ssize_t xj380_socket_read_impl(xj380_lwip_socket_t *socket, void *buffer,
         }
 
         api_flags |= NETCONN_DONTBLOCK | NETCONN_NOFIN;
-        if (recvd > 0) {
+        if ((flags & O_NONBLOCK) && recvd > 0) {
             break;
         }
     }
 
     if (recvd > 0) {
         netconn_tcp_recvd(socket->conn, (size_t)recvd);
+    }
+    if (g_read_log_count < 96) {
+        printk("[DEBUG-xbps-net] read end ret=%lld state=%d pending_err=%d rx_buf=%p recv_ready=%d nonblock=%d\n",
+               (long long)recvd,
+               (int)socket->conn->state,
+               (int)socket->conn->pending_err,
+               socket->rx_buf,
+               (int)xj380_mbox_has_data(&socket->conn->recvmbox),
+               (int)netconn_is_nonblocking(socket->conn));
+        g_read_log_count++;
     }
     return recvd;
 }
@@ -653,6 +694,15 @@ static ssize_t xj380_provider_write(void *socket_ptr, const void *buffer, size_t
         }
         return xj380_err_to_errno(err);
     }
+    if (g_write_log_count < 32) {
+        printk("[DEBUG-xbps-net] write ok requested=%u written=%u state=%d pending_err=%d nonblock=%d\n",
+               (unsigned int)size,
+               (unsigned int)written,
+               (int)socket->conn->state,
+               (int)socket->conn->pending_err,
+               (int)netconn_is_nonblocking(socket->conn));
+        g_write_log_count++;
+    }
     return (ssize_t)written;
 }
 
@@ -775,6 +825,80 @@ static int xj380_provider_getpeername(void *socket_ptr, struct sockaddr *addr, s
     return xj380_provider_sockname_impl(socket_ptr, addr, addrlen, 0);
 }
 
+static int xj380_provider_getsockopt(void *socket_ptr, int level, int optname, void *optval, socklen_t *optlen)
+{
+    xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
+    if (socket == NULL || socket->conn == NULL || optval == NULL || optlen == NULL) {
+        return -EINVAL;
+    }
+    if (*optlen < sizeof(int)) {
+        return -EINVAL;
+    }
+
+    int value = 0;
+    err_t pending_before = socket->conn->pending_err;
+    switch (level) {
+    case SOL_SOCKET:
+        switch (optname) {
+        case SO_TYPE:
+            switch (NETCONNTYPE_GROUP(netconn_type(socket->conn))) {
+            case NETCONN_TCP: value = SOCK_STREAM; break;
+            case NETCONN_UDP: value = SOCK_DGRAM; break;
+            default: value = SOCK_RAW; break;
+            }
+            break;
+        case SO_ERROR:
+            value = err_to_errno(netconn_err(socket->conn));
+            break;
+        case SO_KEEPALIVE:
+            value = socket->conn->pcb.ip != NULL ? ip_get_option(socket->conn->pcb.ip, SOF_KEEPALIVE) != 0 : 0;
+            break;
+        case SO_BROADCAST:
+            value = socket->conn->pcb.ip != NULL ? ip_get_option(socket->conn->pcb.ip, SOF_BROADCAST) != 0 : 0;
+            break;
+        case SO_REUSEADDR:
+            value = socket->conn->pcb.ip != NULL ? ip_get_option(socket->conn->pcb.ip, SOF_REUSEADDR) != 0 : 0;
+            break;
+        default:
+            return -ENOPROTOOPT;
+        }
+        break;
+    case IPPROTO_TCP:
+        if (NETCONNTYPE_GROUP(netconn_type(socket->conn)) != NETCONN_TCP || socket->conn->pcb.tcp == NULL) {
+            return -ENOPROTOOPT;
+        }
+        switch (optname) {
+        case TCP_NODELAY:
+            value = tcp_nagle_disabled(socket->conn->pcb.tcp);
+            break;
+        case TCP_KEEPALIVE:
+            value = (int)socket->conn->pcb.tcp->keep_idle;
+            break;
+        default:
+            return -ENOPROTOOPT;
+        }
+        break;
+    default:
+        return -ENOPROTOOPT;
+    }
+
+    *(int *)optval = value;
+    *optlen = sizeof(int);
+    if (g_getsockopt_log_count < 48) {
+        printk("[DEBUG-xbps-net] getsockopt socket=%p level=%d opt=%d value=%d len=%u state=%d pending_before=%d pending_after=%d\n",
+               socket,
+               level,
+               optname,
+               value,
+               (unsigned int)*optlen,
+               (int)socket->conn->state,
+               (int)pending_before,
+               (int)socket->conn->pending_err);
+        g_getsockopt_log_count++;
+    }
+    return 0;
+}
+
 static int xj380_provider_listen(void *socket_ptr, int backlog)
 {
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
@@ -846,15 +970,19 @@ static int xj380_provider_poll(void *socket_ptr, size_t events)
     }
 
     int out = 0;
+    bool recv_ready = false;
+    bool accept_ready = false;
 
     if (events & EPOLLIN) {
         if (socket->rx_buf != NULL) {
             out |= EPOLLIN;
         } else if (socket->is_listener) {
-            if (xj380_mbox_has_data(&socket->conn->acceptmbox)) {
+            accept_ready = xj380_mbox_has_data(&socket->conn->acceptmbox);
+            if (accept_ready) {
                 out |= EPOLLIN;
             }
-        } else if (xj380_mbox_has_data(&socket->conn->recvmbox) || socket->conn->pending_err == ERR_CLSD) {
+        } else if ((recv_ready = xj380_mbox_has_data(&socket->conn->recvmbox)) ||
+                   socket->conn->pending_err == ERR_CLSD) {
             out |= EPOLLIN;
         }
     }
@@ -871,6 +999,19 @@ static int xj380_provider_poll(void *socket_ptr, size_t events)
         out |= EPOLLERR;
     }
 
+    if (g_poll_log_count < 96) {
+        printk("[DEBUG-xbps-net] poll socket=%p events=0x%x out=0x%x state=%d pending_err=%d rx_buf=%p recv_ready=%d accept_ready=%d nonblock=%d\n",
+               socket,
+               (unsigned int)events,
+               (unsigned int)out,
+               (int)socket->conn->state,
+               (int)socket->conn->pending_err,
+               socket->rx_buf,
+               (int)recv_ready,
+               (int)accept_ready,
+               (int)netconn_is_nonblocking(socket->conn));
+        g_poll_log_count++;
+    }
     return out;
 }
 
@@ -1134,6 +1275,7 @@ static socket_provider_t g_socket_provider = {
     .connect   = xj380_provider_connect,
     .getsockname = xj380_provider_getsockname,
     .getpeername = xj380_provider_getpeername,
+    .getsockopt = xj380_provider_getsockopt,
     .listen    = xj380_provider_listen,
     .accept    = xj380_provider_accept,
     .shutdown  = xj380_provider_shutdown,

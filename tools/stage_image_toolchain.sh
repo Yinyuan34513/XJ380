@@ -150,6 +150,7 @@ stage_glibc_devel()
 {
     triple=$1
 
+    rm -rf "$root/usr/include"
     mkdir -p "$root/usr/include" "$root/usr/lib/$triple" "$root/lib/$triple"
     cp -a /usr/include/. "$root/usr/include/"
 

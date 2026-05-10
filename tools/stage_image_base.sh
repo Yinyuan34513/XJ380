@@ -7,6 +7,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 root=$1
+bf_dir=${BF_DIR:-Bf}
 
 stage_base_dirs()
 {
@@ -61,6 +62,7 @@ stage_base_dirs()
         "$root/usr/share/man/man6" \
         "$root/usr/share/man/man7" \
         "$root/usr/share/man/man8" \
+        "$root/usr/share/terminfo" \
         "$root/users" \
         "$root/users/Another User" \
         "$root/users/GuoqiFish" \
@@ -82,7 +84,6 @@ stage_base_dirs()
         "$root/var/log" \
         "$root/var/mail" \
         "$root/var/opt" \
-        "$root/var/run" \
         "$root/var/spool" \
         "$root/var/tmp"
 
@@ -101,6 +102,9 @@ stage_base_files()
     fi
     if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
         cp -a /etc/ssl/certs/ca-certificates.crt "$root/etc/ssl/certs/ca-certificates.crt"
+    fi
+    if [ -d "$bf_dir/terminfo" ]; then
+        cp -aL "$bf_dir/terminfo/." "$root/usr/share/terminfo/"
     fi
 }
 

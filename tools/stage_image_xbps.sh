@@ -7,19 +7,29 @@ if [ "$#" -ne 1 ]; then
 fi
 
 root=$1
-stage_deps=${STAGE_ELF_DEPS:-tools/stage_elf_deps.sh}
 busybox=${APP_BUSYBOX:-resources/apps/busybox}
-repo=${XBPS_REPOSITORY:-https://repo-default.voidlinux.org/current}
-static_tarball=${XBPS_STATIC_TARBALL:-/home/lu/naos/user/cache/xbps-static-latest.tar.xz}
+repo=${XBPS_REPOSITORY:-http://mirrors.tuna.tsinghua.edu.cn/voidlinux/current}
+bf_dir=${BF_DIR:-Bf}
+host_arch=${XBPS_STATIC_ARCH:-$(uname -m)}
+static_tarball=${XBPS_STATIC_TARBALL:-$bf_dir/xbps-static-latest.$host_arch-musl.tar.xz}
+static_uri=${XBPS_STATIC_URI:-http://repo-default.voidlinux.org/static/xbps-static-latest.$host_arch-musl.tar.xz}
+triggers_dir=${XBPS_TRIGGERS_DIR:-$bf_dir/xbps-triggers}
+triggers_pkg=${XBPS_TRIGGERS_PKG:-}
 
 find_tool()
 {
     tool=$1
-    if [ -x "resources/apps/$tool" ]; then
-        printf '%s\n' "resources/apps/$tool"
-        return 0
-    fi
-    command -v "$tool" 2>/dev/null || return 1
+    for path in \
+        "$bf_dir/usr/bin/$tool" \
+        "$bf_dir/bin/$tool" \
+        "$bf_dir/$tool"
+    do
+        if [ -x "$path" ]; then
+            printf '%s\n' "$path"
+            return 0
+        fi
+    done
+    return 1
 }
 
 copy_to()
@@ -29,15 +39,6 @@ copy_to()
     [ -e "$src" ] || return 0
     mkdir -p "$(dirname "$dst")"
     cp -aL "$src" "$dst"
-}
-
-stage_ldd_deps()
-{
-    if [ -x "$stage_deps" ]; then
-        "$stage_deps" "$root" "$@"
-    elif [ -f "$stage_deps" ]; then
-        sh "$stage_deps" "$root" "$@"
-    fi
 }
 
 install_busybox_applet()
@@ -64,7 +65,9 @@ stage_xbps_dirs()
 {
     mkdir -p \
         "$root/etc/xbps.d" \
+        "$root/usr/share/xbps.d" \
         "$root/usr/bin" \
+        "$root/usr/libexec" \
         "$root/var/cache/xbps" \
         "$root/var/db/xbps/keys" \
         "$root/var/db/xbps/metadata"
@@ -72,40 +75,55 @@ stage_xbps_dirs()
 
 stage_xbps_config()
 {
-    conf="$root/etc/xbps.d/00-repository-main.conf"
-    if [ ! -s "$conf" ]; then
+    for dir in "$root/usr/share/xbps.d" "$root/etc/xbps.d"; do
+        mkdir -p "$dir"
+        conf="$dir/00-repository-main.conf"
         printf 'repository=%s\n' "$repo" > "$conf"
-    fi
+    done
+
+    for conf in "$root"/usr/share/xbps.d/*-repository-*.conf \
+                "$root"/usr/share/xbps.d/*repository*.conf \
+                "$root"/etc/xbps.d/*-repository-*.conf \
+                "$root"/etc/xbps.d/*repository*.conf; do
+        [ -f "$conf" ] || continue
+        sed -i \
+            -e 's|https://repo-default.voidlinux.org|http://mirrors.tuna.tsinghua.edu.cn/voidlinux|g' \
+            -e 's|https://alpha.de.repo.voidlinux.org|http://mirrors.tuna.tsinghua.edu.cn/voidlinux|g' \
+            "$conf"
+    done
 }
 
 stage_xbps_tools()
 {
-    staged=""
     required="xbps-install xbps-query xbps-remove xbps-uhelper"
     optional="xbps-rindex xbps-reconfigure xbps-alternatives xbps-pkgdb"
 
     for tool in $required; do
         if ! src=$(find_tool "$tool"); then
-            echo "missing $tool; install xbps on host or place resources/apps/$tool" >&2
+            echo "missing $tool in $bf_dir" >&2
+            echo "preferred: download $static_uri to $static_tarball" >&2
             exit 1
         fi
         copy_to "$src" "$root/usr/bin/$tool"
-        staged="$staged $src"
     done
 
     for tool in $optional; do
         if src=$(find_tool "$tool"); then
             copy_to "$src" "$root/usr/bin/$tool"
-            staged="$staged $src"
         fi
     done
-
-    stage_ldd_deps $staged
 }
 
 stage_xbps_static_tarball()
 {
-    [ -f "$static_tarball" ] || return 1
+    if [ ! -f "$static_tarball" ]; then
+        echo "missing xbps static tarball: $static_tarball" >&2
+        echo "download it with:" >&2
+        echo "  mkdir -p $bf_dir" >&2
+        echo "  curl -fL '$static_uri' -o '$static_tarball'" >&2
+        return 1
+    fi
+
     tar -xJf "$static_tarball" -C "$root" ./usr/bin ./var/db/xbps/keys
 
     for tool in xbps-install xbps-query xbps-remove xbps-uhelper \
@@ -119,12 +137,51 @@ stage_xbps_static_tarball()
     return 0
 }
 
+sanitize_xbps_keys_for_fat()
+{
+    for key in "$root"/var/db/xbps/keys/*:*; do
+        [ -e "$key" ] || continue
+        dir=$(dirname "$key")
+        base=$(basename "$key")
+        safe=$(printf '%s' "$base" | tr ':<>"\\|?*' '_')
+        if [ "$base" != "$safe" ]; then
+            mv -f "$key" "$dir/$safe"
+        fi
+    done
+}
+
+stage_xbps_triggers()
+{
+    if [ -d "$triggers_dir" ]; then
+        mkdir -p "$root/usr/libexec"
+        cp -aL "$triggers_dir" "$root/usr/libexec/xbps-triggers"
+        return
+    fi
+
+    if [ -z "$triggers_pkg" ]; then
+        for pkg in "$bf_dir"/xbps-triggers-*.xbps; do
+            [ -f "$pkg" ] || continue
+            triggers_pkg=$pkg
+            break
+        done
+    fi
+
+    if [ -n "$triggers_pkg" ] && [ -f "$triggers_pkg" ]; then
+        tar --zstd -xf "$triggers_pkg" -C "$root" ./usr/libexec/xbps-triggers
+        return
+    fi
+
+    echo "missing xbps triggers" >&2
+    echo "place triggers in $triggers_dir or put xbps-triggers-*.xbps under $bf_dir" >&2
+    exit 1
+}
+
 stage_busybox_links()
 {
     if [ -e "$busybox" ]; then
         copy_to "$busybox" "$root/apps/busybox"
         for app in \
-            sh ash cat chmod chown chgrp cp date echo env false grep ln ls mkdir mv printf pwd \
+            sh ash cat chmod chown chgrp cp date echo env false grep install ln ls mkdir mv printf pwd \
             readlink rm rmdir sed sort stat sync test touch tr true uname uniq xargs awk
         do
             install_busybox_applet "/bin/$app" "$app"
@@ -134,8 +191,10 @@ stage_busybox_links()
 }
 
 stage_xbps_dirs
-stage_xbps_config
 if ! stage_xbps_static_tarball; then
     stage_xbps_tools
 fi
+stage_xbps_config
+sanitize_xbps_keys_for_fat
+stage_xbps_triggers
 stage_busybox_links

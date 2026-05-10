@@ -7,7 +7,7 @@ BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno
 DEBUG ?= 1
 SMP ?= 4
 SUDO ?= 1
-VDISK_SUDO ?= sudo
+VDISK_SUDO ?=
 KVM ?= 1
 
 ifeq ($(DEBUG), 1)
@@ -194,11 +194,11 @@ vdisk: all
 		exit 1; \
 	}
 
-	@dd if=/dev/zero of=XJ380.img bs=1024M count=1
+	@dd if=/dev/zero of=XJ380.img bs=2048M count=1
 # You must execute the following command with sudo privileges, that's not good...
 	@$(VDISK_SUDO) sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((1024*1024-2048*512/1024))
+	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
 
 	@sh $(STAGE_IMAGE_BASE) $(VDISK_ROOT)
 
@@ -281,7 +281,7 @@ vdisk: all
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
 		exit 1; \
 	}
-	
+
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk

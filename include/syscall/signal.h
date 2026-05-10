@@ -37,6 +37,7 @@
 
 #define SIG_NOMASK  0x40000000
 #define SIG_ONESHOT 0x80000000
+#define SA_ONSTACK  0x08000000
 
 #define SIG_BLOCK   0
 #define SIG_UNBLOCK 1

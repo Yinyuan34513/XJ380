@@ -8,8 +8,10 @@
 #include <mm/lazyalloc.h>
 #include <mm/frame.h>
 #include <mm/uaccess.h>
+#include <mm/hhdm.h>
 #include "../build_settings.h"
 #include <net/socket.h>
+#include <net/unixsock.h>
 #include <pipe.h>
 #include <rtc.h>
 #include <tty.h>
@@ -73,6 +75,13 @@ static bool trace_dpkg_task()
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
     return strstr(task->name, "dpkg") != NULL || strstr(task->name, "tar") != NULL ||
            strstr(task->parent_group->name, "dpkg") != NULL || strstr(task->parent_group->name, "tar") != NULL;
+}
+
+static bool trace_xbps_wait_task()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL;
 }
 
 static size_t bounded_strlen(const char *str, size_t max_len)
@@ -166,6 +175,19 @@ static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
 {
     if (node == NULL || out == NULL) return SYSCALL_FAULT_(EINVAL);
     memset(out, 0, sizeof(*out));
+    uint64_t ctime_ns = node->createtime;
+    uint64_t mtime_ns = node->writetime;
+    uint64_t atime_ns = node->readtime;
+    if (ctime_ns == 0) ctime_ns = mtime_ns;
+    if (mtime_ns == 0) mtime_ns = ctime_ns;
+    if (atime_ns == 0) atime_ns = mtime_ns;
+    if (ctime_ns == 0 || mtime_ns == 0 || atime_ns == 0)
+    {
+        uint64_t now = realtime_ns();
+        if (ctime_ns == 0) ctime_ns = now;
+        if (mtime_ns == 0) mtime_ns = now;
+        if (atime_ns == 0) atime_ns = now;
+    }
     out->st_gid     = (int)node->group;
     out->st_uid     = (int)node->owner;
     out->st_ino     = node->inode;
@@ -182,8 +204,9 @@ static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
     out->st_rdev    = (long)node->rdev;
     out->st_blksize = PAGE_SIZE;
     out->st_blocks  = (node->size == (uint64_t)-1) ? 0 : (node->size + PAGE_SIZE - 1) / PAGE_SIZE;
-    out->st_ctim = out->st_atim = out->st_mtim =
-        (struct timespec){.tv_sec = node->createtime / 1000000000ULL, .tv_nsec = node->createtime % 1000000000ULL};
+    out->st_atim = (struct timespec){.tv_sec = atime_ns / 1000000000ULL, .tv_nsec = atime_ns % 1000000000ULL};
+    out->st_mtim = (struct timespec){.tv_sec = mtime_ns / 1000000000ULL, .tv_nsec = mtime_ns % 1000000000ULL};
+    out->st_ctim = (struct timespec){.tv_sec = ctime_ns / 1000000000ULL, .tv_nsec = ctime_ns % 1000000000ULL};
     return 0;
 }
 
@@ -343,22 +366,29 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     return (int64_t)total;
 }
 
-static void mirror_stderr_to_serial(const uint8_t *buffer, size_t size)
+static bool trace_xbps_task()
 {
-    static constexpr size_t STDERR_SERIAL_CHUNK = 256;
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL;
+}
+
+static void mirror_linux_output_to_serial(const char *tag, const uint8_t *buffer, size_t size)
+{
+    static constexpr size_t OUTPUT_SERIAL_CHUNK = 256;
     if (buffer == NULL || size == 0) return;
 
     tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return;
 
-    char bounce[STDERR_SERIAL_CHUNK + 1];
+    char bounce[OUTPUT_SERIAL_CHUNK + 1];
     size_t total = 0;
     while (total < size)
     {
-        size_t chunk = MIN(size - total, STDERR_SERIAL_CHUNK);
+        size_t chunk = MIN(size - total, OUTPUT_SERIAL_CHUNK);
         if (!copy_from_user_pagedir(task->parent_group->pagedir, bounce, buffer + total, chunk)) break;
         bounce[chunk] = '\0';
-        write_serial_fmt("[stderr %s] %s", task->name, bounce);
+        write_serial_fmt("[%s %s] %s", tag, task->name, bounce);
         total += chunk;
     }
 }
@@ -380,6 +410,7 @@ static size_t ioctl_arg_size(int request)
     case TIOCGPTLCK:
     case TIOCGPGRP:
     case TIOCSPGRP:
+    case FIONBIO:
     case KDGETMODE:
     case KDSETMODE:
     case KDGKBMODE:
@@ -433,6 +464,7 @@ static bool ioctl_reads_user(int request)
     case TIOCSWINSZ:
     case TIOCSPTLCK:
     case TIOCSPGRP:
+    case FIONBIO:
     case KDSETMODE:
     case KDSKBMODE:
     case VT_SETMODE:
@@ -598,6 +630,16 @@ static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
     }
 
     wait4_discard_exit_message(parent, child_pid);
+    if (trace_xbps_wait_task())
+    {
+        write_serial_fmt("[DEBUG-xbps-wait] reap parent=%s pid=%llu child=%s child_pid=%llu exit=%d status=%d\n",
+                         parent->name,
+                         (unsigned long long)parent->pid,
+                         child->name,
+                         (unsigned long long)child_pid,
+                         child->exit_code,
+                         child->status);
+    }
     kill_proc(child, child->exit_code, false);
     return child_pid;
 }
@@ -704,8 +746,12 @@ sys_(open, char *path0, uint64_t flags, uint64_t mode)
     int ret = copy_string_from_user(&kpath, path0, USER_PATH_MAX);
     if (ret < 0) return SYSCALL_FAULT_((int)-ret);
 
-    uint64_t open_ret = open_kernel_path(kpath, flags, mode);
+    char *resolved = vfs_cwd_path_build(kpath);
     free(kpath);
+    if (resolved == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    uint64_t open_ret = open_kernel_path(resolved, flags, mode);
+    free(resolved);
     return open_ret;
 }
 
@@ -741,7 +787,8 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     }
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return 0;
-    if (fd == 2) mirror_stderr_to_serial(buffer, size);
+    if (fd == 2) mirror_linux_output_to_serial("stderr", buffer, size);
+    else if (fd == 1 && trace_xbps_task()) mirror_linux_output_to_serial("stdout", buffer, size);
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (!handle) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type & file_socket)
@@ -934,6 +981,191 @@ sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockadd
     return (uint64_t)ret;
 }
 
+sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
+{
+    if (fd < 0 || msg == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    page_directory_t *pagedir = current_user_pagedir();
+    if (pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    struct msghdr kmsg;
+    if (!copy_from_user_pagedir(pagedir, &kmsg, msg, sizeof(kmsg))) return SYSCALL_FAULT_(EFAULT);
+    if (kmsg.msg_iovlen > USER_IOV_MAX) return SYSCALL_FAULT_(EINVAL);
+    if (kmsg.msg_iovlen > 0 && kmsg.msg_iov == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (kmsg.msg_name != NULL &&
+        (kmsg.msg_namelen < sizeof(struct sockaddr) || kmsg.msg_namelen > sizeof(struct sockaddr_in6)))
+        return SYSCALL_FAULT_(EINVAL);
+
+    struct sockaddr_in6 kaddr;
+    const struct sockaddr *kaddr_ptr = NULL;
+    if (kmsg.msg_name != NULL)
+    {
+        memset(&kaddr, 0, sizeof(kaddr));
+        if (!copy_from_user_pagedir(pagedir, &kaddr, kmsg.msg_name, kmsg.msg_namelen))
+            return SYSCALL_FAULT_(EFAULT);
+        kaddr_ptr = (const struct sockaddr *)&kaddr;
+    }
+
+    size_t iov_bytes = 0;
+    if (!checked_mul_size(kmsg.msg_iovlen, sizeof(struct iovec), &iov_bytes)) return SYSCALL_FAULT_(EINVAL);
+    struct iovec *kiov = NULL;
+    if (iov_bytes > 0)
+    {
+        kiov = (struct iovec *)malloc(iov_bytes);
+        if (kiov == NULL) return SYSCALL_FAULT_(ENOMEM);
+        if (!copy_from_user_pagedir(pagedir, kiov, kmsg.msg_iov, iov_bytes))
+        {
+            free(kiov);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+    }
+
+    uint8_t *bounce = (uint8_t *)malloc(USER_IO_BOUNCE_BYTES);
+    if (bounce == NULL && kmsg.msg_iovlen > 0)
+    {
+        free(kiov);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    size_t total = 0;
+    for (size_t i = 0; i < kmsg.msg_iovlen; i++)
+    {
+        const uint8_t *base = (const uint8_t *)kiov[i].iov_base;
+        size_t len = kiov[i].iov_len;
+        if (base == NULL && len > 0)
+        {
+            free(bounce);
+            free(kiov);
+            return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
+        }
+        size_t done = 0;
+        while (done < len)
+        {
+            size_t chunk = MIN(len - done, USER_IO_BOUNCE_BYTES);
+            if (!copy_from_user_pagedir(pagedir, bounce, base + done, chunk))
+            {
+                free(bounce);
+                free(kiov);
+                return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
+            }
+            ssize_t ret = socket_sendto(fd, bounce, chunk, flags, kaddr_ptr, kmsg.msg_namelen);
+            if (ret < 0)
+            {
+                free(bounce);
+                free(kiov);
+                return total > 0 ? total : SYSCALL_FAULT_((int)-ret);
+            }
+            total += (size_t)ret;
+            done += (size_t)ret;
+            if ((size_t)ret < chunk) goto out;
+        }
+    }
+
+out:
+    free(bounce);
+    free(kiov);
+    return total;
+}
+
+sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
+{
+    if (fd < 0 || msg == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    page_directory_t *pagedir = current_user_pagedir();
+    if (pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    struct msghdr kmsg;
+    if (!copy_from_user_pagedir(pagedir, &kmsg, msg, sizeof(kmsg))) return SYSCALL_FAULT_(EFAULT);
+    if (kmsg.msg_iovlen > USER_IOV_MAX) return SYSCALL_FAULT_(EINVAL);
+    if (kmsg.msg_iovlen > 0 && kmsg.msg_iov == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    size_t iov_bytes = 0;
+    if (!checked_mul_size(kmsg.msg_iovlen, sizeof(struct iovec), &iov_bytes)) return SYSCALL_FAULT_(EINVAL);
+    struct iovec *kiov = NULL;
+    if (iov_bytes > 0)
+    {
+        kiov = (struct iovec *)malloc(iov_bytes);
+        if (kiov == NULL) return SYSCALL_FAULT_(ENOMEM);
+        if (!copy_from_user_pagedir(pagedir, kiov, kmsg.msg_iov, iov_bytes))
+        {
+            free(kiov);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+    }
+
+    struct sockaddr_in6 kaddr;
+    socklen_t kaddrlen = sizeof(kaddr);
+    socklen_t user_addr_capacity = kmsg.msg_namelen;
+    memset(&kaddr, 0, sizeof(kaddr));
+
+    uint8_t *bounce = (uint8_t *)malloc(USER_IO_BOUNCE_BYTES);
+    if (bounce == NULL && kmsg.msg_iovlen > 0)
+    {
+        free(kiov);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    size_t total = 0;
+    bool got_packet = false;
+    for (size_t i = 0; i < kmsg.msg_iovlen; i++)
+    {
+        uint8_t *base = (uint8_t *)kiov[i].iov_base;
+        size_t len = kiov[i].iov_len;
+        if (base == NULL && len > 0)
+        {
+            free(bounce);
+            free(kiov);
+            return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
+        }
+        size_t done = 0;
+        while (done < len)
+        {
+            size_t chunk = MIN(len - done, USER_IO_BOUNCE_BYTES);
+            socklen_t recv_addrlen = sizeof(kaddr);
+            ssize_t ret = socket_recvfrom(fd, bounce, chunk, flags,
+                                          kmsg.msg_name != NULL ? (struct sockaddr *)&kaddr : NULL,
+                                          kmsg.msg_name != NULL ? &recv_addrlen : NULL);
+            if (ret < 0)
+            {
+                free(bounce);
+                free(kiov);
+                return total > 0 ? total : SYSCALL_FAULT_((int)-ret);
+            }
+            got_packet = true;
+            if (kmsg.msg_name != NULL) kaddrlen = recv_addrlen;
+            if (!copy_to_user_pagedir(pagedir, base + done, bounce, (size_t)ret))
+            {
+                free(bounce);
+                free(kiov);
+                return SYSCALL_FAULT_(EFAULT);
+            }
+            total += (size_t)ret;
+            done += (size_t)ret;
+            if ((size_t)ret < chunk) goto recv_out;
+        }
+    }
+
+recv_out:
+    free(bounce);
+    free(kiov);
+
+    if (kmsg.msg_name != NULL && got_packet)
+    {
+        socklen_t copy_len = MIN(user_addr_capacity, kaddrlen);
+        if (copy_len > 0 && !copy_to_user_pagedir(pagedir, kmsg.msg_name, &kaddr, copy_len))
+            return SYSCALL_FAULT_(EFAULT);
+        kmsg.msg_namelen = kaddrlen;
+    }
+    else
+    {
+        kmsg.msg_namelen = 0;
+    }
+    kmsg.msg_controllen = 0;
+    kmsg.msg_flags = 0;
+    if (!copy_to_user_pagedir(pagedir, msg, &kmsg, sizeof(kmsg))) return SYSCALL_FAULT_(EFAULT);
+    return total;
+}
+
 sys_(setsockopt, int fd, int level, int optname, const void *optval, socklen_t optlen)
 {
     if (fd < 0) return SYSCALL_FAULT_(EBADF);
@@ -964,12 +1196,10 @@ sys_(getsockopt, int fd, int level, int optname, void *optval, socklen_t *optlen
 
     int value = 0;
     if (koptlen < sizeof(value)) return SYSCALL_FAULT_(EINVAL);
+    int sock_ret = socket_getsockopt(fd, level, optname, &value, &koptlen);
+    if (sock_ret < 0) return SYSCALL_FAULT_(-sock_ret);
     if (!copy_to_user_pagedir(pagedir, optval, &value, sizeof(value))) return SYSCALL_FAULT_(EFAULT);
-    koptlen = sizeof(value);
     if (!copy_to_user_pagedir(pagedir, optlen, &koptlen, sizeof(koptlen))) return SYSCALL_FAULT_(EFAULT);
-
-    (void)level;
-    (void)optname;
     return 0;
 }
 
@@ -1035,16 +1265,29 @@ sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
 
     pcb_t parent = get_current_task()->parent_group;
     long  pid    = (long)(int32_t)(uint32_t)pid_value;
+    bool  trace  = trace_xbps_wait_task();
     (void)rusage;
     if (parent == NULL || parent->child_pcb == NULL) return SYSCALL_FAULT_(ECHILD);
     if ((options & ~(LINUX_WNOHANG | LINUX_WUNTRACED | LINUX_WCONTINUED)) != 0) return SYSCALL_FAULT_(EINVAL);
     if (pid < -1 || pid == 0) return SYSCALL_FAULT_(EINVAL);
     if (wait4_find_child(parent, pid) == NULL) return SYSCALL_FAULT_(ECHILD);
 
+    if (trace)
+    {
+        write_serial_fmt("[DEBUG-xbps-wait] enter parent=%s parent_pid=%llu wait_pid=%ld options=0x%x children=%llu ipc=%llu\n",
+                         parent->name,
+                         (unsigned long long)parent->pid,
+                         pid,
+                         options,
+                         (unsigned long long)parent->child_pcb->size,
+                         parent->ipc_queue != NULL ? (unsigned long long)parent->ipc_queue->size : 0ULL);
+    }
+
     pcb_t zombie = wait4_find_zombie_child(parent, pid);
     if (zombie != NULL) return wait4_reap_child(parent, zombie, status);
     if (options & LINUX_WNOHANG) return 0;
 
+    uint64_t spins = 0;
     while (true)
     {
         zombie = wait4_find_zombie_child(parent, pid);
@@ -1055,6 +1298,16 @@ sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
         ipc_message_t message = wait4_pop_exit_message(parent, pid, false);
         if (message == NULL)
         {
+            if (trace && (spins == 1000 || spins == 10000 || spins == 100000))
+            {
+                write_serial_fmt("[DEBUG-xbps-wait] waiting parent=%s wait_pid=%ld children=%llu ipc=%llu spins=%llu\n",
+                                 parent->name,
+                                 pid,
+                                 (unsigned long long)parent->child_pcb->size,
+                                 parent->ipc_queue != NULL ? (unsigned long long)parent->ipc_queue->size : 0ULL,
+                                 (unsigned long long)spins);
+            }
+            spins++;
             __asm__ volatile("pause");
             scheduler_yield();
             continue;
@@ -1063,6 +1316,14 @@ sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
         int exit_code = (int)message->data[0] | ((int)message->data[1] << 8) | ((int)message->data[2] << 16) |
                         ((int)message->data[3] << 24);
         int child_pid = message->pid;
+        if (trace)
+        {
+            write_serial_fmt("[DEBUG-xbps-wait] got-msg parent=%s wait_pid=%ld child_pid=%d exit=%d\n",
+                             parent->name,
+                             pid,
+                             child_pid,
+                             exit_code);
+        }
         free(message);
 
         pcb_t child = wait4_find_child(parent, child_pid);
@@ -1119,13 +1380,16 @@ sys_(socket, int domain, int type, int protocol)
 
 sys_(socketpair, int domain, int type, int protocol, int *sv)
 {
-    (void)protocol;
-    (void)sv;
+    if (sv == NULL) return SYSCALL_FAULT_(EFAULT);
     int sock_type = type & SOCK_TYPE_MASK;
     if (domain == AF_UNIX || domain == AF_LOCAL)
     {
-        if (sock_type == SOCK_STREAM || sock_type == SOCK_DGRAM) return SYSCALL_FAULT_(EAFNOSUPPORT);
-        return SYSCALL_FAULT_(EAFNOSUPPORT);
+        int fds[2] = {-1, -1};
+        int ret = unix_socketpair(sock_type, protocol, fds);
+        if (ret < 0) return SYSCALL_FAULT_(-ret);
+        page_directory_t *pagedir = current_user_pagedir();
+        if (!copy_to_user_pagedir(pagedir, sv, fds, sizeof(fds))) return SYSCALL_FAULT_(EFAULT);
+        return 0;
     }
     return SYSCALL_FAULT_(EAFNOSUPPORT);
 }
@@ -1287,6 +1551,34 @@ sys_(ioctl, int fd, int options, void *arg2)
         karg = NULL;
     }
 
+    if ((handle->node->type & file_socket) && options == FIONBIO)
+    {
+        int nonblock = 0;
+        if (karg == NULL)
+        {
+            return SYSCALL_FAULT_(EFAULT);
+        }
+        nonblock = *(int *)karg;
+        if (nonblock) {
+            handle->flags |= O_NONBLOCK;
+            handle->node->flags |= O_NONBLOCK;
+        } else {
+            handle->flags &= ~O_NONBLOCK;
+            handle->node->flags &= ~O_NONBLOCK;
+        }
+        int ret = socket_apply_flags(handle->node, handle->node->flags);
+        if (arg_size > 0) free(karg);
+        if (trace_xbps_task())
+        {
+            write_serial_fmt("[DEBUG-xbps-syscall] ioctl FIONBIO fd=%d value=%d flags=0x%llx ret=%d\n",
+                             fd,
+                             nonblock,
+                             (unsigned long long)handle->node->flags,
+                             ret);
+        }
+        return ret < 0 ? SYSCALL_FAULT_(-ret) : 0;
+    }
+
     int ret = vfs_ioctl(handle->node, options, karg);
     if (ret == EOK && arg_size > 0 && ioctl_writes_user(options) &&
         !copy_to_user_pagedir(current_user_pagedir(), arg2, karg, arg_size))
@@ -1416,6 +1708,22 @@ static bool mapped_page_intersects(page_directory_t *pagedir, uint64_t start, ui
     return false;
 }
 
+static bool map_zero_user_range(page_directory_t *pagedir, uint64_t start, uint64_t length, uint64_t flags)
+{
+    if (pagedir == NULL) return false;
+
+    for (uint64_t page = start; page < start + length; page += PAGE_SIZE) {
+        uint64_t frame = alloc_frames(1);
+        if (frame == 0) {
+            unmap_page_range(pagedir, start, page - start);
+            return false;
+        }
+        memset(phys_to_virt(frame), 0, PAGE_SIZE);
+        page_map_to(pagedir, page, frame, flags | PTE_FRAME_ALLOCATED);
+    }
+    return true;
+}
+
 static bool user_range_available(pcb_t process, uint64_t start, uint64_t length)
 {
     if (process == NULL || process->pagedir == NULL) return false;
@@ -1430,10 +1738,13 @@ static uint64_t find_user_mmap_range(pcb_t process, uint64_t hint, uint64_t leng
     if (process == NULL || length == 0) return 0;
 
     uint64_t start_addr = hint >= USER_MMAP_START ? (hint & PAGE_MASK) : USER_MMAP_START;
-    while (!check_user_overflow(start_addr, length))
+    if (start_addr >= USER_BRK_START || length > USER_BRK_START - start_addr) return 0;
+
+    uint64_t limit = USER_BRK_START - length;
+    while (start_addr <= limit)
     {
         if (user_range_available(process, start_addr, length)) return start_addr;
-        if (start_addr > KERNEL_AREA_MEM - PAGE_SIZE) return 0;
+        if (start_addr > limit - PAGE_SIZE) return 0;
         start_addr += PAGE_SIZE;
     }
 
@@ -1525,34 +1836,36 @@ static void update_lazy_pte_flags(pcb_t process, uint64_t start, uint64_t end, u
     }
 }
 
-static vma_t *find_heap_vma(pcb_t process)
-{
-    if (process == NULL) return NULL;
-
-    vma_t *vma = process->vma_manager.vma_list;
-    while (vma != NULL)
-    {
-        if (vma->vm_start == process->brk_start && vma->vm_type == VMA_TYPE_ANON &&
-            (vma->vm_flags & VMA_ANON))
-        {
-            return vma;
-        }
-        vma = vma->vm_next;
-    }
-    return NULL;
-}
-
-static bool heap_growth_range_available(pcb_t process, vma_t *heap_vma, uint64_t start, uint64_t end)
+static bool heap_growth_range_available(pcb_t process, uint64_t start, uint64_t end)
 {
     if (process == NULL || start >= end) return true;
 
     vma_t *vma = process->vma_manager.vma_list;
     while (vma != NULL)
     {
-        if (vma != heap_vma && !(end <= vma->vm_start || start >= vma->vm_end)) return false;
+        if (!(end <= vma->vm_start || start >= vma->vm_end)) return false;
         vma = vma->vm_next;
     }
     return !mapped_page_intersects(process->pagedir, start, end - start);
+}
+
+static bool heap_insert_range(pcb_t process, uint64_t start, uint64_t end)
+{
+    if (process == NULL || start >= end) return true;
+
+    vma_t *heap_vma = vma_alloc();
+    if (heap_vma == NULL) return false;
+
+    heap_vma->vm_start = start;
+    heap_vma->vm_end = end;
+    heap_vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
+    heap_vma->vm_type = VMA_TYPE_ANON;
+    heap_vma->vm_name = strdup("[heap]");
+    if (heap_vma->vm_name == NULL || vma_insert(&process->vma_manager, heap_vma) != 0) {
+        vma_free(heap_vma);
+        return false;
+    }
+    return true;
 }
 
 uint64_t sys_brk(uint64_t brk) {
@@ -1581,53 +1894,30 @@ uint64_t sys_brk(uint64_t brk) {
 
     mm_op_lock_acquire();
 
-    vma_t *heap_vma = find_heap_vma(process);
-
     if (new_map_end > old_map_end) {
-        if (!heap_growth_range_available(process, heap_vma, old_map_end, new_map_end)) {
+        if (!heap_growth_range_available(process, old_map_end, new_map_end)) {
             mm_op_lock_release();
             return process->brk_current;
         }
 
         // brk 分配的是用户态堆页，必须带 PTE_USER，否则用户态 malloc 会页故障。
-        page_map_range_to_random(get_current_directory(),
-                       old_map_end,
-                       new_map_end - old_map_end,
-                       PTE_USER | PTE_PRESENT | PTE_WRITEABLE);
+        if (!map_zero_user_range(get_current_directory(),
+                                 old_map_end,
+                                 new_map_end - old_map_end,
+                                 PTE_USER | PTE_PRESENT | PTE_WRITEABLE)) {
+            mm_op_lock_release();
+            return process->brk_current;
+        }
+
+        if (!heap_insert_range(process, old_map_end, new_map_end)) {
+            unmap_page_range(get_current_directory(), old_map_end, new_map_end - old_map_end);
+            mm_op_lock_release();
+            return process->brk_current;
+        }
     }
     else if (new_map_end < old_map_end) {
+        vma_unmap_range(&process->vma_manager, new_map_end, old_map_end);
         unmap_page_range(get_current_directory(), new_map_end, old_map_end - new_map_end);
-    }
-
-    if (new_map_end > process->brk_start) {
-        if (heap_vma == NULL) {
-            heap_vma = vma_alloc();
-            if (heap_vma == NULL) {
-                mm_op_lock_release();
-                return process->brk_current;
-            }
-            heap_vma->vm_start = process->brk_start;
-            heap_vma->vm_end = new_map_end;
-            heap_vma->vm_flags = VMA_READ | VMA_WRITE | VMA_ANON;
-            heap_vma->vm_type = VMA_TYPE_ANON;
-            heap_vma->vm_name = strdup("[heap]");
-            if (heap_vma->vm_name == NULL || vma_insert(&process->vma_manager, heap_vma) != 0) {
-                vma_free(heap_vma);
-                mm_op_lock_release();
-                return process->brk_current;
-            }
-        }
-        else {
-            if (new_map_end > heap_vma->vm_end)
-                process->vma_manager.vm_used += new_map_end - heap_vma->vm_end;
-            else
-                process->vma_manager.vm_used -= heap_vma->vm_end - new_map_end;
-            heap_vma->vm_end = new_map_end;
-        }
-    }
-    else if (heap_vma != NULL) {
-        vma_remove(&process->vma_manager, heap_vma);
-        vma_free(heap_vma);
     }
 
     process->brk_current = brk;
@@ -1661,9 +1951,15 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
         if (check_user_overflow(start_addr, aligned_len)) return SYSCALL_FAULT_(EINVAL);
         end_addr = start_addr + aligned_len;
     } else {
+        if (process->mmap_start < USER_MMAP_START || process->mmap_start >= USER_BRK_START)
+            process->mmap_start = USER_MMAP_START;
         uint64_t search_start = addr ? addr : process->mmap_start;
         if (addr) {
             start_addr = addr;
+            if (start_addr < USER_MMAP_START || start_addr >= USER_BRK_START ||
+                aligned_len > USER_BRK_START - start_addr) {
+                return SYSCALL_FAULT_(ENOMEM);
+            }
             end_addr = start_addr + aligned_len;
             if (!user_range_available(process, start_addr, aligned_len)) {
                 return SYSCALL_FAULT_(ENOMEM);
@@ -1828,43 +2124,11 @@ sys_(munmap, uint64_t addr, size_t size) {
 
     if (check_user_overflow(addr, size)) { return -EFAULT; }
 
-    vma_manager_t *mgr  = &get_current_task()->parent_group->vma_manager;
-    vma_t         *vma  = mgr->vma_list;
-    vma_t         *next = NULL;
-
     uint64_t start = addr;
     uint64_t end   = addr + size;
 
-    while (vma) {
-        next = vma->vm_next;
-
-        // 完全包含在要取消映射的范围内
-        if (vma->vm_start >= start && vma->vm_end <= end) {
-            vma_remove(mgr, vma);
-            vma_free(vma);
-        }
-        // 部分重叠 - 需要分割
-        else if (!(vma->vm_end <= start || vma->vm_start >= end)) {
-            if (vma->vm_start < start && vma->vm_end > end) {
-                // VMA跨越整个取消映射范围 - 分割成两部分
-                vma_split(vma, end);
-                vma_split(vma, start);
-                // 移除中间部分
-                vma_t *middle = vma->vm_next;
-                vma_remove(mgr, middle);
-                vma_free(middle);
-            } else if (vma->vm_start < start) {
-                // 截断VMA的末尾
-                vma->vm_end = start;
-            } else if (vma->vm_end > end) {
-                // 截断VMA的开头
-                vma->vm_start = end;
-                if (vma->vm_type == VMA_TYPE_FILE) { vma->vm_offset += end - vma->vm_start; }
-            }
-        }
-
-        vma = next;
-    }
+    vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
+    if (vma_unmap_range(mgr, start, end) != 0) return SYSCALL_FAULT_(ENOMEM);
 
     unmap_virtual_page(get_current_task()->parent_group, addr, size);
     unmap_page_range(get_current_directory(), addr, size);
@@ -1888,12 +2152,11 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
     vma_t *vma = vma_find(mgr, (unsigned long)old_addr);
     if (!vma || vma->vm_start != (unsigned long)old_addr) { return SYSCALL_FAULT_(EINVAL); }
 
-    uint64_t old_addr_phys = page_virt_to_phys(old_addr);
-
     // 如果新大小更小，直接截断
     if (new_size <= vma->vm_end - vma->vm_start) {
-        unmap_page_range(get_current_directory(), vma->vm_end,
-                         vma->vm_start + new_size - vma->vm_end);
+        uint64_t new_end = vma->vm_start + new_size;
+        if (new_end < vma->vm_end)
+            unmap_page_range(get_current_directory(), new_end, vma->vm_end - new_end);
         vma->vm_end = vma->vm_start + new_size;
         return old_addr;
     }
@@ -1908,31 +2171,56 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
         if (vma->vm_flags & VMA_WRITE) pt_flags |= PTE_WRITEABLE;
         if (!(vma->vm_flags & VMA_EXEC)) pt_flags |= PTE_NO_EXECUTE;
 
-        page_map_range(get_current_directory(), vma->vm_end,
-                       old_addr_phys + vma->vm_end - vma->vm_start, new_end - vma->vm_end,
-                       vma->vm_flags);
+        uint64_t old_end = vma->vm_end;
+        for (uint64_t page = old_end; page < new_end; page += PAGE_SIZE) {
+            uint64_t frame = alloc_frames(1);
+            if (frame == 0) {
+                unmap_page_range(get_current_directory(), old_end, page - old_end);
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+            memset(phys_to_virt(frame), 0, PAGE_SIZE);
+            page_map_to(get_current_directory(), page, frame, pt_flags | PTE_FRAME_ALLOCATED);
+        }
 
         vma->vm_end = new_end;
+        mgr->vm_used += new_end - old_end;
         return old_addr;
     }
 
     if (flags & MREMAP_MAYMOVE) {
+        if (flags & MREMAP_FIXED) {
+            if (new_addr == 0 || check_user_overflow(new_addr, new_size)) return SYSCALL_FAULT_(EINVAL);
+        }
+
         // 简单的地址分配策略：从高地址开始
-        uint64_t start_addr = USER_MMAP_START;
-        while (true) {
-            if (check_user_overflow(start_addr, new_size)) return SYSCALL_FAULT_(ENOMEM);
-            if (!vma_find_intersection(mgr, start_addr, start_addr + new_size)) break;
-            start_addr += PAGE_SIZE;
-            if (start_addr > KERNEL_AREA_MEM) return SYSCALL_FAULT_(ENOMEM);
+        uint64_t start_addr = (flags & MREMAP_FIXED) ? new_addr : 0;
+        if (flags & MREMAP_FIXED) {
+            if (start_addr < USER_MMAP_START || start_addr >= USER_BRK_START ||
+                new_size > USER_BRK_START - start_addr) {
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+            if (vma_find_intersection(mgr, start_addr, start_addr + new_size))
+                return SYSCALL_FAULT_(ENOMEM);
+        } else {
+            start_addr = find_user_mmap_range(get_current_task()->parent_group, USER_MMAP_START, new_size);
+            if (start_addr == 0) return SYSCALL_FAULT_(ENOMEM);
         }
 
         vma_t *new_vma = vma_alloc();
         if (!new_vma) return SYSCALL_FAULT_(ENOMEM);
 
-        memcpy(new_vma, vma, sizeof(vma_t));
+        new_vma->vm_flags = vma->vm_flags;
+        new_vma->vm_type = vma->vm_type;
+        new_vma->vm_fd = vma->vm_fd;
+        new_vma->vm_offset = vma->vm_offset;
+        new_vma->shm_id = vma->shm_id;
+        new_vma->vm_name = vma->vm_name ? strdup(vma->vm_name) : NULL;
+        if (vma->vm_name != NULL && new_vma->vm_name == NULL) {
+            vma_free(new_vma);
+            return SYSCALL_FAULT_(ENOMEM);
+        }
         new_vma->vm_start = start_addr;
         new_vma->vm_end   = start_addr + new_size;
-        new_vma->vm_flags = 0;
 
         if (vma_insert(mgr, new_vma) != 0) {
             vma_free(new_vma);
@@ -1945,7 +2233,26 @@ sys_(mremap, uint64_t old_addr, uint64_t old_size, uint64_t new_size, uint64_t f
         if (new_vma->vm_flags & VMA_WRITE) pt_flags |= PTE_WRITEABLE;
         if (!(new_vma->vm_flags & VMA_EXEC)) pt_flags |= PTE_NO_EXECUTE;
 
-        page_map_range(get_current_directory(), start_addr, old_addr_phys, new_size, pt_flags);
+        uint64_t copy_size = MIN(old_size, new_size);
+        for (uint64_t offset = 0; offset < new_size; offset += PAGE_SIZE) {
+            uint64_t frame = alloc_frames(1);
+            if (frame == 0) {
+                vma_remove(mgr, new_vma);
+                vma_free(new_vma);
+                unmap_page_range(get_current_directory(), start_addr, offset);
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+            memset(phys_to_virt(frame), 0, PAGE_SIZE);
+
+            if (offset < copy_size) {
+                uint64_t old_phys = translate_address(get_current_directory(), old_addr + offset);
+                if (old_phys != 0) {
+                    size_t bytes = (size_t)MIN(PAGE_SIZE, copy_size - offset);
+                    memcpy(phys_to_virt(frame), phys_to_virt(old_phys & PTE_ADDR_MASK), bytes);
+                }
+            }
+            page_map_to(get_current_directory(), start_addr + offset, frame, pt_flags | PTE_FRAME_ALLOCATED);
+        }
 
         sys_munmap(old_addr, old_size, 0, 0, 0, 0, regs);
         return start_addr;
@@ -2322,6 +2629,31 @@ sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uin
     return thread_clone(regs, flags, stack, parent_tid, child_tid, tls);
 }
 
+sys_(clone3, struct clone_args *cl_args, size_t size)
+{
+    if (size < sizeof(uint64_t)) return SYSCALL_FAULT_(EINVAL);
+    if (size > sizeof(struct clone_args)) size = sizeof(struct clone_args);
+
+    struct clone_args args;
+    page_directory_t *pagedir = current_user_pagedir();
+    if (pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
+    memset(&args, 0, sizeof(args));
+    if (!copy_from_user_pagedir(pagedir, &args, cl_args, size)) return SYSCALL_FAULT_(EFAULT);
+
+    if (args.pidfd != 0) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t flags = args.flags;
+    if (args.exit_signal != 0 && (flags & 0xFF) == 0)
+        flags |= (args.exit_signal & 0xFF);
+
+    uint64_t stack      = args.stack;
+    int     *parent_tid = (args.parent_tid != 0) ? (int *)(uintptr_t)args.parent_tid : NULL;
+    int     *child_tid  = (args.child_tid != 0)  ? (int *)(uintptr_t)args.child_tid  : NULL;
+    uint64_t tls        = args.tls;
+
+    return thread_clone(regs, flags, stack, parent_tid, child_tid, tls);
+}
+
 sys_(get_tid)
 {
     return get_current_task()->tid;
@@ -2389,9 +2721,7 @@ sys_(fstat, int fd, struct stat *buf)
 
 sys_(time, int64_t *timer)
 {
-    tm tm;
-    time_read(&tm);
-    int64_t timestamp = mktime(&tm);
+    int64_t timestamp = (int64_t)(realtime_ns() / 1000000000ULL);
     if (timer != NULL && !copy_to_user_pagedir(current_user_pagedir(), timer, &timestamp, sizeof(timestamp)))
         return SYSCALL_FAULT_(EFAULT);
     return (uint64_t)timestamp;
@@ -2403,10 +2733,9 @@ sys_(gettimeofday, struct timeval *tv, void *tz)
     if (tv == NULL) return SYSCALL_FAULT_(EINVAL);
 
     struct timeval ktv;
-    tm tm;
-    time_read(&tm);
-    ktv.tv_sec = (long)mktime(&tm);
-    ktv.tv_usec = (long)((nanoTime() % 1000000000ULL) / 1000ULL);
+    uint64_t now_ns = realtime_ns();
+    ktv.tv_sec = (long)(now_ns / 1000000000ULL);
+    ktv.tv_usec = (long)((now_ns % 1000000000ULL) / 1000ULL);
     if (!copy_to_user_pagedir(current_user_pagedir(), tv, &ktv, sizeof(ktv))) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
@@ -2429,11 +2758,9 @@ sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
         return 0;
     }
     case 0: {
-        tm tm;
-        time_read(&tm);
-        uint64_t timestamp = mktime(&tm);
-        kts.tv_sec  = timestamp;
-        kts.tv_nsec = 0;
+        uint64_t now_ns = realtime_ns();
+        kts.tv_sec  = now_ns / 1000000000ULL;
+        kts.tv_nsec = now_ns % 1000000000ULL;
         if (ts != NULL && !copy_to_user_pagedir(current_user_pagedir(), ts, &kts, sizeof(kts)))
             return SYSCALL_FAULT_(EFAULT);
         return 0;
@@ -3439,6 +3766,47 @@ sys_(getgroups, int count, int *gid_list)
     }
     return 1;
 }
+
+sys_(setgroups, int count, const int *gid_list)
+{
+    if (count < 0) return SYSCALL_FAULT_(EINVAL);
+    if (count > 65536) return SYSCALL_FAULT_(EINVAL);
+    if (count > 0 && gid_list == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (count > 0 && !user_range_mapped(current_user_pagedir(), gid_list, sizeof(int) * (size_t)count))
+        return SYSCALL_FAULT_(EFAULT);
+    return current_uid() == 0 ? 0 : SYSCALL_FAULT_(EPERM);
+}
+
+sys_(flock, int fd, int operation)
+{
+    if ((operation & ~(1 | 2 | 4 | 8)) != 0) return SYSCALL_FAULT_(EINVAL);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    return 0;
+}
+
+sys_(chroot, char *path)
+{
+    if (path == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    char *kpath = NULL;
+    int ret = copy_string_from_user(&kpath, path, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+    char *resolved = vfs_cwd_path_build(kpath);
+    free(kpath);
+    if (resolved == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    vfs_node_t node = vfs_open(resolved);
+    free(resolved);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+
+    bool is_dir = (node->type & file_dir) != 0;
+    vfs_close(node);
+    if (!is_dir) return SYSCALL_FAULT_(ENOTDIR);
+    return current_uid() == 0 ? 0 : SYSCALL_FAULT_(EPERM);
+}
+
 char *get_parent_path(const char *path) {
     if (!path || !*path) return strdup(".");
 
@@ -3555,11 +3923,17 @@ sys_(symlink, char *name, char *nw)
 {
     if (name == NULL || nw == NULL) return SYSCALL_FAULT_(EINVAL);
     char *kname = NULL;
-    char *knw = NULL;
     int copy_ret = copy_string_from_user(&kname, name, USER_PATH_MAX);
     if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
-    copy_ret = copy_string_from_user(&knw, nw, USER_PATH_MAX);
-    if (copy_ret < 0) { free(kname); return SYSCALL_FAULT_((int)-copy_ret); }
+
+    char *knw = NULL;
+    int path_ret = resolve_user_path_at(AT_FDCWD, nw, &knw);
+    if (path_ret < 0)
+    {
+        free(kname);
+        return SYSCALL_FAULT_((int)-path_ret);
+    }
+
     errno_t ret = vfs_symlink(knw, kname);
     free(kname);
     free(knw);
@@ -3593,10 +3967,10 @@ sys_(link, char *name, char *nw)
     if (name == NULL || nw == NULL) return SYSCALL_FAULT_(EINVAL);
     char *kname = NULL;
     char *knw = NULL;
-    int copy_ret = copy_string_from_user(&kname, name, USER_PATH_MAX);
-    if (copy_ret < 0) return SYSCALL_FAULT_((int)-copy_ret);
-    copy_ret = copy_string_from_user(&knw, nw, USER_PATH_MAX);
-    if (copy_ret < 0) { free(kname); return SYSCALL_FAULT_((int)-copy_ret); }
+    int path_ret = resolve_user_path_at(AT_FDCWD, name, &kname);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+    path_ret = resolve_user_path_at(AT_FDCWD, nw, &knw);
+    if (path_ret < 0) { free(kname); return SYSCALL_FAULT_((int)-path_ret); }
     errno_t ret = vfs_link(kname, knw);
     free(kname);
     free(knw);
@@ -3870,6 +4244,61 @@ sys_(setgid, uint32_t gid)
     return SYSCALL_FAULT_(EPERM);
 }
 
+static bool linux_id_arg_allowed(uint32_t id, uint32_t current)
+{
+    return id == (uint32_t)-1 || id == current || current_uid() == 0;
+}
+
+sys_(setresuid, uint32_t ruid, uint32_t euid, uint32_t suid)
+{
+    uint32_t uid = current_uid();
+    if (linux_id_arg_allowed(ruid, uid) && linux_id_arg_allowed(euid, uid) && linux_id_arg_allowed(suid, uid))
+        return 0;
+    return SYSCALL_FAULT_(EPERM);
+}
+
+sys_(getresuid, uint32_t *ruid, uint32_t *euid, uint32_t *suid)
+{
+    uint32_t uid = current_uid();
+    page_directory_t *pagedir = current_user_pagedir();
+    if (ruid != NULL && !copy_to_user_pagedir(pagedir, ruid, &uid, sizeof(uid))) return SYSCALL_FAULT_(EFAULT);
+    if (euid != NULL && !copy_to_user_pagedir(pagedir, euid, &uid, sizeof(uid))) return SYSCALL_FAULT_(EFAULT);
+    if (suid != NULL && !copy_to_user_pagedir(pagedir, suid, &uid, sizeof(uid))) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
+sys_(setresgid, uint32_t rgid, uint32_t egid, uint32_t sgid)
+{
+    uint32_t gid = current_gid();
+    if (linux_id_arg_allowed(rgid, gid) && linux_id_arg_allowed(egid, gid) && linux_id_arg_allowed(sgid, gid))
+        return 0;
+    return SYSCALL_FAULT_(EPERM);
+}
+
+sys_(getresgid, uint32_t *rgid, uint32_t *egid, uint32_t *sgid)
+{
+    uint32_t gid = current_gid();
+    page_directory_t *pagedir = current_user_pagedir();
+    if (rgid != NULL && !copy_to_user_pagedir(pagedir, rgid, &gid, sizeof(gid))) return SYSCALL_FAULT_(EFAULT);
+    if (egid != NULL && !copy_to_user_pagedir(pagedir, egid, &gid, sizeof(gid))) return SYSCALL_FAULT_(EFAULT);
+    if (sgid != NULL && !copy_to_user_pagedir(pagedir, sgid, &gid, sizeof(gid))) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
+sys_(setfsuid, uint32_t uid)
+{
+    uint32_t old_uid = current_uid();
+    if (linux_id_arg_allowed(uid, old_uid)) return old_uid;
+    return old_uid;
+}
+
+sys_(setfsgid, uint32_t gid)
+{
+    uint32_t old_gid = current_gid();
+    if (linux_id_arg_allowed(gid, old_gid)) return old_gid;
+    return old_gid;
+}
+
 sys_(geteuid)
 {
     return current_uid();
@@ -3878,6 +4307,80 @@ sys_(geteuid)
 sys_(getegid)
 {
     return current_gid();
+}
+
+#define LINUX_CAPABILITY_VERSION_1 0x19980330U
+#define LINUX_CAPABILITY_VERSION_2 0x20071026U
+#define LINUX_CAPABILITY_VERSION_3 0x20080522U
+
+static int linux_capability_u32s(uint32_t version)
+{
+    switch (version)
+    {
+    case LINUX_CAPABILITY_VERSION_1: return 1;
+    case LINUX_CAPABILITY_VERSION_2:
+    case LINUX_CAPABILITY_VERSION_3: return 2;
+    default: return 0;
+    }
+}
+
+sys_(capget, struct user_cap_header *header, struct user_cap_data *data)
+{
+    if (header == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    struct user_cap_header kheader;
+    if (!copy_from_user_pagedir(current_user_pagedir(), &kheader, header, sizeof(kheader)))
+        return SYSCALL_FAULT_(EFAULT);
+
+    int u32s = linux_capability_u32s(kheader.version);
+    if (u32s == 0)
+    {
+        kheader.version = LINUX_CAPABILITY_VERSION_3;
+        if (!copy_to_user_pagedir(current_user_pagedir(), header, &kheader, sizeof(kheader)))
+            return SYSCALL_FAULT_(EFAULT);
+        return SYSCALL_FAULT_(EINVAL);
+    }
+    if (kheader.pid < 0) return SYSCALL_FAULT_(EINVAL);
+    if (kheader.pid > 0)
+    {
+        pcb_t process = found_pcb(kheader.pid);
+        if (process == NULL || process->status == DEATH) return SYSCALL_FAULT_(ESRCH);
+    }
+    if (data == NULL) return 0;
+
+    struct user_cap_data kdata[2];
+    memset(kdata, 0, sizeof(kdata));
+    if (current_uid() == 0)
+    {
+        kdata[0].effective = 0xffffffffU;
+        kdata[0].permitted = 0xffffffffU;
+        if (u32s > 1)
+        {
+            kdata[1].effective = 0x000001ffU;
+            kdata[1].permitted = 0x000001ffU;
+        }
+    }
+
+    if (!copy_to_user_pagedir(current_user_pagedir(), data, kdata, sizeof(struct user_cap_data) * (size_t)u32s))
+        return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
+sys_(capset, struct user_cap_header *header, struct user_cap_data *data)
+{
+    if (header == NULL || data == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    struct user_cap_header kheader;
+    if (!copy_from_user_pagedir(current_user_pagedir(), &kheader, header, sizeof(kheader)))
+        return SYSCALL_FAULT_(EFAULT);
+    if (linux_capability_u32s(kheader.version) == 0) return SYSCALL_FAULT_(EINVAL);
+    if (kheader.pid < 0) return SYSCALL_FAULT_(EINVAL);
+    if (kheader.pid > 0)
+    {
+        pcb_t process = found_pcb(kheader.pid);
+        if (process == NULL || process->status == DEATH) return SYSCALL_FAULT_(ESRCH);
+    }
+    return current_uid() == 0 ? 0 : SYSCALL_FAULT_(EPERM);
 }
 
 sys_(sysinfo, struct sysinfo *info)
@@ -4040,7 +4543,7 @@ sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int fla
     }
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
 
-    uint64_t now = nanoTime();
+    uint64_t now = realtime_ns();
     if (times == NULL)
     {
         node->readtime = now;
@@ -4090,6 +4593,50 @@ sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int fla
     }
 
     if (close_node) vfs_close(node);
+    return 0;
+}
+
+sys_(utimes, char *filename, const struct timeval *times)
+{
+    if (filename == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (times != NULL && !user_range_mapped(current_user_pagedir(), times, sizeof(struct timeval) * 2))
+        return SYSCALL_FAULT_(EFAULT);
+
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(AT_FDCWD, filename, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
+
+    vfs_node_t node = vfs_open(resolved);
+    free(resolved);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+
+    if (times != NULL)
+    {
+        struct timeval ktv[2];
+        if (!copy_from_user_pagedir(current_user_pagedir(), ktv, times, sizeof(ktv)))
+        {
+            vfs_close(node);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+        for (int i = 0; i < 2; i++)
+        {
+            if (ktv[i].tv_sec < 0 || ktv[i].tv_usec < 0 || ktv[i].tv_usec >= 1000000L)
+            {
+                vfs_close(node);
+                return SYSCALL_FAULT_(EINVAL);
+            }
+        }
+        node->readtime = (uint64_t)ktv[0].tv_sec * 1000000000ULL + (uint64_t)ktv[0].tv_usec * 1000ULL;
+        node->writetime = (uint64_t)ktv[1].tv_sec * 1000000000ULL + (uint64_t)ktv[1].tv_usec * 1000ULL;
+    }
+    else
+    {
+        uint64_t now = realtime_ns();
+        node->readtime = now;
+        node->writetime = now;
+    }
+
+    vfs_close(node);
     return 0;
 }
 

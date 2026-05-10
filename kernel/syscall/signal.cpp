@@ -117,9 +117,9 @@ int syscall_sigaltstack(stack_t *ss, stack_t *old_ss)
     if (old_ss != NULL)
     {
         stack_t current;
-        current.ss_sp    = NULL;
-        current.ss_flags = SS_DISABLE;
-        current.ss_size  = 0;
+        current.ss_sp    = task->sas_ss_sp;
+        current.ss_flags = task->sas_ss_flags;
+        current.ss_size  = task->sas_ss_size;
         if (!signal_copy_to_user(pagedir, old_ss, &current, sizeof(current))) return -EFAULT;
     }
 
@@ -128,7 +128,20 @@ int syscall_sigaltstack(stack_t *ss, stack_t *old_ss)
         stack_t requested;
         if (!signal_copy_from_user(pagedir, &requested, ss, sizeof(requested))) return -EFAULT;
         if ((requested.ss_flags & ~(SS_DISABLE)) != 0) return -EINVAL;
-        if (!(requested.ss_flags & SS_DISABLE) && requested.ss_size < MINSIGSTKSZ) return -ENOMEM;
+
+        if (requested.ss_flags & SS_DISABLE)
+        {
+            task->sas_ss_sp    = NULL;
+            task->sas_ss_size  = 0;
+            task->sas_ss_flags = SS_DISABLE;
+        }
+        else
+        {
+            if (requested.ss_size < MINSIGSTKSZ) return -ENOMEM;
+            task->sas_ss_sp    = requested.ss_sp;
+            task->sas_ss_size  = requested.ss_size;
+            task->sas_ss_flags = 0;
+        }
     }
 
     return 0;
@@ -203,9 +216,16 @@ bool signal_deliver_pending(struct X64_REGS *regs)
     frame.oldmask = task->blocked;
     memcpy(&frame.regs, regs, sizeof(*regs));
 
-    uint64_t frame_addr = (regs->rsp - sizeof(frame)) & ~0xFULL;
+    bool use_altstack = (action->sa_flags & SA_ONSTACK) &&
+                        !(task->sas_ss_flags & SS_DISABLE) &&
+                        !(task->sas_ss_flags & SS_ONSTACK);
+    uint64_t sp = use_altstack ? ((uint64_t)task->sas_ss_sp + task->sas_ss_size) : regs->rsp;
+    uint64_t frame_addr = (sp - sizeof(frame)) & ~0xFULL;
     uint64_t ret_addr   = frame_addr - sizeof(uint64_t);
     uint64_t restorer   = (uint64_t)action->sa_restorer;
+
+    if (use_altstack)
+        task->sas_ss_flags |= SS_ONSTACK;
 
     if (!signal_copy_to_user(pagedir, (void *)frame_addr, &frame, sizeof(frame)) ||
         !signal_copy_to_user(pagedir, (void *)ret_addr, &restorer, sizeof(restorer))) {
@@ -237,6 +257,7 @@ uint64_t signal_return(struct X64_REGS *regs)
     if (frame.magic != SIGNAL_FRAME_MAGIC) return (uint64_t)-EINVAL;
 
     task->blocked = frame.oldmask & ~(SIGMASK(SIGKILL) | SIGMASK(SIGSTOP));
+    task->sas_ss_flags &= ~SS_ONSTACK;
     memcpy(regs, &frame.regs, sizeof(*regs));
     return regs->rax;
 }

@@ -30,6 +30,7 @@ sys_(fchown, int fd, uint32_t owner, uint32_t group);
 sys_(fchownat, int dirfd, char *pathname, uint32_t owner, uint32_t group, int flags);
 sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
 sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
+sys_(utimes, char *filename, const struct timeval *times);
 
 static bool trace_fsbase_task(tcb_t task)
 {
@@ -69,6 +70,8 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_CONNECT: return "connect";
     case SYS_SENDTO: return "sendto";
     case SYS_RECVFROM: return "recvfrom";
+    case SYS_SENDMSG: return "sendmsg";
+    case SYS_RECVMSG: return "recvmsg";
     case SYS_GETSOCKNAME: return "getsockname";
     case SYS_GETPEERNAME: return "getpeername";
     case SYS_SETSOCKOPT: return "setsockopt";
@@ -82,6 +85,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_WAIT4: return "wait4";
     case SYS_UNAME: return "uname";
     case SYS_FCNTL: return "fcntl";
+    case SYS_FLOCK: return "flock";
     case SYS_SYNC: return "sync";
     case SYS_FSYNC: return "fsync";
     case SYS_FDATASYNC: return "fdatasync";
@@ -89,6 +93,15 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_SYSINFO: return "sysinfo";
     case SYS_SETUID: return "setuid";
     case SYS_SETGID: return "setgid";
+    case SYS_SETGROUPS: return "setgroups";
+    case SYS_SETRESUID: return "setresuid";
+    case SYS_GETRESUID: return "getresuid";
+    case SYS_SETRESGID: return "setresgid";
+    case SYS_GETRESGID: return "getresgid";
+    case SYS_SETFSUID: return "setfsuid";
+    case SYS_SETFSGID: return "setfsgid";
+    case SYS_CAPGET: return "capget";
+    case SYS_CAPSET: return "capset";
     case SYS_GETPGRP: return "getpgrp";
     case SYS_SETSID: return "setsid";
     case SYS_GETSID: return "getsid";
@@ -107,6 +120,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_SYMLINKAT: return "symlinkat";
     case SYS_CLOCK_GETTIME: return "clock_gettime";
     case SYS_EXIT_GROUP: return "exit_group";
+    case SYS_UTIMES: return "utimes";
     case SYS_OPENAT: return "openat";
     case SYS_NEWFSTATAT: return "newfstatat";
     case SYS_READLINKAT: return "readlinkat";
@@ -118,6 +132,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_GETRANDOM: return "getrandom";
     case SYS_FUTEX: return "futex";
     case SYS_ARCH_PRCTL: return "arch_prctl";
+    case SYS_CHROOT: return "chroot";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
     case SYS_SET_ROBUST_LIST: return "set_robust_list";
     case SYS_RSEQ: return "rseq";
@@ -139,6 +154,13 @@ static bool debug_trace_linux_syscall()
 
     trace_budget--;
     return true;
+}
+
+static bool debug_trace_xbps_task()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL;
 }
 
 void init_syscall()
@@ -257,6 +279,12 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_recvfrom(regs->rdi, (void *)regs->rsi, regs->rdx, regs->r10,
                                            (struct sockaddr *)regs->r8, (socklen_t *)regs->r9, regs);
         break;
+    case SYS_SENDMSG:
+        regs->rax = (uint64_t)sys_sendmsg(regs->rdi, (const struct msghdr *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_RECVMSG:
+        regs->rax = (uint64_t)sys_recvmsg(regs->rdi, (struct msghdr *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_SETSOCKOPT:
         regs->rax = (uint64_t)sys_setsockopt(regs->rdi, regs->rsi, regs->rdx, (const void *)regs->r10,
                                              regs->r8, 0, regs);
@@ -294,6 +322,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_open((char *)regs->rdi, O_CREAT | O_WRONLY | O_TRUNC, regs->rsi, 0, 0, 0, regs);
         break;
     case SYS_FCNTL: regs->rax = (uint64_t)sys_fcntl(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_FLOCK: regs->rax = (uint64_t)sys_flock(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_SYNC: regs->rax = (uint64_t)sys_sync(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_FSYNC: regs->rax = (uint64_t)sys_fsync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_FDATASYNC: regs->rax = (uint64_t)sys_fdatasync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -350,7 +379,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_clone(regs->rdi, regs->rsi, (int *)regs->rdx, (int *)regs->r10, regs->r8, 0, regs);
         break;
     case SYS_CLONE3:
-        regs->rax = (uint64_t)-ENOSYS;
+        regs->rax = (uint64_t)sys_clone3((struct clone_args *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
     case SYS_FORK:
         regs->rax = (uint64_t)process_fork(regs, false, 0);
@@ -429,6 +458,37 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETEUID: regs->rax = (uint64_t)sys_geteuid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETEGID: regs->rax = (uint64_t)sys_getegid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETGROUPS: regs->rax = (uint64_t)sys_getgroups(regs->rdi, (int *)regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_SETGROUPS:
+        regs->rax = (uint64_t)sys_setgroups(regs->rdi, (const int *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_SETRESUID:
+        regs->rax = (uint64_t)sys_setresuid(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_GETRESUID:
+        regs->rax = (uint64_t)sys_getresuid((uint32_t *)regs->rdi, (uint32_t *)regs->rsi,
+                                            (uint32_t *)regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_SETRESGID:
+        regs->rax = (uint64_t)sys_setresgid(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_GETRESGID:
+        regs->rax = (uint64_t)sys_getresgid((uint32_t *)regs->rdi, (uint32_t *)regs->rsi,
+                                            (uint32_t *)regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_SETFSUID:
+        regs->rax = (uint64_t)sys_setfsuid(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_SETFSGID:
+        regs->rax = (uint64_t)sys_setfsgid(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_CAPGET:
+        regs->rax = (uint64_t)sys_capget((struct user_cap_header *)regs->rdi,
+                                         (struct user_cap_data *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_CAPSET:
+        regs->rax = (uint64_t)sys_capset((struct user_cap_header *)regs->rdi,
+                                         (struct user_cap_data *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
     case SYS_GETPGRP: regs->rax = (uint64_t)sys_getpgid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_SETSID: regs->rax = (uint64_t)sys_setsid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETSID: regs->rax = (uint64_t)sys_getsid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -464,6 +524,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_UTIMENSAT:
         regs->rax =
             (uint64_t)sys_utimensat(regs->rdi, (char *)regs->rsi, (const struct timespec *)regs->rdx, regs->r10, 0, 0, regs);
+        break;
+    case SYS_UTIMES:
+        regs->rax = (uint64_t)sys_utimes((char *)regs->rdi, (const struct timeval *)regs->rsi, 0, 0, 0, 0, regs);
         break;
     case SYS_STATX:
         regs->rax =
@@ -502,6 +565,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
 
     case SYS_ARCH_PRCTL:
         regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_CHROOT:
+        regs->rax = (uint64_t)sys_chroot((char *)regs->rdi, 0, 0, 0, 0, 0, regs);
         break;
         // case SYS_SET_TID_ADDRESS:
         //     // todo
@@ -649,6 +715,20 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     {
         tcb_t task = get_current_task();
         write_serial_fmt("[dpkg-trace] task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx ret=%lld\n",
+                         task != NULL ? task->name : "?",
+                         syscall_number,
+                         debug_syscall_name(syscall_number),
+                         regs->rdi,
+                         regs->rsi,
+                         regs->rdx,
+                         regs->r10,
+                         regs->r8,
+                         (long long)regs->rax);
+    }
+    if (!trace_syscall && debug_trace_xbps_task() && (int64_t)regs->rax < 0)
+    {
+        tcb_t task = get_current_task();
+        write_serial_fmt("[DEBUG-xbps-syscall] task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx ret=%lld\n",
                          task != NULL ? task->name : "?",
                          syscall_number,
                          debug_syscall_name(syscall_number),
