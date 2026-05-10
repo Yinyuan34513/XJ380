@@ -1753,6 +1753,29 @@ static void init_fork_child_context(tcb_t child, const struct X64_REGS *frame, u
     child->context0.rcx    = frame->rcx;
 }
 
+static void set_child_user_stack_bounds(tcb_t child, tcb_t parent, uint64_t user_stack)
+{
+    if (child == NULL || parent == NULL) return;
+
+    if (user_stack == 0)
+    {
+        child->user_stack     = parent->user_stack;
+        child->user_stack_top = parent->user_stack_top;
+        return;
+    }
+
+    uint64_t stack_top = (user_stack + PAGE_SIZE - 1) & PAGE_MASK;
+    if (stack_top < user_stack || stack_top < BIG_USER_STACK)
+    {
+        child->user_stack     = parent->user_stack;
+        child->user_stack_top = parent->user_stack_top;
+        return;
+    }
+
+    child->user_stack     = stack_top - BIG_USER_STACK;
+    child->user_stack_top = stack_top;
+}
+
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, uint64_t clone_flags,
                       int *parent_tid, int *child_tid)
 {
@@ -1908,8 +1931,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_task->task_level     = TASK_APPLICATION_LEVEL;
     new_task->cpu_id         = get_current_cpu()->processor_id;
     new_task->status         = START;
-    new_task->user_stack     = parent_task->user_stack;
-    new_task->user_stack_top = parent_task->user_stack_top;
+    set_child_user_stack_bounds(new_task, parent_task, user_stack);
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (kernel_stack_phys == 0)
     {

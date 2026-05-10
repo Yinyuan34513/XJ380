@@ -348,6 +348,7 @@
 #define SYS_STATFS 137
 #define SYS_PIVOT_ROOT 155
 
+#define SYS_PRCTL 157
 #define SYS_ARCH_PRCTL 158
 #define SYS_CHROOT 161
 #define SYS_SYNC 162
@@ -364,6 +365,7 @@
 
 #define SYS_CLOCK_GETTIME 228
 #define SYS_CLOCK_GETRES 229
+#define SYS_CLOCK_NANOSLEEP 230
 
 #define SYS_EXIT_GROUP 231
 #define SYS_TGKILL 234
@@ -386,6 +388,7 @@
 #define SYS_UTIMENSAT 280
 #define SYS_PIPE2 293
 #define SYS_PRLIMIT64 302
+#define SYS_SENDMMSG 307
 #define SYS_GETRANDOM 318
 #define SYS_COPY_FILE_RANGE 326
 #define SYS_STATX 332
@@ -438,6 +441,11 @@ struct msghdr {
     void         *msg_control;
     size_t       msg_controllen;
     int          msg_flags;
+};
+
+struct mmsghdr {
+    struct msghdr msg_hdr;
+    uint32_t      msg_len;
 };
 
 struct timespec {
@@ -629,6 +637,7 @@ sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const struct sockaddr *addr, socklen_t addrlen);
 sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockaddr *addr, socklen_t *addrlen);
 sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags);
+sys_(sendmmsg, int fd, struct mmsghdr *mmsg, uint32_t vlen, uint64_t flags);
 sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags);
 sys_(socketpair, int domain, int type, int protocol, int *sv);
 sys_(setsockopt, int fd, int level, int optname, const void *optval, socklen_t optlen);
@@ -637,9 +646,11 @@ sys_(getsockname, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(getpeername, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(stat, char *fn, struct stat *buf);
 sys_(arch_prctl, uint64_t code, uint64_t addr);
+sys_(prctl, int option, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5);
 sys_(yield);
 sys_(uname, struct utsname *utsname);
 sys_(nano_sleep, void *time_handle);
+sys_(clock_nanosleep, int clockid, int flags, const struct timespec *request, struct timespec *remain);
 sys_(ioctl, int fd, int options, void *arg2);
 sys_(writev, int fd, struct iovec *iov, int iovcnt);
 sys_(readv, int fd, struct iovec *iov, int iovcnt0);

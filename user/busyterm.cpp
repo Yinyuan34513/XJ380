@@ -1,4 +1,5 @@
 #include "xapi/include/x3api.h"
+#include "vterm.h"
 
 #define BUSY_WIDTH       720
 #define BUSY_HEIGHT      405
@@ -12,12 +13,10 @@
 #define TERM_ROWS        ((TERM_BOTTOM_Y - TERM_TOP_Y) / CELL_H)
 #define COLOR_BG         0x0b0f14ff
 #define COLOR_FG         0xe6edf3ff
-#define SEQ_MAX          128
-#define PARAM_MAX        16
 #define PTY_CHUNK        1024
 #define DEFAULT_USER     "GuoqiFish"
 #define DEFAULT_HOME     "/users/GuoqiFish"
-#define DEFAULT_SHELL    "/apps/bash"
+#define DEFAULT_SHELL    "/usr/bin/bash"
 
 #define TIOCSCTTY        0x540E
 
@@ -61,17 +60,14 @@ static int  g_child_pid = -1;
 static int  g_pty_master = -1;
 static int  g_spawn_error = 0;
 static const char *g_spawn_stage = "start";
-static int  g_cur_x = TERM_LEFT_X;
-static int  g_cur_y = TERM_TOP_Y;
-static int  g_saved_x = TERM_LEFT_X;
-static int  g_saved_y = TERM_TOP_Y;
-static int  g_parser_state = 0;
-static char g_seq[SEQ_MAX];
-static int  g_seq_len = 0;
 static bool g_ctrl_down = false;
-static UINT32 g_fg = COLOR_FG;
-static UINT32 g_bg = COLOR_BG;
-static XCOLOR g_pixel_buffer[BUSY_WIDTH * BUSY_HEIGHT];
+static VTerm *g_vterm = NULL;
+static VTermScreen *g_vscreen = NULL;
+static VTermPos g_cursor = {0, 0};
+static bool g_cursor_visible = true;
+static XCOLOR g_scroll_buffer[BUSY_WIDTH * (TERM_ROWS * CELL_H)];
+
+static void send_child(const char *buf, int len);
 
 static UINT32 g_palette[16] = {
     0x0b0f14ff, 0xff7b72ff, 0x3fb950ff, 0xd29922ff,
@@ -183,24 +179,6 @@ static int clamp_i(int v, int lo, int hi)
     return v;
 }
 
-static int row()
-{
-    return clamp_i((g_cur_y - TERM_TOP_Y) / CELL_H, 0, TERM_ROWS - 1);
-}
-
-static int col()
-{
-    return clamp_i((g_cur_x - TERM_LEFT_X) / CELL_W, 0, TERM_COLS - 1);
-}
-
-static void set_cursor(int r, int c)
-{
-    r = clamp_i(r, 0, TERM_ROWS - 1);
-    c = clamp_i(c, 0, TERM_COLS - 1);
-    g_cur_x = TERM_LEFT_X + c * CELL_W;
-    g_cur_y = TERM_TOP_Y + r * CELL_H;
-}
-
 static void fill_rect(int x1, int y1, int x2, int y2, UINT32 color)
 {
     x1 = clamp_i(x1, 0, BUSY_WIDTH - 1);
@@ -211,252 +189,254 @@ static void fill_rect(int x1, int y1, int x2, int y2, UINT32 color)
     xapi_DrawRect(g_window, x1, y1, x2, y2, color, true);
 }
 
-static void clear_screen()
+static void clear_window()
 {
     xapi_DrawRect(g_window, 0, 0, BUSY_WIDTH - 1, BUSY_HEIGHT - 1, COLOR_BG, true);
-    set_cursor(0, 0);
-}
-
-static void scroll_up()
-{
-    const int y = TERM_TOP_Y;
-    const int h = (TERM_ROWS - 1) * CELL_H;
-    xapi_ReadBuffer(g_window, 0, y + CELL_H, BUSY_WIDTH, h, g_pixel_buffer);
-    xapi_WriteBuffer(g_window, 0, y, BUSY_WIDTH, h, g_pixel_buffer);
-    fill_rect(0, y + h, BUSY_WIDTH - 1, y + h + CELL_H - 1, g_bg);
-}
-
-static void newline()
-{
-    int r = row();
-    if (r >= TERM_ROWS - 1) scroll_up();
-    else r++;
-    set_cursor(r, 0);
-}
-
-static int utf8_len(unsigned char c)
-{
-    if ((c & 0x80) == 0x00) return 1;
-    if ((c & 0xE0) == 0xC0) return 2;
-    if ((c & 0xF0) == 0xE0) return 3;
-    if ((c & 0xF8) == 0xF0) return 4;
-    return 1;
-}
-
-static void draw_char(const char *text, int len, int cells)
-{
-    if (col() + cells > TERM_COLS) newline();
-    int w = cells * CELL_W;
-    fill_rect(g_cur_x, g_cur_y, g_cur_x + w - 1, g_cur_y + CELL_H - 1, g_bg);
-    char tmp[5] = {0};
-    for (int i = 0; i < len && i < 4; i++) tmp[i] = text[i];
-    xapi_DrawSWText(g_window, g_cur_x, g_cur_y, tmp, g_fg);
-    if (col() + cells >= TERM_COLS) newline();
-    else set_cursor(row(), col() + cells);
-}
-
-static void erase_line(int mode)
-{
-    int y = TERM_TOP_Y + row() * CELL_H;
-    if (mode == 0) fill_rect(g_cur_x, y, TERM_RIGHT_X - 1, y + CELL_H - 1, g_bg);
-    else if (mode == 1) fill_rect(TERM_LEFT_X, y, g_cur_x + CELL_W - 1, y + CELL_H - 1, g_bg);
-    else fill_rect(TERM_LEFT_X, y, TERM_RIGHT_X - 1, y + CELL_H - 1, g_bg);
-}
-
-static void erase_display(int mode)
-{
-    int r = row();
-    int y = TERM_TOP_Y + r * CELL_H;
-    if (mode == 0)
-    {
-        erase_line(0);
-        fill_rect(TERM_LEFT_X, y + CELL_H, TERM_RIGHT_X - 1, TERM_TOP_Y + TERM_ROWS * CELL_H - 1, g_bg);
-    }
-    else if (mode == 1)
-    {
-        fill_rect(TERM_LEFT_X, TERM_TOP_Y, TERM_RIGHT_X - 1, y - 1, g_bg);
-        erase_line(1);
-    }
-    else clear_screen();
-}
-
-static void parse_params(int *params, int *count)
-{
-    *count = 0;
-    int value = 0;
-    bool have = false;
-    int i = 0;
-    if (i < g_seq_len && (g_seq[i] == '?' || g_seq[i] == '>')) i++;
-    for (; i <= g_seq_len && *count < PARAM_MAX; i++)
-    {
-        char c = i < g_seq_len ? g_seq[i] : ';';
-        if (c >= '0' && c <= '9')
-        {
-            value = value * 10 + (c - '0');
-            have = true;
-        }
-        else if (c == ';' || c == ':')
-        {
-            params[(*count)++] = have ? value : -1;
-            value = 0;
-            have = false;
-        }
-    }
-}
-
-static int param_or(int *params, int count, int idx, int defv)
-{
-    if (idx >= count || params[idx] < 0) return defv;
-    return params[idx];
-}
-
-static void apply_sgr(int *params, int count)
-{
-    if (count == 0)
-    {
-        g_fg = COLOR_FG;
-        g_bg = COLOR_BG;
-        return;
-    }
-    bool bold = false;
-    for (int i = 0; i < count; i++)
-    {
-        int p = params[i] < 0 ? 0 : params[i];
-        if (p == 0)
-        {
-            g_fg = COLOR_FG;
-            g_bg = COLOR_BG;
-            bold = false;
-        }
-        else if (p == 1) bold = true;
-        else if (p == 22) bold = false;
-        else if (p == 39) g_fg = COLOR_FG;
-        else if (p == 49) g_bg = COLOR_BG;
-        else if (p >= 30 && p <= 37) g_fg = g_palette[p - 30 + (bold ? 8 : 0)];
-        else if (p >= 40 && p <= 47) g_bg = g_palette[p - 40];
-        else if (p >= 90 && p <= 97) g_fg = g_palette[p - 90 + 8];
-        else if (p >= 100 && p <= 107) g_bg = g_palette[p - 100 + 8];
-        else if ((p == 38 || p == 48) && i + 1 < count)
-        {
-            bool foreground = p == 38;
-            int mode = params[++i];
-            if (mode == 5 && i + 1 < count)
-            {
-                UINT32 color = xterm_256_color(params[++i]);
-                if (foreground) g_fg = color;
-                else g_bg = color;
-            }
-            else if (mode == 2 && i + 3 < count)
-            {
-                UINT32 color = rgb_color(params[i + 1], params[i + 2], params[i + 3]);
-                i += 3;
-                if (foreground) g_fg = color;
-                else g_bg = color;
-            }
-        }
-    }
-}
-
-static void dispatch_csi(char final_char)
-{
-    int params[PARAM_MAX];
-    int count = 0;
-    parse_params(params, &count);
-    int n = param_or(params, count, 0, 1);
-
-    switch (final_char)
-    {
-    case 'A': set_cursor(row() - n, col()); break;
-    case 'B': set_cursor(row() + n, col()); break;
-    case 'C': set_cursor(row(), col() + n); break;
-    case 'D': set_cursor(row(), col() - n); break;
-    case 'H':
-    case 'f': set_cursor(param_or(params, count, 0, 1) - 1, param_or(params, count, 1, 1) - 1); break;
-    case 'G': set_cursor(row(), param_or(params, count, 0, 1) - 1); break;
-    case 'J': erase_display(param_or(params, count, 0, 0)); break;
-    case 'K': erase_line(param_or(params, count, 0, 0)); break;
-    case 'm': apply_sgr(params, count); break;
-    case 's': g_saved_x = g_cur_x; g_saved_y = g_cur_y; break;
-    case 'u': g_cur_x = g_saved_x; g_cur_y = g_saved_y; break;
-    default: break;
-    }
-}
-
-static void append_seq(unsigned char c)
-{
-    if (g_seq_len < SEQ_MAX - 1) g_seq[g_seq_len++] = (char)c;
-}
-
-static void process_byte(unsigned char c)
-{
-    if (g_parser_state == 1)
-    {
-        if (c == '[')
-        {
-            g_parser_state = 2;
-            g_seq_len = 0;
-        }
-        else if (c == '7')
-        {
-            g_saved_x = g_cur_x;
-            g_saved_y = g_cur_y;
-            g_parser_state = 0;
-        }
-        else if (c == '8')
-        {
-            g_cur_x = g_saved_x;
-            g_cur_y = g_saved_y;
-            g_parser_state = 0;
-        }
-        else if (c == 'c')
-        {
-            clear_screen();
-            g_parser_state = 0;
-        }
-        else g_parser_state = 0;
-        return;
-    }
-    if (g_parser_state == 2)
-    {
-        if (c >= 0x40 && c <= 0x7e)
-        {
-            dispatch_csi((char)c);
-            g_parser_state = 0;
-        }
-        else append_seq(c);
-        return;
-    }
-
-    if (c == '\x1b') { g_parser_state = 1; return; }
-    if (c == '\n') { newline(); return; }
-    if (c == '\r') { set_cursor(row(), 0); return; }
-    if (c == '\b') { if (col() > 0) set_cursor(row(), col() - 1); return; }
-    if (c == '\t') { set_cursor(row(), ((col() / 8) + 1) * 8); return; }
-    if (c < 0x20 || c == 0x7f) return;
-}
-
-static void terminal_write(const char *buf, int len)
-{
-    for (int i = 0; i < len;)
-    {
-        unsigned char c = (unsigned char)buf[i];
-        if (g_parser_state != 0 || c == '\x1b' || c < 0x20 || c == 0x7f)
-        {
-            process_byte(c);
-            i++;
-            continue;
-        }
-        int clen = utf8_len(c);
-        if (i + clen > len) clen = 1;
-        draw_char(&buf[i], clen, clen == 1 ? 1 : 2);
-        i += clen;
-    }
 }
 
 static void send_child(const char *buf, int len)
 {
     if (buf == NULL || len <= 0 || g_pty_master < 0) return;
     write(g_pty_master, buf, (size_t)len);
+}
+
+static void utf8_encode(uint32_t cp, char *out)
+{
+    if (cp == 0)
+    {
+        out[0] = '\0';
+        return;
+    }
+    if (cp < 0x80)
+    {
+        out[0] = (char)cp;
+        out[1] = '\0';
+        return;
+    }
+    if (cp < 0x800)
+    {
+        out[0] = (char)(0xc0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3f));
+        out[2] = '\0';
+        return;
+    }
+    if (cp < 0x10000)
+    {
+        out[0] = (char)(0xe0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3f));
+        out[2] = (char)(0x80 | (cp & 0x3f));
+        out[3] = '\0';
+        return;
+    }
+    out[0] = (char)(0xf0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3f));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3f));
+    out[3] = (char)(0x80 | (cp & 0x3f));
+    out[4] = '\0';
+}
+
+static UINT32 vterm_color_to_xcolor(VTermColor color, UINT32 fallback)
+{
+    if (VTERM_COLOR_IS_DEFAULT_FG(&color) || VTERM_COLOR_IS_DEFAULT_BG(&color)) return fallback;
+    if (VTERM_COLOR_IS_INDEXED(&color)) return xterm_256_color(color.indexed.idx);
+    if (VTERM_COLOR_IS_RGB(&color)) return rgb_color(color.rgb.red, color.rgb.green, color.rgb.blue);
+    return fallback;
+}
+
+static void draw_vterm_cell(int row, int col)
+{
+    if (g_vscreen == NULL || row < 0 || row >= TERM_ROWS || col < 0 || col >= TERM_COLS) return;
+
+    VTermScreenCell cell;
+    VTermPos pos = {row, col};
+    if (!vterm_screen_get_cell(g_vscreen, pos, &cell)) return;
+
+    UINT32 fg = vterm_color_to_xcolor(cell.fg, COLOR_FG);
+    UINT32 bg = vterm_color_to_xcolor(cell.bg, COLOR_BG);
+    if (cell.attrs.reverse)
+    {
+        UINT32 tmp = fg;
+        fg = bg;
+        bg = tmp;
+    }
+    if (cell.attrs.bold && VTERM_COLOR_IS_INDEXED(&cell.fg) && cell.fg.indexed.idx < 8)
+        fg = xterm_256_color(cell.fg.indexed.idx + 8);
+
+    int x = TERM_LEFT_X + col * CELL_W;
+    int y = TERM_TOP_Y + row * CELL_H;
+    int w = cell.width > 1 ? cell.width * CELL_W : CELL_W;
+    fill_rect(x, y, x + w - 1, y + CELL_H - 1, bg);
+
+    if (!cell.attrs.conceal && cell.chars[0] != 0)
+    {
+        char text[(VTERM_MAX_CHARS_PER_CELL * 4) + 1];
+        int out = 0;
+        for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i] != 0; i++)
+        {
+            char one[5];
+            utf8_encode(cell.chars[i], one);
+            for (int j = 0; one[j] != '\0' && out < (int)sizeof(text) - 1; j++)
+                text[out++] = one[j];
+        }
+        text[out] = '\0';
+        if (out > 0) xapi_DrawSWText(g_window, x, y, text, fg);
+    }
+
+    if (g_cursor_visible && row == g_cursor.row && col == g_cursor.col)
+    {
+        fill_rect(x, y + CELL_H - 2, x + CELL_W - 1, y + CELL_H - 1, fg);
+    }
+}
+
+static void redraw_vterm_rect(VTermRect rect)
+{
+    rect.start_row = clamp_i(rect.start_row, 0, TERM_ROWS);
+    rect.end_row = clamp_i(rect.end_row, 0, TERM_ROWS);
+    rect.start_col = clamp_i(rect.start_col, 0, TERM_COLS);
+    rect.end_col = clamp_i(rect.end_col, 0, TERM_COLS);
+    for (int r = rect.start_row; r < rect.end_row; r++)
+        for (int c = rect.start_col; c < rect.end_col; c++)
+            draw_vterm_cell(r, c);
+}
+
+static int vterm_damage(VTermRect rect, void *user)
+{
+    (void)user;
+    redraw_vterm_rect(rect);
+    return 1;
+}
+
+static int vterm_moverect(VTermRect dest, VTermRect src, void *user)
+{
+    (void)user;
+    int src_x = TERM_LEFT_X + src.start_col * CELL_W;
+    int src_y = TERM_TOP_Y + src.start_row * CELL_H;
+    int dst_x = TERM_LEFT_X + dest.start_col * CELL_W;
+    int dst_y = TERM_TOP_Y + dest.start_row * CELL_H;
+    int width = (src.end_col - src.start_col) * CELL_W;
+    int height = (src.end_row - src.start_row) * CELL_H;
+    if (width <= 0 || height <= 0) return 0;
+    if (src_x < 0 || src_y < 0 || src_x + width > BUSY_WIDTH || src_y + height > BUSY_HEIGHT) return 0;
+    if (dst_x < 0 || dst_y < 0 || dst_x + width > BUSY_WIDTH || dst_y + height > BUSY_HEIGHT) return 0;
+
+    xapi_ReadBuffer(g_window, src_x, src_y, width, height, g_scroll_buffer);
+    xapi_WriteBuffer(g_window, dst_x, dst_y, width, height, g_scroll_buffer);
+
+    if (dest.start_row < src.start_row)
+    {
+        VTermRect exposed = {
+            .start_row = dest.end_row,
+            .end_row = src.end_row,
+            .start_col = dest.start_col,
+            .end_col = dest.end_col,
+        };
+        redraw_vterm_rect(exposed);
+    }
+    else if (dest.start_row > src.start_row)
+    {
+        VTermRect exposed = {
+            .start_row = src.start_row,
+            .end_row = dest.start_row,
+            .start_col = dest.start_col,
+            .end_col = dest.end_col,
+        };
+        redraw_vterm_rect(exposed);
+    }
+    if (g_cursor_visible) draw_vterm_cell(g_cursor.row, g_cursor.col);
+    return 1;
+}
+
+static int vterm_movecursor(VTermPos pos, VTermPos oldpos, int visible, void *user)
+{
+    (void)user;
+    VTermPos previous = g_cursor;
+    g_cursor = pos;
+    g_cursor_visible = visible != 0;
+    draw_vterm_cell(oldpos.row, oldpos.col);
+    draw_vterm_cell(previous.row, previous.col);
+    draw_vterm_cell(g_cursor.row, g_cursor.col);
+    return 1;
+}
+
+static int vterm_settermprop(VTermProp prop, VTermValue *val, void *user)
+{
+    (void)user;
+    if (prop == VTERM_PROP_CURSORVISIBLE && val != NULL)
+    {
+        g_cursor_visible = val->boolean != 0;
+        draw_vterm_cell(g_cursor.row, g_cursor.col);
+    }
+    return 1;
+}
+
+static void vterm_output(const char *s, size_t len, void *user)
+{
+    (void)user;
+    send_child(s, (int)len);
+}
+
+static void terminal_init()
+{
+    if (g_vterm != NULL) return;
+
+    struct VTermBuilder builder;
+    memset(&builder, 0, sizeof(builder));
+    builder.rows = TERM_ROWS;
+    builder.cols = TERM_COLS;
+    g_vterm = vterm_build(&builder);
+    if (g_vterm == NULL) return;
+
+    vterm_set_utf8(g_vterm, 1);
+    vterm_output_set_callback(g_vterm, vterm_output, NULL);
+    g_vscreen = vterm_obtain_screen(g_vterm);
+    if (g_vscreen == NULL) return;
+
+    VTermColor fg;
+    VTermColor bg;
+    vterm_color_rgb(&fg, 0xe6, 0xed, 0xf3);
+    vterm_color_rgb(&bg, 0x0b, 0x0f, 0x14);
+    vterm_screen_set_default_colors(g_vscreen, &fg, &bg);
+
+    static const VTermScreenCallbacks callbacks = {
+        .damage = vterm_damage,
+        .moverect = vterm_moverect,
+        .movecursor = vterm_movecursor,
+        .settermprop = vterm_settermprop,
+        .bell = NULL,
+        .resize = NULL,
+        .sb_pushline = NULL,
+        .sb_popline = NULL,
+        .sb_clear = NULL,
+        .sb_pushline4 = NULL,
+    };
+    vterm_screen_set_callbacks(g_vscreen, &callbacks, NULL);
+    vterm_screen_set_damage_merge(g_vscreen, VTERM_DAMAGE_SCROLL);
+    vterm_screen_enable_altscreen(g_vscreen, 1);
+    vterm_screen_reset(g_vscreen, 1);
+}
+
+static bool terminal_write_chunk(const char *buf, int len, bool flush_damage)
+{
+    if (buf == NULL || len <= 0) return false;
+    if (g_vterm == NULL) terminal_init();
+    if (g_vterm == NULL)
+    {
+        xapi_DrawSWText(g_window, TERM_LEFT_X, TERM_TOP_Y, (char *)"busyterm: libvterm init failed", COLOR_FG);
+        return true;
+    }
+    vterm_input_write(g_vterm, buf, (size_t)len);
+    if (flush_damage && g_vscreen != NULL) vterm_screen_flush_damage(g_vscreen);
+    return true;
+}
+
+static void terminal_flush_damage()
+{
+    if (g_vscreen != NULL) vterm_screen_flush_damage(g_vscreen);
+}
+
+static void terminal_write(const char *buf, int len)
+{
+    terminal_write_chunk(buf, len, true);
 }
 
 static void send_key_seq(uint64_t key)
@@ -540,8 +520,6 @@ static void busyterm_msg(UINT64 type, UINT64 hData, UINT64 lData)
                 return;
             }
         }
-        // terminal_write(&c, 1);
-        xapi_RefreshWindow(g_window);
         send_child(&c, 1);
     }
     else if (type == MSG_SPCHAR)
@@ -561,8 +539,6 @@ static void busyterm_msg(UINT64 type, UINT64 hData, UINT64 lData)
         if (lData == '\n')
         {
             char c = '\n';
-            terminal_write(&c, 1);
-            xapi_RefreshWindow(g_window);
             send_child(&c, 1);
         }
         else if (lData == '\b')
@@ -612,6 +588,14 @@ static int spawn_busybox(char *envp[])
     }
 
     g_spawn_stage = "fork";
+    struct winsize ws;
+    memset(&ws, 0, sizeof(ws));
+    ws.ws_row = TERM_ROWS;
+    ws.ws_col = TERM_COLS;
+    ws.ws_xpixel = TERM_COLS * CELL_W;
+    ws.ws_ypixel = TERM_ROWS * CELL_H;
+    ioctl(g_pty_master, TIOCSWINSZ, &ws);
+
     int pid = fork();
     if (pid == 0)
     {
@@ -627,7 +611,7 @@ static int spawn_busybox(char *envp[])
         close(g_pty_master);
 
         char *bash_argv[] = {(char *)"bash", (char *)"-i", NULL};
-        execve("/apps/bash", bash_argv, child_env);
+        execve(DEFAULT_SHELL, bash_argv, child_env);
         exit(127);
     }
     if (pid < 0)
@@ -651,6 +635,7 @@ static void drain_pty_output()
     pfd.events = POLLIN | POLLHUP;
     pfd.revents = 0;
 
+    bool drew = false;
     for (;;)
     {
         int ready = poll(&pfd, 1, 0);
@@ -660,8 +645,7 @@ static void drain_pty_output()
         ssize_t got = read(g_pty_master, output, sizeof(output));
         if (got > 0)
         {
-            terminal_write(output, (int)got);
-            xapi_RefreshWindow(g_window);
+            drew |= terminal_write_chunk(output, (int)got, false);
         }
         else
         {
@@ -670,6 +654,12 @@ static void drain_pty_output()
 
         if (pfd.revents & POLLHUP) break;
         pfd.revents = 0;
+    }
+
+    if (drew)
+    {
+        terminal_flush_damage();
+        xapi_RefreshWindow(g_window);
     }
 }
 
@@ -685,7 +675,8 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
     xapi_CreateWindow(&g_window, &win);
     xapi_SetIcon(g_window, "/system/icon/terminal.png");
     SetMsgPrcor(g_window, busyterm_msg);
-    clear_screen();
+    clear_window();
+    terminal_init();
     xapi_RefreshWindow(g_window);
 
     if (spawn_busybox(envp) < 0)

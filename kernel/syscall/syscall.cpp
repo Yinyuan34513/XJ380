@@ -119,6 +119,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_LINKAT: return "linkat";
     case SYS_SYMLINKAT: return "symlinkat";
     case SYS_CLOCK_GETTIME: return "clock_gettime";
+    case SYS_CLOCK_NANOSLEEP: return "clock_nanosleep";
     case SYS_EXIT_GROUP: return "exit_group";
     case SYS_UTIMES: return "utimes";
     case SYS_OPENAT: return "openat";
@@ -129,8 +130,10 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_FTRUNCATE: return "ftruncate";
     case SYS_FSTATFS: return "fstatfs";
     case SYS_PRLIMIT64: return "prlimit64";
+    case SYS_SENDMMSG: return "sendmmsg";
     case SYS_GETRANDOM: return "getrandom";
     case SYS_FUTEX: return "futex";
+    case SYS_PRCTL: return "prctl";
     case SYS_ARCH_PRCTL: return "arch_prctl";
     case SYS_CHROOT: return "chroot";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
@@ -284,6 +287,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_RECVMSG:
         regs->rax = (uint64_t)sys_recvmsg(regs->rdi, (struct msghdr *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_SENDMMSG:
+        regs->rax = (uint64_t)sys_sendmmsg(regs->rdi, (struct mmsghdr *)regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
         break;
     case SYS_SETSOCKOPT:
         regs->rax = (uint64_t)sys_setsockopt(regs->rdi, regs->rsi, regs->rdx, (const void *)regs->r10,
@@ -449,6 +455,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_CLOCK_GETRES:
         regs->rax = (uint64_t)sys_clock_getres(regs->rdi, (uint64_t)regs->rsi, 0, 0, 0, 0, regs);
         break;
+    case SYS_CLOCK_NANOSLEEP:
+        regs->rax = (uint64_t)sys_clock_nanosleep(regs->rdi, regs->rsi, (const struct timespec *)regs->rdx,
+                                                  (struct timespec *)regs->r10, 0, 0, regs);
+        break;
     case SYS_GETPPID: regs->rax = (uint64_t)sys_getppid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_SYSINFO: regs->rax = (uint64_t)sys_sysinfo((struct sysinfo *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETUID: regs->rax = (uint64_t)sys_getuid(0, 0, 0, 0, 0, 0, regs); break;
@@ -563,6 +573,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_getrandom((void *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
         break;
 
+    case SYS_PRCTL:
+        regs->rax = (uint64_t)sys_prctl((int)regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, 0, regs);
+        break;
     case SYS_ARCH_PRCTL:
         regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
@@ -574,7 +587,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     regs->rax = get_current_task()->parent_group->pid;
         //     break;
     case SYS_SET_TID_ADDRESS: regs->rax = (uint64_t)sys_set_tid_address((int *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
-    case SYS_SET_ROBUST_LIST: regs->rax = 0; break;
+    case SYS_SET_ROBUST_LIST: regs->rax = (uint64_t)-ENOSYS; break;
     case SYS_RSEQ: regs->rax = (uint64_t)-ENOSYS; break;
 
 

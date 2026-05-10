@@ -792,14 +792,27 @@ static bool resolve_dependencies(dlhandle_t* handle, Elf64_Dyn* dyn) {
             // 如果未加载，则加载
             if (!dep_handle) {
                 // 构建完整路径
-                char full_path[256];
+                char full_path[384];
                 if (lib_name[0] == '/' || strchr(lib_name, '/')) {
                     snprintf(full_path, sizeof(full_path), "%s", lib_name);
                 } else if (handle->is_kernel) {
                     snprintf(full_path, sizeof(full_path), "/lib/modules/%s", lib_name);
                 } else {
-                    // 用户态：在当前目录或系统库目录查找
-                    snprintf(full_path, sizeof(full_path), "/lib/%s", lib_name);
+                    bool found = false;
+                    // 1) Try RPATH/RUNPATH
+                    if (handle->rpath) {
+                        char rp_buf[384];
+                        snprintf(rp_buf, sizeof(rp_buf), "%s/%s", handle->rpath, lib_name);
+                        vfs_node_t test = vfs_open(rp_buf);
+                        if (test) {
+                            snprintf(full_path, sizeof(full_path), "%s", rp_buf);
+                            vfs_close(test);
+                            found = true;
+                        }
+                    }
+                    // 2) Fall back to /lib/
+                    if (!found)
+                        snprintf(full_path, sizeof(full_path), "/lib/%s", lib_name);
                 }
                 
                 dep_handle = load_shared_object_internal(full_path, 
@@ -1057,7 +1070,26 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
         
         // 提取符号信息
         extract_exports_from_dynamic(handle, dyn);
-        
+
+        // 提取 RPATH/RUNPATH
+        {
+            Elf64_Dyn *rp = dyn;
+            char *rpath_str = NULL;
+            char *runpath_str = NULL;
+            while (rp->d_tag != DT_NULL) {
+                if (rp->d_tag == DT_RPATH)
+                    rpath_str = (char *)(handle->strtab + rp->d_un.d_val);
+                else if (rp->d_tag == DT_RUNPATH)
+                    runpath_str = (char *)(handle->strtab + rp->d_un.d_val);
+                rp++;
+            }
+            const char *search = runpath_str ? runpath_str : rpath_str;
+            if (search) {
+                handle->rpath = strdup(search);
+                write_serial_fmt("RPATH/RUNPATH for %s: %s\n", path, handle->rpath);
+            }
+        }
+
         // 解析依赖项
         if (!resolve_dependencies(handle, dyn)) {
             write_serial_fmt("Failed to resolve dependencies: %s\n", path);

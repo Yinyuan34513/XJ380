@@ -1067,6 +1067,37 @@ out:
     return total;
 }
 
+sys_(sendmmsg, int fd, struct mmsghdr *mmsg, uint32_t vlen, uint64_t flags)
+{
+    if (fd < 0 || mmsg == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (vlen == 0) return 0;
+    if (vlen > USER_IOV_MAX) return SYSCALL_FAULT_(EINVAL);
+
+    page_directory_t *pagedir = current_user_pagedir();
+    if (pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    uint32_t sent = 0;
+    for (uint32_t i = 0; i < vlen; i++)
+    {
+        struct mmsghdr *user_entry = mmsg + i;
+        struct mmsghdr kentry;
+        if (!copy_from_user_pagedir(pagedir, &kentry, user_entry, sizeof(kentry)))
+            return sent > 0 ? sent : SYSCALL_FAULT_(EFAULT);
+
+        uint64_t ret = sys_sendmsg(fd, &user_entry->msg_hdr, flags, 0, 0, 0, regs);
+        if ((int64_t)ret < 0) return sent > 0 ? sent : ret;
+        if (ret > UINT32_MAX) ret = UINT32_MAX;
+
+        kentry.msg_len = (uint32_t)ret;
+        if (!copy_to_user_pagedir(pagedir, &user_entry->msg_len, &kentry.msg_len, sizeof(kentry.msg_len)))
+            return sent > 0 ? sent : SYSCALL_FAULT_(EFAULT);
+
+        sent++;
+    }
+
+    return sent;
+}
+
 sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
 {
     if (fd < 0 || msg == NULL) return SYSCALL_FAULT_(EINVAL);
@@ -1476,6 +1507,42 @@ sys_(arch_prctl, uint64_t code, uint64_t addr)
     return 0;
 }
 
+#define PR_SET_NAME 15
+#define PR_GET_NAME 16
+
+sys_(prctl, int option, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5)
+{
+    (void)a3; (void)a4; (void)a5;
+    tcb_t task = get_current_task();
+    switch (option) {
+    case PR_SET_NAME:
+        if (task == NULL) return SYSCALL_FAULT_(ESRCH);
+        if (a2 == 0) return SYSCALL_FAULT_(EFAULT);
+        {
+            page_directory_t *pagedir = current_user_pagedir();
+            char name[32];
+            if (!copy_from_user_pagedir(pagedir, name, (void *)a2, sizeof(name) - 1))
+                return SYSCALL_FAULT_(EFAULT);
+            name[sizeof(name) - 1] = '\0';
+            strncpy(task->name, name, sizeof(task->name) - 1);
+            if (task->parent_group != NULL)
+                strncpy(task->parent_group->name, name, sizeof(task->parent_group->name) - 1);
+        }
+        return 0;
+    case PR_GET_NAME:
+        if (task == NULL) return SYSCALL_FAULT_(ESRCH);
+        if (a2 == 0) return SYSCALL_FAULT_(EFAULT);
+        {
+            page_directory_t *pagedir = current_user_pagedir();
+            if (!copy_to_user_pagedir(pagedir, (void *)a2, task->name, sizeof(task->name)))
+                return SYSCALL_FAULT_(EFAULT);
+        }
+        return 0;
+    default:
+        return 0;
+    }
+}
+
 sys_(yield)
 {
     scheduler_yield();
@@ -1502,6 +1569,33 @@ sys_(uname, struct utsname *utsname)
 void scheduler_nano_sleep(uint64_t nano) {
     scheduler_sleep_ns(nano);
 }
+
+static uint64_t clock_now_ns_for_sleep(int clockid)
+{
+    switch (clockid)
+    {
+    case 0:
+        return realtime_ns();
+    case 1:
+    case 4:
+    case 6:
+    case 7:
+        return bootNanoTime();
+    default:
+        return UINT64_MAX;
+    }
+}
+
+static uint64_t timespec_to_ns_checked(const struct timespec *ts, bool *ok)
+{
+    if (ok != NULL) *ok = false;
+    if (ts == NULL) return 0;
+    if (ts->tv_sec < 0 || ts->tv_nsec < 0 || ts->tv_nsec >= 1000000000L) return 0;
+    if ((uint64_t)ts->tv_sec > (UINT64_MAX - (uint64_t)ts->tv_nsec) / 1000000000ULL) return 0;
+    if (ok != NULL) *ok = true;
+    return (uint64_t)ts->tv_sec * 1000000000ULL + (uint64_t)ts->tv_nsec;
+}
+
 sys_(nano_sleep, void *time_handle)
 {
     struct timespec k_req;
@@ -1510,12 +1604,34 @@ sys_(nano_sleep, void *time_handle)
     {
         return SYSCALL_FAULT_(EFAULT);
     }
-    if (unlikely(k_req.tv_sec < 0 || k_req.tv_nsec < 0 || k_req.tv_nsec >= 1000000000L))
-        return SYSCALL_FAULT_(EINVAL);
-    if ((uint64_t)k_req.tv_sec > (UINT64_MAX - (uint64_t)k_req.tv_nsec) / 1000000000ULL)
-        return SYSCALL_FAULT_(EINVAL);
-    uint64_t nsec = (uint64_t)k_req.tv_sec * 1000000000ULL + (uint64_t)k_req.tv_nsec;
+    bool ok = false;
+    uint64_t nsec = timespec_to_ns_checked(&k_req, &ok);
+    if (!ok) return SYSCALL_FAULT_(EINVAL);
     scheduler_nano_sleep(nsec);
+    return 0;
+}
+
+sys_(clock_nanosleep, int clockid, int flags, const struct timespec *request, struct timespec *remain)
+{
+    (void)remain;
+    constexpr int TIMER_ABSTIME = 1;
+    if (request == NULL) return SYSCALL_FAULT_(EFAULT);
+    if ((flags & ~TIMER_ABSTIME) != 0) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t now = clock_now_ns_for_sleep(clockid);
+    if (now == UINT64_MAX) return SYSCALL_FAULT_(EINVAL);
+
+    struct timespec k_req;
+    if (!copy_from_user_pagedir(current_user_pagedir(), &k_req, request, sizeof(k_req)))
+        return SYSCALL_FAULT_(EFAULT);
+
+    bool ok = false;
+    uint64_t target_or_delta = timespec_to_ns_checked(&k_req, &ok);
+    if (!ok) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t sleep_ns = target_or_delta;
+    if (flags & TIMER_ABSTIME) sleep_ns = target_or_delta > now ? target_or_delta - now : 0;
+    scheduler_nano_sleep(sleep_ns);
     return 0;
 }
 

@@ -28,6 +28,10 @@ bash-*
 *.zip
 !Bf/
 !Bf/**
+Bf/usr/
+Bf/var/
+Bf/xbps-cache/
+Bf/xbps-root/
 2.txt
 out.txt
 nvme.txt

@@ -25,6 +25,8 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+VDISK_SIZE_MIB ?= 4096
+VDISK_FAT_MIB ?= 4000
 VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
@@ -66,6 +68,7 @@ HOST_LLVM_AR ?= llvm-ar
 HOST_LLVM_RANLIB ?= llvm-ranlib
 IMAGE_TOOLCHAIN ?= clang
 IMAGE_PACKAGE_MANAGER ?= xbps
+BF_DIR ?= Bf
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
 HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
 HOST_GCC_REAL := $(shell readlink -f "$$(command -v $(HOST_GCC))" 2>/dev/null)
@@ -89,7 +92,10 @@ STAGE_IMAGE_BASE := tools/stage_image_base.sh
 STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
 STAGE_IMAGE_DPKG := tools/stage_image_dpkg.sh
 STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
-APP_BASH := resources/apps/bash
+STAGE_XBPS_BOOTSTRAP := tools/stage_xbps_bootstrap.sh
+STAGE_PREPARED_ROOT := tools/stage_prepared_root.sh
+XBPS_PREPARE_ROOT ?= Bf/xbps-root
+XBPS_BOOTSTRAP ?= base-minimal bash coreutils util-linux ncurses tzdata which grep fastfetch gcc binutils make strace inetutils bind-utils curl
 APP_BUSYBOX := resources/apps/busybox
 APP_FASTFETCH := resources/apps/fastfetch
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
@@ -161,12 +167,21 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd stardustui.examples.copy
+.PHONY: clean format check gen.clangd prepare stardustui.examples.copy
 
 clean:
 # 事实上直接删out/最简单了
 	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log
 	@echo Removed build files.
+
+prepare:
+	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ] && [ -n "$(XBPS_BOOTSTRAP)" ]; then \
+		chmod -R u+rwX "$(XBPS_PREPARE_ROOT)" 2>/dev/null || true; \
+		rm -rf "$(XBPS_PREPARE_ROOT)"; \
+		XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
+	else \
+		echo "Nothing to prepare for IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER)"; \
+	fi
 
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
@@ -194,11 +209,12 @@ vdisk: all
 		exit 1; \
 	}
 
-	@dd if=/dev/zero of=XJ380.img bs=2048M count=1
+
+	@dd if=/dev/zero of=XJ380.img bs=1M count=$(VDISK_SIZE_MIB)
 # You must execute the following command with sudo privileges, that's not good...
 	@$(VDISK_SUDO) sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((3580480*512/1024))
+	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$(( $(VDISK_FAT_MIB) * 1024 ))
 
 	@sh $(STAGE_IMAGE_BASE) $(VDISK_ROOT)
 
@@ -235,7 +251,6 @@ vdisk: all
 	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
 
 	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
-	@cp -a $(APP_BASH) $(VDISK_ROOT)/apps/bash
 	@cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox
 	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
 	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
@@ -246,6 +261,14 @@ vdisk: all
 		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_DPKG) $(VDISK_ROOT); \
 	elif [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
 		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
+		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
+			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
+				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
+				echo "run: make prepare" >&2; \
+				exit 1; \
+			fi; \
+			sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
+		fi; \
 	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
 		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected dpkg, xbps, or none)" >&2; \
 		exit 1; \

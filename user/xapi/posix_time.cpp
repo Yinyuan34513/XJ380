@@ -19,6 +19,11 @@ extern "C" int nanosleep(const struct timespec *req, struct timespec *rem)
     return (int)__xposix_ret(enter_syscall(SYS_NANOSLEEP, (uint64_t)req, 0, 0, 0, 0, 0));
 }
 
+extern "C" int clock_nanosleep(int clockid, int flags, const struct timespec *req, struct timespec *rem)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_CLOCK_NANOSLEEP, clockid, flags, (uint64_t)req, (uint64_t)rem, 0, 0));
+}
+
 extern "C" int gettimeofday(struct timeval *tv, void *tz)
 {
     (void)tz;
