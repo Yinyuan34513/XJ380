@@ -190,6 +190,7 @@ static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
                                    : (node->type & file_dir)    ? S_IFDIR
                                    : (node->type & file_block)  ? S_IFBLK
                                    : (node->type & file_socket) ? S_IFSOCK
+                                   : (node->type & file_pipe)   ? S_IFIFO
                                    : (node->type & file_none)   ? S_IFREG
                                    : (node->type & file_stream) ? S_IFCHR
                                                                 : S_IFREG);
@@ -3661,6 +3662,7 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     extern vfs_node_t pipefs_root;
     extern int        pipefd_id;
     extern int        pipefs_id;
+    static uint64_t   pipe_inode_next = 1;
 
     if ((flags & ~(O_CLOEXEC | O_NONBLOCK)) != 0) return SYSCALL_FAULT_(EINVAL);
     if (pipefs_root == NULL) return SYSCALL_FAULT_(ENOSYS);
@@ -3682,6 +3684,12 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     node_output->type      = file_pipe;
     node_output->fsid      = pipefs_id;
     pipefs_root->mode = 0700;
+
+    uint64_t pipe_inode = pipe_inode_next++;
+    node_input->inode   = pipe_inode;
+    node_output->inode  = pipe_inode;
+    node_input->dev     = PIEFS_REGISTER_ID;
+    node_output->dev    = PIEFS_REGISTER_ID;
 
     pipe_info_t *info = (pipe_info_t *)malloc(sizeof(pipe_info_t));
     memset(info, 0, sizeof(pipe_info_t));
@@ -3940,31 +3948,99 @@ sys_(mkdirat, int dirfd, char *pathname, uint64_t mode)
     return ret == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(EIO);
 }
 
+sys_(flistxattr, int fd, char *list, size_t size)
+{
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    if (size != 0 && list == NULL) return SYSCALL_FAULT_(EFAULT);
+    if (size != 0 && !user_range_mapped(current_user_pagedir(), list, size)) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
 
 
 sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags)
 {
     if (flags != 0) { return SYSCALL_FAULT_(EINVAL); }
-    fd_file_handle *src_handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd_in);
-    fd_file_handle *dst_handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd_out);
-    if (src_handle == NULL || dst_handle == NULL) { return SYSCALL_FAULT_(EBADF); }
-    if (dst_handle->offset >= dst_handle->node->size && dst_handle->node->size > 0) return 0;
-    uint64_t src_offset = off_in ? *off_in : src_handle->offset;
-    uint64_t dst_offset = off_out ? *off_out : dst_handle->offset;
+    if (len == 0) return 0;
 
-    uint64_t length     = src_handle->node->size > len ? len : src_handle->node->size;
-    uint8_t *buffer     = (uint8_t *)malloc(length);
-    size_t   copy_total = 0;
-    if (vfs_read(src_handle->node, buffer, src_offset, length) == (size_t)VFS_STATUS_FAILED) { goto errno_; }
-    copy_total = vfs_write(dst_handle->node, buffer, dst_offset, length);
-    if (copy_total == (size_t)VFS_STATUS_FAILED) { goto errno_; }
+    pcb_t process = get_current_task()->parent_group;
+    page_directory_t *pagedir = process->pagedir;
+    fd_file_handle *src_handle =  (fd_file_handle*)queue_get(process->file_open, fd_in);
+    fd_file_handle *dst_handle =  (fd_file_handle*)queue_get(process->file_open, fd_out);
+    if (src_handle == NULL || dst_handle == NULL) { return SYSCALL_FAULT_(EBADF); }
+    if (src_handle->node == NULL || dst_handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    if (src_handle->node->type & (file_socket | file_pipe) || dst_handle->node->type & (file_socket | file_pipe))
+        return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t src_offset = src_handle->offset;
+    uint64_t dst_offset = dst_handle->offset;
+    if (off_in != NULL && !copy_from_user_pagedir(pagedir, &src_offset, off_in, sizeof(src_offset)))
+        return SYSCALL_FAULT_(EFAULT);
+    if (off_out != NULL && !copy_from_user_pagedir(pagedir, &dst_offset, off_out, sizeof(dst_offset)))
+        return SYSCALL_FAULT_(EFAULT);
+
+    if (src_handle->node->size != (uint64_t)-1 && src_offset >= src_handle->node->size) return 0;
+
+    size_t remaining = len;
+    if (src_handle->node->size != (uint64_t)-1)
+    {
+        uint64_t available = src_handle->node->size - src_offset;
+        if ((uint64_t)remaining > available) remaining = (size_t)available;
+    }
+
+    uint8_t *buffer = (uint8_t *)malloc(SENDFILE_BUF_SIZE);
+    if (buffer == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    size_t copy_total = 0;
+    while (remaining > 0)
+    {
+        size_t chunk = remaining < SENDFILE_BUF_SIZE ? remaining : SENDFILE_BUF_SIZE;
+        size_t got = vfs_read(src_handle->node, buffer, src_offset, chunk);
+        if (got == (size_t)VFS_STATUS_FAILED)
+        {
+            free(buffer);
+            return copy_total > 0 ? copy_total : SYSCALL_FAULT_(EIO);
+        }
+        if (got == 0) break;
+
+        size_t wrote = vfs_write(dst_handle->node, buffer, dst_offset, got);
+        if (wrote == (size_t)VFS_STATUS_FAILED)
+        {
+            free(buffer);
+            return copy_total > 0 ? copy_total : SYSCALL_FAULT_(EIO);
+        }
+        if (wrote == 0) break;
+
+        src_offset += wrote;
+        dst_offset += wrote;
+        copy_total += wrote;
+        remaining -= wrote;
+        if (wrote < got) break;
+    }
+
     vfs_update(dst_handle->node);
     free(buffer);
-    dst_handle->offset += copy_total;
+
+    if (off_in != NULL)
+    {
+        if (!copy_to_user_pagedir(pagedir, off_in, &src_offset, sizeof(src_offset))) return SYSCALL_FAULT_(EFAULT);
+    }
+    else
+    {
+        src_handle->offset = (size_t)src_offset;
+    }
+
+    if (off_out != NULL)
+    {
+        if (!copy_to_user_pagedir(pagedir, off_out, &dst_offset, sizeof(dst_offset))) return SYSCALL_FAULT_(EFAULT);
+    }
+    else
+    {
+        dst_handle->offset = (size_t)dst_offset;
+    }
+
     return copy_total;
-errno_:
-    free(buffer);
-    return SYSCALL_FAULT_(EFAULT);
 }
 
 sys_(pread, int fd, uint8_t *buffer, size_t size, uint64_t offset)
@@ -5071,35 +5147,44 @@ sys_(getppid)
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 {
     if (size == 0) { return 0; }
-    if (check_user_overflow(addr, size)) { return SYSCALL_FAULT_(EFAULT); }
 
-    uint64_t start_page = addr & (~(PAGE_SIZE - 1));
-    uint64_t end_page   = (addr + size - 1) & (~(PAGE_SIZE - 1));
-    if (end_page < start_page) return SYSCALL_FAULT_(EINVAL);
-    uint64_t num_pages  = ((end_page - start_page) / PAGE_SIZE) + 1;
+    if ((addr & (PAGE_SIZE - 1)) != 0) return SYSCALL_FAULT_(EINVAL);
 
-    page_directory_t *pagedir = current_user_pagedir();
-    if (!user_range_mapped(pagedir, (void *)vec, num_pages)) { return SYSCALL_FAULT_(EFAULT); }
+    uint64_t aligned_size = 0;
+    if (!align_up_u64(size, PAGE_SIZE, &aligned_size)) return SYSCALL_FAULT_(ENOMEM);
+    if (check_user_overflow(addr, aligned_size)) return SYSCALL_FAULT_(ENOMEM);
+
+    uint64_t num_pages = aligned_size / PAGE_SIZE;
+    if (vec == 0 || check_user_overflow(vec, num_pages)) return SYSCALL_FAULT_(EFAULT);
+
+    tcb_t task = get_current_task();
+    pcb_t process = task != NULL ? task->parent_group : NULL;
+    if (process == NULL || process->pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    uint8_t *kvec = (uint8_t *)malloc((size_t)num_pages);
+    if (kvec == NULL) return SYSCALL_FAULT_(ENOMEM);
 
     mm_op_lock_acquire();
-    uint64_t current_addr = start_page;
-
     for (uint64_t i = 0; i < num_pages; i++)
     {
-        uint64_t phys_addr = page_virt_to_phys(current_addr);
-
-        uint8_t resident = (phys_addr != 0) ? 1 : 0;
-
-        if (!copy_to_user_pagedir(pagedir, (void *)(vec + i), &resident, sizeof(uint8_t)))
+        uint64_t page = addr + i * PAGE_SIZE;
+        uint64_t flags = 0;
+        bool present = page_table_get_flags(process->pagedir, page, &flags) &&
+                       ((flags & (PTE_PRESENT | PTE_USER)) == (PTE_PRESENT | PTE_USER));
+        if (vma_find(&process->vma_manager, page) == NULL && !present)
         {
             mm_op_lock_release();
-            return SYSCALL_FAULT_(EFAULT);
+            free(kvec);
+            return SYSCALL_FAULT_(ENOMEM);
         }
 
-        current_addr += PAGE_SIZE;
+        kvec[i] = present ? 1 : 0;
     }
-
     mm_op_lock_release();
+
+    bool copied = copy_to_user_pagedir(process->pagedir, (void *)vec, kvec, (size_t)num_pages);
+    free(kvec);
+    if (!copied) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
 

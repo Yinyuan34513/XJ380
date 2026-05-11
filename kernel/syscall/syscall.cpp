@@ -135,8 +135,10 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_PRCTL: return "prctl";
     case SYS_ARCH_PRCTL: return "arch_prctl";
     case SYS_CHROOT: return "chroot";
+    case SYS_FLISTXATTR: return "flistxattr";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
     case SYS_FADVISE64: return "fadvise64";
+    case SYS_COPY_FILE_RANGE: return "copy_file_range";
     case SYS_SET_ROBUST_LIST: return "set_robust_list";
     case SYS_RSEQ: return "rseq";
     case SYS_CLONE3: return "clone3";
@@ -150,6 +152,13 @@ static bool debug_trace_xbps_task()
     tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
     return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL;
+}
+
+static bool debug_trace_grep_task()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "grep") != NULL || strstr(task->parent_group->name, "grep") != NULL;
 }
 
 void init_syscall()
@@ -214,6 +223,20 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     }
 
     uint64_t syscall_number = regs->rax;
+    bool trace_grep = debug_trace_grep_task();
+    if (trace_grep)
+    {
+        write_serial_fmt("[DEBUG-grep-syscall] enter task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx rip=%llx\n",
+                         syscall_task != NULL ? syscall_task->name : "?",
+                         syscall_number,
+                         debug_syscall_name(syscall_number),
+                         regs->rdi,
+                         regs->rsi,
+                         regs->rdx,
+                         regs->r10,
+                         regs->r8,
+                         regs->rip);
+    }
 
     switch (syscall_number)
     {
@@ -389,6 +412,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETPID: regs->rax = get_current_task()->parent_group->pid; break;
     case SYS_GETTID: regs->rax = get_current_task()->tid; break;
     case SYS_TIME: regs->rax = (uint64_t)sys_time((int64_t *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_FLISTXATTR:
+        regs->rax = (uint64_t)sys_flistxattr(regs->rdi, (char *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_GETTIMEOFDAY:
         regs->rax = (uint64_t)sys_gettimeofday((struct timeval *)regs->rdi, (void *)regs->rsi, 0, 0, 0, 0, regs);
         break;
@@ -486,6 +512,15 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_FSTATFS:
         regs->rax = (uint64_t)sys_fstatfs(regs->rdi, (struct statfs *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_COPY_FILE_RANGE:
+        regs->rax = (uint64_t)sys_copy_file_range(regs->rdi,
+                                                  (uint64_t *)regs->rsi,
+                                                  regs->rdx,
+                                                  (uint64_t *)regs->r10,
+                                                  regs->r8,
+                                                  regs->r9,
+                                                  regs);
         break;
     case SYS_MINCORE: regs->rax = (uint64_t)sys_mincore(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_OPENAT: regs->rax = (uint64_t)sys_openat(regs->rdi, regs->rsi, regs->rdx, regs->r10, 0, 0, regs); break;
@@ -706,6 +741,15 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
                          regs->rdx,
                          regs->r10,
                          regs->r8,
+                         (long long)regs->rax);
+    }
+    if (trace_grep)
+    {
+        tcb_t task = get_current_task();
+        write_serial_fmt("[DEBUG-grep-syscall] ret task=%s nr=%llu(%s) ret=%lld\n",
+                         task != NULL ? task->name : "?",
+                         syscall_number,
+                         debug_syscall_name(syscall_number),
                          (long long)regs->rax);
     }
     signal_deliver_pending(regs);

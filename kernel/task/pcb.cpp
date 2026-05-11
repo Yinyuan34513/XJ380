@@ -66,6 +66,8 @@ extern UserInfo root_user;
 extern bool no_interrupt;
 extern bool is_scheduler;
 spin_t create_thread_lock = SPIN_INIT;
+static spin_t execve_image_lock = SPIN_INIT;
+static spin_t user_stack_build_lock = SPIN_INIT;
 // pcb.cpp
 #include "task/scheduler.h"
 
@@ -624,11 +626,11 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 
     return ok ? tmp_stack : 0;
 }
-void switch_to_user_mode()
+
+static void switch_task_to_user_mode(tcb_t task)
 {
     close_interrupt;
 
-    tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL)
     {
         write_serial_string("switch_to_user_mode: invalid current task\n");
@@ -645,7 +647,9 @@ void switch_to_user_mode()
 
     // 鏋勫缓鐢ㄦ埛鏍堝苟鑾峰彇 argc 鍜?argv
     uint64_t ep;
+    spin_lock(&user_stack_build_lock);
     rsp = build_user_stack(task, rsp, task->main, 0, NULL, 0, &ep);
+    spin_unlock(&user_stack_build_lock);
     if (rsp == 0)
     {
         write_serial_string("build_user_stack failed\n");
@@ -718,6 +722,11 @@ void switch_to_user_mode()
                        "r"((uint64_t)argv),
                        "r"(entry_rdx)
                      : "memory");
+}
+
+void switch_to_user_mode()
+{
+    switch_task_to_user_mode(get_current_task());
 }
 
 
@@ -1237,7 +1246,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         return (uint64_t)copy_ret;
     }
 
-    pcb_t process = get_current_task()->parent_group;
+    pcb_t process = current_task->parent_group;
 
     char      *norm_path = vfs_cwd_path_build(kpath);
     if (norm_path == NULL)
@@ -1279,10 +1288,12 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     close_interrupt;
     disable_scheduler();
+    spin_lock(&execve_image_lock);
     page_directory_t *old_page_dir = process->pagedir;
     page_directory_t *new_page_dir = clone_page_directory(get_kernel_pagedir(), false);
     if (new_page_dir == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1302,6 +1313,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         {
             if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, kargv[i]))
             {
+                spin_unlock(&execve_image_lock);
                 vfs_close(node);
                 free(norm_path);
                 free(kpath);
@@ -1320,6 +1332,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     if (new_cmdline == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1334,6 +1347,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         new_task_argv = copy_kernel_string_vector(kargv, kargc);
         if (new_task_argv == NULL)
         {
+            spin_unlock(&execve_image_lock);
             vfs_close(node);
             free(norm_path);
             free(kpath);
@@ -1347,6 +1361,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         new_process_argv = copy_kernel_string_vector_owned(kargv, kargc);
         if (new_process_argv == NULL)
         {
+            spin_unlock(&execve_image_lock);
             vfs_close(node);
             free(norm_path);
             free(kpath);
@@ -1362,6 +1377,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     new_exe_path = strdup(norm_path);
     if (new_exe_path == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1388,6 +1404,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         UserInfo *exec_user = current_user != NULL ? current_user : &root_user;
         if (exec_user->envp == NULL)
         {
+            spin_unlock(&execve_image_lock);
             vfs_close(node);
             free(norm_path);
             free(kpath);
@@ -1405,6 +1422,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     if (new_envp == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1466,6 +1484,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(new_exe_path);
         free_envp(kargv);
         free_envp(new_envp);
+        spin_unlock(&execve_image_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)exec_ret;
     }
@@ -1492,6 +1511,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(new_exe_path);
         free_envp(kargv);
         free_envp(new_envp);
+        spin_unlock(&execve_image_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
@@ -1513,6 +1533,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     if (old_process_argv != NULL) free_envp(old_process_argv);
     free(old_exe_path);
     if (old_envp != NULL) free_envp(old_envp);
+    close_exec_file_descriptors(process);
     vma_manager_exit_cleanup(&old_vma_manager);
     if (was_vfork)
     {
@@ -1521,7 +1542,6 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         message->pid          = process->pid;
         ipc_send(process->parent_task, message);
     }
-    close_exec_file_descriptors(process);
     if (current_task->tid_directory == old_page_dir) current_task->tid_directory = process->pagedir;
     if (!was_vfork) free_page_directory(old_page_dir);
     // process->pagedir = get_current_directory();
@@ -1553,22 +1573,23 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     free(kpath);
     free_envp(kargv);
 
-    if (get_current_task()->argv != NULL) free_envp(get_current_task()->argv);
-    get_current_task()->argv = new_task_argv;
-    get_current_task()->argc = kargc;
+    if (current_task->argv != NULL) free_envp(current_task->argv);
+    current_task->argv = new_task_argv;
+    current_task->argc = kargc;
     new_task_argv = NULL;
 
-    get_current_task()->user_stack     = stack;
-    get_current_task()->user_stack_top = stack + BIG_USER_STACK;
-    get_current_task()->main           = e_entry;
-    get_current_task()->hasfscr        = false;
-    get_current_task()->winnum         = 0;
-    get_current_task()->fs             = GET_SEL(4 * 8, SA_RPL3);
-    get_current_task()->fs_base        = 0;
-    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(get_current_task())));
+    current_task->user_stack     = stack;
+    current_task->user_stack_top = stack + BIG_USER_STACK;
+    current_task->main           = e_entry;
+    current_task->hasfscr        = false;
+    current_task->winnum         = 0;
+    current_task->fs             = GET_SEL(4 * 8, SA_RPL3);
+    current_task->fs_base        = 0;
+    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(current_task)));
     write_fsbase(0);
+    spin_unlock(&execve_image_lock);
     if (was_scheduler_enabled) enable_scheduler();
-    switch_to_user_mode();
+    switch_task_to_user_mode(current_task);
     return (uint64_t)-(EAGAIN);
 }
 

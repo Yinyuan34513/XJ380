@@ -20,6 +20,12 @@ extern XSK_SMP_INFO *xsi;
 
 static size_t procfs_copy_content(void *addr, size_t offset, size_t size, const char *content, size_t content_len);
 static void procfs_refresh_fd_dir(vfs_node_t fd_dir, pcb_t task);
+static vfs_node_t procfs_current_self_target()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL) return NULL;
+    return task->parent_group->procfs_node;
+}
 
 const char filesystems_content[] = //"nodev\tsysfs\n"
     "nodev\ttmpfs\n"
@@ -1040,7 +1046,6 @@ void procfs_self_open(void *parent, const char *name, vfs_node_t node) {
     UNUSED(parent, name);
     procfs_self_handle_t *handle = (procfs_self_handle_t *)malloc(sizeof(procfs_self_handle_t));
     handle->self                 = node;
-    node->linkto                 = get_current_task()->parent_group->procfs_node;
     node->handle                 = handle;
 }
 
@@ -1056,27 +1061,36 @@ void procfs_self_close(void *current) {
 
 size_t procfs_self_read(void *fd, void *addr, size_t offset, size_t size) {
     procfs_self_handle_t *handle = (procfs_self_handle_t *)fd;
-    return procfs_read(handle->self->linkto->handle, addr, offset, size);
+    vfs_node_t target = procfs_current_self_target();
+    if (handle == NULL || handle->self == NULL || target == NULL || target->handle == NULL) return VFS_STATUS_FAILED;
+    return procfs_read(target->handle, addr, offset, size);
 }
 
 size_t procfs_self_write(void *fd, const void *addr, size_t offset, size_t size) {
     procfs_self_handle_t *handle = (procfs_self_handle_t *)fd;
-    return procfs_write(handle->self->linkto->handle, addr, offset, size);
+    vfs_node_t target = procfs_current_self_target();
+    if (handle == NULL || handle->self == NULL || target == NULL || target->handle == NULL) return VFS_STATUS_FAILED;
+    return procfs_write(target->handle, addr, offset, size);
 }
 
 size_t procfs_self_readlink(vfs_node_t file, void *addr, size_t offset, size_t size) {
     procfs_self_handle_t *handle = (procfs_self_handle_t *)file->handle;
-    if (handle == NULL || handle->self == NULL || handle->self->linkto == NULL) return VFS_STATUS_FAILED;
-    char target[MAX_PID_NAME_LEN + 8];
-    sprintf(target, "/proc/%s", handle->self->linkto->name);
-    return procfs_copy_content(addr, offset, size, target, strlen(target));
+    vfs_node_t target_node = procfs_current_self_target();
+    if (handle == NULL || handle->self == NULL || target_node == NULL || target_node->name == NULL)
+        return VFS_STATUS_FAILED;
+    file->linkto = NULL;
+    char target_path[MAX_PID_NAME_LEN + 8];
+    sprintf(target_path, "/proc/%s", target_node->name);
+    return procfs_copy_content(addr, offset, size, target_path, strlen(target_path));
 }
 
 errno_t procfs_self_stat(void *file, vfs_node_t node) {
     procfs_self_handle_t *handle  = (procfs_self_handle_t *)file;
+    vfs_node_t target             = procfs_current_self_target();
     node->type                   |= file_symlink;
-    node->size                    = handle && handle->self && handle->self->linkto ?
-                                    strlen(handle->self->linkto->name) + strlen("/proc/") : 0;
+    node->linkto                  = NULL;
+    node->size                    = handle && handle->self && target && target->name ?
+                                    strlen(target->name) + strlen("/proc/") : 0;
     return EOK;
 }
 

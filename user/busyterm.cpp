@@ -5,12 +5,10 @@
 #define BUSY_HEIGHT      405
 #define TERM_LEFT_X      8
 #define TERM_TOP_Y       4
-#define TERM_RIGHT_X     (BUSY_WIDTH - 8)
-#define TERM_BOTTOM_Y    (BUSY_HEIGHT - 16)
+#define TERM_RIGHT_PAD   8
+#define TERM_BOTTOM_PAD  16
 #define CELL_W           9
 #define CELL_H           16
-#define TERM_COLS        ((TERM_RIGHT_X - TERM_LEFT_X) / CELL_W)
-#define TERM_ROWS        ((TERM_BOTTOM_Y - TERM_TOP_Y) / CELL_H)
 #define COLOR_BG         0x0b0f14ff
 #define COLOR_FG         0xe6edf3ff
 #define PTY_CHUNK        1024
@@ -19,6 +17,9 @@
 #define DEFAULT_SHELL    "/usr/bin/bash"
 
 #define TIOCSCTTY        0x540E
+#ifndef TIOCSWINSZ
+#define TIOCSWINSZ       0x5414
+#endif
 
 enum TerminalKeyCode
 {
@@ -61,11 +62,16 @@ static int  g_pty_master = -1;
 static int  g_spawn_error = 0;
 static const char *g_spawn_stage = "start";
 static bool g_ctrl_down = false;
+static int  g_win_width = BUSY_WIDTH;
+static int  g_win_height = BUSY_HEIGHT;
+static int  g_term_cols = (BUSY_WIDTH - TERM_LEFT_X - TERM_RIGHT_PAD) / CELL_W;
+static int  g_term_rows = (BUSY_HEIGHT - TERM_TOP_Y - TERM_BOTTOM_PAD) / CELL_H;
 static VTerm *g_vterm = NULL;
 static VTermScreen *g_vscreen = NULL;
 static VTermPos g_cursor = {0, 0};
 static bool g_cursor_visible = true;
-static XCOLOR g_scroll_buffer[BUSY_WIDTH * (TERM_ROWS * CELL_H)];
+static XCOLOR *g_scroll_buffer = NULL;
+static size_t  g_scroll_buffer_pixels = 0;
 
 static void send_child(const char *buf, int len);
 
@@ -179,19 +185,61 @@ static int clamp_i(int v, int lo, int hi)
     return v;
 }
 
+static bool ensure_scroll_buffer(int width, int height)
+{
+    if (width <= 0 || height <= 0) return false;
+    size_t pixels = (size_t)width * (size_t)height;
+    if (pixels <= g_scroll_buffer_pixels && g_scroll_buffer != NULL) return true;
+
+    XCOLOR *buffer = (XCOLOR *)realloc(g_scroll_buffer, pixels * sizeof(XCOLOR));
+    if (buffer == NULL) return false;
+    g_scroll_buffer = buffer;
+    g_scroll_buffer_pixels = pixels;
+    return true;
+}
+
+static void calculate_terminal_geometry(int width, int height, int *cols, int *rows)
+{
+    int min_width = TERM_LEFT_X + TERM_RIGHT_PAD + CELL_W;
+    int min_height = TERM_TOP_Y + TERM_BOTTOM_PAD + CELL_H;
+    if (width < min_width) width = min_width;
+    if (height < min_height) height = min_height;
+
+    int new_cols = (width - TERM_LEFT_X - TERM_RIGHT_PAD) / CELL_W;
+    int new_rows = (height - TERM_TOP_Y - TERM_BOTTOM_PAD) / CELL_H;
+    if (new_cols < 1) new_cols = 1;
+    if (new_rows < 1) new_rows = 1;
+
+    if (cols != NULL) *cols = new_cols;
+    if (rows != NULL) *rows = new_rows;
+}
+
+static void sync_pty_window_size()
+{
+    if (g_pty_master < 0) return;
+
+    struct winsize ws;
+    memset(&ws, 0, sizeof(ws));
+    ws.ws_col = (unsigned short)g_term_cols;
+    ws.ws_row = (unsigned short)g_term_rows;
+    ws.ws_xpixel = (unsigned short)(g_term_cols * CELL_W);
+    ws.ws_ypixel = (unsigned short)(g_term_rows * CELL_H);
+    ioctl(g_pty_master, TIOCSWINSZ, &ws);
+}
+
 static void fill_rect(int x1, int y1, int x2, int y2, UINT32 color)
 {
-    x1 = clamp_i(x1, 0, BUSY_WIDTH - 1);
-    y1 = clamp_i(y1, 0, BUSY_HEIGHT - 1);
-    x2 = clamp_i(x2, 0, BUSY_WIDTH - 1);
-    y2 = clamp_i(y2, 0, BUSY_HEIGHT - 1);
+    x1 = clamp_i(x1, 0, g_win_width - 1);
+    y1 = clamp_i(y1, 0, g_win_height - 1);
+    x2 = clamp_i(x2, 0, g_win_width - 1);
+    y2 = clamp_i(y2, 0, g_win_height - 1);
     if (x2 < x1 || y2 < y1) return;
     xapi_DrawRect(g_window, x1, y1, x2, y2, color, true);
 }
 
 static void clear_window()
 {
-    xapi_DrawRect(g_window, 0, 0, BUSY_WIDTH - 1, BUSY_HEIGHT - 1, COLOR_BG, true);
+    xapi_DrawRect(g_window, 0, 0, g_win_width - 1, g_win_height - 1, COLOR_BG, true);
 }
 
 static void send_child(const char *buf, int len)
@@ -245,7 +293,7 @@ static UINT32 vterm_color_to_xcolor(VTermColor color, UINT32 fallback)
 
 static void draw_vterm_cell(int row, int col)
 {
-    if (g_vscreen == NULL || row < 0 || row >= TERM_ROWS || col < 0 || col >= TERM_COLS) return;
+    if (g_vscreen == NULL || row < 0 || row >= g_term_rows || col < 0 || col >= g_term_cols) return;
 
     VTermScreenCell cell;
     VTermPos pos = {row, col};
@@ -290,10 +338,10 @@ static void draw_vterm_cell(int row, int col)
 
 static void redraw_vterm_rect(VTermRect rect)
 {
-    rect.start_row = clamp_i(rect.start_row, 0, TERM_ROWS);
-    rect.end_row = clamp_i(rect.end_row, 0, TERM_ROWS);
-    rect.start_col = clamp_i(rect.start_col, 0, TERM_COLS);
-    rect.end_col = clamp_i(rect.end_col, 0, TERM_COLS);
+    rect.start_row = clamp_i(rect.start_row, 0, g_term_rows);
+    rect.end_row = clamp_i(rect.end_row, 0, g_term_rows);
+    rect.start_col = clamp_i(rect.start_col, 0, g_term_cols);
+    rect.end_col = clamp_i(rect.end_col, 0, g_term_cols);
     for (int r = rect.start_row; r < rect.end_row; r++)
         for (int c = rect.start_col; c < rect.end_col; c++)
             draw_vterm_cell(r, c);
@@ -316,8 +364,9 @@ static int vterm_moverect(VTermRect dest, VTermRect src, void *user)
     int width = (src.end_col - src.start_col) * CELL_W;
     int height = (src.end_row - src.start_row) * CELL_H;
     if (width <= 0 || height <= 0) return 0;
-    if (src_x < 0 || src_y < 0 || src_x + width > BUSY_WIDTH || src_y + height > BUSY_HEIGHT) return 0;
-    if (dst_x < 0 || dst_y < 0 || dst_x + width > BUSY_WIDTH || dst_y + height > BUSY_HEIGHT) return 0;
+    if (src_x < 0 || src_y < 0 || src_x + width > g_win_width || src_y + height > g_win_height) return 0;
+    if (dst_x < 0 || dst_y < 0 || dst_x + width > g_win_width || dst_y + height > g_win_height) return 0;
+    if (!ensure_scroll_buffer(width, height)) return 0;
 
     xapi_ReadBuffer(g_window, src_x, src_y, width, height, g_scroll_buffer);
     xapi_WriteBuffer(g_window, dst_x, dst_y, width, height, g_scroll_buffer);
@@ -381,8 +430,8 @@ static void terminal_init()
 
     struct VTermBuilder builder;
     memset(&builder, 0, sizeof(builder));
-    builder.rows = TERM_ROWS;
-    builder.cols = TERM_COLS;
+    builder.rows = g_term_rows;
+    builder.cols = g_term_cols;
     g_vterm = vterm_build(&builder);
     if (g_vterm == NULL) return;
 
@@ -413,6 +462,40 @@ static void terminal_init()
     vterm_screen_set_damage_merge(g_vscreen, VTERM_DAMAGE_SCROLL);
     vterm_screen_enable_altscreen(g_vscreen, 1);
     vterm_screen_reset(g_vscreen, 1);
+}
+
+static void terminal_resize(int width, int height)
+{
+    int new_cols = 0;
+    int new_rows = 0;
+    calculate_terminal_geometry(width, height, &new_cols, &new_rows);
+
+    g_win_width = width;
+    g_win_height = height;
+    if (g_win_width < TERM_LEFT_X + TERM_RIGHT_PAD + CELL_W) g_win_width = TERM_LEFT_X + TERM_RIGHT_PAD + CELL_W;
+    if (g_win_height < TERM_TOP_Y + TERM_BOTTOM_PAD + CELL_H) g_win_height = TERM_TOP_Y + TERM_BOTTOM_PAD + CELL_H;
+
+    if (new_cols != g_term_cols || new_rows != g_term_rows)
+    {
+        g_term_cols = new_cols;
+        g_term_rows = new_rows;
+        if (g_vterm != NULL) vterm_set_size(g_vterm, g_term_rows, g_term_cols);
+    }
+
+    g_cursor.row = clamp_i(g_cursor.row, 0, g_term_rows - 1);
+    g_cursor.col = clamp_i(g_cursor.col, 0, g_term_cols - 1);
+    sync_pty_window_size();
+    clear_window();
+    if (g_vscreen != NULL)
+    {
+        VTermRect all = {
+            .start_row = 0,
+            .end_row = g_term_rows,
+            .start_col = 0,
+            .end_col = g_term_cols,
+        };
+        redraw_vterm_rect(all);
+    }
 }
 
 static bool terminal_write_chunk(const char *buf, int len, bool flush_damage)
@@ -548,6 +631,11 @@ static void busyterm_msg(UINT64 type, UINT64 hData, UINT64 lData)
         }
         else send_key_seq(lData);
     }
+    else if (type == MSG_RESIZE)
+    {
+        terminal_resize((int)hData, (int)lData);
+        xapi_RefreshWindow(g_window);
+    }
 }
 
 static int spawn_busybox(char *envp[])
@@ -588,13 +676,7 @@ static int spawn_busybox(char *envp[])
     }
 
     g_spawn_stage = "fork";
-    struct winsize ws;
-    memset(&ws, 0, sizeof(ws));
-    ws.ws_row = TERM_ROWS;
-    ws.ws_col = TERM_COLS;
-    ws.ws_xpixel = TERM_COLS * CELL_W;
-    ws.ws_ypixel = TERM_ROWS * CELL_H;
-    ioctl(g_pty_master, TIOCSWINSZ, &ws);
+    sync_pty_window_size();
 
     int pid = fork();
     if (pid == 0)
@@ -671,12 +753,14 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
     win.title = (char *)"Terminal";
     win.width = BUSY_WIDTH;
     win.height = BUSY_HEIGHT;
-    win.sets = XWIN_NORMAL;
+    win.sets = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
     xapi_CreateWindow(&g_window, &win);
     xapi_SetIcon(g_window, "/system/icon/terminal.png");
     SetMsgPrcor(g_window, busyterm_msg);
-    clear_window();
+    calculate_terminal_geometry(BUSY_WIDTH, BUSY_HEIGHT, &g_term_cols, &g_term_rows);
     terminal_init();
+    terminal_resize(BUSY_WIDTH, BUSY_HEIGHT);
+    clear_window();
     xapi_RefreshWindow(g_window);
 
     if (spawn_busybox(envp) < 0)

@@ -356,6 +356,7 @@
 #define SYS_UMOUNT2 166
 
 #define SYS_GETTID 186
+#define SYS_FLISTXATTR 196
 #define SYS_TIME 201
 #define SYS_FUTEX 202
 #define SYS_SCHED_GETAFFINITY 204
@@ -759,6 +760,7 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
 sys_(pwrite, int fd, uint8_t *buffer, size_t size, int64_t offset);
 sys_(pread, int fd, uint8_t *buffer, size_t size, uint64_t offset);
 sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags);
+sys_(flistxattr, int fd, char *list, size_t size);
 sys_(openat);
 sys_(faccessat2);
 sys_(faccessat);
