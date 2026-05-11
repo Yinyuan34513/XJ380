@@ -33,13 +33,6 @@ sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int fla
 sys_(utimes, char *filename, const struct timeval *times);
 sys_(close_range, uint32_t first, uint32_t last, uint32_t flags);
 
-static bool trace_fsbase_task(tcb_t task)
-{
-    return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi &&
-           (strstr(task->name, "dpkg") != NULL || strstr(task->parent_group->name, "dpkg") != NULL ||
-            strstr(task->name, "xjapt") != NULL || strstr(task->parent_group->name, "xjapt") != NULL);
-}
-
 static const char *debug_syscall_name(uint64_t nr)
 {
     switch (nr)
@@ -152,21 +145,6 @@ static const char *debug_syscall_name(uint64_t nr)
     }
 }
 
-static bool debug_trace_linux_syscall()
-{
-    static int trace_budget = 1000;
-    if (trace_budget <= 0) return false;
-
-    tcb_t task = get_current_task();
-    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
-    if (strstr(task->name, "dpkg") == NULL && strstr(task->name, "tar") == NULL &&
-        strstr(task->parent_group->name, "dpkg") == NULL && strstr(task->parent_group->name, "tar") == NULL)
-        return false;
-
-    trace_budget--;
-    return true;
-}
-
 static bool debug_trace_xbps_task()
 {
     tcb_t task = get_current_task();
@@ -232,31 +210,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         if (hw_fs_base != 0 || syscall_task->fs_base == 0)
             syscall_task->fs_base = hw_fs_base;
         else
-        {
-            if (trace_fsbase_task(syscall_task))
-                write_serial_fmt("[fsbase] syscall-entry-restore task=%s tid=%llu nr=%llu tcb=0x%llx hw=0x%llx rip=0x%llx\n",
-                                 syscall_task->name, syscall_task->tid, regs->rax, syscall_task->fs_base,
-                                 hw_fs_base, regs->rcx);
             write_fsbase(syscall_task->fs_base);
-        }
     }
 
     uint64_t syscall_number = regs->rax;
-    bool trace_syscall = debug_trace_linux_syscall();
-    if (syscall_task != NULL && trace_fsbase_task(syscall_task) &&
-        (syscall_number == SYS_FORK || syscall_number == SYS_CLONE || syscall_number == SYS_VFORK ||
-         syscall_number == SYS_WAIT4 || syscall_number == SYS_EXECVE || syscall_number == SYS_EXIT_GROUP ||
-         syscall_number == SYS_SET_ROBUST_LIST))
-    {
-        write_serial_fmt("[DEBUG-fork-ret] syscall-entry task=%s pid=%llu tid=%llu nr=%llu rip=0x%llx rsp=0x%llx fs=0x%llx\n",
-                         syscall_task->name,
-                         syscall_task->parent_group != NULL ? syscall_task->parent_group->pid : 0,
-                         syscall_task->tid,
-                         syscall_number,
-                         regs->rip,
-                         regs->rsp,
-                         syscall_task->fs_base);
-    }
 
     switch (syscall_number)
     {
@@ -417,20 +374,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_CLONE3:
         regs->rax = (uint64_t)sys_clone3((struct clone_args *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
-    case SYS_FORK:
-        regs->rax = (uint64_t)process_fork(regs, false, 0);
-        if (syscall_task != NULL && trace_fsbase_task(syscall_task))
-        {
-            write_serial_fmt("[DEBUG-fork-ret] syscall-return-task=%s pid=%llu tid=%llu ret=0x%llx rip=0x%llx rsp=0x%llx fs=0x%llx\n",
-                             syscall_task->name,
-                             syscall_task->parent_group != NULL ? syscall_task->parent_group->pid : 0,
-                             syscall_task->tid,
-                             regs->rax,
-                             regs->rip,
-                             regs->rsp,
-                             syscall_task->fs_base);
-        }
-        break;
+    case SYS_FORK: regs->rax = (uint64_t)process_fork(regs, false, 0); break;
     case SYS_VFORK: regs->rax = (uint64_t)process_fork(regs, true, 0); break;
     case SYS_FUTEX:
         regs->rax = (uint64_t)sys_futex((uint32_t *)regs->rdi, regs->rsi, regs->rdx,
@@ -750,25 +694,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         write_serial_string("\n");
         break;
     }
-    if (trace_syscall)
-    {
-        tcb_t task = get_current_task();
-    }
-    if (trace_syscall && (int64_t)regs->rax < 0)
-    {
-        tcb_t task = get_current_task();
-        write_serial_fmt("[dpkg-trace] task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx ret=%lld\n",
-                         task != NULL ? task->name : "?",
-                         syscall_number,
-                         debug_syscall_name(syscall_number),
-                         regs->rdi,
-                         regs->rsi,
-                         regs->rdx,
-                         regs->r10,
-                         regs->r8,
-                         (long long)regs->rax);
-    }
-    if (!trace_syscall && debug_trace_xbps_task() && (int64_t)regs->rax < 0)
+    if (debug_trace_xbps_task() && (int64_t)regs->rax < 0)
     {
         tcb_t task = get_current_task();
         write_serial_fmt("[DEBUG-xbps-syscall] task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx ret=%lld\n",
@@ -789,10 +715,6 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         uint64_t fs_selector = task_user_fs_selector(return_task);
         __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(fs_selector));
         write_fsbase(return_task->fs_base);
-        // if (trace_fsbase_task(return_task))
-        //     write_serial_fmt("[fsbase] syscall-return task=%s tid=%llu nr=%llu fs=0x%llx hw_after=0x%llx rip=0x%llx ret=0x%llx\n",
-        //                      return_task->name, return_task->tid, syscall_number, return_task->fs_base,
-        //                      read_fsbase(), regs->rip, regs->rax);
     }
     return (uint64_t)regs;
 }

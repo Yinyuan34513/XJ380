@@ -25,8 +25,8 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
-VDISK_SIZE_MIB ?= 4096
-VDISK_FAT_MIB ?= 4000
+VDISK_SIZE_MIB ?= 2048
+VDISK_FAT_MIB ?= 2038
 VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
@@ -93,7 +93,6 @@ BUILD_CONFIG_HEADER := kernel/build_config.h
 STAGE_ELF_DEPS := tools/stage_elf_deps.sh
 STAGE_IMAGE_BASE := tools/stage_image_base.sh
 STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
-STAGE_IMAGE_DPKG := tools/stage_image_dpkg.sh
 STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
 STAGE_XBPS_BOOTSTRAP := tools/stage_xbps_bootstrap.sh
 STAGE_PREPARED_ROOT := tools/stage_prepared_root.sh
@@ -272,7 +271,6 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/sigtest.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
-	@cp -a $(BUILD_DIR)/xjapt.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
 	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(VDISK_ROOT)"
 	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
@@ -289,9 +287,7 @@ vdisk: all
 	@cp ./1.c $(VDISK_ROOT)/apps/1.c
 	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
 	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
-	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "dpkg" ]; then \
-		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_DPKG) $(VDISK_ROOT); \
-	elif [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
+	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
 		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
 		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
 			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
@@ -302,7 +298,7 @@ vdisk: all
 			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
 		fi; \
 	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
-		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected dpkg, xbps, or none)" >&2; \
+		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected xbps or none)" >&2; \
 		exit 1; \
 	fi
 

@@ -19,8 +19,6 @@ stage_base_dirs()
         "$root/bin" \
         "$root/boot" \
         "$root/dev" \
-        "$root/etc/apt/apt.conf.d" \
-        "$root/etc/dpkg/dpkg.cfg.d" \
         "$root/etc/fastfetch" \
         "$root/etc/ssl/certs" \
         "$root/etc/xbps.d" \
@@ -67,15 +65,6 @@ stage_base_dirs()
         "$root/users/Another User" \
         "$root/users/GuoqiFish" \
         "$root/var/backups" \
-        "$root/var/cache/apt/archives/partial" \
-        "$root/var/cache/debconf" \
-        "$root/var/cache/xjapt/cache" \
-        "$root/var/lib/apt/lists/partial" \
-        "$root/var/lib/dpkg/alternatives" \
-        "$root/var/lib/dpkg/info" \
-        "$root/var/lib/dpkg/parts" \
-        "$root/var/lib/dpkg/triggers" \
-        "$root/var/lib/dpkg/updates" \
         "$root/var/cache/xbps" \
         "$root/var/db/xbps/keys" \
         "$root/var/db/xbps/metadata" \
@@ -94,9 +83,13 @@ stage_base_files()
 {
     printf "nameserver 223.5.5.5\n" > "$root/etc/resolv.conf"
 
-    if [ -f resources/etc/os-release ]; then
-        cp -a resources/etc/os-release "$root/etc/os-release"
-    fi
+    cat > "$root/etc/os-release" <<'EOF'
+NAME="XJ380"
+PRETTY_NAME="XINGJI XJ380 Singularity 1.0.0 XSK 2.1.0"
+ID=xj380
+VERSION_ID="6.6"
+HOME_URL="https://github.com/xingji-studio/XJ380"
+EOF
     if [ -d resources/etc/fastfetch ]; then
         cp -a resources/etc/fastfetch/. "$root/etc/fastfetch/"
     fi

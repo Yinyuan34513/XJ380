@@ -1050,10 +1050,6 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     uint64_t parent_fs_base = read_fsbase();
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
-    else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
-             (strstr(parent_task->name, "dpkg") != NULL || strstr(parent_task->parent_group->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(parent_task->parent_group->name, "xjapt") != NULL))
-        write_serial_fmt("[fsbase] clone-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx flags=0x%llx tls=0x%llx\n",
-                         parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base, flags, tls);
 
     pcb_t process = parent_task->parent_group;
     page_directory_t *pagedir = process->pagedir;
@@ -1134,9 +1130,6 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     new_task->signal  = 0;
     new_task->fs      = parent_task->fs;
     new_task->fs_base = (flags & CLONE_SETTLS_FLAG) ? tls : parent_task->fs_base;
-    if (process->linux_abi && (strstr(parent_task->name, "dpkg") != NULL || strstr(process->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(process->name, "xjapt") != NULL))
-        write_serial_fmt("[fsbase] clone-child task=%s parent_tid=%llu child_fs=0x%llx parent_fs=0x%llx flags=0x%llx tls=0x%llx\n",
-                         parent_task->name, parent_task->tid, new_task->fs_base, parent_task->fs_base, flags, tls);
 
     new_task->cwd = parent_task->cwd;
     if (new_task->cwd != NULL) new_task->cwd->refcount++;
@@ -1797,11 +1790,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     uint64_t parent_fs_base = read_fsbase();
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
-    else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
-             (strstr(parent_task->name, "dpkg") != NULL || strstr(parent_task->parent_group->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(parent_task->parent_group->name, "xjapt") != NULL))
-        write_serial_fmt("[fsbase] fork-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx\n",
-                         parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base,
-                         reg != NULL ? reg->rcx : 0);
 
     pcb_t current_pcb = parent_task->parent_group;
     if ((clone_flags & CLONE_PARENT_SETTID_FLAG) && parent_tid == NULL)
@@ -1971,21 +1959,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
 
     new_task->fs      = parent_task->fs;
     new_task->fs_base = parent_task->fs_base;
-    if (current_pcb->linux_abi && (strstr(parent_task->name, "dpkg") != NULL || strstr(current_pcb->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(current_pcb->name, "xjapt") != NULL))
-    {
-        write_serial_fmt("[fsbase] fork-child parent=%s parent_tid=%llu child_pid=%llu child_fs=0x%llx parent_fs=0x%llx rip=0x%llx\n",
-                         parent_task->name, parent_task->tid, new_pcb->pid, new_task->fs_base, parent_task->fs_base,
-                         fork_frame.rcx);
-        write_serial_fmt("[forkctx] frame_rcx=0x%llx frame_rsp=0x%llx frame_r11=0x%llx child_rip=0x%llx child_rsp=0x%llx child_rflags=0x%llx cs=0x%llx ss=0x%llx ds=0x%llx es=0x%llx rax=0x%llx\n",
-                         fork_frame.rcx, fork_frame.rsp, fork_frame.r11, new_task->context0.rip,
-                         new_task->context0.rsp, new_task->context0.rflags, new_task->context0.cs,
-                         new_task->context0.ss, new_task->context0.ds, new_task->context0.es,
-                         new_task->context0.rax);
-        write_serial_fmt("[forkctx] regs rbx=0x%llx rbp=0x%llx r12=0x%llx r13=0x%llx r14=0x%llx r15=0x%llx rdi=0x%llx rsi=0x%llx rdx=0x%llx\n",
-                         new_task->context0.rbx, new_task->context0.rbp, new_task->context0.r12,
-                         new_task->context0.r13, new_task->context0.r14, new_task->context0.r15,
-                         new_task->context0.rdi, new_task->context0.rsi, new_task->context0.rdx);
-    }
 
     new_task->parent_group = new_pcb;
     new_task->tid = new_pcb->pid;
@@ -2040,17 +2013,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     restore_runtime_state(was_scheduler_enabled, is_sti);
 
     write_serial_fmt("FORK PID: %d\n", new_pcb->pid);
-    if (current_pcb->linux_abi && (strstr(parent_task->name, "dpkg") != NULL || strstr(current_pcb->name, "dpkg") != NULL || strstr(parent_task->name, "xjapt") != NULL || strstr(current_pcb->name, "xjapt") != NULL))
-    {
-        write_serial_fmt("[DEBUG-fork-ret] parent=%s pid=%llu child=%llu sti=%d sched=%d rip=0x%llx rsp=0x%llx\n",
-                         parent_task->name,
-                         current_pcb->pid,
-                         new_pcb->pid,
-                         (int)is_sti,
-                         (int)was_scheduler_enabled,
-                         fork_frame.rcx,
-                         fork_frame.rsp);
-    }
     if (!is_vfork) return new_pcb->pid;
 
     scheduler_yield();

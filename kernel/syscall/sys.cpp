@@ -71,18 +71,6 @@ static bool add_u64_i64(uint64_t base, int64_t offset, uint64_t *out)
     return true;
 }
 
-static bool trace_dpkg_task()
-{
-    tcb_t task = get_current_task();
-    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
-    return strstr(task->name, "dpkg") != NULL || strstr(task->name, "tar") != NULL ||
-           strstr(task->name, "sh") != NULL || strstr(task->name, "find") != NULL ||
-           strstr(task->name, "sort") != NULL || strstr(task->name, "grep") != NULL ||
-           strstr(task->parent_group->name, "dpkg") != NULL || strstr(task->parent_group->name, "tar") != NULL ||
-           strstr(task->parent_group->name, "sh") != NULL || strstr(task->parent_group->name, "find") != NULL ||
-           strstr(task->parent_group->name, "sort") != NULL || strstr(task->parent_group->name, "grep") != NULL;
-}
-
 static bool trace_xbps_wait_task()
 {
     tcb_t task = get_current_task();
@@ -766,21 +754,6 @@ sys_(close, int fd)
     if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle = (fd_file_handle *)queue_remove_at(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
-    if (trace_dpkg_task() && handle->node != NULL && (handle->node->type & file_pipe))
-    {
-        pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
-        pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-        pcb_t proc = get_current_task()->parent_group;
-        write_serial_fmt("[DEBUG-dpkg-pipe] pid=%d task=%s close fd=%d side=%s pipe=%llx ptr=%u r=%d w=%d\n",
-                         proc != NULL ? proc->pid : -1,
-                         get_current_task()->name,
-                         fd,
-                         spec != NULL && spec->write ? "w" : "r",
-                         (unsigned long long)pipe,
-                         pipe != NULL ? pipe->ptr : 0,
-                         pipe != NULL ? pipe->read_fds : -1,
-                         pipe != NULL ? pipe->write_fds : -1);
-    }
     vfs_close(handle->node);
     free(handle);
     return 0;
@@ -866,22 +839,6 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
         return (uint64_t)ret;
     }
     int64_t ret = write_from_user_buffer(handle, buffer, size, false);
-    if (trace_dpkg_task() && (handle->node->type & file_pipe))
-    {
-        pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
-        pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-        pcb_t proc = get_current_task()->parent_group;
-        write_serial_fmt("[DEBUG-dpkg-pipe] pid=%d task=%s write fd=%d req=%llu ret=%lld pipe=%llx ptr=%u r=%d w=%d\n",
-                         proc != NULL ? proc->pid : -1,
-                         get_current_task()->name,
-                         fd,
-                         (unsigned long long)size,
-                         (long long)ret,
-                         (unsigned long long)pipe,
-                         pipe != NULL ? pipe->ptr : 0,
-                         pipe != NULL ? pipe->read_fds : -1,
-                         pipe != NULL ? pipe->write_fds : -1);
-    }
     if (ret < 0) return SYSCALL_FAULT_((int)-ret);
     return (uint64_t)ret;
 }
@@ -912,22 +869,6 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
             if (pipe == NULL || pipe->write_fds != 0) return SYSCALL_FAULT_(EWOULDBLOCK);
         }
         int64_t ret = pipe_read_to_user_buffer(handle, buffer, size);
-        if (trace_dpkg_task())
-        {
-            pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
-            pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-            pcb_t proc = get_current_task()->parent_group;
-            write_serial_fmt("[DEBUG-dpkg-pipe] pid=%d task=%s read fd=%d req=%llu ret=%lld pipe=%llx ptr=%u r=%d w=%d\n",
-                             proc != NULL ? proc->pid : -1,
-                             get_current_task()->name,
-                             fd,
-                             (unsigned long long)size,
-                             (long long)ret,
-                             (unsigned long long)pipe,
-                             pipe != NULL ? pipe->ptr : 0,
-                             pipe != NULL ? pipe->read_fds : -1,
-                             pipe != NULL ? pipe->write_fds : -1);
-        }
         return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)
@@ -1555,20 +1496,11 @@ sys_(arch_prctl, uint64_t code, uint64_t addr)
     switch (code)
     {
     case ARCH_SET_FS:
-        if (thread != NULL && thread->parent_group != NULL && thread->parent_group->linux_abi &&
-            (strstr(thread->name, "dpkg") != NULL || strstr(thread->parent_group->name, "dpkg") != NULL || strstr(thread->name, "xjapt") != NULL || strstr(thread->parent_group->name, "xjapt") != NULL))
-            write_serial_fmt("[fsbase] arch_set_fs task=%s tid=%llu old=0x%llx hw_old=0x%llx new=0x%llx\n",
-                             thread->name, thread->tid, thread->fs_base, read_fsbase(), addr);
         thread->fs_base = addr;
         if (thread->parent_group != NULL && thread->parent_group->linux_abi && addr != 0) thread->fs = 0;
         write_fsbase(thread->fs_base);
         break;
-    case ARCH_GET_FS:
-        if (thread != NULL && thread->parent_group != NULL && thread->parent_group->linux_abi &&
-            (strstr(thread->name, "dpkg") != NULL || strstr(thread->parent_group->name, "dpkg") != NULL || strstr(thread->name, "xjapt") != NULL || strstr(thread->parent_group->name, "xjapt") != NULL))
-            write_serial_fmt("[fsbase] arch_get_fs task=%s tid=%llu tcb=0x%llx hw=0x%llx\n",
-                             thread->name, thread->tid, thread->fs_base, read_fsbase());
-        return thread->fs_base;
+    case ARCH_GET_FS: return thread->fs_base;
     // case ARCH_SET_GS:
     //     thread->gs_base = addr;
     //     write_gsbase(thread->gs_base);
