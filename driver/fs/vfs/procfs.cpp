@@ -632,6 +632,70 @@ static void append_flags(char *buf, size_t *pos, size_t buf_size, uint32_t edx, 
     }
 }
 
+static uint32_t cpu_cache_size_kb(uint32_t max_basic)
+{
+    (void)max_basic;
+    uint32_t max_ext = 0, ebx = 0, ecx = 0, edx = 0;
+    asm_cpuid(0x80000000, 0, &max_ext, &ebx, &ecx, &edx);
+    if (max_ext >= 0x80000006)
+    {
+        uint32_t eax6 = 0, ebx6 = 0, ecx6 = 0, edx6 = 0;
+        asm_cpuid(0x80000006, 0, &eax6, &ebx6, &ecx6, &edx6);
+        uint32_t l2_kb = (ecx6 >> 16) & 0xFFFF;
+        if (l2_kb != 0) return l2_kb;
+    }
+    return 0;
+}
+
+static inline uint64_t proc_rdtsc()
+{
+    uint32_t low = 0, high = 0;
+    asm volatile("rdtsc" : "=a"(low), "=d"(high));
+    return ((uint64_t)high << 32) | low;
+}
+
+static uint64_t cpu_mhz_sample()
+{
+    static uint64_t cached_mhz = 0;
+    if (cached_mhz != 0) return cached_mhz;
+
+    uint64_t start_ns = nanoTime();
+    if (start_ns == 0) return 0;
+
+    uint64_t start_tsc = proc_rdtsc();
+    uint64_t elapsed_ns = 0;
+    do {
+        elapsed_ns = nanoTime() - start_ns;
+    } while (elapsed_ns < 10000000ULL);
+
+    uint64_t elapsed_cycles = proc_rdtsc() - start_tsc;
+    cached_mhz = (elapsed_cycles + elapsed_ns / 2) / elapsed_ns;
+    return cached_mhz;
+}
+
+static uint64_t cpu_mhz_from_cpuid(uint32_t max_basic)
+{
+    if (max_basic >= 0x16)
+    {
+        uint32_t base_mhz = 0, max_mhz = 0, bus_mhz = 0, edx = 0;
+        asm_cpuid(0x16, 0, &base_mhz, &max_mhz, &bus_mhz, &edx);
+        if (base_mhz != 0) return base_mhz;
+    }
+
+    if (max_basic >= 0x15)
+    {
+        uint32_t denom = 0, numer = 0, crystal_hz = 0, edx = 0;
+        asm_cpuid(0x15, 0, &denom, &numer, &crystal_hz, &edx);
+        if (denom != 0 && numer != 0 && crystal_hz != 0)
+        {
+            uint64_t tsc_hz = ((uint64_t)crystal_hz * numer) / denom;
+            return (tsc_hz + 500000ULL) / 1000000ULL;
+        }
+    }
+
+    return 0;
+}
+
 char *proc_gen_cpuinfo(size_t *content_len)
 {
     size_t ncpus = xsi ? xsi->cpu_count : 1;
@@ -657,6 +721,10 @@ char *proc_gen_cpuinfo(size_t *content_len)
 
     uint32_t apic_id = (ebx1 >> 24) & 0xFF;
     uint32_t clflush_size = ((ebx1 >> 8) & 0xFF) * 8;
+    uint32_t cache_size_kb = cpu_cache_size_kb(max_basic);
+    uint64_t cpu_mhz = cpu_mhz_from_cpuid(max_basic);
+    if (cpu_mhz == 0) cpu_mhz = cpu_mhz_sample();
+    uint64_t bogomips_int = cpu_mhz * 2;
 
     char model_name[48];
     get_cpu_name(model_name);
@@ -671,8 +739,8 @@ char *proc_gen_cpuinfo(size_t *content_len)
             "model name\t: %s\n"
             "stepping\t: %u\n"
             "microcode\t: 0x0\n"
-            "cpu MHz\t\t: 2000.000\n"
-            "cache size\t: 4096 KB\n"
+            "cpu MHz\t\t: %llu.000\n"
+            "cache size\t: %u KB\n"
             "physical id\t: %lu\n"
             "siblings\t: %lu\n"
             "core id\t\t: %lu\n"
@@ -685,15 +753,15 @@ char *proc_gen_cpuinfo(size_t *content_len)
             "wp\t\t: yes\n"
             "flags\t\t: ",
             cpu, vendor, family, model, model_name, stepping,
-            cpu, ncpus, cpu, ncpus, lapic_id, lapic_id, max_basic);
+            cpu_mhz, cache_size_kb, cpu, ncpus, cpu, ncpus, lapic_id, lapic_id, max_basic);
         append_flags(buf, &pos, buf_size, edx1, ecx1);
         pos += snprintf(buf + pos, buf_size - pos,
-            "\nbogomips\t: 4000.00\n"
+            "\nbogomips\t: %llu.00\n"
             "clflush size\t: %u\n"
             "cache_alignment\t: 64\n"
             "address sizes\t: 48 bits physical, 48 bits virtual\n"
             "power management:\n\n",
-            clflush_size);
+            bogomips_int, clflush_size);
     }
     *content_len = pos;
     return buf;

@@ -208,6 +208,7 @@ static bool tmpfs_reserve(tmpfs_entry_t *entry, size_t want)
         if (new_capacity > ((size_t)-1) / 2) return false;
         new_capacity *= 2;
     }
+    // realloc failure leaves entry->data valid and unchanged; keep the old file contents.
     uint8_t *new_data = (uint8_t *)realloc(entry->data, new_capacity);
     if (new_data == NULL) return false;
     if (new_capacity > entry->capacity) {
