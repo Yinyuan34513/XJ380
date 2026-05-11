@@ -29,13 +29,37 @@
 #define EPOLL_CTL_DEL 2
 #define EPOLL_CTL_MOD 3
 
+#define EPOLL_CLOEXEC 02000000
+
 #include "krlibc.h"
+#include "lock_queue.h"
 
 struct pollfd {
     int   fd;
     short events;
     short revents;
 };
+
+typedef union epoll_data {
+    void    *ptr;
+    int      fd;
+    uint32_t u32;
+    uint64_t u64;
+} epoll_data_t;
+
+struct epoll_event {
+    uint32_t     events;
+    epoll_data_t data;
+} __attribute__((packed));
+
+typedef struct epoll_watch {
+    int                fd;
+    struct epoll_event event;
+} epoll_watch_t;
+
+typedef struct epoll_file {
+    lock_queue *watches;
+} epoll_file_t;
 
 struct pollfd *select_add(struct pollfd **comp, size_t *compIndex, size_t *complength, int fd,
                           int events);

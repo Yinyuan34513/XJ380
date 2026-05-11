@@ -15,6 +15,7 @@ out/draw.o
 .cache
 .config
 include/generated/
+kernel/build_config.h
 
 bash-*
 

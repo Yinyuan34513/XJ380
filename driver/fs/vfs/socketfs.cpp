@@ -252,7 +252,7 @@ int socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_pro
     fd_handle->node   = node;
     fd_handle->offset = 0;
     fd_handle->flags  = flags;
-    fd_handle->fd     = queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
+    fd_handle->fd     = queue_enqueue_lowest(get_current_task()->parent_group->file_open, fd_handle);
     if ((int)fd_handle->fd < 0) {
         free(fd_handle);
         socketfs_del(NULL, node);

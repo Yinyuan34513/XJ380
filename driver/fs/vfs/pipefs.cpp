@@ -169,25 +169,39 @@ bool pipefs_close(void *current) {
         return true;
     }
 
-    bool free_spec = false;
-    bool free_pipe = false;
+    bool free_spec  = false;
+    bool free_pipe  = false;
+    pipe_specific_t *other_spec = NULL;
 
     spin_lock(&pipe->lock);
     if (spec->write) {
         if (pipe->write_fds > 0) pipe->write_fds--;
         free_spec = (pipe->write_fds == 0);
-        if (pipe->write_fds == 0) pipe_wake_waiters(&pipe->blocking_read);
+        if (free_spec) {
+            pipe_wake_waiters(&pipe->blocking_read);
+            pipe->write_spec = NULL;
+            other_spec = pipe->read_spec;
+        }
     } else {
         if (pipe->read_fds > 0) pipe->read_fds--;
         free_spec = (pipe->read_fds == 0);
-        if (pipe->read_fds == 0) pipe_wake_waiters(&pipe->blocking_write);
+        if (free_spec) {
+            pipe_wake_waiters(&pipe->blocking_write);
+            pipe->read_spec = NULL;
+            other_spec = pipe->write_spec;
+        }
     }
     free_pipe = (pipe->write_fds == 0 && pipe->read_fds == 0);
-
     spin_unlock(&pipe->lock);
 
-    if (free_spec) free(spec);
+    if (free_spec) {
+        free(spec);
+    }
     if (free_pipe) {
+        if (other_spec) {
+            other_spec->info = NULL;
+            free(other_spec);
+        }
         free(pipe->buf);
         free(pipe);
     }

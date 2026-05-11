@@ -21,7 +21,8 @@ esac
 static_tarball=${XBPS_STATIC_TARBALL:-$bf_dir/xbps-static-latest.$host_arch-musl.tar.xz}
 static_uri=${XBPS_STATIC_URI:-http://repo-default.voidlinux.org/static/xbps-static-latest.$host_arch-musl.tar.xz}
 
-BOOTSTRAP_PKGS="${XBPS_BOOTSTRAP:-base-minimal bash coreutils util-linux ncurses tzdata which grep fastfetch gcc binutils make strace inetutils bind-utils curl}"
+default_bootstrap=${XBPS_BOOTSTRAP_BASE:-base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl}
+BOOTSTRAP_PKGS="${XBPS_BOOTSTRAP:-$default_bootstrap}"
 
 find_xbps_static()
 {

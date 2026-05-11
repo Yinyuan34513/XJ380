@@ -743,7 +743,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
-    idle_thread->cwd->refcount++;
     save_fpu_context(&idle_thread->fpu_context);
 
     get_current_cpu()->current_task = idle_thread;
@@ -756,7 +755,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
+#if CONFIG_KERNEL_BUSYBOX_ALIASES
     setup_busybox_vfs_aliases();
+#endif
     setup_xbps_vfs_aliases();
     tmpfs_setup();
     pipefs_setup();

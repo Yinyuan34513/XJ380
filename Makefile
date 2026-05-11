@@ -68,6 +68,8 @@ HOST_LLVM_AR ?= llvm-ar
 HOST_LLVM_RANLIB ?= llvm-ranlib
 IMAGE_TOOLCHAIN ?= clang
 IMAGE_PACKAGE_MANAGER ?= xbps
+IMAGE_BUSYBOX ?= 0
+KERNEL_BUSYBOX_ALIASES ?= $(IMAGE_BUSYBOX)
 BF_DIR ?= Bf
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
 HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
@@ -87,6 +89,7 @@ C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
 CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
+BUILD_CONFIG_HEADER := kernel/build_config.h
 STAGE_ELF_DEPS := tools/stage_elf_deps.sh
 STAGE_IMAGE_BASE := tools/stage_image_base.sh
 STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
@@ -94,8 +97,13 @@ STAGE_IMAGE_DPKG := tools/stage_image_dpkg.sh
 STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
 STAGE_XBPS_BOOTSTRAP := tools/stage_xbps_bootstrap.sh
 STAGE_PREPARED_ROOT := tools/stage_prepared_root.sh
+SELFHOST_USER_THIRD_PARTY := \
+	third_party/mbedtls-src \
+	third_party/litehtml \
+	third_party/libvterm
 XBPS_PREPARE_ROOT ?= Bf/xbps-root
-XBPS_BOOTSTRAP ?= base-minimal bash coreutils util-linux ncurses tzdata which grep fastfetch gcc binutils make strace inetutils bind-utils curl
+XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl
+XBPS_BOOTSTRAP ?= $(XBPS_BOOTSTRAP_BASE)
 APP_BUSYBOX := resources/apps/busybox
 APP_FASTFETCH := resources/apps/fastfetch
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
@@ -103,7 +111,18 @@ CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
 PWD := $(shell pwd)
 
-$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER)
+$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER) $(BUILD_CONFIG_HEADER)
+
+$(BUILD_CONFIG_HEADER): FORCE
+	@tmp="$@.tmp"; \
+	{ \
+		echo "#pragma once"; \
+		echo "#define CONFIG_KERNEL_BUSYBOX_ALIASES $(KERNEL_BUSYBOX_ALIASES)"; \
+	} > "$$tmp"; \
+	if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm -f "$$tmp"; fi
+
+.PHONY: FORCE
+FORCE:
 
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
@@ -167,21 +186,33 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd prepare stardustui.examples.copy
+.PHONY: clean format check gen.clangd prepare stage.selfhost-user stardustui.examples.copy
 
 clean:
 # 事实上直接删out/最简单了
-	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log
+	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log $(BUILD_CONFIG_HEADER)
 	@echo Removed build files.
 
 prepare:
 	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ] && [ -n "$(XBPS_BOOTSTRAP)" ]; then \
 		chmod -R u+rwX "$(XBPS_PREPARE_ROOT)" 2>/dev/null || true; \
 		rm -rf "$(XBPS_PREPARE_ROOT)"; \
-		XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
+		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
 	else \
 		echo "Nothing to prepare for IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER)"; \
 	fi
+
+stage.selfhost-user:
+	@rm -rf $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/include $(VDISK_ROOT)/apps/lib $(VDISK_ROOT)/apps/third_party $(VDISK_ROOT)/apps/liballoc-x86_64.a
+	@mkdir -p $(VDISK_ROOT)/apps/third_party
+	@cp -a ./user $(VDISK_ROOT)/apps/user
+	@cp -a ./include $(VDISK_ROOT)/apps/include
+	@cp -a ./lib $(VDISK_ROOT)/apps/lib
+	@cp -a ./liballoc-x86_64.a $(VDISK_ROOT)/apps/liballoc-x86_64.a
+	@for dir in $(SELFHOST_USER_THIRD_PARTY); do \
+		cp -a ./$$dir $(VDISK_ROOT)/apps/third_party/; \
+	done
+	@find $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/third_party -type d -name .git -prune -exec rm -rf {} +
 
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
@@ -243,6 +274,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/xjapt.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
+	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(VDISK_ROOT)"
 	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
 
 	@cp -a resources/musl/ld-musl-x86_64.so.1 $(VDISK_ROOT)/lib/ld-musl-x86_64.so.1
@@ -251,23 +283,23 @@ vdisk: all
 	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
 
 	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
-	@cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox
+	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
 	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
 	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
 	@cp ./1.c $(VDISK_ROOT)/apps/1.c
 	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
 	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
 	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "dpkg" ]; then \
-		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_DPKG) $(VDISK_ROOT); \
+		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_DPKG) $(VDISK_ROOT); \
 	elif [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
-		APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
+		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
 		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
 			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
 				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
 				echo "run: make prepare" >&2; \
 				exit 1; \
 			fi; \
-			sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
+			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
 		fi; \
 	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
 		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected dpkg, xbps, or none)" >&2; \

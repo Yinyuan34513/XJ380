@@ -2146,7 +2146,6 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     new_task->str_cwd = "/";
     new_task->cwd     = rootdir;
-    new_task->cwd->refcount++;
     new_task->window_count = 0;
 
     new_task->group_index = queue_enqueue(target_group->thread_queue, new_task);
@@ -2235,7 +2234,6 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-ENOENT;
     }
-    new_task->cwd->refcount++;
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;
@@ -2363,7 +2361,6 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-ENOENT;
     }
-    new_task->cwd->refcount++;
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;

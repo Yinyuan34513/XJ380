@@ -31,6 +31,7 @@ sys_(fchownat, int dirfd, char *pathname, uint32_t owner, uint32_t group, int fl
 sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
 sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
 sys_(utimes, char *filename, const struct timeval *times);
+sys_(close_range, uint32_t first, uint32_t last, uint32_t flags);
 
 static bool trace_fsbase_task(tcb_t task)
 {
@@ -133,13 +134,20 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_SENDMMSG: return "sendmmsg";
     case SYS_GETRANDOM: return "getrandom";
     case SYS_FUTEX: return "futex";
+    case SYS_EPOLL_CREATE: return "epoll_create";
+    case SYS_EPOLL_WAIT: return "epoll_wait";
+    case SYS_EPOLL_CTL: return "epoll_ctl";
+    case SYS_EPOLL_PWAIT: return "epoll_pwait";
+    case SYS_EPOLL_CREATE1: return "epoll_create1";
     case SYS_PRCTL: return "prctl";
     case SYS_ARCH_PRCTL: return "arch_prctl";
     case SYS_CHROOT: return "chroot";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
+    case SYS_FADVISE64: return "fadvise64";
     case SYS_SET_ROBUST_LIST: return "set_robust_list";
     case SYS_RSEQ: return "rseq";
     case SYS_CLONE3: return "clone3";
+    case SYS_CLOSE_RANGE: return "close_range";
     default: return "?";
     }
 }
@@ -263,8 +271,27 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_OPEN: regs->rax = (uint64_t)sys_open((char *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_CLOSE: regs->rax = (uint64_t)sys_close(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_CLOSE_RANGE: regs->rax = (uint64_t)sys_close_range(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_POLL:
         regs->rax = (uint64_t)sys_poll((struct pollfd *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_EPOLL_CREATE:
+        regs->rax = (uint64_t)sys_epoll_create(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_EPOLL_CREATE1:
+        regs->rax = (uint64_t)sys_epoll_create1(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_EPOLL_CTL:
+        regs->rax = (uint64_t)sys_epoll_ctl(regs->rdi, regs->rsi, regs->rdx,
+                                            (struct epoll_event *)regs->r10, 0, 0, regs);
+        break;
+    case SYS_EPOLL_WAIT:
+        regs->rax = (uint64_t)sys_epoll_wait(regs->rdi, (struct epoll_event *)regs->rsi, regs->rdx,
+                                             regs->r10, 0, 0, regs);
+        break;
+    case SYS_EPOLL_PWAIT:
+        regs->rax = (uint64_t)sys_epoll_pwait(regs->rdi, (struct epoll_event *)regs->rsi, regs->rdx,
+                                              regs->r10, (sigset_t *)regs->r8, regs->r9, regs);
         break;
     case SYS_SOCKET: regs->rax = (uint64_t)sys_socket(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_CONNECT:
@@ -332,6 +359,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_SYNC: regs->rax = (uint64_t)sys_sync(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_FSYNC: regs->rax = (uint64_t)sys_fsync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_FDATASYNC: regs->rax = (uint64_t)sys_fdatasync(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_FADVISE64:
+        regs->rax = (uint64_t)sys_fadvise64(regs->rdi, regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
+        break;
     case SYS_SYNC_FILE_RANGE:
         regs->rax = (uint64_t)sys_sync_file_range(regs->rdi, (int64_t)regs->rsi, (int64_t)regs->rdx, regs->r10, 0, 0, regs);
         break;

@@ -35,6 +35,10 @@
 #ifndef _BUILD_SETTINGS_H_
 #define _BUILD_SETTINGS_H_
 
+#if __has_include("build_config.h")
+#include "build_config.h"
+#endif
+
 // 编译版本类型
 #define DEBUG_VERSION 0
 #define RELEASE_VERSION 1
@@ -121,6 +125,10 @@
 
 #ifndef CONFIG_KERNEL_AHCI_QEMU_ACCEL
 #define CONFIG_KERNEL_AHCI_QEMU_ACCEL 1
+#endif
+
+#ifndef CONFIG_KERNEL_BUSYBOX_ALIASES
+#define CONFIG_KERNEL_BUSYBOX_ALIASES 1
 #endif
 
 #ifndef CONFIG_KERNEL_DESKTOP_DEBUG_INPUT_ECHO

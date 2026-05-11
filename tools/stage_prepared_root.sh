@@ -52,3 +52,37 @@ stage_entry()
 find "$src_root" -mindepth 1 | while IFS= read -r src; do
     stage_entry "$src"
 done
+
+mkdir -p "$dst_root/bin" "$dst_root/usr/bin"
+
+link_bin_tool()
+{
+    tool=$1
+    target=$2
+    dst=$dst_root/bin/$tool
+
+    if [ ! -x "$dst_root/$target" ]; then
+        return 0
+    fi
+    if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+        return 0
+    fi
+
+    rm -f "$dst"
+    ln -s "../$target" "$dst"
+}
+
+if [ -x "$dst_root/usr/bin/dash" ]; then
+    link_bin_tool sh usr/bin/dash
+elif [ -x "$dst_root/usr/bin/bash" ]; then
+    link_bin_tool sh usr/bin/bash
+fi
+
+for tool in \
+    awk basename cat chmod chgrp chown cp cut date dd df dirname du echo env false find grep \
+    gunzip gzip head install ln ls mkdir mv printf pwd readlink realpath rm rmdir sed sh sleep \
+    sort stat sync tail tar test touch tr true uname uniq wc which xargs
+do
+    [ "$tool" = "sh" ] && continue
+    link_bin_tool "$tool" "usr/bin/$tool"
+done

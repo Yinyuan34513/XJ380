@@ -109,6 +109,41 @@ size_t queue_enqueue(lock_queue *q, void *data)
     return new_node->index;
 }
 
+size_t queue_enqueue_lowest(lock_queue *q, void *data)
+{
+    if (q == NULL) return -1;
+    lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
+    if (!new_node) return -1;
+
+    new_node->data = data;
+    new_node->next = NULL;
+    new_node->prev = NULL;
+
+    spin_lock(&q->lock);
+    size_t id = 0;
+    while (true)
+    {
+        bool used = false;
+        for (lock_node *current = q->head; current != NULL; current = current->next)
+        {
+            if (current->index == id)
+            {
+                used = true;
+                break;
+            }
+        }
+        if (!used) break;
+        id++;
+    }
+
+    new_node->index = id;
+    queue_append_node(q, new_node);
+    if (id >= (size_t)q->next_index) q->next_index = (int)id + 1;
+    spin_unlock(&q->lock);
+
+    return new_node->index;
+}
+
 size_t queue_enqueue_ref(lock_queue *q, void *data, lock_node **out_node)
 {
     if (out_node != NULL) *out_node = NULL;
@@ -141,8 +176,18 @@ size_t queue_enqueue_id(lock_queue *q, void *data, size_t id)
     new_node->prev  = NULL;
 
     spin_lock(&q->lock);
+    for (lock_node *current = q->head; current != NULL; current = current->next)
+    {
+        if (current->index == id)
+        {
+            spin_unlock(&q->lock);
+            free(new_node);
+            return -1;
+        }
+    }
     new_node->index = id;
     queue_append_node(q, new_node);
+    if (id >= (size_t)q->next_index) q->next_index = (int)id + 1;
     spin_unlock(&q->lock);
 
     return new_node->index;

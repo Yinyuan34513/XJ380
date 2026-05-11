@@ -8,6 +8,7 @@ fi
 
 root=$1
 busybox=${APP_BUSYBOX:-resources/apps/busybox}
+image_busybox=${IMAGE_BUSYBOX:-1}
 repo=${XBPS_REPOSITORY:-http://mirrors.tuna.tsinghua.edu.cn/voidlinux/current}
 bf_dir=${BF_DIR:-Bf}
 host_arch=${XBPS_STATIC_ARCH:-$(uname -m)}
@@ -178,6 +179,11 @@ stage_xbps_triggers()
 
 stage_busybox_links()
 {
+    if [ "$image_busybox" != "1" ]; then
+        echo "skip busybox applet staging (IMAGE_BUSYBOX=$image_busybox)"
+        return
+    fi
+
     if [ -e "$busybox" ]; then
         copy_to "$busybox" "$root/apps/busybox"
         for app in \

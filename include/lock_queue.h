@@ -35,6 +35,7 @@ lock_queue *queue_init();
  * @return 该节点的索引
  */
 size_t queue_enqueue(lock_queue *q, void *data);
+size_t queue_enqueue_lowest(lock_queue *q, void *data);
 
 /**
  * 入队并返回节点句柄

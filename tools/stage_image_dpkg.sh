@@ -9,6 +9,7 @@ fi
 root=$1
 stage_deps=${STAGE_ELF_DEPS:-tools/stage_elf_deps.sh}
 busybox=${APP_BUSYBOX:-resources/apps/busybox}
+image_busybox=${IMAGE_BUSYBOX:-1}
 
 find_real()
 {
@@ -137,6 +138,11 @@ stage_dpkg_data()
 
 stage_busybox_links()
 {
+    if [ "$image_busybox" != "1" ]; then
+        echo "skip busybox applet staging (IMAGE_BUSYBOX=$image_busybox)"
+        return
+    fi
+
     require_host_file "$busybox"
     copy_to "$busybox" "$root/apps/busybox"
 

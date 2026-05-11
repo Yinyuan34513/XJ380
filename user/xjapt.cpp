@@ -729,6 +729,35 @@ static bool file_exists_nonempty(const char *path)
     return path != NULL && stat(path, &st) == 0 && st.st_size > 0;
 }
 
+static const char *find_tool_path(const char *tool)
+{
+    static char path[128];
+    const char *dirs[] = {"/bin", "/usr/bin", "/apps", NULL};
+    for (int i = 0; dirs[i] != NULL; i++) {
+        snprintf(path, sizeof(path), "%s/%s", dirs[i], tool);
+        if (access(path, X_OK) == 0) return path;
+    }
+    return NULL;
+}
+
+static int run_tool_or_busybox(const char *tool, const char *arg1, const char *arg2, const char *arg3,
+                               char *const busybox_args[])
+{
+    const char *tool_path = find_tool_path(tool);
+    if (tool_path != NULL) {
+        char *tool_args[] = {
+            (char *)tool_path,
+            (char *)arg1,
+            (char *)arg2,
+            (char *)arg3,
+            NULL,
+        };
+        return run_child(tool_args);
+    }
+    if (access("/apps/busybox", X_OK) == 0) return run_child(busybox_args);
+    return -1;
+}
+
 static char *join_url(const char *base, const char *name)
 {
     size_t bl = strlen(base);
@@ -751,8 +780,8 @@ static bool download_file(const char *url, const char *out_path)
     fprintf(stderr, "xjapt: download %s\n", url);
     if (starts_with(url, "http://")) return download_http_file(url, out_path);
 
-    char *argv[] = {(char *)"/apps/busybox", (char *)"wget", (char *)"-O", (char *)out_path, (char *)url, NULL};
-    int ret = run_child(argv);
+    char *busybox_argv[] = {(char *)"/apps/busybox", (char *)"wget", (char *)"-O", (char *)out_path, (char *)url, NULL};
+    int ret = run_tool_or_busybox("wget", "-O", out_path, url, busybox_argv);
     if (ret != 0) {
         fprintf(stderr, "xjapt: wget failed status=%d url=%s\n", ret, url);
         return false;
@@ -771,8 +800,8 @@ static bool fetch_packages_index(const char *base_url, const char *plain_path)
     snprintf(gz_path, sizeof(gz_path), "%s.gz", plain_path);
     if (file_exists_nonempty(gz_path)) {
         xjapt_serialf("xjapt: use cached index %s\n", gz_path);
-        char *argv[] = {(char *)"/apps/busybox", (char *)"gunzip", (char *)"-f", gz_path, NULL};
-        int ret = run_child(argv);
+        char *busybox_argv[] = {(char *)"/apps/busybox", (char *)"gunzip", (char *)"-f", gz_path, NULL};
+        int ret = run_tool_or_busybox("gunzip", "-f", gz_path, NULL, busybox_argv);
         xjapt_serialf("xjapt: gunzip ret=%d\n", ret);
         return ret == 0;
     }
@@ -783,8 +812,8 @@ static bool fetch_packages_index(const char *base_url, const char *plain_path)
     free(url);
     if (ok) {
         xjapt_serial("xjapt: gunzip start\n");
-        char *argv[] = {(char *)"/apps/busybox", (char *)"gunzip", (char *)"-f", gz_path, NULL};
-        int ret = run_child(argv);
+        char *busybox_argv[] = {(char *)"/apps/busybox", (char *)"gunzip", (char *)"-f", gz_path, NULL};
+        int ret = run_tool_or_busybox("gunzip", "-f", gz_path, NULL, busybox_argv);
         xjapt_serialf("xjapt: gunzip ret=%d\n", ret);
         if (ret != 0) {
             fprintf(stderr, "xjapt: gunzip failed status=%d\n", ret);

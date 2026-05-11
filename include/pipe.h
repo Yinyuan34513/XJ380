@@ -20,6 +20,9 @@ typedef struct pipe_info {
 
     task_block_list_t blocking_read;
     task_block_list_t blocking_write;
+
+    struct pipe_specific *read_spec;
+    struct pipe_specific *write_spec;
 } pipe_info_t;
 
 typedef struct pipe_specific pipe_specific_t;

@@ -536,8 +536,11 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
         current = vfs_child_find(current, buf);
         if (current == NULL) { goto err; }
 
+        bool final_component_had_handle = current->handle != NULL;
         do_update(current);
         bool is_final_component = save_ptr == NULL || *save_ptr == '\0';
+        if (is_final_component && !final_component_had_handle && current->handle != NULL && current->refcount == 1)
+            current->refcount = 0;
         if (is_final_component && !follow_final_symlink) break;
         if (current->type & file_symlink) {
             if (!current->parent) { goto err; }
@@ -580,13 +583,13 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
             }
             if (!target) goto err;
 
-            target->refcount++;
             current = target;
             continue;
         }
     }
 
     free(path);
+    if (current != NULL) current->refcount++;
     return current;
 err:
     free(path);
@@ -621,7 +624,6 @@ void vfs_deinit() {
 fd_file_handle *fd_dup(fd_file_handle *src) {
     fd_file_handle *nw = (fd_file_handle *)malloc(sizeof(fd_file_handle));
     // not_null_assets(new, "fd_dup out of memory.");
-    src->node->refcount++;
     nw->node       = src->node;
     nw->offset     = src->offset;
     nw->flags      = src->flags;
@@ -629,6 +631,7 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
     vfs_node_t node = nw->node;
     if ((node->type & (file_ptmx | file_pts)) && fs_callbacks[node->fsid]->dup != (void *)empty_func) {
         fs_callbacks[node->fsid]->dup(node);
+        node->refcount++;
         return nw;
     }
     if ((node->type & file_pipe) && node->handle != NULL) {
@@ -644,6 +647,7 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
             spin_unlock(&pipe->lock);
         }
     }
+    node->refcount++;
     return nw;
 }
 
@@ -722,6 +726,28 @@ errno_t vfs_close(vfs_node_t node) {
         return VFS_STATUS_SUCCESS;
     }
 
+    if (node->type & file_epoll) {
+        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
+        epoll_file_t *ep = (epoll_file_t *)node->handle;
+        if (ep != NULL) {
+            if (ep->watches != NULL) {
+                while (true) {
+                    epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
+                    if (watch == NULL) break;
+                    free(watch);
+                }
+                queue_destroy(ep->watches);
+            }
+            free(ep);
+            node->handle = NULL;
+        }
+        if (node->parent == NULL) {
+            free(node->name);
+            free(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
     if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
     if ((node->type & file_socket) && node->refcount > 0) {
@@ -735,6 +761,9 @@ errno_t vfs_close(vfs_node_t node) {
     {
         return VFS_STATUS_SUCCESS;
     } 
+    if (!(node->type & file_delete) && node->refcount > 0) {
+        return VFS_STATUS_SUCCESS;
+    }
     if (node->type & file_delete && node->refcount <= 0) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;

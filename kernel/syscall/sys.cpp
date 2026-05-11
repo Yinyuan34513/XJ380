@@ -27,6 +27,8 @@ static constexpr size_t USER_PATH_MAX        = 4096UL;
 static constexpr size_t USER_IOV_MAX         = 1024UL;
 static constexpr size_t USER_POLL_MAX        = FD_SETSIZE;
 
+static void epoll_close_node(vfs_node_t node);
+
 static bool checked_add_size(size_t a, size_t b, size_t *out)
 {
     if (out == NULL) return false;
@@ -74,7 +76,11 @@ static bool trace_dpkg_task()
     tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
     return strstr(task->name, "dpkg") != NULL || strstr(task->name, "tar") != NULL ||
-           strstr(task->parent_group->name, "dpkg") != NULL || strstr(task->parent_group->name, "tar") != NULL;
+           strstr(task->name, "sh") != NULL || strstr(task->name, "find") != NULL ||
+           strstr(task->name, "sort") != NULL || strstr(task->name, "grep") != NULL ||
+           strstr(task->parent_group->name, "dpkg") != NULL || strstr(task->parent_group->name, "tar") != NULL ||
+           strstr(task->parent_group->name, "sh") != NULL || strstr(task->parent_group->name, "find") != NULL ||
+           strstr(task->parent_group->name, "sort") != NULL || strstr(task->parent_group->name, "grep") != NULL;
 }
 
 static bool trace_xbps_wait_task()
@@ -724,7 +730,7 @@ next:
     fd_handle->node   = node;
     fd_handle->flags  = flags;
     fd_handle->node->flags = flags;
-    int index         = (int)lock_queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
+    int index         = (int)queue_enqueue_lowest(get_current_task()->parent_group->file_open, fd_handle);
     fd_handle->fd     = index;
     if (index == -1)
     {
@@ -764,7 +770,9 @@ sys_(close, int fd)
     {
         pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
         pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-        write_serial_fmt("[DEBUG-dpkg-pipe] task=%s close fd=%d side=%s pipe=%llx ptr=%u r=%d w=%d\n",
+        pcb_t proc = get_current_task()->parent_group;
+        write_serial_fmt("[DEBUG-dpkg-pipe] pid=%d task=%s close fd=%d side=%s pipe=%llx ptr=%u r=%d w=%d\n",
+                         proc != NULL ? proc->pid : -1,
                          get_current_task()->name,
                          fd,
                          spec != NULL && spec->write ? "w" : "r",
@@ -775,6 +783,66 @@ sys_(close, int fd)
     }
     vfs_close(handle->node);
     free(handle);
+    return 0;
+}
+
+sys_(close_range, uint32_t first, uint32_t last, uint32_t flags)
+{
+    if ((flags & ~(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC)) != 0) return SYSCALL_FAULT_(EINVAL);
+    if ((flags & CLOSE_RANGE_UNSHARE) != 0) return SYSCALL_FAULT_(ENOSYS);
+    if (first > last) return SYSCALL_FAULT_(EINVAL);
+
+    pcb_t process = get_current_task()->parent_group;
+    if (process == NULL || process->file_open == NULL) return SYSCALL_FAULT_(EBADF);
+
+    const bool cloexec = (flags & CLOSE_RANGE_CLOEXEC) != 0;
+    lock_queue *queue = process->file_open;
+    size_t count = 0;
+
+    spin_lock(&queue->lock);
+    for (lock_node *node = queue->head; node != NULL; node = node->next)
+    {
+        if (node->index >= first && node->index <= last) count++;
+    }
+
+    size_t *fds = NULL;
+    if (count != 0)
+    {
+        fds = (size_t *)malloc(sizeof(size_t) * count);
+        if (fds == NULL)
+        {
+            spin_unlock(&queue->lock);
+            return SYSCALL_FAULT_(ENOMEM);
+        }
+
+        size_t i = 0;
+        for (lock_node *node = queue->head; node != NULL; node = node->next)
+        {
+            if (node->index >= first && node->index <= last) fds[i++] = node->index;
+        }
+    }
+    spin_unlock(&queue->lock);
+
+    for (size_t i = 0; i < count; i++)
+    {
+        fd_file_handle *handle = (fd_file_handle *)queue_get(queue, fds[i]);
+        if (handle == NULL) continue;
+
+        if (cloexec)
+        {
+            handle->flags |= O_CLOEXEC;
+            continue;
+        }
+
+        handle = (fd_file_handle *)queue_remove_at(queue, fds[i]);
+        if (handle != NULL)
+        {
+            vfs_close(handle->node);
+            free(handle);
+        }
+    }
+
+    free(fds);
     return 0;
 }
 
@@ -802,7 +870,9 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     {
         pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
         pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-        write_serial_fmt("[DEBUG-dpkg-pipe] task=%s write fd=%d req=%llu ret=%lld pipe=%llx ptr=%u r=%d w=%d\n",
+        pcb_t proc = get_current_task()->parent_group;
+        write_serial_fmt("[DEBUG-dpkg-pipe] pid=%d task=%s write fd=%d req=%llu ret=%lld pipe=%llx ptr=%u r=%d w=%d\n",
+                         proc != NULL ? proc->pid : -1,
                          get_current_task()->name,
                          fd,
                          (unsigned long long)size,
@@ -846,7 +916,9 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
         {
             pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
             pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-            write_serial_fmt("[DEBUG-dpkg-pipe] task=%s read fd=%d req=%llu ret=%lld pipe=%llx ptr=%u r=%d w=%d\n",
+            pcb_t proc = get_current_task()->parent_group;
+            write_serial_fmt("[DEBUG-dpkg-pipe] pid=%d task=%s read fd=%d req=%llu ret=%lld pipe=%llx ptr=%u r=%d w=%d\n",
+                             proc != NULL ? proc->pid : -1,
                              get_current_task()->name,
                              fd,
                              (unsigned long long)size,
@@ -2408,7 +2480,6 @@ static uint64_t set_current_cwd(vfs_node_t node, char *normalized_path)
     tcb_t current = get_current_task();
     if (current->cwd != NULL) vfs_close(current->cwd);
     current->cwd = node;
-    current->cwd->refcount++;
 
     if (current->str_cwd != NULL) free(current->str_cwd);
     current->str_cwd = normalized_path;
@@ -2476,6 +2547,7 @@ sys_(fchdir, int fd)
     char *normalized_path = vfs_get_fullpath(handle->node);
     if (unlikely(normalized_path == NULL)) return SYSCALL_FAULT_(ENOENT);
 
+    handle->node->refcount++;
     return set_current_cwd(handle->node, normalized_path);
 }
 
@@ -2546,6 +2618,267 @@ static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t tim
 
     if (!ready && sigexit) return (size_t)-EINTR;
     return ready;
+}
+
+static epoll_file_t *epoll_from_fd(int epfd)
+{
+    if (epfd < 0) return NULL;
+    pcb_t process = get_current_task()->parent_group;
+    if (process == NULL || process->file_open == NULL) return NULL;
+
+    fd_file_handle *handle = (fd_file_handle *)queue_get(process->file_open, epfd);
+    if (handle == NULL || handle->node == NULL || !(handle->node->type & file_epoll)) return NULL;
+    return (epoll_file_t *)handle->node->handle;
+}
+
+static epoll_watch_t *epoll_find_watch(epoll_file_t *ep, int fd)
+{
+    if (ep == NULL || ep->watches == NULL) return NULL;
+
+    epoll_watch_t *found = NULL;
+    spin_lock(&ep->watches->lock);
+    queue_foreach(ep->watches, node)
+    {
+        epoll_watch_t *watch = (epoll_watch_t *)node->data;
+        if (watch != NULL && watch->fd == fd)
+        {
+            found = watch;
+            break;
+        }
+    }
+    spin_unlock(&ep->watches->lock);
+    return found;
+}
+
+static int epoll_poll_fd(int fd, uint32_t events, uint32_t *revents)
+{
+    if (revents == NULL) return -EINVAL;
+    *revents = 0;
+    if (fd < 0) return -EBADF;
+
+    pcb_t process = get_current_task()->parent_group;
+    if (process == NULL || process->file_open == NULL) return -EBADF;
+
+    fd_file_handle *handle = (fd_file_handle *)queue_get(process->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return -EBADF;
+
+    extern vfs_callback_t fs_callbacks[256];
+    vfs_node_t node = handle->node;
+    if (fs_callbacks[node->fsid]->poll == (void *)empty)
+    {
+        if (events & (EPOLLIN | EPOLLOUT | EPOLLRDNORM | EPOLLWRNORM))
+        {
+            if (events & (EPOLLIN | EPOLLRDNORM)) *revents |= EPOLLIN;
+            if (events & (EPOLLOUT | EPOLLWRNORM)) *revents |= EPOLLOUT;
+        }
+        return 0;
+    }
+
+    uint32_t wanted = events;
+    if (events & EPOLLRDNORM) wanted |= EPOLLIN;
+    if (events & EPOLLWRNORM) wanted |= EPOLLOUT;
+    *revents = vfs_poll(node, wanted);
+    return 0;
+}
+
+static void epoll_free_file(epoll_file_t *ep)
+{
+    if (ep == NULL) return;
+    if (ep->watches != NULL)
+    {
+        while (true)
+        {
+            epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
+            if (watch == NULL) break;
+            free(watch);
+        }
+        queue_destroy(ep->watches);
+    }
+    free(ep);
+}
+
+static void epoll_close_node(vfs_node_t node)
+{
+    if (node == NULL || !(node->type & file_epoll)) return;
+    epoll_free_file((epoll_file_t *)node->handle);
+    node->handle = NULL;
+}
+
+static uint64_t epoll_create_common(int flags)
+{
+    if ((flags & ~EPOLL_CLOEXEC) != 0) return SYSCALL_FAULT_(EINVAL);
+
+    epoll_file_t *ep = (epoll_file_t *)calloc(1, sizeof(epoll_file_t));
+    if (ep == NULL) return SYSCALL_FAULT_(ENOMEM);
+    ep->watches = queue_init();
+    if (ep->watches == NULL)
+    {
+        free(ep);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    vfs_node_t node = vfs_node_alloc(NULL, "anon_epoll");
+    if (node == NULL)
+    {
+        epoll_free_file(ep);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+    node->type = file_epoll;
+    node->handle = ep;
+    node->fsid = 0;
+    node->size = 0;
+
+    fd_file_handle *fd_handle = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+    if (fd_handle == NULL)
+    {
+        epoll_close_node(node);
+        free(node->name);
+        free(node);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+    fd_handle->node = node;
+    fd_handle->flags = flags & EPOLL_CLOEXEC ? O_CLOEXEC : 0;
+    node->flags = fd_handle->flags;
+
+    int fd = (int)queue_enqueue_lowest(get_current_task()->parent_group->file_open, fd_handle);
+    if (fd < 0)
+    {
+        epoll_close_node(node);
+        free(node->name);
+        free(node);
+        free(fd_handle);
+        return SYSCALL_FAULT_(EMFILE);
+    }
+
+    fd_handle->fd = fd;
+    return fd;
+}
+
+sys_(epoll_create, int size)
+{
+    if (size <= 0) return SYSCALL_FAULT_(EINVAL);
+    return epoll_create_common(0);
+}
+
+sys_(epoll_create1, int flags)
+{
+    return epoll_create_common(flags);
+}
+
+sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event)
+{
+    epoll_file_t *ep = epoll_from_fd(epfd);
+    if (ep == NULL) return SYSCALL_FAULT_(EBADF);
+    if (fd < 0 || fd == epfd) return SYSCALL_FAULT_(EINVAL);
+
+    pcb_t process = get_current_task()->parent_group;
+    fd_file_handle *target = (fd_file_handle *)queue_get(process->file_open, fd);
+    if (target == NULL || target->node == NULL) return SYSCALL_FAULT_(EBADF);
+
+    struct epoll_event kev = {};
+    if (op != EPOLL_CTL_DEL)
+    {
+        if (event == NULL) return SYSCALL_FAULT_(EFAULT);
+        if (!copy_from_user_pagedir(current_user_pagedir(), &kev, event, sizeof(kev)))
+            return SYSCALL_FAULT_(EFAULT);
+    }
+
+    epoll_watch_t *watch = epoll_find_watch(ep, fd);
+    switch (op)
+    {
+    case EPOLL_CTL_ADD:
+        if (watch != NULL) return SYSCALL_FAULT_(EEXIST);
+        watch = (epoll_watch_t *)calloc(1, sizeof(epoll_watch_t));
+        if (watch == NULL) return SYSCALL_FAULT_(ENOMEM);
+        watch->fd = fd;
+        watch->event = kev;
+        if (lock_queue_enqueue(ep->watches, watch) == (size_t)-1)
+        {
+            free(watch);
+            return SYSCALL_FAULT_(ENOMEM);
+        }
+        return 0;
+    case EPOLL_CTL_MOD:
+        if (watch == NULL) return SYSCALL_FAULT_(ENOENT);
+        watch->event = kev;
+        return 0;
+    case EPOLL_CTL_DEL:
+        if (watch == NULL) return SYSCALL_FAULT_(ENOENT);
+        {
+            spin_lock(&ep->watches->lock);
+            lock_node *found_node = NULL;
+            queue_foreach(ep->watches, node)
+            {
+                epoll_watch_t *candidate = (epoll_watch_t *)node->data;
+                if (candidate != NULL && candidate->fd == fd)
+                {
+                    found_node = node;
+                    break;
+                }
+            }
+            spin_unlock(&ep->watches->lock);
+            epoll_watch_t *removed = (epoll_watch_t *)queue_remove_node(ep->watches, found_node);
+            free(removed);
+        }
+        return 0;
+    default:
+        return SYSCALL_FAULT_(EINVAL);
+    }
+}
+
+sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeout)
+{
+    epoll_file_t *ep = epoll_from_fd(epfd);
+    if (ep == NULL) return SYSCALL_FAULT_(EBADF);
+    if (events == NULL || maxevents <= 0) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t start_time = nanoTime();
+    uint64_t timeout_ns = timeout < 0 ? (uint64_t)-1 : (uint64_t)timeout * 1000000ULL;
+    int ready = 0;
+
+    do
+    {
+        ready = 0;
+        spin_lock(&ep->watches->lock);
+        queue_foreach(ep->watches, node)
+        {
+            if (ready >= maxevents) break;
+            epoll_watch_t *watch = (epoll_watch_t *)node->data;
+            if (watch == NULL) continue;
+
+            uint32_t revents = 0;
+            int poll_ret = epoll_poll_fd(watch->fd, watch->event.events, &revents);
+            if (poll_ret < 0) revents = EPOLLERR;
+            revents &= watch->event.events | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
+            if (revents == 0) continue;
+
+            struct epoll_event out = watch->event;
+            out.events = revents;
+            if (!copy_to_user_pagedir(current_user_pagedir(), &events[ready], &out, sizeof(out)))
+            {
+                spin_unlock(&ep->watches->lock);
+                return SYSCALL_FAULT_(EFAULT);
+            }
+            ready++;
+        }
+        spin_unlock(&ep->watches->lock);
+
+        if (ready > 0 || timeout == 0) break;
+
+        open_interrupt;
+        scheduler_yield();
+        __asm__ volatile("pause");
+        close_interrupt;
+    } while (timeout < 0 || (nanoTime() - start_time) < timeout_ns);
+
+    return ready;
+}
+
+sys_(epoll_pwait, int epfd, struct epoll_event *events, int maxevents, int timeout, sigset_t *sigmask, size_t sigsetsize)
+{
+    (void)sigmask;
+    (void)sigsetsize;
+    return sys_epoll_wait(epfd, events, maxevents, timeout, 0, 0, regs);
 }
 
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
@@ -2642,7 +2975,14 @@ sys_(dup2, int fd, int newfd)
 
     fd_file_handle *new_handle = fd_dup(handle);
     if (new_handle == NULL) return SYSCALL_FAULT_(ENOMEM);
-    queue_enqueue_id(get_current_task()->parent_group->file_open, new_handle, newfd);
+    new_handle->flags &= ~O_CLOEXEC;
+    new_handle->fd = newfd;
+    if (queue_enqueue_id(get_current_task()->parent_group->file_open, new_handle, newfd) == (size_t)-1)
+    {
+        vfs_close(new_handle->node);
+        free(new_handle);
+        return SYSCALL_FAULT_(EBADF);
+    }
     return newfd;
 }
 
@@ -2655,10 +2995,10 @@ sys_(dup3, int fd, int newfd, int flags)
     if (ret < 0) return ret;
 
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, newfd);
-    if (handle != NULL && (flags & O_CLOEXEC))
+    if (handle != NULL)
     {
-        handle->flags |= O_CLOEXEC;
-        handle->node->flags |= O_CLOEXEC;
+        if (flags & O_CLOEXEC) handle->flags |= O_CLOEXEC;
+        else handle->flags &= ~O_CLOEXEC;
     }
     return ret;
 }
@@ -2669,7 +3009,9 @@ sys_(dup, int fd)
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
     fd_file_handle *new_handle = fd_dup(handle);
-    return new_handle->fd      = queue_enqueue(get_current_task()->parent_group->file_open, new_handle);
+    if (new_handle == NULL) return SYSCALL_FAULT_(ENOMEM);
+    new_handle->flags &= ~O_CLOEXEC;
+    return new_handle->fd      = queue_enqueue_lowest(get_current_task()->parent_group->file_open, new_handle);
 }
 
 static int fd_dup_from(fd_file_handle *handle, int minfd, bool cloexec)
@@ -2686,6 +3028,12 @@ static int fd_dup_from(fd_file_handle *handle, int minfd, bool cloexec)
     while (queue_get(queue, (size_t)newfd) != NULL) newfd++;
 
     new_handle->fd = queue_enqueue_id(queue, new_handle, (size_t)newfd);
+    if (new_handle->fd == (size_t)-1)
+    {
+        vfs_close(new_handle->node);
+        free(new_handle);
+        return -EBADF;
+    }
     return newfd;
 }
 
@@ -2699,16 +3047,8 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
     {
     case F_GETFD: return (handle->flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
     case F_SETFD:
-        if (arg & FD_CLOEXEC)
-        {
-            handle->flags |= O_CLOEXEC;
-            handle->node->flags |= O_CLOEXEC;
-        }
-        else
-        {
-            handle->flags &= ~O_CLOEXEC;
-            handle->node->flags &= ~O_CLOEXEC;
-        }
+        if (arg & FD_CLOEXEC) handle->flags |= O_CLOEXEC;
+        else handle->flags &= ~O_CLOEXEC;
         return 0;
     case F_DUPFD_CLOEXEC:
         return fd_dup_from(handle, (int)arg, true);
@@ -3334,14 +3674,7 @@ sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
     uint64_t ret = (flags & AT_SYMLINK_NOFOLLOW) ?
                    lstat_kernel_path(resolved, &kstat) :
                    stat_kernel_path(resolved, &kstat);
-    if (busybox_debug_current_linux_abi())
-    {
-        write_serial_fmt("[busybox-debug] newfstatat dirfd=%d path=%s flags=0x%llx ret=%lld\n",
-                         dirfd,
-                         resolved,
-                         (unsigned long long)flags,
-                         (long long)ret);
-    }
+
     free(resolved);
     if ((int64_t)ret < 0) return ret;
     return copy_stat_to_user(buf, &kstat);
@@ -3410,14 +3743,12 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     vfs_node_t node_input = vfs_node_alloc(pipefs_root, buf);
     node_input->type      = file_pipe;
     node_input->fsid      = pipefs_id;
-    node_input->refcount++;
     pipefs_root->mode = 0700;
 
     sprintf(buf, "pipe%d", pipefd_id++);
     vfs_node_t node_output = vfs_node_alloc(pipefs_root, buf);
     node_output->type      = file_pipe;
     node_output->fsid      = pipefs_id;
-    node_output->refcount++;
     pipefs_root->mode = 0700;
 
     pipe_info_t *info = (pipe_info_t *)malloc(sizeof(pipe_info_t));
@@ -3438,6 +3769,9 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     write_spec->info            = info;
     write_spec->node            = node_output;
 
+    info->read_spec  = read_spec;
+    info->write_spec = write_spec;
+
     node_input->handle  = read_spec;
     node_output->handle = write_spec;
 
@@ -3447,14 +3781,14 @@ sys_(pipe2, int *pipefd, uint64_t flags)
     handle_in->offset         = 0;
     handle_in->flags          = (flags & ~O_ACCMODE) | O_RDONLY;
     handle_in->node->flags    = handle_in->flags;
-    handle_in->fd             = queue_enqueue(queue, handle_in);
+    handle_in->fd             = queue_enqueue_lowest(queue, handle_in);
 
     fd_file_handle *handle_out = (fd_file_handle*)malloc(sizeof(fd_file_handle));
     handle_out->node           = node_output;
     handle_out->offset         = 0;
     handle_out->flags          = (flags & ~O_ACCMODE) | O_WRONLY;
     handle_out->node->flags    = handle_out->flags;
-    handle_out->fd             = queue_enqueue(queue, handle_out);
+    handle_out->fd             = queue_enqueue_lowest(queue, handle_out);
 
     int kpipefd[2] = {(int)handle_in->fd, (int)handle_out->fd};
     if (kernel_pipefd)
@@ -4277,6 +4611,19 @@ sys_(fdatasync, int fd)
     return sys_fsync(fd, 0, 0, 0, 0, 0, regs);
 }
 
+sys_(fadvise64, int fd, uint64_t offset, uint64_t len, int advice)
+{
+    (void)offset;
+    (void)len;
+
+    if (fd < 0) return SYSCALL_FAULT_(EBADF);
+    if (advice < 0 || advice > 5) return SYSCALL_FAULT_(EINVAL);
+
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    return 0;
+}
+
 sys_(sync_file_range, int fd, int64_t offset, int64_t nbytes, uint64_t flags)
 {
     (void)offset;
@@ -4775,12 +5122,11 @@ sys_(fsopen, char *fsname, uint32_t flags)
     vfs_node_t node = vfs_node_alloc(NULL, NULL);
     node->type      = file_none;
     node->handle    = filesystem;
-    node->refcount++;
     node->size = 0;
 
     fd_file_handle *handle =  (fd_file_handle*)calloc(1, sizeof(fd_file_handle));
     handle->node           = node;
-    handle->fd             = queue_enqueue(get_current_task()->parent_group->file_open, handle);
+    handle->fd             = queue_enqueue_lowest(get_current_task()->parent_group->file_open, handle);
     handle->flags          = flags;
     return handle->fd;
 }

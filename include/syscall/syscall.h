@@ -359,15 +359,19 @@
 #define SYS_TIME 201
 #define SYS_FUTEX 202
 #define SYS_SCHED_GETAFFINITY 204
+#define SYS_EPOLL_CREATE 213
 #define SYS_GETDENTS64 217
 
 #define SYS_SET_TID_ADDRESS 218
+#define SYS_FADVISE64 221
 
 #define SYS_CLOCK_GETTIME 228
 #define SYS_CLOCK_GETRES 229
 #define SYS_CLOCK_NANOSLEEP 230
 
 #define SYS_EXIT_GROUP 231
+#define SYS_EPOLL_WAIT 232
+#define SYS_EPOLL_CTL 233
 #define SYS_TGKILL 234
 #define SYS_UTIMES 235
 
@@ -386,6 +390,8 @@
 #define SYS_SET_ROBUST_LIST 273
 #define SYS_SYNC_FILE_RANGE 277
 #define SYS_UTIMENSAT 280
+#define SYS_EPOLL_PWAIT 281
+#define SYS_EPOLL_CREATE1 291
 #define SYS_PIPE2 293
 #define SYS_PRLIMIT64 302
 #define SYS_SENDMMSG 307
@@ -399,8 +405,12 @@
 #define SYS_RSEQ 334
 #define SYS_FSOPEN 430
 #define SYS_CLONE3 435
+#define SYS_CLOSE_RANGE 436
 #define SYS_FACCESSAT2 439
 #define SYS_FCHMODAT2 452
+
+#define CLOSE_RANGE_UNSHARE  (1U << 1)
+#define CLOSE_RANGE_CLOEXEC  (1U << 2)
 
 #define CLONE_ARGS_SIZE_VER0 80
 #define CLONE_ARGS_SIZE_VER1 88
@@ -671,6 +681,11 @@ sys_(fchdir, int fd);
 sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
 sys_(exit_group, int exit_code);
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
+sys_(epoll_create, int size);
+sys_(epoll_create1, int flags);
+sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event);
+sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeout);
+sys_(epoll_pwait, int epfd, struct epoll_event *events, int maxevents, int timeout, sigset_t *sigmask, size_t sigsetsize);
 sys_(sched_getaffinity, int pid, size_t cpusetsize, void *mask);
 sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
 sys_(kill, int pid, int sig);
@@ -725,6 +740,7 @@ sys_(symlinkat, char *target, int newdirfd, char *linkpath);
 sys_(ftruncate, int fd, uint64_t length);
 sys_(fsync, int fd);
 sys_(fdatasync, int fd);
+sys_(fadvise64, int fd, uint64_t offset, uint64_t len, int advice);
 sys_(sync_file_range, int fd, int64_t offset, int64_t nbytes, uint64_t flags);
 sys_(sync);
 sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rlimit *old_limit);
