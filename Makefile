@@ -68,7 +68,7 @@ HOST_LLVM_AR ?= llvm-ar
 HOST_LLVM_RANLIB ?= llvm-ranlib
 IMAGE_TOOLCHAIN ?= clang
 IMAGE_PACKAGE_MANAGER ?= xbps
-IMAGE_BUSYBOX ?= 0
+IMAGE_BUSYBOX ?= 1
 KERNEL_BUSYBOX_ALIASES ?= $(IMAGE_BUSYBOX)
 BF_DIR ?= Bf
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
@@ -96,6 +96,7 @@ STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
 STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
 STAGE_XBPS_BOOTSTRAP := tools/stage_xbps_bootstrap.sh
 STAGE_PREPARED_ROOT := tools/stage_prepared_root.sh
+COPY_REGULAR_FILE := tools/copy_regular_file.sh
 SELFHOST_USER_THIRD_PARTY := \
 	third_party/mbedtls-src \
 	third_party/litehtml \
@@ -185,18 +186,23 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd prepare stage.selfhost-user stardustui.examples.copy
+.PHONY: clean format check check.line-endings gen.clangd prepare prepare.xbps-root stage.selfhost-user stardustui.examples.copy
 
 clean:
 # 事实上直接删out/最简单了
 	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log $(BUILD_CONFIG_HEADER)
 	@echo Removed build files.
 
-prepare:
+prepare: prepare.xbps-root
+
+prepare.xbps-root:
 	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ] && [ -n "$(XBPS_BOOTSTRAP)" ]; then \
-		chmod -R u+rwX "$(XBPS_PREPARE_ROOT)" 2>/dev/null || true; \
-		rm -rf "$(XBPS_PREPARE_ROOT)"; \
-		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
+		if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
+			echo "Preparing xbps root: $(XBPS_PREPARE_ROOT)"; \
+			chmod -R u+rwX "$(XBPS_PREPARE_ROOT)" 2>/dev/null || true; \
+			rm -rf "$(XBPS_PREPARE_ROOT)"; \
+			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
+		fi; \
 	else \
 		echo "Nothing to prepare for IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER)"; \
 	fi
@@ -221,7 +227,10 @@ stardustui.examples.copy:
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
 
-check: $(CHECK_FILES)
+check.line-endings:
+	@sh tools/check_line_endings.sh
+
+check: check.line-endings $(CHECK_FILES)
 	@echo "Checked all the code ..."
 
 clean.clangd:
@@ -230,7 +239,7 @@ clean.clangd:
 gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
-vdisk: all
+vdisk: all prepare.xbps-root
 	@rm -rf XJ380.img
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
@@ -281,20 +290,19 @@ vdisk: all
 	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
 
 	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
-	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
+	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then sh $(COPY_REGULAR_FILE) $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
 	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
-	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
-	@cp ./1.c $(VDISK_ROOT)/apps/1.c
+	@sh $(COPY_REGULAR_FILE) $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
+	@sh $(COPY_REGULAR_FILE) ./1.c $(VDISK_ROOT)/apps/1.c 644
+	@echo "STAGE image toolchain"
 	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
+	@echo "STAGE fastfetch deps"
 	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
 	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
+		echo "STAGE xbps tools"; \
 		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
 		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
-			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
-				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
-				echo "run: make prepare" >&2; \
-				exit 1; \
-			fi; \
+			echo "STAGE prepared xbps root"; \
 			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
 		fi; \
 	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
@@ -302,28 +310,36 @@ vdisk: all
 		exit 1; \
 	fi
 
-	@cp -a ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font
-	@cp -a ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font
+	@echo "STAGE fonts"
+	@sh $(COPY_REGULAR_FILE) ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font/XJ380F.ttf 644
+	@sh $(COPY_REGULAR_FILE) ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font/XJ380C.ttf 644
 
+	@echo "STAGE theme"
 	@cp -a ./graphics/window/theme/skyglass/*.* $(VDISK_ROOT)/system/theme/skyglass
 
-	@cp -a ./graphics/peek.png $(VDISK_ROOT)/system/foxland
+	@echo "STAGE graphics"
+	@sh $(COPY_REGULAR_FILE) ./graphics/peek.png $(VDISK_ROOT)/system/foxland/peek.png 644
 
 	@cp -a ./graphics/logo/*.* $(VDISK_ROOT)/system
 # 	@cp -a ./test.wav $(BUILD_DIR)/XJ380/system
 
 	@cp -a ./graphics/icon/*.* $(VDISK_ROOT)/system/icon
 
+	@echo "STAGE kernel modules"
 	@cp -a ./out/*.km $(VDISK_ROOT)/mod
 
+	@echo "STAGE resources"
 	@cp -a ./resources/* $(VDISK_ROOT)/system/resources
 
-	@cp ./out/helloworld.elf $(VDISK_ROOT)/apps/builtin
-	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
-	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
+	@echo "STAGE StardustUI examples"
+	@sh $(COPY_REGULAR_FILE) ./out/helloworld.elf $(VDISK_ROOT)/apps/builtin/helloworld.elf
+	@sh $(COPY_REGULAR_FILE) ./out/layout.elf $(VDISK_ROOT)/apps/builtin/layout.elf
+	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then sh $(COPY_REGULAR_FILE) ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin/duckchat.elf; fi
 
+	@echo "FINALIZE image root"
 	@find $(VDISK_ROOT) -xtype l -delete
 	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
+	@echo "COPY image root to FAT"
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
 
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true

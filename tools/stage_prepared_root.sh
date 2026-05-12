@@ -53,6 +53,21 @@ find "$src_root" -mindepth 1 | while IFS= read -r src; do
     stage_entry "$src"
 done
 
+sanitize_xbps_keys_for_fat()
+{
+    for key in "$dst_root"/var/db/xbps/keys/*:*; do
+        [ -e "$key" ] || continue
+        dir=$(dirname "$key")
+        base=$(basename "$key")
+        safe=$(printf '%s' "$base" | tr ':<>"\\|?*' '_')
+        if [ "$base" != "$safe" ]; then
+            mv -f "$key" "$dir/$safe"
+        fi
+    done
+}
+
+sanitize_xbps_keys_for_fat
+
 mkdir -p "$dst_root/bin" "$dst_root/usr/bin"
 
 link_bin_tool()
