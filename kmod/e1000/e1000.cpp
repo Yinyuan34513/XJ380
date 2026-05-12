@@ -189,7 +189,7 @@ int e1000_init(void *mmio_base) {
 
     memset(dev, 0, sizeof(e1000_device_t));
     dev->mmio_base = mmio_base;
-    dev->mtu = E1000_TX_BUFFER_SIZE;
+    dev->mtu = E1000_MTU;
 
     // Reset device
     e1000_reset(dev);
@@ -236,7 +236,10 @@ int e1000_init(void *mmio_base) {
 int e1000_send(void *dev_desc, void *data, uint32_t len) {
     e1000_device_t *dev = (e1000_device_t *)dev_desc;
 
-    if (len > E1000_MTU || len == 0) {
+    if (len > E1000_MAX_FRAME_SIZE || len == 0) {
+        printk("e1000: tx invalid frame len=%u max=%u\n",
+               (unsigned int)len,
+               (unsigned int)E1000_MAX_FRAME_SIZE);
         return -1;
     }
 

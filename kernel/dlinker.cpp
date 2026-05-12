@@ -52,11 +52,15 @@ static uint8_t *dlinker_read_entire_file(vfs_node_t file) {
 }
 
 void *resolve_symbol(Elf64_Sym *symtab, uint32_t sym_idx) {
+    if (symtab == NULL) return NULL;
     return (void *)symtab[sym_idx].st_value;
 }
 
 bool handle_relocations(Elf64_Rela *rela_start, Elf64_Sym *symtab, char *strtab, size_t jmprel_sz,
                         uint64_t offset) {
+    if (jmprel_sz == 0) return true;
+    if (rela_start == NULL || symtab == NULL || strtab == NULL) return false;
+
     Elf64_Rela *rela_plt   = rela_start;
     size_t      rela_count = jmprel_sz / sizeof(Elf64_Rela);
 
@@ -97,6 +101,7 @@ void *find_symbol_address(const char *symbol_name, Elf64_Ehdr *ehdr, uint64_t of
     }
 
     size_t num_symbols = symtabsz / sizeof(Elf64_Sym);
+    if (symtab == NULL || strtab == NULL || num_symbols == 0) return NULL;
 
     for (size_t i = 0; i < num_symbols; i++) {
         Elf64_Sym *sym      = &symtab[i];
@@ -160,6 +165,8 @@ dlinit_t load_dynamic(kernel_mode_t *kmod,Elf64_Phdr *phdrs, Elf64_Ehdr *ehdr, u
         dyn_entry++;
     }
 
+    if (relsz != 0 && rel == NULL) return NULL;
+
     for (size_t i = 0; i < relsz / sizeof(Elf64_Rela); i++) {
         Elf64_Rela *r          = &rel[i];
         uint64_t   *reloc_addr = (uint64_t *)(r->r_offset + offset);
@@ -167,11 +174,15 @@ dlinit_t load_dynamic(kernel_mode_t *kmod,Elf64_Phdr *phdrs, Elf64_Ehdr *ehdr, u
         uint32_t    type       = ELF64_R_TYPE(r->r_info);
 
         if (type == R_X86_64_GLOB_DAT || type == R_X86_64_JUMP_SLOT) {
-            *reloc_addr = (uint64_t)resolve_symbol(symtab, sym_idx) + offset;
+            void *symbol_addr = resolve_symbol(symtab, sym_idx);
+            if (symbol_addr == NULL) return NULL;
+            *reloc_addr = (uint64_t)symbol_addr + offset;
         } else if (type == R_X86_64_RELATIVE) {
             *reloc_addr = (uint64_t)(offset + r->r_addend);
         } else if (type == R_X86_64_64) {
-            *reloc_addr = (uint64_t)resolve_symbol(symtab, sym_idx) + r->r_addend + offset;
+            void *symbol_addr = resolve_symbol(symtab, sym_idx);
+            if (symbol_addr == NULL) return NULL;
+            *reloc_addr = (uint64_t)symbol_addr + r->r_addend + offset;
         }
     }
     if (!handle_relocations(jmprel, symtab, strtab, jmprel_sz, offset)) {
@@ -781,14 +792,27 @@ static bool resolve_dependencies(dlhandle_t* handle, Elf64_Dyn* dyn) {
             // 如果未加载，则加载
             if (!dep_handle) {
                 // 构建完整路径
-                char full_path[256];
+                char full_path[384];
                 if (lib_name[0] == '/' || strchr(lib_name, '/')) {
                     snprintf(full_path, sizeof(full_path), "%s", lib_name);
                 } else if (handle->is_kernel) {
                     snprintf(full_path, sizeof(full_path), "/lib/modules/%s", lib_name);
                 } else {
-                    // 用户态：在当前目录或系统库目录查找
-                    snprintf(full_path, sizeof(full_path), "/lib/%s", lib_name);
+                    bool found = false;
+                    // 1) Try RPATH/RUNPATH
+                    if (handle->rpath) {
+                        char rp_buf[384];
+                        snprintf(rp_buf, sizeof(rp_buf), "%s/%s", handle->rpath, lib_name);
+                        vfs_node_t test = vfs_open(rp_buf);
+                        if (test) {
+                            snprintf(full_path, sizeof(full_path), "%s", rp_buf);
+                            vfs_close(test);
+                            found = true;
+                        }
+                    }
+                    // 2) Fall back to /lib/
+                    if (!found)
+                        snprintf(full_path, sizeof(full_path), "/lib/%s", lib_name);
                 }
                 
                 dep_handle = load_shared_object_internal(full_path, 
@@ -1046,7 +1070,26 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
         
         // 提取符号信息
         extract_exports_from_dynamic(handle, dyn);
-        
+
+        // 提取 RPATH/RUNPATH
+        {
+            Elf64_Dyn *rp = dyn;
+            char *rpath_str = NULL;
+            char *runpath_str = NULL;
+            while (rp->d_tag != DT_NULL) {
+                if (rp->d_tag == DT_RPATH)
+                    rpath_str = (char *)(handle->strtab + rp->d_un.d_val);
+                else if (rp->d_tag == DT_RUNPATH)
+                    runpath_str = (char *)(handle->strtab + rp->d_un.d_val);
+                rp++;
+            }
+            const char *search = runpath_str ? runpath_str : rpath_str;
+            if (search) {
+                handle->rpath = strdup(search);
+                write_serial_fmt("RPATH/RUNPATH for %s: %s\n", path, handle->rpath);
+            }
+        }
+
         // 解析依赖项
         if (!resolve_dependencies(handle, dyn)) {
             write_serial_fmt("Failed to resolve dependencies: %s\n", path);

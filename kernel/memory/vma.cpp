@@ -136,40 +136,53 @@ int vma_merge(vma_t *vma1, vma_t *vma2) {
 }
 
 int vma_unmap_range(vma_manager_t *mgr, uintptr_t start, uintptr_t end) {
+    if (!mgr || start >= end) return -1;
+
     vma_t *vma = mgr->vma_list;
-    vma_t *next;
 
     while (vma) {
-        next = vma->vm_next;
+        if (vma->vm_end <= start) {
+            vma = vma->vm_next;
+            continue;
+        }
+        if (vma->vm_start >= end) break;
 
         // 完全包含在要取消映射的范围内
         if (vma->vm_start >= start && vma->vm_end <= end) {
+            vma_t *next = vma->vm_next;
             vma_remove(mgr, vma);
             vma_free(vma);
-        }
-        // 部分重叠 - 需要分割
-        else if (!(vma->vm_end <= start || vma->vm_start >= end)) {
-            if (vma->vm_start < start && vma->vm_end > end) {
-                // VMA跨越整个取消映射范围 - 分割成两部分
-                vma_split(vma, end);
-                vma_split(vma, start);
-                // 移除中间部分
-                vma_t *middle = vma->vm_next;
-                vma_remove(mgr, middle);
-                vma_free(middle);
-            } else if (vma->vm_start < start) {
-                // 截断VMA的末尾
-                mgr->vm_used -= vma->vm_end - start;
-                vma->vm_end   = start;
-            } else if (vma->vm_end > end) {
-                // 截断VMA的开头
-                mgr->vm_used -= end - vma->vm_start;
-                if (vma->vm_type == VMA_TYPE_FILE) { vma->vm_offset += end - vma->vm_start; }
-                vma->vm_start = end;
-            }
+            vma = next;
+            continue;
         }
 
-        vma = next;
+        if (vma->vm_start < start && vma->vm_end > end) {
+            // VMA crosses the unmapped hole. Keep the left part in place and
+            // split off the right part so vm_used drops by exactly the hole.
+            if (vma_split(vma, end) != 0) return -1;
+            vma->vm_end = start;
+            mgr->vm_used -= end - start;
+            vma = vma->vm_next;
+            continue;
+        }
+
+        if (vma->vm_start < start) {
+            uintptr_t old_end = vma->vm_end;
+            vma->vm_end       = start;
+            mgr->vm_used -= old_end - start;
+            vma = vma->vm_next;
+            continue;
+        }
+
+        if (vma->vm_end > end) {
+            uintptr_t old_start = vma->vm_start;
+            vma->vm_start       = end;
+            if (vma->vm_type == VMA_TYPE_FILE) { vma->vm_offset += end - old_start; }
+            mgr->vm_used -= end - old_start;
+            break;
+        }
+
+        vma = vma->vm_next;
     }
 
     return 0;
@@ -211,6 +224,22 @@ void vma_manager_exit_cleanup(vma_manager_t *mgr) {
     mgr->vm_used  = 0;
 }
 
+static bool vma_clone_name(vma_t *dst, const vma_t *src)
+{
+    if (src->vm_name == NULL)
+    {
+        dst->vm_name = NULL;
+        return true;
+    }
+
+    size_t name_len = strlen(src->vm_name) + 1;
+    dst->vm_name = (char *)malloc(name_len);
+    if (dst->vm_name == NULL) return false;
+
+    memcpy(dst->vm_name, src->vm_name, name_len);
+    return true;
+}
+
 bool vma_manager_clone(vma_manager_t *src_mgr,vma_manager_t *dst_mgr) {
     if (!src_mgr) {
         return false;
@@ -229,9 +258,38 @@ bool vma_manager_clone(vma_manager_t *src_mgr,vma_manager_t *dst_mgr) {
 
     // 3. 遍历源 VMA 链表并深拷贝
     while (src_vma) {
+        if (src_vma->vm_start >= src_vma->vm_end) {
+            write_serial_fmt("[vma-clone] invalid range start=0x%llx end=0x%llx flags=0x%llx type=%d\n",
+                             src_vma->vm_start,
+                             src_vma->vm_end,
+                             src_vma->vm_flags,
+                             src_vma->vm_type);
+            vma_manager_exit_cleanup(dst_mgr);
+            return false;
+        }
+        vma_t *src_overlap = src_mgr->vma_list;
+        while (src_overlap != NULL)
+        {
+            if (src_overlap != src_vma &&
+                !(src_vma->vm_end <= src_overlap->vm_start || src_vma->vm_start >= src_overlap->vm_end))
+            {
+                write_serial_fmt("[vma-clone] source overlap a=0x%llx-0x%llx b=0x%llx-0x%llx\n",
+                                 src_vma->vm_start,
+                                 src_vma->vm_end,
+                                 src_overlap->vm_start,
+                                 src_overlap->vm_end);
+                vma_manager_exit_cleanup(dst_mgr);
+                return false;
+            }
+            src_overlap = src_overlap->vm_next;
+        }
+
         // 3.1. 分配新的 VMA 节点
         new_vma = vma_alloc();
         if (!new_vma) {
+            write_serial_fmt("[vma-clone] alloc node failed start=0x%llx end=0x%llx\n",
+                             src_vma->vm_start,
+                             src_vma->vm_end);
             // 如果分配失败，必须清理已复制的部分
             // vma_manager_exit_cleanup 适合清理，但需要保证它能正确处理部分构建的链表
             // 这里我们使用一个更轻量级的清理，因为 vma_insert 并没有完全依赖 mgr->vm_used
@@ -253,21 +311,22 @@ bool vma_manager_clone(vma_manager_t *src_mgr,vma_manager_t *dst_mgr) {
         // 链表指针在 vma_alloc 中初始化为 NULL，在 vma_insert 中设置
 
         // 3.3. 深拷贝 vm_name
-        if (src_vma->vm_name) {
-            size_t name_len = strlen(src_vma->vm_name) + 1;
-            new_vma->vm_name = (char *)malloc(name_len);
-            if (!new_vma->vm_name) {
-                // 如果名称分配失败，清理并退出
-                vma_free(new_vma);
-                vma_manager_exit_cleanup(dst_mgr);
-                return false;
-            }
-            memcpy(new_vma->vm_name, src_vma->vm_name, name_len);
-        } else {
-            new_vma->vm_name = NULL;
+        if (!vma_clone_name(new_vma, src_vma)) {
+            write_serial_fmt("[vma-clone] alloc name failed start=0x%llx end=0x%llx name=0x%llx\n",
+                             src_vma->vm_start,
+                             src_vma->vm_end,
+                             (uint64_t)src_vma->vm_name);
+            // 如果名称分配失败，清理并退出
+            vma_free(new_vma);
+            vma_manager_exit_cleanup(dst_mgr);
+            return false;
         }
 
         if (vma_insert(dst_mgr, new_vma) != 0) {
+            write_serial_fmt("[vma-clone] insert failed start=0x%llx end=0x%llx overlap=0x%llx\n",
+                             new_vma->vm_start,
+                             new_vma->vm_end,
+                             (uint64_t)vma_find_intersection(dst_mgr, new_vma->vm_start, new_vma->vm_end));
             // 这不应该发生，除非 vm_start/vm_end 出错
             vma_free(new_vma);
             vma_manager_exit_cleanup(dst_mgr);

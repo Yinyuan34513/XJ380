@@ -1,12 +1,13 @@
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include 
+C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
 SMP ?= 4
 SUDO ?= 1
+VDISK_SUDO ?=
 KVM ?= 1
 
 ifeq ($(DEBUG), 1)
@@ -24,12 +25,14 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+VDISK_SIZE_MIB ?= 3072
+VDISK_FAT_MIB ?= 3072
 VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
 	frameworks/StardustUI/examples/layout \
-	frameworks/StardustUI/examples/duckchat
+	$(wildcard frameworks/StardustUI/examples/duckchat)
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
@@ -41,7 +44,7 @@ AUDIO_BACKEND ?= sdl
 HDA_CODEC ?= hda-output
 QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
-COMPILER_PREFIX ?= 
+COMPILER_PREFIX ?=
 
 # FILES
 NASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.asm")
@@ -59,6 +62,15 @@ export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
 HOST_CC ?= cc
 HOST_GCC ?= gcc
+HOST_CLANG ?= clang
+HOST_CLANGXX ?= clang++
+HOST_LLVM_AR ?= llvm-ar
+HOST_LLVM_RANLIB ?= llvm-ranlib
+IMAGE_TOOLCHAIN ?= clang
+IMAGE_PACKAGE_MANAGER ?= xbps
+IMAGE_BUSYBOX ?= 0
+KERNEL_BUSYBOX_ALIASES ?= $(IMAGE_BUSYBOX)
+BF_DIR ?= Bf
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
 HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
 HOST_GCC_REAL := $(shell readlink -f "$$(command -v $(HOST_GCC))" 2>/dev/null)
@@ -77,20 +89,39 @@ C_OBJS := $(patsubst ./%.c, ./$(BUILD_DIR)/%.o, $(C_FILES))
 CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
-OPKG_CONF_GEN := $(BUILD_DIR)/tools/xj380_opkg_conf_gen
-OPKG_LD_LIBRARY_PATH ?=
-OPKG_STAGE_DEPS := tools/stage_elf_deps.sh
-OPKG_FEEDS ?= openwrt_base http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/base openwrt_packages http://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/24.10.2/packages/x86_64/packages
-APP_BASH := resources/apps/bash
+BUILD_CONFIG_HEADER := kernel/build_config.h
+STAGE_ELF_DEPS := tools/stage_elf_deps.sh
+STAGE_IMAGE_BASE := tools/stage_image_base.sh
+STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
+STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
+STAGE_XBPS_BOOTSTRAP := tools/stage_xbps_bootstrap.sh
+STAGE_PREPARED_ROOT := tools/stage_prepared_root.sh
+SELFHOST_USER_THIRD_PARTY := \
+	third_party/mbedtls-src \
+	third_party/litehtml \
+	third_party/libvterm
+XBPS_PREPARE_ROOT ?= Bf/xbps-root
+XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl
+XBPS_BOOTSTRAP ?= $(XBPS_BOOTSTRAP_BASE)
 APP_BUSYBOX := resources/apps/busybox
 APP_FASTFETCH := resources/apps/fastfetch
-APP_OPKG := resources/apps/opkg
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
 PWD := $(shell pwd)
 
-$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER)
+$(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER) $(BUILD_CONFIG_HEADER)
+
+$(BUILD_CONFIG_HEADER): FORCE
+	@tmp="$@.tmp"; \
+	{ \
+		echo "#pragma once"; \
+		echo "#define CONFIG_KERNEL_BUSYBOX_ALIASES $(KERNEL_BUSYBOX_ALIASES)"; \
+	} > "$$tmp"; \
+	if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm -f "$$tmp"; fi
+
+.PHONY: FORCE
+FORCE:
 
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
@@ -154,17 +185,33 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-$(OPKG_CONF_GEN): tools/xj380_opkg_conf_gen.c
-	@mkdir -p $(@D)
-	@$(HOST_CC) -O2 -Wall -Wextra $< -o $@
-	@echo "HOSTCC $< -> $@"
-
-.PHONY: clean format check gen.clangd stardustui.examples.copy
+.PHONY: clean format check gen.clangd prepare stage.selfhost-user stardustui.examples.copy
 
 clean:
 # 事实上直接删out/最简单了
-	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log
+	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log $(BUILD_CONFIG_HEADER)
 	@echo Removed build files.
+
+prepare:
+	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ] && [ -n "$(XBPS_BOOTSTRAP)" ]; then \
+		chmod -R u+rwX "$(XBPS_PREPARE_ROOT)" 2>/dev/null || true; \
+		rm -rf "$(XBPS_PREPARE_ROOT)"; \
+		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
+	else \
+		echo "Nothing to prepare for IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER)"; \
+	fi
+
+stage.selfhost-user:
+	@rm -rf $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/include $(VDISK_ROOT)/apps/lib $(VDISK_ROOT)/apps/third_party $(VDISK_ROOT)/apps/liballoc-x86_64.a
+	@mkdir -p $(VDISK_ROOT)/apps/third_party
+	@cp -a ./user $(VDISK_ROOT)/apps/user
+	@cp -a ./include $(VDISK_ROOT)/apps/include
+	@cp -a ./lib $(VDISK_ROOT)/apps/lib
+	@cp -a ./liballoc-x86_64.a $(VDISK_ROOT)/apps/liballoc-x86_64.a
+	@for dir in $(SELFHOST_USER_THIRD_PARTY); do \
+		cp -a ./$$dir $(VDISK_ROOT)/apps/third_party/; \
+	done
+	@find $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/third_party -type d -name .git -prune -exec rm -rf {} +
 
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
@@ -183,7 +230,7 @@ clean.clangd:
 gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
-vdisk: all $(OPKG_CONF_GEN)
+vdisk: all
 	@rm -rf XJ380.img
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
@@ -192,49 +239,14 @@ vdisk: all $(OPKG_CONF_GEN)
 		exit 1; \
 	}
 
-	@dd if=/dev/zero of=XJ380.img bs=1024M count=1
+
+	@dd if=/dev/zero of=XJ380.img bs=1M count=$(VDISK_SIZE_MIB)
 # You must execute the following command with sudo privileges, that's not good...
-	@sudo sgdisk XJ380.img -n 1:2048 -t 1:ef00
+	@$(VDISK_SUDO) sgdisk XJ380.img -n 1:2048 -t 1:ef00
 
-	@sudo mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$((1024*1024-2048*512/1024))
+	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$(( $(VDISK_FAT_MIB) * 1024 ))
 
-	@mkdir -p $(VDISK_ROOT)/EFI/BOOT
-	@mkdir -p $(VDISK_ROOT)/system
-	@mkdir -p $(VDISK_ROOT)/system/font
-	@mkdir -p $(VDISK_ROOT)/system/theme/skyglass
-	@mkdir -p $(VDISK_ROOT)/system/foxland
-	@mkdir -p $(VDISK_ROOT)/system/icon
-	@mkdir -p $(VDISK_ROOT)/apps
-	@mkdir -p $(VDISK_ROOT)/lib64
-	@mkdir -p $(VDISK_ROOT)/lib/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(VDISK_ROOT)/usr/bin
-	@mkdir -p $(VDISK_ROOT)/usr/include
-	@mkdir -p $(VDISK_ROOT)/usr/lib/gcc/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(VDISK_ROOT)/usr/libexec/gcc/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(VDISK_ROOT)/usr/lib/$(HOST_GCC_TRIPLE)
-	@mkdir -p $(VDISK_ROOT)/system/resources/image
-	@mkdir -p $(VDISK_ROOT)/mod
-	@mkdir -p $(VDISK_ROOT)/etc/opkg
-	@mkdir -p $(VDISK_ROOT)/etc/fastfetch
-	@mkdir -p $(VDISK_ROOT)/etc
-	@mkdir -p $(VDISK_ROOT)/etc/ssl/certs
-	@mkdir -p $(VDISK_ROOT)/usr/lib/opkg/info
-	@mkdir -p $(VDISK_ROOT)/usr/lib/opkg/lists
-	@mkdir -p $(VDISK_ROOT)/tmp
-	@mkdir -p $(VDISK_ROOT)/var
-	@mkdir -p $(VDISK_ROOT)/var/lock
-	@printf "nameserver 223.5.5.5\n" > $(VDISK_ROOT)/etc/resolv.conf
-	@cp -a resources/etc/os-release $(VDISK_ROOT)/etc/os-release
-	@cp -a resources/etc/fastfetch/. $(VDISK_ROOT)/etc/fastfetch/
-	@if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp -a /etc/ssl/certs/ca-certificates.crt $(VDISK_ROOT)/etc/ssl/certs/ca-certificates.crt; fi
-	@touch $(VDISK_ROOT)/usr/lib/opkg/lock
-	@cp -a resources/opkg/status $(VDISK_ROOT)/usr/lib/opkg/status
-	@if [ -d resources/opkg/info ]; then cp -a resources/opkg/info/. $(VDISK_ROOT)/usr/lib/opkg/info/; fi
-	@$(OPKG_CONF_GEN) $(VDISK_ROOT) $(OPKG_FEEDS)
-	@mkdir -p $(VDISK_ROOT)/system/config
-	@mkdir -p $(VDISK_ROOT)/apps/builtin
-	@mkdir -p $(VDISK_ROOT)/apps/system
-	@mkdir -p $(VDISK_ROOT)/apps/thirdparty
+	@sh $(STAGE_IMAGE_BASE) $(VDISK_ROOT)
 
 	@cp -a ./user/fmanager/fm_bg.png $(VDISK_ROOT)/system/resources/image
 
@@ -260,6 +272,7 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
+	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(VDISK_ROOT)"
 	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
 
 	@cp -a resources/musl/ld-musl-x86_64.so.1 $(VDISK_ROOT)/lib/ld-musl-x86_64.so.1
@@ -268,29 +281,26 @@ vdisk: all $(OPKG_CONF_GEN)
 	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
 
 	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
-	@cp -a $(APP_BASH) $(VDISK_ROOT)/apps/bash
-	@cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox
+	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
+	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
 	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
-	@[ -n "$(HOST_GCC_REAL)" ] && [ -n "$(HOST_GCC_TRIPLE)" ] && [ -n "$(HOST_GCC_VERSION)" ]
 	@cp ./1.c $(VDISK_ROOT)/apps/1.c
-	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_REAL_NAME)
-	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/gcc-$(HOST_GCC_VERSION)
-	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/gcc
-	@cp -aL $(HOST_GCC_REAL) $(VDISK_ROOT)/usr/bin/cc
-	@cp -aL $(HOST_GCC_AS) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_AS_NAME)
-	@cp -aL $(HOST_GCC_AS) $(VDISK_ROOT)/usr/bin/as
-	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_LD_NAME)
-	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/$(HOST_GCC_TRIPLE)-ld
-	@cp -aL $(HOST_GCC_LD) $(VDISK_ROOT)/usr/bin/ld
-	@cp -a $(HOST_GCC_LIBEXECDIR) $(VDISK_ROOT)/usr/libexec/gcc/$(HOST_GCC_TRIPLE)/
-	@cp -a $(HOST_GCC_LIBDIR) $(VDISK_ROOT)/usr/lib/gcc/$(HOST_GCC_TRIPLE)/
-	@cp -aL /usr/include/. $(VDISK_ROOT)/usr/include/
-	@for f in /usr/lib/$(HOST_GCC_TRIPLE)/crt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Scrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/Mcrt*.o /usr/lib/$(HOST_GCC_TRIPLE)/libc.so /usr/lib/$(HOST_GCC_TRIPLE)/libc_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libm.so /usr/lib/$(HOST_GCC_TRIPLE)/libmvec_nonshared.a /usr/lib/$(HOST_GCC_TRIPLE)/libpthread_nonshared.a; do [ ! -e "$$f" ] || cp -a "$$f" $(VDISK_ROOT)/usr/lib/$(HOST_GCC_TRIPLE)/; done
-	@$(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(HOST_GCC_REAL) $(HOST_GCC_AS) $(HOST_GCC_LD) $(HOST_GCC_LIBEXECDIR)/cc1 $(HOST_GCC_LIBEXECDIR)/collect2
-	@for f in /lib/$(HOST_GCC_TRIPLE)/libbfd-*.so /lib/$(HOST_GCC_TRIPLE)/libctf.so* /lib/$(HOST_GCC_TRIPLE)/libjansson.so* /lib/$(HOST_GCC_TRIPLE)/libsframe.so* /lib/$(HOST_GCC_TRIPLE)/libz.so* /lib/$(HOST_GCC_TRIPLE)/libzstd.so* /lib/$(HOST_GCC_TRIPLE)/libc.so* /lib/$(HOST_GCC_TRIPLE)/libm.so* /lib/$(HOST_GCC_TRIPLE)/libgcc_s.so*; do [ ! -e "$$f" ] || cp -a "$$f" $(VDISK_ROOT)/lib/$(HOST_GCC_TRIPLE)/; done
-	@$(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
-	@cp -a $(APP_OPKG) $(VDISK_ROOT)/apps/opkg
-	@LD_LIBRARY_PATH="$(OPKG_LD_LIBRARY_PATH)" $(OPKG_STAGE_DEPS) $(VDISK_ROOT) $(VDISK_ROOT)/apps/opkg
+	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
+	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
+	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
+		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
+		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
+			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
+				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
+				echo "run: make prepare" >&2; \
+				exit 1; \
+			fi; \
+			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
+		fi; \
+	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
+		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected xbps or none)" >&2; \
+		exit 1; \
+	fi
 
 	@cp -a ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font
@@ -310,11 +320,8 @@ vdisk: all $(OPKG_CONF_GEN)
 
 	@cp ./out/helloworld.elf $(VDISK_ROOT)/apps/builtin
 	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
-	@cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin
+	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
 
-# temp test (remember to delete)
-	@mkdir -p $(VDISK_ROOT)/users/GuoqiFish/desktop
-	@cp -a ./test.txt $(VDISK_ROOT)/users/GuoqiFish/desktop
 	@find $(VDISK_ROOT) -xtype l -delete
 	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
@@ -325,7 +332,7 @@ vdisk: all $(OPKG_CONF_GEN)
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
 		exit 1; \
 	}
-	
+
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk

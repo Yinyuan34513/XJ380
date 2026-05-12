@@ -112,6 +112,7 @@ static inline void do_open(vfs_node_t file) {
 
 static inline void do_update(vfs_node_t file) {
     if (file == NULL) return;
+    if ((file->type & file_symlink) && file->linkname != NULL) return;
     if (file->type & file_none || file->handle == NULL || file->type & file_dir ||
         file->type & file_symlink || file->type & file_pipe)
         do_open(file);
@@ -345,6 +346,8 @@ errno_t vfs_symlink(const char *name, const char *target_name) {
 create:
     node = vfs_child_append(current, filename, NULL);
     node->type      = file_symlink;
+    node->linkname  = strdup(target_name);
+    node->size      = node->linkname != NULL ? strlen(node->linkname) : 0;
     callbackof(current, symlink)(current->handle, target_name, node);
     node->linkto = vfs_open(target_name);
 
@@ -397,8 +400,11 @@ errno_t vfs_delete(vfs_node_t node) {
     if (node == NULL || node->parent == NULL) return VFS_STATUS_FAILED;
     if ((node->type & file_dir) && node->child != NULL) return -ENOTEMPTY;
 
-    errno_t res = callbackof(node, del)(node->parent->handle, node);
-    if (res < 0) return res;
+    if (!((node->type & file_symlink) && node->linkname != NULL))
+    {
+        errno_t res = callbackof(node, del)(node->parent->handle, node);
+        if (res < 0) return res;
+    }
 
     vfs_child_lock();
     node->parent->child = list_delete(node->parent->child, node);
@@ -412,6 +418,59 @@ errno_t vfs_delete(vfs_node_t node) {
 
 errno_t vfs_rename(vfs_node_t node, const char *nw) {
     if (node == NULL || nw == NULL) return VFS_STATUS_FAILED;
+    if ((node->type & file_symlink) && node->linkname != NULL)
+    {
+        char *new_name = strrchr(nw, '/');
+        new_name = new_name != NULL ? new_name + 1 : (char *)nw;
+        if (*new_name == '\0') return VFS_STATUS_FAILED;
+        char *copy = strdup(new_name);
+        if (copy == NULL) return VFS_STATUS_FAILED;
+
+        char *parent_path = strdup(nw);
+        if (parent_path == NULL)
+        {
+            free(copy);
+            return VFS_STATUS_FAILED;
+        }
+        char *last_slash = strrchr(parent_path, '/');
+        if (last_slash == parent_path)
+        {
+            parent_path[1] = '\0';
+        }
+        else if (last_slash != NULL)
+        {
+            *last_slash = '\0';
+        }
+        else
+        {
+            strcpy(parent_path, ".");
+        }
+
+        vfs_node_t new_parent = streq(parent_path, ".") ? node->parent : vfs_open(parent_path);
+        free(parent_path);
+        if (new_parent == NULL || !(new_parent->type & file_dir))
+        {
+            if (new_parent != NULL && new_parent != node->parent) vfs_close(new_parent);
+            free(copy);
+            return VFS_STATUS_FAILED;
+        }
+
+        if (new_parent != node->parent)
+        {
+            vfs_child_lock();
+            node->parent->child = list_delete(node->parent->child, node);
+            new_parent->child = list_prepend(new_parent->child, node);
+            node->parent = new_parent;
+            node->fsid = new_parent->fsid;
+            node->root = new_parent->root;
+            node->dev = new_parent->dev;
+            vfs_child_unlock();
+        }
+
+        free(node->name);
+        node->name = copy;
+        return VFS_STATUS_SUCCESS;
+    }
     do_update(node);
     if (node->handle == NULL) return VFS_STATUS_FAILED;
     return callbackof(node, rename)(node->handle, nw);
@@ -453,18 +512,10 @@ vfs_node_t vfs_do_search(vfs_node_t dir, const char *name) {
     return child;
 }
 
-static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink) {
+static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool allow_alias) {
     if (unlikely(str == NULL)) return NULL;
     if (unlikely(str[0] != '/')) return NULL;
     if (str[1] == '\0') return rootdir; // 根目录
-
-    char *alias_target = vfs_alias_target_dup(str);
-    if (alias_target != NULL) {
-        write_serial_fmt("[busybox-debug] vfs_alias_hit %s -> %s\n", str, alias_target);
-        vfs_node_t alias_node = vfs_open(alias_target);
-        free(alias_target);
-        return alias_node;
-    }
 
     char *path = strdup(str + 1);
     if (unlikely(path == NULL)) return NULL;
@@ -485,15 +536,21 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink) {
         current = vfs_child_find(current, buf);
         if (current == NULL) { goto err; }
 
+        bool final_component_had_handle = current->handle != NULL;
         do_update(current);
         bool is_final_component = save_ptr == NULL || *save_ptr == '\0';
+        if (is_final_component && !final_component_had_handle && current->handle != NULL && current->refcount == 1)
+            current->refcount = 0;
         if (is_final_component && !follow_final_symlink) break;
         if (current->type & file_symlink) {
             if (!current->parent) { goto err; }
 
-            current->type = file_symlink | file_proxy;
+            bool dynamic_symlink = current->name != NULL && streq(current->name, "self") &&
+                                   current->parent != NULL && current->parent->parent == NULL &&
+                                   current->handle != NULL && current->linkto == NULL;
+            if (!dynamic_symlink) current->type = file_symlink | file_proxy;
 
-            vfs_node_t target = current->linkto;
+            vfs_node_t target = dynamic_symlink ? NULL : current->linkto;
             if (target == NULL)
             {
                 char target_path[256];
@@ -525,29 +582,38 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink) {
                     target = vfs_open(full_target);
                     free(full_target);
                 }
-                current->linkto = target;
+                if (!dynamic_symlink) current->linkto = target;
             }
             if (!target) goto err;
 
-            target->refcount++;
             current = target;
             continue;
         }
     }
 
     free(path);
+    if (current != NULL) current->refcount++;
     return current;
 err:
     free(path);
+    if (allow_alias) {
+        char *alias_target = vfs_alias_target_dup(str);
+        if (alias_target != NULL) {
+            write_serial_fmt("[busybox-debug] vfs_alias_hit %s -> %s\n", str, alias_target);
+            vfs_node_t alias_node = vfs_open_impl(alias_target, follow_final_symlink, false);
+            free(alias_target);
+            return alias_node;
+        }
+    }
     return NULL;
 }
 
 vfs_node_t vfs_open(const char *str) {
-    return vfs_open_impl(str, true);
+    return vfs_open_impl(str, true, true);
 }
 
 vfs_node_t vfs_open_no_follow(const char *str) {
-    return vfs_open_impl(str, false);
+    return vfs_open_impl(str, false, true);
 }
 
 void vfs_update(vfs_node_t node) {
@@ -561,7 +627,6 @@ void vfs_deinit() {
 fd_file_handle *fd_dup(fd_file_handle *src) {
     fd_file_handle *nw = (fd_file_handle *)malloc(sizeof(fd_file_handle));
     // not_null_assets(new, "fd_dup out of memory.");
-    src->node->refcount++;
     nw->node       = src->node;
     nw->offset     = src->offset;
     nw->flags      = src->flags;
@@ -569,6 +634,7 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
     vfs_node_t node = nw->node;
     if ((node->type & (file_ptmx | file_pts)) && fs_callbacks[node->fsid]->dup != (void *)empty_func) {
         fs_callbacks[node->fsid]->dup(node);
+        node->refcount++;
         return nw;
     }
     if ((node->type & file_pipe) && node->handle != NULL) {
@@ -584,6 +650,7 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
             spin_unlock(&pipe->lock);
         }
     }
+    node->refcount++;
     return nw;
 }
 
@@ -662,6 +729,28 @@ errno_t vfs_close(vfs_node_t node) {
         return VFS_STATUS_SUCCESS;
     }
 
+    if (node->type & file_epoll) {
+        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
+        epoll_file_t *ep = (epoll_file_t *)node->handle;
+        if (ep != NULL) {
+            if (ep->watches != NULL) {
+                while (true) {
+                    epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
+                    if (watch == NULL) break;
+                    free(watch);
+                }
+                queue_destroy(ep->watches);
+            }
+            free(ep);
+            node->handle = NULL;
+        }
+        if (node->parent == NULL) {
+            free(node->name);
+            free(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
     if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
     if ((node->type & file_socket) && node->refcount > 0) {
@@ -675,6 +764,9 @@ errno_t vfs_close(vfs_node_t node) {
     {
         return VFS_STATUS_SUCCESS;
     } 
+    if (!(node->type & file_delete) && node->refcount > 0) {
+        return VFS_STATUS_SUCCESS;
+    }
     if (node->type & file_delete && node->refcount <= 0) {
         errno_t res = callbackof(node, del)(node->parent->handle, node);
         if (res < 0) return res;
@@ -707,6 +799,7 @@ void vfs_free(vfs_node_t vfs) {
     list_free_with(child, (void (*)(void *))vfs_free);
     vfs_close(vfs);
     free(vfs->name);
+    free(vfs->linkname);
     free(vfs);
 }
 
@@ -786,6 +879,12 @@ errno_t vfs_unmount(const char *path) {
 }
 
 size_t vfs_readlink(vfs_node_t node, char *buf, size_t bufsize) {
+    if (node != NULL && node->linkname != NULL) {
+        size_t link_size = strlen(node->linkname);
+        size_t copy_size = MIN(link_size, bufsize);
+        memcpy(buf, node->linkname, copy_size);
+        return copy_size;
+    }
     size_t ret = callbackof(node, readlink)(node, buf, 0, bufsize);
     return ret;
 }
@@ -843,34 +942,24 @@ char *vfs_get_fullpath(vfs_node_t node) {
 
 char *at_resolve_pathname(int dirfd, char *pathname) {
     if (pathname[0] == '/') { // by absolute pathname
-        return strdup(pathname);
+        return normalize_path(pathname);
     } else if (pathname[0] != '/') {
         if (dirfd == AT_FDCWD) { // relative to cwd
             return vfs_cwd_path_build(pathname);
         } else { // relative to dirfd, resolve accordingly
-            vfs_node_t node = (vfs_node_t)queue_get(get_current_task()->parent_group->file_open, dirfd);
-            if (!node) return NULL;
+            fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, dirfd);
+            if (!handle || !handle->node) return NULL;
+            vfs_node_t node = handle->node;
             if (node->type != file_dir) return NULL;
 
             char *dirname = vfs_get_fullpath(node);
-
-            char *prefix = vfs_get_fullpath(node->root);
-
-            int prefixLen   = strlen(prefix);
-            int rootDirLen  = strlen(dirname);
-            int pathnameLen = strlen(pathname) + 1;
-
-            char *out = (char*)malloc(prefixLen + rootDirLen + 1 + pathnameLen + 1);
-
-            memcpy(out, prefix, prefixLen);
-            memcpy(&out[prefixLen], dirname, rootDirLen);
-            out[prefixLen + rootDirLen] = '/';
-            memcpy(&out[prefixLen + rootDirLen + 1], pathname, pathnameLen);
-
+            if (dirname == NULL) return NULL;
+            char *joined = pathacat(dirname, pathname);
             free(dirname);
-            free(prefix);
-
-            return out;
+            if (joined == NULL) return NULL;
+            char *normalized = normalize_path(joined);
+            free(joined);
+            return normalized;
         }
     }
 
@@ -1217,7 +1306,18 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
 static errno_t tty_poll(size_t events)
 {
     int revents = 0;
-    if (events & POLLIN) revents |= POLLIN;
+    if (events & POLLIN)
+    {
+        xtttp_dtt *terminal = current_xtttp_terminal();
+        if (terminal != NULL)
+        {
+            if (terminal->input[0] != '\0') revents |= POLLIN;
+        }
+        else
+        {
+            revents |= POLLIN;
+        }
+    }
     if (events & POLLOUT) revents |= POLLOUT;
     return revents;
 }

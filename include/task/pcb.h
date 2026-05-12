@@ -97,6 +97,7 @@ struct process_control_block
     lock_queue       *ipc_queue;   // 进程消息队列
 
     lock_queue *file_open; // 文件句柄占用队列
+    size_t     *file_open_shared_refs;
     char      **envp;      // 环境变量指针
     size_t      envc;      // 环境变量数量
 
@@ -121,6 +122,7 @@ struct process_control_block
     uint64_t    aux_entry;
     uint64_t    aux_execfn;
     bool        linux_abi;
+    uint16_t    umask;
     vma_manager_t     vma_manager; // VMA 分配管理器
     vfs_node_t        procfs_node; // 进程私有 procfs 文件句柄
     vfs_node_t        proc_root;   // 进程私有根文件节点
@@ -185,6 +187,10 @@ struct thread_control_block
     uint64_t clear_child_tid;
     page_directory_t *tid_directory;
 
+    void   *sas_ss_sp;
+    size_t  sas_ss_size;
+    int     sas_ss_flags;
+
     vfs_node_t cwd;
     char      *str_cwd;
 
@@ -225,7 +231,7 @@ void get_thread_name_from_filepath(char *path, char *name);
 
 size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uint64_t arg);
 
-void init_killer();
+void init_reaper();
 
 typedef void (*elf_start)(int, char **, char **);
 void kill_proc(pcb_t pcb, int exit_code, bool is_zombie);

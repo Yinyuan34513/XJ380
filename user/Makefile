@@ -160,6 +160,11 @@ BROWSER_BUILTINS ?= $(shell runtime_dir="$$(clang --print-runtime-dir 2>/dev/nul
 		find /usr/lib/clang -type f -name 'libclang_rt.builtins-x86_64.a' 2>/dev/null | sort -V | tail -n 1; \
 	fi)
 
+LIBVTERM_SRC_DIR := ../third_party/libvterm
+LIBVTERM_CFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I $(LIBVTERM_SRC_DIR)/include -I $(LIBVTERM_SRC_DIR)/src
+LIBVTERM_SOURCES := $(shell find $(LIBVTERM_SRC_DIR)/src -maxdepth 1 -name "*.c" | sort)
+LIBVTERM_OBJECTS := $(patsubst $(LIBVTERM_SRC_DIR)/src/%.c, ../out/libvterm/%.o, $(LIBVTERM_SOURCES))
+
 build_xapi:
 	$(MAKE) -C xapi build_all_api
 
@@ -304,10 +309,15 @@ bcms-sp.elf: bcms-sp.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-busyterm.elf: busyterm.cpp $(XAPI_HEADERS) $(USER_HEADERS)
-	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+busyterm.elf: busyterm.cpp $(XAPI_HEADERS) $(USER_HEADERS) $(LIBVTERM_OBJECTS)
+	@$(CXX) $(CFLAGS) -I $(LIBVTERM_SRC_DIR)/include -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o $(LIBVTERM_OBJECTS) -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
+
+../out/libvterm/%.o: $(LIBVTERM_SRC_DIR)/src/%.c
+	@mkdir -p $(@D)
+	@$(CC) $(LIBVTERM_CFLAGS) -c $< -o $@
+	@echo "CC $< -> $@"
 
 
 SHELL_SOURCES := ./shell/shell_main.cpp \

@@ -8,6 +8,10 @@
 #include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
+#include "xapi/include/libsys.h"
+#include "xapi/include/xposix/syscall_ret.h"
+
+static constexpr uint64_t SYS_UTIMENSAT_NR = 280;
 
 static void ok(const char *msg, unsigned long len)
 {
@@ -52,6 +56,14 @@ static int posixdemo_main_impl()
         OK("fstat ok\n");
     } else {
         FAIL("fstat failed\n");
+    }
+
+    struct timespec file_times[2] = {{1585591680, 0}, {1585591680, 0}};
+    long raw_utime = __xposix_ret(enter_syscall(SYS_UTIMENSAT_NR, fd, 0, (uint64_t)file_times, 0, 0, 0));
+    if (raw_utime == 0) {
+        OK("utimensat fd/null ok\n");
+    } else {
+        FAIL("utimensat fd/null failed\n");
     }
 
     lseek(fd, 0, SEEK_SET);

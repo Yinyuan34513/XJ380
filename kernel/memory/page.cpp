@@ -24,10 +24,38 @@ page_t         *page_maps;
 void           *early_alloc(size_t size);
 extern lock_queue *pcb_group_queue;
 
+static uint64_t page_entry_value(page_directory_t *directory, uint64_t addr);
+
 static inline uint64_t page_align_up(uint64_t length)
 {
     if (length == 0) return 0;
     return (length + PAGE_SIZE - 1) & PAGE_MASK;
+}
+
+static bool try_map_user_stack_fault(tcb_t task, uint64_t address)
+{
+    if (task == NULL || task->parent_group == NULL || task->parent_group->pagedir == NULL) return false;
+    if (task->user_stack == 0 || task->user_stack_top <= task->user_stack) return false;
+    if (address >= task->user_stack_top) return false;
+
+    uint64_t page_addr = address & PAGE_MASK;
+    if (page_entry_value(task->parent_group->pagedir, page_addr) & PTE_PRESENT) return false;
+
+    // Allow stack to grow below user_stack, but prevent collision with heap
+    if (page_addr < task->user_stack)
+    {
+        pcb_t pcb = task->parent_group;
+        if (pcb->brk_current != 0 && page_addr < pcb->brk_current + PAGE_SIZE) return false;
+    }
+
+    uint64_t phys = alloc_frames(1);
+    if (phys == 0) return false;
+    memset((void *)phys_to_virt(phys), 0, PAGE_SIZE);
+    page_map_to(task->parent_group->pagedir, page_addr, phys,
+                PTE_PRESENT | PTE_WRITEABLE | PTE_USER | PTE_FRAME_ALLOCATED);
+
+    if (page_addr < task->user_stack) task->user_stack = page_addr;
+    return true;
 }
 
 static pcb_t find_process_by_pagedir(page_directory_t *directory)
@@ -304,6 +332,12 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
         pcb_t current_proc = current_task->parent_group;
         if (current_proc != NULL && current_proc->task_level == TASK_APPLICATION_LEVEL)
         {
+            if (try_map_user_stack_fault(current_task, faulting_address))
+            {
+                enable_scheduler();
+                open_interrupt;
+                return;
+            }
             errno_t status = lazy_tryalloc(current_proc, faulting_address);
             if (status != 0) { goto err; }
             else
@@ -740,16 +774,17 @@ EXPORT_SYMBOL(page_map_to);
 
 void switch_process_page_directory(page_directory_t *dir)
 {
+    bool was_scheduler_enabled = is_scheduler;
+    bool was_interrupt_enabled = are_interrupts_enabled();
+
     disable_scheduler();
     close_interrupt;
     pcb_t pcb    = get_current_task()->parent_group;
     pcb->pagedir = dir;
     switch_page_directory(dir);
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
+
+    if (was_scheduler_enabled) enable_scheduler();
+    if (was_interrupt_enabled && !no_interrupt) open_interrupt;
 }
 
 void switch_page_directory(page_directory_t *dir)

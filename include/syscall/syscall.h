@@ -274,6 +274,8 @@
 #define SYS_ACCEPT 43
 #define SYS_SENDTO 44
 #define SYS_RECVFROM 45
+#define SYS_SENDMSG 46
+#define SYS_RECVMSG 47
 #define SYS_SOCKETPAIR 53
 
 #define SYS_SHUTDOWN 48
@@ -294,6 +296,7 @@
 #define SYS_KILL   62
 #define SYS_UNAME  63
 #define SYS_FCNTL  72
+#define SYS_FLOCK  73
 #define SYS_FTRUNCATE 77
 
 #define SYS_GETDENTS 78
@@ -314,6 +317,7 @@
 #define SYS_CHOWN    92
 #define SYS_FCHOWN   93
 #define SYS_LCHOWN   94
+#define SYS_UMASK    95
 #define SYS_GETTIMEOFDAY 96
 
 #define SYS_SYSINFO 99
@@ -328,29 +332,49 @@
 #define SYS_GETPGRP 111
 #define SYS_SETSID 112
 #define SYS_GETGROUPS 115
+#define SYS_SETGROUPS 116
+#define SYS_SETRESUID 117
+#define SYS_GETRESUID 118
+#define SYS_SETRESGID 119
+#define SYS_GETRESGID 120
 #define SYS_GETPGID 121
+#define SYS_SETFSUID 122
+#define SYS_SETFSGID 123
 #define SYS_GETSID 124
+#define SYS_CAPGET 125
+#define SYS_CAPSET 126
+#define SYS_SIGALTSTACK 131
 #define SYS_MKNOD 133
 #define SYS_STATFS 137
 #define SYS_PIVOT_ROOT 155
 
+#define SYS_PRCTL 157
 #define SYS_ARCH_PRCTL 158
+#define SYS_CHROOT 161
 #define SYS_SYNC 162
 #define SYS_MOUNT 165
 #define SYS_UMOUNT2 166
 
 #define SYS_GETTID 186
+#define SYS_FLISTXATTR 196
 #define SYS_TIME 201
 #define SYS_FUTEX 202
+#define SYS_SCHED_GETAFFINITY 204
+#define SYS_EPOLL_CREATE 213
 #define SYS_GETDENTS64 217
 
 #define SYS_SET_TID_ADDRESS 218
+#define SYS_FADVISE64 221
 
 #define SYS_CLOCK_GETTIME 228
 #define SYS_CLOCK_GETRES 229
+#define SYS_CLOCK_NANOSLEEP 230
 
 #define SYS_EXIT_GROUP 231
+#define SYS_EPOLL_WAIT 232
+#define SYS_EPOLL_CTL 233
 #define SYS_TGKILL 234
+#define SYS_UTIMES 235
 
 #define SYS_OPENAT 257
 #define SYS_MKDIRAT 258
@@ -365,9 +389,13 @@
 #define SYS_FACCESSAT 269
 #define SYS_PSELECT6 270
 #define SYS_SET_ROBUST_LIST 273
+#define SYS_SYNC_FILE_RANGE 277
 #define SYS_UTIMENSAT 280
+#define SYS_EPOLL_PWAIT 281
+#define SYS_EPOLL_CREATE1 291
 #define SYS_PIPE2 293
 #define SYS_PRLIMIT64 302
+#define SYS_SENDMMSG 307
 #define SYS_GETRANDOM 318
 #define SYS_COPY_FILE_RANGE 326
 #define SYS_STATX 332
@@ -378,7 +406,29 @@
 #define SYS_RSEQ 334
 #define SYS_FSOPEN 430
 #define SYS_CLONE3 435
+#define SYS_CLOSE_RANGE 436
 #define SYS_FACCESSAT2 439
+#define SYS_FCHMODAT2 452
+
+#define CLOSE_RANGE_UNSHARE  (1U << 1)
+#define CLOSE_RANGE_CLOEXEC  (1U << 2)
+
+#define CLONE_ARGS_SIZE_VER0 80
+#define CLONE_ARGS_SIZE_VER1 88
+
+struct clone_args {
+    uint64_t flags;
+    uint64_t pidfd;
+    uint64_t child_tid;
+    uint64_t parent_tid;
+    uint64_t exit_signal;
+    uint64_t stack;
+    uint64_t stack_size;
+    uint64_t tls;
+    uint64_t set_tid;
+    uint64_t set_tid_size;
+    uint64_t cgroup;
+};
 
 struct utsname {
     char sysname[65];
@@ -393,9 +443,25 @@ struct iovec {
     void  *iov_base;
     size_t iov_len;
 };
+
+struct msghdr {
+    void         *msg_name;
+    socklen_t    msg_namelen;
+    struct iovec *msg_iov;
+    size_t       msg_iovlen;
+    void         *msg_control;
+    size_t       msg_controllen;
+    int          msg_flags;
+};
+
+struct mmsghdr {
+    struct msghdr msg_hdr;
+    uint32_t      msg_len;
+};
+
 struct timespec {
-    uint64_t tv_sec;
-    uint64_t tv_nsec;
+    int64_t tv_sec;
+    int64_t tv_nsec;
 };
 
 struct stat {
@@ -413,6 +479,17 @@ struct stat {
     struct timespec   st_mtim;
     struct timespec   st_ctim;
     char              _pad[24];
+};
+
+struct user_cap_header {
+    uint32_t version;
+    int      pid;
+};
+
+struct user_cap_data {
+    uint32_t effective;
+    uint32_t permitted;
+    uint32_t inheritable;
 };
 
 typedef struct {
@@ -570,6 +647,9 @@ sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen);
 sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const struct sockaddr *addr, socklen_t addrlen);
 sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockaddr *addr, socklen_t *addrlen);
+sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags);
+sys_(sendmmsg, int fd, struct mmsghdr *mmsg, uint32_t vlen, uint64_t flags);
+sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags);
 sys_(socketpair, int domain, int type, int protocol, int *sv);
 sys_(setsockopt, int fd, int level, int optname, const void *optval, socklen_t optlen);
 sys_(getsockopt, int fd, int level, int optname, void *optval, socklen_t *optlen);
@@ -577,9 +657,11 @@ sys_(getsockname, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(getpeername, int fd, struct sockaddr *addr, socklen_t *addrlen);
 sys_(stat, char *fn, struct stat *buf);
 sys_(arch_prctl, uint64_t code, uint64_t addr);
+sys_(prctl, int option, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5);
 sys_(yield);
 sys_(uname, struct utsname *utsname);
 sys_(nano_sleep, void *time_handle);
+sys_(clock_nanosleep, int clockid, int flags, const struct timespec *request, struct timespec *remain);
 sys_(ioctl, int fd, int options, void *arg2);
 sys_(writev, int fd, struct iovec *iov, int iovcnt);
 sys_(readv, int fd, struct iovec *iov, int iovcnt0);
@@ -600,7 +682,12 @@ sys_(fchdir, int fd);
 sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
 sys_(exit_group, int exit_code);
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
-sys_(sched_getaffinity);//不支持
+sys_(epoll_create, int size);
+sys_(epoll_create1, int flags);
+sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event);
+sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeout);
+sys_(epoll_pwait, int epfd, struct epoll_event *events, int maxevents, int timeout, sigset_t *sigmask, size_t sigsetsize);
+sys_(sched_getaffinity, int pid, size_t cpusetsize, void *mask);
 sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
 sys_(kill, int pid, int sig);
 sys_(tgkill, int tgid, int tid, int sig);
@@ -610,6 +697,7 @@ sys_(dup, int fd);
 sys_(fcntl, int fd, int cmd, uint64_t arg);
 sys_(fork);
 sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uint64_t tls);
+sys_(clone3, struct clone_args *cl_args, size_t size);
 sys_(get_tid);
 sys_(set_tid_address, int *tidptr);
 sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3);
@@ -633,8 +721,16 @@ sys_(getuid);
 sys_(getgid);
 sys_(setuid, uint32_t uid);
 sys_(setgid, uint32_t gid);
+sys_(setresuid, uint32_t ruid, uint32_t euid, uint32_t suid);
+sys_(getresuid, uint32_t *ruid, uint32_t *euid, uint32_t *suid);
+sys_(setresgid, uint32_t rgid, uint32_t egid, uint32_t sgid);
+sys_(getresgid, uint32_t *rgid, uint32_t *egid, uint32_t *sgid);
+sys_(setfsuid, uint32_t uid);
+sys_(setfsgid, uint32_t gid);
 sys_(geteuid);
 sys_(getegid);
+sys_(capget, struct user_cap_header *header, struct user_cap_data *data);
+sys_(capset, struct user_cap_header *header, struct user_cap_data *data);
 sys_(sysinfo, struct sysinfo *info);
 sys_(readlink);
 sys_(readlinkat, int dirfd, char *path, char *buf, size_t size);
@@ -645,6 +741,8 @@ sys_(symlinkat, char *target, int newdirfd, char *linkpath);
 sys_(ftruncate, int fd, uint64_t length);
 sys_(fsync, int fd);
 sys_(fdatasync, int fd);
+sys_(fadvise64, int fd, uint64_t offset, uint64_t len, int advice);
+sys_(sync_file_range, int fd, int64_t offset, int64_t nbytes, uint64_t flags);
 sys_(sync);
 sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rlimit *old_limit);
 sys_(getrandom, void *buf, size_t buflen, uint64_t flags);
@@ -653,12 +751,16 @@ sys_(link, char *name, char *nw);
 sys_(symlink, char *name, char *nw);
 sys_(rename, char *oldpath, char *newpath);
 sys_(getgroups, int count, int *gid_list);
+sys_(setgroups, int count, const int *gid_list);
 sys_(getpgid);
 sys_(setpgid, int pid, int pgid);
+sys_(flock, int fd, int operation);
+sys_(chroot, char *path);
 sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *data);
-sys_(pwrite, int fd, uint8_t *buffer, size_t size, uint64_t offset);
+sys_(pwrite, int fd, uint8_t *buffer, size_t size, int64_t offset);
 sys_(pread, int fd, uint8_t *buffer, size_t size, uint64_t offset);
 sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags);
+sys_(flistxattr, int fd, char *list, size_t size);
 sys_(openat);
 sys_(faccessat2);
 sys_(faccessat);
@@ -673,14 +775,16 @@ sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags);
 sys_(fchownat, int dirfd, char *pathname, uint32_t owner, uint32_t group, int flags);
 sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
 sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
+sys_(utimes, char *filename, const struct timeval *times);
 sys_(getdents, int fd, struct dirent *dents, size_t size);
 sys_(getdents64, int fd, void *dents, size_t size);
 sys_(pselect6, uint64_t nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timespec *timeout,
      WeirdPselect6 *weirdPselect6);
 sys_(select, int nfds, uint8_t *read, uint8_t *write, uint8_t *except, struct timeval *timeout);
-sys_(lseek, int fd, size_t offset, size_t whence);
+sys_(lseek, int fd, int64_t offset, size_t whence);
 sys_(mkdir, char *name, uint64_t mode);
 sys_(clock_getres);
+sys_(umask, uint64_t mask);
 sys_(shutdown, int fd, int how);
 sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen);
 sys_(listen, int fd, int backlog);

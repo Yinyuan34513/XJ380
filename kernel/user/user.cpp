@@ -31,7 +31,7 @@
 
 char *current_user_envp[100] = {
     ENVP_SYSTEM_VERSION,
-    (char *)"PATH=/usr/bin:/apps:/system",//像不像
+    (char *)"PATH=/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin:/apps:/system",//像不像
     NULL // 必须以NULL结尾
 };
 
@@ -63,9 +63,8 @@ uint32_t user_uid(const UserInfo *user)
     {
     case XUT_Root:
     case XUT_System:
-        return 0;
     case XUT_Admin:
-        return 1000;
+        return 0;
     case XUT_Visitor:
         return 65534;
     case XUT_Custom:
@@ -81,9 +80,8 @@ uint32_t user_gid(const UserInfo *user)
     {
     case XUT_Root:
     case XUT_System:
-        return 0;
     case XUT_Admin:
-        return 1000;
+        return 0;
     case XUT_Visitor:
         return 65534;
     case XUT_Custom:
@@ -509,10 +507,26 @@ static int load_user_elf_image(uint8_t *buf, uint64_t file_size, pcb_t group, co
         ehdr->e_phentsize != sizeof(Elf64_Phdr) ||
         !elf_range_in_file(ehdr->e_phoff, (uint64_t)ehdr->e_phnum * ehdr->e_phentsize, file_size))
     {
+        write_serial_fmt("ELF load reject %s: size=%llu magic=%02x %02x %02x %02x type=%u machine=%u phoff=%llu phnum=%u phentsize=%u\n",
+                         name != NULL ? name : "(null)",
+                         file_size,
+                         file_size > 0 ? buf[0] : 0,
+                         file_size > 1 ? buf[1] : 0,
+                         file_size > 2 ? buf[2] : 0,
+                         file_size > 3 ? buf[3] : 0,
+                         elf_range_in_file(0, sizeof(Elf64_Ehdr), file_size) ? ehdr->e_type : 0,
+                         elf_range_in_file(0, sizeof(Elf64_Ehdr), file_size) ? ehdr->e_machine : 0,
+                         elf_range_in_file(0, sizeof(Elf64_Ehdr), file_size) ? ehdr->e_phoff : 0,
+                         elf_range_in_file(0, sizeof(Elf64_Ehdr), file_size) ? ehdr->e_phnum : 0,
+                         elf_range_in_file(0, sizeof(Elf64_Ehdr), file_size) ? ehdr->e_phentsize : 0);
         return -ENOEXEC;
     }
 
-    if (ehdr->e_type != ET_EXEC && ehdr->e_type != ET_DYN) return -ENOEXEC;
+    if (ehdr->e_type != ET_EXEC && ehdr->e_type != ET_DYN)
+    {
+        write_serial_fmt("ELF load reject %s: unsupported type=%u\n", name != NULL ? name : "(null)", ehdr->e_type);
+        return -ENOEXEC;
+    }
 
     Elf64_Phdr *phdrs = (Elf64_Phdr *)(buf + ehdr->e_phoff);
     uint64_t load_bias = ehdr->e_type == ET_DYN ? dyn_base : 0;
@@ -525,6 +539,13 @@ static int load_user_elf_image(uint8_t *buf, uint64_t file_size, pcb_t group, co
         if (phdrs[i].p_filesz > phdrs[i].p_memsz ||
             !elf_range_in_file(phdrs[i].p_offset, phdrs[i].p_filesz, file_size))
         {
+            write_serial_fmt("ELF load reject %s: bad PT_LOAD index=%d offset=%llu filesz=%llu memsz=%llu file_size=%llu\n",
+                             name != NULL ? name : "(null)",
+                             i,
+                             phdrs[i].p_offset,
+                             phdrs[i].p_filesz,
+                             phdrs[i].p_memsz,
+                             file_size);
             return -ENOEXEC;
         }
 
@@ -534,7 +555,11 @@ static int load_user_elf_image(uint8_t *buf, uint64_t file_size, pcb_t group, co
         load_end = max(load_end, (uint64_t)PADDING_UP(seg_end, PAGE_SIZE));
     }
 
-    if (load_start == ~0ULL || load_end <= load_start) return -ENOEXEC;
+    if (load_start == ~0ULL || load_end <= load_start)
+    {
+        write_serial_fmt("ELF load reject %s: no loadable segments\n", name != NULL ? name : "(null)");
+        return -ENOEXEC;
+    }
 
     page_map_range_to_random(group->pagedir, load_start, load_end - load_start,
                              PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
@@ -619,7 +644,13 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     {
         free_file_image(buf, file_size);
         pr_warn("Parse ELF/EPF file failed.\n");
-        write_serial_fmt("Reason:   Bad Format.\n");
+        write_serial_fmt("Reason:   Bad Format path=%s size=%llu magic=%02x %02x %02x %02x.\n",
+                         path,
+                         file_size,
+                         file_size > 0 ? buf[0] : 0,
+                         file_size > 1 ? buf[1] : 0,
+                         file_size > 2 ? buf[2] : 0,
+                         file_size > 3 ? buf[3] : 0);
         return NULL;
     }
 

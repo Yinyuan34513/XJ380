@@ -19,9 +19,43 @@ typedef uint32_t socklen_t;
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
+#define SOCK_RAW    3
 #define SOCK_TYPE_MASK 0xf
 #define SOCK_CLOEXEC 02000000
 #define SOCK_NONBLOCK 00004000
+
+#define SOL_SOCKET 1
+#define SO_DEBUG 1
+#define SO_REUSEADDR 2
+#define SO_TYPE 3
+#define SO_ERROR 4
+#define SO_BROADCAST 6
+#define SO_SNDBUF 7
+#define SO_RCVBUF 8
+#define SO_KEEPALIVE 9
+#define SO_LINGER 13
+#define SO_RCVLOWAT 18
+#define SO_SNDLOWAT 19
+#define SO_ACCEPTCONN 30
+#define SO_SNDTIMEO 66
+#define SO_RCVTIMEO 67
+
+#define IPPROTO_IP 0
+#define IPPROTO_ICMP 1
+#define IPPROTO_TCP 6
+#define IPPROTO_UDP 17
+#define TCP_NODELAY 1
+#define TCP_KEEPALIVE 2
+#define TCP_KEEPIDLE 3
+#define TCP_KEEPINTVL 4
+#define TCP_KEEPCNT 5
+
+#define MSG_PEEK 0x01
+#define MSG_WAITALL 0x02
+#define MSG_OOB 0x04
+#define MSG_DONTWAIT 0x08
+#define MSG_MORE 0x10
+#define MSG_NOSIGNAL 0x20
 
 #define SHUT_RD   0
 #define SHUT_WR   1
@@ -103,6 +137,7 @@ typedef struct socket_provider {
     int     (*connect)(void *socket, const struct sockaddr *addr, socklen_t addrlen);
     int     (*getsockname)(void *socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*getpeername)(void *socket, struct sockaddr *addr, socklen_t *addrlen);
+    int     (*getsockopt)(void *socket, int level, int optname, void *optval, socklen_t *optlen);
     int     (*listen)(void *socket, int backlog);
     int     (*accept)(void *socket, void **out_socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*shutdown)(void *socket, int how);
@@ -118,11 +153,13 @@ typedef struct socket_provider {
 
 int     socket_provider_register(const socket_provider_t *provider);
 int     socketfs_setup(void);
+int     socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_provider_t *provider);
 int     socket_open(int domain, int type, int protocol);
 int     socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int     socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int     socket_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
+int     socket_getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 int     socket_listen(int fd, int backlog);
 int     socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_shutdown(int fd, int how);

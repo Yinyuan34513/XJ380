@@ -83,7 +83,15 @@ static int month_day_countable[25] = {0, // 这里占位，没有 0 月，从 1 
 
 int century;
 
-bool is_leap_year(int year) { return ((year % 4 == 0) && (year % 100 != 0)); }
+bool is_leap_year(int year) { return (year % 4 == 0) && ((year % 100 != 0) || (year % 400 == 0)); }
+
+static bool is_valid_cmos_bcd(uint8_t value) {
+    return (value & 0x0f) <= 9 && ((value >> 4) & 0x0f) <= 9;
+}
+
+static bool is_plausible_full_year(int year) {
+    return year >= 2020 && year <= 2099;
+}
 
 int64_t mktime(tm *time) {
     int64_t seconds = 0;
@@ -138,6 +146,8 @@ void time_read(tm *time) {
     time_read_bcd(time);
     uint8_t rb = cmos_read(0x0b);
     bool need_convert = !(rb & 0x04);
+    int raw_year = time->tm_year;
+    int raw_century = century;
 
     if (need_convert) {
         time->tm_sec = bcd_to_bin(time->tm_sec);
@@ -149,11 +159,24 @@ void time_read(tm *time) {
         time->tm_wday = bcd_to_bin(time->tm_wday);
         time->tm_yday = month_day_countable[time->tm_mon] + time->tm_mday;
         time->tm_isdst = -1;
-        century = bcd_to_bin(century);
+        century = is_valid_cmos_bcd((uint8_t)raw_century) ? bcd_to_bin((uint8_t)raw_century) : 0;
     }
 
-    time->tm_year += century * 100;
+    int full_year = time->tm_year + century * 100;
+    if (!is_plausible_full_year(full_year)) {
+        int two_digit_year = need_convert ? time->tm_year : (raw_year & 0xff);
+        full_year = (two_digit_year < 70 ? 2000 : 1900) + two_digit_year;
+    }
+    time->tm_year = full_year;
 
     if (!(rb & 0x02) && (time->tm_hour & 0x80))
         time->tm_hour = ((time->tm_hour & 0x7F) + 12) % 24;
+}
+
+uint64_t realtime_ns() {
+    tm time;
+    time_read(&time);
+    int64_t seconds = mktime(&time);
+    if (seconds < 0) seconds = 0;
+    return (uint64_t)seconds * 1000000000ULL + (nanoTime() % 1000000000ULL);
 }

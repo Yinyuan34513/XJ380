@@ -66,12 +66,17 @@ extern UserInfo root_user;
 extern bool no_interrupt;
 extern bool is_scheduler;
 spin_t create_thread_lock = SPIN_INIT;
+static spin_t execve_image_lock = SPIN_INIT;
+static spin_t user_stack_build_lock = SPIN_INIT;
 // pcb.cpp
 #include "task/scheduler.h"
 
 extern spin_t scheduler_lock;
 extern void message_thread(uint64_t arg);
 extern uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);
+static void close_exec_file_descriptors(pcb_t process);
+static void close_process_file_table(pcb_t pcb);
+static bool fd_table_unref(pcb_t pcb);
 
 static tcb_t alloc_zeroed_tcb(void)
 {
@@ -220,6 +225,7 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
 
     if (is_zombie)
     {
+        close_process_file_table(pcb);
         pcb->status = ZOMBIE;
         if (pcb->thread_queue->size > 0)
         {
@@ -291,13 +297,7 @@ void kill_proc0(pcb_t pcb)
         if (thread != NULL) thread->status = DEATH;
     }
 
-    while (1)
-    {
-        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(pcb->file_open);
-        if (handle == NULL) break;
-        vfs_close(handle->node);
-        free(handle);
-    }
+    close_process_file_table(pcb);
 
     do
     {
@@ -330,7 +330,6 @@ void kill_proc0(pcb_t pcb)
     bool vfork = pcb->vfork;
 
     // 先销毁队列，因为它们需要访问pcb中的指针
-    lock_queue *file_open = pcb->file_open;
     lock_queue *ipc_queue = pcb->ipc_queue;
     lock_queue *virt_queue = pcb->virt_queue;
 
@@ -341,7 +340,6 @@ void kill_proc0(pcb_t pcb)
     pcb->virt_queue = NULL;
 
     // 现在销毁队列
-    if (file_open) queue_destroy(file_open);
     if (ipc_queue) queue_destroy(ipc_queue);
     if (virt_queue) queue_destroy(virt_queue);
 
@@ -450,7 +448,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     int      argv_i = 0;
     bool     ok     = true;
 
-    char *parsed_argv[51];
+    char *parsed_argv[EXECVE_VECTOR_MAX + 1];
     char **argv = task->argv;
     int argc = (int)task->argc;
     bool argv_owned_by_parser = false;
@@ -458,7 +456,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
     if (argv == NULL || argc <= 0)
     {
         build_cmdline = strdup(task->parent_group->cmdline);
-        argc = cmd_parse(build_cmdline, parsed_argv, ' ');
+        argc = cmd_parse_limit(build_cmdline, parsed_argv, ' ', EXECVE_VECTOR_MAX);
         argv = parsed_argv;
         argv_owned_by_parser = true;
     }
@@ -467,7 +465,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
         if (build_cmdline != NULL) free(build_cmdline);
         return 0;
     }
-    if (argc > 50) argc = 50;
+    if (argc > (int)EXECVE_VECTOR_MAX) argc = (int)EXECVE_VECTOR_MAX;
     write_serial_fmt("[busybox-debug] build_user_stack proc=%s pid=%llu argc=%d argv_source=%s cmdline=%s\n",
                      task->parent_group ? task->parent_group->name : "(null)",
                      task->parent_group ? (unsigned long long)task->parent_group->pid : 0ULL,
@@ -628,11 +626,11 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
 
     return ok ? tmp_stack : 0;
 }
-void switch_to_user_mode()
+
+static void switch_task_to_user_mode(tcb_t task)
 {
     close_interrupt;
 
-    tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL)
     {
         write_serial_string("switch_to_user_mode: invalid current task\n");
@@ -649,7 +647,9 @@ void switch_to_user_mode()
 
     // 鏋勫缓鐢ㄦ埛鏍堝苟鑾峰彇 argc 鍜?argv
     uint64_t ep;
+    spin_lock(&user_stack_build_lock);
     rsp = build_user_stack(task, rsp, task->main, 0, NULL, 0, &ep);
+    spin_unlock(&user_stack_build_lock);
     if (rsp == 0)
     {
         write_serial_string("build_user_stack failed\n");
@@ -722,6 +722,11 @@ void switch_to_user_mode()
                        "r"((uint64_t)argv),
                        "r"(entry_rdx)
                      : "memory");
+}
+
+void switch_to_user_mode()
+{
+    switch_task_to_user_mode(get_current_task());
 }
 
 
@@ -1054,10 +1059,6 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     uint64_t parent_fs_base = read_fsbase();
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
-    else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
-             (strstr(parent_task->name, "opkg") != NULL || strstr(parent_task->parent_group->name, "opkg") != NULL))
-        write_serial_fmt("[fsbase] clone-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx flags=0x%llx tls=0x%llx\n",
-                         parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base, flags, tls);
 
     pcb_t process = parent_task->parent_group;
     page_directory_t *pagedir = process->pagedir;
@@ -1138,9 +1139,6 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     new_task->signal  = 0;
     new_task->fs      = parent_task->fs;
     new_task->fs_base = (flags & CLONE_SETTLS_FLAG) ? tls : parent_task->fs_base;
-    if (process->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(process->name, "opkg") != NULL))
-        write_serial_fmt("[fsbase] clone-child task=%s parent_tid=%llu child_fs=0x%llx parent_fs=0x%llx flags=0x%llx tls=0x%llx\n",
-                         parent_task->name, parent_task->tid, new_task->fs_base, parent_task->fs_base, flags, tls);
 
     new_task->cwd = parent_task->cwd;
     if (new_task->cwd != NULL) new_task->cwd->refcount++;
@@ -1248,9 +1246,9 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         return (uint64_t)copy_ret;
     }
 
-    pcb_t process = get_current_task()->parent_group;
+    pcb_t process = current_task->parent_group;
 
-    char      *norm_path = strdup(kpath);
+    char      *norm_path = vfs_cwd_path_build(kpath);
     if (norm_path == NULL)
     {
         free(kpath);
@@ -1290,10 +1288,12 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     close_interrupt;
     disable_scheduler();
+    spin_lock(&execve_image_lock);
     page_directory_t *old_page_dir = process->pagedir;
     page_directory_t *new_page_dir = clone_page_directory(get_kernel_pagedir(), false);
     if (new_page_dir == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1313,6 +1313,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         {
             if (!append_cmdline_arg(cmdline, sizeof(cmdline), &cmdline_ptr, kargv[i]))
             {
+                spin_unlock(&execve_image_lock);
                 vfs_close(node);
                 free(norm_path);
                 free(kpath);
@@ -1331,6 +1332,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     if (new_cmdline == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1345,6 +1347,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         new_task_argv = copy_kernel_string_vector(kargv, kargc);
         if (new_task_argv == NULL)
         {
+            spin_unlock(&execve_image_lock);
             vfs_close(node);
             free(norm_path);
             free(kpath);
@@ -1358,6 +1361,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         new_process_argv = copy_kernel_string_vector_owned(kargv, kargc);
         if (new_process_argv == NULL)
         {
+            spin_unlock(&execve_image_lock);
             vfs_close(node);
             free(norm_path);
             free(kpath);
@@ -1373,6 +1377,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     new_exe_path = strdup(norm_path);
     if (new_exe_path == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1399,6 +1404,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         UserInfo *exec_user = current_user != NULL ? current_user : &root_user;
         if (exec_user->envp == NULL)
         {
+            spin_unlock(&execve_image_lock);
             vfs_close(node);
             free(norm_path);
             free(kpath);
@@ -1416,6 +1422,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     }
     if (new_envp == NULL)
     {
+        spin_unlock(&execve_image_lock);
         vfs_close(node);
         free(norm_path);
         free(kpath);
@@ -1477,6 +1484,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(new_exe_path);
         free_envp(kargv);
         free_envp(new_envp);
+        spin_unlock(&execve_image_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)exec_ret;
     }
@@ -1503,6 +1511,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         free(new_exe_path);
         free_envp(kargv);
         free_envp(new_envp);
+        spin_unlock(&execve_image_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
@@ -1524,6 +1533,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     if (old_process_argv != NULL) free_envp(old_process_argv);
     free(old_exe_path);
     if (old_envp != NULL) free_envp(old_envp);
+    close_exec_file_descriptors(process);
     vma_manager_exit_cleanup(&old_vma_manager);
     if (was_vfork)
     {
@@ -1563,22 +1573,23 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     free(kpath);
     free_envp(kargv);
 
-    if (get_current_task()->argv != NULL) free_envp(get_current_task()->argv);
-    get_current_task()->argv = new_task_argv;
-    get_current_task()->argc = kargc;
+    if (current_task->argv != NULL) free_envp(current_task->argv);
+    current_task->argv = new_task_argv;
+    current_task->argc = kargc;
     new_task_argv = NULL;
 
-    get_current_task()->user_stack     = stack;
-    get_current_task()->user_stack_top = stack + BIG_USER_STACK;
-    get_current_task()->main           = e_entry;
-    get_current_task()->hasfscr        = false;
-    get_current_task()->winnum         = 0;
-    get_current_task()->fs             = GET_SEL(4 * 8, SA_RPL3);
-    get_current_task()->fs_base        = 0;
-    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(get_current_task())));
+    current_task->user_stack     = stack;
+    current_task->user_stack_top = stack + BIG_USER_STACK;
+    current_task->main           = e_entry;
+    current_task->hasfscr        = false;
+    current_task->winnum         = 0;
+    current_task->fs             = GET_SEL(4 * 8, SA_RPL3);
+    current_task->fs_base        = 0;
+    __asm__ __volatile__("movq %0, %%fs\n\t" ::"r"(task_user_fs_selector(current_task)));
     write_fsbase(0);
+    spin_unlock(&execve_image_lock);
     if (was_scheduler_enabled) enable_scheduler();
-    switch_to_user_mode();
+    switch_task_to_user_mode(current_task);
     return (uint64_t)-(EAGAIN);
 }
 
@@ -1587,6 +1598,39 @@ static void *file_copy(void *ptr)
     if (ptr == NULL) return NULL;
     fd_file_handle *src = (fd_file_handle *)ptr;
     return fd_dup(src);
+}
+
+static void close_exec_file_descriptors(pcb_t process)
+{
+    if (process == NULL || process->file_open == NULL) return;
+
+    while (true)
+    {
+        size_t fd_to_close = (size_t)-1;
+
+        spin_lock(&process->file_open->lock);
+        lock_node *node = process->file_open->head;
+        while (node != NULL)
+        {
+            fd_file_handle *handle = (fd_file_handle *)node->data;
+            if (handle != NULL && (handle->flags & O_CLOEXEC))
+            {
+                fd_to_close = node->index;
+                break;
+            }
+            node = node->next;
+        }
+        spin_unlock(&process->file_open->lock);
+
+        if (fd_to_close == (size_t)-1) break;
+
+        fd_file_handle *handle = (fd_file_handle *)queue_remove_at(process->file_open, fd_to_close);
+        if (handle != NULL)
+        {
+            vfs_close(handle->node);
+            free(handle);
+        }
+    }
 }
 
 static void free_fd_handle_queue(lock_queue *queue)
@@ -1600,6 +1644,53 @@ static void free_fd_handle_queue(lock_queue *queue)
         free(handle);
     }
     queue_destroy(queue);
+}
+
+static size_t *alloc_fd_table_ref(void)
+{
+    size_t *refs = (size_t *)malloc(sizeof(size_t));
+    if (refs != NULL) *refs = 1;
+    return refs;
+}
+
+static void fd_table_ref(pcb_t pcb)
+{
+    if (pcb == NULL || pcb->file_open_shared_refs == NULL) return;
+    __atomic_fetch_add(pcb->file_open_shared_refs, 1, __ATOMIC_SEQ_CST);
+}
+
+static bool fd_table_unref(pcb_t pcb)
+{
+    if (pcb == NULL || pcb->file_open_shared_refs == NULL) return true;
+    size_t old = __atomic_fetch_sub(pcb->file_open_shared_refs, 1, __ATOMIC_SEQ_CST);
+    if (old <= 1)
+    {
+        free(pcb->file_open_shared_refs);
+        pcb->file_open_shared_refs = NULL;
+        return true;
+    }
+    pcb->file_open_shared_refs = NULL;
+    return false;
+}
+
+static void close_process_file_table(pcb_t pcb)
+{
+    if (pcb == NULL || pcb->file_open == NULL) return;
+
+    lock_queue *file_open = pcb->file_open;
+    bool close_fd_table = fd_table_unref(pcb);
+    pcb->file_open = NULL;
+
+    if (!close_fd_table) return;
+
+    while (true)
+    {
+        fd_file_handle *handle = (fd_file_handle *)queue_dequeue(file_open);
+        if (handle == NULL) break;
+        vfs_close(handle->node);
+        free(handle);
+    }
+    queue_destroy(file_open);
 }
 
 static void free_owned_pointer_queue(lock_queue *queue)
@@ -1625,7 +1716,7 @@ static void free_partial_process(pcb_t pcb, bool owns_pagedir)
 
     if (pcb->thread_queue) queue_destroy(pcb->thread_queue);
     if (pcb->child_pcb) queue_destroy(pcb->child_pcb);
-    free_fd_handle_queue(pcb->file_open);
+    if (fd_table_unref(pcb)) free_fd_handle_queue(pcb->file_open);
     free_owned_pointer_queue(pcb->virt_queue);
     free_owned_pointer_queue(pcb->ipc_queue);
     vma_manager_exit_cleanup(&pcb->vma_manager);
@@ -1676,6 +1767,29 @@ static void init_fork_child_context(tcb_t child, const struct X64_REGS *frame, u
     child->context0.rcx    = frame->rcx;
 }
 
+static void set_child_user_stack_bounds(tcb_t child, tcb_t parent, uint64_t user_stack)
+{
+    if (child == NULL || parent == NULL) return;
+
+    if (user_stack == 0)
+    {
+        child->user_stack     = parent->user_stack;
+        child->user_stack_top = parent->user_stack_top;
+        return;
+    }
+
+    uint64_t stack_top = (user_stack + PAGE_SIZE - 1) & PAGE_MASK;
+    if (stack_top < user_stack || stack_top < BIG_USER_STACK)
+    {
+        child->user_stack     = parent->user_stack;
+        child->user_stack_top = parent->user_stack_top;
+        return;
+    }
+
+    child->user_stack     = stack_top - BIG_USER_STACK;
+    child->user_stack_top = stack_top;
+}
+
 uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, uint64_t clone_flags,
                       int *parent_tid, int *child_tid)
 {
@@ -1697,11 +1811,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     uint64_t parent_fs_base = read_fsbase();
     if (parent_fs_base != 0 || parent_task->fs_base == 0)
         parent_task->fs_base = parent_fs_base;
-    else if (parent_task->parent_group != NULL && parent_task->parent_group->linux_abi &&
-             (strstr(parent_task->name, "opkg") != NULL || strstr(parent_task->parent_group->name, "opkg") != NULL))
-        write_serial_fmt("[fsbase] fork-parent-zero-ignored task=%s tid=%llu tcb=0x%llx hw=0x%llx rip=0x%llx\n",
-                         parent_task->name, parent_task->tid, parent_task->fs_base, parent_fs_base,
-                         reg != NULL ? reg->rcx : 0);
 
     pcb_t current_pcb = parent_task->parent_group;
     if ((clone_flags & CLONE_PARENT_SETTID_FLAG) && parent_tid == NULL)
@@ -1773,7 +1882,17 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_pcb->parent_task  = current_pcb;
     new_pcb->child_pcb    = queue_init();
     new_pcb->virt_queue   = queue_copy(current_pcb->virt_queue, virt_copy);
-    new_pcb->file_open    = queue_copy(current_pcb->file_open, file_copy);
+    if (clone_flags & CLONE_FILES_FLAG)
+    {
+        new_pcb->file_open = current_pcb->file_open;
+        new_pcb->file_open_shared_refs = current_pcb->file_open_shared_refs;
+        fd_table_ref(new_pcb);
+    }
+    else
+    {
+        new_pcb->file_open = queue_copy(current_pcb->file_open, file_copy);
+        new_pcb->file_open_shared_refs = alloc_fd_table_ref();
+    }
     new_pcb->ipc_queue    = queue_init();
     new_pcb->tty          = alloc_default_tty();
 
@@ -1781,7 +1900,8 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     if (new_pcb->cmdline == NULL || (current_pcb->argc > 0 && new_pcb->argv == NULL) ||
         (current_pcb->exe_path != NULL && new_pcb->exe_path == NULL) ||
         new_pcb->thread_queue == NULL || new_pcb->child_pcb == NULL ||
-        new_pcb->virt_queue == NULL || new_pcb->file_open == NULL || new_pcb->ipc_queue == NULL ||
+        new_pcb->virt_queue == NULL || new_pcb->file_open == NULL || new_pcb->file_open_shared_refs == NULL ||
+        new_pcb->ipc_queue == NULL ||
         new_pcb->tty == NULL || new_pcb->xtttp_stc == NULL)
     {
         free_partial_process(new_pcb, !is_vfork);
@@ -1820,8 +1940,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_task->task_level     = TASK_APPLICATION_LEVEL;
     new_task->cpu_id         = get_current_cpu()->processor_id;
     new_task->status         = START;
-    new_task->user_stack     = parent_task->user_stack;
-    new_task->user_stack_top = parent_task->user_stack_top;
+    set_child_user_stack_bounds(new_task, parent_task, user_stack);
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (kernel_stack_phys == 0)
     {
@@ -1861,21 +1980,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
 
     new_task->fs      = parent_task->fs;
     new_task->fs_base = parent_task->fs_base;
-    if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
-    {
-        write_serial_fmt("[fsbase] fork-child parent=%s parent_tid=%llu child_pid=%llu child_fs=0x%llx parent_fs=0x%llx rip=0x%llx\n",
-                         parent_task->name, parent_task->tid, new_pcb->pid, new_task->fs_base, parent_task->fs_base,
-                         fork_frame.rcx);
-        write_serial_fmt("[forkctx] frame_rcx=0x%llx frame_rsp=0x%llx frame_r11=0x%llx child_rip=0x%llx child_rsp=0x%llx child_rflags=0x%llx cs=0x%llx ss=0x%llx ds=0x%llx es=0x%llx rax=0x%llx\n",
-                         fork_frame.rcx, fork_frame.rsp, fork_frame.r11, new_task->context0.rip,
-                         new_task->context0.rsp, new_task->context0.rflags, new_task->context0.cs,
-                         new_task->context0.ss, new_task->context0.ds, new_task->context0.es,
-                         new_task->context0.rax);
-        write_serial_fmt("[forkctx] regs rbx=0x%llx rbp=0x%llx r12=0x%llx r13=0x%llx r14=0x%llx r15=0x%llx rdi=0x%llx rsi=0x%llx rdx=0x%llx\n",
-                         new_task->context0.rbx, new_task->context0.rbp, new_task->context0.r12,
-                         new_task->context0.r13, new_task->context0.r14, new_task->context0.r15,
-                         new_task->context0.rdi, new_task->context0.rsi, new_task->context0.rdx);
-    }
 
     new_task->parent_group = new_pcb;
     new_task->tid = new_pcb->pid;
@@ -1930,17 +2034,6 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     restore_runtime_state(was_scheduler_enabled, is_sti);
 
     write_serial_fmt("FORK PID: %d\n", new_pcb->pid);
-    if (current_pcb->linux_abi && (strstr(parent_task->name, "opkg") != NULL || strstr(current_pcb->name, "opkg") != NULL))
-    {
-        write_serial_fmt("[DEBUG-fork-ret] parent=%s pid=%llu child=%llu sti=%d sched=%d rip=0x%llx rsp=0x%llx\n",
-                         parent_task->name,
-                         current_pcb->pid,
-                         new_pcb->pid,
-                         (int)is_sti,
-                         (int)was_scheduler_enabled,
-                         fork_frame.rcx,
-                         fork_frame.rsp);
-    }
     if (!is_vfork) return new_pcb->pid;
 
     scheduler_yield();
@@ -2036,7 +2129,6 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 
     new_task->str_cwd = "/";
     new_task->cwd     = rootdir;
-    new_task->cwd->refcount++;
     new_task->window_count = 0;
 
     new_task->group_index = queue_enqueue(target_group->thread_queue, new_task);
@@ -2125,7 +2217,6 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-ENOENT;
     }
-    new_task->cwd->refcount++;
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;
@@ -2134,7 +2225,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->argv = (char **)args;
     new_task->argc = argc;
 
-    new_task->user_info = current_user;
+    new_task->user_info = current_user != NULL ? current_user : &root_user;
 
     new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
     if (new_task->user_stack == 0)
@@ -2253,7 +2344,6 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-ENOENT;
     }
-    new_task->cwd->refcount++;
     new_task->str_cwd = cwd;
 
     new_task->winnum  = 0;
@@ -2358,15 +2448,17 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
     pcb->file_open    = queue_init();
+    pcb->file_open_shared_refs = alloc_fd_table_ref();
     pcb->virt_queue   = queue_init();
     pcb->ipc_queue    = queue_init();
     pcb->tty          = alloc_default_tty();
-    if (pcb->thread_queue == NULL || pcb->child_pcb == NULL || pcb->file_open == NULL || pcb->virt_queue == NULL ||
-        pcb->ipc_queue == NULL || pcb->tty == NULL)
+    if (pcb->thread_queue == NULL || pcb->child_pcb == NULL || pcb->file_open == NULL ||
+        pcb->file_open_shared_refs == NULL || pcb->virt_queue == NULL || pcb->ipc_queue == NULL || pcb->tty == NULL)
     {
         if (pcb->thread_queue) queue_destroy(pcb->thread_queue);
         if (pcb->child_pcb) queue_destroy(pcb->child_pcb);
         if (pcb->file_open) queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         if (pcb->virt_queue) queue_destroy(pcb->virt_queue);
         if (pcb->ipc_queue) queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2392,6 +2484,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->thread_queue);
         queue_destroy(pcb->child_pcb);
         queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2407,6 +2500,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->thread_queue);
         queue_destroy(pcb->child_pcb);
         queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2422,6 +2516,7 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
         queue_destroy(pcb->thread_queue);
         queue_destroy(pcb->child_pcb);
         queue_destroy(pcb->file_open);
+        free(pcb->file_open_shared_refs);
         queue_destroy(pcb->virt_queue);
         queue_destroy(pcb->ipc_queue);
         free_tty(pcb->tty);
@@ -2479,6 +2574,7 @@ void process_setup()
     kernel_pcb->child_pcb    = queue_init();
     kernel_pcb->xtttp_stc    = (xtttp_dtt *)calloc(1,sizeof(xtttp_dtt));
     kernel_pcb->file_open    = queue_init();
+    kernel_pcb->file_open_shared_refs = alloc_fd_table_ref();
     kernel_pcb->virt_queue   = queue_init();
     kernel_pcb->ipc_queue    = queue_init();
     kernel_pcb->mmap_start   = USER_MMAP_START;

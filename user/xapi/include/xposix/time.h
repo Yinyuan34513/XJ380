@@ -10,6 +10,7 @@
 #define CLOCK_REALTIME_COARSE    5
 #define CLOCK_MONOTONIC_COARSE   6
 #define CLOCK_BOOTTIME           7
+#define TIMER_ABSTIME            1
 
 struct timespec {
     time_t tv_sec;
@@ -23,6 +24,7 @@ extern "C" {
 int clock_gettime(int clockid, struct timespec *ts);
 int clock_getres(int clockid, struct timespec *ts);
 int nanosleep(const struct timespec *req, struct timespec *rem);
+int clock_nanosleep(int clockid, int flags, const struct timespec *req, struct timespec *rem);
 time_t time(time_t *timer);
 
 struct tm {

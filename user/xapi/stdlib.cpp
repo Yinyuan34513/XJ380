@@ -415,6 +415,11 @@ extern "C" void *realloc(void *ptr, size_t size)
     return new_ptr;
 }
 
+extern "C" int abs(int value)
+{
+    return value < 0 ? -value : value;
+}
+
 extern "C" long atol(const char *nptr)
 {
     // atol 直接复用已有 strtol，保持空白/符号/进制处理一致。
