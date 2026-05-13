@@ -14,7 +14,8 @@
 #define PTY_CHUNK        1024
 #define DEFAULT_USER     "GuoqiFish"
 #define DEFAULT_HOME     "/users/GuoqiFish"
-#define DEFAULT_SHELL    "/usr/bin/bash"
+#define DEFAULT_SHELL    "/bin/sh"
+#define BUSYBOX_PATH     "/apps/busybox"
 
 #define TIOCSCTTY        0x540E
 #ifndef TIOCSWINSZ
@@ -692,8 +693,9 @@ static int spawn_busybox(char *envp[])
         if (slave > 2) close(slave);
         close(g_pty_master);
 
-        char *bash_argv[] = {(char *)"bash", (char *)"-i", NULL};
-        execve(DEFAULT_SHELL, bash_argv, child_env);
+        char *shell_argv[] = {(char *)"sh", (char *)"-i", NULL};
+        execve(DEFAULT_SHELL, shell_argv, child_env);
+        execve(BUSYBOX_PATH, shell_argv, child_env);
         exit(127);
     }
     if (pid < 0)
