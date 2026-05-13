@@ -16,6 +16,7 @@
 #define DEFAULT_HOME     "/users/GuoqiFish"
 #define DEFAULT_SHELL    "/bin/sh"
 #define BUSYBOX_PATH     "/apps/busybox"
+#define RESIZE_DEBOUNCE_NS 30000000ULL
 
 #define TIOCSCTTY        0x540E
 #ifndef TIOCSWINSZ
@@ -73,6 +74,11 @@ static VTermPos g_cursor = {0, 0};
 static bool g_cursor_visible = true;
 static XCOLOR *g_scroll_buffer = NULL;
 static size_t  g_scroll_buffer_pixels = 0;
+static bool g_resize_pending = false;
+static int  g_resize_pending_width = BUSY_WIDTH;
+static int  g_resize_pending_height = BUSY_HEIGHT;
+static uint64_t g_resize_last_event_ns = 0;
+static bool g_terminal_painted = false;
 
 static void send_child(const char *buf, int len);
 
@@ -186,6 +192,13 @@ static int clamp_i(int v, int lo, int hi)
     return v;
 }
 
+static uint64_t monotonic_ns()
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
 static bool ensure_scroll_buffer(int width, int height)
 {
     if (width <= 0 || height <= 0) return false;
@@ -241,6 +254,14 @@ static void fill_rect(int x1, int y1, int x2, int y2, UINT32 color)
 static void clear_window()
 {
     xapi_DrawRect(g_window, 0, 0, g_win_width - 1, g_win_height - 1, COLOR_BG, true);
+}
+
+static void clear_resized_edges(int old_width, int old_height)
+{
+    if (g_win_width > old_width)
+        fill_rect(old_width, 0, g_win_width - 1, g_win_height - 1, COLOR_BG);
+    if (g_win_height > old_height)
+        fill_rect(0, old_height, g_win_width - 1, g_win_height - 1, COLOR_BG);
 }
 
 static void send_child(const char *buf, int len)
@@ -467,6 +488,10 @@ static void terminal_init()
 
 static void terminal_resize(int width, int height)
 {
+    int old_width = g_win_width;
+    int old_height = g_win_height;
+    int old_cols = g_term_cols;
+    int old_rows = g_term_rows;
     int new_cols = 0;
     int new_rows = 0;
     calculate_terminal_geometry(width, height, &new_cols, &new_rows);
@@ -486,6 +511,13 @@ static void terminal_resize(int width, int height)
     g_cursor.row = clamp_i(g_cursor.row, 0, g_term_rows - 1);
     g_cursor.col = clamp_i(g_cursor.col, 0, g_term_cols - 1);
     sync_pty_window_size();
+    if (g_terminal_painted && new_cols == old_cols && new_rows == old_rows)
+    {
+        clear_resized_edges(old_width, old_height);
+        if (g_cursor_visible) draw_vterm_cell(g_cursor.row, g_cursor.col);
+        return;
+    }
+
     clear_window();
     if (g_vscreen != NULL)
     {
@@ -497,6 +529,7 @@ static void terminal_resize(int width, int height)
         };
         redraw_vterm_rect(all);
     }
+    g_terminal_painted = true;
 }
 
 static bool terminal_write_chunk(const char *buf, int len, bool flush_damage)
@@ -521,6 +554,30 @@ static void terminal_flush_damage()
 static void terminal_write(const char *buf, int len)
 {
     terminal_write_chunk(buf, len, true);
+}
+
+static void queue_terminal_resize(int width, int height)
+{
+    g_resize_pending_width = width;
+    g_resize_pending_height = height;
+    g_resize_last_event_ns = monotonic_ns();
+    g_resize_pending = true;
+}
+
+static void service_pending_resize(bool force)
+{
+    if (!g_resize_pending) return;
+
+    uint64_t now = monotonic_ns();
+    if (!force && now != 0 && g_resize_last_event_ns != 0 &&
+        now - g_resize_last_event_ns < RESIZE_DEBOUNCE_NS)
+    {
+        return;
+    }
+
+    g_resize_pending = false;
+    terminal_resize(g_resize_pending_width, g_resize_pending_height);
+    xapi_RefreshWindow(g_window);
 }
 
 static void send_key_seq(uint64_t key)
@@ -634,8 +691,7 @@ static void busyterm_msg(UINT64 type, UINT64 hData, UINT64 lData)
     }
     else if (type == MSG_RESIZE)
     {
-        terminal_resize((int)hData, (int)lData);
-        xapi_RefreshWindow(g_window);
+        queue_terminal_resize((int)hData, (int)lData);
     }
 }
 
@@ -762,7 +818,6 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
     calculate_terminal_geometry(BUSY_WIDTH, BUSY_HEIGHT, &g_term_cols, &g_term_rows);
     terminal_init();
     terminal_resize(BUSY_WIDTH, BUSY_HEIGHT);
-    clear_window();
     xapi_RefreshWindow(g_window);
 
     if (spawn_busybox(envp) < 0)
@@ -776,6 +831,7 @@ static int busyterm_main(int argc, char *argv[], char *envp[])
 
     while (true)
     {
+        service_pending_resize(false);
         drain_pty_output();
 
         if (g_child_pid > 0)
