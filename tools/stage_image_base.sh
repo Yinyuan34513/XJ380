@@ -84,11 +84,13 @@ stage_base_files()
     printf "nameserver 223.5.5.5\n" > "$root/etc/resolv.conf"
 
     cat > "$root/etc/os-release" <<'EOF'
-NAME="XJ380"
-PRETTY_NAME="XINGJI XJ380 Singularity 1.0.0 XSK 2.1.0"
+NAME="XJ380 OS"
+PRETTY_NAME="XJ380 Singularity 1.0.0"
 ID=xj380
-VERSION_ID="6.6"
-HOME_URL="https://github.com/xingji-studio/XJ380"
+VERSION_ID="1.0"
+HOME_URL="https://www.xingjisoft.com/os/xj380"
+DOCUMENTATION_URL="https://www.xingjisoft.com/os/xj380"
+LOGO=xj380
 EOF
     if [ -d resources/etc/fastfetch ]; then
         cp -a resources/etc/fastfetch/. "$root/etc/fastfetch/"

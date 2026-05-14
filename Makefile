@@ -322,7 +322,7 @@ vdisk: all
 	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
 	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
 
-	# temp test (remember to delete)
+# temp test (remember to delete)
 	@mkdir -p $(VDISK_ROOT)/users/GuoqiFish/desktop
 	@cp -a ./test.txt $(VDISK_ROOT)/users/GuoqiFish/desktop
 

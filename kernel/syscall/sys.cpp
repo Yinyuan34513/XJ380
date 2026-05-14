@@ -1559,10 +1559,10 @@ sys_(uname, struct utsname *utsname)
     if (unlikely(utsname == NULL)) return SYSCALL_FAULT_(EINVAL);
     struct utsname kname;
     memset(&kname, 0, sizeof(kname));
-    char sysname[] = "XJ380";
+    char sysname[] = KN_VERSION;
     char machine[] = "x86_64";
-    char release[] = "6.6.30";
-    char version[] = "XJ380 OS XSK2.1";
+    char release[] = "6.6.30"; // byd 咱就非要检查吗
+    char version[] = OS_VERSION;
     memcpy(kname.sysname, sysname, sizeof(sysname));
     memcpy(kname.nodename, "localhost", 10);
     memcpy(kname.release, release, sizeof(release));
