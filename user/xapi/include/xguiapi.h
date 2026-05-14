@@ -15,40 +15,39 @@
 #include "stdint.h"
 #include "./liballoc/alloc.h"
 
-// define
-typedef UINT64 		HDLE;
-typedef void 		(*MsgPrcor)(
-	UINT64 Type, 
-	UINT64 hData, 
-	UINT64 lData
-);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-struct XWINDOW
+typedef UINT64 HDLE;
+typedef void (*MsgPrcor)(UINT64 Type, UINT64 hData, UINT64 lData);
+
+typedef struct XWINDOW
 {
-    UINT32 	width;
-    UINT32 	height;
-    WSTR 	title;
-    UINT8 	sets;
-};
+    UINT32 width;
+    UINT32 height;
+    WSTR   title;
+    UINT8  sets;
+} XWINDOW;
 
 #pragma pack(1)
 
-struct XCOLOR
+typedef struct XCOLOR
 {
-	UINT8 	Red;
-	UINT8 	Green;
-	UINT8 	Blue;
-};
+    UINT8 Red;
+    UINT8 Green;
+    UINT8 Blue;
+} XCOLOR;
 
 #pragma pack()
 
-struct XCOLORA
+typedef struct XCOLORA
 {
-	UINT8 	Red;
-	UINT8 	Green;
-	UINT8 	Blue;
-	UINT8	Alpha;
-};
+    UINT8 Red;
+    UINT8 Green;
+    UINT8 Blue;
+    UINT8 Alpha;
+} XCOLORA;
 
 typedef struct 
 {
@@ -123,7 +122,7 @@ INT32 xapi_DrawSvg(
 	UINT32  y,
 	UINT32  width,
 	WSTR    svgText,
-	bool    enableTrans = false
+	bool    enableTrans
 );
 
 INT32 xapi_DrawFA(
@@ -132,7 +131,7 @@ INT32 xapi_DrawFA(
 	UINT32  y,
 	UINT32  width,
 	char   *name,
-	bool    enableTrans = false
+	bool    enableTrans
 );
 
 // void  xapi_DrawCircle(
@@ -230,6 +229,15 @@ void xapi_WriteBuffer(
 	XCOLOR*  	buffer
 );
 
+void xapi_ReadBufferA(
+	HDLE  	 	handle,
+	UINT32  	x,
+	UINT32  	y,
+	UINT32  	width,
+	UINT32		height,
+	XCOLOR*  	buffer
+);
+
 void xapi_WriteBufferA(
 	HDLE  	 	handle,
 	UINT32  	x,
@@ -280,3 +288,17 @@ void xapi_RegisterRightButtonMenu(
 );
 
 void xapi_DeleteRightButtonMenu(HDLE handle);
+
+#ifdef __cplusplus
+}
+
+inline INT32 xapi_DrawSvg(HDLE handle, UINT32 x, UINT32 y, UINT32 width, WSTR svgText)
+{
+	return xapi_DrawSvg(handle, x, y, width, svgText, false);
+}
+
+inline INT32 xapi_DrawFA(HDLE handle, UINT32 x, UINT32 y, UINT32 width, char *name)
+{
+	return xapi_DrawFA(handle, x, y, width, name, false);
+}
+#endif

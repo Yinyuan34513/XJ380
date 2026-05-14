@@ -28,6 +28,7 @@ static inline bool socketfs_provider_valid(const socket_provider_t *provider)
            provider->read != NULL && provider->write != NULL && provider->bind != NULL &&
            provider->recvfrom != NULL && provider->sendto != NULL &&
            provider->getsockname != NULL && provider->getpeername != NULL &&
+           provider->getsockopt != NULL &&
            provider->connect != NULL && provider->listen != NULL && provider->accept != NULL &&
            provider->shutdown != NULL && provider->poll != NULL && provider->set_flags != NULL &&
            provider->resolve_ipv4 != NULL && provider->resolve_ipv6 != NULL &&
@@ -80,6 +81,13 @@ static inline bool socketfs_is_socket_fd(int fd, fd_file_handle **out_handle)
         *out_handle = handle;
     }
     return handle != NULL && handle->node != NULL && (handle->node->type & file_socket);
+}
+
+static inline void socketfs_sync_flags(socketfs_handle_t *handle, uint64_t flags)
+{
+    if (handle != NULL && handle->provider.set_flags != NULL) {
+        handle->provider.set_flags(handle->socket, flags);
+    }
 }
 
 static inline int socketfs_errno(ssize_t ret)
@@ -200,14 +208,9 @@ static struct vfs_callback socketfs_callbacks = {
     .rename   = (vfs_rename_t)empty,
 };
 
-static int socketfs_alloc_fd(void *impl, uint64_t flags)
+int socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_provider_t *provider)
 {
-    socket_provider_t provider = {};
-    int               ret      = socketfs_snapshot_provider(&provider);
-    if (ret < 0) {
-        return ret;
-    }
-    if (socketfs_root == NULL || impl == NULL) {
+    if (socketfs_root == NULL || impl == NULL || provider == NULL) {
         return -ENOSYS;
     }
 
@@ -227,7 +230,7 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
         return -ENOMEM;
     }
 
-    socket_handle->provider = provider;
+    socket_handle->provider = *provider;
     socket_handle->socket   = impl;
 
     node->type   = file_socket | file_delete;
@@ -249,7 +252,7 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
     fd_handle->node   = node;
     fd_handle->offset = 0;
     fd_handle->flags  = flags;
-    fd_handle->fd     = queue_enqueue(get_current_task()->parent_group->file_open, fd_handle);
+    fd_handle->fd     = queue_enqueue_lowest(get_current_task()->parent_group->file_open, fd_handle);
     if ((int)fd_handle->fd < 0) {
         free(fd_handle);
         socketfs_del(NULL, node);
@@ -261,6 +264,19 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
 
     return (int)fd_handle->fd;
 }
+
+static int socketfs_alloc_fd(void *impl, uint64_t flags)
+{
+    socket_provider_t provider = {};
+    int ret = socketfs_snapshot_provider(&provider);
+    if (ret < 0) return ret;
+    return socketfs_alloc_fd_with_provider(impl, flags, &provider);
+}
+
+#include <net/unixsock.h>
+
+extern socket_provider_t g_unix_provider;
+extern void init_unix_provider(void);
 
 int socket_provider_register(const socket_provider_t *provider)
 {
@@ -292,6 +308,14 @@ int socketfs_setup(void)
 
 int socket_open(int domain, int type, int protocol)
 {
+    if (domain == AF_UNIX || domain == AF_LOCAL) {
+        init_unix_provider();
+        void *impl = NULL;
+        int ret = unix_create(domain, type, protocol, &impl);
+        if (ret < 0) return ret;
+        return socketfs_alloc_fd_with_provider(impl, 0, &g_unix_provider);
+    }
+
     if (domain != AF_INET) {
         return -EAFNOSUPPORT;
     }
@@ -376,6 +400,21 @@ int socket_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
     return handle->provider.getpeername(handle->socket, addr, addrlen);
 }
 
+int socket_getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle) || optval == NULL || optlen == NULL) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL || handle->provider.getsockopt == NULL) {
+        return -EBADF;
+    }
+
+    return handle->provider.getsockopt(handle->socket, level, optname, optval, optlen);
+}
+
 int socket_listen(int fd, int backlog)
 {
     fd_file_handle *fd_handle = NULL;
@@ -409,7 +448,13 @@ int socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
         return ret;
     }
 
-    return socketfs_alloc_fd(new_socket, fd_handle->node->flags);
+    int new_fd = socketfs_alloc_fd_with_provider(new_socket, fd_handle->node->flags, &handle->provider);
+    if (new_fd < 0)
+    {
+        handle->provider.close(new_socket);
+        return new_fd;
+    }
+    return new_fd;
 }
 
 int socket_shutdown(int fd, int how)
@@ -433,6 +478,7 @@ ssize_t socket_read(vfs_node_t node, void *buffer, size_t size)
     if (handle == NULL || buffer == NULL || handle->provider.read == NULL) {
         return -EBADF;
     }
+    socketfs_sync_flags(handle, node->flags);
     return handle->provider.read(handle->socket, buffer, size, node->flags);
 }
 
@@ -442,6 +488,7 @@ ssize_t socket_write(vfs_node_t node, const void *buffer, size_t size)
     if (handle == NULL || buffer == NULL || handle->provider.write == NULL) {
         return -EBADF;
     }
+    socketfs_sync_flags(handle, node->flags);
     return handle->provider.write(handle->socket, buffer, size, node->flags);
 }
 
@@ -456,6 +503,7 @@ ssize_t socket_recvfrom(int fd, void *buffer, size_t size, uint64_t flags, struc
     if (handle == NULL || buffer == NULL || handle->provider.recvfrom == NULL) {
         return -EBADF;
     }
+    socketfs_sync_flags(handle, fd_handle->node->flags);
     return handle->provider.recvfrom(handle->socket, buffer, size, fd_handle->node->flags | flags, addr, addrlen);
 }
 
@@ -471,6 +519,7 @@ ssize_t socket_sendto(int fd, const void *buffer, size_t size, uint64_t flags,
     if (handle == NULL || buffer == NULL || handle->provider.sendto == NULL) {
         return -EBADF;
     }
+    socketfs_sync_flags(handle, fd_handle->node->flags);
     return handle->provider.sendto(handle->socket, buffer, size, fd_handle->node->flags | flags, addr, addrlen);
 }
 

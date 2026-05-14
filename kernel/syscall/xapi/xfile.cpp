@@ -273,8 +273,6 @@ void do_xapi_SearchFile(uint64_t path, uint64_t count, uint64_t dir)
         free(fpath);
         return;
     }
-    v->refcount++;
-
     vfs_child_lock();
     for (list_t node = v->child; node != NULL; node = node->next)
     {

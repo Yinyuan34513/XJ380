@@ -314,6 +314,8 @@ errno_t devfs_delete(const char *path) {
     }
     node->parent->child = list_delete(node->parent->child, node);
     vfs_free(node);
+    free(buf);
+    return EOK;
 }
 
 errno_t devfs_register(const char *path, size_t id) {

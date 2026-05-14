@@ -30,7 +30,6 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
-static constexpr size_t XAPI_RUN_ARG_MAX = 32;
 
 uint64_t do_xapi_GetTime()
 {

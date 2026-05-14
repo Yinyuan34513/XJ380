@@ -2,7 +2,19 @@
 
 #include <krlibc.h>
 #include <proto.hpp>
+#include <mm/lazyalloc.h>
 #include <mm/page.h>
+
+static inline bool fault_in_user_page(page_directory_t *pagedir, uint64_t page)
+{
+    if (translate_address(pagedir, page) != 0) return true;
+
+    tcb_t task = get_current_task();
+    pcb_t process = task != NULL ? task->parent_group : NULL;
+    if (process == NULL || process->pagedir != pagedir) return false;
+    if (lazy_tryalloc(process, page) != EOK) return false;
+    return translate_address(pagedir, page) != 0;
+}
 
 static inline bool copy_user_bytes_pagedir(page_directory_t *pagedir, void *dst, const void *src, size_t size,
                                            bool to_user)
@@ -18,6 +30,7 @@ static inline bool copy_user_bytes_pagedir(page_directory_t *pagedir, void *dst,
     while (done < size)
     {
         uint64_t cur_uva = uva + done;
+        if (!fault_in_user_page(pagedir, cur_uva & PAGE_MASK)) return false;
         uint64_t phys    = translate_address(pagedir, cur_uva);
         if (phys == 0) return false;
 
@@ -53,7 +66,7 @@ static inline bool user_range_mapped(page_directory_t *pagedir, const void *ptr,
     while (true)
     {
         uint64_t flags = 0;
-        if (translate_address(pagedir, page) == 0) return false;
+        if (!fault_in_user_page(pagedir, page)) return false;
         if (!page_table_get_flags(pagedir, page, &flags)) return false;
         if ((flags & (PTE_PRESENT | PTE_USER)) != (PTE_PRESENT | PTE_USER)) return false;
         if (page == last_page) break;

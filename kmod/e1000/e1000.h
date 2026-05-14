@@ -87,6 +87,7 @@ extern "C" {
 #define E1000_RX_BUFFER_SIZE 2048
 #define E1000_TX_BUFFER_SIZE 2048
 #define E1000_MTU 1500
+#define E1000_MAX_FRAME_SIZE (E1000_MTU + 18)
 
 // RX Descriptor Structure
 struct e1000_rx_desc {

@@ -615,7 +615,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     SheetIsCreating = false;
 }
 
-// 这个lift_sheet是将图层提升到倒数第三个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
+// 这个lift_sheet是将图层提升到倒数第四个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
 // don't touch this
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
@@ -630,7 +630,7 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
     front_p->next->front = front_p->front;
     front_p->front->next = front_p->next;
     SHEET *front_p2      = sht->start;
-    for (int i = 0; i < sht->sheet_num - 3; i++)
+    for (int i = 0; i < sht->sheet_num - 4; i++)
     {
         front_p2 = front_p2->next; // 寻找最后一个
     }

@@ -11,7 +11,8 @@
 #include "./include/x3api.h"
 #include "./include/libsys.h"
 
-extern "C" int xapi_cpp_main(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int main(int argc, char *argv[], char *envp[]) __attribute__((weak));
+extern "C" int xapi_legacy_cpp_main(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_") __attribute__((weak));
 // extern void _init();
 // extern void __preinit_array_start();
 // extern void __preinit_array_end();
@@ -46,5 +47,15 @@ extern "C" __attribute__((force_align_arg_pointer)) void xapi_start(int argc, ch
     //    }
     //}
 
-    exit(xapi_cpp_main(argc, argv, envp));
+    if (main != NULL)
+    {
+        exit(main(argc, argv, envp));
+    }
+
+    if (xapi_legacy_cpp_main != NULL)
+    {
+        exit(xapi_legacy_cpp_main(argc, argv, envp));
+    }
+
+    exit(0);
 }

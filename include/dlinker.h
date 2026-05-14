@@ -104,6 +104,9 @@ typedef struct dlhandle {
     // 依赖项
     struct dlhandle** dependencies;
     size_t           dep_count;
+
+    // 搜索路径
+    char            *rpath;
 } dlhandle_t;
 dlhandle_t* load_shared_object_internal(const char* path, int flags, 
                                                page_directory_t* pd);

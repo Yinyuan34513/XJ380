@@ -117,9 +117,11 @@
 #define SYS_GETDENTS64 217
 
 #define SYS_SET_TID_ADDRESS 218
+#define SYS_FADVISE64 221
 
 #define SYS_CLOCK_GETTIME 228
 #define SYS_CLOCK_GETRES 229
+#define SYS_CLOCK_NANOSLEEP 230
 
 #define SYS_EXIT_GROUP 231
 #define SYS_TGKILL 234
@@ -292,4 +294,10 @@ typedef struct
 #define XWIN_TYPE_MASK         0x0f
 #define XWIN_SUPPORT_RESIZEABLE  0x80
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);
+#ifdef __cplusplus
+}
+#endif

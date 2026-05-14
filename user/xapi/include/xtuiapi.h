@@ -16,6 +16,10 @@
 #include "./libsys.h"
 #include "./liballoc/alloc.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // define
 #define PTE_PRESENT    (0x1 << 0)
 #define PTE_WRITEABLE  (0x1 << 1)
@@ -64,8 +68,8 @@ typedef struct
 // 3-1
 void xapi_Output(WSTR str);
 void xapi_Input(WSTR str);
-char xapi_Getch();
-void xapi_EndLine();
+char xapi_Getch(void);
+void xapi_EndLine(void);
 void xapi_PrintLine(WSTR str);
 void xapi_Printf(WSTR fmt, ...);
 void xapi_OutputSerial(WSTR str);
@@ -99,7 +103,7 @@ UINT32 	toRGB(UINT8 r, UINT8 g, UINT8 b);
 UINT32 	toRGBA(UINT32 color);
 
 // 3-4
-UINT64  xapi_Fork();
+UINT64  xapi_Fork(void);
 UINT64  xapi_Execve(WSTR filename, WSTR argv[], WSTR envp[]);
 void	xapi_Exit(UINT64 value);
 UINT64  xapi_GetTaskList(XapiTaskInfo *buffer, UINT64 max_count);
@@ -107,11 +111,11 @@ UINT64  xapi_KillProcess(UINT64 pid);
 
 // 3-5
 void	xapi_GetSystemVersion(WSTR version);
-UINT64	xapi_GetTime();
+UINT64	xapi_GetTime(void);
 void	xapi_GetCurrentUser(UserInfo *user_info);
 void	xapi_GetTimeX(TimeType *tm);
 void	xapi_GetCpuModel(WSTR version);
-UINT64	xapi_GetMemorySize();
+UINT64	xapi_GetMemorySize(void);
 
 // 3-6
 void	xapi_Broken(WSTR broken_info);
@@ -119,9 +123,13 @@ void	xapi_SendAppMessage(WSTR title, WSTR text);
 void 	xapi_Sleep(UINT64 ms);
 void 	xapi_Run(WSTR path);
 UINT64  xapi_RunArgs(WSTR path, WSTR argv[]);
-void 	xapi_FlushTime();
+void 	xapi_FlushTime(void);
 
 // 3-7
 void   *xapi_AllocateMemory(UINT64 size);
 void    xapi_FreeMemory(void *ptr);
 void   *xapi_MapMemory(void *ptr, uint64_t size, uint32_t flags);
+
+#ifdef __cplusplus
+}
+#endif

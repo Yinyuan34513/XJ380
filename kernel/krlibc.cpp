@@ -338,10 +338,15 @@ int64_t strtol(const char *str, char **endptr, int base)
 }
 EXPORT_SYMBOL(strtol);
 
-int cmd_parse(const char *cmd_str, char **argv, char token)
+int cmd_parse_limit(const char *cmd_str, char **argv, char token, int max_argc)
 {
     int         argc = 0;
     const char *next = cmd_str;
+    if (max_argc <= 0)
+    {
+        if (argv != NULL) argv[0] = NULL;
+        return 0;
+    }
 
     while (*next)
     {
@@ -401,10 +406,16 @@ int cmd_parse(const char *cmd_str, char **argv, char token)
         argv[argc][len] = '\0';
 
         argc++;
-        if (argc >= 50) break;
+        if (argc >= max_argc) break;
     }
     argv[argc] = NULL;
     return argc;
+}
+EXPORT_SYMBOL(cmd_parse_limit);
+
+int cmd_parse(const char *cmd_str, char **argv, char token)
+{
+    return cmd_parse_limit(cmd_str, argv, token, 50);
 }
 
 void cmd_free(char **argv, int argc)

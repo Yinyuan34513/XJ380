@@ -182,9 +182,11 @@ void runfile(char *path)
 
 bool get_file_exname(char *name, char *exname)
 {
+    if (name == NULL || exname == NULL) return false;
+
     char *p = name;
     char *q = exname;
-    bool have_type;
+    bool have_type = false;
     while (*p)
     {
         p++;
@@ -200,11 +202,15 @@ bool get_file_exname(char *name, char *exname)
 
     p++;
 
+    size_t copied = 0;
     while (*p)
     {
+        if (copied >= 9) break;
         *q = *p;
         p++; q++;
+        copied++;
     }
+    *q = '\0';
     
     return true;
 }

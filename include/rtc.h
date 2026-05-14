@@ -18,3 +18,4 @@ typedef struct
 
 void time_read(tm *time);
 int64_t mktime(tm *time);
+uint64_t realtime_ns();

@@ -69,7 +69,8 @@ static const char *busybox_alias_applets[] = {
     "chown",   "clear",   "cmp",      "cp",       "cut",      "date",     "dd",      "df",
     "dirname", "dmesg",   "du",       "echo",     "egrep",    "env",      "false",   "fgrep",
     "find",    "free",    "grep",     "gunzip",   "gzip",     "head",     "hexdump", "hostname",
-    "id",      "ifconfig","ip",       "kill",     "killall",  "less",     "ln",      "ls",
+    "id",      "ifconfig","install",  "ip",       "kill",     "killall",  "less",    "ln",
+    "ls",
     "mkdir",   "more",    "mount",    "mv",       "nc",       "netstat",  "nslookup","od",
     "pgrep",   "pidof",   "ping",     "pkill",    "printenv", "printf",   "ps",      "pwd",
     "readlink","realpath","reset",    "rm",       "rmdir",    "route",    "sed",     "sh",
@@ -80,6 +81,19 @@ static const char *busybox_alias_applets[] = {
 };//暴力枚举这一块，好像只能这么做了
 
 static const char *busybox_binary_path = "/apps/busybox";
+
+static void setup_xbps_vfs_aliases()
+{
+    static const char *xbps_void_key_alias =
+        "/var/db/xbps/keys/60:ae:0c:d6:f0:95:17:80:bc:93:46:7a:89:af:a3:2d.plist";
+    static const char *xbps_void_key_target =
+        "/var/db/xbps/keys/60_ae_0c_d6_f0_95_17_80_bc_93_46_7a_89_af_a3_2d.plist";
+
+    if (vfs_register_alias(xbps_void_key_alias, xbps_void_key_target) == EOK)
+    {
+        write_serial_fmt("[xbps-debug] key alias %s -> %s\n", xbps_void_key_alias, xbps_void_key_target);
+    }
+}
 
 static void setup_busybox_vfs_aliases()
 {
@@ -358,6 +372,7 @@ void components_flusher()
 extern SHEET *mouse_ct_sheet_img;
 SHEET        *desktop_ct_sheet; // 如果SheetTest那行输出的是1145的话那么绝对有问题
 SHEET        *dock_ct_sheet;
+SHEET        *middle_ct_sheet;
 SHEET        *mouse_ct_sheet;
 SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
@@ -382,15 +397,21 @@ void desktop_flusher()
 
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
                  &desktop_ct_sheet);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 9999,
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32700,
                  &dock_ct_sheet);
-    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 10, 21, FixedSheetType, 10000,
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32766,
+                 &middle_ct_sheet); // 输入法类窗口放这层
+    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 29, 22, FixedSheetType, 32767,
                  &mouse_ct_sheet);
 
     // 草稿纸吗，有点意思
+    SHEET_INFO zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi;
+    init_sheet(*fbc_addr, &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi);
     create_sheet(
-        &shtinf, get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, -1,
-        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
+        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi, 
+        get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, 1145,
+        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi
+    );
 
     init_ttf();
     draw_startup_screen(&shtinf, desktop_ct_sheet);
@@ -535,7 +556,7 @@ skip_timer_widget_init:
 // #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    // create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -610,6 +631,7 @@ extern int      socketfs_setup();
 extern int      procfs_setup();
 extern int      dnsfs_setup();
 extern int      nmfs_setup();
+extern int      tmpfs_setup();
 EFI_SYSTEM_TABLE *EFI_ST;
 BOOT_CONFIG *EFI_BC;
 
@@ -725,7 +747,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     idle_thread->str_cwd = "/";
     idle_thread->cwd     = rootdir;
-    idle_thread->cwd->refcount++;
     save_fpu_context(&idle_thread->fpu_context);
 
     get_current_cpu()->current_task = idle_thread;
@@ -738,7 +759,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
+#if CONFIG_KERNEL_BUSYBOX_ALIASES
     setup_busybox_vfs_aliases();
+#endif
+    setup_xbps_vfs_aliases();
+    tmpfs_setup();
     pipefs_setup();
     pty_init();
     fsgsbase_init();
@@ -770,8 +795,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
-    init_killer();
-    write_serial_string("Process Killer is ready\n");
+    init_reaper();
+    write_serial_string("Process Reaper is ready\n");
 
     if (BootConfig.is_qemu == 1) pr_warn("XJ380 is running under the QEMU/BOCHS.\n");
 

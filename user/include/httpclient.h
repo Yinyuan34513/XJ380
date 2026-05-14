@@ -8,11 +8,11 @@
 #endif
 
 #ifndef XHTTP_RECV_BUFFER_SIZE
-#define XHTTP_RECV_BUFFER_SIZE 512
+#define XHTTP_RECV_BUFFER_SIZE 4096
 #endif
 
 #ifndef XHTTP_IO_TIMEOUT_MS
-#define XHTTP_IO_TIMEOUT_MS 5000
+#define XHTTP_IO_TIMEOUT_MS 30000
 #endif
 
 typedef int (*xhttp_response_callback_t)(const char *data, int len, void *user_data);
@@ -283,13 +283,15 @@ static inline int xhttp_connect_socket_fd(const char *host, uint16_t port)
 
         xapi_OutputSerial((char *)"xhttp: before connect\n");
         int connect_ret = connect(sockfd, it->ai_addr, it->ai_addrlen);
+        int connect_errno = connect_ret < 0 ? errno : 0;
         {
             char logbuf[96];
-            snprintf(logbuf, sizeof(logbuf), "xhttp: connect ret=%d\n", connect_ret);
+            snprintf(logbuf, sizeof(logbuf), "xhttp: connect ret=%d errno=%d\n",
+                     connect_ret, connect_errno);
             xapi_OutputSerial(logbuf);
         }
-        if (connect_ret < 0 && connect_ret != -EINPROGRESS &&
-            connect_ret != -EALREADY && connect_ret != -EWOULDBLOCK) {
+        if (connect_ret < 0 && connect_errno != EINPROGRESS &&
+            connect_errno != EALREADY && connect_errno != EWOULDBLOCK) {
             close(sockfd);
             status = XHTTP_ERR_CONNECT;
             continue;
