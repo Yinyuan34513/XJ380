@@ -145,7 +145,7 @@ static const char *xapi_webrequest_skip_scheme(const char *url)
     return url;
 }
 
-char *xapi_httpGet(const char *url, uint16_t port, bool tls)
+extern "C" char *xapi_httpGet(const char *url, uint16_t port, bool tls)
 {
     if (url == NULL || url[0] == '\0') {
         return NULL;
