@@ -5071,35 +5071,45 @@ sys_(getppid)
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 {
     if (size == 0) { return 0; }
-    if (check_user_overflow(addr, size)) { return SYSCALL_FAULT_(EFAULT); }
 
-    uint64_t start_page = addr & (~(PAGE_SIZE - 1));
-    uint64_t end_page   = (addr + size - 1) & (~(PAGE_SIZE - 1));
-    if (end_page < start_page) return SYSCALL_FAULT_(EINVAL);
-    uint64_t num_pages  = ((end_page - start_page) / PAGE_SIZE) + 1;
+    if ((addr & (PAGE_SIZE - 1)) != 0) return SYSCALL_FAULT_(EINVAL);
 
-    page_directory_t *pagedir = current_user_pagedir();
-    if (!user_range_mapped(pagedir, (void *)vec, num_pages)) { return SYSCALL_FAULT_(EFAULT); }
+    uint64_t aligned_size = 0;
+    if (!align_up_u64(size, PAGE_SIZE, &aligned_size)) return SYSCALL_FAULT_(ENOMEM);
+    if (check_user_overflow(addr, aligned_size)) return SYSCALL_FAULT_(ENOMEM);
+
+    uint64_t num_pages = aligned_size / PAGE_SIZE;
+    if (num_pages > (uint64_t)(size_t)-1) return SYSCALL_FAULT_(ENOMEM);
+    if (vec == 0 || check_user_overflow(vec, (size_t)num_pages)) return SYSCALL_FAULT_(EFAULT);
+
+    tcb_t task = get_current_task();
+    pcb_t process = task != NULL ? task->parent_group : NULL;
+    if (process == NULL || process->pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    uint8_t *kvec = (uint8_t *)malloc((size_t)num_pages);
+    if (kvec == NULL) return SYSCALL_FAULT_(ENOMEM);
 
     mm_op_lock_acquire();
-    uint64_t current_addr = start_page;
-
     for (uint64_t i = 0; i < num_pages; i++)
     {
-        uint64_t phys_addr = page_virt_to_phys(current_addr);
-
-        uint8_t resident = (phys_addr != 0) ? 1 : 0;
-
-        if (!copy_to_user_pagedir(pagedir, (void *)(vec + i), &resident, sizeof(uint8_t)))
+        uint64_t page = addr + i * PAGE_SIZE;
+        uint64_t flags = 0;
+        bool present = page_table_get_flags(process->pagedir, page, &flags) &&
+                       ((flags & (PTE_PRESENT | PTE_USER)) == (PTE_PRESENT | PTE_USER));
+        if (vma_find(&process->vma_manager, page) == NULL && !present)
         {
             mm_op_lock_release();
-            return SYSCALL_FAULT_(EFAULT);
+            free(kvec);
+            return SYSCALL_FAULT_(ENOMEM);
         }
 
-        current_addr += PAGE_SIZE;
+        kvec[i] = present ? 1 : 0;
     }
-
     mm_op_lock_release();
+
+    bool copied = copy_to_user_pagedir(process->pagedir, (void *)vec, kvec, (size_t)num_pages);
+    free(kvec);
+    if (!copied) return SYSCALL_FAULT_(EFAULT);
     return 0;
 }
 
