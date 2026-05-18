@@ -85,7 +85,8 @@ __attribute__((naked)) void save_registers()
                      "pop r14\n\t"
                      "pop r15\n\t"
                      "add rsp, 16\n\t" // 越过对齐
-                     "sti\n\t"
+                     // Let iretq restore IF from the saved RFLAGS. Forcing sti here
+                     // can re-enter interrupts before the full return frame is restored.
                      "iretq\n\t");
 }
 
