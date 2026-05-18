@@ -488,9 +488,11 @@ static void render_status_bar()
 
 static void render_editor()
 {
+    bool full_refresh = g_need_layout_redraw;
     if (g_need_layout_redraw) render_layout();
     if (g_need_text_redraw) render_text_area();
     if (g_need_status_redraw) render_status_bar();
+    if (full_refresh) xapi_RefreshWindow(g_handle);
     g_need_redraw = false;
 }
 
