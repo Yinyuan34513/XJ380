@@ -38,6 +38,12 @@ uint64_t do_xapi_GetTime()
     return mktime(&t);
 }
 
+static uint64_t p_xapi_wait_process_exit(uint64_t pid)
+{
+    if ((int64_t)pid <= 0) return (uint64_t)-EINVAL;
+    return sys_wait4(pid, NULL, 0, NULL, 0, 0, NULL);
+}
+
 // p 开头的代表 private
 void p_xapi_output_kernel(const char *str)
 {
@@ -341,6 +347,75 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags)
         ret = ptr;
     }
     return ret;
+}
+
+uint64_t do_xapi_FileDialog(uint64_t mode, uint64_t title, uint64_t initial_path, uint64_t out_path, uint64_t out_size)
+{
+    if (out_path == 0 || out_size == 0) return (uint64_t)-EINVAL;
+
+    page_directory_t *caller_pagedir = get_current_task()->parent_group->pagedir;
+    char *dialog_title = NULL;
+    char *dialog_path = NULL;
+
+    if (title != 0)
+    {
+        int ret = xapi_copy_string_from_user(&dialog_title, (const char *)title, XAPI_USER_STRING_MAX);
+        if (ret < 0) return (uint64_t)ret;
+    }
+    if (initial_path != 0)
+    {
+        int ret = xapi_copy_string_from_user(&dialog_path, (const char *)initial_path, XAPI_USER_PATH_MAX);
+        if (ret < 0)
+        {
+            free(dialog_title);
+            return (uint64_t)ret;
+        }
+    }
+
+    char mode_buf[16];
+    snprintf(mode_buf, sizeof(mode_buf), "%llu", (unsigned long long)mode);
+    char *argv[5];
+    argv[0] = (char *)"/apps/system/filedlg.elf";
+    argv[1] = mode_buf;
+    argv[2] = dialog_title != NULL ? dialog_title : (char *)"";
+    argv[3] = dialog_path != NULL ? dialog_path : (char *)"";
+    argv[4] = NULL;
+
+    int pid = create_user_process_from_file((char *)"/apps/system/filedlg.elf", get_current_task()->parent_group, argv);
+    switch_page_directory(caller_pagedir);
+    free(dialog_title);
+    free(dialog_path);
+    if (pid < 0) return (uint64_t)pid;
+
+    uint64_t wait_ret = p_xapi_wait_process_exit((uint64_t)pid);
+    switch_page_directory(caller_pagedir);
+    if ((int64_t)wait_ret < 0) return wait_ret;
+
+    char result_path[256];
+    memset(result_path, 0, sizeof(result_path));
+    snprintf(result_path, sizeof(result_path), "/tmp/filedlg_%d.out", pid);
+
+    vfs_node_t node = vfs_open(result_path);
+    if (node == NULL) return (uint64_t)-ENOENT;
+
+    size_t copy_bytes = MIN((size_t)out_size, (size_t)node->size + 1);
+    char *buffer = (char *)calloc(copy_bytes, 1);
+    if (buffer == NULL)
+    {
+        vfs_close(node);
+        return (uint64_t)-ENOMEM;
+    }
+
+    if (copy_bytes > 1) vfs_read(node, buffer, 0, copy_bytes - 1);
+    buffer[copy_bytes - 1] = '\0';
+    vfs_close(node);
+
+    bool ok = copy_to_user_pagedir(xapi_current_pagedir(), (void *)out_path, buffer, copy_bytes);
+    free(buffer);
+    vfs_node_t cleanup_node = vfs_open_no_follow(result_path);
+    if (cleanup_node != NULL) vfs_delete(cleanup_node);
+    if (!ok) return (uint64_t)-EFAULT;
+    return 0;
 }
 
 extern int clock_hour_offset;

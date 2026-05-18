@@ -43,19 +43,19 @@ void register_button_components(SHEET *sheet, int x1, int y1, int x2, int y2, in
 void unregister_button_components(SHEET *sheet, int CRLid)
 {
     button_regt_p front_p = first_button;
-    while (true)
+    while (front_p != NULL)
     {
-        if (front_p == NULL)
+        button_regt_p next = front_p->next;
+        if (front_p->obj_sheet == sheet && front_p->CRLid == CRLid)
         {
-            break;
-        }
-        else if (front_p->obj_sheet == sheet && front_p->CRLid == CRLid)
-        {
-            if (front_p->prev != NULL) front_p->prev->next = front_p->next;
+            if (front_p->prev != NULL)
+                front_p->prev->next = front_p->next;
+            else
+                first_button = front_p->next;
             if (front_p->next != NULL) front_p->next->prev = front_p->prev;
             free(front_p);
         }
-        front_p = front_p->next;
+        front_p = next;
     }
 }
 

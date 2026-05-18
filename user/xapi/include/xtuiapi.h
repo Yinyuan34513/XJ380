@@ -52,6 +52,11 @@ typedef struct {
 	UINT64	 filetype;
 }  DirNode;
 
+typedef enum {
+    XAPI_FILE_DIALOG_OPEN = 0,
+    XAPI_FILE_DIALOG_SAVE = 1
+} XApiFileDialogMode;
+
 typedef struct
 {
     int tm_sec;   // 秒数 [0，59]
@@ -94,6 +99,7 @@ UINT64 xapi_RenameFile(WSTR old_path, WSTR new_path);
 UINT64 xapi_ReadFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
 UINT64 xapi_WriteFile(WSTR filename, char *buffer, UINT64 size, UINT64 offset);
 UINT64 xapi_Rmdir(WSTR path);
+UINT64 xapi_FileDialog(UINT64 mode, WSTR title, WSTR initial_path, char *out_path, UINT64 out_size);
 
 // 3-3
 UINT64 	xcr_char2int(WSTR str);

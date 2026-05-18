@@ -257,6 +257,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/filedlg.elf  $(VDISK_ROOT)/apps/system
 
 	@cp -a $(BUILD_DIR)/calc.elf     $(VDISK_ROOT)/apps/builtin
 	@cp -a $(BUILD_DIR)/texter.elf   $(VDISK_ROOT)/apps/builtin
