@@ -114,6 +114,11 @@ extern "C" UINT64 xapi_Rmdir(WSTR path)
 	return enter_syscall(XAPI_REMOVEDIR, (uint64_t)path, 0, 0, 0, 0, 0);
 }
 
+extern "C" UINT64 xapi_FileDialog(UINT64 mode, WSTR title, WSTR initial_path, char *out_path, UINT64 out_size)
+{
+    return enter_syscall(XAPI_FILE_DIALOG, mode, (uint64_t)title, (uint64_t)initial_path, (uint64_t)out_path, out_size, 0);
+}
+
 // 3-3
 extern "C" UINT64 xcr_char2int(WSTR str) {
     char *p = str;

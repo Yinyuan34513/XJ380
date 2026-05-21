@@ -86,6 +86,7 @@ typedef struct {
 #define XAPI_WRITE_FILE     7424
 
 #define XAPI_REMOVEDIR      7444
+#define XAPI_FILE_DIALOG    7450
 
 // P3.4
 #define XAPI_FORK   7389
@@ -109,7 +110,7 @@ typedef struct {
 #define XAPI_SLEEP          7430
 
 #define XAPI_RUN            7439
-#define XAPI_RUN_ARGS       7450
+#define XAPI_RUN_ARGS       7451
 
 #define XAPI_FLUSH_TIME     7445
 
@@ -253,6 +254,7 @@ void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, 
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
 uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
+uint64_t do_xapi_FileDialog(uint64_t mode, uint64_t title, uint64_t initial_path, uint64_t out_path, uint64_t out_size);
 void do_xapi_Broken(char *info);
 void do_xapi_GetTimeX(uint64_t tt);
 uint64_t do_xapi_GetMemorySize();
