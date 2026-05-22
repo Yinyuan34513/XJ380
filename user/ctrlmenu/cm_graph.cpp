@@ -2,7 +2,14 @@
 #include <libsys.h>
 #include <krlibc.h>
 #include "cm_proto.h"
-#include "../../kernel/build_settings.h"
+
+#ifndef OS_VERSION
+#define OS_VERSION "XINGJI XJ380 Singularity 1.0.0"
+#endif
+
+#ifndef KN_VERSION
+#define KN_VERSION "XSK 2.1.0"
+#endif
 
 int cindex = 1;
 

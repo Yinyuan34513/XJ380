@@ -254,7 +254,7 @@ nut.elf: $(NUT_OBJECTS) $(MBEDTLS_LIBRARY_OBJECTS)
 	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
-../out/nut/main.o: ./nut/main.cpp $(XAPI_HEADERS) $(USER_HEADERS) ../include/xapi_json.h ../lib/xapi_json_impl.inc
+../out/nut/main.o: ./nut/main.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(MBEDTLS_CFLAGS) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"

@@ -1,6 +1,7 @@
 SRC_FILES := $(shell find . \( -name "*.cpp" -o -name "*.S" \) |grep -v "start.cpp" |grep -v "constart.cpp")
 OBJ_FILES := $(patsubst ./%, ../../out/xapi/%.o, $(SRC_FILES))
 XAPI_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \))
+XAPI_IMPL_INCLUDES := $(shell find . -type f -name "*.inc")
 
 export CXX ?= g++
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include -Wno-write-strings
@@ -34,7 +35,7 @@ build_all_api: all compile_head compile_headcon
 	@$(CC) $(CFLAGS) -c $< -o $@
 	@echo "AS $<"
 
-../../out/xapi/%.cpp.o: ./%.cpp $(XAPI_HEADERS)
+../../out/xapi/%.cpp.o: ./%.cpp $(XAPI_HEADERS) $(XAPI_IMPL_INCLUDES)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $<"

@@ -1,5 +1,5 @@
 #include "../xapi/include/x3api.h"
-#include "../../include/xapi_json.h"
+#include "../xapi/include/xapi_json.h"
 #include "../include/httpclient.h"
 #include "../include/https_client.h"
 
