@@ -727,7 +727,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (!EFI_ERROR(status))
     {
         installer_mode = 1;
-        BootMenuFlags |= BOOT_FLAG_INSTALLER | BOOT_FLAG_SHOW_PROGRESS | BOOT_FLAG_DISABLE_KMOD;
+        BootMenuFlags |= BOOT_FLAG_INSTALLER | BOOT_FLAG_SHOW_PROGRESS | BOOT_FLAG_DISABLE_KMOD |
+                         BOOT_FLAG_SAFE_STORAGE_IO;
         write_serial_string("Installer kernel found.\n");
         boot_status("Loading installer payloads");
 

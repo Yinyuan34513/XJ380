@@ -290,17 +290,26 @@ size_t device_write(size_t lba, size_t number, const void *buffer, int drive) {
     if (have_vdisk(drive)) {
         if (device_ctl[drive].sector_size == 0 ||
             (number != 0 && device_ctl[drive].sector_size > (size_t)-1 / number)) {
+            write_serial_fmt("device_write: reject drive=%d name=%s lba=%zu sectors=%zu sector_size=%zu\n",
+                             drive, device_ctl[drive].drive_name, lba, number, device_ctl[drive].sector_size);
             return 0;
         }
         size_t ret_size = 0;
         for (size_t i = 0; i < number; i += SECTORS_ONCE) {
             int sectors  = ((number - i) >= SECTORS_ONCE) ? SECTORS_ONCE : (number - i);
-            ret_size    += rw_device(drive, lba + i,
-                                     (uint8_t *)((uint64_t)buffer + i * device_ctl[drive].sector_size),
-                                     sectors, 0);
+            size_t got = rw_device(drive, lba + i,
+                                   (uint8_t *)((uint64_t)buffer + i * device_ctl[drive].sector_size),
+                                   sectors, 0);
+            ret_size += got;
+            if (got != (size_t)sectors) {
+                write_serial_fmt("device_write: short drive=%d name=%s lba=%zu sectors=%d got=%zu\n",
+                                 drive, device_ctl[drive].drive_name, lba + i, sectors, got);
+                break;
+            }
         }
         return ret_size;
     }
+    write_serial_fmt("device_write: missing drive=%d lba=%zu sectors=%zu\n", drive, lba, number);
     return 0;
 }
 

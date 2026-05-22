@@ -91,7 +91,15 @@ static int installer_fail(int ret, uint32_t percent, const char *stage, const ch
 static bool installer_write_sectors(size_t disk_id, uint64_t lba, const void *data, size_t sectors)
 {
     if (data == NULL && sectors != 0) return false;
-    return device_write((size_t)lba, sectors, data, (int)disk_id) == sectors;
+    size_t got = device_write((size_t)lba, sectors, data, (int)disk_id);
+    if (got != sectors)
+    {
+        device_t *disk = get_device(disk_id);
+        write_serial_fmt("installer: disk write short disk=%s id=%zu lba=%llu sectors=%zu got=%zu\n",
+                         disk != NULL ? disk->drive_name : "<missing>", disk_id, lba, sectors, got);
+        return false;
+    }
+    return true;
 }
 
 static bool installer_zero_sectors(size_t disk_id, uint64_t lba, size_t sectors)
@@ -99,7 +107,7 @@ static bool installer_zero_sectors(size_t disk_id, uint64_t lba, size_t sectors)
     device_t *disk = get_device(disk_id);
     if (disk == NULL || disk->sector_size == 0) return false;
 
-    size_t chunk_sectors = 16;
+    size_t chunk_sectors = 1;
     size_t bytes = chunk_sectors * disk->sector_size;
     uint8_t *zero = (uint8_t *)calloc(bytes, 1);
     if (zero == NULL) return false;
