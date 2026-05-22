@@ -2,5 +2,5 @@
 #include "./include/xapi_xml.h"
 
 extern "C" {
-#include "../../lib/xapi_xml_impl.inc"
+#include "xapi_xml_impl.inc"
 }
