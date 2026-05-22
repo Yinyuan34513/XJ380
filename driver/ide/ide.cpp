@@ -154,11 +154,8 @@ int ide_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     uint16_t base = ide_devices[drive].is_primary ? IDE_PRIMARY_DATA_PORT : IDE_SECONDARY_DATA_PORT;
     uint8_t drive_select = ide_devices[drive].is_master ? IDE_DEVICE_MASTER : IDE_DEVICE_SLAVE;
     
-    // 等待设备请求数据
-    if (ide_wait_drq(base) != 0) {
-        write_serial_fmt("IDE: write lba=%llu did not enter DRQ\n", lba);
-        return -1;
-    }
+    // 等待就绪
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
     
     // 选择设备和 LBA 模式
     outb(base + 6, drive_select | 0x40 | ((lba >> 24) & 0x0F));
@@ -172,8 +169,11 @@ int ide_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     // 发送写命令
     outb(base + 7, IDE_CMD_WRITE_SECTORS);
     
-    // 等待就绪
-    if (!ide_wait_not_busy(base, 1000000)) return -1;
+    // 等待设备请求数据
+    if (ide_wait_drq(base) != 0) {
+        write_serial_fmt("IDE: write lba=%llu did not enter DRQ\n", lba);
+        return -1;
+    }
     
     // 写入数据
     uint16_t *buf = (uint16_t *)buffer;
