@@ -135,6 +135,9 @@ void 	xapi_FlushTime(void);
 void   *xapi_AllocateMemory(UINT64 size);
 void    xapi_FreeMemory(void *ptr);
 void   *xapi_MapMemory(void *ptr, uint64_t size, uint32_t flags);
+UINT64  xapi_InstallerEnumDisks(void *list);
+UINT64  xapi_InstallerStart(UINT64 disk_id);
+UINT64  xapi_InstallerProgress(void *progress);
 
 #ifdef __cplusplus
 }

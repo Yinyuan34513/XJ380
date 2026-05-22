@@ -40,6 +40,7 @@
 #include <user/info_register.h>
 #include <hda/vsound.h>
 #include <hda/hda.h>
+#include <installer_mode.h>
 
 bool        desktop_done = false;
 SHEET_INFO *sht_img;
@@ -61,6 +62,7 @@ extern spin_t            fb_print_lock;
 extern bool allow_to_flush;
 extern void ahci_set_accel(bool enabled);
 extern bool ahci_is_qemu_environment();
+extern BOOT_CONFIG *EFI_BC;
 
 extern UserInfo *current_user;
 
@@ -378,12 +380,13 @@ SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_
 
 void desktop_flusher()
 {
+    bool installer_mode = EFI_BC != NULL && installer_boot_active(*EFI_BC);
     no_interrupt = true;
     disable_intr();
     disable_scheduler();
 
     // 之后应该挪到OOBE里的部分
-    init_runfile();
+    if (!installer_mode) init_runfile();
 
     write_serial_string("desktop flusher is running\n");
 
@@ -502,19 +505,24 @@ void desktop_flusher()
     enable_intr();
     enable_scheduler();
 
-    write_serial_string("desktop: init_user begin\n");
-    init_user();
-    write_serial_string("desktop: init_user done\n");
-    write_serial_string("desktop: init_xuls begin\n");
-    init_xuls();
-    write_serial_string("desktop: init_xuls done\n");
-    init_time();
+    if (!installer_mode) {
+        write_serial_string("desktop: init_user begin\n");
+        init_user();
+        write_serial_string("desktop: init_user done\n");
+        write_serial_string("desktop: init_xuls begin\n");
+        init_xuls();
+        write_serial_string("desktop: init_xuls done\n");
+        init_time();
 
-    write_serial_string("user & settings initialized.\n");
+        write_serial_string("user & settings initialized.\n");
 
-    init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
+        init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
 
-    write_serial_string("desktop initialized.\n");
+        write_serial_string("desktop initialized.\n");
+    } else {
+        write_serial_string("installer: skipping normal desktop login\n");
+        draw_rect(&shtinf, desktop_ct_sheet, 0, 0, shtinf.scrx - 1, shtinf.scry - 1, {0x0f, 0x4c, 0x9a, 0xff});
+    }
 
     winRD_lock = true;
 
@@ -556,7 +564,11 @@ skip_timer_widget_init:
 // #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+    if (installer_mode) {
+        installer_launch_app();
+    } else {
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+    }
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -568,7 +580,7 @@ skip_timer_widget_init:
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data->need_flush)
+        if (tw_data != NULL && tw_data->need_flush)
         {
             tw_data->need_flush = false;
             refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
@@ -758,12 +770,21 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
-    mount_root();
+    bool installer_mode = installer_boot_active(BootConfig);
+    if (installer_mode) {
+        int installer_root_ret = installer_prepare_root(BootConfig);
+        if (installer_root_ret < 0) {
+            write_serial_fmt("installer: cannot prepare installer root: %d\n", installer_root_ret);
+            while (true) { __asm__ volatile("pause"); }
+        }
+    } else {
+        mount_root();
+    }
 #if CONFIG_KERNEL_BUSYBOX_ALIASES
     setup_busybox_vfs_aliases();
 #endif
     setup_xbps_vfs_aliases();
-    tmpfs_setup();
+    if (!installer_root_is_tmpfs_ready()) tmpfs_setup();
     pipefs_setup();
     pty_init();
     fsgsbase_init();
@@ -777,7 +798,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_message();
 
-    if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD)) == 0) {
+    if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD | BOOT_FLAG_INSTALLER)) == 0) {
         module_setup();
         dlinker_init();
         load_all_kernel_module();
@@ -822,7 +843,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     open_interrupt;
     no_interrupt = false;
 
-    while (!desktop_done)
+    while (!installer_mode && !desktop_done)
         cpu_relax();
 
     // no_interrupt = true;

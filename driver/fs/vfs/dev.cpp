@@ -63,15 +63,14 @@ static errno_t devfs_register0(const char *path, size_t id) {
 
 static errno_t devfs_mount(const char *handle, vfs_node_t node) {
     if ((uint64_t)handle != DEVFS_REGISTER_ID) return VFS_STATUS_FAILED;
-    if (devfs_root) {
-        write_serial_fmt("Device file system has been mounted.");
-        return VFS_STATUS_FAILED;
+    if (root_handle == NULL) {
+        root_handle         =  (device_handle_t)calloc(1, sizeof(struct device_handle));
+        root_handle->device = NULL;
+        root_handle->is_dir = true;
+        llist_init_head(&root_handle->child);
+        llist_init_head(&root_handle->curr);
     }
-    root_handle         =  (device_handle_t)calloc(1, sizeof(struct device_handle));
-    root_handle->device = NULL;
-    root_handle->is_dir = true;
-    llist_init_head(&root_handle->child);
-    llist_init_head(&root_handle->curr);
+    if (root_handle == NULL) return VFS_STATUS_FAILED;
 
     node->fsid   = devfs_id;
     node->handle = root_handle;
@@ -321,7 +320,7 @@ errno_t devfs_delete(const char *path) {
 errno_t devfs_register(const char *path, size_t id) {
     device_t *device = &device_ctl[id];
     char     *buf    = NULL;
-    device->path     = strdup(path);
+    device->path     = path != NULL ? strdup(path) : NULL;
     if (devfs_root == NULL) { return EOK; }
     return devfs_register0(device->path, id);
 }

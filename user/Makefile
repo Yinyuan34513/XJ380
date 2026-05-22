@@ -1,8 +1,8 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -Wno-write-strings
+export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I ../include -Wno-write-strings
 XAPI_HEADERS := $(shell find ./xapi/include -type f \( -name "*.h" -o -name "*.hpp" \))
 USER_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \))
 BROWSER_HEADERS := $(shell find ./browser -type f \( -name "*.h" -o -name "*.hpp" \))
@@ -10,7 +10,7 @@ BROWSER_HEADERS := $(shell find ./browser -type f \( -name "*.h" -o -name "*.hpp
 MBEDTLS_SRC_DIR := ../third_party/mbedtls-src
 MBEDTLS_CONFIG_HEADER := mbed_compat/xj380_mbedtls_user_config.h
 MBEDTLS_CFLAGS := -I ./include/mbed_compat -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"'
-MBEDTLS_CCFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include/mbed_compat -I ./xapi/include -I ./include -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"' -DMBEDTLS_NO_UDBL_DIVISION
+MBEDTLS_CCFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include/mbed_compat -I ./xapi/include -I ./include -I ../include -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"' -DMBEDTLS_NO_UDBL_DIVISION
 MBEDTLS_LIBRARY_SOURCES := \
 	$(MBEDTLS_SRC_DIR)/library/aes.c \
 	$(MBEDTLS_SRC_DIR)/library/aria.c \
@@ -347,6 +347,7 @@ CALC_SOURCES := ./calc/calc.cpp
 TEXTER_SOURCES := ./texter/texter.cpp
 TASKMGR_SOURCES := ./taskmgr/taskmgr.cpp
 FILEDLG_SOURCES := ./filedlg/filedlg.cpp
+INSTALLER_SOURCES := ./installer/installer.cpp
 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
@@ -356,6 +357,7 @@ CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 TASKMGR_OBJECTS := $(patsubst ./taskmgr/%.cpp, ../out/taskmgr/%.o, $(TASKMGR_SOURCES))
 FILEDLG_OBJECTS := $(patsubst ./filedlg/%.cpp, ../out/filedlg/%.o, $(FILEDLG_SOURCES))
+INSTALLER_OBJECTS := $(patsubst ./installer/%.cpp, ../out/installer/%.o, $(INSTALLER_SOURCES))
 
 ../out/calc/%.o: ./calc/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
@@ -425,6 +427,15 @@ filedlg.elf: $(FILEDLG_OBJECTS)
 	@echo "LINK filedlg objects -> ../out/$@"
 
 ../out/filedlg/%.o: ./filedlg/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+installer.elf: $(INSTALLER_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(INSTALLER_OBJECTS) -o ../out/$@
+	@echo "LINK installer objects -> ../out/$@"
+
+../out/installer/%.o: ./installer/%.cpp $(XAPI_HEADERS) $(USER_HEADERS) ../include/installer_protocol.h
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"

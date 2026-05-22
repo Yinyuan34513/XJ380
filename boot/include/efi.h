@@ -473,8 +473,14 @@ struct EFI_LOADED_IMAGE_PROTOCOL
 
 struct EFI_FILE_INFO
 {
-    unsigned char _buf[80];   // 对齐用
-    CHAR16        FileName[]; // 此乃C99柔性数组之力
+    UINT64   Size;
+    UINT64   FileSize;
+    UINT64   PhysicalSize;
+    EFI_TIME CreateTime;
+    EFI_TIME LastAccessTime;
+    EFI_TIME ModificationTime;
+    UINT64   Attribute;
+    CHAR16   FileName[];
 };
 
 #define EFI_FILE_MODE_READ   0x0000000000000001
@@ -489,12 +495,17 @@ struct EFI_FILE_PROTOCOL
     (struct EFI_FILE_PROTOCOL *This, struct EFI_FILE_PROTOCOL **NewHandle, CHAR16 *FileName, UINT64 OpenMode,
      UINT64 Attributes);
     EFIAPI EFI_STATUS (*Close)(struct EFI_FILE_PROTOCOL *This);
-    UINTN  _buf2;
+    EFIAPI EFI_STATUS (*Delete)(struct EFI_FILE_PROTOCOL *This);
     EFIAPI
     EFI_STATUS (*Read)(struct EFI_FILE_PROTOCOL *This, UINTN *BufferSize, VOID *Buffer);
     EFIAPI
     EFI_STATUS (*Write)(struct EFI_FILE_PROTOCOL *This, UINTN *BufferSize, VOID *Buffer);
-    UINTN  _buf3[4];
+    EFIAPI EFI_STATUS (*GetPosition)(struct EFI_FILE_PROTOCOL *This, UINT64 *Position);
+    EFIAPI EFI_STATUS (*SetPosition)(struct EFI_FILE_PROTOCOL *This, UINT64 Position);
+    EFIAPI EFI_STATUS (*GetInfo)(struct EFI_FILE_PROTOCOL *This, EFI_GUID *InformationType, UINTN *BufferSize,
+                                 VOID *Buffer);
+    EFIAPI EFI_STATUS (*SetInfo)(struct EFI_FILE_PROTOCOL *This, EFI_GUID *InformationType, UINTN BufferSize,
+                                 VOID *Buffer);
     EFIAPI EFI_STATUS (*Flush)(struct EFI_FILE_PROTOCOL *This);
 }; // EFI_FILE_PROTOCOL
 

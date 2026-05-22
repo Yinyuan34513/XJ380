@@ -41,6 +41,38 @@ static inline void fatfs_unlock() {
     mutex_unlock(&fatfs_operate_lock);
 }
 
+int fatfs_format_node(vfs_node_t node)
+{
+    if (node == NULL) return -EINVAL;
+    fatfs_lock();
+    int drive = alloc_number();
+    if (drive < 0)
+    {
+        fatfs_unlock();
+        return -ENOSPC;
+    }
+    drive_number_mapping[drive] = node;
+    char path[4];
+    sprintf(path, "%d:", drive);
+    MKFS_PARM opt;
+    memset(&opt, 0, sizeof(opt));
+    opt.fmt = FM_FAT32 | FM_SFD;
+    opt.n_fat = 1;
+    void *work = malloc(FF_MAX_SS);
+    if (work == NULL)
+    {
+        drive_number_mapping[drive] = NULL;
+        fatfs_unlock();
+        return -ENOMEM;
+    }
+    FRESULT res = f_mkfs(path, &opt, work, FF_MAX_SS);
+    free(work);
+    f_unmount(path);
+    drive_number_mapping[drive] = NULL;
+    fatfs_unlock();
+    return res == FR_OK ? EOK : -EIO;
+}
+
 static u32 *fatfs_try_build_clmt(FIL *fp, size_t request_size) {
     if (!ahci_is_qemu_environment()) {
         return NULL;

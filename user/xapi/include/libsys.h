@@ -204,6 +204,9 @@
 
 #define XAPI_RUN            7439
 #define XAPI_RUN_ARGS       7451
+#define XAPI_INSTALLER_ENUM_DISKS 7452
+#define XAPI_INSTALLER_START      7453
+#define XAPI_INSTALLER_PROGRESS   7454
 
 #define XAPI_FLUSH_TIME     7445
 

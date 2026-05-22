@@ -111,6 +111,9 @@ typedef struct {
 
 #define XAPI_RUN            7439
 #define XAPI_RUN_ARGS       7451
+#define XAPI_INSTALLER_ENUM_DISKS 7452
+#define XAPI_INSTALLER_START      7453
+#define XAPI_INSTALLER_PROGRESS   7454
 
 #define XAPI_FLUSH_TIME     7445
 
@@ -267,6 +270,9 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 void do_xapi_FlushTime();
 uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count);
 uint64_t do_xapi_KillProcess(uint64_t pid);
+uint64_t do_xapi_InstallerEnumDisks(uint64_t list);
+uint64_t do_xapi_InstallerStart(uint64_t disk_id);
+uint64_t do_xapi_InstallerProgress(uint64_t progress);
 
 
 

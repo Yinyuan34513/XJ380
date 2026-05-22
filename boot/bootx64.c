@@ -131,6 +131,9 @@ EFI_GUID acpi_table_guid = {
 EFI_GUID efi_acpi_table_guid = {
     0x8868e871, 0xe4f1, 0x11d3, {0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81}
 };
+EFI_GUID efi_file_info_guid = {
+    0x09576e92, 0x6d3f, 0x11d2, {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}
+};
 
 /**
  * @brief 输出一个16位的字符到控制台
@@ -430,6 +433,75 @@ void free(void *buf)
     BS->FreePool(buf);
 }
 
+static EFI_STATUS open_boot_file(struct EFI_FILE_PROTOCOL *root, CHAR16 *path, struct EFI_FILE_PROTOCOL **file)
+{
+    return root->Open(root, file, path, EFI_FILE_MODE_READ, 0);
+}
+
+static EFI_STATUS boot_file_size(struct EFI_FILE_PROTOCOL *file, UINTN *out_size)
+{
+    if (file == NULL || out_size == NULL) return EFI_INVALID_PARAMETER;
+
+    UINTN info_size = sizeof(struct EFI_FILE_INFO) + 256 * sizeof(CHAR16);
+    struct EFI_FILE_INFO *info = (struct EFI_FILE_INFO *)malloc(info_size);
+    if (info == NULL) return EFI_OUT_OF_RESOURCES;
+
+    EFI_STATUS status = file->GetInfo(file, &efi_file_info_guid, &info_size, info);
+    if (status == EFI_BUFFER_TOO_SMALL)
+    {
+        free(info);
+        info = (struct EFI_FILE_INFO *)malloc(info_size);
+        if (info == NULL) return EFI_OUT_OF_RESOURCES;
+        status = file->GetInfo(file, &efi_file_info_guid, &info_size, info);
+    }
+
+    if (!EFI_ERROR(status))
+        *out_size = (UINTN)info->FileSize;
+
+    free(info);
+    return status;
+}
+
+static EFI_STATUS read_boot_file(struct EFI_FILE_PROTOCOL *root, CHAR16 *path, void **out_buffer, UINTN *out_size)
+{
+    if (root == NULL || path == NULL || out_buffer == NULL || out_size == NULL) return EFI_INVALID_PARAMETER;
+    *out_buffer = NULL;
+    *out_size = 0;
+
+    struct EFI_FILE_PROTOCOL *file = NULL;
+    EFI_STATUS status = open_boot_file(root, path, &file);
+    if (EFI_ERROR(status)) return status;
+
+    UINTN size = 0;
+    status = boot_file_size(file, &size);
+    if (EFI_ERROR(status) || size == 0)
+    {
+        file->Close(file);
+        return EFI_ERROR(status) ? status : EFI_NOT_FOUND;
+    }
+
+    void *buffer = malloc(size);
+    if (buffer == NULL)
+    {
+        file->Close(file);
+        return EFI_OUT_OF_RESOURCES;
+    }
+    xmemset(buffer, 0, size);
+
+    UINTN read_size = size;
+    status = file->Read(file, &read_size, buffer);
+    file->Close(file);
+    if (EFI_ERROR(status) || read_size != size)
+    {
+        free(buffer);
+        return EFI_ERROR(status) ? status : EFI_DEVICE_ERROR;
+    }
+
+    *out_buffer = buffer;
+    *out_size = size;
+    return EFI_SUCCESS;
+}
+
 EFI_STATUS mallocAt(EFI_PHYSICAL_ADDRESS addr, UINTN size)
 {
     EFI_STATUS           status;
@@ -628,10 +700,14 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     EFI_STATUS                status;
     EFI_PHYSICAL_ADDRESS      entry_addr;
-    struct EFI_FILE_PROTOCOL *root, *kernel_file;
-    UINTN                     kernel_size   = 4194304;
-    void                     *kernel_buffer = malloc(kernel_size);
-    xmemset(kernel_buffer,0,kernel_size);
+    struct EFI_FILE_PROTOCOL *root;
+    UINTN                     kernel_size   = 0;
+    void                     *kernel_buffer = NULL;
+    UINTN                     installer_root_size = 0;
+    UINTN                     system_payload_size = 0;
+    void                     *installer_root_buffer = NULL;
+    void                     *system_payload_buffer = NULL;
+    int                       installer_mode = 0;
 
     // 引导内核
     status = SFSP->OpenVolume(SFSP, &root);
@@ -647,7 +723,38 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     write_serial_string("Root Dir Open Success.\n");
     boot_status("Opening kernel image");
 
-    status = root->Open(root, &kernel_file, L"\\system\\kernel.elf", EFI_FILE_MODE_READ, 0);
+    status = read_boot_file(root, L"\\installer\\installer-kernel.elf", &kernel_buffer, &kernel_size);
+    if (!EFI_ERROR(status))
+    {
+        installer_mode = 1;
+        BootMenuFlags |= BOOT_FLAG_INSTALLER | BOOT_FLAG_SHOW_PROGRESS | BOOT_FLAG_DISABLE_KMOD;
+        write_serial_string("Installer kernel found.\n");
+        boot_status("Loading installer payloads");
+
+        status = read_boot_file(root, L"\\installer\\installer-root.pak", &installer_root_buffer,
+                                &installer_root_size);
+        if (EFI_ERROR(status))
+        {
+            puts(L"XJ380 installer payload is missing. Error code: INSTALLER_ROOT_NOT_FOUND");
+            write_serial_string("Installer root payload read failed. Stop.\n");
+            while (1)
+                ;
+        }
+
+        status = read_boot_file(root, L"\\installer\\system-payload.pak", &system_payload_buffer,
+                                &system_payload_size);
+        if (EFI_ERROR(status))
+        {
+            puts(L"XJ380 installer payload is missing. Error code: SYSTEM_PAYLOAD_NOT_FOUND");
+            write_serial_string("System payload read failed. Stop.\n");
+            while (1)
+                ;
+        }
+    }
+    else
+    {
+        status = read_boot_file(root, L"\\system\\kernel.elf", &kernel_buffer, &kernel_size);
+    }
 
     if (EFI_ERROR(status))
     {
@@ -658,16 +765,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
             ;
     }
 
-    status = kernel_file->Read(kernel_file, &kernel_size,
-                               kernel_buffer); // 读取内核，直接读到kernel_buffer
-    if (EFI_ERROR(status))
-    {
-        puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: CANNOT_READ_KERNEL");
-        write_serial_string("Kernel Read Failed. Stop.\n");
-        while (1)
-            ;
-    }
     write_serial_string("XSK2.1 Kernel Read Success.\n");
     boot_status("Mapping kernel image");
 
@@ -724,6 +821,13 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 
     BootConfig->is_qemu = 0;
     BootConfig->boot_flags = BootMenuFlags;
+    if (installer_mode)
+    {
+        BootConfig->installer_root_pak = (UINT64)installer_root_buffer;
+        BootConfig->installer_root_pak_size = (UINT64)installer_root_size;
+        BootConfig->system_payload_pak = (UINT64)system_payload_buffer;
+        BootConfig->system_payload_pak_size = (UINT64)system_payload_size;
+    }
 
     // 获取RSDP
     EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;

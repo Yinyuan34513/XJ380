@@ -317,3 +317,18 @@ extern "C" void   *xapi_MapMemory(void *ptr, uint64_t size, uint32_t flags)
 {
 	return (void *)enter_syscall(XAPI_MAP_MEMORY, (uint64_t)ptr, size, flags, 0, 0, 0);
 }
+
+extern "C" UINT64 xapi_InstallerEnumDisks(void *list)
+{
+    return enter_syscall(XAPI_INSTALLER_ENUM_DISKS, (uint64_t)list, 0, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_InstallerStart(UINT64 disk_id)
+{
+    return enter_syscall(XAPI_INSTALLER_START, disk_id, 0, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_InstallerProgress(void *progress)
+{
+    return enter_syscall(XAPI_INSTALLER_PROGRESS, (uint64_t)progress, 0, 0, 0, 0, 0);
+}

@@ -189,8 +189,15 @@ void delete_device(int vdiskid) {
         mutex_unlock(&blk_cached_bounce_lock[vdiskid]);
     }
     device_t dev = device_ctl[vdiskid];
-    devfs_delete(dev.path);
-    free(dev.path);
+    if (dev.path != NULL)
+    {
+        devfs_delete(dev.path);
+        free(dev.path);
+    }
+    else if (dev.drive_name[0] != '\0')
+    {
+        devfs_delete(dev.drive_name);
+    }
     id_free(dev_allocator, dev.vdiskid);
     dev.path    = NULL;
     dev.flag    = 0;

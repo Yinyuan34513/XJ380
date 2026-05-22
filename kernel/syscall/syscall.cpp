@@ -3,6 +3,7 @@
 #include <cpu/msr.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
+#include <installer_protocol.h>
 #include <math.hpp>
 #include <mm/lazyalloc.h>
 #include <mm/vma.h>
@@ -118,6 +119,9 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_UTIMES: return "utimes";
     case SYS_OPENAT: return "openat";
     case SYS_NEWFSTATAT: return "newfstatat";
+    case XAPI_INSTALLER_ENUM_DISKS: return "xapi_installer_enum_disks";
+    case XAPI_INSTALLER_START: return "xapi_installer_start";
+    case XAPI_INSTALLER_PROGRESS: return "xapi_installer_progress";
     case SYS_READLINKAT: return "readlinkat";
     case SYS_PSELECT6: return "pselect6";
     case SYS_PIPE2: return "pipe2";
@@ -710,6 +714,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_FLUSH_TIME: do_xapi_FlushTime(); break;
     case XAPI_GET_TASK_LIST: regs->rax = do_xapi_GetTaskList(regs->rdi, regs->rsi); break;
     case XAPI_KILL_PROCESS: regs->rax = do_xapi_KillProcess(regs->rdi); break;
+    case XAPI_INSTALLER_ENUM_DISKS: regs->rax = do_xapi_InstallerEnumDisks(regs->rdi); break;
+    case XAPI_INSTALLER_START: regs->rax = do_xapi_InstallerStart(regs->rdi); break;
+    case XAPI_INSTALLER_PROGRESS: regs->rax = do_xapi_InstallerProgress(regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 

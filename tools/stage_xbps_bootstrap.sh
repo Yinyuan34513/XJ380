@@ -11,7 +11,12 @@ fi
 
 root=$1
 bf_dir=${BF_DIR:-Bf}
-repo=${XBPS_REPOSITORY:-https://mirrors.tuna.tsinghua.edu.cn/voidlinux/current}
+default_repo=https://mirrors.tuna.tsinghua.edu.cn/voidlinux/current
+if [ -n "${XBPS_REPOSITORY:-}" ]; then
+    repositories=$XBPS_REPOSITORY
+else
+    repositories=${XBPS_REPOSITORY_FALLBACKS:-"$default_repo https://repo-default.voidlinux.org/current https://mirrors.ustc.edu.cn/voidlinux/current http://mirrors.tuna.tsinghua.edu.cn/voidlinux/current"}
+fi
 host_arch=${XBPS_STATIC_ARCH:-$(uname -m)}
 case ${XBPS_CACHEDIR:-} in
 /*) cache_dir=$XBPS_CACHEDIR ;;
@@ -84,6 +89,13 @@ xbins_noconf()
         "$@"
 }
 
+write_repository_config()
+{
+    repo=$1
+    printf 'repository=%s\n' "$repo" > "$root/usr/share/xbps.d/00-repository-main.conf"
+    printf 'repository=%s\n' "$repo" > "$root/etc/xbps.d/00-repository-main.conf"
+}
+
 prepare_xbps_static || true
 
 xbps_install=
@@ -103,16 +115,12 @@ if [ -z "$xbps_install" ]; then
 fi
 
 echo "Using xbps-install: $xbps_install" >&2
-echo "Repository: $repo" >&2
 echo "Target root: $root" >&2
 
 mkdir -p "$cache_dir"
 mkdir -p "$root/var/db/xbps/keys"
 mkdir -p "$root/etc/xbps.d"
 mkdir -p "$root/usr/share/xbps.d"
-
-printf 'repository=%s\n' "$repo" > "$root/usr/share/xbps.d/00-repository-main.conf"
-printf 'repository=%s\n' "$repo" > "$root/etc/xbps.d/00-repository-main.conf"
 
 if [ -d "$bf_dir/xbps-triggers" ]; then
     mkdir -p "$root/usr/libexec"
@@ -132,7 +140,21 @@ for pkg in $BOOTSTRAP_PKGS; do
     echo "  -> $pkg" >&2
 done
 
-xbins_noconf "$xbps_install" -Sy $BOOTSTRAP_PKGS
+install_status=1
+for repo in $repositories; do
+    echo "Repository: $repo" >&2
+    write_repository_config "$repo"
+    if xbins_noconf "$xbps_install" -Sy $BOOTSTRAP_PKGS; then
+        install_status=0
+        break
+    fi
+    install_status=$?
+    echo "Repository failed: $repo (status $install_status)" >&2
+done
+
+if [ "$install_status" -ne 0 ]; then
+    exit "$install_status"
+fi
 
 # Clean FAT32-incompatible characters from key filenames after xbps has used them.
 for key in "$root"/var/db/xbps/keys/*:*; do
