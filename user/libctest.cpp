@@ -98,6 +98,18 @@ static int libctest_main_impl()
     free(zeroed);
 
     expect(printf("") == 0 && fprintf(stdout, "") == 0 && dprintf(1, "") == 0, "stdio formatted empty");
+
+    char fmtbuf[32];
+    memset(fmtbuf, 'X', sizeof(fmtbuf));
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%5s", "ab") == 5 && same(fmtbuf, "   ab"), "snprintf string right pad");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-5s", "ab") == 5 && same(fmtbuf, "ab   "), "snprintf string left pad");
+    memset(fmtbuf, 'X', sizeof(fmtbuf));
+    expect(snprintf(fmtbuf, 4, "abcdef") == 6 && same(fmtbuf, "abc") && fmtbuf[4] == 'X', "snprintf truncate literal");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%3c", 'z') == 3 && same(fmtbuf, "  z"), "snprintf char right pad");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-3c", 'z') == 3 && same(fmtbuf, "z  "), "snprintf char left pad");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%05d", 42) == 5 && same(fmtbuf, "00042"), "snprintf zero pad number");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%#x", 42) == 4 && same(fmtbuf, "0x2a"), "snprintf hex prefix");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%8llx", 0x2aULL) == 8 && same(fmtbuf, "      2a"), "snprintf long long width");
     expect(fileno(stdin) == 0 && fileno(stdout) == 1 && fileno(stderr) == 2, "fileno std streams");
     expect(fflush(NULL) == 0 && fputs("", stdout) == 0, "stdio flush puts");
 
