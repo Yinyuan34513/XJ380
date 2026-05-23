@@ -6,6 +6,7 @@
 #include <fs/vfs/vfs.h>
 #include <installer_mode.h>
 #include <installer_protocol.h>
+#include <ioctl.h>
 #include <krlibc.h>
 #include <mm/uaccess.h>
 #include <proto.hpp>
@@ -254,6 +255,8 @@ static int installer_mkdir_parent(const char *path)
 
 static int installer_write_payload_file(const char *path, const uint8_t *data, size_t size)
 {
+    static const size_t INSTALLER_COPY_CHUNK = 0x100000;
+
     int ret = installer_mkdir_parent(path);
     if (ret < 0) return ret;
     vfs_node_t exists = vfs_open_no_follow(path);
@@ -261,22 +264,89 @@ static int installer_write_payload_file(const char *path, const uint8_t *data, s
     {
         vfs_delete(exists);
     }
-    vfs_mkfile(path);
+    ret = vfs_mkfile(path);
+    if (ret != EOK)
+    {
+        write_serial_fmt("installer: mkfile failed path=%s ret=%d\n", path, ret);
+        return ret < 0 ? ret : -EIO;
+    }
     vfs_node_t node = vfs_open(path);
-    if (node == NULL) return -ENOENT;
+    if (node == NULL)
+    {
+        write_serial_fmt("installer: open payload file failed path=%s\n", path);
+        return -ENOENT;
+    }
     size_t written = 0;
     while (written < size)
     {
-        size_t chunk = MIN((size_t)0x10000, size - written);
+        size_t chunk = MIN(INSTALLER_COPY_CHUNK, size - written);
         size_t got = vfs_write(node, (void *)(data + written), written, chunk);
         if (got != chunk)
         {
+            write_serial_fmt("installer: write payload file failed path=%s offset=%zu chunk=%zu got=%zu\n",
+                             path, written, chunk, got);
             vfs_close(node);
             return -EIO;
         }
         written += got;
     }
     vfs_close(node);
+    return EOK;
+}
+
+static uint64_t installer_align_up_u64(uint64_t value, uint64_t align)
+{
+    if (align == 0) return value;
+    uint64_t rem = value % align;
+    if (rem == 0) return value;
+    uint64_t add = align - rem;
+    if (value > (~0ULL) - add) return ~0ULL;
+    return value + add;
+}
+
+static int installer_payload_required_space(const uint8_t *pak, size_t pak_size,
+                                            uint64_t *out_file_bytes, uint64_t *out_required_bytes)
+{
+    if (out_file_bytes == NULL || out_required_bytes == NULL) return -EINVAL;
+    *out_file_bytes = 0;
+    *out_required_bytes = 0;
+    if (pak == NULL || pak_size < sizeof(xj380_pak_header)) return -EINVAL;
+    const xj380_pak_header *header = (const xj380_pak_header *)pak;
+    if (memcmp(header->magic, XJ380_INSTALLER_PAK_MAGIC, XJ380_INSTALLER_PAK_MAGIC_SIZE) != 0) return -EINVAL;
+
+    static const uint64_t FAT32_CLUSTER_ESTIMATE = 32768;
+    static const uint64_t FAT32_METADATA_RESERVE = 64ULL * 1024ULL * 1024ULL;
+    size_t off = sizeof(*header);
+    uint64_t required = FAT32_METADATA_RESERVE;
+    for (uint64_t i = 0; i < header->entry_count; i++)
+    {
+        if (off > pak_size || pak_size - off < sizeof(xj380_pak_entry_header)) return -EINVAL;
+        const xj380_pak_entry_header *entry = (const xj380_pak_entry_header *)(pak + off);
+        off += sizeof(*entry);
+        if (entry->path_len == 0 || entry->path_len >= 512 || off > pak_size || pak_size - off < entry->path_len)
+            return -EINVAL;
+        off += entry->path_len;
+        if (entry->type == XJ380_PAK_ENTRY_FILE)
+        {
+            if (entry->size > pak_size - off) return -EINVAL;
+            uint64_t aligned = installer_align_up_u64(entry->size, FAT32_CLUSTER_ESTIMATE);
+            if (*out_file_bytes > (~0ULL) - entry->size || required > (~0ULL) - aligned) return -EOVERFLOW;
+            *out_file_bytes += entry->size;
+            required += aligned;
+            off += (size_t)entry->size;
+        }
+        else if (entry->type == XJ380_PAK_ENTRY_DIR)
+        {
+            if (required > (~0ULL) - FAT32_CLUSTER_ESTIMATE) return -EOVERFLOW;
+            required += FAT32_CLUSTER_ESTIMATE;
+        }
+        else
+        {
+            return -EINVAL;
+        }
+    }
+    if (off != pak_size) return -EINVAL;
+    *out_required_bytes = required;
     return EOK;
 }
 
@@ -311,7 +381,15 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
         {
             if (off > pak_size || entry->size > pak_size - off) return -EINVAL;
             int ret = installer_write_payload_file(out_path, pak + off, (size_t)entry->size);
-            if (ret < 0) return ret;
+            if (ret < 0)
+            {
+                uint64_t denom = header->entry_count == 0 ? 1 : header->entry_count;
+                uint32_t percent = 55 + (uint32_t)((i * 40) / denom);
+                installer_set_progress(XJ380_INSTALLER_RUNNING, percent, ret, "正在复制系统文件", rel);
+                write_serial_fmt("installer: payload file failed ret=%d rel=%s out=%s size=%llu\n",
+                                 ret, rel, out_path, entry->size);
+                return ret;
+            }
             off += (size_t)entry->size;
         }
         else
@@ -372,8 +450,25 @@ static int installer_install_to_disk(size_t disk_id)
     uint64_t last_lba = total_lba - 34;
     if (last_lba <= first_lba) return installer_fail(-ENOSPC, 0, "目标硬盘过小", "无法创建 EFI 系统分区。");
 
-    write_serial_fmt("installer: start disk=%s id=%zu size=%llu sector=%zu payload=%zu\n",
-                     disk->drive_name, disk_id, disk->size, disk->sector_size, payload_size);
+    uint64_t payload_file_bytes = 0;
+    uint64_t payload_required_bytes = 0;
+    int payload_ret = installer_payload_required_space(payload, payload_size, &payload_file_bytes, &payload_required_bytes);
+    if (payload_ret < 0)
+        return installer_fail(payload_ret, 0, "系统包不可用", "安装介质中的 system-payload.pak 格式不正确。");
+    uint64_t target_bytes = (last_lba - first_lba + 1) * disk->sector_size;
+    if (target_bytes < payload_required_bytes)
+    {
+        char detail[XJ380_INSTALLER_DETAIL_LEN];
+        snprintf(detail, sizeof(detail), "目标分区约 %llu MiB，系统需要约 %llu MiB。请使用更大的硬盘。",
+                 target_bytes / 1024ULL / 1024ULL, payload_required_bytes / 1024ULL / 1024ULL);
+        write_serial_fmt("installer: target too small target=%llu file_bytes=%llu required=%llu payload=%zu\n",
+                         target_bytes, payload_file_bytes, payload_required_bytes, payload_size);
+        return installer_fail(-ENOSPC, 0, "目标硬盘过小", detail);
+    }
+
+    write_serial_fmt("installer: start disk=%s id=%zu size=%llu sector=%zu payload=%zu file_bytes=%llu required=%llu target=%llu\n",
+                     disk->drive_name, disk_id, disk->size, disk->sector_size, payload_size,
+                     payload_file_bytes, payload_required_bytes, target_bytes);
 
     installer_set_progress(XJ380_INSTALLER_RUNNING, 5, 0, "正在清理磁盘", "写入新的 GPT 分区表前会清除磁盘头尾区域。");
     if (!installer_zero_sectors(disk_id, 0, 2048)) return installer_fail(-EIO, 5, "清理磁盘失败", "写入磁盘头部区域失败。");
@@ -409,6 +504,7 @@ static int installer_install_to_disk(size_t disk_id)
 
     installer_set_progress(XJ380_INSTALLER_RUNNING, 97, 0, "正在完成安装", "正在同步并卸载目标分区。");
     vfs_unmount("/target");
+    if (disk->ioctl != NULL) disk->ioctl(disk, IOBLKSYNC, NULL);
     installer_set_progress(XJ380_INSTALLER_DONE, 100, 0, "安装完成", "XJ380 已安装到硬盘。请关机后移除 ISO 安装介质。");
     return EOK;
 }

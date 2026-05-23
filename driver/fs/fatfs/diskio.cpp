@@ -195,7 +195,7 @@ DRESULT disk_ioctl(byte  pdrv, /* Physical drive nmuber (0..) */
     case GET_SECTOR_SIZE: *(u16 *)buff = 512; return RES_OK;
     case GET_SECTOR_COUNT: *(u32 *)buff = disk_size(pdrv); return RES_OK;
     case GET_BLOCK_SIZE: *(u16 *)buff = 0; return RES_OK;
-    case CTRL_SYNC: return RES_OK;
+    case CTRL_SYNC: return fatfs_get_node_by_number(pdrv) != NULL ? RES_OK : RES_PARERR;
     default: break;
     }
 

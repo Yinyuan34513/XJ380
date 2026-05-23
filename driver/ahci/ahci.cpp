@@ -2,6 +2,7 @@
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <device.h>
+#include <ioctl.h>
 
 void              *op_buffer;
 static uint32_t    cdb_size[] = {SCSI_CDB12, SCSI_CDB16, 0, 0};
@@ -397,6 +398,13 @@ size_t ahci_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     return size;
 }
 
+static int ahci_ioctl(device_t *device, size_t req, void *arg)
+{
+    (void)device;
+    (void)arg;
+    return req == IOBLKSYNC ? 0 : -1;
+}
+
 // �?utils.cpp 中添�?
 void ahci_setup() {
     pci_device_t *device = pci_find_class(0x010601);
@@ -503,7 +511,7 @@ void ahci_setup() {
         sata.read = ahci_read;
         sata.write = (hbadev->flags & HBA_DEV_FATAPI) ? NULL : ahci_write;
         sata.flag = 1;
-        sata.ioctl = (ioctlf)empty;
+        sata.ioctl = ahci_ioctl;
         sata.poll = (pollf)empty;
         sata.map = (mapf)empty;
         sata.read_vbuf = NULL;

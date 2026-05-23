@@ -2,6 +2,7 @@
 #include <proto.hpp>
 #include <pci/pci.h>
 #include <fs/vfs/vfs.h>
+#include <ioctl.h>
 
 static ide_device_t ide_devices[4]; // 最多 4 个 IDE 设备
 extern vfs_node_t devfs_root;
@@ -116,77 +117,98 @@ int ide_detect_device(uint8_t port, uint8_t device) {
 // IDE 读操作
 int ide_read(int drive, uint8_t *buffer, size_t size, size_t lba) {
     if (drive < 0 || drive > 3 || !ide_devices[drive].exists) return -1;
-    
+    if (buffer == NULL && size != 0) return -1;
+
     uint16_t base = ide_devices[drive].is_primary ? IDE_PRIMARY_DATA_PORT : IDE_SECONDARY_DATA_PORT;
     uint8_t drive_select = ide_devices[drive].is_master ? IDE_DEVICE_MASTER : IDE_DEVICE_SLAVE;
-    
-    // 等待就绪
-    if (!ide_wait_not_busy(base, 1000000)) return -1;
-    
-    // 选择设备和 LBA 模式
-    outb(base + 6, drive_select | 0x40 | ((lba >> 24) & 0x0F));
-    
-    // 设置扇区数和 LBA 地址
-    outb(base + 2, 1);  // 读取 1 个扇区
-    outb(base + 3, lba & 0xFF);
-    outb(base + 4, (lba >> 8) & 0xFF);
-    outb(base + 5, (lba >> 16) & 0xFF);
-    
-    // 发送读命令
-    outb(base + 7, IDE_CMD_READ_SECTORS);
-    
-    // 等待数据就绪
-    if (ide_wait_drq(base) != 0) return -1;
-    
-    // 读取数据
-    uint16_t *buf = (uint16_t *)buffer;
-    for (int i = 0; i < 256; i++) {
-        buf[i] = inw(base);
+
+    for (size_t sector_index = 0; sector_index < size; sector_index++) {
+        uint64_t current_lba = lba + sector_index;
+
+        // 等待就绪
+        if (!ide_wait_not_busy(base, 1000000)) return -1;
+
+        // 选择设备和 LBA 模式
+        outb(base + 6, drive_select | 0x40 | ((current_lba >> 24) & 0x0F));
+
+        // 设置扇区数和 LBA 地址
+        outb(base + 2, 1);  // 读取 1 个扇区
+        outb(base + 3, current_lba & 0xFF);
+        outb(base + 4, (current_lba >> 8) & 0xFF);
+        outb(base + 5, (current_lba >> 16) & 0xFF);
+
+        // 发送读命令
+        outb(base + 7, IDE_CMD_READ_SECTORS);
+
+        // 等待数据就绪
+        if (ide_wait_drq(base) != 0) return -1;
+
+        // 读取数据
+        uint16_t *buf = (uint16_t *)(buffer + sector_index * ide_devices[drive].sector_size);
+        for (int i = 0; i < 256; i++) {
+            buf[i] = inw(base);
+        }
     }
-    
+
     return 0;
 }
 
 // IDE 写操作
 int ide_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     if (drive < 0 || drive > 3 || !ide_devices[drive].exists) return -1;
-    
+    if (buffer == NULL && size != 0) return -1;
+
     uint16_t base = ide_devices[drive].is_primary ? IDE_PRIMARY_DATA_PORT : IDE_SECONDARY_DATA_PORT;
     uint8_t drive_select = ide_devices[drive].is_master ? IDE_DEVICE_MASTER : IDE_DEVICE_SLAVE;
-    
-    // 等待就绪
-    if (!ide_wait_not_busy(base, 1000000)) return -1;
-    
-    // 选择设备和 LBA 模式
-    outb(base + 6, drive_select | 0x40 | ((lba >> 24) & 0x0F));
-    
-    // 设置扇区数和 LBA 地址
-    outb(base + 2, 1);  // 写入 1 个扇区
-    outb(base + 3, lba & 0xFF);
-    outb(base + 4, (lba >> 8) & 0xFF);
-    outb(base + 5, (lba >> 16) & 0xFF);
-    
-    // 发送写命令
-    outb(base + 7, IDE_CMD_WRITE_SECTORS);
-    
-    // 等待设备请求数据
-    if (ide_wait_drq(base) != 0) {
-        write_serial_fmt("IDE: write lba=%llu did not enter DRQ\n", lba);
-        return -1;
-    }
-    
-    // 写入数据
-    uint16_t *buf = (uint16_t *)buffer;
-    for (int i = 0; i < 256; i++) {
-        outw(base, buf[i]);
+
+    for (size_t sector_index = 0; sector_index < size; sector_index++) {
+        uint64_t current_lba = lba + sector_index;
+
+        // 等待就绪
+        if (!ide_wait_not_busy(base, 1000000)) return -1;
+
+        // 选择设备和 LBA 模式
+        outb(base + 6, drive_select | 0x40 | ((current_lba >> 24) & 0x0F));
+
+        // 设置扇区数和 LBA 地址
+        outb(base + 2, 1);  // 写入 1 个扇区
+        outb(base + 3, current_lba & 0xFF);
+        outb(base + 4, (current_lba >> 8) & 0xFF);
+        outb(base + 5, (current_lba >> 16) & 0xFF);
+
+        // 发送写命令
+        outb(base + 7, IDE_CMD_WRITE_SECTORS);
+
+        // 等待设备请求数据
+        if (ide_wait_drq(base) != 0) {
+            write_serial_fmt("IDE: write lba=%llu did not enter DRQ\n", current_lba);
+            return -1;
+        }
+
+        // 写入数据
+        uint16_t *buf = (uint16_t *)(buffer + sector_index * ide_devices[drive].sector_size);
+        for (int i = 0; i < 256; i++) {
+            outw(base, buf[i]);
+        }
+
+        // 等待完成
+        if (!ide_wait_not_busy(base, 1000000)) return -1;
     }
 
-    outb(base + 7, IDE_CMD_CACHE_FLUSH);
-
-    // 等待完成
-    if (!ide_wait_not_busy(base, 1000000)) return -1;
-    
     return 0;
+}
+
+static int ide_flush(int drive) {
+    if (drive < 0 || drive > 3 || !ide_devices[drive].exists) return -1;
+
+    uint16_t base = ide_devices[drive].is_primary ? IDE_PRIMARY_DATA_PORT : IDE_SECONDARY_DATA_PORT;
+    uint8_t drive_select = ide_devices[drive].is_master ? IDE_DEVICE_MASTER : IDE_DEVICE_SLAVE;
+
+    if (!ide_wait_not_busy(base, 1000000)) return -1;
+    outb(base + 6, drive_select);
+    for (int i = 0; i < 4; i++) inb(base + 7);
+    outb(base + 7, IDE_CMD_CACHE_FLUSH);
+    return ide_wait_not_busy(base, 1000000) ? 0 : -1;
 }
 
 // IDE 设备读取回调
@@ -221,6 +243,25 @@ static size_t ide_write_callback(int drive, uint8_t *buffer, size_t size, size_t
     }
     if (ide_write(local_drive, buffer, size, lba) != 0) return 0;
     return size;
+}
+
+static int ide_ioctl(device_t *device, size_t req, void *arg) {
+    (void)arg;
+    if (device == NULL) return -1;
+    if (req != IOBLKSYNC) return 0;
+
+    int local_drive = -1;
+    for (int i = 0; i < 4; i++) {
+        if (ide_devices[i].exists && ide_devices[i].drive_id == (int)device->vdiskid) {
+            local_drive = i;
+            break;
+        }
+    }
+    if (local_drive < 0) {
+        write_serial_fmt("IDE: ioctl cannot map global drive id %d\n", device->vdiskid);
+        return -1;
+    }
+    return ide_flush(local_drive);
 }
 
 // 等待 devfs 就绪
@@ -299,7 +340,7 @@ void ide_setup(void) {
         ide_dev.read = ide_read_callback;
         ide_dev.write = ide_write_callback;
         ide_dev.flag = 1;
-        ide_dev.ioctl = (ioctlf)empty;
+        ide_dev.ioctl = ide_ioctl;
         ide_dev.poll = (pollf)empty;
         ide_dev.map = (mapf)empty;
         ide_dev.read_vbuf = NULL;
@@ -310,7 +351,7 @@ void ide_setup(void) {
         
         write_serial_fmt("IDE: Registering %s with %d sectors\n", name_buf, ide_devices[i].sectors);
         
-        int id = regist_device(name_buf, ide_dev);
+        int id = regist_device(NULL, ide_dev);
         if (id >= 0) {
             ide_devices[i].drive_id = id;  // 保存设备 ID
             write_serial_fmt("ide%d registered with id %d\n", i, id);

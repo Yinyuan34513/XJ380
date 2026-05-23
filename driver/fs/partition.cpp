@@ -161,6 +161,15 @@ size_t partition_write(int part, uint8_t *buf, size_t number, size_t lba)
     return device_ctl[partition->vdisk_id].write(partition->vdisk_id, buf, number, partition->starting_lba + lba);
 }
 
+static int partition_sync(partition_t *partition)
+{
+    if (partition == NULL) return -ENODEV;
+    if (partition->vdisk_id >= 256) return -ENODEV;
+    device_t *base = &device_ctl[partition->vdisk_id];
+    if (base->flag < 1 || base->ioctl == NULL) return -ENODEV;
+    return base->ioctl(base, IOBLKSYNC, NULL);
+}
+
 void format_guid(const uint8_t guid[16], char out[37])
 {
     snprintf(out, 37, "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X", guid[3], guid[2], guid[1],
@@ -427,6 +436,8 @@ int partition_ioctl(device_t *device, size_t req, void *arg)
     partition_t partition = partitions[device_id];
     switch (req)
     {
+    case IOBLKSYNC:
+        return partition_sync(&partition);
     case IOGPTYPE: {
         if (arg == NULL) return -EINVAL;
         uint32_t *type = (uint32_t *)arg;
