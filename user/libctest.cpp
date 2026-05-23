@@ -103,13 +103,32 @@ static int libctest_main_impl()
     memset(fmtbuf, 'X', sizeof(fmtbuf));
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%5s", "ab") == 5 && same(fmtbuf, "   ab"), "snprintf string right pad");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-5s", "ab") == 5 && same(fmtbuf, "ab   "), "snprintf string left pad");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%2s", "abcd") == 4 && same(fmtbuf, "abcd"), "snprintf string narrow width");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-2s", "abcd") == 4 && same(fmtbuf, "abcd"),
+           "snprintf string left narrow width");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "[%10s]", "hi") == 12 && same(fmtbuf, "[        hi]"),
+           "snprintf string bracketed width");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%.3s", "abcdef") == 3 && same(fmtbuf, "abc"),
+           "snprintf string precision");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%10.3s", "abcdef") == 10 && same(fmtbuf, "       abc"),
+           "snprintf string width precision");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-10.3s", "abcdef") == 10 && same(fmtbuf, "abc       "),
+           "snprintf string left width precision");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%.*s", 2, "abcdef") == 2 && same(fmtbuf, "ab"),
+           "snprintf string star precision");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%.*s", -1, "abcdef") == 6 && same(fmtbuf, "abcdef"),
+           "snprintf string negative star precision");
     memset(fmtbuf, 'X', sizeof(fmtbuf));
     expect(snprintf(fmtbuf, 4, "abcdef") == 6 && same(fmtbuf, "abc") && fmtbuf[4] == 'X', "snprintf truncate literal");
+    memset(fmtbuf, 'X', sizeof(fmtbuf));
+    expect(snprintf(fmtbuf, 1, "abcdef") == 6 && fmtbuf[0] == '\0' && fmtbuf[1] == 'X',
+           "snprintf truncate size one");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%3c", 'z') == 3 && same(fmtbuf, "  z"), "snprintf char right pad");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-3c", 'z') == 3 && same(fmtbuf, "z  "), "snprintf char left pad");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%05d", 42) == 5 && same(fmtbuf, "00042"), "snprintf zero pad number");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%#x", 42) == 4 && same(fmtbuf, "0x2a"), "snprintf hex prefix");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%8llx", 0x2aULL) == 8 && same(fmtbuf, "      2a"), "snprintf long long width");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%%") == 1 && same(fmtbuf, "%"), "snprintf percent literal");
     expect(fileno(stdin) == 0 && fileno(stdout) == 1 && fileno(stderr) == 2, "fileno std streams");
     expect(fflush(NULL) == 0 && fputs("", stdout) == 0, "stdio flush puts");
 

@@ -366,6 +366,18 @@ int skip_atoi(const char **s)
     return i;
 }
 
+static size_t bounded_strlen(const char *str, size_t max_len)
+{
+    size_t len = 0;
+
+    while (len < max_len && str[len] != '\0')
+    {
+        ++len;
+    }
+
+    return len;
+}
+
 static void buf_writer_write(Writer *writer, const char *str, size_t len);
 static void buf_writer_repeat(Writer *writer, char ch, size_t len);
 
@@ -507,12 +519,14 @@ typedef struct SafeBufWriterData
 uint8_t safe_buf_writer_handler(Writer *writer, char ch)
 {
     SafeBufWriterData *data = (SafeBufWriterData *)writer->data;
+    if (data->max_size == 0) return 1;
 
     // 检查是否还有空间（为null终止符保留1字节）
     if (data->idx < data->max_size - 1)
     {
         data->buf[data->idx] = ch;
         ++(data->idx);
+        data->buf[data->idx] = '\0';
         return 0; // 成功
     }
 
@@ -522,12 +536,16 @@ uint8_t safe_buf_writer_handler(Writer *writer, char ch)
 typedef struct UnsafeBufWriterData
 {
     size_t idx; // index of buffer
-    char  *buf; // Unsafe, because unknown size
+    size_t max_size;
+    char  *buf;
 } UnsafeBufWriterData;
 
 uint8_t unsafe_buf_writer_handler(Writer *writer, char ch)
 {
     UnsafeBufWriterData *data = (UnsafeBufWriterData *)writer->data;
+    if (data->max_size == 0) return 1;
+    if (data->idx >= data->max_size - 1) return 1;
+
     data->buf[data->idx]      = ch;
     ++(data->idx);
     data->buf[data->idx] = '\0'; // EOF (Must do, because the buffer may be full of dirty datas)
@@ -553,15 +571,25 @@ static void buf_writer_write(Writer *writer, const char *str, size_t len)
 
         memcpy(data->buf + data->idx, str, writable);
         data->idx += writable;
+        data->buf[data->idx] = '\0';
         return;
     }
 
     if (writer->handler == unsafe_buf_writer_handler)
     {
         UnsafeBufWriterData *data = (UnsafeBufWriterData *)writer->data;
+        size_t               limit = 0;
+        size_t               writable = 0;
 
-        memcpy(data->buf + data->idx, str, len);
-        data->idx += len;
+        if (data->max_size == 0) return;
+        limit = data->max_size - 1;
+        if (data->idx >= limit) return;
+
+        writable = limit - data->idx;
+        if (writable > len) writable = len;
+
+        memcpy(data->buf + data->idx, str, writable);
+        data->idx += writable;
         data->buf[data->idx] = '\0';
         return;
     }
@@ -591,15 +619,25 @@ static void buf_writer_repeat(Writer *writer, char ch, size_t len)
 
         memset(data->buf + data->idx, ch, writable);
         data->idx += writable;
+        data->buf[data->idx] = '\0';
         return;
     }
 
     if (writer->handler == unsafe_buf_writer_handler)
     {
         UnsafeBufWriterData *data = (UnsafeBufWriterData *)writer->data;
+        size_t               limit = 0;
+        size_t               writable = 0;
 
-        memset(data->buf + data->idx, ch, len);
-        data->idx += len;
+        if (data->max_size == 0) return;
+        limit = data->max_size - 1;
+        if (data->idx >= limit) return;
+
+        writable = limit - data->idx;
+        if (writable > len) writable = len;
+
+        memset(data->buf + data->idx, ch, writable);
+        data->idx += writable;
         data->buf[data->idx] = '\0';
         return;
     }
@@ -664,6 +702,7 @@ int sprintf(char *str, const char *format, ...)
     char buffer[4096];
     UnsafeBufWriterData data = {
         .idx = 0,
+        .max_size = sizeof(buffer),
         .buf = buffer,
     };
 
@@ -726,6 +765,7 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
     size_t       str_len       = 0; // for align `%s`
     size_t       result        = 0; // Same as write_counter?
     WriteHandler write         = writer->handler;
+    bool         precision_set = false;
 
     num_formatter_t num_fmter = {};
     num_fmt_type    num_flag  = {};
@@ -739,11 +779,11 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         ++(*fmt_ptr); // Skip '%' or any flags
         switch (**fmt_ptr)
         {
-        case '-': num_flag.left = true; break;
-        case '+': num_flag.plus = true; break;
-        case ' ': num_flag.space = true; break;
-        case '#': num_flag.special = true; break;
-        case '0': num_flag.zeropad = true; break;
+        case '-': num_flag.left = true; continue;
+        case '+': num_flag.plus = true; continue;
+        case ' ': num_flag.space = true; continue;
+        case '#': num_flag.special = true; continue;
+        case '0': num_flag.zeropad = true; continue;
         default: break;
         }
 
@@ -759,13 +799,17 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         /* Calc num_fmter.precision */
         if (**fmt_ptr == '.')
         {
+            precision_set = true;
             ++(*fmt_ptr); // Skip '.'
             if (IS_DIGIT(**fmt_ptr)) { num_fmter.precision = skip_atoi(fmt_ptr); }
             else if (**fmt_ptr == '*')
             {
                 /* by the following argument */
                 ++(*fmt_ptr); // Skip '*'
-                num_fmter.precision = (size_t)va_arg(args, int);
+                int precision_arg = va_arg(args, int);
+
+                if (precision_arg < 0) { precision_set = false; }
+                else { num_fmter.precision = (size_t)precision_arg; }
             }
         }
 
@@ -838,8 +882,7 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         {
         case 'c': break;
         case 's':
-            str_len = strlen(str);
-            if (num_fmter.size < str_len) num_fmter.size = str_len;
+            str_len = precision_set ? bounded_strlen(str, num_fmter.precision) : strlen(str);
             break;
         case 'o': num_fmter.base = 8; break;
         case 'p':
@@ -887,27 +930,26 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
             break;
         }
         case 's':
+        {
+            size_t pad_len = num_fmter.size > str_len ? (num_fmter.size - str_len) : 0;
+
             // Right align
             if (!(num_flag.left))
             {
-                size_t pad_len = num_fmter.size - str_len;
-
                 buf_writer_repeat(writer, ' ', pad_len);
                 write_counter += pad_len;
-                str_len = num_fmter.size;
             }
             // Write string
-            buf_writer_write(writer, str, str_len - write_counter);
-            write_counter = str_len;
+            buf_writer_write(writer, str, str_len);
+            write_counter += str_len;
             // Left align
             if (num_flag.left)
             {
-                size_t pad_len = num_fmter.size - str_len;
-
                 buf_writer_repeat(writer, ' ', pad_len);
                 write_counter += pad_len;
             }
             break;
+        }
         case 'o':                                                               // fallthrough
         case 'p':                                                               // fallthrough
         case 'x':                                                               // fallthrough
@@ -916,7 +958,10 @@ size_t wfmt_arg(Writer *writer, const char **fmt_ptr, va_list args) //NOLINT // 
         case 'i':                                                               // fallthrough
         case 'u':                                                               // fallthrough
         case 'b': write_counter += wnumber(writer, num_fmter, num_flag); break; // Format number with `Writer`
-        case '%': write(writer, '%'); break;
+        case '%':
+            write(writer, '%');
+            ++write_counter;
+            break;
         default: break;
         }
         break;
