@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,15 @@ static void expect(int cond, const char *name)
 static int same(const char *a, const char *b)
 {
     return strcmp(a, b) == 0;
+}
+
+static int vsnprintf_count_zero(const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    int ret = vsnprintf(NULL, 0, format, ap);
+    va_end(ap);
+    return ret;
 }
 
 static int intcmp(const void *lhs, const void *rhs)
@@ -118,11 +128,17 @@ static int libctest_main_impl()
            "snprintf string star precision");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%.*s", -1, "abcdef") == 6 && same(fmtbuf, "abcdef"),
            "snprintf string negative star precision");
+    expect(snprintf(fmtbuf, sizeof(fmtbuf), "%s", NULL) == 6 && same(fmtbuf, "(null)"), "snprintf null string");
     memset(fmtbuf, 'X', sizeof(fmtbuf));
     expect(snprintf(fmtbuf, 4, "abcdef") == 6 && same(fmtbuf, "abc") && fmtbuf[4] == 'X', "snprintf truncate literal");
     memset(fmtbuf, 'X', sizeof(fmtbuf));
     expect(snprintf(fmtbuf, 1, "abcdef") == 6 && fmtbuf[0] == '\0' && fmtbuf[1] == 'X',
            "snprintf truncate size one");
+    memset(fmtbuf, 'X', sizeof(fmtbuf));
+    expect(snprintf(fmtbuf, 0, "abcdef") == 6 && fmtbuf[0] == 'X', "snprintf count size zero");
+    expect(snprintf(NULL, 0, "abcdef") == 6, "snprintf null size zero");
+    expect(simple_snprintf(NULL, 0, "abcdef") == 6, "simple snprintf null size zero");
+    expect(vsnprintf_count_zero("abcdef") == 6, "vsnprintf null size zero");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%3c", 'z') == 3 && same(fmtbuf, "  z"), "snprintf char right pad");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%-3c", 'z') == 3 && same(fmtbuf, "z  "), "snprintf char left pad");
     expect(snprintf(fmtbuf, sizeof(fmtbuf), "%05d", 42) == 5 && same(fmtbuf, "00042"), "snprintf zero pad number");

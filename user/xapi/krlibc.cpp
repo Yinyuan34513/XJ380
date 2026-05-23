@@ -446,7 +446,7 @@ size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type) // NOLI
 
         buf_writer_repeat(writer, ' ', pad_len);
         result += pad_len;
-        size -= (int64_t)pad_len;
+        size = 0;
     }
 
     /* Write the sign */
@@ -470,7 +470,7 @@ size_t wnumber(Writer *writer, num_formatter_t fmter, num_fmt_type type) // NOLI
 
         buf_writer_repeat(writer, c, pad_len);
         result += pad_len;
-        size -= (int64_t)pad_len;
+        size = 0;
     }
 
     /* Write the zero padding */
@@ -651,11 +651,11 @@ static void buf_writer_repeat(Writer *writer, char ch, size_t len)
 // 完整的 snprintf 实现
 int snprintf(char *str, size_t size, const char *format, ...)
 {
-    if (str == NULL || format == NULL || size == 0)
+    if ((str == NULL && size != 0) || format == NULL)
         return -1;
 
     // 初始化缓冲区为空字符串
-    str[0] = '\0';
+    if (size != 0) str[0] = '\0';
 
     va_list args;
     va_start(args, format);
@@ -727,11 +727,11 @@ int sprintf(char *str, const char *format, ...)
 // vsnprintf 实现
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 {
-    if (str == NULL || format == NULL || size == 0)
+    if ((str == NULL && size != 0) || format == NULL)
         return -1;
 
     // 初始化缓冲区为空字符串
-    str[0] = '\0';
+    if (size != 0) str[0] = '\0';
 
     SafeBufWriterData data = {
         .idx = 0,
@@ -998,8 +998,6 @@ size_t vwprintf(Writer *writer, const char *fmt, va_list args)
 
 int simple_snprintf(char *str, size_t size, const char *format, ...)
 {
-    if (size == 0) return 0;
-    
     va_list args;
     va_start(args, format);
     int result = vsnprintf(str, size, format, args);
