@@ -334,11 +334,13 @@ void       vfs_free_child(vfs_node_t vfs);
 errno_t    vfs_delete(vfs_node_t node);
 errno_t    vfs_rename(vfs_node_t node, const char *nw);
 errno_t    vfs_resize(vfs_node_t node, uint64_t size);
+errno_t    vfs_resize_fast(vfs_node_t node, uint64_t size);
 errno_t    vfs_poll(vfs_node_t node, size_t event);
 void      *vfs_map(vfs_node_t node, uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags,
                    uint64_t offset);
 size_t     vfs_read(vfs_node_t file, void *addr, size_t offset, size_t size);  // 读取节点数据
 size_t     vfs_write(vfs_node_t file, void *addr, size_t offset, size_t size); // 写入节点
+size_t     vfs_write_fast(vfs_node_t file, void *addr, size_t offset, size_t size);
 void *general_map(vfs_read_t read_callback, void *file, uint64_t addr, uint64_t len, uint64_t prot,
                   uint64_t flags, uint64_t offset); // 文件映射
 

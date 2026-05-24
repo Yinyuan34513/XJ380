@@ -385,9 +385,6 @@ void desktop_flusher()
     disable_intr();
     disable_scheduler();
 
-    // 之后应该挪到OOBE里的部分
-    if (!installer_mode) init_runfile();
-
     write_serial_string("desktop flusher is running\n");
 
     register_hardware_info();

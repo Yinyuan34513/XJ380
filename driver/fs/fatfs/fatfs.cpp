@@ -227,17 +227,26 @@ size_t fatfs_writefile(file_t file, const void *addr, size_t offset, size_t size
         fatfs_unlock();
         return -1;
     }
-    FRESULT res;
-    res = f_lseek((FIL*)file->handle, offset);
-    if (res != FR_OK) 
+    FIL *fp = (FIL *)file->handle;
+    if (fp == NULL)
     {
-        write_serial_fmt("fatfs_writefile: seek path=%s offset=%zu size=%zu res=%d\n",
-                         file->path != NULL ? file->path : "<null>", offset, size, res);
         fatfs_unlock();
         return -1;
     }
+    FRESULT res = FR_OK;
+    if (fp->fptr != (FSIZE_t)offset)
+    {
+        res = f_lseek(fp, offset);
+        if (res != FR_OK)
+        {
+            write_serial_fmt("fatfs_writefile: seek path=%s offset=%zu size=%zu res=%d\n",
+                             file->path != NULL ? file->path : "<null>", offset, size, res);
+            fatfs_unlock();
+            return -1;
+        }
+    }
     uint32_t n;
-    res = f_write((FIL*)file->handle, addr, size, &n);
+    res = f_write(fp, addr, size, &n);
     if (res != FR_OK) 
     {
         write_serial_fmt("fatfs_writefile: write path=%s offset=%zu size=%zu wrote=%u res=%d\n",
@@ -624,9 +633,12 @@ static void fatfs_resize(file_t file, uint64_t size) {
     }
 
     FIL *fp = (FIL *)file->handle;
-    if (f_lseek(fp, (FSIZE_t)size) == FR_OK) {
+    if (fp->obj.objsize == 0 && size > 0 && f_expand(fp, (FSIZE_t)size, 1) == FR_OK) {
+        if (f_lseek(fp, (FSIZE_t)size) == FR_OK) {
+            f_truncate(fp);
+        }
+    } else if (fp->fptr == (FSIZE_t)size || f_lseek(fp, (FSIZE_t)size) == FR_OK) {
         f_truncate(fp);
-        f_sync(fp);
     }
 
     fatfs_unlock();

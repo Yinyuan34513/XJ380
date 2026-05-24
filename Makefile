@@ -340,10 +340,6 @@ vdisk: all
 	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
 	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
 
-# temp test (remember to delete)
-	@mkdir -p $(VDISK_ROOT)/users/GuoqiFish/desktop
-	@cp -a ./test.txt $(VDISK_ROOT)/users/GuoqiFish/desktop
-
 	@find $(VDISK_ROOT) -xtype l -delete
 	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
@@ -416,8 +412,6 @@ installer.system.stage: all installer.prepare
 	@cp ./out/helloworld.elf $(INSTALLER_SYSTEM_ROOT)/apps/builtin
 	@cp ./out/layout.elf $(INSTALLER_SYSTEM_ROOT)/apps/builtin
 	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(INSTALLER_SYSTEM_ROOT)/apps/builtin; fi
-	@mkdir -p $(INSTALLER_SYSTEM_ROOT)/users/GuoqiFish/desktop
-	@cp -a ./test.txt $(INSTALLER_SYSTEM_ROOT)/users/GuoqiFish/desktop
 	@find $(INSTALLER_SYSTEM_ROOT) -xtype l -delete
 	@find $(INSTALLER_SYSTEM_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
 	@python3 $(MAKE_PAK) $(INSTALLER_SYSTEM_ROOT) $(INSTALLER_SYSTEM_PAK)

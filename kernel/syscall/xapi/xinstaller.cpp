@@ -70,11 +70,10 @@ static void installer_set_progress(uint32_t state, uint32_t percent, int64_t res
                                     const char *stage, const char *detail)
 {
     if (percent > 100) percent = 100;
+    memset(&g_installer_progress, 0, sizeof(g_installer_progress));
     g_installer_progress.state = state;
     g_installer_progress.percent = percent;
     g_installer_progress.result = result;
-    memset(g_installer_progress.stage, 0, sizeof(g_installer_progress.stage));
-    memset(g_installer_progress.detail, 0, sizeof(g_installer_progress.detail));
     if (stage != NULL) strncpy(g_installer_progress.stage, stage, sizeof(g_installer_progress.stage) - 1);
     if (detail != NULL) strncpy(g_installer_progress.detail, detail, sizeof(g_installer_progress.detail) - 1);
 }
@@ -108,7 +107,7 @@ static bool installer_zero_sectors(size_t disk_id, uint64_t lba, size_t sectors)
     device_t *disk = get_device(disk_id);
     if (disk == NULL || disk->sector_size == 0) return false;
 
-    size_t chunk_sectors = 1;
+    size_t chunk_sectors = 1024;
     size_t bytes = chunk_sectors * disk->sector_size;
     uint8_t *zero = (uint8_t *)calloc(bytes, 1);
     if (zero == NULL) return false;
@@ -236,34 +235,291 @@ static bool installer_write_gpt(size_t disk_id, uint64_t first_lba, uint64_t las
     return ok;
 }
 
-static int installer_mkdir_parent(const char *path)
+typedef struct {
+    char  **items;
+    size_t  capacity;
+    size_t  count;
+} installer_dir_cache;
+
+typedef struct {
+    char    **items;
+    uint64_t  count;
+} installer_file_list;
+
+typedef struct {
+    installer_dir_cache dirs;
+    installer_file_list  files;
+    uint64_t            total_file_bytes;
+    uint64_t            total_file_count;
+    uint64_t            copied_file_bytes;
+    uint64_t            current_file_index;
+    uint32_t            last_percent;
+    uint32_t            chunk_counter;
+    char                last_parent[640];
+} installer_copy_context;
+
+static uint64_t installer_path_hash(const char *path)
+{
+    uint64_t hash = 1469598103934665603ULL;
+    if (path == NULL) return hash;
+    for (const unsigned char *p = (const unsigned char *)path; *p != '\0'; p++)
+    {
+        hash ^= *p;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+static size_t installer_dir_cache_capacity(uint64_t entry_count)
+{
+    size_t cap = 64;
+    uint64_t want = entry_count < 131072ULL ? entry_count * 2ULL + 32ULL : 262144ULL;
+    while ((uint64_t)cap < want && cap < 262144) cap <<= 1;
+    return cap;
+}
+
+static void installer_dir_cache_init(installer_dir_cache *cache, uint64_t entry_count)
+{
+    if (cache == NULL) return;
+    memset(cache, 0, sizeof(*cache));
+    size_t cap = installer_dir_cache_capacity(entry_count);
+    cache->items = (char **)calloc(cap, sizeof(char *));
+    if (cache->items == NULL)
+    {
+        cache->capacity = 0;
+        return;
+    }
+    cache->capacity = cap;
+}
+
+static void installer_dir_cache_free(installer_dir_cache *cache)
+{
+    if (cache == NULL || cache->items == NULL) return;
+    for (size_t i = 0; i < cache->capacity; i++)
+    {
+        if (cache->items[i] != NULL) free(cache->items[i]);
+    }
+    free(cache->items);
+    memset(cache, 0, sizeof(*cache));
+}
+
+static bool installer_dir_cache_contains(installer_dir_cache *cache, const char *path)
+{
+    if (cache == NULL || cache->items == NULL || cache->capacity == 0 || path == NULL) return false;
+    size_t mask = cache->capacity - 1;
+    size_t pos = (size_t)installer_path_hash(path) & mask;
+    for (size_t probe = 0; probe < cache->capacity; probe++)
+    {
+        char *item = cache->items[pos];
+        if (item == NULL) return false;
+        if (strcmp(item, path) == 0) return true;
+        pos = (pos + 1) & mask;
+    }
+    return false;
+}
+
+static void installer_dir_cache_add(installer_dir_cache *cache, const char *path)
+{
+    if (cache == NULL || cache->items == NULL || cache->capacity == 0 || path == NULL) return;
+    if (cache->count * 2 >= cache->capacity) return;
+
+    size_t mask = cache->capacity - 1;
+    size_t pos = (size_t)installer_path_hash(path) & mask;
+    for (size_t probe = 0; probe < cache->capacity; probe++)
+    {
+        char *item = cache->items[pos];
+        if (item == NULL)
+        {
+            char *copy = strdup(path);
+            if (copy == NULL) return;
+            cache->items[pos] = copy;
+            cache->count++;
+            return;
+        }
+        if (strcmp(item, path) == 0) return;
+        pos = (pos + 1) & mask;
+    }
+}
+
+static void installer_file_list_free(installer_file_list *list)
+{
+    if (list == NULL || list->items == NULL) return;
+    for (uint64_t i = 0; i < list->count; i++)
+    {
+        free(list->items[i]);
+    }
+    free(list->items);
+    memset(list, 0, sizeof(*list));
+}
+
+static bool installer_file_list_init(installer_file_list *list, uint64_t count)
+{
+    if (list == NULL) return false;
+    memset(list, 0, sizeof(*list));
+    if (count == 0) return true;
+    list->items = (char **)calloc((size_t)count, sizeof(char *));
+    if (list->items == NULL) return false;
+    list->count = count;
+    return true;
+}
+
+static int installer_collect_file_list(const uint8_t *pak, size_t pak_size, installer_file_list *list)
+{
+    if (pak == NULL || pak_size < sizeof(xj380_pak_header) || list == NULL) return -EINVAL;
+    const xj380_pak_header *header = (const xj380_pak_header *)pak;
+    if (memcmp(header->magic, XJ380_INSTALLER_PAK_MAGIC, XJ380_INSTALLER_PAK_MAGIC_SIZE) != 0) return -EINVAL;
+    if (list->count == 0) return EOK;
+    if (list->items == NULL) return -ENOMEM;
+
+    size_t   off  = sizeof(*header);
+    uint64_t file = 0;
+    for (uint64_t i = 0; i < header->entry_count; i++)
+    {
+        if (off > pak_size || pak_size - off < sizeof(xj380_pak_entry_header)) return -EINVAL;
+        const xj380_pak_entry_header *entry = (const xj380_pak_entry_header *)(pak + off);
+        off += sizeof(*entry);
+        if (entry->path_len == 0 || entry->path_len >= 512 || off > pak_size || pak_size - off < entry->path_len)
+            return -EINVAL;
+
+        char rel[512];
+        memcpy(rel, pak + off, entry->path_len);
+        rel[entry->path_len] = '\0';
+        off += entry->path_len;
+        if (rel[0] != '/') return -EINVAL;
+
+        if (entry->type == XJ380_PAK_ENTRY_FILE)
+        {
+            if (file >= list->count) return -EINVAL;
+            list->items[file] = strdup(rel);
+            if (list->items[file] == NULL) return -ENOMEM;
+            file++;
+            if (entry->size > pak_size - off) return -EINVAL;
+            off += (size_t)entry->size;
+        }
+        else if (entry->type == XJ380_PAK_ENTRY_DIR)
+        {
+            continue;
+        }
+        else
+        {
+            return -EINVAL;
+        }
+    }
+
+    if (file != list->count) return -EINVAL;
+    return EOK;
+}
+
+static int installer_mkdir_cached(installer_copy_context *ctx, const char *path)
 {
     if (path == NULL || path[0] != '/') return -EINVAL;
-    char temp[512];
+    if (path[1] == '\0') return EOK;
+    if (ctx != NULL && installer_dir_cache_contains(&ctx->dirs, path)) return EOK;
+
+    char temp[640];
     size_t len = strlen(path);
     if (len >= sizeof(temp)) return -ENAMETOOLONG;
     strcpy(temp, path);
+
     for (size_t i = 1; temp[i] != '\0'; i++)
     {
         if (temp[i] != '/') continue;
         temp[i] = '\0';
-        if (temp[0] != '\0') vfs_mkdir(temp);
+        if (temp[0] != '\0' && (ctx == NULL || !installer_dir_cache_contains(&ctx->dirs, temp)))
+        {
+            vfs_mkdir(temp);
+            if (ctx != NULL) installer_dir_cache_add(&ctx->dirs, temp);
+        }
         temp[i] = '/';
+    }
+
+    if (ctx == NULL || !installer_dir_cache_contains(&ctx->dirs, temp))
+    {
+        vfs_mkdir(temp);
+        if (ctx != NULL) installer_dir_cache_add(&ctx->dirs, temp);
     }
     return EOK;
 }
 
-static int installer_write_payload_file(const char *path, const uint8_t *data, size_t size)
+static int installer_prepare_payload_parent_cached(installer_copy_context *ctx, const char *path)
 {
-    static const size_t INSTALLER_COPY_CHUNK = 0x100000;
+    if (path == NULL || path[0] != '/') return -EINVAL;
+    char parent[640];
+    size_t len = strlen(path);
+    if (len >= sizeof(parent)) return -ENAMETOOLONG;
+    strcpy(parent, path);
 
-    int ret = installer_mkdir_parent(path);
-    if (ret < 0) return ret;
-    vfs_node_t exists = vfs_open_no_follow(path);
-    if (exists != NULL)
+    char *last = strrchr(parent, '/');
+    if (last == NULL) return -EINVAL;
+    if (last == parent) return EOK;
+    *last = '\0';
+
+    if (ctx != NULL && strcmp(ctx->last_parent, parent) == 0) return EOK;
+    int ret = installer_mkdir_cached(ctx, parent);
+    if (ret == EOK && ctx != NULL)
     {
-        vfs_delete(exists);
+        strncpy(ctx->last_parent, parent, sizeof(ctx->last_parent) - 1);
+        ctx->last_parent[sizeof(ctx->last_parent) - 1] = '\0';
     }
+    return ret;
+}
+
+static void installer_progress_sync_queue(installer_copy_context *ctx)
+{
+    if (ctx == NULL)
+    {
+        g_installer_progress.queue_index = 0;
+        g_installer_progress.queue_total = 0;
+        g_installer_progress.queue_count = 0;
+        memset(g_installer_progress.queue_items, 0, sizeof(g_installer_progress.queue_items));
+        return;
+    }
+
+    memset(g_installer_progress.queue_items, 0, sizeof(g_installer_progress.queue_items));
+    g_installer_progress.queue_count = 0;
+    g_installer_progress.queue_total = (xj380_inst_u32)MIN(ctx->total_file_count, 0xffffffffULL);
+    g_installer_progress.queue_index = (xj380_inst_u32)MIN(ctx->current_file_index + 1, ctx->total_file_count);
+    if (ctx->files.items == NULL || ctx->files.count == 0) return;
+    if (ctx->current_file_index >= ctx->files.count) return;
+
+    uint32_t slot = 0;
+    for (uint64_t i = ctx->current_file_index; i < ctx->files.count && slot < XJ380_INSTALLER_QUEUE_ITEMS; i++)
+    {
+        const char *item = ctx->files.items[i];
+        if (item == NULL || item[0] == '\0') continue;
+        strncpy(g_installer_progress.queue_items[slot], item, XJ380_INSTALLER_QUEUE_LEN - 1);
+        g_installer_progress.queue_items[slot][XJ380_INSTALLER_QUEUE_LEN - 1] = '\0';
+        slot++;
+    }
+    g_installer_progress.queue_count = slot;
+}
+
+static uint32_t installer_copy_percent(installer_copy_context *ctx)
+{
+    if (ctx == NULL || ctx->total_file_bytes == 0) return 55;
+    uint32_t copy_percent = (uint32_t)((ctx->copied_file_bytes * 40ULL) / ctx->total_file_bytes);
+    if (copy_percent > 40) copy_percent = 40;
+    return 55 + copy_percent;
+}
+
+static void installer_copy_progress(installer_copy_context *ctx, const char *detail, bool force)
+{
+    if (ctx == NULL) return;
+    installer_progress_sync_queue(ctx);
+    uint32_t percent = installer_copy_percent(ctx);
+    if (!force && percent == ctx->last_percent) return;
+    ctx->last_percent = percent;
+    installer_set_progress(XJ380_INSTALLER_RUNNING, percent, 0, "正在复制系统文件", detail);
+    installer_progress_sync_queue(ctx);
+}
+
+static int installer_write_payload_file(installer_copy_context *ctx, const char *path,
+                                        const uint8_t *data, size_t size, const char *detail)
+{
+    static const size_t INSTALLER_COPY_CHUNK = 0x400000;
+
+    int ret = installer_prepare_payload_parent_cached(ctx, path);
+    if (ret < 0) return ret;
     ret = vfs_mkfile(path);
     if (ret != EOK)
     {
@@ -276,11 +532,12 @@ static int installer_write_payload_file(const char *path, const uint8_t *data, s
         write_serial_fmt("installer: open payload file failed path=%s\n", path);
         return -ENOENT;
     }
+    if (size > INSTALLER_COPY_CHUNK) vfs_resize_fast(node, size);
     size_t written = 0;
     while (written < size)
     {
         size_t chunk = MIN(INSTALLER_COPY_CHUNK, size - written);
-        size_t got = vfs_write(node, (void *)(data + written), written, chunk);
+        size_t got = vfs_write_fast(node, (void *)(data + written), written, chunk);
         if (got != chunk)
         {
             write_serial_fmt("installer: write payload file failed path=%s offset=%zu chunk=%zu got=%zu\n",
@@ -289,6 +546,13 @@ static int installer_write_payload_file(const char *path, const uint8_t *data, s
             return -EIO;
         }
         written += got;
+        if (ctx != NULL)
+        {
+            ctx->copied_file_bytes += got;
+            installer_copy_progress(ctx, detail, false);
+            ctx->chunk_counter++;
+            if ((ctx->chunk_counter & 7U) == 0) scheduler_yield();
+        }
     }
     vfs_close(node);
     return EOK;
@@ -356,55 +620,163 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
     const xj380_pak_header *header = (const xj380_pak_header *)pak;
     if (memcmp(header->magic, XJ380_INSTALLER_PAK_MAGIC, XJ380_INSTALLER_PAK_MAGIC_SIZE) != 0) return -EINVAL;
 
+    uint64_t total_file_bytes = 0;
+    uint64_t required_bytes = 0;
+    int ret = installer_payload_required_space(pak, pak_size, &total_file_bytes, &required_bytes);
+    if (ret < 0) return ret;
+
+    installer_copy_context ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.total_file_bytes = total_file_bytes;
+    ctx.total_file_count = 0;
+    ctx.last_percent = 54;
+    installer_dir_cache_init(&ctx.dirs, header->entry_count);
+    installer_dir_cache_add(&ctx.dirs, "/target");
+    memset(g_installer_progress.queue_items, 0, sizeof(g_installer_progress.queue_items));
+    g_installer_progress.queue_count = 0;
+    g_installer_progress.queue_index = 0;
+    g_installer_progress.queue_total = 0;
+
     size_t off = sizeof(*header);
     for (uint64_t i = 0; i < header->entry_count; i++)
     {
-        if (off > pak_size || pak_size - off < sizeof(xj380_pak_entry_header)) return -EINVAL;
+        if (off > pak_size || pak_size - off < sizeof(xj380_pak_entry_header))
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            return -EINVAL;
+        }
         const xj380_pak_entry_header *entry = (const xj380_pak_entry_header *)(pak + off);
         off += sizeof(*entry);
         if (entry->path_len == 0 || entry->path_len >= 512 || off > pak_size || pak_size - off < entry->path_len)
+        {
+            installer_dir_cache_free(&ctx.dirs);
             return -EINVAL;
+        }
+        off += entry->path_len;
+        if (entry->type == XJ380_PAK_ENTRY_FILE)
+        {
+            ctx.total_file_count++;
+            if (entry->size > pak_size - off)
+            {
+                installer_dir_cache_free(&ctx.dirs);
+                return -EINVAL;
+            }
+            off += (size_t)entry->size;
+        }
+        else if (entry->type == XJ380_PAK_ENTRY_DIR)
+        {
+        }
+        else
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            return -EINVAL;
+        }
+    }
+    if (off != pak_size)
+    {
+        installer_dir_cache_free(&ctx.dirs);
+        return -EINVAL;
+    }
+
+    if (!installer_file_list_init(&ctx.files, ctx.total_file_count))
+    {
+        installer_dir_cache_free(&ctx.dirs);
+        return -ENOMEM;
+    }
+    ret = installer_collect_file_list(pak, pak_size, &ctx.files);
+    if (ret < 0)
+    {
+        installer_file_list_free(&ctx.files);
+        installer_dir_cache_free(&ctx.dirs);
+        return ret;
+    }
+    installer_progress_sync_queue(&ctx);
+    installer_set_progress(XJ380_INSTALLER_RUNNING, 55, 0, "正在复制系统文件", "准备复制系统文件。");
+    installer_progress_sync_queue(&ctx);
+
+    off = sizeof(*header);
+    uint64_t file_index = 0;
+    for (uint64_t i = 0; i < header->entry_count; i++)
+    {
+        if (off > pak_size || pak_size - off < sizeof(xj380_pak_entry_header))
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            installer_file_list_free(&ctx.files);
+            return -EINVAL;
+        }
+        const xj380_pak_entry_header *entry = (const xj380_pak_entry_header *)(pak + off);
+        off += sizeof(*entry);
+        if (entry->path_len == 0 || entry->path_len >= 512 || off > pak_size || pak_size - off < entry->path_len)
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            installer_file_list_free(&ctx.files);
+            return -EINVAL;
+        }
 
         char rel[512];
         memcpy(rel, pak + off, entry->path_len);
         rel[entry->path_len] = '\0';
         off += entry->path_len;
-        if (rel[0] != '/') return -EINVAL;
+        if (rel[0] != '/')
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            installer_file_list_free(&ctx.files);
+            return -EINVAL;
+        }
 
         char out_path[640];
         snprintf(out_path, sizeof(out_path), "%s%s", target_prefix, rel);
         if (entry->type == XJ380_PAK_ENTRY_DIR)
         {
-            vfs_mkdir(out_path);
+            ret = installer_mkdir_cached(&ctx, out_path);
+            if (ret < 0)
+            {
+                installer_dir_cache_free(&ctx.dirs);
+                installer_file_list_free(&ctx.files);
+                return ret;
+            }
         }
         else if (entry->type == XJ380_PAK_ENTRY_FILE)
         {
-            if (off > pak_size || entry->size > pak_size - off) return -EINVAL;
-            int ret = installer_write_payload_file(out_path, pak + off, (size_t)entry->size);
+            if (off > pak_size || entry->size > pak_size - off)
+            {
+                installer_dir_cache_free(&ctx.dirs);
+                installer_file_list_free(&ctx.files);
+                return -EINVAL;
+            }
+            ctx.current_file_index = file_index;
+            installer_progress_sync_queue(&ctx);
+            installer_copy_progress(&ctx, rel, true);
+            ret = installer_write_payload_file(&ctx, out_path, pak + off, (size_t)entry->size, rel);
             if (ret < 0)
             {
-                uint64_t denom = header->entry_count == 0 ? 1 : header->entry_count;
-                uint32_t percent = 55 + (uint32_t)((i * 40) / denom);
+                uint32_t percent = installer_copy_percent(&ctx);
                 installer_set_progress(XJ380_INSTALLER_RUNNING, percent, ret, "正在复制系统文件", rel);
                 write_serial_fmt("installer: payload file failed ret=%d rel=%s out=%s size=%llu\n",
                                  ret, rel, out_path, entry->size);
+                installer_dir_cache_free(&ctx.dirs);
+                installer_file_list_free(&ctx.files);
                 return ret;
             }
             off += (size_t)entry->size;
+            file_index++;
         }
         else
         {
+            installer_dir_cache_free(&ctx.dirs);
+            installer_file_list_free(&ctx.files);
             return -EINVAL;
         }
 
-        if ((i & 7) == 0)
+        if ((i & 63) == 0)
         {
-            uint64_t denom = header->entry_count == 0 ? 1 : header->entry_count;
-            uint32_t percent = 55 + (uint32_t)((i * 40) / denom);
-            installer_set_progress(XJ380_INSTALLER_RUNNING, percent, 0, "正在复制系统文件", rel);
+            installer_copy_progress(&ctx, rel, false);
             scheduler_yield();
         }
     }
+    installer_copy_progress(&ctx, "系统文件复制完成。", true);
+    installer_dir_cache_free(&ctx.dirs);
+    installer_file_list_free(&ctx.files);
     return EOK;
 }
 

@@ -10,6 +10,8 @@ typedef long long          xj380_inst_i64;
 #define XJ380_INSTALLER_DISK_NAME_LEN  48
 #define XJ380_INSTALLER_STAGE_LEN      96
 #define XJ380_INSTALLER_DETAIL_LEN     192
+#define XJ380_INSTALLER_QUEUE_ITEMS     16
+#define XJ380_INSTALLER_QUEUE_LEN      128
 #define XJ380_INSTALLER_BOOT_MAGIC     0x584A33383049534FULL
 #define XJ380_INSTALLER_PAK_MAGIC      "XJPAK10"
 #define XJ380_INSTALLER_PAK_MAGIC_SIZE 8
@@ -56,4 +58,9 @@ typedef struct {
     xj380_inst_i64 result;
     char           stage[XJ380_INSTALLER_STAGE_LEN];
     char           detail[XJ380_INSTALLER_DETAIL_LEN];
+    xj380_inst_u32 queue_index;
+    xj380_inst_u32 queue_total;
+    xj380_inst_u32 queue_count;
+    xj380_inst_u32 queue_reserved;
+    char           queue_items[XJ380_INSTALLER_QUEUE_ITEMS][XJ380_INSTALLER_QUEUE_LEN];
 } xj380_installer_progress;

@@ -12,8 +12,6 @@
 #define COLOR_BG         0x0b0f14ff
 #define COLOR_FG         0xe6edf3ff
 #define PTY_CHUNK        1024
-#define DEFAULT_USER     "GuoqiFish"
-#define DEFAULT_HOME     "/users/GuoqiFish"
 #define DEFAULT_SHELL    "/bin/sh"
 #define BUSYBOX_PATH     "/apps/busybox"
 #define RESIZE_DEBOUNCE_NS 30000000ULL
@@ -136,18 +134,43 @@ static bool env_has_key(char *envp[], const char *key)
     return false;
 }
 
+static void get_current_user_name(char *out, size_t out_size)
+{
+    if (out == NULL || out_size == 0) return;
+
+    UserInfo info;
+    memset(&info, 0, sizeof(info));
+    xapi_GetCurrentUser(&info);
+
+    const char *name = info.name[0] != '\0' ? info.name : "Root";
+    snprintf(out, out_size, "%s", name);
+}
+
 static char **build_shell_env(char *envp[])
 {
-    static const char *extra_env[] = {
+    char username[64];
+    char home_env[104];
+    char user_env[80];
+    char logname_env[88];
+    char ps1[180];
+
+    get_current_user_name(username, sizeof(username));
+    snprintf(home_env, sizeof(home_env), "HOME=/users/%s", username);
+    snprintf(user_env, sizeof(user_env), "USER=%s", username);
+    snprintf(logname_env, sizeof(logname_env), "LOGNAME=%s", username);
+    snprintf(ps1, sizeof(ps1), "PS1=\\[\\033[01;32m\\]%s@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\\\$ ",
+             username);
+
+    const char *extra_env[] = {
         "TERM=xterm-256color",
-        "HOME=" DEFAULT_HOME,
-        "USER=" DEFAULT_USER,
-        "LOGNAME=" DEFAULT_USER,
+        home_env,
+        user_env,
+        logname_env,
         "HOSTNAME=localhost",
         "PATH=/apps:/system:/bin:/usr/bin",
         "SHELL=" DEFAULT_SHELL,
         "PWD=/apps",
-        "PS1=\\[\\033[01;32m\\]" DEFAULT_USER "@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\\\$ ",
+        ps1,
         NULL,
     };
 
