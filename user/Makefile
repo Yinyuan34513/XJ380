@@ -431,7 +431,7 @@ filedlg.elf: $(FILEDLG_OBJECTS)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
-installer.elf: $(INSTALLER_OBJECTS)
+installer.elf: build_xapi $(INSTALLER_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(INSTALLER_OBJECTS) -o ../out/$@
 	@echo "LINK installer objects -> ../out/$@"
 

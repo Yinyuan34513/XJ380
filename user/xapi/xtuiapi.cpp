@@ -333,9 +333,19 @@ extern "C" UINT64 xapi_InstallerStartEx(UINT64 disk_id, UINT64 mode)
     return enter_syscall(XAPI_INSTALLER_START_EX, disk_id, mode, 0, 0, 0, 0);
 }
 
+extern "C" UINT64 xapi_InstallerStartOptions(void *options)
+{
+    return enter_syscall(XAPI_INSTALLER_START_OPTIONS, (uint64_t)options, 0, 0, 0, 0, 0);
+}
+
 extern "C" UINT64 xapi_InstallerPrecheck(UINT64 disk_id, UINT64 mode, void *out)
 {
     return enter_syscall(XAPI_INSTALLER_PRECHECK, disk_id, mode, (uint64_t)out, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_InstallerPrecheckOptions(void *options, void *out)
+{
+    return enter_syscall(XAPI_INSTALLER_PRECHECK_OPTIONS, (uint64_t)options, (uint64_t)out, 0, 0, 0, 0);
 }
 
 extern "C" UINT64 xapi_InstallerProgress(void *progress)

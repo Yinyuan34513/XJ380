@@ -33,6 +33,7 @@ static bool g_need_redraw = true;
 static bool g_install_requested = false;
 static int g_selected = 0;
 static UINT32 g_mode = XJ380_INSTALLER_MODE_FRESH;
+static UINT64 g_components = XJ380_INSTALLER_COMPONENT_DEFAULT;
 static InstallerPage g_page = PAGE_HOME;
 static xj380_installer_disk_list g_disks;
 static xj380_installer_precheck g_precheck;
@@ -63,6 +64,50 @@ static const char *mode_detail(UINT32 mode)
     case XJ380_INSTALLER_MODE_FRESH:
     default: return "清空目标硬盘并安装完整系统。";
     }
+}
+
+static UINT64 normalize_components(UINT64 components)
+{
+    components &= XJ380_INSTALLER_COMPONENT_ALL;
+    if ((components & XJ380_INSTALLER_COMPONENT_LINUX_COMPAT) == 0)
+        components = 0;
+    return components;
+}
+
+static void append_component_text(char *out, UINT64 out_size, const char *text, bool *first)
+{
+    if (out == NULL || out_size == 0 || text == NULL || first == NULL) return;
+    UINT64 len = strlen(out);
+    if (len >= out_size - 1) return;
+    if (!*first)
+    {
+        snprintf(out + len, out_size - len, "、");
+        len = strlen(out);
+        if (len >= out_size - 1) return;
+    }
+    snprintf(out + len, out_size - len, "%s", text);
+    *first = false;
+}
+
+static void components_to_text(char *out, UINT64 out_size)
+{
+    if (out == NULL || out_size == 0) return;
+    out[0] = '\0';
+    UINT64 components = normalize_components(g_components);
+    if ((components & XJ380_INSTALLER_COMPONENT_LINUX_COMPAT) == 0)
+    {
+        snprintf(out, out_size, "不安装 Linux 兼容层");
+        return;
+    }
+
+    bool first = true;
+    append_component_text(out, out_size, "Linux 兼容层基础环境", &first);
+    if ((components & XJ380_INSTALLER_COMPONENT_PYTHON) != 0)
+        append_component_text(out, out_size, "Python", &first);
+    if ((components & XJ380_INSTALLER_COMPONENT_LLVM_CLANG) != 0)
+        append_component_text(out, out_size, "LLVM / Clang", &first);
+    if ((components & XJ380_INSTALLER_COMPONENT_GCC) != 0)
+        append_component_text(out, out_size, "GCC", &first);
 }
 
 static void set_local_failure(INT64 result, const char *stage, const char *detail)
@@ -195,7 +240,12 @@ static void run_precheck()
         g_precheck.can_continue = 0;
         return;
     }
-    xapi_InstallerPrecheck(g_disks.disks[g_selected].id, g_mode, &g_precheck);
+    xj380_installer_start_options opts;
+    memset(&opts, 0, sizeof(opts));
+    opts.disk_id = g_disks.disks[g_selected].id;
+    opts.mode = g_mode;
+    opts.components = normalize_components(g_components);
+    xapi_InstallerPrecheckOptions(&opts, &g_precheck);
 }
 
 static void draw_header(const char *subtitle)
@@ -223,6 +273,80 @@ static void draw_mode_cards(int x, int y, int w)
         xapi_DrawSWText(g_window, x + 14, row_y + 8, (char *)mode_name((UINT32)i), COLOR_BLUE_DARK);
         xapi_DrawSWText(g_window, x + 156, row_y + 8, (char *)mode_detail((UINT32)i), COLOR_MUTED);
     }
+}
+
+static void draw_component_row(int x, int y, int w, const char *name, const char *detail,
+                               bool checked, bool enabled, int indent)
+{
+    UINT32 text_color = enabled ? COLOR_TEXT : COLOR_DISABLED;
+    UINT32 detail_color = enabled ? COLOR_MUTED : COLOR_DISABLED;
+    UINT32 box_color = enabled ? COLOR_BLUE_DARK : COLOR_DISABLED;
+    int row_x = x + indent;
+    xapi_DrawRect(g_window, row_x, y + 5, row_x + 16, y + 21, enabled ? COLOR_WHITE : 0xE2E8F0FF, true);
+    xapi_DrawRect(g_window, row_x, y + 5, row_x + 16, y + 21, box_color, false);
+    if (checked)
+    {
+        xapi_DrawRect(g_window, row_x + 4, y + 9, row_x + 12, y + 17, box_color, true);
+    }
+    xapi_DrawSWText(g_window, row_x + 28, y + 2, (char *)name, text_color);
+    xapi_DrawSWText(g_window, x + w - 250, y + 2, (char *)detail, detail_color);
+}
+
+static int components_panel_y()
+{
+    return 118 + 18 + 30 + 4 * 58 + 18;
+}
+
+static int component_row_at(UINT64 y)
+{
+    int panel_y = components_panel_y();
+    int row_y = panel_y + 32;
+    if (y < (UINT64)row_y) return -1;
+    int row = (int)((y - row_y) / 28);
+    if (row < 0 || row > 3) return -1;
+    return row;
+}
+
+static void toggle_component_row(int row)
+{
+    g_components = normalize_components(g_components);
+    if (row == 0)
+    {
+        if ((g_components & XJ380_INSTALLER_COMPONENT_LINUX_COMPAT) != 0)
+            g_components = 0;
+        else
+            g_components = XJ380_INSTALLER_COMPONENT_DEFAULT;
+        return;
+    }
+
+    if ((g_components & XJ380_INSTALLER_COMPONENT_LINUX_COMPAT) == 0)
+        return;
+
+    if (row == 1)
+        g_components ^= XJ380_INSTALLER_COMPONENT_PYTHON;
+    else if (row == 2)
+        g_components ^= XJ380_INSTALLER_COMPONENT_LLVM_CLANG;
+    else if (row == 3)
+        g_components ^= XJ380_INSTALLER_COMPONENT_GCC;
+    g_components = normalize_components(g_components);
+}
+
+static void draw_component_tree(int x, int y, int w)
+{
+    xapi_DrawSWText(g_window, x, y, (char *)"可选组件", COLOR_TEXT);
+    xapi_DrawSWText(g_window, x + 96, y, (char *)"取消勾选后不会复制对应目录和工具链文件。", COLOR_MUTED);
+
+    UINT64 components = normalize_components(g_components);
+    bool linux_on = (components & XJ380_INSTALLER_COMPONENT_LINUX_COMPAT) != 0;
+    int row_y = y + 32;
+    draw_component_row(x, row_y, w, "Linux 兼容层", "/usr、动态库、Linux 工具基础环境",
+                       linux_on, true, 0);
+    draw_component_row(x, row_y + 28, w, "└ Python", "/usr 中的 Python 运行库和命令",
+                       linux_on && (components & XJ380_INSTALLER_COMPONENT_PYTHON) != 0, linux_on, 20);
+    draw_component_row(x, row_y + 56, w, "└ LLVM / Clang", "clang、llvm、lld 相关文件",
+                       linux_on && (components & XJ380_INSTALLER_COMPONENT_LLVM_CLANG) != 0, linux_on, 20);
+    draw_component_row(x, row_y + 84, w, "└ GCC", "gcc、g++、cpp、libgcc 和 C++ 头文件",
+                       linux_on && (components & XJ380_INSTALLER_COMPONENT_GCC) != 0, linux_on, 20);
 }
 
 static void draw_disk_rows(int x, int y, int w)
@@ -304,6 +428,7 @@ static void draw_home()
     xapi_DrawRect(g_window, right_x, top, right_x + right_w, top + panel_h, COLOR_PANEL, true);
     xapi_DrawRect(g_window, right_x, top, right_x + right_w, top + panel_h, COLOR_PANEL_LINE, false);
     draw_mode_cards(right_x + 18, top + 18, right_w - 36);
+    draw_component_tree(right_x + 18, components_panel_y(), right_w - 36);
 
     UINT32 next_color = (g_selected >= 0 && !g_install_requested) ? COLOR_BLUE : COLOR_DISABLED;
     draw_button(margin, (int)g_height - 58, margin + 150, (int)g_height - 22, "刷新硬盘", COLOR_BLUE_DARK);
@@ -334,9 +459,13 @@ static void draw_confirm()
         snprintf(line, sizeof(line), "安装模式：%s。", mode_name(g_mode));
         xapi_DrawSWText(g_window, margin + 22, top + 88, line, COLOR_TEXT);
         xapi_DrawSWText(g_window, margin + 22, top + 118, (char *)mode_detail(g_mode), COLOR_MUTED);
+        char component_text[220];
+        components_to_text(component_text, sizeof(component_text));
+        snprintf(line, sizeof(line), "可选组件：%s。", component_text);
+        xapi_DrawSWText(g_window, margin + 22, top + 148, line, COLOR_TEXT);
     }
 
-    draw_precheck_panel(margin + 22, top + 156, w - 44, h - 180);
+    draw_precheck_panel(margin + 22, top + 186, w - 44, h - 210);
 
     draw_button(margin, (int)g_height - 58, margin + 120, (int)g_height - 22, "返回", COLOR_BLUE_DARK);
     UINT32 install_color = g_precheck.can_continue ? COLOR_RED : COLOR_DISABLED;
@@ -492,7 +621,12 @@ static void start_install()
         set_local_failure(-1, "安装前检查失败", "目标硬盘未通过安装前检查。");
         return;
     }
-    INT64 ret = (INT64)xapi_InstallerStartEx(g_disks.disks[g_selected].id, g_mode);
+    xj380_installer_start_options opts;
+    memset(&opts, 0, sizeof(opts));
+    opts.disk_id = g_disks.disks[g_selected].id;
+    opts.mode = g_mode;
+    opts.components = normalize_components(g_components);
+    INT64 ret = (INT64)xapi_InstallerStartOptions(&opts);
     if (ret < 0)
     {
         set_local_failure(ret, "无法开始安装", "内核拒绝启动安装任务，请确认当前是 ISO 安装模式。");
@@ -561,6 +695,14 @@ static void handle_home_click(UINT64 x, UINT64 y)
             g_need_redraw = true;
             return;
         }
+    }
+    int component_row = component_row_at(y);
+    if (component_row >= 0 && in_rect(x, y, right_x + 18, components_panel_y() + 28,
+                                      (int)g_width - margin - 18, components_panel_y() + 150))
+    {
+        toggle_component_row(component_row);
+        g_need_redraw = true;
+        return;
     }
     if (in_rect(x, y, margin, (int)g_height - 58, margin + 150, (int)g_height - 22))
     {

@@ -41,6 +41,16 @@ typedef long long          xj380_inst_i64;
 #define XJ380_INSTALLER_RESCUE_OPEN_TERM    4
 #define XJ380_INSTALLER_RESCUE_VIEW_LOG     5
 
+#define XJ380_INSTALLER_COMPONENT_LINUX_COMPAT  (1ULL << 0)
+#define XJ380_INSTALLER_COMPONENT_PYTHON        (1ULL << 1)
+#define XJ380_INSTALLER_COMPONENT_LLVM_CLANG    (1ULL << 2)
+#define XJ380_INSTALLER_COMPONENT_GCC           (1ULL << 3)
+#define XJ380_INSTALLER_COMPONENT_DEFAULT       (XJ380_INSTALLER_COMPONENT_LINUX_COMPAT | \
+                                                 XJ380_INSTALLER_COMPONENT_PYTHON | \
+                                                 XJ380_INSTALLER_COMPONENT_LLVM_CLANG | \
+                                                 XJ380_INSTALLER_COMPONENT_GCC)
+#define XJ380_INSTALLER_COMPONENT_ALL           XJ380_INSTALLER_COMPONENT_DEFAULT
+
 #define XJ380_PAK_ENTRY_FILE 1
 #define XJ380_PAK_ENTRY_DIR  2
 
@@ -80,8 +90,15 @@ typedef struct {
 typedef struct {
     xj380_inst_u32 disk_id;
     xj380_inst_u32 mode;
+    xj380_inst_u64 components;
+} xj380_installer_start_options;
+
+typedef struct {
+    xj380_inst_u32 disk_id;
+    xj380_inst_u32 mode;
     xj380_inst_u32 item_count;
     xj380_inst_u32 can_continue;
+    xj380_inst_u64 components;
     xj380_inst_u64 payload_bytes;
     xj380_inst_u64 required_bytes;
     xj380_inst_u64 target_bytes;
