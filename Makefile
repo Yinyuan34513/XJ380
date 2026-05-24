@@ -4,7 +4,7 @@ C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-buil
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= 1
+DEBUG ?= 0
 SMP ?= 4
 SUDO ?= 1
 VDISK_SUDO ?=
@@ -25,24 +25,41 @@ KVM_FLAG = -cpu max
 endif
 
 BUILD_DIR := out
+BOOT_EFI := $(BUILD_DIR)/BOOTX64.efi
+KERNEL_ELF := $(BUILD_DIR)/kernel.elf
+FONT_BIN_OBJ := $(BUILD_DIR)/font/hankaku.o
+LOGO_BIN_OBJ := $(BUILD_DIR)/graphics/logo/xj380_2.o
+VDISK_IMAGE := XJ380.img
+VMDK_IMAGE := XJ380.vmdk
 VDISK_SIZE_MIB ?= 5120
 VDISK_FAT_MIB ?= 5120
+VDISK_OFFSET_SECTORS ?= 2048
 VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
+STAGE_IMAGE := tools/stage_image.sh
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
 	frameworks/StardustUI/examples/layout \
 	$(wildcard frameworks/StardustUI/examples/duckchat)
+SELFHOST_USER_THIRD_PARTY := \
+	third_party/mbedtls-src \
+	third_party/litehtml \
+	third_party/libvterm
+SYSTEM_APPS := shell.elf fmanager.elf taskmgr.elf ctrlmenu.elf
+BUILTIN_APPS := calc.elf texter.elf picturer.elf browser.elf nut.elf
+USER_APPS := busyterm.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello
+STARDUSTUI_BUILTIN_APPS := helloworld.elf layout.elf duckchat.elf
+MUSL_RUNTIME_FILES := ld-musl-x86_64.so.1 libc.so libc.musl-x86_64.so.1 libgcc_s.so.1
 
 # QEMU "--display" expects a display backend type (gtk/sdl/curses/none/...),
 # not an X11 DISPLAY string like ":0".
 # Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
 # via SUDO_CMD when needed.
-DISPLAY_BACKEND ?= gtk
+DISPLAY_BACKEND ?= gtk,gl=on
 USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
 AUDIO_BACKEND ?= sdl
 HDA_CODEC ?= hda-output
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=$(VDISK_IMAGE),index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio  -vga virtio
 
 COMPILER_PREFIX ?=
 
@@ -82,6 +99,11 @@ HOST_GCC_AS := $(shell command -v $(HOST_GCC_TRIPLE)-as 2>/dev/null || command -
 HOST_GCC_AS_NAME := $(notdir $(HOST_GCC_AS))
 HOST_GCC_LD := $(shell command -v $(HOST_GCC_TRIPLE)-ld.bfd 2>/dev/null || command -v $(HOST_GCC_TRIPLE)-ld 2>/dev/null || command -v ld.bfd 2>/dev/null || command -v ld 2>/dev/null)
 HOST_GCC_LD_NAME := $(notdir $(HOST_GCC_LD))
+APP_BUSYBOX := resources/apps/busybox
+APP_FASTFETCH := resources/apps/fastfetch
+XBPS_PREPARE_ROOT ?= Bf/xbps-root
+XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl
+XBPS_BOOTSTRAP ?= $(XBPS_BOOTSTRAP_BASE)
 
 NASM_OBJS := $(patsubst ./%.asm, ./$(BUILD_DIR)/%.o, $(NASM_FILES))
 ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
@@ -90,25 +112,44 @@ CPP_OBJS := $(patsubst ./%.cpp, ./$(BUILD_DIR)/%.o, $(CPP_FILES))
 KERNEL_OBJS := $(ASM_OBJS) $(C_OBJS) $(CPP_OBJS) $(NASM_OBJS)
 BUILD_SETTINGS_HEADER := kernel/build_settings.h
 BUILD_CONFIG_HEADER := kernel/build_config.h
-STAGE_ELF_DEPS := tools/stage_elf_deps.sh
-STAGE_IMAGE_BASE := tools/stage_image_base.sh
-STAGE_IMAGE_TOOLCHAIN := tools/stage_image_toolchain.sh
-STAGE_IMAGE_XBPS := tools/stage_image_xbps.sh
-STAGE_XBPS_BOOTSTRAP := tools/stage_xbps_bootstrap.sh
-STAGE_PREPARED_ROOT := tools/stage_prepared_root.sh
-SELFHOST_USER_THIRD_PARTY := \
-	third_party/mbedtls-src \
-	third_party/litehtml \
-	third_party/libvterm
-XBPS_PREPARE_ROOT ?= Bf/xbps-root
-XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl
-XBPS_BOOTSTRAP ?= $(XBPS_BOOTSTRAP_BASE)
-APP_BUSYBOX := resources/apps/busybox
-APP_FASTFETCH := resources/apps/fastfetch
 FMT_FILES := $(C_FILES:%=%.fmt) $(CPP_FILES:%=%.fmt) $(HEADER_FILES:%=%.fmt)
 CHECK_FILES := $(C_FILES:%.c=%.tidy) $(CPP_FILES:%.cpp=%.tidy) $(HEADER_FILES:%.h=%.tidy)
 CLANGD_TEMPLATE_CONFS := $(wildcard ./**/.clangd_template ./.clangd_template)
 PWD := $(shell pwd)
+
+STAGE_IMAGE_COMMON_ENV = \
+	APP_BUSYBOX="$(APP_BUSYBOX)" \
+	APP_FASTFETCH="$(APP_FASTFETCH)" \
+	BF_DIR="$(BF_DIR)" \
+	BUILD_DIR="$(BUILD_DIR)" \
+	BUILTIN_APPS="$(BUILTIN_APPS)" \
+	HOST_CLANG="$(HOST_CLANG)" \
+	HOST_CLANGXX="$(HOST_CLANGXX)" \
+	HOST_GCC="$(HOST_GCC)" \
+	HOST_GCC_TRIPLE="$(HOST_GCC_TRIPLE)" \
+	HOST_LLVM_AR="$(HOST_LLVM_AR)" \
+	HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" \
+	IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" \
+	IMAGE_PACKAGE_MANAGER="$(IMAGE_PACKAGE_MANAGER)" \
+	IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" \
+	MUSL_RUNTIME_FILES="$(MUSL_RUNTIME_FILES)" \
+	SELFHOST_USER_THIRD_PARTY="$(SELFHOST_USER_THIRD_PARTY)" \
+	STARDUSTUI_BUILTIN_APPS="$(STARDUSTUI_BUILTIN_APPS)" \
+	SYSTEM_APPS="$(SYSTEM_APPS)" \
+	USER_APPS="$(USER_APPS)" \
+	XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" \
+	XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" \
+	XBPS_PREPARE_ROOT="$(XBPS_PREPARE_ROOT)"
+STAGE_IMAGE_OPTIONAL_ENV = \
+	$(if $(CLANG_STAGE_FULL_RESOURCE),CLANG_STAGE_FULL_RESOURCE="$(CLANG_STAGE_FULL_RESOURCE)") \
+	$(if $(XBPS_CACHEDIR),XBPS_CACHEDIR="$(XBPS_CACHEDIR)") \
+	$(if $(XBPS_REPOSITORY),XBPS_REPOSITORY="$(XBPS_REPOSITORY)") \
+	$(if $(XBPS_STATIC_ARCH),XBPS_STATIC_ARCH="$(XBPS_STATIC_ARCH)") \
+	$(if $(XBPS_STATIC_TARBALL),XBPS_STATIC_TARBALL="$(XBPS_STATIC_TARBALL)") \
+	$(if $(XBPS_STATIC_URI),XBPS_STATIC_URI="$(XBPS_STATIC_URI)") \
+	$(if $(XBPS_TRIGGERS_DIR),XBPS_TRIGGERS_DIR="$(XBPS_TRIGGERS_DIR)") \
+	$(if $(XBPS_TRIGGERS_PKG),XBPS_TRIGGERS_PKG="$(XBPS_TRIGGERS_PKG)")
+STAGE_IMAGE_ENV = $(STAGE_IMAGE_COMMON_ENV) $(STAGE_IMAGE_OPTIONAL_ENV)
 
 $(KERNEL_OBJS): $(BUILD_SETTINGS_HEADER) $(BUILD_CONFIG_HEADER)
 
@@ -119,9 +160,6 @@ $(BUILD_CONFIG_HEADER): FORCE
 		echo "#define CONFIG_KERNEL_BUSYBOX_ALIASES $(KERNEL_BUSYBOX_ALIASES)"; \
 	} > "$$tmp"; \
 	if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm -f "$$tmp"; fi
-
-.PHONY: FORCE
-FORCE:
 
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
@@ -140,8 +178,23 @@ $(BUILD_DIR)/%.o: %.c
 
 $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
-	@$(CPP) -fno-pic -fno-pie -mcmodel=large  $(CPP_FLAGS) -c $< -o $@
+	@$(CPP) -fno-pic -fno-pie -mcmodel=large $(CPP_FLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
+
+$(BOOT_EFI): boot/bootx64.c boot/bootlib.c
+	@mkdir -p $(@D)
+	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $@ $^
+
+$(FONT_BIN_OBJ): font/hankaku.bin
+	@mkdir -p $(@D)
+	@$(OBJC) -I binary -O elf64-x86-64 ./$< $@
+
+$(LOGO_BIN_OBJ): graphics/logo/xj380_2.png
+	@mkdir -p $(@D)
+	@$(OBJC) -I binary -O elf64-x86-64 ./$< $@
+
+$(KERNEL_ELF): $(KERNEL_OBJS) $(FONT_BIN_OBJ) $(LOGO_BIN_OBJ) liballoc-x86_64.a linker.ld
+	@$(LD) -z muldefs -T linker.ld --static -o $@ $(KERNEL_OBJS) $(FONT_BIN_OBJ) $(LOGO_BIN_OBJ) liballoc-x86_64.a
 
 %.fmt: %
 	@echo "Formatting $<"
@@ -151,6 +204,7 @@ $(BUILD_DIR)/%.o: %.cpp
 %.tidy: %.c
 	@echo "Checking C $<"
 	@clang-tidy $< -- $(C_FLAGS)
+
 %.tidy: %.h
 	@echo "Checking Header $<"
 	@clang-tidy $< -- $(C_FLAGS)
@@ -160,63 +214,54 @@ $(BUILD_DIR)/%.o: %.cpp
 	@clang-tidy $< -- $(CPP_FLAGS)
 
 .clangd:
-	@echo "# Generated by Makefile" > $<.clangd
-	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $<.clangd_template >> $<.clangd
-	@printf "\033[1;32m[Done]\033[0m $<.clangd was generated.\n"
+	@echo "# Generated by Makefile" > $@
+	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $@_template >> $@
+	@printf "\033[1;32m[Done]\033[0m %s was generated.\n" "$@"
+
 %.clangd: %
-	@echo "# Generated by Makefile" > $<.clangd
-	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $<.clangd_template >> $<.clangd
-	@printf "\033[1;32m[Done]\033[0m $<.clangd was generated.\n"
-
-all: $(KERNEL_OBJS) liballoc-x86_64.a
-# 针对BOOT和KERNEL进行特殊处理
-	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $(BUILD_DIR)/BOOTX64.efi boot/bootx64.c boot/bootlib.c
-
-	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
-	@$(OBJC) -I binary -O elf64-x86-64 ./graphics/logo/xj380_2.png ./graphics/logo/xj380_2.o
-
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
-
-	@$(MAKE) -C user build_xapi
-	@$(MAKE) -C user
-	@$(MAKE) -C $(KMOD_DIR)
-	@$(MAKE) stardustui.examples.copy
+	@echo "# Generated by Makefile" > $@
+	@sed "s/\$${workspaceFolder}/$(subst /,\/,${PWD})/g" $@_template >> $@
+	@printf "\033[1;32m[Done]\033[0m %s was generated.\n" "$@"
 
 liballoc-x86_64.a:
-	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
+	curl -Lo $@ https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd prepare stage.selfhost-user stardustui.examples.copy
+kernel.artifacts: $(BOOT_EFI) $(KERNEL_ELF)
+
+user.xapi: kernel.artifacts liballoc-x86_64.a
+	@$(MAKE) -C user build_xapi
+
+user.apps: user.xapi
+	@$(MAKE) -C user
+
+kmods: user.apps
+	@$(MAKE) -C $(KMOD_DIR)
+
+stardustui.examples.copy: kmods
+	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
+		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
+	done
+
+all: stardustui.examples.copy
+
+.PHONY: FORCE all clean format check clean.clangd gen.clangd prepare kernel.artifacts user.xapi user.apps kmods stage.selfhost-user stardustui.examples.copy vdisk vmdk run justrun
+FORCE:
 
 clean:
-# 事实上直接删out/最简单了
-	@rm -rf $(BUILD_DIR) ./XJ380.img serial.log $(BUILD_CONFIG_HEADER)
+	@rm -rf $(BUILD_DIR) $(VDISK_IMAGE) $(VMDK_IMAGE) serial.log $(BUILD_CONFIG_HEADER)
 	@echo Removed build files.
 
 prepare:
 	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ] && [ -n "$(XBPS_BOOTSTRAP)" ]; then \
 		chmod -R u+rwX "$(XBPS_PREPARE_ROOT)" 2>/dev/null || true; \
 		rm -rf "$(XBPS_PREPARE_ROOT)"; \
-		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" BF_DIR="$(BF_DIR)" sh $(STAGE_XBPS_BOOTSTRAP) "$(XBPS_PREPARE_ROOT)"; \
+		$(STAGE_IMAGE_ENV) sh $(STAGE_IMAGE) xbps-bootstrap "$(XBPS_PREPARE_ROOT)"; \
 	else \
 		echo "Nothing to prepare for IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER)"; \
 	fi
 
 stage.selfhost-user:
-	@rm -rf $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/include $(VDISK_ROOT)/apps/lib $(VDISK_ROOT)/apps/third_party $(VDISK_ROOT)/apps/liballoc-x86_64.a
-	@mkdir -p $(VDISK_ROOT)/apps/third_party
-	@cp -a ./user $(VDISK_ROOT)/apps/user
-	@cp -a ./include $(VDISK_ROOT)/apps/include
-	@cp -a ./lib $(VDISK_ROOT)/apps/lib
-	@cp -a ./liballoc-x86_64.a $(VDISK_ROOT)/apps/liballoc-x86_64.a
-	@for dir in $(SELFHOST_USER_THIRD_PARTY); do \
-		cp -a ./$$dir $(VDISK_ROOT)/apps/third_party/; \
-	done
-	@find $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/third_party -type d -name .git -prune -exec rm -rf {} +
-
-stardustui.examples.copy:
-	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
-		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
-	done
+	@$(STAGE_IMAGE_ENV) sh $(STAGE_IMAGE) selfhost-user "$(VDISK_ROOT)"
 
 format: $(FMT_FILES)
 	@echo "Formatted all the code ..."
@@ -231,112 +276,28 @@ gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
 vdisk: all
-	@rm -rf XJ380.img
+	@rm -f $(VDISK_IMAGE)
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
 		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
 		exit 1; \
 	}
-
-
-	@dd if=/dev/zero of=XJ380.img bs=1M count=$(VDISK_SIZE_MIB)
-# You must execute the following command with sudo privileges, that's not good...
-	@$(VDISK_SUDO) sgdisk XJ380.img -n 1:2048 -t 1:ef00
-
-	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset 2048 -S 512 XJ380.img $$(( $(VDISK_FAT_MIB) * 1024 ))
-
-	@sh $(STAGE_IMAGE_BASE) $(VDISK_ROOT)
-
-	@cp -a ./user/fmanager/fm_bg.png $(VDISK_ROOT)/system/resources/image
-
-	@cp -a $(BUILD_DIR)/BOOTX64.efi $(VDISK_ROOT)/EFI/BOOT
-	@cp -a $(BUILD_DIR)/kernel.elf $(VDISK_ROOT)/system
-
-	@cp -a $(BUILD_DIR)/shell.elf    $(VDISK_ROOT)/apps/system
-	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
-	@cp -a $(BUILD_DIR)/taskmgr.elf  $(VDISK_ROOT)/apps/system
-	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
-
-	@cp -a $(BUILD_DIR)/calc.elf     $(VDISK_ROOT)/apps/builtin
-	@cp -a $(BUILD_DIR)/texter.elf   $(VDISK_ROOT)/apps/builtin
-	@cp -a $(BUILD_DIR)/picturer.elf $(VDISK_ROOT)/apps/builtin
-	@cp -a $(BUILD_DIR)/browser.elf $(VDISK_ROOT)/apps/builtin
-	@cp -a $(BUILD_DIR)/nut.elf $(VDISK_ROOT)/apps/builtin
-
-#	@cp -a $(BUILD_DIR)/init.elf $(BUILD_DIR)/XJ380/apps
-#	@cp -a $(BUILD_DIR)/cp537.elf $(BUILD_DIR)/XJ380/apps
-	@cp -a $(BUILD_DIR)/busyterm.elf $(VDISK_ROOT)/apps
-	@cp -a $(BUILD_DIR)/bcms-sp.elf $(VDISK_ROOT)/apps
-	@cp -a $(BUILD_DIR)/sigtest.elf $(VDISK_ROOT)/apps
-	@cp -a $(BUILD_DIR)/posixdemo.elf $(VDISK_ROOT)/apps
-	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
-	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
-	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(VDISK_ROOT)"
-	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
-
-	@cp -a resources/musl/ld-musl-x86_64.so.1 $(VDISK_ROOT)/lib/ld-musl-x86_64.so.1
-	@cp -a resources/musl/libc.so $(VDISK_ROOT)/lib/libc.so
-	@cp -a resources/musl/libc.musl-x86_64.so.1 $(VDISK_ROOT)/lib/libc.musl-x86_64.so.1
-	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
-
-	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
-	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
-	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
-	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
-	@cp ./1.c $(VDISK_ROOT)/apps/1.c
-	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
-	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
-	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
-		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
-		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
-			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
-				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
-				echo "run: make prepare" >&2; \
-				exit 1; \
-			fi; \
-			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
-		fi; \
-	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
-		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected xbps or none)" >&2; \
-		exit 1; \
-	fi
-
-	@cp -a ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font
-	@cp -a ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font
-
-	@cp -a ./graphics/window/theme/skyglass/*.* $(VDISK_ROOT)/system/theme/skyglass
-
-	@cp -a ./graphics/peek.png $(VDISK_ROOT)/system/foxland
-
-	@cp -a ./graphics/logo/*.* $(VDISK_ROOT)/system
-# 	@cp -a ./test.wav $(BUILD_DIR)/XJ380/system
-
-	@cp -a ./graphics/icon/*.* $(VDISK_ROOT)/system/icon
-
-	@cp -a ./out/*.km $(VDISK_ROOT)/mod
-
-	@cp -a ./resources/* $(VDISK_ROOT)/system/resources
-
-	@cp ./out/helloworld.elf $(VDISK_ROOT)/apps/builtin
-	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
-	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
-
-	@find $(VDISK_ROOT) -xtype l -delete
-	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
-	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
-
+	@dd if=/dev/zero of=$(VDISK_IMAGE) bs=1M count=$(VDISK_SIZE_MIB)
+	@$(VDISK_SUDO) sgdisk $(VDISK_IMAGE) -n 1:$(VDISK_OFFSET_SECTORS) -t 1:ef00
+	@$(VDISK_SUDO) mkfs.vfat -F 32 --offset $(VDISK_OFFSET_SECTORS) -S 512 $(VDISK_IMAGE) $$(( $(VDISK_FAT_MIB) * 1024 ))
+	@$(STAGE_IMAGE_ENV) sh $(STAGE_IMAGE) populate-root "$(VDISK_ROOT)"
+	@mcopy -o -s -i $(VDISK_IMAGE)@@$$(( $(VDISK_OFFSET_SECTORS) * 512 )) $(VDISK_ROOT)/* ::
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
 		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
 		exit 1; \
 	}
-
 
 vmdk: vdisk
-	@rm -rf XJ380.vmdk
-	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
+	@rm -f $(VMDK_IMAGE)
+	@qemu-img convert -O vmdk $(VDISK_IMAGE) $(VMDK_IMAGE)
 
 run: vdisk
 	@$(QEMU_CMD)

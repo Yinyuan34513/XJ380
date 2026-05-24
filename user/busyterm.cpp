@@ -407,7 +407,6 @@ static void terminal_init()
         .sb_pushline = NULL,
         .sb_popline = NULL,
         .sb_clear = NULL,
-        .sb_pushline4 = NULL,
     };
     vterm_screen_set_callbacks(g_vscreen, &callbacks, NULL);
     vterm_screen_set_damage_merge(g_vscreen, VTERM_DAMAGE_SCROLL);

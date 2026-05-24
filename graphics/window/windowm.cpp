@@ -430,6 +430,9 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     refresh_part_sheet(sht, refresh_bx, refresh_by, refresh_bx + width + 24, refresh_by + height + 47);
 
     register_task_dock(new_window);
+    lift_sheet(sht, new_window->w_sheet);
+    ms_dec.sht_now = new_window->w_sheet;
+    focus_window_dock(new_window);
 
     WindowIsCreating = false;
 }

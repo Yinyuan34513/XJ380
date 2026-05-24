@@ -1102,14 +1102,6 @@ dlhandle_t* load_shared_object_internal(const char* path, int flags,
             write_serial_fmt("Failed to process relocations: %s\n", path);
             return NULL;
         }
-        if (is_kernel && handle->path && strstr(handle->path, "netserver")) {
-            uint64_t *cyclic_timers = (uint64_t *)(handle->base_addr + 0x2ae70);
-            write_serial_fmt("netserver reloc check base=0x%llx cyclic0={%llu,0x%llx} cyclic1={%llu,0x%llx} cyclic2={%llu,0x%llx}\n",
-                             handle->base_addr,
-                             cyclic_timers[0], cyclic_timers[1],
-                             cyclic_timers[2], cyclic_timers[3],
-                             cyclic_timers[4], cyclic_timers[5]);
-        }
         if (!call_dynamic_initializers(handle)) {
             write_serial_fmt("Failed to run initializers: %s\n", path);
             return NULL;

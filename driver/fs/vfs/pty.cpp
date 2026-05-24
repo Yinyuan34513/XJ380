@@ -114,6 +114,31 @@ static size_t ptmx_data_available(pty_handle_t *pair)
     return pair->ptr_master;
 }
 
+static size_t pty_master_append_processed_locked(pty_handle_t *pair, const uint8_t *in, size_t size)
+{
+    size_t written = 0;
+    bool translate = (pair->term.c_oflag & OPOST) && (pair->term.c_oflag & ONLCR);
+
+    for (size_t i = 0; i < size; i++)
+    {
+        uint8_t ch = in[i];
+        if (translate && ch == '\n')
+        {
+            if (pair->ptr_master + 2 > PTY_BUFF_SIZE) break;
+            pair->master_buffer[pair->ptr_master++] = '\r';
+            pair->master_buffer[pair->ptr_master++] = '\n';
+        }
+        else
+        {
+            if (pair->ptr_master + 1 > PTY_BUFF_SIZE) break;
+            pair->master_buffer[pair->ptr_master++] = ch;
+        }
+        written++;
+    }
+
+    return written;
+}
+
 static size_t pts_data_available(pty_handle_t *pair)
 {
     if (!(pair->term.c_lflag & ICANON)) return pair->ptr_slave;
@@ -293,19 +318,49 @@ static size_t ptmx_write(void *file, const void *addr, size_t offset, size_t siz
     }
 
     spin_lock(&pair->lock);
-    size_t writable = MIN(size, PTY_BUFF_SIZE - pair->ptr_slave);
-    memcpy(pair->slave_buffer + pair->ptr_slave, addr, writable);
-    if (pair->term.c_iflag & ICRNL)
+    const uint8_t *input = (const uint8_t *)addr;
+    size_t written = 0;
+    for (size_t i = 0; i < size; i++)
     {
-        for (size_t i = 0; i < writable; i++)
+        uint8_t ch = input[i];
+        if ((pair->term.c_iflag & ICRNL) && ch == '\r')
         {
-            if (pair->slave_buffer[pair->ptr_slave + i] == '\r')
-                pair->slave_buffer[pair->ptr_slave + i] = '\n';
+            ch = '\n';
         }
+
+        bool erased = false;
+        if ((pair->term.c_lflag & ICANON) && (ch == '\b' || ch == 0x7f))
+        {
+            if (pair->ptr_slave > 0 && pair->slave_buffer[pair->ptr_slave - 1] != '\n')
+            {
+                pair->ptr_slave--;
+                erased = true;
+            }
+            if (pair->term.c_lflag & ECHO)
+            {
+                static const uint8_t erase_seq[] = {'\b', ' ', '\b'};
+                (void)pty_master_append_processed_locked(pair, erase_seq, sizeof(erase_seq));
+            }
+            written++;
+            continue;
+        }
+
+        if (pair->ptr_slave >= PTY_BUFF_SIZE) break;
+        pair->slave_buffer[pair->ptr_slave++] = ch;
+
+        if (pair->term.c_lflag & ECHO)
+        {
+            (void)pty_master_append_processed_locked(pair, &ch, 1);
+        }
+        else if (ch == '\n' && (pair->term.c_lflag & ECHONL))
+        {
+            (void)pty_master_append_processed_locked(pair, &ch, 1);
+        }
+
+        if (!erased) written++;
     }
-    pair->ptr_slave += writable;
     spin_unlock(&pair->lock);
-    return writable;
+    return written;
 }
 
 static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
@@ -471,27 +526,7 @@ static size_t pts_read(void *file, void *addr, size_t offset, size_t size)
 
 static size_t pts_write_inner(pty_handle_t *pair, const uint8_t *in, size_t size)
 {
-    size_t written = 0;
-    bool translate = (pair->term.c_oflag & OPOST) && (pair->term.c_oflag & ONLCR);
-
-    for (size_t i = 0; i < size; i++)
-    {
-        uint8_t ch = in[i];
-        if (translate && ch == '\n')
-        {
-            if (pair->ptr_master + 2 > PTY_BUFF_SIZE) break;
-            pair->master_buffer[pair->ptr_master++] = '\r';
-            pair->master_buffer[pair->ptr_master++] = '\n';
-        }
-        else
-        {
-            if (pair->ptr_master + 1 > PTY_BUFF_SIZE) break;
-            pair->master_buffer[pair->ptr_master++] = ch;
-        }
-        written++;
-    }
-
-    return written;
+    return pty_master_append_processed_locked(pair, in, size);
 }
 
 static size_t pts_write(void *file, const void *addr, size_t offset, size_t size)
