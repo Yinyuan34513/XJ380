@@ -17,6 +17,8 @@
 
 extern device_t device_ctl[256];
 
+static const uint8_t *installer_payload_virt(const BOOT_CONFIG *config, size_t *out_size);
+
 typedef struct {
     uint8_t status;
     uint8_t first_chs[3];
@@ -34,6 +36,8 @@ typedef struct {
 
 static volatile int g_installer_running = 0;
 static size_t       g_installer_target_disk = 0;
+static uint32_t     g_installer_mode = XJ380_INSTALLER_MODE_FRESH;
+static xj380_installer_log g_installer_log;
 static xj380_installer_progress g_installer_progress = {
     XJ380_INSTALLER_IDLE,
     0,
@@ -41,6 +45,41 @@ static xj380_installer_progress g_installer_progress = {
     "等待安装",
     "请选择目标硬盘，然后开始安装。",
 };
+
+typedef struct {
+    size_t   disk_id;
+    uint32_t mode;
+} installer_worker_args;
+
+static void installer_log_text(const char *line)
+{
+    if (line == NULL) return;
+
+    if (g_installer_log.count < XJ380_INSTALLER_LOG_LINES)
+    {
+        strncpy(g_installer_log.lines[g_installer_log.count], line, XJ380_INSTALLER_LOG_LEN - 1);
+        g_installer_log.count++;
+    }
+    else
+    {
+        memmove(g_installer_log.lines[0], g_installer_log.lines[1],
+                (XJ380_INSTALLER_LOG_LINES - 1) * XJ380_INSTALLER_LOG_LEN);
+        memset(g_installer_log.lines[XJ380_INSTALLER_LOG_LINES - 1], 0, XJ380_INSTALLER_LOG_LEN);
+        strncpy(g_installer_log.lines[XJ380_INSTALLER_LOG_LINES - 1], line, XJ380_INSTALLER_LOG_LEN - 1);
+    }
+
+    write_serial_string("installer-log: ");
+    write_serial_string(line);
+    write_serial_string("\n");
+}
+
+static void installer_log_fmt(const char *fmt, uint64_t a, uint64_t b, uint64_t c)
+{
+    char line[XJ380_INSTALLER_LOG_LEN];
+    memset(line, 0, sizeof(line));
+    snprintf(line, sizeof(line), fmt, a, b, c);
+    installer_log_text(line);
+}
 
 static bool installer_device_is_slice_name(const char *name)
 {
@@ -66,6 +105,30 @@ static bool installer_device_is_install_target(device_t *dev)
     return true;
 }
 
+static uint64_t installer_disk_flags(device_t *dev)
+{
+    uint64_t flags = 0;
+    if (dev == NULL) return flags;
+    if (dev->write != NULL) flags |= XJ380_INSTALLER_DISK_FLAG_WRITABLE;
+    if (installer_is_boot_media_name(dev->drive_name)) flags |= XJ380_INSTALLER_DISK_FLAG_BOOT_MEDIA;
+    if (installer_device_is_slice_name(dev->drive_name)) flags |= XJ380_INSTALLER_DISK_FLAG_SLICE;
+    if (dev->sector_size == 512) flags |= XJ380_INSTALLER_DISK_FLAG_SECTOR_512;
+    if (installer_device_is_install_target(dev)) flags |= XJ380_INSTALLER_DISK_FLAG_INSTALLABLE;
+    return flags;
+}
+
+static const char *installer_mode_name(uint32_t mode)
+{
+    switch (mode)
+    {
+    case XJ380_INSTALLER_MODE_REPAIR_BOOT: return "仅修复引导";
+    case XJ380_INSTALLER_MODE_KEEP_USERS: return "重装系统保留用户";
+    case XJ380_INSTALLER_MODE_DEVELOPER: return "开发者安装";
+    case XJ380_INSTALLER_MODE_FRESH:
+    default: return "全新安装";
+    }
+}
+
 static void installer_set_progress(uint32_t state, uint32_t percent, int64_t result,
                                     const char *stage, const char *detail)
 {
@@ -73,7 +136,9 @@ static void installer_set_progress(uint32_t state, uint32_t percent, int64_t res
     memset(&g_installer_progress, 0, sizeof(g_installer_progress));
     g_installer_progress.state = state;
     g_installer_progress.percent = percent;
+    g_installer_progress.total_percent = percent;
     g_installer_progress.result = result;
+    g_installer_progress.mode = g_installer_mode;
     if (stage != NULL) strncpy(g_installer_progress.stage, stage, sizeof(g_installer_progress.stage) - 1);
     if (detail != NULL) strncpy(g_installer_progress.detail, detail, sizeof(g_installer_progress.detail) - 1);
 }
@@ -251,8 +316,15 @@ typedef struct {
     installer_file_list  files;
     uint64_t            total_file_bytes;
     uint64_t            total_file_count;
+    uint64_t            small_file_count;
+    uint64_t            large_file_count;
+    uint64_t            copied_small_file_count;
+    uint64_t            copied_large_file_count;
     uint64_t            copied_file_bytes;
+    uint64_t            current_file_size;
+    uint64_t            current_file_written;
     uint64_t            current_file_index;
+    uint64_t            copy_start_ns;
     uint32_t            last_percent;
     uint32_t            chunk_counter;
     char                last_parent[640];
@@ -363,7 +435,9 @@ static bool installer_file_list_init(installer_file_list *list, uint64_t count)
     return true;
 }
 
-static int installer_collect_file_list(const uint8_t *pak, size_t pak_size, installer_file_list *list)
+static bool installer_should_skip_payload_path(const char *rel, uint32_t mode);
+
+static int installer_collect_file_list(const uint8_t *pak, size_t pak_size, installer_file_list *list, uint32_t mode)
 {
     if (pak == NULL || pak_size < sizeof(xj380_pak_header) || list == NULL) return -EINVAL;
     const xj380_pak_header *header = (const xj380_pak_header *)pak;
@@ -386,14 +460,18 @@ static int installer_collect_file_list(const uint8_t *pak, size_t pak_size, inst
         rel[entry->path_len] = '\0';
         off += entry->path_len;
         if (rel[0] != '/') return -EINVAL;
+        bool skip = installer_should_skip_payload_path(rel, mode);
 
         if (entry->type == XJ380_PAK_ENTRY_FILE)
         {
-            if (file >= list->count) return -EINVAL;
-            list->items[file] = strdup(rel);
-            if (list->items[file] == NULL) return -ENOMEM;
-            file++;
             if (entry->size > pak_size - off) return -EINVAL;
+            if (!skip)
+            {
+                if (file >= list->count) return -EINVAL;
+                list->items[file] = strdup(rel);
+                if (list->items[file] == NULL) return -ENOMEM;
+                file++;
+            }
             off += (size_t)entry->size;
         }
         else if (entry->type == XJ380_PAK_ENTRY_DIR)
@@ -471,6 +549,13 @@ static void installer_progress_sync_queue(installer_copy_context *ctx)
         g_installer_progress.queue_index = 0;
         g_installer_progress.queue_total = 0;
         g_installer_progress.queue_count = 0;
+        g_installer_progress.stage_percent = 0;
+        g_installer_progress.bytes_per_second = 0;
+        g_installer_progress.eta_seconds = 0;
+        g_installer_progress.copied_bytes = 0;
+        g_installer_progress.total_bytes = 0;
+        g_installer_progress.current_file_bytes = 0;
+        g_installer_progress.current_file_size = 0;
         memset(g_installer_progress.queue_items, 0, sizeof(g_installer_progress.queue_items));
         return;
     }
@@ -479,6 +564,32 @@ static void installer_progress_sync_queue(installer_copy_context *ctx)
     g_installer_progress.queue_count = 0;
     g_installer_progress.queue_total = (xj380_inst_u32)MIN(ctx->total_file_count, 0xffffffffULL);
     g_installer_progress.queue_index = (xj380_inst_u32)MIN(ctx->current_file_index + 1, ctx->total_file_count);
+    g_installer_progress.small_file_count = (xj380_inst_u32)MIN(ctx->small_file_count, 0xffffffffULL);
+    g_installer_progress.large_file_count = (xj380_inst_u32)MIN(ctx->large_file_count, 0xffffffffULL);
+    g_installer_progress.copied_small_file_count = (xj380_inst_u32)MIN(ctx->copied_small_file_count, 0xffffffffULL);
+    g_installer_progress.copied_large_file_count = (xj380_inst_u32)MIN(ctx->copied_large_file_count, 0xffffffffULL);
+    g_installer_progress.copied_bytes = ctx->copied_file_bytes;
+    g_installer_progress.total_bytes = ctx->total_file_bytes;
+    g_installer_progress.current_file_bytes = ctx->current_file_written;
+    g_installer_progress.current_file_size = ctx->current_file_size;
+    if (ctx->total_file_bytes > 0)
+        g_installer_progress.stage_percent = (xj380_inst_u32)MIN((ctx->copied_file_bytes * 100ULL) / ctx->total_file_bytes, 100ULL);
+    else
+        g_installer_progress.stage_percent = 0;
+
+    uint64_t now = nanoTime();
+    if (ctx->copy_start_ns != 0 && now > ctx->copy_start_ns)
+    {
+        uint64_t elapsed_ns = now - ctx->copy_start_ns;
+        if (elapsed_ns > 0)
+        {
+            g_installer_progress.bytes_per_second = (ctx->copied_file_bytes * 1000000000ULL) / elapsed_ns;
+            if (g_installer_progress.bytes_per_second > 0 && ctx->total_file_bytes > ctx->copied_file_bytes)
+                g_installer_progress.eta_seconds = (ctx->total_file_bytes - ctx->copied_file_bytes) / g_installer_progress.bytes_per_second;
+            else
+                g_installer_progress.eta_seconds = 0;
+        }
+    }
     if (ctx->files.items == NULL || ctx->files.count == 0) return;
     if (ctx->current_file_index >= ctx->files.count) return;
 
@@ -510,6 +621,8 @@ static void installer_copy_progress(installer_copy_context *ctx, const char *det
     if (!force && percent == ctx->last_percent) return;
     ctx->last_percent = percent;
     installer_set_progress(XJ380_INSTALLER_RUNNING, percent, 0, "正在复制系统文件", detail);
+    g_installer_progress.stage_percent = ctx->total_file_bytes == 0 ? 0 :
+        (xj380_inst_u32)MIN((ctx->copied_file_bytes * 100ULL) / ctx->total_file_bytes, 100ULL);
     installer_progress_sync_queue(ctx);
 }
 
@@ -549,6 +662,7 @@ static int installer_write_payload_file(installer_copy_context *ctx, const char 
         if (ctx != NULL)
         {
             ctx->copied_file_bytes += got;
+            ctx->current_file_written = written;
             installer_copy_progress(ctx, detail, false);
             ctx->chunk_counter++;
             if ((ctx->chunk_counter & 7U) == 0) scheduler_yield();
@@ -614,7 +728,132 @@ static int installer_payload_required_space(const uint8_t *pak, size_t pak_size,
     return EOK;
 }
 
-static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, const char *target_prefix)
+static void installer_precheck_add(xj380_installer_precheck *check, uint32_t status, uint32_t code,
+                                   const char *title, const char *detail)
+{
+    if (check == NULL || check->item_count >= XJ380_INSTALLER_CHECK_ITEMS) return;
+    xj380_installer_check_item *item = &check->items[check->item_count++];
+    memset(item, 0, sizeof(*item));
+    item->status = status;
+    item->code = code;
+    if (title != NULL) strncpy(item->title, title, sizeof(item->title) - 1);
+    if (detail != NULL) strncpy(item->detail, detail, sizeof(item->detail) - 1);
+    if (status == XJ380_INSTALLER_CHECK_ERROR) check->can_continue = 0;
+}
+
+static int installer_build_precheck(size_t disk_id, uint32_t mode, xj380_installer_precheck *check)
+{
+    if (check == NULL) return -EINVAL;
+    memset(check, 0, sizeof(*check));
+    check->disk_id = (xj380_inst_u32)disk_id;
+    check->mode = mode;
+    check->can_continue = 1;
+
+    device_t *disk = get_device(disk_id);
+    if (disk == NULL || disk->type != DEVICE_BLOCK || disk->flag < 1)
+    {
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 1, "目标硬盘不可用", "内核找不到指定的块设备。");
+        return -ENODEV;
+    }
+
+    char detail[XJ380_INSTALLER_DETAIL_LEN];
+    snprintf(detail, sizeof(detail), "设备 %s，容量 %llu MiB。", disk->drive_name, disk->size / 1024ULL / 1024ULL);
+    installer_precheck_add(check, XJ380_INSTALLER_CHECK_OK, 0, "发现目标硬盘", detail);
+
+    if (disk->write == NULL)
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 2, "目标硬盘不可写", "该设备没有写入接口，可能是 ISO 光驱或只读设备。");
+    else
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_OK, 0, "硬盘可写", "内核检测到该块设备支持写入。");
+
+    if (installer_device_is_slice_name(disk->drive_name) || installer_is_boot_media_name(disk->drive_name))
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 3, "设备类型不允许", "不能安装到分区、ISO 或启动介质。");
+    else
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_OK, 0, "设备类型正常", "该设备看起来是整块硬盘。");
+
+    if (disk->sector_size != 512)
+    {
+        snprintf(detail, sizeof(detail), "当前扇区大小是 %zu 字节，安装器目前只支持 512 字节。", disk->sector_size);
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 4, "扇区大小不支持", detail);
+    }
+    else
+    {
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_OK, 0, "扇区大小正确", "目标硬盘扇区大小为 512 字节。");
+    }
+
+    if (disk->size == 0)
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 5, "容量读取失败", "内核无法读取目标硬盘容量。");
+    if (disk->sector_size != 0 && (disk->size / disk->sector_size) > 0xffffffffULL)
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 6, "目标硬盘过大", "当前 FAT32 后端暂不支持该硬盘大小。");
+
+    size_t payload_size = 0;
+    const uint8_t *payload = installer_payload_virt(installer_current_boot_config(), &payload_size);
+    if (payload == NULL || payload_size < sizeof(xj380_pak_header))
+    {
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 7, "系统包不可用", "安装介质中的 system-payload.pak 无法读取。");
+        return -EINVAL;
+    }
+
+    uint64_t payload_file_bytes = 0;
+    uint64_t payload_required_bytes = 0;
+    int ret = installer_payload_required_space(payload, payload_size, &payload_file_bytes, &payload_required_bytes);
+    if (ret < 0)
+    {
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 8, "系统包格式错误", "安装介质中的 system-payload.pak 无法解析。");
+        return ret;
+    }
+    check->payload_bytes = payload_file_bytes;
+    check->required_bytes = payload_required_bytes;
+    snprintf(detail, sizeof(detail), "系统文件约 %llu MiB，需要约 %llu MiB 可用空间。",
+             payload_file_bytes / 1024ULL / 1024ULL, payload_required_bytes / 1024ULL / 1024ULL);
+    installer_precheck_add(check, XJ380_INSTALLER_CHECK_OK, 0, "系统包检查完成", detail);
+
+    if (disk->sector_size != 0)
+    {
+        uint64_t total_lba = disk->size / disk->sector_size;
+        uint64_t first_lba = 2048;
+        uint64_t last_lba = total_lba > 34 ? total_lba - 34 : 0;
+        check->efi_first_lba = first_lba;
+        check->efi_last_lba = last_lba;
+        if (total_lba < 4096 || last_lba <= first_lba)
+        {
+            installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 9, "无法创建 EFI 分区", "目标硬盘太小，无法放下 GPT 和 EFI 系统分区。");
+        }
+        else
+        {
+            check->target_bytes = (last_lba - first_lba + 1) * disk->sector_size;
+            snprintf(detail, sizeof(detail), "将创建 1 个 FAT32 EFI 系统分区，可用约 %llu MiB。",
+                     check->target_bytes / 1024ULL / 1024ULL);
+            installer_precheck_add(check, XJ380_INSTALLER_CHECK_OK, 0, "EFI 分区可创建", detail);
+            if (mode != XJ380_INSTALLER_MODE_REPAIR_BOOT && check->target_bytes < payload_required_bytes)
+            {
+                snprintf(detail, sizeof(detail), "目标分区约 %llu MiB，系统需要约 %llu MiB。",
+                         check->target_bytes / 1024ULL / 1024ULL, payload_required_bytes / 1024ULL / 1024ULL);
+                installer_precheck_add(check, XJ380_INSTALLER_CHECK_ERROR, 10, "目标硬盘空间不足", detail);
+            }
+        }
+    }
+
+    if (mode == XJ380_INSTALLER_MODE_REPAIR_BOOT)
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "仅修复引导", "该模式需要已有 EFI 分区，只会重写 EFI/BOOT/BOOTX64.efi 和 /system/kernel.elf。");
+    else if (mode == XJ380_INSTALLER_MODE_KEEP_USERS)
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "保留用户目录", "该模式需要已有 XJ380 分区，会覆盖系统文件并跳过 /users，不会格式化硬盘。");
+    else if (mode == XJ380_INSTALLER_MODE_DEVELOPER)
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "开发者安装", "安装过程会显示更详细的复制和日志信息。");
+    else
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "全新安装", "该模式会清空目标硬盘上的所有数据。");
+
+    return check->can_continue ? EOK : -EINVAL;
+}
+
+static bool installer_should_skip_payload_path(const char *rel, uint32_t mode)
+{
+    if (rel == NULL) return false;
+    if (mode == XJ380_INSTALLER_MODE_KEEP_USERS)
+        return strcmp(rel, "/users") == 0 || strncmp(rel, "/users/", 7) == 0;
+    return false;
+}
+
+static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, const char *target_prefix, uint32_t mode)
 {
     if (pak == NULL || pak_size < sizeof(xj380_pak_header) || target_prefix == NULL) return -EINVAL;
     const xj380_pak_header *header = (const xj380_pak_header *)pak;
@@ -630,6 +869,7 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
     ctx.total_file_bytes = total_file_bytes;
     ctx.total_file_count = 0;
     ctx.last_percent = 54;
+    ctx.copy_start_ns = nanoTime();
     installer_dir_cache_init(&ctx.dirs, header->entry_count);
     installer_dir_cache_add(&ctx.dirs, "/target");
     memset(g_installer_progress.queue_items, 0, sizeof(g_installer_progress.queue_items));
@@ -656,6 +896,10 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
         if (entry->type == XJ380_PAK_ENTRY_FILE)
         {
             ctx.total_file_count++;
+            if (entry->size >= 1024ULL * 1024ULL)
+                ctx.large_file_count++;
+            else
+                ctx.small_file_count++;
             if (entry->size > pak_size - off)
             {
                 installer_dir_cache_free(&ctx.dirs);
@@ -683,7 +927,7 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
         installer_dir_cache_free(&ctx.dirs);
         return -ENOMEM;
     }
-    ret = installer_collect_file_list(pak, pak_size, &ctx.files);
+    ret = installer_collect_file_list(pak, pak_size, &ctx.files, mode);
     if (ret < 0)
     {
         installer_file_list_free(&ctx.files);
@@ -723,6 +967,20 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
             installer_file_list_free(&ctx.files);
             return -EINVAL;
         }
+        if (installer_should_skip_payload_path(rel, mode))
+        {
+            if (entry->type == XJ380_PAK_ENTRY_FILE)
+            {
+                if (off > pak_size || entry->size > pak_size - off)
+                {
+                    installer_dir_cache_free(&ctx.dirs);
+                    installer_file_list_free(&ctx.files);
+                    return -EINVAL;
+                }
+                off += (size_t)entry->size;
+            }
+            continue;
+        }
 
         char out_path[640];
         snprintf(out_path, sizeof(out_path), "%s%s", target_prefix, rel);
@@ -745,6 +1003,8 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
                 return -EINVAL;
             }
             ctx.current_file_index = file_index;
+            ctx.current_file_size = entry->size;
+            ctx.current_file_written = 0;
             installer_progress_sync_queue(&ctx);
             installer_copy_progress(&ctx, rel, true);
             ret = installer_write_payload_file(&ctx, out_path, pak + off, (size_t)entry->size, rel);
@@ -759,6 +1019,11 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
                 return ret;
             }
             off += (size_t)entry->size;
+            if (entry->size >= 1024ULL * 1024ULL)
+                ctx.copied_large_file_count++;
+            else
+                ctx.copied_small_file_count++;
+            ctx.current_file_written = entry->size;
             file_index++;
         }
         else
@@ -780,6 +1045,71 @@ static int installer_unpack_pak_to_target(const uint8_t *pak, size_t pak_size, c
     return EOK;
 }
 
+static int installer_copy_payload_file_by_rel(const uint8_t *pak, size_t pak_size, const char *rel, const char *target_prefix)
+{
+    if (pak == NULL || rel == NULL || target_prefix == NULL || pak_size < sizeof(xj380_pak_header)) return -EINVAL;
+    const xj380_pak_header *header = (const xj380_pak_header *)pak;
+    if (memcmp(header->magic, XJ380_INSTALLER_PAK_MAGIC, XJ380_INSTALLER_PAK_MAGIC_SIZE) != 0) return -EINVAL;
+
+    installer_copy_context ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.total_file_count = 1;
+    ctx.last_percent = 54;
+    ctx.copy_start_ns = nanoTime();
+    installer_dir_cache_init(&ctx.dirs, header->entry_count);
+    installer_dir_cache_add(&ctx.dirs, "/target");
+
+    size_t off = sizeof(*header);
+    for (uint64_t i = 0; i < header->entry_count; i++)
+    {
+        if (off > pak_size || pak_size - off < sizeof(xj380_pak_entry_header))
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            return -EINVAL;
+        }
+        const xj380_pak_entry_header *entry = (const xj380_pak_entry_header *)(pak + off);
+        off += sizeof(*entry);
+        if (entry->path_len == 0 || entry->path_len >= 512 || off > pak_size || pak_size - off < entry->path_len)
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            return -EINVAL;
+        }
+
+        char entry_rel[512];
+        memcpy(entry_rel, pak + off, entry->path_len);
+        entry_rel[entry->path_len] = '\0';
+        off += entry->path_len;
+
+        if (entry->type == XJ380_PAK_ENTRY_FILE)
+        {
+            if (entry->size > pak_size - off)
+            {
+                installer_dir_cache_free(&ctx.dirs);
+                return -EINVAL;
+            }
+            if (strcmp(entry_rel, rel) == 0)
+            {
+                char out_path[640];
+                snprintf(out_path, sizeof(out_path), "%s%s", target_prefix, entry_rel);
+                ctx.total_file_bytes = entry->size;
+                ctx.current_file_size = entry->size;
+                int ret = installer_write_payload_file(&ctx, out_path, pak + off, (size_t)entry->size, entry_rel);
+                installer_dir_cache_free(&ctx.dirs);
+                return ret;
+            }
+            off += (size_t)entry->size;
+        }
+        else if (entry->type != XJ380_PAK_ENTRY_DIR)
+        {
+            installer_dir_cache_free(&ctx.dirs);
+            return -EINVAL;
+        }
+    }
+
+    installer_dir_cache_free(&ctx.dirs);
+    return -ENOENT;
+}
+
 static const uint8_t *installer_payload_virt(const BOOT_CONFIG *config, size_t *out_size)
 {
     if (out_size == NULL || config == NULL || config->system_payload_pak == 0 || config->system_payload_pak_size == 0)
@@ -788,8 +1118,46 @@ static const uint8_t *installer_payload_virt(const BOOT_CONFIG *config, size_t *
     return (const uint8_t *)(config->system_payload_pak + 0xffff800000000000ULL);
 }
 
-static int installer_install_to_disk(size_t disk_id)
+static int installer_mount_first_partition(size_t disk_id, const char *stage, uint32_t percent, char *out_part_path, size_t out_part_path_size)
 {
+    device_t *disk = get_device(disk_id);
+    if (disk == NULL) return installer_fail(-ENODEV, percent, stage, "内核找不到指定的块设备。");
+
+    partition_rescan_device(disk_id, false);
+    int part_index = partition_find_first_for_disk(disk_id);
+    if (part_index < 0) return installer_fail(-ENODEV, percent, stage, "内核没有识别到目标硬盘上的 EFI 分区。");
+
+    char part_path[64];
+    snprintf(part_path, sizeof(part_path), "/dev/%sp%d", disk->drive_name, part_index);
+    if (out_part_path != NULL && out_part_path_size > 0)
+    {
+        strncpy(out_part_path, part_path, out_part_path_size - 1);
+        out_part_path[out_part_path_size - 1] = '\0';
+    }
+
+    vfs_mkdir("/target");
+    vfs_node_t target = vfs_open("/target");
+    if (target == NULL) return installer_fail(-ENOENT, percent, "挂载失败", "无法创建 /target 挂载点。");
+    int ret = vfs_mount(part_path, target);
+    if (ret != EOK) return installer_fail(-EIO, percent, "挂载失败", "无法挂载 FAT32 目标分区。");
+    return EOK;
+}
+
+static int installer_repair_boot_on_mounted_target(const uint8_t *payload, size_t payload_size)
+{
+    installer_set_progress(XJ380_INSTALLER_RUNNING, 55, 0, "正在修复引导", "正在写入 UEFI bootloader。");
+    int ret = installer_copy_payload_file_by_rel(payload, payload_size, "/EFI/BOOT/BOOTX64.efi", "/target");
+    if (ret < 0) return ret;
+    installer_set_progress(XJ380_INSTALLER_RUNNING, 75, 0, "正在修复引导", "正在写入系统内核。");
+    ret = installer_copy_payload_file_by_rel(payload, payload_size, "/system/kernel.elf", "/target");
+    if (ret < 0) return ret;
+    installer_set_progress(XJ380_INSTALLER_RUNNING, 92, 0, "正在修复引导", "引导文件已重建。");
+    return EOK;
+}
+
+static int installer_install_to_disk(size_t disk_id, uint32_t mode)
+{
+    g_installer_mode = mode;
     device_t *disk = get_device(disk_id);
     if (disk == NULL || disk->type != DEVICE_BLOCK || disk->flag < 1)
         return installer_fail(-ENODEV, 0, "目标硬盘不可用", "内核找不到指定的块设备。");
@@ -828,7 +1196,7 @@ static int installer_install_to_disk(size_t disk_id)
     if (payload_ret < 0)
         return installer_fail(payload_ret, 0, "系统包不可用", "安装介质中的 system-payload.pak 格式不正确。");
     uint64_t target_bytes = (last_lba - first_lba + 1) * disk->sector_size;
-    if (target_bytes < payload_required_bytes)
+    if (mode != XJ380_INSTALLER_MODE_REPAIR_BOOT && target_bytes < payload_required_bytes)
     {
         char detail[XJ380_INSTALLER_DETAIL_LEN];
         snprintf(detail, sizeof(detail), "目标分区约 %llu MiB，系统需要约 %llu MiB。请使用更大的硬盘。",
@@ -838,9 +1206,44 @@ static int installer_install_to_disk(size_t disk_id)
         return installer_fail(-ENOSPC, 0, "目标硬盘过小", detail);
     }
 
-    write_serial_fmt("installer: start disk=%s id=%zu size=%llu sector=%zu payload=%zu file_bytes=%llu required=%llu target=%llu\n",
-                     disk->drive_name, disk_id, disk->size, disk->sector_size, payload_size,
+    write_serial_fmt("installer: start disk=%s id=%zu mode=%u size=%llu sector=%zu payload=%zu file_bytes=%llu required=%llu target=%llu\n",
+                     disk->drive_name, disk_id, mode, disk->size, disk->sector_size, payload_size,
                      payload_file_bytes, payload_required_bytes, target_bytes);
+    installer_log_fmt("开始安装：disk=%llu mode=%llu size=%llu", disk_id, mode, disk->size);
+
+    if (mode == XJ380_INSTALLER_MODE_REPAIR_BOOT)
+    {
+        installer_set_progress(XJ380_INSTALLER_RUNNING, 20, 0, "正在查找现有系统", "准备挂载目标 EFI 分区。");
+        char part_path[64];
+        int ret = installer_mount_first_partition(disk_id, "查找分区失败", 30, part_path, sizeof(part_path));
+        if (ret < 0) return ret;
+        ret = installer_repair_boot_on_mounted_target(payload, payload_size);
+        vfs_unmount("/target");
+        if (disk->ioctl != NULL) disk->ioctl(disk, IOBLKSYNC, NULL);
+        if (ret < 0) return installer_fail(ret, g_installer_progress.percent, "修复引导失败", g_installer_progress.detail);
+        installer_set_progress(XJ380_INSTALLER_DONE, 100, 0, "修复完成", "EFI 引导文件已重新写入。");
+        return EOK;
+    }
+
+    if (mode == XJ380_INSTALLER_MODE_KEEP_USERS)
+    {
+        installer_set_progress(XJ380_INSTALLER_RUNNING, 20, 0, "正在查找现有系统", "准备挂载目标系统分区。");
+        char part_path[64];
+        int ret = installer_mount_first_partition(disk_id, "查找分区失败", 30, part_path, sizeof(part_path));
+        if (ret < 0) return ret;
+        installer_set_progress(XJ380_INSTALLER_RUNNING, 52, 0, "正在挂载目标系统", "将覆盖系统文件并保留 /users。");
+        ret = installer_unpack_pak_to_target(payload, payload_size, "/target", mode);
+        if (ret < 0)
+        {
+            vfs_unmount("/target");
+            return installer_fail(ret, g_installer_progress.percent, "复制系统失败", g_installer_progress.detail);
+        }
+        installer_set_progress(XJ380_INSTALLER_RUNNING, 97, 0, "正在完成安装", "正在同步并卸载目标分区。");
+        vfs_unmount("/target");
+        if (disk->ioctl != NULL) disk->ioctl(disk, IOBLKSYNC, NULL);
+        installer_set_progress(XJ380_INSTALLER_DONE, 100, 0, "安装完成", "XJ380 已重装完成，/users 已保留。");
+        return EOK;
+    }
 
     installer_set_progress(XJ380_INSTALLER_RUNNING, 5, 0, "正在清理磁盘", "写入新的 GPT 分区表前会清除磁盘头尾区域。");
     if (!installer_zero_sectors(disk_id, 0, 2048)) return installer_fail(-EIO, 5, "清理磁盘失败", "写入磁盘头部区域失败。");
@@ -871,7 +1274,7 @@ static int installer_install_to_disk(size_t disk_id)
     ret = vfs_mount(part_path, target);
     if (ret != EOK) return installer_fail(-EIO, 52, "挂载失败", "无法挂载 FAT32 目标分区。");
 
-    ret = installer_unpack_pak_to_target(payload, payload_size, "/target");
+    ret = installer_unpack_pak_to_target(payload, payload_size, "/target", mode);
     if (ret < 0) return installer_fail(ret, g_installer_progress.percent, "复制系统失败", g_installer_progress.detail);
 
     installer_set_progress(XJ380_INSTALLER_RUNNING, 97, 0, "正在完成安装", "正在同步并卸载目标分区。");
@@ -883,8 +1286,11 @@ static int installer_install_to_disk(size_t disk_id)
 
 static void installer_worker(void *arg)
 {
-    size_t disk_id = (size_t)(uintptr_t)arg;
-    int ret = installer_install_to_disk(disk_id);
+    installer_worker_args *args = (installer_worker_args *)arg;
+    size_t disk_id = args != NULL ? args->disk_id : 0;
+    uint32_t mode = args != NULL ? args->mode : XJ380_INSTALLER_MODE_FRESH;
+    if (args != NULL) free(args);
+    int ret = installer_install_to_disk(disk_id, mode);
     if (ret < 0)
     {
         if (g_installer_progress.state != XJ380_INSTALLER_FAILED)
@@ -910,7 +1316,7 @@ uint64_t do_xapi_InstallerEnumDisks(uint64_t list)
         out->id = i;
         out->sector_size = (xj380_inst_u32)dev->sector_size;
         out->size_bytes = dev->size;
-        out->flags = 0;
+        out->flags = installer_disk_flags(dev);
         strncpy(out->name, dev->drive_name, sizeof(out->name) - 1);
         write_serial_fmt("installer: target disk id=%u name=%s size=%llu sector=%zu\n",
                          i, dev->drive_name, dev->size, dev->sector_size);
@@ -923,23 +1329,65 @@ uint64_t do_xapi_InstallerEnumDisks(uint64_t list)
 
 uint64_t do_xapi_InstallerStart(uint64_t disk_id)
 {
+    return do_xapi_InstallerStartEx(disk_id, XJ380_INSTALLER_MODE_FRESH);
+}
+
+uint64_t do_xapi_InstallerStartEx(uint64_t disk_id, uint64_t mode)
+{
     const BOOT_CONFIG *config = installer_current_boot_config();
     if (config == NULL || !installer_boot_active(*config)) return (uint64_t)-ENOSYS;
     if (disk_id >= 256) return (uint64_t)-EINVAL;
+    if (mode > XJ380_INSTALLER_MODE_DEVELOPER) return (uint64_t)-EINVAL;
+
+    xj380_installer_precheck check;
+    int precheck_ret = installer_build_precheck((size_t)disk_id, (uint32_t)mode, &check);
+    if (precheck_ret < 0 || !check.can_continue)
+    {
+        installer_set_progress(XJ380_INSTALLER_FAILED, 0, precheck_ret < 0 ? precheck_ret : -EINVAL,
+                               "安装前检查失败", "目标硬盘未通过安装前检查。");
+        return (uint64_t)(precheck_ret < 0 ? precheck_ret : -EINVAL);
+    }
+
     if (__sync_lock_test_and_set(&g_installer_running, 1) != 0) return (uint64_t)-EBUSY;
 
     g_installer_target_disk = (size_t)disk_id;
+    g_installer_mode = (uint32_t)mode;
+    memset(&g_installer_log, 0, sizeof(g_installer_log));
+    installer_log_text("安装任务启动。");
+    installer_log_text(installer_mode_name((uint32_t)mode));
     installer_set_progress(XJ380_INSTALLER_RUNNING, 0, 0, "准备安装", "安装程序正在初始化。");
-    size_t tid = create_kernel_thread((void *)installer_worker, (void *)(uintptr_t)disk_id,
-                                      (char *)"XJ380 Installer", NULL);
+    installer_worker_args *args = (installer_worker_args *)malloc(sizeof(installer_worker_args));
+    if (args == NULL)
+    {
+        g_installer_running = 0;
+        installer_set_progress(XJ380_INSTALLER_FAILED, 0, -ENOMEM, "无法启动安装线程", "内核无法分配安装参数。");
+        return (uint64_t)-ENOMEM;
+    }
+    args->disk_id = (size_t)disk_id;
+    args->mode = (uint32_t)mode;
+    size_t tid = create_kernel_thread((void *)installer_worker, args, (char *)"XJ380 Installer", NULL);
     if ((int64_t)tid < 0)
     {
+        free(args);
         g_installer_running = 0;
         installer_set_progress(XJ380_INSTALLER_FAILED, 0, (int64_t)tid, "无法启动安装线程",
                                "内核无法创建安装工作线程。");
         return tid;
     }
     return 0;
+}
+
+uint64_t do_xapi_InstallerPrecheck(uint64_t disk_id, uint64_t mode, uint64_t out)
+{
+    if (out == 0) return (uint64_t)-EINVAL;
+    if (disk_id >= 256 || mode > XJ380_INSTALLER_MODE_DEVELOPER) return (uint64_t)-EINVAL;
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return (uint64_t)-EFAULT;
+
+    xj380_installer_precheck local;
+    int ret = installer_build_precheck((size_t)disk_id, (uint32_t)mode, &local);
+    if (!copy_to_user_pagedir(pagedir, (void *)out, &local, sizeof(local))) return (uint64_t)-EFAULT;
+    return (uint64_t)ret;
 }
 
 uint64_t do_xapi_InstallerProgress(uint64_t progress)
@@ -949,6 +1397,116 @@ uint64_t do_xapi_InstallerProgress(uint64_t progress)
     if (pagedir == NULL) return (uint64_t)-EFAULT;
     (void)g_installer_target_disk;
     if (!copy_to_user_pagedir(pagedir, (void *)progress, &g_installer_progress, sizeof(g_installer_progress)))
+        return (uint64_t)-EFAULT;
+    return 0;
+}
+
+static void installer_rescue_add(xj380_installer_rescue_result *result, uint32_t status, uint32_t code,
+                                 const char *title, const char *detail)
+{
+    if (result == NULL || result->item_count >= XJ380_INSTALLER_RESCUE_ITEMS) return;
+    xj380_installer_rescue_item *item = &result->items[result->item_count++];
+    memset(item, 0, sizeof(*item));
+    item->status = status;
+    item->code = code;
+    if (title != NULL) strncpy(item->title, title, sizeof(item->title) - 1);
+    if (detail != NULL) strncpy(item->detail, detail, sizeof(item->detail) - 1);
+}
+
+uint64_t do_xapi_InstallerRescue(uint64_t action, uint64_t disk_id, uint64_t out)
+{
+    if (out == 0) return (uint64_t)-EINVAL;
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return (uint64_t)-EFAULT;
+
+    xj380_installer_rescue_result result;
+    memset(&result, 0, sizeof(result));
+    result.result = 0;
+
+    if (action == XJ380_INSTALLER_RESCUE_OPEN_TERM)
+    {
+        int pid = create_user_process_from_file((char *)"/apps/system/shell.elf", NULL, NULL);
+        switch_page_directory(pagedir);
+        result.result = pid < 0 ? pid : 0;
+        if (pid < 0)
+            installer_rescue_add(&result, XJ380_INSTALLER_CHECK_ERROR, (uint32_t)-pid, "终端启动失败", "无法启动 /apps/system/shell.elf。");
+        else
+            installer_rescue_add(&result, XJ380_INSTALLER_CHECK_OK, 0, "终端已打开", "已启动安装环境终端。");
+        if (!copy_to_user_pagedir(pagedir, (void *)out, &result, sizeof(result))) return (uint64_t)-EFAULT;
+        return (uint64_t)result.result;
+    }
+
+    if (action == XJ380_INSTALLER_RESCUE_VIEW_LOG)
+    {
+        installer_rescue_add(&result, XJ380_INSTALLER_CHECK_OK, 0, "安装日志", "日志面板会显示最近的安装器日志。");
+        if (!copy_to_user_pagedir(pagedir, (void *)out, &result, sizeof(result))) return (uint64_t)-EFAULT;
+        return 0;
+    }
+
+    if (disk_id >= 256) return (uint64_t)-EINVAL;
+    device_t *disk = get_device((size_t)disk_id);
+    if (disk == NULL || disk->type != DEVICE_BLOCK || disk->flag < 1)
+    {
+        result.result = -ENODEV;
+        installer_rescue_add(&result, XJ380_INSTALLER_CHECK_ERROR, 1, "目标硬盘不可用", "内核找不到指定的块设备。");
+        copy_to_user_pagedir(pagedir, (void *)out, &result, sizeof(result));
+        return (uint64_t)result.result;
+    }
+
+    char detail[XJ380_INSTALLER_DETAIL_LEN];
+    switch (action)
+    {
+    case XJ380_INSTALLER_RESCUE_CHECK_DISK:
+    {
+        xj380_installer_precheck check;
+        int ret = installer_build_precheck((size_t)disk_id, XJ380_INSTALLER_MODE_FRESH, &check);
+        result.result = ret;
+        for (uint32_t i = 0; i < check.item_count && result.item_count < XJ380_INSTALLER_RESCUE_ITEMS; i++)
+            installer_rescue_add(&result, check.items[i].status, check.items[i].code, check.items[i].title, check.items[i].detail);
+        break;
+    }
+    case XJ380_INSTALLER_RESCUE_VIEW_DISK:
+        snprintf(detail, sizeof(detail), "设备名 %s，容量 %llu MiB，扇区 %zu 字节，标志 0x%llx。",
+                 disk->drive_name, disk->size / 1024ULL / 1024ULL, disk->sector_size,
+                 (unsigned long long)installer_disk_flags(disk));
+        installer_rescue_add(&result, XJ380_INSTALLER_CHECK_OK, 0, "硬盘信息", detail);
+        partition_rescan_device((size_t)disk_id, false);
+        snprintf(detail, sizeof(detail), "第一分区编号：%d。", partition_find_first_for_disk((size_t)disk_id));
+        installer_rescue_add(&result, XJ380_INSTALLER_CHECK_OK, 0, "分区扫描", detail);
+        break;
+    case XJ380_INSTALLER_RESCUE_REBUILD_BOOT:
+    {
+        size_t payload_size = 0;
+        const uint8_t *payload = installer_payload_virt(installer_current_boot_config(), &payload_size);
+        int ret = installer_mount_first_partition((size_t)disk_id, "查找分区失败", 0, NULL, 0);
+        if (ret >= 0)
+        {
+            ret = installer_repair_boot_on_mounted_target(payload, payload_size);
+            vfs_unmount("/target");
+        }
+        result.result = ret;
+        if (ret < 0)
+            installer_rescue_add(&result, XJ380_INSTALLER_CHECK_ERROR, (uint32_t)-ret, "重建引导失败", "无法写入 EFI 引导文件。");
+        else
+            installer_rescue_add(&result, XJ380_INSTALLER_CHECK_OK, 0, "重建引导完成", "EFI/BOOT/BOOTX64.efi 和系统内核已写入。");
+        break;
+    }
+    default:
+        result.result = -EINVAL;
+        installer_rescue_add(&result, XJ380_INSTALLER_CHECK_ERROR, 1, "未知救援操作", "安装器不支持该救援命令。");
+        break;
+    }
+
+    if (!copy_to_user_pagedir(pagedir, (void *)out, &result, sizeof(result))) return (uint64_t)-EFAULT;
+    return (uint64_t)result.result;
+}
+
+uint64_t do_xapi_InstallerLog(uint64_t out)
+{
+    if (out == 0) return (uint64_t)-EINVAL;
+    page_directory_t *pagedir = xapi_current_pagedir();
+    if (pagedir == NULL) return (uint64_t)-EFAULT;
+    if (!copy_to_user_pagedir(pagedir, (void *)out, &g_installer_log, sizeof(g_installer_log)))
         return (uint64_t)-EFAULT;
     return 0;
 }

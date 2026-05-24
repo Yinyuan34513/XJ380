@@ -12,9 +12,34 @@ typedef long long          xj380_inst_i64;
 #define XJ380_INSTALLER_DETAIL_LEN     192
 #define XJ380_INSTALLER_QUEUE_ITEMS     16
 #define XJ380_INSTALLER_QUEUE_LEN      128
+#define XJ380_INSTALLER_CHECK_ITEMS     12
+#define XJ380_INSTALLER_RESCUE_ITEMS    16
+#define XJ380_INSTALLER_LOG_LINES       24
+#define XJ380_INSTALLER_LOG_LEN        160
 #define XJ380_INSTALLER_BOOT_MAGIC     0x584A33383049534FULL
 #define XJ380_INSTALLER_PAK_MAGIC      "XJPAK10"
 #define XJ380_INSTALLER_PAK_MAGIC_SIZE 8
+
+#define XJ380_INSTALLER_DISK_FLAG_WRITABLE      (1ULL << 0)
+#define XJ380_INSTALLER_DISK_FLAG_BOOT_MEDIA    (1ULL << 1)
+#define XJ380_INSTALLER_DISK_FLAG_SLICE         (1ULL << 2)
+#define XJ380_INSTALLER_DISK_FLAG_SECTOR_512    (1ULL << 3)
+#define XJ380_INSTALLER_DISK_FLAG_INSTALLABLE   (1ULL << 4)
+
+#define XJ380_INSTALLER_MODE_FRESH          0
+#define XJ380_INSTALLER_MODE_REPAIR_BOOT    1
+#define XJ380_INSTALLER_MODE_KEEP_USERS     2
+#define XJ380_INSTALLER_MODE_DEVELOPER      3
+
+#define XJ380_INSTALLER_CHECK_OK      0
+#define XJ380_INSTALLER_CHECK_WARN    1
+#define XJ380_INSTALLER_CHECK_ERROR   2
+
+#define XJ380_INSTALLER_RESCUE_REBUILD_BOOT 1
+#define XJ380_INSTALLER_RESCUE_CHECK_DISK   2
+#define XJ380_INSTALLER_RESCUE_VIEW_DISK    3
+#define XJ380_INSTALLER_RESCUE_OPEN_TERM    4
+#define XJ380_INSTALLER_RESCUE_VIEW_LOG     5
 
 #define XJ380_PAK_ENTRY_FILE 1
 #define XJ380_PAK_ENTRY_DIR  2
@@ -45,6 +70,26 @@ typedef struct {
     xj380_installer_disk disks[XJ380_INSTALLER_MAX_DISKS];
 } xj380_installer_disk_list;
 
+typedef struct {
+    xj380_inst_u32 status;
+    xj380_inst_u32 code;
+    char           title[64];
+    char           detail[XJ380_INSTALLER_DETAIL_LEN];
+} xj380_installer_check_item;
+
+typedef struct {
+    xj380_inst_u32 disk_id;
+    xj380_inst_u32 mode;
+    xj380_inst_u32 item_count;
+    xj380_inst_u32 can_continue;
+    xj380_inst_u64 payload_bytes;
+    xj380_inst_u64 required_bytes;
+    xj380_inst_u64 target_bytes;
+    xj380_inst_u64 efi_first_lba;
+    xj380_inst_u64 efi_last_lba;
+    xj380_installer_check_item items[XJ380_INSTALLER_CHECK_ITEMS];
+} xj380_installer_precheck;
+
 typedef enum {
     XJ380_INSTALLER_IDLE = 0,
     XJ380_INSTALLER_RUNNING,
@@ -63,4 +108,37 @@ typedef struct {
     xj380_inst_u32 queue_count;
     xj380_inst_u32 queue_reserved;
     char           queue_items[XJ380_INSTALLER_QUEUE_ITEMS][XJ380_INSTALLER_QUEUE_LEN];
+    xj380_inst_u32 mode;
+    xj380_inst_u32 stage_percent;
+    xj380_inst_u32 total_percent;
+    xj380_inst_u32 small_file_count;
+    xj380_inst_u32 large_file_count;
+    xj380_inst_u32 copied_small_file_count;
+    xj380_inst_u32 copied_large_file_count;
+    xj380_inst_u64 bytes_per_second;
+    xj380_inst_u64 eta_seconds;
+    xj380_inst_u64 copied_bytes;
+    xj380_inst_u64 total_bytes;
+    xj380_inst_u64 current_file_bytes;
+    xj380_inst_u64 current_file_size;
 } xj380_installer_progress;
+
+typedef struct {
+    xj380_inst_u32 status;
+    xj380_inst_u32 code;
+    char           title[64];
+    char           detail[XJ380_INSTALLER_DETAIL_LEN];
+} xj380_installer_rescue_item;
+
+typedef struct {
+    xj380_inst_i64 result;
+    xj380_inst_u32 item_count;
+    xj380_inst_u32 reserved;
+    xj380_installer_rescue_item items[XJ380_INSTALLER_RESCUE_ITEMS];
+} xj380_installer_rescue_result;
+
+typedef struct {
+    xj380_inst_u32 count;
+    xj380_inst_u32 reserved;
+    char           lines[XJ380_INSTALLER_LOG_LINES][XJ380_INSTALLER_LOG_LEN];
+} xj380_installer_log;

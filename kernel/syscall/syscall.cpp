@@ -122,6 +122,10 @@ static const char *debug_syscall_name(uint64_t nr)
     case XAPI_INSTALLER_ENUM_DISKS: return "xapi_installer_enum_disks";
     case XAPI_INSTALLER_START: return "xapi_installer_start";
     case XAPI_INSTALLER_PROGRESS: return "xapi_installer_progress";
+    case XAPI_INSTALLER_PRECHECK: return "xapi_installer_precheck";
+    case XAPI_INSTALLER_START_EX: return "xapi_installer_start_ex";
+    case XAPI_INSTALLER_RESCUE: return "xapi_installer_rescue";
+    case XAPI_INSTALLER_LOG: return "xapi_installer_log";
     case SYS_READLINKAT: return "readlinkat";
     case SYS_PSELECT6: return "pselect6";
     case SYS_PIPE2: return "pipe2";
@@ -716,7 +720,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_KILL_PROCESS: regs->rax = do_xapi_KillProcess(regs->rdi); break;
     case XAPI_INSTALLER_ENUM_DISKS: regs->rax = do_xapi_InstallerEnumDisks(regs->rdi); break;
     case XAPI_INSTALLER_START: regs->rax = do_xapi_InstallerStart(regs->rdi); break;
+    case XAPI_INSTALLER_START_EX: regs->rax = do_xapi_InstallerStartEx(regs->rdi, regs->rsi); break;
+    case XAPI_INSTALLER_PRECHECK: regs->rax = do_xapi_InstallerPrecheck(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_INSTALLER_PROGRESS: regs->rax = do_xapi_InstallerProgress(regs->rdi); break;
+    case XAPI_INSTALLER_RESCUE: regs->rax = do_xapi_InstallerRescue(regs->rdi, regs->rsi, regs->rdx); break;
+    case XAPI_INSTALLER_LOG: regs->rax = do_xapi_InstallerLog(regs->rdi); break;
 
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 

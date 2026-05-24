@@ -53,11 +53,14 @@ static int                  g_serial_screen_left     = 0;
 static int                  g_serial_screen_top      = 0;
 static int                  g_serial_screen_width    = 0;
 static int                  g_serial_screen_height   = 0;
-static bool                 g_serial_overlay_force_show = true;
+static bool                 g_serial_overlay_force_show = false;
 
 static bool serial_runtime_overlay_enabled()
 {
-    if (EFI_BC != NULL && EFI_BC->is_qemu == 1 && !g_serial_overlay_force_show) {
+    if (g_serial_overlay_force_show) {
+        return true;
+    }
+    if (EFI_BC != NULL && (EFI_BC->boot_flags & BOOT_FLAG_INSTALLER) != 0) {
         return false;
     }
     return true;

@@ -422,6 +422,7 @@ installer.root.stage: all
 	@mkdir -p $(INSTALLER_ROOT)/apps $(INSTALLER_ROOT)/apps/system $(INSTALLER_ROOT)/apps/builtin
 	@mkdir -p $(INSTALLER_ROOT)/system/font $(INSTALLER_ROOT)/system/theme/skyglass $(INSTALLER_ROOT)/system/icon $(INSTALLER_ROOT)/system/resources/image $(INSTALLER_ROOT)/tmp
 	@cp -a $(BUILD_DIR)/installer.elf $(INSTALLER_ROOT)/apps/installer.elf
+	@cp -a $(BUILD_DIR)/shell.elf $(INSTALLER_ROOT)/apps/system/shell.elf
 	@cp -a $(BUILD_DIR)/filedlg.elf $(INSTALLER_ROOT)/apps/system/filedlg.elf
 	@cp -a ./font/ttf/XJ380F.ttf $(INSTALLER_ROOT)/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(INSTALLER_ROOT)/system/font
