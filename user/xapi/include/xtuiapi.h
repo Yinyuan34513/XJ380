@@ -135,15 +135,6 @@ void 	xapi_FlushTime(void);
 void   *xapi_AllocateMemory(UINT64 size);
 void    xapi_FreeMemory(void *ptr);
 void   *xapi_MapMemory(void *ptr, uint64_t size, uint32_t flags);
-UINT64  xapi_InstallerEnumDisks(void *list);
-UINT64  xapi_InstallerStart(UINT64 disk_id);
-UINT64  xapi_InstallerStartEx(UINT64 disk_id, UINT64 mode);
-UINT64  xapi_InstallerStartOptions(void *options);
-UINT64  xapi_InstallerPrecheck(UINT64 disk_id, UINT64 mode, void *out);
-UINT64  xapi_InstallerPrecheckOptions(void *options, void *out);
-UINT64  xapi_InstallerProgress(void *progress);
-UINT64  xapi_InstallerRescue(UINT64 action, UINT64 disk_id, void *out);
-UINT64  xapi_InstallerLog(void *out);
 
 #ifdef __cplusplus
 }

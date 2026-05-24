@@ -1,6 +1,7 @@
 #include <krlibc.h>
 #include <x3api.h>
 #include <installer_protocol.h>
+#include "installer_hidden.h"
 
 #define COLOR_BG          0x0B3D91FF
 #define COLOR_BG_2        0x0F5FB8FF

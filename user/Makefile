@@ -347,7 +347,8 @@ CALC_SOURCES := ./calc/calc.cpp
 TEXTER_SOURCES := ./texter/texter.cpp
 TASKMGR_SOURCES := ./taskmgr/taskmgr.cpp
 FILEDLG_SOURCES := ./filedlg/filedlg.cpp
-INSTALLER_SOURCES := ./installer/installer.cpp
+INSTALLER_SOURCES := ./installer/installer.cpp \
+                ./installer/installer_hidden.cpp
 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
@@ -435,7 +436,7 @@ installer.elf: build_xapi $(INSTALLER_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(INSTALLER_OBJECTS) -o ../out/$@
 	@echo "LINK installer objects -> ../out/$@"
 
-../out/installer/%.o: ./installer/%.cpp $(XAPI_HEADERS) $(USER_HEADERS) ../include/installer_protocol.h
+../out/installer/%.o: ./installer/%.cpp $(XAPI_HEADERS) $(USER_HEADERS) ../include/installer_protocol.h ./installer/installer_hidden.h
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
