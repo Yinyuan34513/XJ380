@@ -36,6 +36,9 @@ bool yicixing_lock = false;
 
 bool need_paint = false;
 
+static const char *fm_sidebar_paths[] = {"/", "/users", "/apps", "/system", "/dev"};
+static const int fm_sidebar_path_count = sizeof(fm_sidebar_paths) / sizeof(fm_sidebar_paths[0]);
+
 static void set_scroll_base(int base)
 {
     int old_base = file_count_base;
@@ -50,7 +53,9 @@ static void set_scroll_base(int base)
 
 static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_index)
 {
-    if (x < 4 || x > fmr_width / 10 * 8 || y < 148)
+    int left = fm_sidebar_width() + 4;
+    int right = need_duopage ? fmr_width - 22 : fmr_width - 1;
+    if (x < left || x > right || y < 148)
     {
         return false;
     }
@@ -70,6 +75,22 @@ static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_i
 
     *visible_index = current_visible_index;
     *file_index = file_count_base + current_visible_index;
+    return true;
+}
+
+bool fm_handle_sidebar_click(int x, int y)
+{
+    int sidebar_w = fm_sidebar_width();
+    if (sidebar_w <= 0 || x < 0 || x > sidebar_w || y < 148) return false;
+    int index = (y - 148) / 34;
+    if (index < 0 || index >= fm_sidebar_path_count) return false;
+
+    strcpy(current_path, fm_sidebar_paths[index]);
+    file_count_base = 0;
+    choosing_index = -1;
+    first_click = false;
+    double_click = false;
+    need_paint = true;
     return true;
 }
 
@@ -100,6 +121,27 @@ void register_scroll_wheel(int delta)
     set_scroll_base(file_count_base - delta * 3);
 }
 
+void fm_select_item_at(int x, int y)
+{
+    int current_file_index = -1;
+    int current_visible_index = -1;
+    if (!get_clicked_file_index(x, y, &current_file_index, &current_visible_index))
+    {
+        return;
+    }
+
+    choosing_history = choosing_index;
+    choosing_index = current_visible_index;
+    first_click = false;
+    double_click = false;
+    double_click_file_index = -1;
+    last_click_file_index = current_file_index;
+    if (choosing_history != choosing_index)
+    {
+        refresh_choose_change(choosing_history, choosing_index);
+    }
+}
+
 void reg_lock()
 {
     while (register_lock);
@@ -124,6 +166,11 @@ void register_click(int x, int y)
     
     click_x = x;
     click_y = y;
+
+    if (fm_handle_sidebar_click(x, y))
+    {
+        return;
+    }
 
     int  current_file_index = -1;
     int  current_visible_index = -1;
