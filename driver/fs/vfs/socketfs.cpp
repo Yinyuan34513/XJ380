@@ -265,6 +265,27 @@ int socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_pro
     return (int)fd_handle->fd;
 }
 
+int socketfs_get_socket_impl(int fd, void **out_impl, socket_provider_t *out_provider)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle)) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL) {
+        return -EBADF;
+    }
+
+    if (out_impl != NULL) {
+        *out_impl = handle->socket;
+    }
+    if (out_provider != NULL) {
+        *out_provider = handle->provider;
+    }
+    return 0;
+}
+
 static int socketfs_alloc_fd(void *impl, uint64_t flags)
 {
     socket_provider_t provider = {};

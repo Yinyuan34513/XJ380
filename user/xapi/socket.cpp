@@ -36,3 +36,13 @@ extern "C" int shutdown(int sockfd, int how)
 {
     return (int)__xposix_ret(enter_syscall(SYS_SHUTDOWN, sockfd, how, 0, 0, 0, 0));
 }
+
+extern "C" ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
+{
+    return (ssize_t)__xposix_ret(enter_syscall(SYS_SENDMSG, sockfd, (uint64_t)msg, flags, 0, 0, 0));
+}
+
+extern "C" ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
+{
+    return (ssize_t)__xposix_ret(enter_syscall(SYS_RECVMSG, sockfd, (uint64_t)msg, flags, 0, 0, 0));
+}

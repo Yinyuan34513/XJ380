@@ -51,7 +51,9 @@
 #define SYS_SOCKET 41
 #define SYS_CONNECT 42
 #define SYS_ACCEPT 43
+#define SYS_SENDMSG 46
 #define SYS_SOCKETPAIR 53
+#define SYS_RECVMSG 47
 
 #define SYS_SHUTDOWN 48
 

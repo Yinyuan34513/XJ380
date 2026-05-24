@@ -4,6 +4,7 @@
 #include <lock_queue.h>
 #include <net/socket.h>
 #include <cpu/lock.h>
+#include <syscall/syscall.h>
 
 #define UNIX_PATH_MAX   108
 #define UNIX_RING_SIZE  65536
@@ -37,10 +38,19 @@ struct unix_sock {
     size_t   whead, wtail, wcap;
 
     lock_queue *dg_queue;
+    lock_queue *stream_queue;
 
     spin_t  lock;
     size_t  refcount;
     bool    closed;
+};
+
+struct unix_stream_packet {
+    size_t          len;
+    size_t          offset;
+    size_t          fd_count;
+    fd_file_handle **fds;
+    uint8_t         data[];
 };
 
 struct unix_dgram {
@@ -64,6 +74,12 @@ ssize_t unix_sendto(void *impl, const void *buf, size_t size, uint64_t flags,
                     const struct sockaddr *addr, socklen_t addrlen);
 ssize_t unix_recvfrom(void *impl, void *buf, size_t size, uint64_t flags,
                       struct sockaddr *addr, socklen_t *addrlen);
+ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_t flags,
+                            const struct sockaddr *addr, socklen_t addrlen,
+                            fd_file_handle **fds, size_t fd_count);
+ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flags,
+                            struct sockaddr *addr, socklen_t *addrlen,
+                            fd_file_handle ***out_fds, size_t *out_fd_count);
 int  unix_poll(void *impl, size_t events);
 int  unix_close(void *impl);
 int  unix_set_flags(void *impl, uint64_t flags);

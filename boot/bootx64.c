@@ -691,7 +691,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
 #if BUILD_EDITION == DEBUG_VERSION
     else
     {
-        SwitchToResolution(1280, 768); // 切换分辨率
+        SwitchToResolution(1920, 1080); // 切换分辨率
     }
 #endif
 

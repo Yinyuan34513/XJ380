@@ -95,6 +95,191 @@ static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
     return true;
 }
 
+static fd_file_handle **unix_msg_copy_rights_from_user(page_directory_t *pagedir, const struct msghdr *kmsg,
+                                                       size_t *out_fd_count, int *out_error)
+{
+    if (out_fd_count != NULL) *out_fd_count = 0;
+    if (out_error != NULL) *out_error = 0;
+    if (kmsg == NULL || kmsg->msg_controllen == 0 || kmsg->msg_control == NULL) {
+        return NULL;
+    }
+
+    if (kmsg->msg_controllen > USER_IO_BOUNCE_BYTES) {
+        if (out_error != NULL) *out_error = -EINVAL;
+        return NULL;
+    }
+
+    uint8_t *control = (uint8_t *)malloc(kmsg->msg_controllen);
+    if (control == NULL) {
+        if (out_error != NULL) *out_error = -ENOMEM;
+        return NULL;
+    }
+    if (!copy_from_user_pagedir(pagedir, control, kmsg->msg_control, kmsg->msg_controllen)) {
+        free(control);
+        if (out_error != NULL) *out_error = -EFAULT;
+        return NULL;
+    }
+
+    struct msghdr control_msg = {};
+    control_msg.msg_control = control;
+    control_msg.msg_controllen = kmsg->msg_controllen;
+
+    fd_file_handle **out_handles = NULL;
+    size_t fd_count = 0;
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&control_msg);
+         cmsg != NULL;
+         cmsg = CMSG_NXTHDR(&control_msg, cmsg))
+    {
+        if (cmsg->cmsg_level != SOL_SOCKET) continue;
+        if (cmsg->cmsg_type != SCM_RIGHTS) {
+            free(control);
+            if (out_error != NULL) *out_error = -EINVAL;
+            return NULL;
+        }
+        if (cmsg->cmsg_len < CMSG_LEN(sizeof(int))) {
+            free(control);
+            if (out_error != NULL) *out_error = -EINVAL;
+            return NULL;
+        }
+
+        size_t payload_len = cmsg->cmsg_len - CMSG_LEN(0);
+        if ((payload_len % sizeof(int)) != 0) {
+            free(control);
+            if (out_error != NULL) *out_error = -EINVAL;
+            return NULL;
+        }
+        fd_count = payload_len / sizeof(int);
+        out_handles = (fd_file_handle **)calloc(fd_count, sizeof(fd_file_handle *));
+        if (out_handles == NULL) {
+            free(control);
+            if (out_error != NULL) *out_error = -ENOMEM;
+            return NULL;
+        }
+
+        int *fds = (int *)CMSG_DATA(cmsg);
+        for (size_t i = 0; i < fd_count; i++) {
+            fd_file_handle *src = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fds[i]);
+            if (src == NULL) {
+                for (size_t j = 0; j < i; j++) {
+                    if (out_handles[j] != NULL) {
+                        vfs_close(out_handles[j]->node);
+                        free(out_handles[j]);
+                    }
+                }
+                free(out_handles);
+                free(control);
+                if (out_error != NULL) *out_error = -EBADF;
+                return NULL;
+            }
+
+            fd_file_handle *dup = fd_dup(src);
+            if (dup == NULL) {
+                for (size_t j = 0; j < i; j++) {
+                    if (out_handles[j] != NULL) {
+                        vfs_close(out_handles[j]->node);
+                        free(out_handles[j]);
+                    }
+                }
+                free(out_handles);
+                free(control);
+                if (out_error != NULL) *out_error = -ENOMEM;
+                return NULL;
+            }
+            dup->fd = (size_t)-1;
+            out_handles[i] = dup;
+        }
+        break;
+    }
+
+    free(control);
+    if (out_fd_count != NULL) *out_fd_count = fd_count;
+    return out_handles;
+}
+
+static void unix_msg_release_rights(fd_file_handle **handles, size_t fd_count)
+{
+    if (handles == NULL) return;
+    for (size_t i = 0; i < fd_count; i++) {
+        if (handles[i] == NULL) continue;
+        vfs_close(handles[i]->node);
+        free(handles[i]);
+    }
+    free(handles);
+}
+
+static int unix_msg_install_rights_to_user(page_directory_t *pagedir, struct msghdr *msg, struct msghdr *kmsg,
+                                           fd_file_handle **handles, size_t fd_count, uint64_t flags)
+{
+    if (handles == NULL || fd_count == 0) {
+        kmsg->msg_controllen = 0;
+        kmsg->msg_flags = 0;
+        return 0;
+    }
+
+    if (kmsg->msg_control == NULL || kmsg->msg_controllen < CMSG_SPACE(fd_count * sizeof(int))) {
+        unix_msg_release_rights(handles, fd_count);
+        kmsg->msg_controllen = 0;
+        kmsg->msg_flags = 0;
+        return 0;
+    }
+
+    size_t out_len = CMSG_SPACE(fd_count * sizeof(int));
+    uint8_t *control = (uint8_t *)calloc(1, out_len);
+    if (control == NULL) {
+        unix_msg_release_rights(handles, fd_count);
+        return -ENOMEM;
+    }
+
+    struct msghdr local_msg = {};
+    local_msg.msg_control = control;
+    local_msg.msg_controllen = out_len;
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&local_msg);
+    if (cmsg == NULL) {
+        free(control);
+        unix_msg_release_rights(handles, fd_count);
+        return -EINVAL;
+    }
+
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(fd_count * sizeof(int));
+    int *fds = (int *)CMSG_DATA(cmsg);
+    memset(fds, 0, fd_count * sizeof(int));
+
+    bool cloexec = (flags & MSG_CMSG_CLOEXEC) != 0;
+    for (size_t i = 0; i < fd_count; i++) {
+        fd_file_handle *handle = handles[i];
+        if (handle == NULL) continue;
+        if (cloexec) handle->flags |= O_CLOEXEC;
+        else handle->flags &= ~O_CLOEXEC;
+        handle->fd = queue_enqueue_lowest(get_current_task()->parent_group->file_open, handle);
+        if ((int)handle->fd < 0) {
+            handle->fd = (size_t)-1;
+            free(control);
+            for (size_t j = i; j < fd_count; j++) {
+                if (handles[j] != NULL) {
+                    vfs_close(handles[j]->node);
+                    free(handles[j]);
+                }
+            }
+            free(handles);
+            return -EMFILE;
+        }
+        fds[i] = (int)handle->fd;
+    }
+
+    if (!copy_to_user_pagedir(pagedir, kmsg->msg_control, control, out_len)) {
+        free(control);
+        free(handles);
+        return -EFAULT;
+    }
+    free(control);
+    free(handles);
+    kmsg->msg_controllen = out_len;
+    kmsg->msg_flags = 0;
+    return 0;
+}
+
 static bool process_has_other_live_thread(pcb_t process, tcb_t exiting_thread)
 {
     if (process == NULL || process->thread_queue == NULL) return false;
@@ -1009,6 +1194,11 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
         (kmsg.msg_namelen < sizeof(struct sockaddr) || kmsg.msg_namelen > sizeof(struct sockaddr_in6)))
         return SYSCALL_FAULT_(EINVAL);
 
+    void *socket_impl = NULL;
+    socket_provider_t socket_provider = {};
+    bool is_unix_socket = socketfs_get_socket_impl(fd, &socket_impl, &socket_provider) == 0 &&
+                          socket_provider.sendto == unix_sendto;
+
     struct sockaddr_in6 kaddr;
     const struct sockaddr *kaddr_ptr = NULL;
     if (kmsg.msg_name != NULL)
@@ -1038,6 +1228,64 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
     {
         free(kiov);
         return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    if (is_unix_socket)
+    {
+        size_t total_len = 0;
+        for (size_t i = 0; i < kmsg.msg_iovlen; i++)
+        {
+            if (!checked_add_size(total_len, kiov[i].iov_len, &total_len))
+            {
+                free(bounce);
+                free(kiov);
+                return SYSCALL_FAULT_(EINVAL);
+            }
+        }
+
+        uint8_t *buffer = NULL;
+        if (total_len > 0)
+        {
+            buffer = (uint8_t *)malloc(total_len);
+            if (buffer == NULL)
+            {
+                free(bounce);
+                free(kiov);
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+        }
+
+        size_t copied = 0;
+        for (size_t i = 0; i < kmsg.msg_iovlen; i++)
+        {
+            if (kiov[i].iov_len == 0) continue;
+            if (!copy_from_user_pagedir(pagedir, buffer + copied, kiov[i].iov_base, kiov[i].iov_len))
+            {
+                free(buffer);
+                free(bounce);
+                free(kiov);
+                return SYSCALL_FAULT_(EFAULT);
+            }
+            copied += kiov[i].iov_len;
+        }
+
+        int ancillary_error = 0;
+        size_t fd_count = 0;
+        fd_file_handle **rights = unix_msg_copy_rights_from_user(pagedir, &kmsg, &fd_count, &ancillary_error);
+        if (ancillary_error < 0)
+        {
+            free(buffer);
+            free(bounce);
+            free(kiov);
+            return SYSCALL_FAULT_(-ancillary_error);
+        }
+
+        ssize_t ret = unix_sendmsg_kernel(socket_impl, buffer, total_len, flags, kaddr_ptr, kmsg.msg_namelen,
+                                          rights, fd_count);
+        free(buffer);
+        free(bounce);
+        free(kiov);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
 
     size_t total = 0;
@@ -1142,11 +1390,96 @@ sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
     socklen_t user_addr_capacity = kmsg.msg_namelen;
     memset(&kaddr, 0, sizeof(kaddr));
 
+    void *socket_impl = NULL;
+    socket_provider_t socket_provider = {};
+    bool is_unix_socket = socketfs_get_socket_impl(fd, &socket_impl, &socket_provider) == 0 &&
+                          socket_provider.recvfrom == unix_recvfrom;
+
     uint8_t *bounce = (uint8_t *)malloc(USER_IO_BOUNCE_BYTES);
     if (bounce == NULL && kmsg.msg_iovlen > 0)
     {
         free(kiov);
         return SYSCALL_FAULT_(ENOMEM);
+    }
+
+    if (is_unix_socket)
+    {
+        size_t total_len = 0;
+        for (size_t i = 0; i < kmsg.msg_iovlen; i++)
+        {
+            if (!checked_add_size(total_len, kiov[i].iov_len, &total_len))
+            {
+                free(bounce);
+                free(kiov);
+                return SYSCALL_FAULT_(EINVAL);
+            }
+        }
+
+        uint8_t *buffer = NULL;
+        if (total_len > 0)
+        {
+            buffer = (uint8_t *)malloc(total_len);
+            if (buffer == NULL)
+            {
+                free(bounce);
+                free(kiov);
+                return SYSCALL_FAULT_(ENOMEM);
+            }
+        }
+
+        fd_file_handle **received_rights = NULL;
+        size_t received_fd_count = 0;
+        ssize_t ret = unix_recvmsg_kernel(socket_impl, buffer, total_len, flags,
+                                          kmsg.msg_name != NULL ? (struct sockaddr *)&kaddr : NULL,
+                                          kmsg.msg_name != NULL ? &kaddrlen : NULL,
+                                          &received_rights, &received_fd_count);
+        if (ret < 0)
+        {
+            free(buffer);
+            free(bounce);
+            free(kiov);
+            return SYSCALL_FAULT_((int)-ret);
+        }
+
+        size_t copied = 0;
+        size_t remaining = (size_t)ret;
+        for (size_t i = 0; i < kmsg.msg_iovlen && remaining > 0; i++)
+        {
+            size_t chunk = MIN(kiov[i].iov_len, remaining);
+            if (chunk > 0 && !copy_to_user_pagedir(pagedir, kiov[i].iov_base, buffer + copied, chunk))
+            {
+                free(buffer);
+                free(bounce);
+                free(kiov);
+                unix_msg_release_rights(received_rights, received_fd_count);
+                return SYSCALL_FAULT_(EFAULT);
+            }
+            copied += chunk;
+            remaining -= chunk;
+        }
+        free(buffer);
+        free(bounce);
+        free(kiov);
+
+        if (kmsg.msg_name != NULL)
+        {
+            socklen_t copy_len = MIN(user_addr_capacity, kaddrlen);
+            if (copy_len > 0 && !copy_to_user_pagedir(pagedir, kmsg.msg_name, &kaddr, copy_len))
+            {
+                unix_msg_release_rights(received_rights, received_fd_count);
+                return SYSCALL_FAULT_(EFAULT);
+            }
+            kmsg.msg_namelen = kaddrlen;
+        }
+        else
+        {
+            kmsg.msg_namelen = 0;
+        }
+
+        int install_ret = unix_msg_install_rights_to_user(pagedir, msg, &kmsg, received_rights, received_fd_count, flags);
+        if (install_ret < 0) return SYSCALL_FAULT_(-install_ret);
+        if (!copy_to_user_pagedir(pagedir, msg, &kmsg, sizeof(kmsg))) return SYSCALL_FAULT_(EFAULT);
+        return (uint64_t)ret;
     }
 
     size_t total = 0;
@@ -1688,14 +2021,6 @@ sys_(ioctl, int fd, int options, void *arg2)
         }
         int ret = socket_apply_flags(handle->node, handle->node->flags);
         if (arg_size > 0) free(karg);
-        if (trace_xbps_task())
-        {
-            write_serial_fmt("[DEBUG-xbps-syscall] ioctl FIONBIO fd=%d value=%d flags=0x%llx ret=%d\n",
-                             fd,
-                             nonblock,
-                             (unsigned long long)handle->node->flags,
-                             ret);
-        }
         return ret < 0 ? SYSCALL_FAULT_(-ret) : 0;
     }
 

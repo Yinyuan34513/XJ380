@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../stdint.h"
+#include "sys/types.h"
+#include "sys/uio.h"
 
 typedef uint16_t sa_family_t;
 typedef uint16_t in_port_t;
@@ -21,6 +23,11 @@ extern "C" {
 #define SOCK_TYPE_MASK 0xf
 #define SOCK_CLOEXEC 02000000
 #define SOCK_NONBLOCK 00004000
+
+#define SOL_SOCKET 1
+#define SCM_RIGHTS 0x01
+
+#define MSG_CMSG_CLOEXEC 0x40000000U
 
 #define SHUT_RD   0
 #define SHUT_WR   1
@@ -54,6 +61,36 @@ struct sockaddr_in6 {
     uint32_t        sin6_scope_id;
 };
 
+struct msghdr {
+    void         *msg_name;
+    socklen_t    msg_namelen;
+    struct iovec *msg_iov;
+    size_t       msg_iovlen;
+    void         *msg_control;
+    size_t       msg_controllen;
+    int          msg_flags;
+};
+
+struct cmsghdr {
+    size_t cmsg_len;
+    int    cmsg_level;
+    int    cmsg_type;
+};
+
+#define CMSG_ALIGN(len) (((size_t)(len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))
+#define CMSG_SPACE(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(len))
+#define CMSG_LEN(len)   (CMSG_ALIGN(sizeof(struct cmsghdr)) + (size_t)(len))
+#define CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define CMSG_FIRSTHDR(mhdr) \
+    ((mhdr) != NULL && (mhdr)->msg_control != NULL && (mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
+         ? (struct cmsghdr *)(mhdr)->msg_control \
+         : (struct cmsghdr *)0)
+#define CMSG_NXTHDR(mhdr, cmsg) \
+    ((((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len) + sizeof(struct cmsghdr)) > \
+      ((unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen)) \
+         ? (struct cmsghdr *)0 \
+         : (struct cmsghdr *)((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len)))
+
 static inline uint16_t htons(uint16_t value)
 {
     return (uint16_t)((value << 8) | (value >> 8));
@@ -84,6 +121,8 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int sockfd, int backlog);
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int shutdown(int sockfd, int how);
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags);
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
 
 #ifdef __cplusplus
 }

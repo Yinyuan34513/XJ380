@@ -56,6 +56,9 @@ typedef uint32_t socklen_t;
 #define MSG_DONTWAIT 0x08
 #define MSG_MORE 0x10
 #define MSG_NOSIGNAL 0x20
+#define MSG_CMSG_CLOEXEC 0x40000000U
+
+#define SCM_RIGHTS 0x01
 
 #define SHUT_RD   0
 #define SHUT_WR   1
@@ -88,6 +91,26 @@ struct sockaddr_in6 {
     struct in6_addr sin6_addr;
     uint32_t        sin6_scope_id;
 };
+
+struct cmsghdr {
+    size_t cmsg_len;
+    int    cmsg_level;
+    int    cmsg_type;
+};
+
+#define CMSG_ALIGN(len) (((size_t)(len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))
+#define CMSG_SPACE(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(len))
+#define CMSG_LEN(len)   (CMSG_ALIGN(sizeof(struct cmsghdr)) + (size_t)(len))
+#define CMSG_DATA(cmsg) ((unsigned char *)(cmsg) + CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define CMSG_FIRSTHDR(mhdr) \
+    ((mhdr) != NULL && (mhdr)->msg_control != NULL && (mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
+         ? (struct cmsghdr *)(mhdr)->msg_control \
+         : (struct cmsghdr *)0)
+#define CMSG_NXTHDR(mhdr, cmsg) \
+    ((((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len) + sizeof(struct cmsghdr)) > \
+      ((unsigned char *)(mhdr)->msg_control + (mhdr)->msg_controllen)) \
+         ? (struct cmsghdr *)0 \
+         : (struct cmsghdr *)((unsigned char *)(cmsg) + CMSG_ALIGN((cmsg)->cmsg_len)))
 
 typedef struct socket_netinfo {
     uint32_t ipv4_addr;
@@ -154,6 +177,7 @@ typedef struct socket_provider {
 int     socket_provider_register(const socket_provider_t *provider);
 int     socketfs_setup(void);
 int     socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_provider_t *provider);
+int     socketfs_get_socket_impl(int fd, void **out_impl, socket_provider_t *out_provider);
 int     socket_open(int domain, int type, int protocol);
 int     socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int     socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);

@@ -694,20 +694,20 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         write_serial_string("\n");
         break;
     }
-    if (debug_trace_xbps_task() && (int64_t)regs->rax < 0)
-    {
-        tcb_t task = get_current_task();
-        write_serial_fmt("[DEBUG-xbps-syscall] task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx ret=%lld\n",
-                         task != NULL ? task->name : "?",
-                         syscall_number,
-                         debug_syscall_name(syscall_number),
-                         regs->rdi,
-                         regs->rsi,
-                         regs->rdx,
-                         regs->r10,
-                         regs->r8,
-                         (long long)regs->rax);
-    }
+    // if (debug_trace_xbps_task() && (int64_t)regs->rax < 0)
+    // {
+    //     tcb_t task = get_current_task();
+    //     write_serial_fmt("[DEBUG-xbps-syscall] task=%s nr=%llu(%s) args=%llx,%llx,%llx,%llx,%llx ret=%lld\n",
+    //                      task != NULL ? task->name : "?",
+    //                      syscall_number,
+    //                      debug_syscall_name(syscall_number),
+    //                      regs->rdi,
+    //                      regs->rsi,
+    //                      regs->rdx,
+    //                      regs->r10,
+    //                      regs->r8,
+    //                      (long long)regs->rax);
+    // }
     signal_deliver_pending(regs);
     tcb_t return_task = get_current_task();
     if (return_task != NULL && return_task->task_level == TASK_APPLICATION_LEVEL)
