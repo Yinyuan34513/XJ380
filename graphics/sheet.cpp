@@ -372,7 +372,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
         // 直接分配下一个
         if (front_p != NULL)
         {
-            for (int i = 0; i < sht->sheet_num - 2; i++)
+            for (int i = 0; i < sht->sheet_num - 3; i++)
             {
                 front_p = front_p->next;
             }
@@ -615,7 +615,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     SheetIsCreating = false;
 }
 
-// 这个lift_sheet是将图层提升到倒数第三个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
+// 这个lift_sheet是将图层提升到倒数第四个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
 // don't touch this
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {

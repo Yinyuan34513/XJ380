@@ -318,6 +318,18 @@ static int movecursor(VTermPos pos, VTermPos oldpos, int visible, void *user)
   return 1;
 }
 
+static int want_premove = 0;
+static int premove(VTermRect rect, void *user)
+{
+  if(!want_premove)
+    return 0;
+
+  printf("premove %d..%d,%d..%d\n",
+      rect.start_row, rect.end_row, rect.start_col, rect.end_col);
+
+  return 1;
+}
+
 static int want_scrollrect = 0;
 static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
 {
@@ -489,6 +501,7 @@ static int state_sb_clear(void *user) {
 VTermStateCallbacks state_cbs = {
   .putglyph    = state_putglyph,
   .movecursor  = movecursor,
+  .premove     = premove,
   .scrollrect  = scrollrect,
   .moverect    = moverect,
   .erase       = state_erase,
@@ -569,7 +582,7 @@ static int screen_damage(VTermRect rect, void *user)
 }
 
 static int want_screen_scrollback = 0;
-static int screen_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
+static int screen_sb_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user)
 {
   if(!want_screen_scrollback)
     return 1;
@@ -578,7 +591,7 @@ static int screen_sb_pushline(int cols, const VTermScreenCell *cells, void *user
   while(eol && !cells[eol-1].chars[0])
     eol--;
 
-  printf("sb_pushline %d =", cols);
+  printf("sb_pushline %d%s =", cols, continuation ? " cont" : "");
   for(int c = 0; c < eol; c++)
     printf(" %02X", cells[c].chars[0]);
   printf("\n");
@@ -615,13 +628,13 @@ static int screen_sb_clear(void *user)
 }
 
 VTermScreenCallbacks screen_cbs = {
-  .damage      = screen_damage,
-  .moverect    = moverect,
-  .movecursor  = movecursor,
-  .settermprop = settermprop,
-  .sb_pushline = screen_sb_pushline,
-  .sb_popline  = screen_sb_popline,
-  .sb_clear    = screen_sb_clear,
+  .damage       = screen_damage,
+  .moverect     = moverect,
+  .movecursor   = movecursor,
+  .settermprop  = settermprop,
+  .sb_popline   = screen_sb_popline,
+  .sb_clear     = screen_sb_clear,
+  .sb_pushline4 = screen_sb_pushline4,
 };
 
 int main(int argc, char **argv)
@@ -657,6 +670,7 @@ int main(int argc, char **argv)
       if(!state) {
         state = vterm_obtain_state(vt);
         vterm_state_set_callbacks(state, &state_cbs, NULL);
+        vterm_state_callbacks_has_premove(state);
         /* In some tests we want to check the behaviour of overflowing the
          * buffer, so make it nicely small
          */
@@ -683,6 +697,9 @@ int main(int argc, char **argv)
         case 's':
           want_scrollrect = sense;
           break;
+        case 'P':
+          want_premove = sense;
+          break;
         case 'm':
           want_moverect = sense;
           break;
@@ -708,6 +725,7 @@ int main(int argc, char **argv)
       if(!screen)
         screen = vterm_obtain_screen(vt);
       vterm_screen_set_callbacks(screen, &screen_cbs, NULL);
+      vterm_screen_callbacks_has_pushline4(screen);
 
       int i = 10;
       int sense = 1;

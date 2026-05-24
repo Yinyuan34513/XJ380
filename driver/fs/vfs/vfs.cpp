@@ -545,9 +545,12 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
         if (current->type & file_symlink) {
             if (!current->parent) { goto err; }
 
-            current->type = file_symlink | file_proxy;
+            bool dynamic_symlink = current->name != NULL && streq(current->name, "self") &&
+                                   current->parent != NULL && current->parent->parent == NULL &&
+                                   current->handle != NULL && current->linkto == NULL;
+            if (!dynamic_symlink) current->type = file_symlink | file_proxy;
 
-            vfs_node_t target = current->linkto;
+            vfs_node_t target = dynamic_symlink ? NULL : current->linkto;
             if (target == NULL)
             {
                 char target_path[256];
@@ -579,7 +582,7 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
                     target = vfs_open(full_target);
                     free(full_target);
                 }
-                current->linkto = target;
+                if (!dynamic_symlink) current->linkto = target;
             }
             if (!target) goto err;
 

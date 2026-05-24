@@ -469,7 +469,13 @@ int socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
         return ret;
     }
 
-    return socketfs_alloc_fd_with_provider(new_socket, fd_handle->node->flags, &handle->provider);
+    int new_fd = socketfs_alloc_fd_with_provider(new_socket, fd_handle->node->flags, &handle->provider);
+    if (new_fd < 0)
+    {
+        handle->provider.close(new_socket);
+        return new_fd;
+    }
+    return new_fd;
 }
 
 int socket_shutdown(int fd, int how)

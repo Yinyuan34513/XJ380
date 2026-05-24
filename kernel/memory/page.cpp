@@ -774,16 +774,17 @@ EXPORT_SYMBOL(page_map_to);
 
 void switch_process_page_directory(page_directory_t *dir)
 {
+    bool was_scheduler_enabled = is_scheduler;
+    bool was_interrupt_enabled = are_interrupts_enabled();
+
     disable_scheduler();
     close_interrupt;
     pcb_t pcb    = get_current_task()->parent_group;
     pcb->pagedir = dir;
     switch_page_directory(dir);
-    if (!no_interrupt)
-    {
-        enable_scheduler();
-        open_interrupt;
-    }
+
+    if (was_scheduler_enabled) enable_scheduler();
+    if (was_interrupt_enabled && !no_interrupt) open_interrupt;
 }
 
 void switch_page_directory(page_directory_t *dir)

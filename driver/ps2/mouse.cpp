@@ -406,40 +406,37 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (!was_resizing && current_window != NULL)
         {
-            if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
-                tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
-                tbx > get_sheet(sht_img, current_window->w_sheet)->bx +
-                          get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
-                tby > get_sheet(sht_img, current_window->w_sheet)->by +
-                          get_sheet(sht_img, current_window->w_sheet)->height - 20)
+            if (tbx < current_window->w_sheet->bx + 12 ||
+                tby < current_window->w_sheet->by + 27 ||
+                tbx > current_window->w_sheet->bx +
+                          current_window->w_sheet->width - 12 ||
+                tby > current_window->w_sheet->by +
+                          current_window->w_sheet->height - 20)
             { /* do nothing */
             }
             else
             {
                 if (current_window->type == XWIN_NORMAL)
                 {
-                    do_message(MSG_LBUTTON, tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12,
-                               tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, current_window->WinMPf,
+                    do_message(MSG_LBUTTON, tbx - current_window->w_sheet->bx - 12,
+                               tby - current_window->w_sheet->by - 27, current_window->WinMPf,
                                current_window->w_task);
                 }
                 else
                 {
-                    do_message(MSG_LBUTTON, tbx - get_sheet(sht_img, current_window->w_sheet)->bx,
-                               tby - get_sheet(sht_img, current_window->w_sheet)->by, current_window->WinMPf,
+                    do_message(MSG_LBUTTON, tbx - current_window->w_sheet->bx,
+                               tby - current_window->w_sheet->by, current_window->WinMPf,
                                current_window->w_task);
                 }
 
-                process_click_event(found_sheet_byid(sht_img, current_window->w_sheet),
-                                    tbx - get_sheet(sht_img, current_window->w_sheet)->bx,
-                                    tby - get_sheet(sht_img, current_window->w_sheet)->by);
+                process_click_event(current_window->w_sheet, tbx - current_window->w_sheet->bx,
+                                                             tby - current_window->w_sheet->by);
             }
             if (current_window->type == XWIN_NORMAL &&
-                tbx > get_sheet(sht_img, current_window->w_sheet)->bx +
-                          get_sheet(sht_img, current_window->w_sheet)->width - 12 - 21 &&
-                tbx < get_sheet(sht_img, current_window->w_sheet)->bx +
-                          get_sheet(sht_img, current_window->w_sheet)->width + 18 &&
-                tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
-                tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
+                tbx > current_window->w_sheet->bx + current_window->w_sheet->width - 12 - 21 &&
+                tbx < current_window->w_sheet->bx + current_window->w_sheet->width + 18 &&
+                tby > current_window->w_sheet->by + 5 &&
+                tby < current_window->w_sheet->by + 18 + 5)
             {
                 // 关闭窗口
                 ms_dec.sht_now         = NULL;
@@ -449,12 +446,10 @@ void process_mouse_button()
                 if (current_win_task->window_count == 0) { kill_thread(current_win_task); }
             }
             else if (current_window->type == XWIN_NORMAL &&
-                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx +
-                               get_sheet(sht_img, current_window->w_sheet)->width - 12 - 48 &&
-                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx +
-                               get_sheet(sht_img, current_window->w_sheet)->width - 12 - 21 &&
-                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
-                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
+                     tbx > current_window->w_sheet->bx + (int)current_window->width - 12 - 48 &&
+                     tbx < current_window->w_sheet->bx + (int)current_window->width - 12 - 21 &&
+                     tby > current_window->w_sheet->by + 5 &&
+                     tby < current_window->w_sheet->by + 18 + 5)
             {
                 if (current_window->can_maximize)
                 {
@@ -467,32 +462,32 @@ void process_mouse_button()
                     // 最小化
                     ms_dec.sht_now = NULL;
                     save_window_xy(current_window);
-                    int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
+                    int bx = current_window->w_sheet->bx;
                     // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
-                    get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
-                    refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
-                                                    bx + get_sheet(sht_img, current_window->w_sheet)->width,
-                                                    get_sheet(sht_img, current_window->w_sheet)->by +
-                                                        get_sheet(sht_img, current_window->w_sheet)->height);
+                    current_window->w_sheet->bx = sht_img->scrx + 10; // 扔到屏幕外面
+                    refresh_part_sheet_deferred_or_now(sht_img, bx, current_window->w_sheet->by,
+                                                    bx + current_window->w_sheet->width,
+                                                    current_window->w_sheet->by +
+                                                    current_window->w_sheet->height);
                 }
             }
             else if (current_window->type == XWIN_NORMAL && current_window->can_maximize &&
                      current_window->width >= 80 &&
-                     tbx > get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 75 &&
-                     tbx < get_sheet(sht_img, current_window->w_sheet)->bx + (int)current_window->width - 48 &&
-                     tby > get_sheet(sht_img, current_window->w_sheet)->by + 5 &&
-                     tby < get_sheet(sht_img, current_window->w_sheet)->by + 18 + 5)
+                     tbx > current_window->w_sheet->bx + (int)current_window->width - 75 &&
+                     tbx < current_window->w_sheet->bx + (int)current_window->width - 48 &&
+                     tby > current_window->w_sheet->by + 5 &&
+                     tby < current_window->w_sheet->by + 18 + 5)
             {
                 // 最小化
                 ms_dec.sht_now = NULL;
                 save_window_xy(current_window);
-                int bx = get_sheet(sht_img, current_window->w_sheet)->bx;
+                int bx = current_window->w_sheet->bx;
                 // 按理来说应该给图层挪到-1层才是正解，但是太麻烦了而且由于机制问题会拖慢刷新，所以干脆扔到屏幕外面得了
-                get_sheet(sht_img, current_window->w_sheet)->bx = sht_img->scrx + 10; // 扔到屏幕外面
-                refresh_part_sheet_deferred_or_now(sht_img, bx, get_sheet(sht_img, current_window->w_sheet)->by,
-                                                   bx + get_sheet(sht_img, current_window->w_sheet)->width,
-                                                   get_sheet(sht_img, current_window->w_sheet)->by +
-                                                       get_sheet(sht_img, current_window->w_sheet)->height);
+                current_window->w_sheet->bx = sht_img->scrx + 10; // 扔到屏幕外面
+                refresh_part_sheet_deferred_or_now(sht_img, bx, current_window->w_sheet->by,
+                                                    bx + current_window->w_sheet->width,
+                                                    current_window->w_sheet->by +
+                                                    current_window->w_sheet->height);
             }
         }
         ms_dec.sht_now              = found_sheetmb(sht_img, mouse_x, mouse_y);
@@ -511,26 +506,26 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
-            if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
-                tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
-                tbx > get_sheet(sht_img, current_window->w_sheet)->bx +
-                          get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
-                tby > get_sheet(sht_img, current_window->w_sheet)->by +
-                          get_sheet(sht_img, current_window->w_sheet)->height - 20)
+            if (tbx < current_window->w_sheet->bx + 12 ||
+                tby < current_window->w_sheet->by + 27 ||
+                tbx > current_window->w_sheet->bx +
+                          current_window->w_sheet->width - 12 ||
+                tby > current_window->w_sheet->by +
+                          current_window->w_sheet->height - 20)
             { /* do nothing */
             }
             else
             {
                 if (current_window->type == XWIN_NORMAL)
                 {
-                    do_message(MSG_RBUTTON, tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12,
-                               tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, current_window->WinMPf,
+                    do_message(MSG_RBUTTON, tbx - current_window->w_sheet->bx - 12,
+                               tby - current_window->w_sheet->by - 27, current_window->WinMPf,
                                current_window->w_task);
                 }
                 else
                 {
-                    do_message(MSG_RBUTTON, tbx - get_sheet(sht_img, current_window->w_sheet)->bx,
-                               tby - get_sheet(sht_img, current_window->w_sheet)->by, current_window->WinMPf,
+                    do_message(MSG_RBUTTON, tbx - current_window->w_sheet->bx,
+                               tby - current_window->w_sheet->by, current_window->WinMPf,
                                current_window->w_task);
                 }
                 close_menu(current_window, tbx, tby);
@@ -547,26 +542,26 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL)
         {
-            if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
-                tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
-                tbx > get_sheet(sht_img, current_window->w_sheet)->bx +
-                          get_sheet(sht_img, current_window->w_sheet)->width - 12 ||
-                tby > get_sheet(sht_img, current_window->w_sheet)->by +
-                          get_sheet(sht_img, current_window->w_sheet)->height - 20)
+            if (tbx < current_window->w_sheet->bx + 12 ||
+                tby < current_window->w_sheet->by + 27 ||
+                tbx > current_window->w_sheet->bx +
+                          current_window->w_sheet->width - 12 ||
+                tby > current_window->w_sheet->by +
+                          current_window->w_sheet->height - 20)
             { /* do nothing */
             }
             else
             {
                 if (current_window->type == XWIN_NORMAL)
                 {
-                    do_message(MSG_MBUTTON, tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12,
-                               tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, current_window->WinMPf,
+                    do_message(MSG_MBUTTON, tbx - current_window->w_sheet->bx - 12,
+                               tby - current_window->w_sheet->by - 27, current_window->WinMPf,
                                current_window->w_task);
                 }
                 else
                 {
-                    do_message(MSG_MBUTTON, tbx - get_sheet(sht_img, current_window->w_sheet)->bx,
-                               tby - get_sheet(sht_img, current_window->w_sheet)->by, current_window->WinMPf,
+                    do_message(MSG_MBUTTON, tbx - current_window->w_sheet->bx,
+                               tby - current_window->w_sheet->by, current_window->WinMPf,
                                current_window->w_task);
                 }
             }
@@ -593,26 +588,26 @@ void process_mouse_button()
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
     if (current_window != NULL)
     {
-        if (tbx < get_sheet(sht_img, current_window->w_sheet)->bx + 12 ||
-            tby < get_sheet(sht_img, current_window->w_sheet)->by + 27 ||
-            tbx > get_sheet(sht_img, current_window->w_sheet)->bx + get_sheet(sht_img, current_window->w_sheet)->width -
+        if (tbx < current_window->w_sheet->bx + 12 ||
+            tby < current_window->w_sheet->by + 27 ||
+            tbx > current_window->w_sheet->bx + current_window->w_sheet->width -
                       12 ||
-            tby > get_sheet(sht_img, current_window->w_sheet)->by +
-                      get_sheet(sht_img, current_window->w_sheet)->height - 20)
+            tby > current_window->w_sheet->by +
+                      current_window->w_sheet->height - 20)
         { /* do nothing */
         }
         else
         {
             if (current_window->type == XWIN_NORMAL)
             {
-                do_message(MSG_MOVE, tbx - get_sheet(sht_img, current_window->w_sheet)->bx - 12,
-                           tby - get_sheet(sht_img, current_window->w_sheet)->by - 27, current_window->WinMPf,
+                do_message(MSG_MOVE, tbx - current_window->w_sheet->bx - 12,
+                           tby - current_window->w_sheet->by - 27, current_window->WinMPf,
                            current_window->w_task);
             }
             else
             {
-                do_message(MSG_MOVE, tbx - get_sheet(sht_img, current_window->w_sheet)->bx,
-                           tby - get_sheet(sht_img, current_window->w_sheet)->by, current_window->WinMPf,
+                do_message(MSG_MOVE, tbx - current_window->w_sheet->bx,
+                           tby - current_window->w_sheet->by, current_window->WinMPf,
                            current_window->w_task);
             }
         }

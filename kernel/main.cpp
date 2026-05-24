@@ -405,9 +405,13 @@ void desktop_flusher()
                  &mouse_ct_sheet);
 
     // 草稿纸吗，有点意思
+    SHEET_INFO zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi;
+    init_sheet(*fbc_addr, &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi);
     create_sheet(
-        &shtinf, get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, -1,
-        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi);
+        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi, 
+        get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, 1145,
+        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi
+    );
 
     init_ttf();
     draw_startup_screen(&shtinf, desktop_ct_sheet);
@@ -552,7 +556,7 @@ skip_timer_widget_init:
 // #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    create_user_process_from_file((char *)"/apps/busyterm.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);

@@ -64,12 +64,15 @@ static inline void spin_lock_no_irqsave(spin_t *lock) {
 }
 
 static inline void spin_unlock(spin_t *lock) {
+    // Capture the owner's saved flags before releasing the lock; otherwise a
+    // new owner on another CPU can acquire the lock and overwrite rflags.
+    long flags = lock->rflags;
+
     asm volatile("lock btrq $0, %0\n\t" // 清除锁标志
                  : "+m"(lock->lock)
                  :
                  : "memory", "cc");
 
-    long flags = lock->rflags;
     asm volatile("push %0\n\t" // 恢复原始RFLAGS
                  "popfq"
                  :

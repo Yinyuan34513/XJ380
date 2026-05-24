@@ -11,7 +11,8 @@
 #include "./include/x3api.h"
 #include "./include/libsys.h"
 
-extern "C" int xapi_cpp_main(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_");
+extern "C" int main(int argc, char *argv[], char *envp[]) __attribute__((weak));
+extern "C" int xapi_legacy_cpp_main(int argc, char *argv[], char *envp[]) asm("_Z4mainiPPcS0_") __attribute__((weak));
 // extern void _init();
 // extern void __preinit_array_start();
 // extern void __preinit_array_end();
@@ -58,12 +59,31 @@ extern "C" __attribute__((force_align_arg_pointer)) void xapi_start(int argc, ch
             // 这时命令行肯定是他的父进程，循环检查是否标记为命令行，检测到标记即代表可以吃了
             if (enter_syscall(SXAH_CHECK_TERMINAL_INIT_STATUS, 0, 0, 0, 0, 0, 0)) break;
         }
-        // return; // 国企鱼是超级大傻逼
-        exit(xapi_cpp_main(argc, argv, envp));
+        if (main != NULL)
+        {
+            exit(main(argc, argv, envp));
+        }
+
+        if (xapi_legacy_cpp_main != NULL)
+        {
+            exit(xapi_legacy_cpp_main(argc, argv, envp));
+        }
+
+        exit(0);
     }
 
     char *execve_argv[2] = {"-xj380sys-terminal-app-mode"};
     xapi_Execve("/apps/system/shell.elf", execve_argv, NULL);
 
-    exit(xapi_cpp_main(argc, argv, envp));
+    if (main != NULL)
+    {
+        exit(main(argc, argv, envp));
+    }
+
+    if (xapi_legacy_cpp_main != NULL)
+    {
+        exit(xapi_legacy_cpp_main(argc, argv, envp));
+    }
+
+    exit(0);
 }

@@ -124,19 +124,7 @@ constexpr int EINVAL = 22;
 constexpr int EALREADY = 114;
 constexpr int EINPROGRESS = 115;
 
-inline std::uint16_t htons(std::uint16_t value)
-{
-    return static_cast<std::uint16_t>((value << 8) | (value >> 8));
-}
-
-inline std::uint32_t htonl(std::uint32_t value)
-{
-    return ((value & 0x000000ffU) << 24) |
-           ((value & 0x0000ff00U) << 8) |
-           ((value & 0x00ff0000U) >> 8) |
-           ((value & 0xff000000U) >> 24);
-}
-
+extern "C" {
 void     xapi_CreateWindow(HDLE *handle, XWINDOW *xwin);
 void     xapi_SetWindowTitle(HDLE handle, WSTR str);
 void     xapi_CloseWindow(HDLE handle);
@@ -159,7 +147,6 @@ void     xapi_OutputSerial(WSTR str);
 void     xapi_Sleep(unsigned long long ms);
 void     SetMsgPrcor(HDLE handle, MsgPrcor func);
 
-extern "C" {
 int      socket(int domain, int type, int protocol);
 int      connect(int sockfd, const sockaddr *addr, socklen_t addrlen);
 int      shutdown(int sockfd, int how);
@@ -171,6 +158,19 @@ int      fcntl(int fd, int cmd, unsigned long long arg);
 int      getaddrinfo(const char *node, const char *service, const addrinfo *hints, addrinfo **res);
 void     freeaddrinfo(addrinfo *res);
 const char *gai_strerror(int errcode);
+}
+
+inline std::uint16_t htons(std::uint16_t value)
+{
+    return static_cast<std::uint16_t>((value << 8) | (value >> 8));
+}
+
+inline std::uint32_t htonl(std::uint32_t value)
+{
+    return ((value & 0x000000ffU) << 24) |
+           ((value & 0x0000ff00U) << 8) |
+           ((value & 0x00ff0000U) >> 8) |
+           ((value & 0xff000000U) >> 24);
 }
 
 inline std::uint32_t xj380_rgba(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255)

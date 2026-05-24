@@ -32,10 +32,8 @@ struct unix_sock {
     struct unix_sock *peer;
     lock_queue *conn_queue;
 
-    uint8_t *rbuf;
-    size_t   rhead, rtail, rcap;
-    uint8_t *wbuf;
-    size_t   whead, wtail, wcap;
+    uint8_t *in_buf;
+    size_t   in_head, in_tail, in_cap;
 
     lock_queue *dg_queue;
     lock_queue *stream_queue;

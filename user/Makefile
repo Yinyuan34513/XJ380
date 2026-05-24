@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf nut.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf dyn-hello
+all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
@@ -204,6 +204,11 @@ fbtest.elf: fbtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
 
+ccompat-demo.elf: ccompat_demo.c $(XAPI_HEADERS)
+	@$(CC) -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./xapi/include -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "/start.cpp.o$$") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CLD $< -> ../out/$@"
+
 dyn-hello: dyn_hello.c
 	@$(CC) -O0 -g -Wall -Wextra $< -o ../out/$@
 	@echo "HOSTLD $< -> ../out/$@"
@@ -341,6 +346,7 @@ CALC_SOURCES := ./calc/calc.cpp
 
 TEXTER_SOURCES := ./texter/texter.cpp
 TASKMGR_SOURCES := ./taskmgr/taskmgr.cpp
+FILEDLG_SOURCES := ./filedlg/filedlg.cpp
 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
@@ -349,6 +355,7 @@ CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU
 CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 TASKMGR_OBJECTS := $(patsubst ./taskmgr/%.cpp, ../out/taskmgr/%.o, $(TASKMGR_SOURCES))
+FILEDLG_OBJECTS := $(patsubst ./filedlg/%.cpp, ../out/filedlg/%.o, $(FILEDLG_SOURCES))
 
 ../out/calc/%.o: ./calc/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
@@ -409,6 +416,15 @@ taskmgr.elf: $(TASKMGR_OBJECTS)
 	@echo "LINK taskmgr objects -> ../out/$@"
 
 ../out/taskmgr/%.o: ./taskmgr/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+filedlg.elf: $(FILEDLG_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(FILEDLG_OBJECTS) -o ../out/$@
+	@echo "LINK filedlg objects -> ../out/$@"
+
+../out/filedlg/%.o: ./filedlg/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"

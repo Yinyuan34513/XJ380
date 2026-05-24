@@ -23,3 +23,7 @@ sudo apt install gcc-mingw-w64-x86-64 -y
 sudo apt install mtools dosfstools -y
 sudo apt install qemu-system -y
 ```
+
+## 更新版本信息
+
+需要手动更改 ``stage_image_base.sh`` 和 ``build_settings.h`` 。

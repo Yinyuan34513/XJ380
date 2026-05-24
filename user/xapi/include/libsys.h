@@ -181,6 +181,7 @@
 #define XAPI_WRITE_FILE     7424
 
 #define XAPI_REMOVEDIR      7444
+#define XAPI_FILE_DIALOG    7450
 
 // P3.4
 #define XAPI_FORK   7389
@@ -204,7 +205,7 @@
 #define XAPI_SLEEP          7430
 
 #define XAPI_RUN            7439
-#define XAPI_RUN_ARGS       7450
+#define XAPI_RUN_ARGS       7451
 
 #define XAPI_FLUSH_TIME     7445
 
@@ -296,4 +297,10 @@ typedef struct
 #define XWIN_TYPE_MASK         0x0f
 #define XWIN_SUPPORT_RESIZEABLE  0x80
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 uint64_t enter_syscall(uint64_t syscall_number, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);
+#ifdef __cplusplus
+}
+#endif
