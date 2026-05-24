@@ -164,6 +164,8 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     { // Ctrl按下
         kb_fifo.ctrl = 0;
     }
+
+    bool key_release = (x & 0x80) != 0;
     if (x < 0x80)
     {
         // write_serial_string("scan code: ");
@@ -195,6 +197,11 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         }
     }
     kb_e0_prefix = false;
+    if (key_release)
+    {
+        send_eoi();
+        return;
+    }
     if (x == 0)
     {
         send_eoi();

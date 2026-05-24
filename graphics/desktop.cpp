@@ -39,6 +39,125 @@ extern UserInfo *current_user;
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet);
 
+static const char *DEFAULT_DESKTOP_BACKGROUND = "/system/resources/image/background2.png";
+static const char *FALLBACK_DESKTOP_BACKGROUND = "/system/resources/image/background3.png";
+
+static void set_default_desktop_settings(SettingsDataFileFormat *settings)
+{
+    if (settings == NULL) return;
+    memset(settings, 0, sizeof(SettingsDataFileFormat));
+    strcpy(settings->BackgroundFilePath, DEFAULT_DESKTOP_BACKGROUND);
+    settings->ClockHourOffset = 8;
+}
+
+static void load_desktop_settings(SettingsDataFileFormat *settings)
+{
+    if (settings == NULL) return;
+    set_default_desktop_settings(settings);
+
+    if (current_user == NULL || current_user->name[0] == '\0') return;
+
+    init_user_profile(current_user->name);
+
+    char settings_path[256];
+    memset(settings_path, 0, sizeof(settings_path));
+    int written = snprintf(settings_path, sizeof(settings_path), "/users/%s/settings.dat", current_user->name);
+    if (written <= 0 || written >= (int)sizeof(settings_path)) return;
+
+    vfs_node_t settings_file = vfs_open(settings_path);
+    if (settings_file == NULL)
+    {
+        write_serial_fmt("init_desktop: cannot open settings '%s', using defaults\n", settings_path);
+        return;
+    }
+
+    SettingsDataFileFormat loaded;
+    memset(&loaded, 0, sizeof(loaded));
+    size_t read_size = settings_file->size < sizeof(loaded) ? (size_t)settings_file->size : sizeof(loaded);
+    size_t got       = 0;
+    if (read_size > 0) got = vfs_read(settings_file, &loaded, 0, read_size);
+    vfs_close(settings_file);
+
+    loaded.BackgroundFilePath[sizeof(loaded.BackgroundFilePath) - 1] = '\0';
+    if (got > 0 && loaded.BackgroundFilePath[0] != '\0')
+    {
+        strncpy(settings->BackgroundFilePath, loaded.BackgroundFilePath, sizeof(settings->BackgroundFilePath) - 1);
+        settings->BackgroundFilePath[sizeof(settings->BackgroundFilePath) - 1] = '\0';
+    }
+    if (got == sizeof(loaded)) settings->ClockHourOffset = loaded.ClockHourOffset;
+}
+
+static bool draw_desktop_background_image(SHEET_INFO *sht, SHEET *csheet, const char *path)
+{
+    if (sht == NULL || csheet == NULL || csheet->buffer == NULL || path == NULL || path[0] == '\0') return false;
+
+    vfs_node_t image_file = vfs_open(path);
+    if (image_file == NULL)
+    {
+        write_serial_fmt("init_desktop: cannot open background '%s'\n", path);
+        return false;
+    }
+
+    if (image_file->size == 0 || image_file->size > 0x7fffffff)
+    {
+        write_serial_fmt("init_desktop: invalid background size for '%s': %llu\n", path,
+                         (unsigned long long)image_file->size);
+        vfs_close(image_file);
+        return false;
+    }
+
+    size_t         image_size = (size_t)image_file->size;
+    unsigned char *file_data  = (unsigned char *)malloc(image_size);
+    if (file_data == NULL)
+    {
+        write_serial_fmt("init_desktop: failed to allocate %u bytes for '%s'\n", (unsigned)image_size, path);
+        vfs_close(image_file);
+        return false;
+    }
+
+    size_t got = vfs_read(image_file, file_data, 0, image_size);
+    vfs_close(image_file);
+    if (got == 0 || got == (size_t)-1)
+    {
+        write_serial_fmt("init_desktop: failed to read background '%s'\n", path);
+        free(file_data);
+        return false;
+    }
+
+    int      w, h, bpp;
+    stbi_uc *pixels = stbi_load_from_memory(file_data, (int)got, &w, &h, &bpp, 4);
+    free(file_data);
+    if (pixels == NULL || w <= 0 || h <= 0)
+    {
+        write_serial_fmt("init_desktop: decode failed for '%s' (%u bytes)\n", path, (unsigned)got);
+        if (pixels != NULL) stbi_image_free(pixels);
+        return false;
+    }
+
+    int ok = stbir_resize_uint8(pixels, w, h, 0, (uint8_t *)csheet->buffer, sht->scrx, sht->scry, 0, 4);
+    stbi_image_free(pixels);
+    if (!ok)
+    {
+        write_serial_fmt("init_desktop: resize failed for '%s'\n", path);
+        return false;
+    }
+
+    csheet->is_change = true;
+    return true;
+}
+
+static void draw_desktop_background(SHEET_INFO *sht, SHEET *csheet, const char *preferred_path)
+{
+    if (draw_desktop_background_image(sht, csheet, preferred_path)) return;
+    if (preferred_path == NULL || strcmp(preferred_path, DEFAULT_DESKTOP_BACKGROUND) != 0)
+    {
+        if (draw_desktop_background_image(sht, csheet, DEFAULT_DESKTOP_BACKGROUND)) return;
+    }
+    if (draw_desktop_background_image(sht, csheet, FALLBACK_DESKTOP_BACKGROUND)) return;
+
+    draw_rect(sht, csheet, 0, 0, sht->scrx - 1, sht->scry - 1, WIN_BLUE);
+}
+
 /*
 static const char *xapi_demoSvgCheck =
     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\">"
@@ -50,77 +169,19 @@ static const char *xapi_demoSvgCheck =
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
 {
-    int           scrx = sht->scrx;
-    int           scry = sht->scry;
-    // #136dff
-    // draw_rect(sht, ct_sheet, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
+    if (sht == NULL || csheet == NULL || dock_ct_sheet == NULL || csheet->buffer == NULL) return;
 
-    // 获取路径
-    char runfile_setfile_path[256];
-    memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/users/");
-    strcat(runfile_setfile_path, current_user->name);
-    strcat(runfile_setfile_path, "/settings.dat");
-    vfs_mkfile(runfile_setfile_path);
-
-    char  settings_file_buffer[sizeof(SettingsDataFileFormat)];
-    vfs_node_t settings_file_v = vfs_open(runfile_setfile_path);
-    if (!settings_file_v) return;
-    vfs_read(settings_file_v, settings_file_buffer, 0, sizeof(SettingsDataFileFormat));
-
-    SettingsDataFileFormat *file_format = (SettingsDataFileFormat *)settings_file_buffer;
-
-    // 渲染
-    SHEET_BUFFER *buff = (SHEET_BUFFER *)malloc(scrx * scry * 4);
-    int           w, h, bpp;
-    vfs_node_t    v = vfs_open(file_format->BackgroundFilePath);
-    if (!v)
-    {
-        write_serial_fmt("init_desktop: cannot open '%s'\n", file_format->BackgroundFilePath);
-        return;
-    }
-    unsigned char *bf = (unsigned char *)malloc(v->size);
-    if (!bf)
-    {
-        write_serial_fmt("init_desktop: failed to allocate %u bytes for '%s'\n", (unsigned)v->size,
-                         file_format->BackgroundFilePath);
-        vfs_close(v);
-        return;
-    }
-    vfs_read(v, (uint8_t *)bf, 0, v->size);
-    stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 0);
-    free(bf);
-    if (!b)
-    {
-        write_serial_fmt("init_desktop: decode failed for '%s' (%u bytes)\n", file_format->BackgroundFilePath,
-                         (unsigned)v->size);
-        vfs_close(v);
-        return;
-    }
-    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buff), scrx, scry, 0, 4);
-    stbi_image_free(b);
-    vfs_close(v);
-
-    SHEET *front_p = sht->start;
-    while (true)
-    {
-        if (front_p == csheet) { break; }
-        else if (front_p->next == NULL) { return; }
-        front_p = front_p->next;
-    }
-
-    // SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-
-    // 检查内存对齐情况
-    front_p->buffer = (void *)buff;
+    SettingsDataFileFormat settings;
+    load_desktop_settings(&settings);
+    draw_desktop_background(sht, csheet, settings.BackgroundFilePath);
 
     init_dock(sht, dock_ct_sheet);
     init_shortcut_dock(sht, dock_ct_sheet);
-    init_desktop_icon(sht, csheet);
+    if (current_user != NULL && current_user->name[0] != '\0') init_desktop_icon(sht, csheet);
 
     int svg_demo_width  = 56;
     int svg_demo_height = 64;
-    int svg_demo_x      = scrx - svg_demo_width - 28;
+    int svg_demo_x      = sht->scrx - svg_demo_width - 28;
     int svg_demo_y      = 34;
     // xapi_drawSvgBySheet(sht, csheet, svg_demo_x, svg_demo_y, svg_demo_width,
     //                                        xapi_demoSvgCheck, true);

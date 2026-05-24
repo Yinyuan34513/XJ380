@@ -638,6 +638,7 @@ static bool run_oobe()
                           {0x0f, 0x4c, 0x9a, 0xff});
                 print_box_ttf(sht_img, desktop_ct_sheet, "账户已创建，正在进入桌面。", WHITE, 64, 64, 18);
                 refresh_user_fullscreen_now();
+                oobe_free_shell_cache();
                 return true;
             }
             need_render = true;
