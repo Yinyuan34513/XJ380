@@ -27,6 +27,59 @@ int fm_visible_rows()
     return rows < 1 ? 1 : rows;
 }
 
+int fm_max_scroll_base()
+{
+    int max_base = file_count - fm_visible_rows();
+    return max_base < 0 ? 0 : max_base;
+}
+
+void fm_clamp_scroll_base()
+{
+    int max_base = fm_max_scroll_base();
+    if (file_count_base < 0) file_count_base = 0;
+    if (file_count_base > max_base) file_count_base = max_base;
+}
+
+bool fm_scrollbar_rect(int *x1, int *y1, int *x2, int *y2)
+{
+    if (!need_duopage) return false;
+    if (fmr_width < 80 || fmr_height <= 164) return false;
+    if (x1 != NULL) *x1 = fmr_width - 18;
+    if (y1 != NULL) *y1 = 148;
+    if (x2 != NULL) *x2 = fmr_width - 6;
+    if (y2 != NULL) *y2 = fmr_height - 10;
+    return true;
+}
+
+bool fm_scrollbar_thumb_rect(int *x1, int *y1, int *x2, int *y2)
+{
+    int bar_x1, bar_y1, bar_x2, bar_y2;
+    if (!fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2)) return false;
+
+    int visible_rows = fm_visible_rows();
+    if (file_count <= visible_rows) return false;
+
+    int track_h = bar_y2 - bar_y1;
+    if (track_h <= 0) return false;
+    int thumb_h = (track_h * visible_rows) / file_count;
+    if (thumb_h < 28) thumb_h = track_h < 28 ? track_h : 28;
+    if (thumb_h > track_h) thumb_h = track_h;
+
+    int max_base = fm_max_scroll_base();
+    int travel = track_h - thumb_h;
+    int thumb_y = bar_y1;
+    if (max_base > 0 && travel > 0)
+    {
+        thumb_y += (file_count_base * travel + max_base / 2) / max_base;
+    }
+
+    if (x1 != NULL) *x1 = bar_x1 + 2;
+    if (y1 != NULL) *y1 = thumb_y;
+    if (x2 != NULL) *x2 = bar_x2 - 2;
+    if (y2 != NULL) *y2 = thumb_y + thumb_h;
+    return true;
+}
+
 static bool visible_index_is_valid(int visible_index)
 {
     int visible_count = file_count - file_count_base;
@@ -125,8 +178,18 @@ void paint_fm_back()
     // xapi_DrawSvg(handle, FMR_X - 40, 30, 28, (char *)xapi_demoSvgCheck);
     if (need_duopage)
     {
-        xapi_DrawPNG(handle, fmr_width - 19, 148, 18, 18, "/system/icon/bup.png");
-        xapi_DrawPNG(handle, fmr_width - 19, 170, 18, 18, "/system/icon/bdown.png");
+        int bar_x1, bar_y1, bar_x2, bar_y2;
+        int thumb_x1, thumb_y1, thumb_x2, thumb_y2;
+        if (fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2))
+        {
+            xapi_DrawRect(handle, bar_x1, bar_y1, bar_x2, bar_y2, 0xf0f0f0ff, true);
+            xapi_DrawRect(handle, bar_x1, bar_y1, bar_x2, bar_y2, 0xd2d2d2ff, false);
+            if (fm_scrollbar_thumb_rect(&thumb_x1, &thumb_y1, &thumb_x2, &thumb_y2))
+            {
+                xapi_DrawRect(handle, thumb_x1, thumb_y1, thumb_x2, thumb_y2, 0xb8c7d9ff, true);
+                xapi_DrawRect(handle, thumb_x1, thumb_y1, thumb_x2, thumb_y2, 0x6f8fb3ff, false);
+            }
+        }
     }
 }
 
@@ -266,7 +329,7 @@ void paint_dir(char *path)
         if (file_count_base + visible_rows > file_count)
         {
             file_count_base = file_count - visible_rows;
-            if (file_count_base < 0) file_count_base = 0;
+            fm_clamp_scroll_base();
         }
     }
     else 

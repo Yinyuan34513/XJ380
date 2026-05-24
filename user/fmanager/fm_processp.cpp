@@ -36,6 +36,18 @@ bool yicixing_lock = false;
 
 bool need_paint = false;
 
+static void set_scroll_base(int base)
+{
+    int old_base = file_count_base;
+    file_count_base = base;
+    fm_clamp_scroll_base();
+    if (file_count_base != old_base)
+    {
+        choosing_index = -1;
+        need_paint = true;
+    }
+}
+
 static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_index)
 {
     if (x < 4 || x > fmr_width / 10 * 8 || y < 148)
@@ -59,6 +71,33 @@ static bool get_clicked_file_index(int x, int y, int *file_index, int *visible_i
     *visible_index = current_visible_index;
     *file_index = file_count_base + current_visible_index;
     return true;
+}
+
+static bool point_in_rect(int x, int y, int x1, int y1, int x2, int y2)
+{
+    return x >= x1 && x <= x2 && y >= y1 && y <= y2;
+}
+
+void register_scrollbar_click(int x, int y)
+{
+    if (!need_duopage) return;
+
+    int bar_x1, bar_y1, bar_x2, bar_y2;
+    if (!fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2)) return;
+    if (!point_in_rect(x, y, bar_x1, bar_y1, bar_x2, bar_y2)) return;
+
+    int track_h = bar_y2 - bar_y1;
+    int max_base = fm_max_scroll_base();
+    if (track_h <= 0 || max_base <= 0) return;
+
+    int target = ((y - bar_y1) * max_base + track_h / 2) / track_h;
+    set_scroll_base(target);
+}
+
+void register_scroll_wheel(int delta)
+{
+    if (!need_duopage || delta == 0) return;
+    set_scroll_base(file_count_base - delta * 3);
 }
 
 void reg_lock()
@@ -126,22 +165,7 @@ void register_click(int x, int y)
         }
     }
     
-    if (need_duopage)
-    {
-        if (x > fmr_width - 19)
-        {
-            if (y > 148 && y < 166 && file_count_base > 0)
-            {
-                file_count_base--;
-                need_paint = true;
-            }
-            else if (y > 170 && y < 188 && file_count_base + fm_visible_rows() < file_count)
-            {
-                file_count_base++;
-                need_paint = true;
-            }
-        }
-    }
+    register_scrollbar_click(x, y);
 
     if (click_on_file)
     {

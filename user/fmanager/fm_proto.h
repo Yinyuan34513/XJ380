@@ -58,4 +58,10 @@ void reg_lock();
 void reg_unlock();
 
 int fm_visible_rows();
+int fm_max_scroll_base();
+void fm_clamp_scroll_base();
+bool fm_scrollbar_rect(int *x1, int *y1, int *x2, int *y2);
+bool fm_scrollbar_thumb_rect(int *x1, int *y1, int *x2, int *y2);
 bool fm_get_selected_file(DirNode *node);
+void register_scrollbar_click(int x, int y);
+void register_scroll_wheel(int delta);

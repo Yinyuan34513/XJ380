@@ -28,6 +28,9 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         register_click(hData, lData);
         break;
+    case MSG_ROLLER:
+        register_scroll_wheel((int)hData);
+        break;
     case MSG_RBUTTON:
         yicixing_lock = true;
         break;
@@ -44,11 +47,7 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_RESIZE:
         fmr_width = (int)hData;
         fmr_height = (int)lData;
-        if (file_count_base + fm_visible_rows() > file_count)
-        {
-            file_count_base = file_count - fm_visible_rows();
-            if (file_count_base < 0) file_count_base = 0;
-        }
+        fm_clamp_scroll_base();
         need_paint = true;
         break;
     }
