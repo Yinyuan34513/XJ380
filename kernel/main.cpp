@@ -10,6 +10,7 @@
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
 #include <fs/partition.h>
+#include <fs/vfs/anonfs.h>
 #include <fs/vfs/devfs.h>
 #include <fbdev.h>
 #include <fs/vfs/sys.h>
@@ -556,7 +557,7 @@ skip_timer_widget_init:
 // #endif
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
-    create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+    create_user_process_from_file((char *)"/apps/terminal.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);
@@ -765,6 +766,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     setup_xbps_vfs_aliases();
     tmpfs_setup();
     pipefs_setup();
+    anonfs_init();
     pty_init();
     fsgsbase_init();
     socketfs_setup();

@@ -2,6 +2,7 @@
 #include <cpu/fsgsbase.h>
 #include <cpu/msr.h>
 #include <errno.h>
+#include <fs/vfs/anonfs.h>
 #include <fs/vfs/vfs.h>
 #include <math.hpp>
 #include <mm/lazyalloc.h>
@@ -32,6 +33,13 @@ sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
 sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
 sys_(utimes, char *filename, const struct timeval *times);
 sys_(close_range, uint32_t first, uint32_t last, uint32_t flags);
+sys_(eventfd, uint64_t initial_value);
+sys_(eventfd2, uint64_t initial_value, uint64_t flags);
+sys_(signalfd, int ufd, sigset_t *mask, size_t sizemask);
+sys_(signalfd4, int ufd, sigset_t *mask, size_t sizemask, uint64_t flags);
+sys_(timerfd_create, int clockid, int flags);
+sys_(timerfd_settime, int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value);
+sys_(memfd_create, const char *name, uint64_t flags);
 
 static const char *debug_syscall_name(uint64_t nr)
 {
@@ -46,6 +54,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_PREAD64: return "pread64";
     case SYS_PWRITE64: return "pwrite64";
     case SYS_POLL: return "poll";
+    case SYS_PPOLL: return "ppoll";
     case SYS_LSEEK: return "lseek";
     case SYS_MMAP: return "mmap";
     case SYS_MPROTECT: return "mprotect";
@@ -121,10 +130,17 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_READLINKAT: return "readlinkat";
     case SYS_PSELECT6: return "pselect6";
     case SYS_PIPE2: return "pipe2";
+    case SYS_SIGNALFD: return "signalfd";
+    case SYS_TIMERFD_CREATE: return "timerfd_create";
+    case SYS_EVENTFD: return "eventfd";
+    case SYS_TIMERFD_SETTIME: return "timerfd_settime";
+    case SYS_SIGNALFD4: return "signalfd4";
+    case SYS_EVENTFD2: return "eventfd2";
     case SYS_FTRUNCATE: return "ftruncate";
     case SYS_FSTATFS: return "fstatfs";
     case SYS_PRLIMIT64: return "prlimit64";
     case SYS_SENDMMSG: return "sendmmsg";
+    case SYS_MEMFD_CREATE: return "memfd_create";
     case SYS_GETRANDOM: return "getrandom";
     case SYS_FUTEX: return "futex";
     case SYS_EPOLL_CREATE: return "epoll_create";
@@ -255,6 +271,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_POLL:
         regs->rax = (uint64_t)sys_poll((struct pollfd *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
         break;
+    case SYS_PPOLL:
+        regs->rax = (uint64_t)sys_ppoll((struct pollfd *)regs->rdi, regs->rsi, (const struct timespec *)regs->rdx,
+                                        (const sigset_t *)regs->r10, regs->r8, 0, regs);
+        break;
     case SYS_EPOLL_CREATE:
         regs->rax = (uint64_t)sys_epoll_create(regs->rdi, 0, 0, 0, 0, 0, regs);
         break;
@@ -365,6 +385,25 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_PSELECT6:
         regs->rax = (uint64_t)sys_pselect6(regs->rdi, (fd_set *)regs->rsi, (fd_set *)regs->rdx, (fd_set *)regs->r10,
                                            (struct timespec *)regs->r8, (WeirdPselect6 *)regs->r9, regs);
+        break;
+    case SYS_SIGNALFD:
+        regs->rax = (uint64_t)sys_signalfd(regs->rdi, (sigset_t *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_SIGNALFD4:
+        regs->rax = (uint64_t)sys_signalfd4(regs->rdi, (sigset_t *)regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
+        break;
+    case SYS_EVENTFD:
+        regs->rax = (uint64_t)sys_eventfd(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_EVENTFD2:
+        regs->rax = (uint64_t)sys_eventfd2(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_TIMERFD_CREATE:
+        regs->rax = (uint64_t)sys_timerfd_create(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_TIMERFD_SETTIME:
+        regs->rax = (uint64_t)sys_timerfd_settime(regs->rdi, regs->rsi, (const struct itimerspec *)regs->rdx,
+                                                  (struct itimerspec *)regs->r10, 0, 0, regs);
         break;
     case SYS_SCHED_GETAFFINITY:
         regs->rax = (uint64_t)sys_sched_getaffinity(regs->rdi, regs->rsi, (void *)regs->rdx, 0, 0, 0, regs);
@@ -580,6 +619,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_GETRANDOM:
         regs->rax = (uint64_t)sys_getrandom((void *)regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_MEMFD_CREATE:
+        regs->rax = (uint64_t)sys_memfd_create((const char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
 
     case SYS_PRCTL:

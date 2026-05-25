@@ -2,6 +2,7 @@
 #include <proto.hpp>
 #include <fs/vfs/vfs.h>
 #include <fs/fatfs/fatfs.h>
+#include <fs/vfs/anonfs.h>
 #include <ioctl.h>
 #include <cpu/fsgsbase.h>
 #include <task/poll.h>
@@ -93,6 +94,13 @@ static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
     if (nfds > FD_SETSIZE) return false;
     *out = ((size_t)nfds + 7) / 8;
     return true;
+}
+
+static int64_t vfs_io_status(size_t status)
+{
+    if (status == (size_t)VFS_STATUS_FAILED) return -EIO;
+    int64_t signed_status = (int64_t)status;
+    return signed_status < 0 ? signed_status : (int64_t)status;
 }
 
 static fd_file_handle **unix_msg_copy_rights_from_user(page_directory_t *pagedir, const struct msghdr *kmsg,
@@ -525,20 +533,21 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
 
         size_t write_offset = (handle->node->type & file_pipe) ? 0 : handle->offset;
         size_t wrote        = vfs_write(handle->node, bounce, write_offset, chunk);
-        if ((handle->node->type & file_pipe) && wrote == (size_t)-EPIPE)
+        int64_t wrote_status = vfs_io_status(wrote);
+        if ((handle->node->type & file_pipe) && wrote_status == -EPIPE)
         {
             free(bounce);
             signal_send_process(process, SIGPIPE);
             return total > 0 ? (int64_t)total : -EPIPE;
         }
-        if (wrote == (size_t)VFS_STATUS_FAILED)
+        if (wrote_status < 0)
         {
             free(bounce);
-            return total > 0 ? (int64_t)total : -EIO;
+            return total > 0 ? (int64_t)total : wrote_status;
         }
-        if (!(handle->node->type & file_pipe) && handle->node->size != (uint64_t)-1) handle->offset += wrote;
-        total += wrote;
-        if (wrote < chunk) break;
+        if (!(handle->node->type & file_pipe) && handle->node->size != (uint64_t)-1) handle->offset += (size_t)wrote_status;
+        total += (size_t)wrote_status;
+        if ((size_t)wrote_status < chunk) break;
     }
 
     free(bounce);
@@ -684,12 +693,13 @@ static int64_t read_to_user_buffer(fd_file_handle *handle, uint8_t *buffer, size
         else
         {
             size_t got = vfs_read(handle->node, bounce, offset + total, chunk);
-            if (got == (size_t)VFS_STATUS_FAILED)
+            int64_t got_status = vfs_io_status(got);
+            if (got_status < 0)
             {
                 free(bounce);
-                return total > 0 ? (int64_t)total : -EIO;
+                return total > 0 ? (int64_t)total : got_status;
             }
-            read_now = (ssize_t)got;
+            read_now = (ssize_t)got_status;
         }
 
         if (read_now == 0) break;
@@ -718,11 +728,13 @@ static int64_t pipe_read_to_user_buffer(fd_file_handle *handle, uint8_t *buffer,
     if (bounce == NULL) return -ENOMEM;
 
     size_t got = vfs_read(handle->node, bounce, 0, bounce_bytes);
-    if (got == (size_t)VFS_STATUS_FAILED)
+    int64_t got_status = vfs_io_status(got);
+    if (got_status < 0)
     {
         free(bounce);
-        return -EIO;
+        return got_status;
     }
+    got = (size_t)got_status;
 
     if (got != 0 && !copy_to_user_pagedir(current_user_pagedir(), buffer, bounce, got))
     {
@@ -3166,6 +3178,85 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
     return ret;
 }
 
+sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout,
+     const sigset_t *sigmask, size_t sigsetsize)
+{
+    if (nfds == 0) return 0;
+    if (fds_user == NULL) return SYSCALL_FAULT_(EINVAL);
+    if (nfds > USER_POLL_MAX) return SYSCALL_FAULT_(EINVAL);
+
+    page_directory_t *pagedir = current_user_pagedir();
+    size_t fds_bytes = 0;
+    if (!checked_mul_size(nfds, sizeof(struct pollfd), &fds_bytes)) return SYSCALL_FAULT_(EFAULT);
+
+    struct pollfd *fds = (struct pollfd *)malloc(fds_bytes);
+    if (fds == NULL) return SYSCALL_FAULT_(ENOMEM);
+    if (!copy_from_user_pagedir(pagedir, fds, fds_user, fds_bytes))
+    {
+        free(fds);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    size_t timeout_ms = (size_t)-1;
+    if (timeout != NULL)
+    {
+        struct timespec ktimeout = {};
+        if (!copy_from_user_pagedir(pagedir, &ktimeout, timeout, sizeof(ktimeout)))
+        {
+            free(fds);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+        if (ktimeout.tv_sec < 0 || ktimeout.tv_nsec < 0 || ktimeout.tv_nsec >= 1000000000L)
+        {
+            free(fds);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+
+        uint64_t timeout_ns = (uint64_t)ktimeout.tv_sec * 1000000000ULL + (uint64_t)ktimeout.tv_nsec;
+        timeout_ms = (size_t)(timeout_ns / 1000000ULL);
+        if ((timeout_ns % 1000000ULL) != 0) timeout_ms++;
+    }
+
+    sigset_t origmask = 0;
+    bool mask_installed = false;
+    if (sigmask != NULL)
+    {
+        if (sigsetsize < sizeof(sigset_t))
+        {
+            free(fds);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+
+        sigset_t requested_mask = 0;
+        if (!copy_from_user_pagedir(pagedir, &requested_mask, sigmask, sizeof(requested_mask)))
+        {
+            free(fds);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+
+        int mask_ret = signal_setmask(SIG_SETMASK, &requested_mask, &origmask);
+        if (mask_ret < 0)
+        {
+            free(fds);
+            return SYSCALL_FAULT_(-mask_ret);
+        }
+        mask_installed = true;
+    }
+
+    uint64_t ret = poll_kernel_fds(fds, nfds, timeout_ms);
+
+    if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
+
+    if ((int64_t)ret >= 0 && !copy_to_user_pagedir(pagedir, fds_user, fds, fds_bytes))
+    {
+        free(fds);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    free(fds);
+    return ret;
+}
+
 sys_(sched_getaffinity, int pid, size_t cpusetsize, void *mask)
 {
     if (cpusetsize == 0 || mask == NULL) return SYSCALL_FAULT_(EINVAL);
@@ -5562,6 +5653,48 @@ sys_(fstatfs, int fd, struct statfs *buf)
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
     return statfs_kernel_node(handle->node, buf);
+}
+
+sys_(eventfd, uint64_t initial_value)
+{
+    int ret = anonfs_create_eventfd(initial_value, 0);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(eventfd2, uint64_t initial_value, uint64_t flags)
+{
+    int ret = anonfs_create_eventfd(initial_value, (uint32_t)flags);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(signalfd, int ufd, sigset_t *mask, size_t sizemask)
+{
+    int ret = anonfs_create_signalfd(ufd, mask, sizemask, 0);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(signalfd4, int ufd, sigset_t *mask, size_t sizemask, uint64_t flags)
+{
+    int ret = anonfs_create_signalfd(ufd, mask, sizemask, (uint32_t)flags);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(timerfd_create, int clockid, int flags)
+{
+    int ret = anonfs_create_timerfd(clockid, (uint32_t)flags);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(timerfd_settime, int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value)
+{
+    int ret = anonfs_timerfd_settime(fd, flags, new_value, old_value);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(memfd_create, const char *name, uint64_t flags)
+{
+    int ret = anonfs_create_memfd(name, (uint32_t)flags);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
 }
 
 

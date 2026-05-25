@@ -27,6 +27,13 @@
 #include <task/pcb.h>
 #include <ttf.h>
 
+static ssize_t xfile_vfs_io_status(size_t status)
+{
+    if (status == (size_t)VFS_STATUS_FAILED) return -EIO;
+    ssize_t signed_status = (ssize_t)status;
+    return signed_status < 0 ? signed_status : (ssize_t)status;
+}
+
 static ssize_t xfile_write_from_user(vfs_node_t node, const void *buffer, size_t offset, size_t size)
 {
     if (node == NULL) return -EIO;
@@ -56,14 +63,15 @@ static ssize_t xfile_write_from_user(vfs_node_t node, const void *buffer, size_t
         }
 
         size_t wrote = vfs_write(node, bounce, io_offset, chunk);
-        if (wrote == (size_t)VFS_STATUS_FAILED)
+        ssize_t wrote_status = xfile_vfs_io_status(wrote);
+        if (wrote_status < 0)
         {
             free(bounce);
-            return total > 0 ? (ssize_t)total : -EIO;
+            return total > 0 ? (ssize_t)total : wrote_status;
         }
 
-        total += wrote;
-        if (wrote < chunk) break;
+        total += (size_t)wrote_status;
+        if ((size_t)wrote_status < chunk) break;
     }
 
     free(bounce);
@@ -94,11 +102,13 @@ static ssize_t xfile_read_to_user(vfs_node_t node, void *buffer, size_t offset, 
         }
 
         size_t got = vfs_read(node, bounce, io_offset, chunk);
-        if (got == (size_t)VFS_STATUS_FAILED)
+        ssize_t got_status = xfile_vfs_io_status(got);
+        if (got_status < 0)
         {
             free(bounce);
-            return total > 0 ? (ssize_t)total : -EIO;
+            return total > 0 ? (ssize_t)total : got_status;
         }
+        got = (size_t)got_status;
         if (got == 0) break;
 
         if (!copy_to_user_pagedir(pagedir, (uint8_t *)buffer + total, bounce, got))

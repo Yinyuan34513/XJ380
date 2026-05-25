@@ -126,6 +126,7 @@ enum {
     file_pts      = 0x1000UL, // pts 设备
     file_proxy    = 0x2000UL, // 代理节点
     file_delete   = 0x4000UL, // 删除标记 (仅在删除时使用)
+    file_anon     = 0x8000UL, // 匿名 fd 节点
 };
 
 typedef struct vfs_callback { // VFS回调函数

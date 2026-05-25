@@ -1,4 +1,5 @@
 #include <proto.hpp>
+#include <fs/vfs/anonfs.h>
 #include <cpu/longm.h>
 #include <mm/uaccess.h>
 #include <syscall/signal.h>
@@ -160,6 +161,7 @@ int signal_send_process(pcb_t process, int sig)
         tcb_t thread = (tcb_t)node->data;
         if (thread == NULL || thread->status == DEATH || thread->status == OUT) continue;
         thread->signal |= SIGMASK(sig);
+        anonfs_notify_signal(process, sig, NULL);
         spin_unlock(&process->thread_queue->lock);
         return 0;
     }

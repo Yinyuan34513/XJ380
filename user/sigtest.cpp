@@ -1,23 +1,5 @@
 #include "./xapi/include/x3api.h"
 
-#define SIGUSR1 10
-
-#define SIG_BLOCK   0
-#define SIG_UNBLOCK 1
-
-typedef uint64_t sigset_t;
-typedef void (*sighandler_t)(void);
-
-#define SIG_DFL ((sighandler_t)0)
-#define SIG_IGN ((sighandler_t)1)
-
-struct sigaction {
-    sighandler_t  sa_handler;
-    unsigned long sa_flags;
-    void (*sa_restorer)(void);
-    sigset_t sa_mask;
-};
-
 static volatile int g_seen_signal = 0;
 static volatile int g_seen_count  = 0;
 
@@ -81,7 +63,7 @@ static int sigtest_main_impl(int argc, char *argv[], char *envp[])
     struct sigaction oldact;
     memset(&act, 0, sizeof(act));
     memset(&oldact, 0, sizeof(oldact));
-    act.sa_handler  = (sighandler_t)sigusr1_handler;
+    act.sa_handler  = sigusr1_handler;
     act.sa_restorer = signal_restorer;
     act.sa_mask     = 0;
 

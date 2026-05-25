@@ -751,6 +751,21 @@ errno_t vfs_close(vfs_node_t node) {
         return VFS_STATUS_SUCCESS;
     }
 
+    if (node->type & file_anon) {
+        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
+        if (node->handle != NULL) {
+            callbackof(node, del)(NULL, node);
+        }
+        if (node->parent != NULL) {
+            vfs_child_lock();
+            node->parent->child = list_delete(node->parent->child, node);
+            vfs_child_unlock();
+        }
+        free(node->name);
+        free(node);
+        return VFS_STATUS_SUCCESS;
+    }
+
     if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
 
     if ((node->type & file_socket) && node->refcount > 0) {
@@ -784,10 +799,10 @@ errno_t vfs_close(vfs_node_t node) {
 
 bool is_virtual_fs(const char *src) {
     return ((uint64_t)src) == DEVFS_REGISTER_ID || ((uint64_t)src) == MODFS_REGISTER_ID ||
-           ((uint64_t)src) == TMPFS_REGISTER_ID || ((uint64_t)src) == PIEFS_REGISTER_ID ||
-           ((uint64_t)src) == NETFS_REGISTER_ID || ((uint64_t)src) == CPFS_REGISTER_ID ||
-           ((uint64_t)src) == PROC_REGISTER_ID || ((uint64_t)src) == DNS_REGISTER_ID ||
-           ((uint64_t)src) == NM_REGISTER_ID;
+           ((uint64_t)src) == TMPFS_REGISTER_ID || ((uint64_t)src) == TMPFS_REGISTER_ID + 1000 ||
+           ((uint64_t)src) == PIEFS_REGISTER_ID || ((uint64_t)src) == NETFS_REGISTER_ID ||
+           ((uint64_t)src) == CPFS_REGISTER_ID || ((uint64_t)src) == PROC_REGISTER_ID ||
+           ((uint64_t)src) == DNS_REGISTER_ID || ((uint64_t)src) == NM_REGISTER_ID;
 }
 
 void vfs_free(vfs_node_t vfs) {

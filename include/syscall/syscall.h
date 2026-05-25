@@ -388,14 +388,22 @@
 #define SYS_FCHMODAT 268
 #define SYS_FACCESSAT 269
 #define SYS_PSELECT6 270
+#define SYS_PPOLL 271
 #define SYS_SET_ROBUST_LIST 273
 #define SYS_SYNC_FILE_RANGE 277
 #define SYS_UTIMENSAT 280
 #define SYS_EPOLL_PWAIT 281
+#define SYS_SIGNALFD 282
+#define SYS_TIMERFD_CREATE 283
+#define SYS_EVENTFD 284
 #define SYS_EPOLL_CREATE1 291
+#define SYS_EVENTFD2 290
 #define SYS_PIPE2 293
+#define SYS_SIGNALFD4 289
+#define SYS_TIMERFD_SETTIME 286
 #define SYS_PRLIMIT64 302
 #define SYS_SENDMMSG 307
+#define SYS_MEMFD_CREATE 319
 #define SYS_GETRANDOM 318
 #define SYS_COPY_FILE_RANGE 326
 #define SYS_STATX 332
@@ -682,6 +690,8 @@ sys_(fchdir, int fd);
 sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
 sys_(exit_group, int exit_code);
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
+sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout,
+     const sigset_t *sigmask, size_t sigsetsize);
 sys_(epoll_create, int size);
 sys_(epoll_create1, int flags);
 sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event);

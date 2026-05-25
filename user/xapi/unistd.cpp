@@ -128,6 +128,31 @@ extern "C" int pipe2(int pipefd[2], int flags)
     return (int)__xposix_ret(enter_syscall(SYS_PIPE2, (uint64_t)pipefd, flags, 0, 0, 0, 0));
 }
 
+extern "C" int eventfd(unsigned int initval, int flags)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_EVENTFD2, initval, flags, 0, 0, 0, 0));
+}
+
+extern "C" int signalfd(int fd, const sigset_t *mask, int flags)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_SIGNALFD4, fd, (uint64_t)mask, sizeof(sigset_t), flags, 0, 0));
+}
+
+extern "C" int timerfd_create(int clockid, int flags)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_TIMERFD_CREATE, clockid, flags, 0, 0, 0, 0));
+}
+
+extern "C" int timerfd_settime(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_TIMERFD_SETTIME, fd, flags, (uint64_t)new_value, (uint64_t)old_value, 0, 0));
+}
+
+extern "C" int memfd_create(const char *name, unsigned int flags)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_MEMFD_CREATE, (uint64_t)name, flags, 0, 0, 0, 0));
+}
+
 extern "C" int access(const char *path, int mode)
 {
     (void)mode;

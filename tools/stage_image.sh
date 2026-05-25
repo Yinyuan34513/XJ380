@@ -22,12 +22,13 @@ SELFHOST_USER_THIRD_PARTY_DEFAULT='third_party/mbedtls-src third_party/litehtml 
 SELFHOST_USER_THIRD_PARTY=${SELFHOST_USER_THIRD_PARTY:-$SELFHOST_USER_THIRD_PARTY_DEFAULT}
 SYSTEM_APPS=${SYSTEM_APPS:-shell.elf fmanager.elf taskmgr.elf ctrlmenu.elf}
 BUILTIN_APPS=${BUILTIN_APPS:-calc.elf texter.elf picturer.elf browser.elf nut.elf}
-USER_APPS=${USER_APPS:-busyterm.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello}
+USER_APPS=${USER_APPS:-terminal.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello}
 STARDUSTUI_BUILTIN_APPS=${STARDUSTUI_BUILTIN_APPS:-helloworld.elf layout.elf duckchat.elf}
 MUSL_RUNTIME_FILES=${MUSL_RUNTIME_FILES:-ld-musl-x86_64.so.1 libc.so libc.musl-x86_64.so.1 libgcc_s.so.1}
 XBPS_PREPARE_ROOT=${XBPS_PREPARE_ROOT:-$BF_DIR/xbps-root}
+XBPS_BOOTSTRAP_EXTRA=${XBPS_BOOTSTRAP_EXTRA:-weston seatd dbus wayland wayland-protocols libxkbcommon pixman}
 XBPS_BOOTSTRAP_BASE=${XBPS_BOOTSTRAP_BASE:-base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl}
-XBPS_BOOTSTRAP=${XBPS_BOOTSTRAP:-$XBPS_BOOTSTRAP_BASE}
+XBPS_BOOTSTRAP=${XBPS_BOOTSTRAP:-$XBPS_BOOTSTRAP_BASE $XBPS_BOOTSTRAP_EXTRA}
 
 usage()
 {
@@ -467,6 +468,7 @@ cmd_prepared_root()
         link_bin_tool sh usr/bin/dash
     elif [ -x "$dst_root/usr/bin/bash" ]; then
         link_bin_tool sh usr/bin/bash
+        link_bin_tool bash usr/bin/bash
     fi
 
     for tool in \

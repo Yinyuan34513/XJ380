@@ -47,7 +47,7 @@ SELFHOST_USER_THIRD_PARTY := \
 	third_party/libvterm
 SYSTEM_APPS := shell.elf fmanager.elf taskmgr.elf ctrlmenu.elf
 BUILTIN_APPS := calc.elf texter.elf picturer.elf browser.elf nut.elf
-USER_APPS := busyterm.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello
+USER_APPS := terminal.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf scmtest.elf anonfdtest.elf dyn-hello
 STARDUSTUI_BUILTIN_APPS := helloworld.elf layout.elf duckchat.elf
 MUSL_RUNTIME_FILES := ld-musl-x86_64.so.1 libc.so libc.musl-x86_64.so.1 libgcc_s.so.1
 
@@ -88,6 +88,7 @@ IMAGE_PACKAGE_MANAGER ?= xbps
 IMAGE_BUSYBOX ?= 1
 KERNEL_BUSYBOX_ALIASES ?= $(IMAGE_BUSYBOX)
 BF_DIR ?= Bf
+XBPS_BOOTSTRAP_EXTRA ?= weston
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
 HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
 HOST_GCC_REAL := $(shell readlink -f "$$(command -v $(HOST_GCC))" 2>/dev/null)
@@ -103,7 +104,7 @@ APP_BUSYBOX := resources/apps/busybox
 APP_FASTFETCH := resources/apps/fastfetch
 XBPS_PREPARE_ROOT ?= Bf/xbps-root
 XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl
-XBPS_BOOTSTRAP ?= $(XBPS_BOOTSTRAP_BASE)
+XBPS_BOOTSTRAP ?= $(strip $(XBPS_BOOTSTRAP_BASE) $(XBPS_BOOTSTRAP_EXTRA))
 
 NASM_OBJS := $(patsubst ./%.asm, ./$(BUILD_DIR)/%.o, $(NASM_FILES))
 ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
@@ -139,6 +140,7 @@ STAGE_IMAGE_COMMON_ENV = \
 	USER_APPS="$(USER_APPS)" \
 	XBPS_BOOTSTRAP="$(XBPS_BOOTSTRAP)" \
 	XBPS_BOOTSTRAP_BASE="$(XBPS_BOOTSTRAP_BASE)" \
+	XBPS_BOOTSTRAP_EXTRA="$(XBPS_BOOTSTRAP_EXTRA)" \
 	XBPS_PREPARE_ROOT="$(XBPS_PREPARE_ROOT)"
 STAGE_IMAGE_OPTIONAL_ENV = \
 	$(if $(CLANG_STAGE_FULL_RESOURCE),CLANG_STAGE_FULL_RESOURCE="$(CLANG_STAGE_FULL_RESOURCE)") \
