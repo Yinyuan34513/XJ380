@@ -13,16 +13,16 @@ static const int TXR_LINE_H = 16;
 static const int TXR_CHAR_W = 8;
 static const int TXR_MAX_PATH = 256;
 static const int TXR_GROW_STEP = 4096;
-static const UINT64 TXR_KEY_HOME = 149;
-static const UINT64 TXR_KEY_UP = 150;
-static const UINT64 TXR_KEY_PAGE_UP = 151;
-static const UINT64 TXR_KEY_LEFT = 152;
-static const UINT64 TXR_KEY_RIGHT = 153;
-static const UINT64 TXR_KEY_END = 154;
-static const UINT64 TXR_KEY_DOWN = 155;
-static const UINT64 TXR_KEY_PAGE_DOWN = 156;
-static const UINT64 TXR_KEY_INSERT = 157;
-static const UINT64 TXR_KEY_DELETE = 158;
+static const UINT64 TXR_KEY_HOME = 151;
+static const UINT64 TXR_KEY_UP = 152;
+static const UINT64 TXR_KEY_PAGE_UP = 153;
+static const UINT64 TXR_KEY_LEFT = 154;
+static const UINT64 TXR_KEY_RIGHT = 155;
+static const UINT64 TXR_KEY_END = 156;
+static const UINT64 TXR_KEY_DOWN = 157;
+static const UINT64 TXR_KEY_PAGE_DOWN = 158;
+static const UINT64 TXR_KEY_INSERT = 159;
+static const UINT64 TXR_KEY_DELETE = 160;
 
 enum
 {

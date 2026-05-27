@@ -250,6 +250,7 @@ static uint8_t xhci_keyboard_translate_usage(uint8_t usage, bool shift,
     case 0x43: return KEY_F10;
     case 0x44: return KEY_F11;
     case 0x45: return KEY_F12;
+    case 0x46: return KEY_SCROLL;
     case 0x49: return KEY_INSERT;
     case 0x4A: return KEY_HOME;
     case 0x4B: return KEY_PAGE_UP;
@@ -260,8 +261,33 @@ static uint8_t xhci_keyboard_translate_usage(uint8_t usage, bool shift,
     case 0x50: return KEY_LEFT;
     case 0x51: return KEY_DOWN;
     case 0x52: return KEY_UP;
+    case 0x53: return KEY_NUML;
+    case 0x54: return '/';
+    case 0x55: return '*';
+    case 0x56: return '-';
+    case 0x57: return '+';
+    case 0x58: return '\n';
+    case 0x59: return '1';
+    case 0x5A: return '2';
+    case 0x5B: return '3';
+    case 0x5C: return '4';
+    case 0x5D: return '5';
+    case 0x5E: return '6';
+    case 0x5F: return '7';
+    case 0x60: return '8';
+    case 0x61: return '9';
+    case 0x62: return '0';
+    case 0x63: return '.';
     default: return 0;
     }
+}
+
+static void xhci_keyboard_update_modifier(bool pressed, uint8_t value) {
+    if (value == 0) {
+        return;
+    }
+
+    keyboard_usb_key_event(0, value, pressed ? 1U : 0U);
 }
 
 static void xhci_handle_keyboard_report(xhci_slot_state *slot,
@@ -278,16 +304,27 @@ static void xhci_handle_keyboard_report(xhci_slot_state *slot,
         memcpy(current, report, copy_len);
     }
 
-    uint8_t new_modifiers =
-        (uint8_t)(current[0] & (uint8_t)~hid->prev_report[0]);
-    if (new_modifiers & 0x11U) {
-        keyboard_push_input(KEY_CTRL);
-    }
-    if (new_modifiers & 0x44U) {
-        keyboard_push_input(KEY_ALT);
-    }
-    if (new_modifiers & 0x22U) {
-        keyboard_push_input(KEY_SHIFT);
+    uint8_t modifier_changes = (uint8_t)(current[0] ^ hid->prev_report[0]);
+    if (modifier_changes != 0)
+    {
+        const struct
+        {
+            uint8_t mask;
+            uint8_t value;
+        } modifier_map[] = {
+            {0x11U, KEY_CTRL},
+            {0x22U, KEY_SHIFT},
+            {0x44U, KEY_ALT},
+        };
+
+        for (size_t i = 0; i < sizeof(modifier_map) / sizeof(modifier_map[0]); ++i)
+        {
+            if ((modifier_changes & modifier_map[i].mask) == 0) {
+                continue;
+            }
+            bool pressed = (current[0] & modifier_map[i].mask) != 0;
+            xhci_keyboard_update_modifier(pressed, modifier_map[i].value);
+        }
     }
 
     bool shift = (current[0] & 0x22U) != 0;

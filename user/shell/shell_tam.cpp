@@ -14,7 +14,14 @@ extern bool command_ck_lock;
 enum TerminalKeyCode
 {
     TERM_KEY_ESC = 128,
+    TERM_KEY_BACKSPACE,
     TERM_KEY_TAB = 130,
+    TERM_KEY_ENTER,
+    TERM_KEY_CAPS,
+    TERM_KEY_SHIFT,
+    TERM_KEY_CTRL,
+    TERM_KEY_ALT,
+    TERM_KEY_SPACE,
     TERM_KEY_F1 = 136,
     TERM_KEY_F2,
     TERM_KEY_F3,
