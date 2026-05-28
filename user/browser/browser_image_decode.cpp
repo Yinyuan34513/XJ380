@@ -292,7 +292,7 @@ static int nanosvg_sscanf(const char *text, const char *format, ...)
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
 #define STBI_NO_THREAD_LOCALS
-#include "../../graphics/image/stbi.h"
+#include "third_party/stb/stbi.h"
 
 namespace
 {
