@@ -210,6 +210,43 @@ void xapi_GetPicSize(
 #include "libsys.h"
 void SetMsgPrcor(HDLE handle, MsgPrcor func);
 
+enum XAPI_SPECIAL_KEY
+{
+    XKEY_ESC = 128,
+    XKEY_BACKSPACE,
+    XKEY_TAB,
+    XKEY_ENTER,
+    XKEY_CAPS,
+    XKEY_SHIFT,
+    XKEY_CTRL,
+    XKEY_ALT,
+    XKEY_SPACE,
+    XKEY_F1,
+    XKEY_F2,
+    XKEY_F3,
+    XKEY_F4,
+    XKEY_F5,
+    XKEY_F6,
+    XKEY_F7,
+    XKEY_F8,
+    XKEY_F9,
+    XKEY_F10,
+    XKEY_F11,
+    XKEY_F12,
+    XKEY_NUML,
+    XKEY_SCROLL,
+    XKEY_HOME,
+    XKEY_UP,
+    XKEY_PAGE_UP,
+    XKEY_LEFT,
+    XKEY_RIGHT,
+    XKEY_END,
+    XKEY_DOWN,
+    XKEY_PAGE_DOWN,
+    XKEY_INSERT,
+    XKEY_DELETE
+};
+
 // 4-5
 void  xapi_ReadBuffer(
 	HDLE  	 	handle,

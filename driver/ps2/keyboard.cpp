@@ -10,6 +10,8 @@ static uint8_t *kb_synth_head = kb_synth_buf;
 static uint8_t *kb_synth_tail = kb_synth_buf;
 static volatile uint32_t kb_synth_lock = 0;
 static bool kb_e0_prefix = false;
+extern uint8_t keyboard_code[256];
+extern uint8_t keyboard_code1[256];
 
 #define KB_USB_REPEAT_SLOTS 6
 #define KB_USB_REPEAT_DELAY_NS 500000000ULL
@@ -116,6 +118,128 @@ static void kb_usb_repeat_service()
     kb_synth_lock_release();
 }
 
+static uint8_t keyboard_translate_base_make_code(uint8_t make_code, bool shift,
+                                                 bool caps)
+{
+    if (make_code >= 128) {
+        return 0;
+    }
+
+    uint8_t base = keyboard_code[make_code];
+    if (base == 0) {
+        return 0;
+    }
+
+    if (base >= 'a' && base <= 'z')
+    {
+        if (shift ^ caps) {
+            return (uint8_t)(base - 'a' + 'A');
+        }
+        return base;
+    }
+
+    return shift ? keyboard_code1[make_code] : base;
+}
+
+uint8_t keyboard_translate_extended_make_code(uint8_t make_code)
+{
+    switch (make_code)
+    {
+    case 0x1c: return '\n';
+    case 0x1d: return KEY_CTRL;
+    case 0x35: return '/';
+    case 0x38: return KEY_ALT;
+    case 0x47: return KEY_HOME;
+    case 0x48: return KEY_UP;
+    case 0x49: return KEY_PAGE_UP;
+    case 0x4b: return KEY_LEFT;
+    case 0x4d: return KEY_RIGHT;
+    case 0x4f: return KEY_END;
+    case 0x50: return KEY_DOWN;
+    case 0x51: return KEY_PAGE_DOWN;
+    case 0x52: return KEY_INSERT;
+    case 0x53: return KEY_DELETE;
+    default: return 0;
+    }
+}
+
+uint8_t keyboard_translate_event_value(uint8_t make_code, bool extended,
+                                       bool shift, bool caps)
+{
+    if (extended) {
+        return keyboard_translate_extended_make_code(make_code);
+    }
+    return keyboard_translate_base_make_code(make_code, shift, caps);
+}
+
+static WINDOWLSP keyboard_target_window()
+{
+    return sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+}
+
+extern "C" void keyboard_dispatch_key_message(uint64_t msg_type, uint8_t value)
+{
+    if (value == 0) {
+        return;
+    }
+
+    WINDOWLSP current_window = keyboard_target_window();
+    if (current_window == NULL) {
+        return;
+    }
+
+    do_message(msg_type, NULL, value, current_window->WinMPf, current_window->w_task);
+}
+
+static void keyboard_update_modifier_state(uint8_t make_code, bool extended,
+                                           bool pressed)
+{
+    if (!extended)
+    {
+        switch (make_code)
+        {
+        case 0x2a:
+        case 0x36:
+            kb_fifo.shift = pressed;
+            return;
+        case 0x1d:
+            kb_fifo.ctrl = pressed;
+            return;
+        case 0x38:
+            kb_fifo.alt = pressed;
+            return;
+        case 0x3a:
+            if (pressed) {
+                kb_fifo.caps = kb_fifo.caps ^ 1;
+            }
+            return;
+        default:
+            return;
+        }
+    }
+
+    switch (make_code)
+    {
+    case 0x1d:
+        kb_fifo.ctrl = pressed;
+        return;
+    case 0x38:
+        kb_fifo.alt = pressed;
+        return;
+    default:
+        return;
+    }
+}
+
+/*
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25， 26, 27, 28,
+    29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+    42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+    55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68,
+    69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88
+*/
+
 uint8_t keyboard_code[256] = {
     0, KEY_ESC, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     KEY_TAB, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
@@ -135,8 +259,8 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 {
     keyboard_prepare_fifo();
 
-    uint8_t x;
-    x = inb(0x60);
+    uint8_t x = inb(0x60);
+
     if (x == 0xe0)
     {
         kb_e0_prefix = true;
@@ -144,73 +268,62 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         return;
     }
 
-    if (x == 0x2a || x == 0x36)
-    { // Shift按下
-        kb_fifo.shift = 1;
-    }
-    else if (x == 0x1d)
-    { // Ctrl按下
-        kb_fifo.ctrl = 1;
-    }
-    else if (x == 0x3a)
-    { // Caps Lock按下
-        kb_fifo.caps = kb_fifo.caps ^ 1;
-    }
-    else if (x == 0xaa || x == 0xb6)
-    { // Shift松开
-        kb_fifo.shift = 0;
-    }
-    else if (x == 0x9d)
-    { // Ctrl按下
-        kb_fifo.ctrl = 0;
-    }
+    bool extended = kb_e0_prefix;
+    bool pressed = (x & 0x80) == 0;
+    bool key_release = !pressed;
+    uint8_t make_code = pressed ? x : (uint8_t)(x & 0x7f);
 
-    bool key_release = (x & 0x80) != 0;
-    if (x < 0x80)
-    {
-        // write_serial_string("scan code: ");
-        // write_serial_hex(x);
-        // write_serial_string("\n");
-    }
+    uint8_t event_value = keyboard_translate_event_value(
+        make_code,
+        extended,
+        kb_fifo.shift,
+        kb_fifo.caps
+    );
 
-    if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_head = kb_fifo.buf; }
-    if (kb_fifo.count >= KB_BUF_SIZE) {
-        kb_fifo.p_tail++;
-        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
-        kb_fifo.count = KB_BUF_SIZE - 1;
-    }
-    if (kb_e0_prefix && x < 0x80)
-    {
-        switch (x)
-        {
-        case 0x47: x = KEY_HOME; break;
-        case 0x48: x = KEY_UP; break;
-        case 0x49: x = KEY_PAGE_UP; break;
-        case 0x4b: x = KEY_LEFT; break;
-        case 0x4d: x = KEY_RIGHT; break;
-        case 0x4f: x = KEY_END; break;
-        case 0x50: x = KEY_DOWN; break;
-        case 0x51: x = KEY_PAGE_DOWN; break;
-        case 0x52: x = KEY_INSERT; break;
-        case 0x53: x = KEY_DELETE; break;
-        default: x = 0; break;
-        }
-    }
+    keyboard_dispatch_key_message(
+        pressed ? MSG_KEYDOWN : MSG_KEYUP,
+        event_value
+    );
+
+    keyboard_update_modifier_state(make_code, extended, pressed);
+
     kb_e0_prefix = false;
+
     if (key_release)
     {
         send_eoi();
         return;
     }
-    if (x == 0)
+
+    uint8_t fifo_value = extended ? event_value : make_code;
+
+    if (fifo_value == 0)
     {
         send_eoi();
         return;
     }
-    *kb_fifo.p_head = x;
+
+    if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE)
+    {
+        kb_fifo.p_head = kb_fifo.buf;
+    }
+
+    if (kb_fifo.count >= KB_BUF_SIZE)
+    {
+        kb_fifo.p_tail++;
+        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE)
+        {
+            kb_fifo.p_tail = kb_fifo.buf;
+        }
+
+        kb_fifo.count = KB_BUF_SIZE - 1;
+    }
+
+    *kb_fifo.p_head = fifo_value;
 
     kb_fifo.count++;
     kb_fifo.p_head++;
+
     send_eoi();
 }
 
@@ -228,8 +341,8 @@ uint8_t get_keyboard_input()
     {
         // 有没有读的
         uint8_t raw = *kb_fifo.p_tail;
-        uint8_t temp = raw >= 128 ? raw : keyboard_code[raw];
-        if (raw < 128 && (kb_fifo.shift == 1 || kb_fifo.caps == 1)) { temp = keyboard_code1[raw]; }
+        uint8_t temp = raw >= 128 ? raw :
+                       keyboard_translate_base_make_code(raw, kb_fifo.shift, kb_fifo.caps);
 
         if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
         kb_fifo.p_tail++;
@@ -271,6 +384,7 @@ extern "C" void keyboard_push_input(uint8_t value)
 extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed)
 {
     keyboard_prepare_fifo();
+    keyboard_dispatch_key_message(pressed ? MSG_KEYDOWN : MSG_KEYUP, value);
 
     kb_synth_lock_acquire();
     keyboard_usb_repeat_slot *free_slot = NULL;
@@ -299,9 +413,16 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
             }
         }
     }
-    else if (match != NULL)
+    else
     {
-        match->active = false;
+        if (match != NULL) {
+            match->active = false;
+        }
+        if (value == KEY_CTRL)
+        {
+            // Keep legacy terminal input behavior consistent with the PS/2 path.
+            kb_synth_enqueue_locked(0x9d);
+        }
     }
 
     kb_synth_lock_release();
