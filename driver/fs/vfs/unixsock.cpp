@@ -11,6 +11,69 @@
 
 socket_provider_t g_unix_provider;
 
+struct unix_path_node {
+    struct unix_sock *sock;
+    char             *path;
+};
+
+static int unix_pathfs_dummy()
+{
+    return -ENOSYS;
+}
+
+static errno_t unix_pathfs_stat(void *file, vfs_node_t node)
+{
+    struct unix_path_node *path_node = (struct unix_path_node *)file;
+    if (path_node == NULL || node == NULL) return VFS_STATUS_FAILED;
+
+    node->type  = file_socket;
+    node->size  = 0;
+    node->mode  = node->mode == 0 ? 0666 : node->mode;
+    node->owner = path_node->sock != NULL ? path_node->sock->owner_uid : 0;
+    node->group = path_node->sock != NULL ? path_node->sock->owner_gid : 0;
+    if (node->inode == 0 && path_node->sock != NULL)
+        node->inode = ((uint64_t)(uintptr_t)path_node->sock) >> 4;
+    return EOK;
+}
+
+static errno_t unix_pathfs_del(void *parent, vfs_node_t node)
+{
+    (void)parent;
+    if (node == NULL) return VFS_STATUS_FAILED;
+
+    struct unix_path_node *path_node = (struct unix_path_node *)node->handle;
+    if (path_node != NULL) {
+        free(path_node->path);
+        free(path_node);
+        node->handle = NULL;
+    }
+    return EOK;
+}
+
+static struct vfs_callback unix_pathfs_callbacks = {
+    .mount    = (vfs_mount_t)unix_pathfs_dummy,
+    .unmount  = (vfs_unmount_t)empty,
+    .open     = (vfs_open_t)empty,
+    .close    = (vfs_close_t)empty,
+    .read     = (vfs_read_t)unix_pathfs_dummy,
+    .write    = (vfs_write_t)unix_pathfs_dummy,
+    .readlink = (vfs_readlink_t)unix_pathfs_dummy,
+    .mkdir    = (vfs_mk_t)unix_pathfs_dummy,
+    .mkfile   = (vfs_mk_t)unix_pathfs_dummy,
+    .link     = (vfs_mk_t)unix_pathfs_dummy,
+    .symlink  = (vfs_mk_t)unix_pathfs_dummy,
+    .stat     = unix_pathfs_stat,
+    .ioctl    = (vfs_ioctl_t)unix_pathfs_dummy,
+    .dup      = (vfs_dup_t)empty,
+    .poll     = (vfs_poll_t)unix_pathfs_dummy,
+    .map      = (vfs_mapfile_t)empty,
+    .resize   = (vfs_resize_t)unix_pathfs_dummy,
+    .del      = unix_pathfs_del,
+    .rename   = (vfs_rename_t)unix_pathfs_dummy,
+};
+
+static int unix_pathfs_id = 0;
+
 void init_unix_provider(void)
 {
     static bool inited = false;
@@ -33,16 +96,157 @@ void init_unix_provider(void)
     g_unix_provider.shutdown     = unix_shutdown;
     g_unix_provider.poll         = unix_poll;
     g_unix_provider.set_flags    = unix_set_flags;
+    unix_pathfs_id               = vfs_regist("unixpath", &unix_pathfs_callbacks, 0, 0x554e4958);
 }
 
 static lock_queue *g_unix_namespace = NULL;
 static spin_t      g_unix_ns_lock   = SPIN_INIT;
 
+static size_t unix_bounded_strlen(const char *str, size_t max_len)
+{
+    if (str == NULL) return 0;
+    size_t len = 0;
+    while (len < max_len && str[len] != '\0')
+        len++;
+    return len;
+}
+
+static char *unix_bound_path_dup(const struct sockaddr_un *addr, socklen_t addrlen)
+{
+    if (addr == NULL || addr->sun_path[0] == '\0') return NULL;
+
+    size_t path_len = 0;
+    if (addrlen > (socklen_t)offsetof(struct sockaddr_un, sun_path)) {
+        path_len = (size_t)addrlen - offsetof(struct sockaddr_un, sun_path);
+        if (path_len > UNIX_PATH_MAX) path_len = UNIX_PATH_MAX;
+    } else {
+        path_len = unix_bounded_strlen(addr->sun_path, UNIX_PATH_MAX);
+    }
+
+    if (path_len == 0) return NULL;
+
+    size_t actual_len = unix_bounded_strlen(addr->sun_path, path_len);
+    if (actual_len == 0 || actual_len >= UNIX_PATH_MAX) return NULL;
+
+    char *path = (char *)malloc(actual_len + 1);
+    if (path == NULL) return NULL;
+    memcpy(path, addr->sun_path, actual_len);
+    path[actual_len] = '\0';
+    return path;
+}
+
+static vfs_node_t unix_path_parent_open(const char *path, char **out_name)
+{
+    if (path == NULL || path[0] != '/' || out_name == NULL) return NULL;
+
+    char *fullpath = strdup(path);
+    if (fullpath == NULL) return NULL;
+
+    char *filename = strrchr(fullpath, '/');
+    if (filename == NULL || filename[1] == '\0') {
+        free(fullpath);
+        return NULL;
+    }
+
+    *filename++ = '\0';
+    vfs_node_t parent = fullpath[0] == '\0' ? get_rootdir() : vfs_open(fullpath);
+    free(fullpath);
+    if (parent == NULL || !(parent->type & file_dir)) {
+        if (parent != NULL && parent != get_rootdir()) vfs_close(parent);
+        return NULL;
+    }
+
+    *out_name = strdup(filename);
+    if (*out_name == NULL) {
+        if (parent != get_rootdir()) vfs_close(parent);
+        return NULL;
+    }
+    return parent;
+}
+
+static int unix_create_path_node(struct unix_sock *sk, const char *path)
+{
+    if (sk == NULL || path == NULL || path[0] != '/' || unix_pathfs_id == 0) return -EINVAL;
+
+    vfs_node_t existing = vfs_open_no_follow(path);
+    if (existing != NULL) {
+        vfs_close(existing);
+        return -EADDRINUSE;
+    }
+
+    char *name = NULL;
+    vfs_node_t parent = unix_path_parent_open(path, &name);
+    if (parent == NULL || name == NULL) {
+        free(name);
+        return -ENOENT;
+    }
+
+    vfs_node_t node = vfs_child_append(parent, name, NULL);
+    free(name);
+    if (node == NULL) {
+        if (parent != get_rootdir()) vfs_close(parent);
+        return -ENOMEM;
+    }
+
+    struct unix_path_node *path_node = (struct unix_path_node *)calloc(1, sizeof(struct unix_path_node));
+    if (path_node == NULL) {
+        vfs_child_lock();
+        parent->child = list_delete(parent->child, node);
+        vfs_child_unlock();
+        free(node->name);
+        free(node);
+        if (parent != get_rootdir()) vfs_close(parent);
+        return -ENOMEM;
+    }
+
+    path_node->sock = sk;
+    path_node->path = strdup(path);
+    if (path_node->path == NULL) {
+        free(path_node);
+        vfs_child_lock();
+        parent->child = list_delete(parent->child, node);
+        vfs_child_unlock();
+        free(node->name);
+        free(node);
+        if (parent != get_rootdir()) vfs_close(parent);
+        return -ENOMEM;
+    }
+
+    node->handle = path_node;
+    node->type  = file_socket;
+    node->fsid  = unix_pathfs_id;
+    node->size  = 0;
+    node->flags = 0;
+    node->mode  = 0666;
+    node->owner = sk->owner_uid;
+    node->group = sk->owner_gid;
+    node->inode = ((uint64_t)(uintptr_t)sk) >> 4;
+
+    if (parent != get_rootdir()) vfs_close(parent);
+    return 0;
+}
+
+static void unix_delete_path_node(const char *path)
+{
+    if (path == NULL || path[0] != '/') return;
+
+    vfs_node_t node = vfs_open_no_follow(path);
+    if (node == NULL) return;
+    if (node->type & file_socket)
+        (void)vfs_delete(node);
+    else
+        vfs_close(node);
+}
+
 static void unix_sock_init(struct unix_sock *sk, int type, int protocol)
 {
+    tcb_t task = get_current_task();
     sk->state    = UNIX_FREE;
     sk->type     = type;
     sk->protocol = protocol;
+    sk->owner_pid = task != NULL && task->parent_group != NULL ? (int)task->parent_group->pid : 0;
+    sk->owner_uid = user_uid(task_effective_user());
+    sk->owner_gid = user_gid(task_effective_user());
     sk->peer     = NULL;
     sk->conn_queue = NULL;
     sk->in_cap = UNIX_RING_SIZE;
@@ -53,6 +257,8 @@ static void unix_sock_init(struct unix_sock *sk, int type, int protocol)
     sk->lock     = SPIN_INIT;
     sk->refcount = 1;
     sk->closed   = false;
+    sk->namespace_registered = false;
+    sk->path_node_created    = false;
     memset(&sk->local_addr, 0, sizeof(sk->local_addr));
     memset(&sk->peer_addr, 0, sizeof(sk->peer_addr));
 }
@@ -124,19 +330,22 @@ static void unix_ns_register(struct unix_sock *sk)
     spin_lock(&g_unix_ns_lock);
     if (g_unix_namespace == NULL)
         g_unix_namespace = queue_init();
-    if (g_unix_namespace != NULL)
+    if (g_unix_namespace != NULL) {
         queue_enqueue(g_unix_namespace, sk);
+        sk->namespace_registered = true;
+    }
     spin_unlock(&g_unix_ns_lock);
 }
 
 static void unix_ns_unregister(struct unix_sock *sk)
 {
-    if (g_unix_namespace == NULL) return;
+    if (sk == NULL || !sk->namespace_registered || g_unix_namespace == NULL) return;
     spin_lock(&g_unix_ns_lock);
     lock_node *node = g_unix_namespace->head;
     while (node != NULL) {
         if (node->data == sk) {
             queue_remove_node(g_unix_namespace, node);
+            sk->namespace_registered = false;
             break;
         }
         node = node->next;
@@ -270,22 +479,38 @@ int unix_bind(void *impl, const struct sockaddr *addr, socklen_t addrlen)
         if (max_path > UNIX_PATH_MAX) max_path = UNIX_PATH_MAX;
     }
 
+    char *bound_path = NULL;
     if (max_path > 0 && sunaddr->sun_path[0] != '\0') {
-        struct unix_sock *existing = unix_ns_lookup(sunaddr->sun_path);
+        bound_path = unix_bound_path_dup(sunaddr, addrlen);
+        if (bound_path == NULL) {
+            spin_unlock(&sk->lock);
+            return -EINVAL;
+        }
+        struct unix_sock *existing = unix_ns_lookup(bound_path);
         if (existing != NULL) {
             existing->refcount--;
+            free(bound_path);
             spin_unlock(&sk->lock);
             return -EADDRINUSE;
+        }
+        int node_ret = unix_create_path_node(sk, bound_path);
+        if (node_ret < 0) {
+            free(bound_path);
+            spin_unlock(&sk->lock);
+            return node_ret;
         }
     }
 
     memcpy(&sk->local_addr, sunaddr, addrlen < sizeof(sk->local_addr) ? (size_t)addrlen : sizeof(sk->local_addr));
     sk->state = UNIX_BOUND;
 
-    if (max_path > 0 && sunaddr->sun_path[0] != '\0')
+    if (bound_path != NULL) {
+        sk->path_node_created = true;
         unix_ns_register(sk);
+    }
 
     spin_unlock(&sk->lock);
+    free(bound_path);
     return 0;
 }
 
@@ -337,6 +562,9 @@ int unix_connect(void *impl, const struct sockaddr *addr, socklen_t addrlen)
     }
     unix_sock_init(server_sk, SOCK_STREAM, sk->protocol);
     server_sk->state = UNIX_CONNECTED;
+    server_sk->owner_pid = listener->owner_pid;
+    server_sk->owner_uid = listener->owner_uid;
+    server_sk->owner_gid = listener->owner_gid;
     server_sk->local_addr = listener->local_addr;
     server_sk->peer_addr  = sk->local_addr;
     server_sk->peer       = sk;
@@ -455,6 +683,25 @@ int unix_getsockopt(void *impl, int level, int optname, void *optval, socklen_t 
             size_t copy_len = *optlen < (socklen_t)sizeof(val) ? (size_t)*optlen : sizeof(val);
             memcpy(optval, &val, copy_len);
             *optlen = (socklen_t)sizeof(val);
+            return 0;
+        }
+        case SO_PEERCRED: {
+            /* struct ucred { pid_t pid; uid_t uid; gid_t gid; } — 12 bytes */
+            int    pid  = 0;
+            uint32_t uid  = 0;
+            uint32_t gid  = 0;
+            if (sk->peer != NULL) {
+                pid = sk->peer->owner_pid;
+                uid = sk->peer->owner_uid;
+                gid = sk->peer->owner_gid;
+            }
+            struct { int pid; int uid; int gid; } ucred_buf;
+            ucred_buf.pid = pid;
+            ucred_buf.uid = (int)uid;
+            ucred_buf.gid = (int)gid;
+            size_t copy_len = *optlen < sizeof(ucred_buf) ? (size_t)*optlen : sizeof(ucred_buf);
+            memcpy(optval, &ucred_buf, copy_len);
+            *optlen = sizeof(ucred_buf);
             return 0;
         }
         default: return -ENOPROTOOPT;
@@ -682,6 +929,9 @@ int unix_close(void *impl)
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL) return 0;
 
+    char bound_path[UNIX_PATH_MAX];
+    bool remove_path_node = false;
+
     spin_lock(&sk->lock);
     sk->closed = true;
 
@@ -696,7 +946,17 @@ int unix_close(void *impl)
     if (sk->state >= UNIX_BOUND)
         unix_ns_unregister(sk);
 
+    if (sk->path_node_created && sk->local_addr.sun_path[0] != '\0') {
+        memcpy(bound_path, sk->local_addr.sun_path, sizeof(bound_path));
+        bound_path[UNIX_PATH_MAX - 1] = '\0';
+        remove_path_node = true;
+        sk->path_node_created = false;
+    }
+
     spin_unlock(&sk->lock);
+
+    if (remove_path_node)
+        unix_delete_path_node(bound_path);
 
     sk->refcount--;
     if (sk->refcount == 0)
@@ -821,6 +1081,14 @@ int unix_socketpair(int type, int protocol, int sv[2])
 
     sk1->state = UNIX_CONNECTED;
     sk2->state = UNIX_CONNECTED;
+    sk1->owner_pid = get_current_task() != NULL && get_current_task()->parent_group != NULL
+                         ? (int)get_current_task()->parent_group->pid
+                         : 0;
+    sk1->owner_uid = user_uid(task_effective_user());
+    sk1->owner_gid = user_gid(task_effective_user());
+    sk2->owner_pid = sk1->owner_pid;
+    sk2->owner_uid = sk1->owner_uid;
+    sk2->owner_gid = sk1->owner_gid;
     sk1->local_addr.sun_family = AF_UNIX;
     sk2->local_addr.sun_family = AF_UNIX;
     sk1->peer = sk2;
@@ -836,4 +1104,20 @@ int unix_socketpair(int type, int protocol, int sv[2])
         return -EMFILE;
     }
     return 0;
+}
+
+void unix_unbind_path(const char *path)
+{
+    if (path == NULL || path[0] == '\0') return;
+
+    struct unix_sock *bound = unix_ns_lookup(path);
+    if (bound != NULL) {
+        spin_lock(&bound->lock);
+        bound->path_node_created = false;
+        unix_ns_unregister(bound);
+        spin_unlock(&bound->lock);
+        bound->refcount--;
+    }
+
+    unix_delete_path_node(path);
 }

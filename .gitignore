@@ -46,3 +46,5 @@ scsi.txt
 .codex
 
 venv/
+
+./xj380-vdisk-1000/*

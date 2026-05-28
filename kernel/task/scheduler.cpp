@@ -486,7 +486,7 @@ EXPORT_SYMBOL(scheduler_sleep_ns);
 
 void scheduler_wake_task(tcb_t task)
 {
-    if (task == NULL || task->status != WAIT) return;
+    if (task == NULL || (task->status != WAIT && task->status != FUTEX)) return;
 
     uint64_t base_vruntime = 0;
     tcb_t current = get_current_task();

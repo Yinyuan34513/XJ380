@@ -213,10 +213,10 @@ size_t disk_size(int drive) {
     return 0;
 }
 
-void *device_mmap(int drive, void *addr, size_t len) {
+void *device_mmap(int drive, void *addr, size_t len, size_t offset) {
     if (have_vdisk(drive)) {
         int indx = drive;
-        if (device_ctl[indx].map) { return device_ctl[indx].map(drive, addr, len); }
+        if (device_ctl[indx].map) { return device_ctl[indx].map(drive, addr, len, offset); }
         return NULL;
     }
     return NULL;

@@ -16,6 +16,7 @@
 #include <pipe.h>
 #include <rtc.h>
 #include <tty.h>
+#include <vt.h>
 #include <task/ipc.h>
 #include <mutex.h>
 #include <math.hpp>
@@ -27,8 +28,24 @@ static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
 static constexpr size_t USER_PATH_MAX        = 4096UL;
 static constexpr size_t USER_IOV_MAX         = 1024UL;
 static constexpr size_t USER_POLL_MAX        = FD_SETSIZE;
+static constexpr size_t SOCKET_ADDR_MAX      = sizeof(struct sockaddr_un) > sizeof(struct sockaddr_in6)
+                                                   ? sizeof(struct sockaddr_un)
+                                                   : sizeof(struct sockaddr_in6);
+static constexpr uint64_t CLONE_THREAD_FLAG  = 0x00010000ULL;
 
 static void epoll_close_node(vfs_node_t node);
+
+struct futex_waiter
+{
+    uint32_t *uaddr;
+    page_directory_t *pagedir;
+    uint32_t bitset;
+    tcb_t task;
+    futex_waiter *next;
+};
+
+static spin_t futex_wait_lock = SPIN_INIT;
+static futex_waiter *futex_waiters = NULL;
 
 static bool checked_add_size(size_t a, size_t b, size_t *out)
 {
@@ -95,6 +112,94 @@ static bool user_bitmap_bytes(uint64_t nfds, size_t *out)
     *out = ((size_t)nfds + 7) / 8;
     return true;
 }
+
+static bool user_word_accessible(page_directory_t *pagedir, const void *addr)
+{
+    if (pagedir == NULL || addr == NULL) return false;
+    uint64_t uaddr = (uint64_t)(uintptr_t)addr;
+    return !check_user_overflow(uaddr, sizeof(uint32_t)) && translate_address(pagedir, uaddr) != 0;
+}
+
+static int futex_read_user_word(page_directory_t *pagedir, uint32_t *uaddr, uint32_t *value)
+{
+    if (value == NULL) return -EINVAL;
+    if (!user_word_accessible(pagedir, uaddr)) return -EFAULT;
+    if (!copy_from_user_pagedir(pagedir, value, uaddr, sizeof(*value))) return -EFAULT;
+    return 0;
+}
+
+static int futex_write_user_word(page_directory_t *pagedir, uint32_t *uaddr, uint32_t value)
+{
+    if (!user_word_accessible(pagedir, uaddr)) return -EFAULT;
+    if (!copy_to_user_pagedir(pagedir, uaddr, &value, sizeof(value))) return -EFAULT;
+    return 0;
+}
+
+static void futex_enqueue_waiter(futex_waiter *waiter)
+{
+    if (waiter == NULL) return;
+    spin_lock(&futex_wait_lock);
+    waiter->next = futex_waiters;
+    futex_waiters = waiter;
+    spin_unlock(&futex_wait_lock);
+}
+
+static bool futex_dequeue_waiter(futex_waiter *waiter)
+{
+    if (waiter == NULL) return false;
+
+    bool removed = false;
+    spin_lock(&futex_wait_lock);
+    futex_waiter **link = &futex_waiters;
+    while (*link != NULL)
+    {
+        if (*link == waiter)
+        {
+            *link = waiter->next;
+            waiter->next = NULL;
+            removed = true;
+            break;
+        }
+        link = &(*link)->next;
+    }
+    spin_unlock(&futex_wait_lock);
+    return removed;
+}
+
+int futex_wake_waiters(uint32_t *uaddr, page_directory_t *pagedir, int max_wake, uint32_t bitset)
+{
+    if (uaddr == NULL || pagedir == NULL || max_wake <= 0) return 0;
+
+    int woken = 0;
+    spin_lock(&futex_wait_lock);
+    futex_waiter **link = &futex_waiters;
+    while (*link != NULL && woken < max_wake)
+    {
+        futex_waiter *waiter = *link;
+        if (waiter->uaddr == uaddr && waiter->pagedir == pagedir && (waiter->bitset & bitset) != 0)
+        {
+            *link = waiter->next;
+            waiter->next = NULL;
+            if (waiter->task != NULL && waiter->task->status == FUTEX)
+            {
+                scheduler_wake_task(waiter->task);
+                woken++;
+            }
+            continue;
+        }
+        link = &waiter->next;
+    }
+    spin_unlock(&futex_wait_lock);
+    return woken;
+}
+
+union socket_addr_storage
+{
+    struct sockaddr    base;
+    struct sockaddr_in6 in6;
+    struct sockaddr_un un;
+    uint8_t            bytes[SOCKET_ADDR_MAX];
+};
 
 static int64_t vfs_io_status(size_t status)
 {
@@ -601,14 +706,14 @@ static size_t ioctl_arg_size(int request)
     case TIOCSPGRP:
     case FIONBIO:
     case KDGETMODE:
-    case KDSETMODE:
     case KDGKBMODE:
-    case KDSKBMODE:
     case VT_OPENQRY:
         return sizeof(int);
     case VT_GETMODE:
     case VT_SETMODE:
         return sizeof(struct vt_mode);
+    case VT_GETSTATE:
+        return sizeof(struct vt_stat);
     case FBIOGET_FSCREENINFO:
         return sizeof(struct fb_fix_screeninfo);
     case FBIOGET_VSCREENINFO:
@@ -633,6 +738,7 @@ static bool ioctl_writes_user(int request)
     case KDGKBMODE:
     case VT_OPENQRY:
     case VT_GETMODE:
+    case VT_GETSTATE:
     case FBIOGET_FSCREENINFO:
     case FBIOGET_VSCREENINFO:
     case FBIOPUT_VSCREENINFO:
@@ -654,8 +760,6 @@ static bool ioctl_reads_user(int request)
     case TIOCSPTLCK:
     case TIOCSPGRP:
     case FIONBIO:
-    case KDSETMODE:
-    case KDSKBMODE:
     case VT_SETMODE:
     case FBIOPUT_VSCREENINFO:
     case FBIOPAN_DISPLAY:
@@ -1098,13 +1202,13 @@ pipe:;
 sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (fd < 0 || (buffer == NULL && size > 0)) return SYSCALL_FAULT_(EINVAL);
-    if (addr != NULL && (addrlen < sizeof(struct sockaddr) || addrlen > sizeof(struct sockaddr_in6)))
+    if (addr != NULL && (addrlen < sizeof(struct sockaddr) || addrlen > SOCKET_ADDR_MAX))
         return SYSCALL_FAULT_(EINVAL);
 
     page_directory_t *pagedir = current_user_pagedir();
     if (pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
 
-    struct sockaddr_in6 kaddr;
+    socket_addr_storage kaddr;
     const struct sockaddr *kaddr_ptr = NULL;
     if (addr != NULL)
     {
@@ -1151,7 +1255,7 @@ sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockadd
     page_directory_t *pagedir = current_user_pagedir();
     if (pagedir == NULL) return SYSCALL_FAULT_(EFAULT);
 
-    struct sockaddr_in6 kaddr;
+    socket_addr_storage kaddr;
     socklen_t kaddrlen = sizeof(kaddr);
     socklen_t user_addr_capacity = 0;
     if (addrlen != NULL && !copy_from_user_pagedir(pagedir, &kaddrlen, addrlen, sizeof(kaddrlen)))
@@ -1204,7 +1308,7 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
     if (kmsg.msg_iovlen > USER_IOV_MAX) return SYSCALL_FAULT_(EINVAL);
     if (kmsg.msg_iovlen > 0 && kmsg.msg_iov == NULL) return SYSCALL_FAULT_(EINVAL);
     if (kmsg.msg_name != NULL &&
-        (kmsg.msg_namelen < sizeof(struct sockaddr) || kmsg.msg_namelen > sizeof(struct sockaddr_in6)))
+        (kmsg.msg_namelen < sizeof(struct sockaddr) || kmsg.msg_namelen > SOCKET_ADDR_MAX))
         return SYSCALL_FAULT_(EINVAL);
 
     void *socket_impl = NULL;
@@ -1212,7 +1316,7 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
     bool is_unix_socket = socketfs_get_socket_impl(fd, &socket_impl, &socket_provider) == 0 &&
                           socket_provider.sendto == unix_sendto;
 
-    struct sockaddr_in6 kaddr;
+    socket_addr_storage kaddr;
     const struct sockaddr *kaddr_ptr = NULL;
     if (kmsg.msg_name != NULL)
     {
@@ -1398,7 +1502,7 @@ sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
         }
     }
 
-    struct sockaddr_in6 kaddr;
+    socket_addr_storage kaddr;
     socklen_t kaddrlen = sizeof(kaddr);
     socklen_t user_addr_capacity = kmsg.msg_namelen;
     memset(&kaddr, 0, sizeof(kaddr));
@@ -1584,12 +1688,18 @@ sys_(getsockopt, int fd, int level, int optname, void *optval, socklen_t *optlen
     socklen_t koptlen = 0;
     if (!copy_from_user_pagedir(pagedir, &koptlen, optlen, sizeof(koptlen))) return SYSCALL_FAULT_(EFAULT);
 
-    int value = 0;
-    if (koptlen < sizeof(value)) return SYSCALL_FAULT_(EINVAL);
-    int sock_ret = socket_getsockopt(fd, level, optname, &value, &koptlen);
-    if (sock_ret < 0) return SYSCALL_FAULT_(-sock_ret);
-    if (!copy_to_user_pagedir(pagedir, optval, &value, sizeof(value))) return SYSCALL_FAULT_(EFAULT);
-    if (!copy_to_user_pagedir(pagedir, optlen, &koptlen, sizeof(koptlen))) return SYSCALL_FAULT_(EFAULT);
+    if (koptlen < 4) return SYSCALL_FAULT_(EINVAL);
+    if (koptlen > 256) koptlen = 256;
+
+    uint8_t *kbuf = (uint8_t *)calloc(1, koptlen);
+    if (kbuf == NULL) return SYSCALL_FAULT_(ENOMEM);
+
+    int sock_ret = socket_getsockopt(fd, level, optname, kbuf, &koptlen);
+    if (sock_ret < 0) { free(kbuf); return SYSCALL_FAULT_(-sock_ret); }
+
+    if (!copy_to_user_pagedir(pagedir, optval, kbuf, koptlen)) { free(kbuf); return SYSCALL_FAULT_(EFAULT); }
+    if (!copy_to_user_pagedir(pagedir, optlen, &koptlen, sizeof(koptlen))) { free(kbuf); return SYSCALL_FAULT_(EFAULT); }
+    free(kbuf);
     return 0;
 }
 
@@ -1603,7 +1713,7 @@ static uint64_t socket_name_to_user(int fd, struct sockaddr *addr, socklen_t *ad
     if (!copy_from_user_pagedir(pagedir, &user_addr_capacity, addrlen, sizeof(user_addr_capacity)))
         return SYSCALL_FAULT_(EFAULT);
 
-    struct sockaddr_in6 kaddr;
+    socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     socklen_t kaddrlen = MIN(user_addr_capacity, (socklen_t)sizeof(kaddr));
 
@@ -1787,8 +1897,8 @@ sys_(socketpair, int domain, int type, int protocol, int *sv)
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
-    if (addrlen < sizeof(struct sockaddr) || addrlen > sizeof(struct sockaddr_in6)) return SYSCALL_FAULT_(EINVAL);
-    struct sockaddr_in6 kaddr;
+    if (addrlen < sizeof(struct sockaddr) || addrlen > SOCKET_ADDR_MAX) return SYSCALL_FAULT_(EINVAL);
+    socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     if (!copy_from_user_pagedir(current_user_pagedir(), &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
     int ret = socket_connect(fd, (const struct sockaddr *)&kaddr, addrlen);
@@ -1798,13 +1908,13 @@ sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
 
 sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    socklen_t kaddrlen = sizeof(struct sockaddr_in6);
+    socklen_t kaddrlen = SOCKET_ADDR_MAX;
     if (addrlen != NULL && !copy_from_user_pagedir(current_user_pagedir(), &kaddrlen, addrlen, sizeof(kaddrlen)))
         return SYSCALL_FAULT_(EFAULT);
     if (addr != NULL && addrlen == NULL) return SYSCALL_FAULT_(EINVAL);
-    if (kaddrlen > sizeof(struct sockaddr_in6)) kaddrlen = sizeof(struct sockaddr_in6);
+    if (kaddrlen > SOCKET_ADDR_MAX) kaddrlen = SOCKET_ADDR_MAX;
 
-    struct sockaddr_in6 kaddr;
+    socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     int ret = socket_accept(fd, addr ? (struct sockaddr *)&kaddr : NULL, addr ? &kaddrlen : NULL);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
@@ -1999,8 +2109,10 @@ sys_(ioctl, int fd, int options, void *arg2)
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
 
-    size_t arg_size = ioctl_arg_size(options);
-    void *karg = arg2;
+    bool immediate_int_arg = options == KDSETMODE || options == KDSKBMODE || options == VT_ACTIVATE ||
+                             options == VT_WAITACTIVE;
+    size_t arg_size = immediate_int_arg ? 0 : ioctl_arg_size(options);
+    void *karg = immediate_int_arg ? (void *)(uintptr_t)arg2 : arg2;
     if (arg_size > 0)
     {
         if (arg2 == NULL) return SYSCALL_FAULT_(EFAULT);
@@ -3436,7 +3548,7 @@ sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uin
 
 sys_(clone3, struct clone_args *cl_args, size_t size)
 {
-    if (size < sizeof(uint64_t)) return SYSCALL_FAULT_(EINVAL);
+    if (size < 64) return SYSCALL_FAULT_(EINVAL);
     if (size > sizeof(struct clone_args)) size = sizeof(struct clone_args);
 
     struct clone_args args;
@@ -3446,12 +3558,20 @@ sys_(clone3, struct clone_args *cl_args, size_t size)
     if (!copy_from_user_pagedir(pagedir, &args, cl_args, size)) return SYSCALL_FAULT_(EFAULT);
 
     if (args.pidfd != 0) return SYSCALL_FAULT_(EINVAL);
+    if ((args.flags & 0xffULL) != 0) return SYSCALL_FAULT_(EINVAL);
+    if ((args.exit_signal & ~0xffULL) != 0) return SYSCALL_FAULT_(EINVAL);
 
     uint64_t flags = args.flags;
     if (args.exit_signal != 0 && (flags & 0xFF) == 0)
         flags |= (args.exit_signal & 0xFF);
 
     uint64_t stack      = args.stack;
+    if ((flags & CLONE_THREAD_FLAG) != 0)
+    {
+        if (args.stack_size == 0) return SYSCALL_FAULT_(EINVAL);
+        if (args.stack > UINT64_MAX - args.stack_size) return SYSCALL_FAULT_(EINVAL);
+        stack = args.stack + args.stack_size;
+    }
     int     *parent_tid = (args.parent_tid != 0) ? (int *)(uintptr_t)args.parent_tid : NULL;
     int     *child_tid  = (args.child_tid != 0)  ? (int *)(uintptr_t)args.child_tid  : NULL;
     uint64_t tls        = args.tls;
@@ -3474,28 +3594,99 @@ sys_(set_tid_address, int *tidptr)
     return task->tid;
 }
 
+sys_(set_robust_list, void *head, size_t len)
+{
+    tcb_t task = get_current_task();
+    if (task == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    if (len != 24) return SYSCALL_FAULT_(EINVAL);
+    if (head != NULL && !user_word_accessible(current_user_pagedir(), head)) return SYSCALL_FAULT_(EFAULT);
+
+    task->robust_list_head = head;
+    task->robust_list_len  = len;
+    return 0;
+}
+
+sys_(rseq, void *rseq, uint32_t rseq_len, int flags, uint32_t sig)
+{
+    (void)rseq;
+    (void)rseq_len;
+    (void)flags;
+    (void)sig;
+    return SYSCALL_FAULT_(ENOSYS);
+}
+
 sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3)
 {
-    (void)timeout;
     (void)uaddr2;
-    (void)val3;
 
-    if (uaddr == NULL) return SYSCALL_FAULT_(EFAULT);
+    page_directory_t *pagedir = current_user_pagedir();
+    if (pagedir == NULL || uaddr == NULL) return SYSCALL_FAULT_(EFAULT);
 
-    uint32_t current = 0;
     int cmd = op & 0x7f;
+    uint32_t bitset = cmd == FUTEX_WAIT_BITSET ? val3 : 0xffffffffU;
 
     switch (cmd)
     {
     case FUTEX_WAIT:
-    case FUTEX_WAIT_BITSET:
-        if (!copy_from_user_pagedir(current_user_pagedir(), &current, uaddr, sizeof(current)))
-            return SYSCALL_FAULT_(EFAULT);
+    case FUTEX_WAIT_BITSET: {
+        if (bitset == 0) return SYSCALL_FAULT_(EINVAL);
+
+        uint32_t current = 0;
+        int read_ret = futex_read_user_word(pagedir, uaddr, &current);
+        if (read_ret < 0) return SYSCALL_FAULT_(-read_ret);
         if (current != val) return SYSCALL_FAULT_(EAGAIN);
-        scheduler_yield();
-        return SYSCALL_FAULT_(ETIMEDOUT);
-    case FUTEX_WAKE:
+
+        tcb_t task = get_current_task();
+        if (task == NULL) return SYSCALL_FAULT_(ESRCH);
+
+        futex_waiter waiter = {};
+        waiter.uaddr = uaddr;
+        waiter.pagedir = pagedir;
+        waiter.bitset = bitset;
+        waiter.task = task;
+
+        futex_enqueue_waiter(&waiter);
+        task->wakeup_time = 0;
+        task->status = FUTEX;
+
+        if (timeout != NULL)
+        {
+            struct timespec ktmo;
+            if (!copy_from_user_pagedir(pagedir, &ktmo, timeout, sizeof(ktmo)))
+            {
+                task->status = RUNNING;
+                futex_dequeue_waiter(&waiter);
+                return SYSCALL_FAULT_(EFAULT);
+            }
+
+            uint64_t timeout_ns = (uint64_t)ktmo.tv_sec * 1000000000ULL + (uint64_t)ktmo.tv_nsec;
+            uint64_t start_ns = bootNanoTime();
+            while (task->status == FUTEX)
+            {
+                scheduler_yield();
+                if (task->status != FUTEX) break;
+                uint64_t now_ns = bootNanoTime();
+                if (now_ns - start_ns >= timeout_ns)
+                {
+                    task->status = RUNNING;
+                    futex_dequeue_waiter(&waiter);
+                    return SYSCALL_FAULT_(ETIMEDOUT);
+                }
+            }
+        }
+        else
+        {
+            while (task->status == FUTEX)
+                scheduler_yield();
+        }
+
+        futex_dequeue_waiter(&waiter);
+        if (task->status == START) task->status = RUNNING;
         return 0;
+    }
+    case FUTEX_WAKE:
+        return futex_wake_waiters(uaddr, pagedir, (int)val, 0xffffffffU);
     default:
         return SYSCALL_FAULT_(ENOSYS);
     }
@@ -3629,8 +3820,8 @@ sys_(mkdir, char *name, uint64_t mode)
 sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
-    if (addrlen < sizeof(struct sockaddr) || addrlen > sizeof(struct sockaddr_in6)) return SYSCALL_FAULT_(EINVAL);
-    struct sockaddr_in6 kaddr;
+    if (addrlen < sizeof(struct sockaddr) || addrlen > SOCKET_ADDR_MAX) return SYSCALL_FAULT_(EINVAL);
+    socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     if (!copy_from_user_pagedir(current_user_pagedir(), &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
     int ret = socket_bind(fd, (const struct sockaddr *)&kaddr, addrlen);
@@ -4177,11 +4368,18 @@ sys_(unlink)
     if (npath == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t node  = vfs_open_no_follow(npath);
     if (node == NULL) { free(npath); return SYSCALL_FAULT_(ENOENT); }
-    if (node->type != file_none && node->type != file_symlink)
+    if (node->type != file_none && node->type != file_symlink && !(node->type & file_socket))
     {
         vfs_close(node);
         free(npath);
         return SYSCALL_FAULT_(ENOTDIR);
+    }
+    if (node->type & file_socket)
+    {
+        unix_unbind_path(npath);
+        vfs_close(node);
+        free(npath);
+        return 0;
     }
     size_t ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
     free(npath);
@@ -4228,11 +4426,19 @@ sys_(unlinkat)
         free(path);
         return SYSCALL_FAULT_(ENOENT);
     }
-    if (node->type != file_none && node->type != file_symlink)
+    if (node->type != file_none && node->type != file_symlink && !(node->type & file_socket))
     {
         vfs_close(node);
         free(path);
         return SYSCALL_FAULT_(ENOTDIR);
+    }
+
+    if (node->type & file_socket)
+    {
+        unix_unbind_path(path);
+        vfs_close(node);
+        free(path);
+        return 0;
     }
 
     uint64_t ret;

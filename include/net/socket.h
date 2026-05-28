@@ -29,6 +29,7 @@ typedef uint32_t socklen_t;
 #define SO_REUSEADDR 2
 #define SO_TYPE 3
 #define SO_ERROR 4
+#define SO_PEERCRED 17
 #define SO_BROADCAST 6
 #define SO_SNDBUF 7
 #define SO_RCVBUF 8

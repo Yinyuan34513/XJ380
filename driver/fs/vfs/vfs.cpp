@@ -1289,16 +1289,14 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
         *(int *)arg = tty_mode;
         break;
     case KDSETMODE:
-        if (arg == NULL) return -EFAULT;
-        tty_mode = *(int *)arg;
+        tty_mode = (int)(uintptr_t)arg;
         break;
     case KDGKBMODE:
         if (arg == NULL) return -EFAULT;
         *(int *)arg = tty_kbmode;
         break;
     case KDSKBMODE:
-        if (arg == NULL) return -EFAULT;
-        tty_kbmode = *(int *)arg;
+        tty_kbmode = (int)(uintptr_t)arg;
         break;
     case VT_SETMODE:
         if (arg == NULL) return -EFAULT;

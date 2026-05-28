@@ -710,6 +710,8 @@ sys_(clone, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid, uin
 sys_(clone3, struct clone_args *cl_args, size_t size);
 sys_(get_tid);
 sys_(set_tid_address, int *tidptr);
+sys_(set_robust_list, void *head, size_t len);
+sys_(rseq, void *rseq, uint32_t rseq_len, int flags, uint32_t sig);
 sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3);
 sys_(vfork);
 sys_(execve, char *path, char **argv, char **envp);

@@ -26,6 +26,9 @@ struct unix_sock {
     enum unix_sock_state state;
     int                  type;
     int                  protocol;
+    int                  owner_pid;
+    uint32_t             owner_uid;
+    uint32_t             owner_gid;
     struct sockaddr_un   local_addr;
     struct sockaddr_un   peer_addr;
 
@@ -41,6 +44,8 @@ struct unix_sock {
     spin_t  lock;
     size_t  refcount;
     bool    closed;
+    bool    namespace_registered;
+    bool    path_node_created;
 };
 
 struct unix_stream_packet {
@@ -82,6 +87,7 @@ int  unix_poll(void *impl, size_t events);
 int  unix_close(void *impl);
 int  unix_set_flags(void *impl, uint64_t flags);
 int  unix_socketpair(int type, int protocol, int sv[2]);
+void unix_unbind_path(const char *path);
 
 extern socket_provider_t g_unix_provider;
 void init_unix_provider(void);

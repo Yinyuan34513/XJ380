@@ -18,7 +18,7 @@ typedef size_t (*readf)(int drive, uint8_t *buffer, size_t number, size_t lba);
 typedef size_t (*writef)(int drive, uint8_t *buffer, size_t number, size_t lba);
 typedef int (*ioctlf)(struct _device *device, size_t req, void *handle);
 typedef int (*pollf)(size_t events);
-typedef void *(*mapf)(int drive, void *addr, size_t len);
+typedef void *(*mapf)(int drive, void *addr, size_t len, size_t offset);
 typedef struct _device
 {
     size_t (*read_vbuf)(int drive, struct vecbuf *buffer, size_t number, size_t lba);
@@ -27,7 +27,7 @@ typedef struct _device
     size_t (*write)(int drive, uint8_t *buffer, size_t number, size_t lba);
     int (*ioctl)(struct _device *device, size_t req, void *handle);
     int (*poll)(size_t events);
-    void *(*map)(int drive, void *addr, size_t len);
+    void *(*map)(int drive, void *addr, size_t len, size_t offset);
     int           flag;
     size_t        size;        // 大小
     size_t        sector_size; // 扇区大小
@@ -70,4 +70,4 @@ size_t device_read(size_t lba, size_t number, void *buffer, int drive);
 size_t device_write(size_t lba, size_t number, const void *buffer, int drive);
 size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length);
 size_t blk_device_write(device_t device, const void *buffer, size_t offset, size_t length);
-void  *device_mmap(int drive, void *addr, size_t len);
+void  *device_mmap(int drive, void *addr, size_t len, size_t offset);

@@ -221,8 +221,9 @@ static int fbdev_ioctl(device_t *, size_t req, void *arg)
     }
 }
 
-static void *fbdev_map(int, void *addr, size_t len)
+static void *fbdev_map(int, void *addr, size_t len, size_t offset)
 {
+    (void)offset;
     if (!g_fbdev.ready || addr == NULL) return NULL;
     if (len > g_fbdev.total_bytes) return NULL;
     size_t map_len = PADDING_UP(MIN(len, g_fbdev.total_bytes), PAGE_SIZE);
@@ -294,4 +295,9 @@ void fbdev_present_region(uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2)
 void fbdev_present_kernel_region(uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2)
 {
     fbdev_present_buffer_region(fbdev_kernel_framebuffer(), x1, y1, x2, y2);
+}
+
+const FrameBufferConfig *fbdev_get_fbc()
+{
+    return g_fbdev.ready ? g_fbdev.fbc : NULL;
 }

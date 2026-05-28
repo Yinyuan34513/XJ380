@@ -186,6 +186,8 @@ struct thread_control_block
     uint64_t fs;
     uint64_t clear_child_tid;
     page_directory_t *tid_directory;
+    void   *robust_list_head;
+    size_t  robust_list_len;
 
     void   *sas_ss_sp;
     size_t  sas_ss_size;

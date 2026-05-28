@@ -50,6 +50,8 @@ static size_t alloc_tid()
     return __atomic_fetch_add(&now_tid, 1, __ATOMIC_SEQ_CST);
 }
 
+extern int futex_wake_waiters(uint32_t *uaddr, page_directory_t *pagedir, int max_wake, uint32_t bitset);
+
 static void reserve_tid_value(size_t tid)
 {
     size_t next = __atomic_load_n(&now_tid, __ATOMIC_SEQ_CST);
@@ -360,7 +362,8 @@ static void clear_child_tid_if_requested(tcb_t task)
     if (task == NULL || task->clear_child_tid == 0 || task->tid_directory == NULL) return;
 
     int zero = 0;
-    copy_to_user_pagedir(task->tid_directory, (void *)task->clear_child_tid, &zero, sizeof(zero));
+    if (copy_to_user_pagedir(task->tid_directory, (void *)task->clear_child_tid, &zero, sizeof(zero)))
+        futex_wake_waiters((uint32_t *)(uintptr_t)task->clear_child_tid, task->tid_directory, 1, 0xffffffffU);
     task->clear_child_tid = 0;
     task->tid_directory = NULL;
 }

@@ -14,7 +14,7 @@
 #define PTY_CHUNK        1024
 #define DEFAULT_USER     "GuoqiFish"
 #define DEFAULT_HOME     "/users/GuoqiFish"
-#define DEFAULT_SHELL    "/usr/bin/bash"
+#define DEFAULT_SHELL    "/bin/sh"
 #define AUTORUN_DELAY_NS 5000000000ULL
 #define RESIZE_DEBOUNCE_NS 30000000ULL
 
@@ -85,8 +85,16 @@ static uint64_t g_autorun_deadline_ns = 0;
 static void send_child(const char *buf, int len);
 static void drain_pty_output();
 
+static const char *const g_shell_candidates[] = {
+    "/usr/bin/bash",
+    "/bin/bash",
+    "/usr/bin/sh",
+    "/bin/sh",
+    NULL,
+};
+
 static const char g_autorun_command[] =
-    "weston --backend=headless-backend.so --renderer=pixman --socket=wayland-1 --idle-time=0 \n";
+    "seatd -u root -l info & sleep 1 && weston --backend=drm-backend.so --renderer=pixman --socket=wayland-1 --idle-time=0 \n";
 
 static UINT32 g_palette[16] = {
     0x0b0f14ff, 0xff7b72ff, 0x3fb950ff, 0xd29922ff,
@@ -131,6 +139,24 @@ static int env_count(char *envp[])
     return count;
 }
 
+static bool shell_is_bash(const char *shell_path)
+{
+    if (shell_path == NULL) return false;
+
+    const char *base = strrchr(shell_path, '/');
+    base = base != NULL ? base + 1 : shell_path;
+    return strcmp(base, "bash") == 0;
+}
+
+static const char *resolve_shell_path()
+{
+    for (int i = 0; g_shell_candidates[i] != NULL; i++)
+    {
+        if (access(g_shell_candidates[i], X_OK) == 0) return g_shell_candidates[i];
+    }
+    return NULL;
+}
+
 static bool env_has_key(char *envp[], const char *key)
 {
     if (envp == NULL || key == NULL) return false;
@@ -142,16 +168,20 @@ static bool env_has_key(char *envp[], const char *key)
     return false;
 }
 
-static char **build_shell_env(char *envp[])
+static char **build_shell_env(char *envp[], const char *shell_path)
 {
-    static const char *extra_env[] = {
+    static char shell_env[64];
+    const char *resolved_shell = shell_path != NULL ? shell_path : DEFAULT_SHELL;
+    snprintf(shell_env, sizeof(shell_env), "SHELL=%s", resolved_shell);
+
+    const char *extra_env[] = {
         "TERM=xterm-256color",
         "HOME=" DEFAULT_HOME,
         "USER=" DEFAULT_USER,
         "LOGNAME=" DEFAULT_USER,
         "HOSTNAME=localhost",
         "PATH=/apps:/system:/bin:/usr/bin",
-        "SHELL=" DEFAULT_SHELL,    /* /usr/bin/bash */
+        shell_env,
         "PWD=/apps",
         "XDG_RUNTIME_DIR=/run/user/0",
         "WAYLAND_DISPLAY=wayland-1",
@@ -191,6 +221,22 @@ static char **build_shell_env(char *envp[])
     }
     child_env[out] = NULL;
     return child_env;
+}
+
+static int exec_shell(char *envp[], const char *shell_path)
+{
+    char **child_env = build_shell_env(envp, shell_path);
+    if (shell_is_bash(shell_path))
+    {
+        char *shell_argv[] = {(char *)"bash", (char *)"--login", (char *)"-i", NULL};
+        execve(shell_path, shell_argv, child_env);
+    }
+    else
+    {
+        char *shell_argv[] = {(char *)"sh", (char *)"-i", NULL};
+        execve(shell_path, shell_argv, child_env);
+    }
+    return errno;
 }
 
 static int clamp_i(int v, int lo, int hi)
@@ -744,6 +790,16 @@ static int spawn_shell(char *envp[])
         return -1;
     }
 
+    g_spawn_stage = "shell lookup";
+    const char *shell_path = resolve_shell_path();
+    if (shell_path == NULL)
+    {
+        g_spawn_error = ENOENT;
+        close(g_pty_master);
+        g_pty_master = -1;
+        return -1;
+    }
+
     g_spawn_stage = "fork";
     sync_pty_window_size();
 
@@ -752,7 +808,6 @@ static int spawn_shell(char *envp[])
     int pid = fork();
     if (pid == 0)
     {
-        char **child_env = build_shell_env(envp);
         int slave = open(slave_name, O_RDWR | O_NOCTTY);
         if (slave < 0) exit(126);
 
@@ -763,9 +818,14 @@ static int spawn_shell(char *envp[])
         if (slave > 2) close(slave);
         close(g_pty_master);
 
-        char *shell_argv[] = {(char *)"bash", (char *)"--login", (char *)"-i", NULL};
-        execve(DEFAULT_SHELL, shell_argv, child_env);
-        exit(127);
+        int exec_error = exec_shell(envp, shell_path);
+        for (int i = 0; g_shell_candidates[i] != NULL; i++)
+        {
+            if (strcmp(g_shell_candidates[i], shell_path) == 0) continue;
+            if (access(g_shell_candidates[i], X_OK) != 0) continue;
+            exec_error = exec_shell(envp, g_shell_candidates[i]);
+        }
+        exit(exec_error == ENOENT ? 127 : 126);
     }
     if (pid < 0)
     {

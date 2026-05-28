@@ -638,8 +638,12 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         //     regs->rax = get_current_task()->parent_group->pid;
         //     break;
     case SYS_SET_TID_ADDRESS: regs->rax = (uint64_t)sys_set_tid_address((int *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
-    case SYS_SET_ROBUST_LIST: regs->rax = (uint64_t)-ENOSYS; break;
-    case SYS_RSEQ: regs->rax = (uint64_t)-ENOSYS; break;
+    case SYS_SET_ROBUST_LIST:
+        regs->rax = (uint64_t)sys_set_robust_list((void *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_RSEQ:
+        regs->rax = (uint64_t)sys_rseq((void *)regs->rdi, (uint32_t)regs->rsi, (int)regs->rdx, (uint32_t)regs->r10, 0, 0, regs);
+        break;
 
 
 

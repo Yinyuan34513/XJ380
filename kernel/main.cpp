@@ -628,6 +628,8 @@ void init_heap()
 extern void     nvme_setup();
 extern void     mount_root();
 extern void     stdio_init();
+extern "C" void drm_init_c(void);
+extern "C" void vt_init_c(void);
 extern int      socketfs_setup();
 extern int      procfs_setup();
 extern int      dnsfs_setup();
@@ -678,6 +680,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: fbdev_setup begin\n");
     fbdev_setup(fbc);
     write_serial_string("BOOT: fbdev_setup done\n");
+
+    /* Initialize DRM on top of fbdev */
+    drm_init_c();
+
+    /* Initialize VT subsystem (tty0, tty1) */
+    vt_init_c();
 
     write_serial_string("BOOT: pci_setup begin\n");
     pci_setup(BootConfig.MCFG);

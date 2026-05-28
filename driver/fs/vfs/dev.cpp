@@ -18,16 +18,56 @@ static int      devfs_inode = 2;
 vfs_node_t      devfs_root  = NULL;
 device_handle_t root_handle = NULL;
 
+static char *devfs_strdup_root_path()
+{
+    char *buf = (char *)malloc(5);
+    if (buf != NULL) strcpy(buf, "/dev");
+    return buf;
+}
+
+static char *devfs_parent_path(const char *path)
+{
+    if (path == NULL || *path == '\0') return devfs_strdup_root_path();
+
+    if (strcmp(path, "/dev") == 0) return devfs_strdup_root_path();
+
+    const char *normalized = path;
+    if (strncmp(path, "/dev/", 5) != 0)
+    {
+        char *buf = (char *)malloc(strlen(path) + 6);
+        if (buf == NULL) return NULL;
+        sprintf(buf, "/dev/%s", path);
+        normalized = buf;
+    }
+
+    char *dup = strdup(normalized);
+    if (normalized != path) free((void *)normalized);
+    if (dup == NULL) return NULL;
+
+    char *slash = strrchr(dup, '/');
+    if (slash == NULL || slash == dup)
+    {
+        free(dup);
+        return devfs_strdup_root_path();
+    }
+
+    *slash = '\0';
+    if (strcmp(dup, "/dev") == 0) return dup;
+
+    if (dup[0] == '\0')
+    {
+        free(dup);
+        return devfs_strdup_root_path();
+    }
+    return dup;
+}
+
 static errno_t devfs_register0(const char *path, size_t id) {
     device_t *device = &device_ctl[id];
-    char     *buf    = NULL;
-    if (path != NULL) {
-        buf = (char*)malloc(strlen(path) + 6);
-        sprintf(buf, "/dev/%s", path);
-    } else {
-        buf = (char*)malloc(5);
-        strcpy(buf, "/dev");
-    }
+    if (device->flag == 0 || device->drive_name[0] == '\0') return EOK;
+
+    char *buf = devfs_parent_path(path);
+    if (buf == NULL) return -ENOMEM;
 
     vfs_node_t node = vfs_open(buf);
     if (node == NULL) {
@@ -80,6 +120,7 @@ static errno_t devfs_mount(const char *handle, vfs_node_t node) {
 
     for (size_t i = 0; i < 256; i++) {
         device_t *device = &device_ctl[i];
+        if (device->flag == 0 || device->drive_name[0] == '\0') continue;
         // write_serial_fmt("mount dev name: %s\n", device->drive_name);
         devfs_register0(device->path, i);
     }
@@ -242,17 +283,17 @@ static vfs_node_t devfs_dup(vfs_node_t node) {
 static errno_t devfs_poll(void *file, size_t events) {
     device_handle_t handle =  (device_handle_t)file;
     if (handle->device->flag == 0) return VFS_STATUS_FAILED;
-    if (handle->device->poll != (void *)empty) {
+    if (handle->device->poll != NULL && handle->device->poll != (void *)empty) {
         return handle->device->poll(events);
-    } else
-        return VFS_STATUS_SUCCESS;
+    }
+    return VFS_STATUS_SUCCESS;
 }
 
 static void *devfs_map(void *file, void *addr, size_t offset, size_t size, size_t prot,
                        size_t flags) {
     device_handle_t handle =  (device_handle_t)file;
     if (handle->device->flag == 0) return NULL;
-    if (handle->device->map) { return handle->device->map(handle->device->vdiskid, addr, size); }
+    if (handle->device->map) { return handle->device->map(handle->device->vdiskid, addr, size, offset); }
     return NULL;
 }
 
@@ -299,13 +340,20 @@ void devfs_setup() {
 
 errno_t devfs_delete(const char *path) {
     char *buf = NULL;
-    if (path != NULL) {
-        buf = (char*)malloc(strlen(path) + 6);
-        sprintf(buf, "/dev/%s", path);
-    } else {
-        buf = (char*)malloc(5);
-        strcpy(buf, "/dev");
+    if (path == NULL || *path == '\0')
+    {
+        buf = devfs_strdup_root_path();
     }
+    else if (strncmp(path, "/dev/", 5) == 0)
+    {
+        buf = strdup(path);
+    }
+    else
+    {
+        buf = (char*)malloc(strlen(path) + 6);
+        if (buf != NULL) sprintf(buf, "/dev/%s", path);
+    }
+    if (buf == NULL) return -ENOMEM;
 
     vfs_node_t node = vfs_open(buf);
     if (node == NULL) {
@@ -320,7 +368,6 @@ errno_t devfs_delete(const char *path) {
 
 errno_t devfs_register(const char *path, size_t id) {
     device_t *device = &device_ctl[id];
-    char     *buf    = NULL;
     device->path     = strdup(path);
     if (devfs_root == NULL) { return EOK; }
     return devfs_register0(device->path, id);

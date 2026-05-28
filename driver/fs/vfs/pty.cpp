@@ -628,12 +628,7 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         *(int *)arg = pair->tty_kbmode;
         break;
     case KDSKBMODE:
-        if (arg == NULL)
-        {
-            ret = -EFAULT;
-            break;
-        }
-        pair->tty_kbmode = *(int *)arg;
+        pair->tty_kbmode = (int)(uintptr_t)arg;
         break;
     case VT_SETMODE:
         if (arg == NULL)
