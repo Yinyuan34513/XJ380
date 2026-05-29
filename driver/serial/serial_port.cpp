@@ -359,12 +359,16 @@ static void write_serial_string_colored(const char *str, const PixelColor &color
     }
 
     spin_lock(&serial_lock);
+#if BUILD_EDITION == DEBUG_VERSION
     for (const char *cursor = str; *cursor != '\0'; ++cursor) {
         serial_screen_append_char(*cursor, color);
     }
     if (serial_runtime_overlay_enabled()) {
         serial_redraw_screen_overlay_locked();
     }
+#else
+    (void)color;
+#endif
     while (*str)
     {
         write_serial(*str++);
