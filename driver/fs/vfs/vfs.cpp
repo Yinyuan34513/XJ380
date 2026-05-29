@@ -485,6 +485,13 @@ errno_t vfs_resize(vfs_node_t node, uint64_t size) {
     return VFS_STATUS_SUCCESS;
 }
 
+errno_t vfs_resize_fast(vfs_node_t node, uint64_t size) {
+    if (node == NULL) return VFS_STATUS_FAILED;
+    if (node->type == file_dir) return VFS_STATUS_FAILED;
+    callbackof(node, resize)(node->handle, size);
+    return VFS_STATUS_SUCCESS;
+}
+
 int vfs_regist(const char *name, vfs_callback_t callback, int register_id, uint64_t magic) {
     if (callback == NULL) return VFS_STATUS_FAILED;
     for (size_t i = 0; i < sizeof(struct vfs_callback) / sizeof(void *); i++) {
@@ -840,6 +847,12 @@ size_t vfs_write(vfs_node_t file, void *addr, size_t offset, size_t size) {
     size_t ret = callbackof(file, write)(file->handle, addr, offset, size);
     do_update(file);
     return ret;
+}
+
+size_t vfs_write_fast(vfs_node_t file, void *addr, size_t offset, size_t size) {
+    if (file == NULL || addr == NULL) return VFS_STATUS_FAILED;
+    if (file->type == file_dir) return VFS_STATUS_FAILED;
+    return callbackof(file, write)(file->handle, addr, offset, size);
 }
 
 errno_t vfs_ioctl(vfs_node_t device, size_t options, void *arg) {

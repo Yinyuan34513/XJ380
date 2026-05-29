@@ -108,6 +108,21 @@ static void partition_scan_single_device(size_t vdisk_id, bool auto_mount)
     }
 }
 
+void partition_rescan_device(size_t vdisk_id, bool auto_mount)
+{
+    if (vdisk_id >= 256) return;
+    partition_scan_single_device(vdisk_id, auto_mount);
+}
+
+int partition_find_first_for_disk(size_t vdisk_id)
+{
+    for (size_t i = partition_num; i > 0; i--)
+    {
+        if (partitions[i - 1].vdisk_id == vdisk_id) return (int)(i - 1);
+    }
+    return -1;
+}
+
 static void partition_dump_prefix(const char *name, const uint8_t *buf, size_t bytes)
 {
     size_t dump_len = bytes > 64 ? 64 : bytes;
@@ -144,6 +159,15 @@ size_t partition_write(int part, uint8_t *buf, size_t number, size_t lba)
 {
     partition_t *partition = device_lists[part];
     return device_ctl[partition->vdisk_id].write(partition->vdisk_id, buf, number, partition->starting_lba + lba);
+}
+
+static int partition_sync(partition_t *partition)
+{
+    if (partition == NULL) return -ENODEV;
+    if (partition->vdisk_id >= 256) return -ENODEV;
+    device_t *base = &device_ctl[partition->vdisk_id];
+    if (base->flag < 1 || base->ioctl == NULL) return -ENODEV;
+    return base->ioctl(base, IOBLKSYNC, NULL);
 }
 
 void format_guid(const uint8_t guid[16], char out[37])
@@ -376,10 +400,28 @@ end:
 
 int extract_partition_index(const char *name)
 {
+    if (name == NULL || name[0] == '\0') return -1;
+
     const char *prefix     = "part";
     size_t      prefix_len = strlen(prefix);
-    if (strncmp(name, prefix, prefix_len) != 0) { return -1; }
-    const char *suffix = name + prefix_len;
+    const char *suffix     = NULL;
+    if (strncmp(name, prefix, prefix_len) == 0)
+    {
+        suffix = name + prefix_len;
+    }
+    else
+    {
+        size_t len = strlen(name);
+        size_t pos = len;
+        while (pos > 0 && isdigit((unsigned char)name[pos - 1]))
+        {
+            pos--;
+        }
+        if (pos == len || pos == 0 || name[pos - 1] != 'p') return -1;
+        suffix = name + pos;
+    }
+
+    if (suffix[0] == '\0') return -1;
     for (const char *p = suffix; *p; p++)
     {
         if (!isdigit((unsigned char)*p)) { return -1; }
@@ -394,9 +436,11 @@ int partition_ioctl(device_t *device, size_t req, void *arg)
     partition_t partition = partitions[device_id];
     switch (req)
     {
+    case IOBLKSYNC:
+        return partition_sync(&partition);
     case IOGPTYPE: {
         if (arg == NULL) return -EINVAL;
-        uint16_t *type = (uint16_t *)arg;
+        uint32_t *type = (uint32_t *)arg;
         *type          = partition.type == partition.GPT   ? PARTITION_TYPE_GPT
                          : partition.type == partition.MBR ? PARTITION_TYPE_MBR
                                                            : PARTITION_TYPE_UNKNOWN;

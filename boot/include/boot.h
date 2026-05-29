@@ -13,6 +13,7 @@
 #define BOOT_FLAG_BASE_VIDEO       (1ULL << 4)
 #define BOOT_FLAG_LAST_KNOWN_GOOD  (1ULL << 5)
 #define BOOT_FLAG_SHOW_PROGRESS    (1ULL << 6)
+#define BOOT_FLAG_INSTALLER        (1ULL << 7)
 
 typedef struct
 {
@@ -30,6 +31,11 @@ typedef struct
     int is_qemu;
 
     UINT64 boot_flags;
+
+    UINT64 installer_root_pak;
+    UINT64 installer_root_pak_size;
+    UINT64 system_payload_pak;
+    UINT64 system_payload_pak_size;
 } BOOT_CONFIG;
 
 #endif

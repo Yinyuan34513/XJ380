@@ -25,6 +25,7 @@
 #include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <user/user.h>
+#include <user/runfile.h>
 #include <graphics/svg.h>
 
 #include <ttf.h>
@@ -40,8 +41,8 @@ UserInfo *current_user = NULL;
 UserInfo root_user = {
     .name = "Root",
     .user_type = XUT_Root,
-    .envc = 3,
     .envp = current_user_envp,
+    .envc = 3,
 };
 
 static uint32_t stable_user_name_id(const char *name)
@@ -173,6 +174,174 @@ static const int PASSWORD_SLOT_WIDTH = 16;
 static const int PASSWORD_MAX_INPUT  = 18;
 static const uint64_t PASSWORD_CURSOR_BLINK_NS = 500000000ULL;
 
+static void refresh_user_ui_now(int x1, int y1, int x2, int y2);
+static void refresh_user_fullscreen_now();
+static void draw_text_input_box(int x, int y, int width, const char *value, bool password, bool focused);
+
+static SHEET_BUFFER *oobe_shell_cache     = NULL;
+static uint32_t      oobe_shell_cache_w   = 0;
+static uint32_t      oobe_shell_cache_h   = 0;
+
+static void oobe_free_shell_cache()
+{
+    if (oobe_shell_cache != NULL)
+    {
+        free(oobe_shell_cache);
+        oobe_shell_cache = NULL;
+    }
+    oobe_shell_cache_w = 0;
+    oobe_shell_cache_h = 0;
+}
+
+static void oobe_draw_static_shell()
+{
+    draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1, {0x0f, 0x4c, 0x9a, 0xff});
+    PrintPicture_blend(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx, sht_img->scry,
+                       "/system/resources/image/background3.png");
+
+    int panel_x = 64;
+    int title_y = 42;
+    int label_x = panel_x;
+
+    print_box_ttf(sht_img, desktop_ct_sheet, "欢迎使用 XJ380", WHITE, panel_x, title_y, 36);
+    print_box_ttf(sht_img, desktop_ct_sheet, "创建第一个管理员账户", WHITE, panel_x, title_y + 56, 16);
+    print_box_ttf(sht_img, desktop_ct_sheet, "用户名：", WHITE, label_x, 142, 14);
+    print_box_ttf(sht_img, desktop_ct_sheet, "密码：", WHITE, label_x, 192, 14);
+    print_box_ttf(sht_img, desktop_ct_sheet, "确认密码：", WHITE, label_x, 242, 14);
+
+    draw_rect(sht_img, desktop_ct_sheet, 224, 294, 374, 328, XINGJI_BLUE);
+    print_box_ttf(sht_img, desktop_ct_sheet, "创建账户", WHITE, 258, 302, 13);
+    print_box_ttf(sht_img, desktop_ct_sheet, "按制表键切换输入框，按回车键创建账户。", WHITE, panel_x, 350, 12);
+}
+
+static bool oobe_prepare_shell_cache()
+{
+    if (desktop_ct_sheet == NULL || desktop_ct_sheet->buffer == NULL) return false;
+
+    uint32_t screen_w = sht_img->scrx;
+    uint32_t screen_h = sht_img->scry;
+    size_t   bytes    = (size_t)screen_w * screen_h * sizeof(SHEET_BUFFER);
+
+    if (oobe_shell_cache != NULL && oobe_shell_cache_w == screen_w && oobe_shell_cache_h == screen_h) return true;
+
+    oobe_free_shell_cache();
+    oobe_shell_cache = (SHEET_BUFFER *)malloc(bytes);
+    if (oobe_shell_cache == NULL) return false;
+
+    oobe_draw_static_shell();
+    refresh_user_fullscreen_now();
+    memcpy(oobe_shell_cache, desktop_ct_sheet->buffer, bytes);
+    oobe_shell_cache_w = screen_w;
+    oobe_shell_cache_h = screen_h;
+    return true;
+}
+
+static void oobe_restore_rect(int x1, int y1, int x2, int y2)
+{
+    if (oobe_shell_cache == NULL || desktop_ct_sheet == NULL || desktop_ct_sheet->buffer == NULL) return;
+    if (x1 > x2)
+    {
+        int tmp = x1;
+        x1      = x2;
+        x2      = tmp;
+    }
+    if (y1 > y2)
+    {
+        int tmp = y1;
+        y1      = y2;
+        y2      = tmp;
+    }
+    if (x2 < 0 || y2 < 0) return;
+    if (x1 >= (int)oobe_shell_cache_w || y1 >= (int)oobe_shell_cache_h) return;
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 >= (int)oobe_shell_cache_w) x2 = (int)oobe_shell_cache_w - 1;
+    if (y2 >= (int)oobe_shell_cache_h) y2 = (int)oobe_shell_cache_h - 1;
+    if (x1 > x2 || y1 > y2) return;
+
+    SHEET_BUFFER *dst = (SHEET_BUFFER *)desktop_ct_sheet->buffer;
+    size_t        row_bytes = (size_t)(x2 - x1 + 1) * sizeof(SHEET_BUFFER);
+    for (int y = y1; y <= y2; y++)
+    {
+        memcpy(&dst[(size_t)y * oobe_shell_cache_w + x1], &oobe_shell_cache[(size_t)y * oobe_shell_cache_w + x1],
+               row_bytes);
+    }
+}
+
+static void draw_oobe_dynamic_inputs(char username[64], char password[64], char confirm[64], int focus)
+{
+    int field_x = 224;
+    int field_w = 320;
+
+    oobe_restore_rect(field_x, 136, field_x + field_w, 264);
+    draw_text_input_box(field_x, 136, field_w, username, false, focus == 0);
+    draw_text_input_box(field_x, 186, field_w, password, true, focus == 1);
+    draw_text_input_box(field_x, 236, field_w, confirm, true, focus == 2);
+    refresh_user_ui_now(field_x, 136, field_x + field_w, 264);
+}
+
+static void draw_oobe_dynamic_message(const char *message)
+{
+    int panel_x = 64;
+    int message_x2 = (int)sht_img->scrx - panel_x - 1;
+    if (message_x2 < panel_x) message_x2 = panel_x;
+
+    oobe_restore_rect(panel_x, 340, message_x2, 370);
+    if (message != NULL && message[0] != '\0')
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, (char *)message, RED, panel_x, 350, 12);
+    }
+    else
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, "按制表键切换输入框，按回车键创建账户。", WHITE, panel_x, 350, 12);
+    }
+    refresh_user_ui_now(panel_x, 340, message_x2, 370);
+}
+
+static void draw_oobe_dynamic_frame(char username[64], char password[64], char confirm[64], int focus,
+                                    const char *message)
+{
+    int panel_x = 64;
+    int panel_y = 136;
+    int panel_x2 = (int)sht_img->scrx - panel_x - 1;
+    if (panel_x2 < panel_x) panel_x2 = panel_x;
+
+    oobe_restore_rect(panel_x, panel_y, panel_x2, 370);
+    draw_text_input_box(224, 136, 320, username, false, focus == 0);
+    draw_text_input_box(224, 186, 320, password, true, focus == 1);
+    draw_text_input_box(224, 236, 320, confirm, true, focus == 2);
+
+    if (message != NULL && message[0] != '\0')
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, (char *)message, RED, panel_x, 350, 12);
+    }
+    else
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, "按制表键切换输入框，按回车键创建账户。", WHITE, panel_x, 350, 12);
+    }
+    refresh_user_ui_now(panel_x, panel_y, panel_x2, 370);
+}
+
+static void draw_oobe_screen_full(char username[64], char password[64], char confirm[64], int focus,
+                                  const char *message)
+{
+    oobe_draw_static_shell();
+    draw_text_input_box(224, 136, 320, username, false, focus == 0);
+    draw_text_input_box(224, 186, 320, password, true, focus == 1);
+    draw_text_input_box(224, 236, 320, confirm, true, focus == 2);
+
+    if (message != NULL && message[0] != '\0')
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, (char *)message, RED, 64, 350, 12);
+    }
+    else
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, "按制表键切换输入框，按回车键创建账户。", WHITE, 64, 350, 12);
+    }
+
+    refresh_user_fullscreen_now();
+}
+
 static void refresh_user_ui_now(int x1, int y1, int x2, int y2)
 {
     refresh_part_sheet(sht_img, x1, y1, x2, y2);
@@ -223,20 +392,332 @@ static void render_password_input(const char *input_password, int input_count, b
                         PASSWORD_BOX_Y + PASSWORD_BOX_HEIGHT);
 }
 
+static void draw_text_input_box(int x, int y, int width, const char *value, bool password, bool focused)
+{
+    SHEET_BUFFER border = focused ? SHEET_BUFFER{0x00, 0xa2, 0xe8, 0xff}
+                                  : SHEET_BUFFER{0xe6, 0xe6, 0xe6, 0xff};
+    draw_rect(sht_img, desktop_ct_sheet, x, y, x + width, y + 28, WHITE);
+    draw_rect(sht_img, desktop_ct_sheet, x, y, x + width, y + 1, border);
+    draw_rect(sht_img, desktop_ct_sheet, x, y + 26, x + width, y + 28, border);
+    draw_rect(sht_img, desktop_ct_sheet, x, y, x + 1, y + 28, border);
+    draw_rect(sht_img, desktop_ct_sheet, x + width - 1, y, x + width, y + 28, border);
+
+    if (value == NULL) value = "";
+    if (password)
+    {
+        char bullets[64];
+        size_t len = strlen(value);
+        if (len >= sizeof(bullets)) len = sizeof(bullets) - 1;
+        for (size_t i = 0; i < len; i++) bullets[i] = '*';
+        bullets[len] = '\0';
+        print_box_ttf(sht_img, desktop_ct_sheet, bullets, BLACK, x + 8, y + 7, 12);
+    }
+    else
+    {
+        print_box_ttf(sht_img, desktop_ct_sheet, (char *)value, BLACK, x + 8, y + 7, 12);
+    }
+
+    if (focused)
+    {
+        int cursor_x = x + 8 + (int)strlen(value) * 8;
+        if (cursor_x > x + width - 12) cursor_x = x + width - 12;
+        draw_rect(sht_img, desktop_ct_sheet, cursor_x, y + 6, cursor_x + 1, y + 22, BLACK);
+    }
+}
+
+static void draw_oobe_screen(char username[64], char password[64], char confirm[64], int focus, const char *message)
+{
+    if (oobe_prepare_shell_cache())
+    {
+        draw_oobe_dynamic_inputs(username, password, confirm, focus);
+        draw_oobe_dynamic_message(message);
+        return;
+    }
+
+    draw_oobe_screen_full(username, password, confirm, focus, message);
+}
+
+static bool oobe_username_char_ok(char ch)
+{
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+           (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == ' ';
+}
+
+static bool oobe_username_ok(const char *username)
+{
+    if (username == NULL || username[0] == '\0') return false;
+    if (username[0] == ' ') return false;
+    size_t len = strlen(username);
+    if (len == 0 || len >= sizeof(((UserInfo *)0)->name) || username[len - 1] == ' ') return false;
+    for (size_t i = 0; i < len; i++)
+    {
+        if (!oobe_username_char_ok(username[i])) return false;
+    }
+    return true;
+}
+
+static bool append_input_char(char *buf, size_t size, char ch)
+{
+    if (buf == NULL || size == 0) return false;
+    size_t len = strlen(buf);
+    if (len + 1 >= size) return false;
+    buf[len] = ch;
+    buf[len + 1] = '\0';
+    return true;
+}
+
+static void render_oobe_if_needed(bool need_render, bool shell_ready, char username[64], char password[64],
+                                  char confirm[64], int focus, const char *message)
+{
+    if (!need_render) return;
+    if (shell_ready)
+    {
+        draw_oobe_dynamic_frame(username, password, confirm, focus, message);
+    }
+    else
+    {
+        draw_oobe_screen_full(username, password, confirm, focus, message);
+    }
+}
+
+static void backspace_input_char(char *buf)
+{
+    if (buf == NULL) return;
+    size_t len = strlen(buf);
+    if (len == 0) return;
+    buf[len - 1] = '\0';
+}
+
+static bool user_registry_needs_oobe(UserRegisterList *urf_data, size_t bytes_read)
+{
+    if (urf_data == NULL) return true;
+    if (bytes_read < sizeof(int)) return true;
+    if (urf_data->user_count <= 1 || urf_data->user_count > 128) return true;
+    for (int i = 1; i < urf_data->user_count; i++)
+    {
+        if (urf_data->uinf[i].name[0] != '\0') return false;
+    }
+    return true;
+}
+
+static bool write_first_user_registry(const char *username, const char *password)
+{
+    if (username == NULL || password == NULL) return false;
+
+    vfs_mkdir("/system");
+    vfs_mkdir("/system/config");
+    if (vfs_mkfile("/system/config/usereg.dat") != EOK) return false;
+
+    vfs_node_t file = vfs_open("/system/config/usereg.dat");
+    if (file == NULL) return false;
+
+    UserRegisterList registry;
+    memset(&registry, 0, sizeof(registry));
+    registry.user_count = 2;
+    strcpy(registry.uinf[0].name, "Root");
+    strcpy(registry.uinf[0].password, "");
+    registry.uinf[0].user_type = XUT_Root;
+    strncpy(registry.uinf[1].name, username, sizeof(registry.uinf[1].name) - 1);
+    strncpy(registry.uinf[1].password, password, sizeof(registry.uinf[1].password) - 1);
+    registry.uinf[1].user_type = XUT_Admin;
+
+    vfs_resize(file, 0);
+    size_t wrote = vfs_write(file, &registry, 0, sizeof(registry));
+    vfs_close(file);
+    return wrote == sizeof(registry);
+}
+
+static void set_current_user_from_info(UserInfo *info)
+{
+    if (info == NULL) return;
+    if (current_user == NULL) current_user = (UserInfo *)malloc(sizeof(UserInfo));
+    if (current_user == NULL) return;
+    memset(current_user, 0, sizeof(UserInfo));
+    strcpy(current_user->name, info->name);
+    strcpy(current_user->password, info->password);
+    current_user->user_type = info->user_type;
+    current_user->envc      = 3;
+    current_user->envp      = current_user_envp;
+}
+
+static bool run_oobe()
+{
+    char username[64];
+    char password[64];
+    char confirm[64];
+    memset(username, 0, sizeof(username));
+    memset(password, 0, sizeof(password));
+    memset(confirm, 0, sizeof(confirm));
+
+    int focus = 0;
+    const char *message = "";
+    bool shell_ready = oobe_prepare_shell_cache();
+    if (shell_ready)
+    {
+        draw_oobe_dynamic_frame(username, password, confirm, focus, message);
+    }
+    else
+    {
+        draw_oobe_screen_full(username, password, confirm, focus, message);
+    }
+
+    bool prev_mouse_left = ms_dec.left;
+
+    while (1)
+    {
+        service_user_wait_loop();
+        bool create_requested = false;
+        bool need_render      = false;
+        bool mouse_click      = ms_dec.left && !prev_mouse_left;
+        prev_mouse_left      = ms_dec.left;
+
+        if (mouse_click)
+        {
+            int mx = get_mouse_x();
+            int my = get_mouse_y();
+            int old_focus = focus;
+            if (mx >= 224 && mx <= 544 && my >= 136 && my <= 164) focus = 0;
+            else if (mx >= 224 && mx <= 544 && my >= 186 && my <= 214) focus = 1;
+            else if (mx >= 224 && mx <= 544 && my >= 236 && my <= 264) focus = 2;
+            else if (mx >= 224 && mx <= 374 && my >= 294 && my <= 328) create_requested = true;
+            if (!create_requested && focus != old_focus)
+            {
+                message = "";
+                need_render = true;
+            }
+        }
+
+        uint8_t k_input = create_requested ? 0 : get_keyboard_input();
+        if (k_input == 0 && !create_requested)
+        {
+            render_oobe_if_needed(need_render, shell_ready, username, password, confirm, focus, message);
+            continue;
+        }
+
+        if (k_input == KEY_TAB)
+        {
+            focus = (focus + 1) % 3;
+            message = "";
+            need_render = true;
+        }
+        else if (k_input == KEY_LEFT || k_input == KEY_RIGHT || k_input == KEY_UP || k_input == KEY_DOWN)
+        {
+            continue;
+        }
+        else if (k_input == '\n')
+        {
+            create_requested = true;
+        }
+        if (create_requested)
+        {
+            if (!oobe_username_ok(username))
+            {
+                message = "用户名只能使用英文、数字、空格、下划线和短横线。";
+            }
+            else if (password[0] == '\0')
+            {
+                message = "请输入密码。";
+            }
+            else if (strcmp(password, confirm) != 0)
+            {
+                message = "两次输入的密码不一致。";
+            }
+            else if (!write_first_user_registry(username, password) || !init_user_profile(username))
+            {
+                message = "创建账户失败，请检查磁盘。";
+            }
+            else
+            {
+                UserInfo info;
+                memset(&info, 0, sizeof(info));
+                strncpy(info.name, username, sizeof(info.name) - 1);
+                strncpy(info.password, password, sizeof(info.password) - 1);
+                info.user_type = XUT_Admin;
+                set_current_user_from_info(&info);
+                draw_rect(sht_img, desktop_ct_sheet, 0, 0, sht_img->scrx - 1, sht_img->scry - 1,
+                          {0x0f, 0x4c, 0x9a, 0xff});
+                print_box_ttf(sht_img, desktop_ct_sheet, "账户已创建，正在进入桌面。", WHITE, 64, 64, 18);
+                refresh_user_fullscreen_now();
+                oobe_free_shell_cache();
+                return true;
+            }
+            need_render = true;
+            render_oobe_if_needed(need_render, shell_ready, username, password, confirm, focus, message);
+            continue;
+        }
+        if (k_input == '\b')
+        {
+            if (focus == 0) backspace_input_char(username);
+            else if (focus == 1) backspace_input_char(password);
+            else backspace_input_char(confirm);
+            message = "";
+            need_render = true;
+            render_oobe_if_needed(need_render, shell_ready, username, password, confirm, focus, message);
+            continue;
+        }
+        if (k_input >= 32 && k_input < 127)
+        {
+            if (focus == 0)
+            {
+                if (oobe_username_char_ok((char)k_input))
+                {
+                    if (append_input_char(username, sizeof(username), (char)k_input))
+                    {
+                        message = "";
+                        need_render = true;
+                    }
+                }
+                else
+                {
+                    message = "用户名只能使用英文、数字、空格、下划线和短横线。";
+                    need_render = true;
+                }
+            }
+            else if (focus == 1)
+            {
+                if (append_input_char(password, sizeof(password), (char)k_input))
+                {
+                    message = "";
+                    need_render = true;
+                }
+            }
+            else
+            {
+                if (append_input_char(confirm, sizeof(confirm), (char)k_input))
+                {
+                    message = "";
+                    need_render = true;
+                }
+            }
+        }
+
+        render_oobe_if_needed(need_render, shell_ready, username, password, confirm, focus, message);
+    }
+}
+
 void init_user()
 {
     char user_reg_data_path[256];
     memset(user_reg_data_path, 0, 256);
     strcat(user_reg_data_path, "/system/config/usereg.dat");
-    vfs_mkfile(user_reg_data_path);
 
     char  urf_buffer[sizeof(UserRegisterList)];
+    memset(urf_buffer, 0, sizeof(urf_buffer));
     vfs_node_t urd_v = vfs_open(user_reg_data_path);
-    if (!urd_v) return;
-
-    vfs_read(urd_v, urf_buffer, 0, sizeof(UserRegisterList));
+    size_t bytes_read = 0;
+    if (urd_v != NULL)
+    {
+        bytes_read = vfs_read(urd_v, urf_buffer, 0, sizeof(UserRegisterList));
+        vfs_close(urd_v);
+    }
 
     UserRegisterList *urf_data = (UserRegisterList *)urf_buffer;
+    if (user_registry_needs_oobe(urf_data, bytes_read))
+    {
+        if (run_oobe()) return;
+        return;
+    }
+
     int current_user_number = 1;
 
     // 选择用户
@@ -344,19 +825,8 @@ check_password:
         }
     }
 
-    current_user = (UserInfo *)malloc(sizeof(UserInfo));
-    strcpy(current_user->name, urf_data->uinf[current_user_number].name);
-    strcpy(current_user->password, urf_data->uinf[current_user_number].password);
-    current_user->user_type = urf_data->uinf[current_user_number].user_type;
-    current_user->envc      = 3;
-    current_user->envp      = current_user_envp;
-
-    
-
-    vfs_mkdir("/users");
-    char user_folder_path[265] = "/users/";
-    strcat(user_folder_path, current_user->name);
-    vfs_mkdir(user_folder_path);
+    set_current_user_from_info(&urf_data->uinf[current_user_number]);
+    if (current_user != NULL) init_user_profile(current_user->name);
 }
 
 void copy_args(char *dst[], char *src[], int n)

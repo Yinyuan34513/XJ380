@@ -259,8 +259,8 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
 {
     keyboard_prepare_fifo();
 
-    uint8_t x;
-    x = inb(0x60);
+    uint8_t x = inb(0x60);
+
     if (x == 0xe0)
     {
         kb_e0_prefix = true;
@@ -269,33 +269,61 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     }
 
     bool extended = kb_e0_prefix;
-    bool pressed = x < 0x80;
+    bool pressed = (x & 0x80) == 0;
+    bool key_release = !pressed;
     uint8_t make_code = pressed ? x : (uint8_t)(x & 0x7f);
-    uint8_t event_value = keyboard_translate_event_value(make_code, extended,
-                                                         kb_fifo.shift, kb_fifo.caps);
 
-    keyboard_dispatch_key_message(pressed ? MSG_KEYDOWN : MSG_KEYUP, event_value);
+    uint8_t event_value = keyboard_translate_event_value(
+        make_code,
+        extended,
+        kb_fifo.shift,
+        kb_fifo.caps
+    );
+
+    keyboard_dispatch_key_message(
+        pressed ? MSG_KEYDOWN : MSG_KEYUP,
+        event_value
+    );
+
     keyboard_update_modifier_state(make_code, extended, pressed);
 
-    if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_head = kb_fifo.buf; }
-    if (kb_fifo.count >= KB_BUF_SIZE) {
-        kb_fifo.p_tail++;
-        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
-        kb_fifo.count = KB_BUF_SIZE - 1;
-    }
-    if (extended && x < 0x80) {
-        x = keyboard_translate_extended_make_code(x);
-    }
     kb_e0_prefix = false;
-    if (x == 0)
+
+    if (key_release)
     {
         send_eoi();
         return;
     }
-    *kb_fifo.p_head = x;
+
+    uint8_t fifo_value = extended ? event_value : make_code;
+
+    if (fifo_value == 0)
+    {
+        send_eoi();
+        return;
+    }
+
+    if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE)
+    {
+        kb_fifo.p_head = kb_fifo.buf;
+    }
+
+    if (kb_fifo.count >= KB_BUF_SIZE)
+    {
+        kb_fifo.p_tail++;
+        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE)
+        {
+            kb_fifo.p_tail = kb_fifo.buf;
+        }
+
+        kb_fifo.count = KB_BUF_SIZE - 1;
+    }
+
+    *kb_fifo.p_head = fifo_value;
 
     kb_fifo.count++;
     kb_fifo.p_head++;
+
     send_eoi();
 }
 

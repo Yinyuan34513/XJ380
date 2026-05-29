@@ -42,6 +42,15 @@ typedef struct {
 #define SXAH_CHECK_INPUT_BUFFER     128956723895689207      // 检查是否需要输入
 #define SXAH_UNLOCK_OUTPUT_LOCK     128956723895689208      // 完成输出，关闭输出锁
 #define SXAH_MESSAGE_ASK            128956723895689209      // message查询
+#define SXAH_INSTALLER_ENUM_DISKS       128956723895689220
+#define SXAH_INSTALLER_START            128956723895689221
+#define SXAH_INSTALLER_PROGRESS         128956723895689222
+#define SXAH_INSTALLER_PRECHECK         128956723895689223
+#define SXAH_INSTALLER_START_EX         128956723895689224
+#define SXAH_INSTALLER_RESCUE           128956723895689225
+#define SXAH_INSTALLER_LOG              128956723895689226
+#define SXAH_INSTALLER_START_OPTIONS    128956723895689227
+#define SXAH_INSTALLER_PRECHECK_OPTIONS 128956723895689228
 
 #define SXAH_CHECK_TERMINAL_INIT_STATUS  3801    // 查询终端初始化状态
 
@@ -269,6 +278,15 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 void do_xapi_FlushTime();
 uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count);
 uint64_t do_xapi_KillProcess(uint64_t pid);
+uint64_t do_xapi_InstallerEnumDisks(uint64_t list);
+uint64_t do_xapi_InstallerStart(uint64_t disk_id);
+uint64_t do_xapi_InstallerStartEx(uint64_t disk_id, uint64_t mode);
+uint64_t do_xapi_InstallerStartOptions(uint64_t options);
+uint64_t do_xapi_InstallerPrecheck(uint64_t disk_id, uint64_t mode, uint64_t out);
+uint64_t do_xapi_InstallerPrecheckOptions(uint64_t options, uint64_t out);
+uint64_t do_xapi_InstallerProgress(uint64_t progress);
+uint64_t do_xapi_InstallerRescue(uint64_t action, uint64_t disk_id, uint64_t out);
+uint64_t do_xapi_InstallerLog(uint64_t out);
 
 
 

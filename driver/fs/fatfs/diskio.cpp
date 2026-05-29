@@ -174,7 +174,8 @@ extern vfs_node_t drive_number_mapping[10];
 
 u32 disk_size(byte drive)
 {
-    return (u32)drive_number_mapping[drive]->size;
+    if (drive >= 10 || drive_number_mapping[drive] == NULL) return 0;
+    return (u32)(drive_number_mapping[drive]->size / 512);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -192,9 +193,9 @@ DRESULT disk_ioctl(byte  pdrv, /* Physical drive nmuber (0..) */
     switch (cmd)
     {
     case GET_SECTOR_SIZE: *(u16 *)buff = 512; return RES_OK;
-    case GET_SECTOR_COUNT: *(u32 *)buff = disk_size(pdrv + 0x41); return RES_OK;
+    case GET_SECTOR_COUNT: *(u32 *)buff = disk_size(pdrv); return RES_OK;
     case GET_BLOCK_SIZE: *(u16 *)buff = 0; return RES_OK;
-    case CTRL_SYNC: return RES_OK;
+    case CTRL_SYNC: return fatfs_get_node_by_number(pdrv) != NULL ? RES_OK : RES_PARERR;
     default: break;
     }
 

@@ -21,6 +21,7 @@ bash-*
 
 *.img
 *.vmdk
+/XJ380-installer.iso
 *.tags
 *.elf
 *.o

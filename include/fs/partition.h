@@ -74,3 +74,5 @@ typedef struct partition {
 
 void partition_init();
 extern "C" void partition_device_added(size_t vdisk_id);
+void partition_rescan_device(size_t vdisk_id, bool auto_mount);
+int  partition_find_first_for_disk(size_t vdisk_id);

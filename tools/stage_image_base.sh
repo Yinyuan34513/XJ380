@@ -62,8 +62,6 @@ stage_base_dirs()
         "$root/usr/share/man/man8" \
         "$root/usr/share/terminfo" \
         "$root/users" \
-        "$root/users/Another User" \
-        "$root/users/GuoqiFish" \
         "$root/var/backups" \
         "$root/var/cache/xbps" \
         "$root/var/db/xbps/keys" \

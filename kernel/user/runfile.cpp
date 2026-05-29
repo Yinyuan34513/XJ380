@@ -29,20 +29,65 @@
 
 extern UserInfo *current_user;
 
-// 这个应该挪到OOBE里，只在第一次启动XJ380时创建，这里只是为了方便测试
-void init_runfile()
+static bool make_user_path(char *out, size_t out_size, const char *username, const char *leaf)
 {
+    if (out == NULL || username == NULL || leaf == NULL) return false;
+    size_t need = strlen("/users/") + strlen(username) + strlen(leaf) + 1;
+    if (need > out_size) return false;
+    memset(out, 0, out_size);
+    strcat(out, "/users/");
+    strcat(out, username);
+    strcat(out, leaf);
+    return true;
+}
+
+bool init_user_dirs(const char *username)
+{
+    if (username == NULL || username[0] == '\0') return false;
+
+    vfs_mkdir("/users");
+
+    char user_folder_path[256];
+    if (!make_user_path(user_folder_path, sizeof(user_folder_path), username, "")) return false;
+    if (vfs_mkdir(user_folder_path) != EOK) return false;
+
+    char desktop_path[256];
+    if (!make_user_path(desktop_path, sizeof(desktop_path), username, "/desktop")) return false;
+    vfs_mkdir(desktop_path);
+    return true;
+}
+
+static bool write_file_if_empty(const char *path, const void *data, size_t size)
+{
+    if (path == NULL || data == NULL || size == 0) return false;
+
+    vfs_node_t existing = vfs_open_no_follow(path);
+    if (existing != NULL)
+    {
+        bool already_initialized = !(existing->type & file_dir) && existing->size > 0;
+        vfs_close(existing);
+        if (already_initialized) return true;
+    }
+
+    if (vfs_mkfile(path) != EOK) return false;
+    vfs_node_t file = vfs_open(path);
+    if (file == NULL) return false;
+
+    vfs_resize(file, 0);
+    size_t wrote = vfs_write(file, (void *)data, 0, size);
+    vfs_close(file);
+    return wrote == size;
+}
+
+bool init_user_runfile(const char *username)
+{
+    if (!init_user_dirs(username)) return false;
+
     char runfile_setfile_path[256];
-    memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/users/");
-    strcat(runfile_setfile_path, "GuoqiFish");
-    strcat(runfile_setfile_path, "/runfile.dat");
-    vfs_mkfile(runfile_setfile_path);
+    if (!make_user_path(runfile_setfile_path, sizeof(runfile_setfile_path), username, "/runfile.dat")) return false;
 
-    char  settings_file_buffer[sizeof(RunfileSettings_Item) * 1024];
-    vfs_node_t settings_file_v = vfs_open(runfile_setfile_path);
-    if (!settings_file_v) return;
-
+    char settings_file_buffer[sizeof(RunfileSettings_Format)];
+    memset(settings_file_buffer, 0, sizeof(settings_file_buffer));
     RunfileSettings_Format *file_format = (RunfileSettings_Format *)settings_file_buffer;
 
     strcpy(file_format->items[0].exname,   "txt");
@@ -69,70 +114,35 @@ void init_runfile()
     strcpy(file_format->items[5].describe, "XJ380 块状文本标记文本文件");
     strcpy(file_format->items[5].runpath,  "/apps/builtin/texter.elf");
 
-    strcpy(file_format->items[6].exname,   "");
+    return write_file_if_empty(runfile_setfile_path, settings_file_buffer, sizeof(settings_file_buffer));
+}
 
-    vfs_write(settings_file_v, settings_file_buffer, 0, sizeof(RunfileSettings_Item) * 1024);
+bool init_user_settings(const char *username)
+{
+    if (!init_user_dirs(username)) return false;
 
-    vfs_close(settings_file_v);
+    char settings_path[256];
+    if (!make_user_path(settings_path, sizeof(settings_path), username, "/settings.dat")) return false;
 
-
-
-    // 回收再利用
-    memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/users/");
-    strcat(runfile_setfile_path, "GuoqiFish");
-    strcat(runfile_setfile_path, "/settings.dat");
-    vfs_mkfile(runfile_setfile_path);
-
-    char  settings_data_buffer[sizeof(SettingsDataFileFormat)];
-    settings_file_v = vfs_open(runfile_setfile_path);
-    if (!settings_file_v) return;
-
+    char settings_data_buffer[sizeof(SettingsDataFileFormat)];
+    memset(settings_data_buffer, 0, sizeof(settings_data_buffer));
     SettingsDataFileFormat *file_data = (SettingsDataFileFormat *)settings_data_buffer;
 
     strcpy(file_data->BackgroundFilePath, "/system/resources/image/background2.png");
     file_data->ClockHourOffset = 8;
 
-    vfs_write(settings_file_v, settings_data_buffer, 0, sizeof(SettingsDataFileFormat));
+    return write_file_if_empty(settings_path, settings_data_buffer, sizeof(settings_data_buffer));
+}
 
-    vfs_close(settings_file_v);
+bool init_user_profile(const char *username)
+{
+    return init_user_dirs(username) && init_user_runfile(username) && init_user_settings(username);
+}
 
-
-
-    // 回收再利用
-    memset(runfile_setfile_path, 0, 256);
-    strcat(runfile_setfile_path, "/system/config/usereg.dat");
-    vfs_mkfile(runfile_setfile_path);
-
-    char  urf_buffer[sizeof(UserRegisterList)];
-    settings_file_v = vfs_open(runfile_setfile_path);
-    if (!settings_file_v) return;
-
-    UserRegisterList *urf_data = (UserRegisterList *)urf_buffer;
-
-    urf_data->user_count = 3;
-
-    strcpy(urf_data->uinf[0].password, "114514");
-
-    strcpy(urf_data->uinf[1].password, "114514");
-    strcpy(urf_data->uinf[1].name, "GuoqiFish");
-    urf_data->uinf[1].user_type = XUT_Admin;
-    vfs_mkdir("/users");
-    char user_folder_path[265] = "/users/";
-    strcat(user_folder_path, "GuoqiFish");
-    vfs_mkdir(user_folder_path);
-    
-    strcpy(urf_data->uinf[2].password, "114514");
-    strcpy(urf_data->uinf[2].name, "Another User");
-    urf_data->uinf[2].user_type = XUT_Admin;
-    vfs_mkdir("/users");
-    char user_folder_path1[265] = "/users/";
-    strcat(user_folder_path1, "Another User");
-    vfs_mkdir(user_folder_path1);
-
-    vfs_write(settings_file_v, urf_buffer, 0, sizeof(UserRegisterList));
-
-    vfs_close(settings_file_v);
+void init_runfile()
+{
+    if (current_user == NULL) return;
+    init_user_profile(current_user->name);
 }
 
 void runfile(char *path)
