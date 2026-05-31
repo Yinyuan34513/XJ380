@@ -715,7 +715,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (EFI_ERROR(status))
     {
         puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: OPEN_ROOT_DIR_ERROR");
+             L"https://xingjisoft.com/os/xj380/error. Error code: OPEN_ROOT_DIR_ERROR");
         write_serial_string("Root Dir Open Failed. Stop.\n");
         while (1)
             ;
@@ -760,7 +760,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (EFI_ERROR(status))
     {
         puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: KERNEL_NOT_FOUND");
+             L"https://xingjisoft.com/os/xj380/error. Error code: KERNEL_NOT_FOUND");
         write_serial_string("Kernel Read Failed. Stop.\n");
         while (1)
             ;
@@ -807,7 +807,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     default:
 
         puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: "
+             L"https://xingjisoft.com/os/xj380/error. Error code: "
              L"UNSUPPORTED_PIXEL_FORMAT");
         write_serial_string("Video Initialize Failed. Stop.\n");
         while (1)
@@ -914,7 +914,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (AcpiTableWasFound == 0)
     {
         puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: "
+             L"https://xingjisoft.com/os/xj380/error. Error code: "
              L"ACPI_TABLE_NOT_FOUND\r\n");
         write_serial_string("ACPI Table Not Found. Stop.\n");
         while (1)
@@ -923,7 +923,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (BootConfig->MADT == 0)
     {
         puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: "
+             L"https://xingjisoft.com/os/xj380/error. Error code: "
              L"MADT_NOT_FOUND\r\n");
         write_serial_string("MADT Not Found. Stop.\n");
         while (1)
@@ -985,7 +985,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     if (EFI_ERROR(ExitBSStatus))
     {
         puts(L"XJ380 does not boot properly. Please visit "
-             L"https://xingjisoft.top/os/xj380/error. Error code: "
+             L"https://xingjisoft.com/os/xj380/error. Error code: "
              L"CANNOT_BOOT_SYSTEM");
         write_serial_string("Boot Services Exit Failed. Stop.\n");
         while (1)
