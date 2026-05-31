@@ -249,7 +249,7 @@ clean.clangd:
 gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
-vdisk: all
+generate_image: all
 	@rm -rf XJ380.img
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
@@ -345,6 +345,8 @@ vdisk: all
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
 
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
+
+vdisk: generate_image
 	@rm -rf $(VDISK_ROOT) || { \
 		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
