@@ -29,7 +29,7 @@ endif
 BUILD_DIR := out
 VDISK_SIZE_MIB ?= 3072
 VDISK_FAT_MIB ?= 3072
-VDISK_ROOT ?= ./xj380-vdisk-$$(id -u)/XJ380
+VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \

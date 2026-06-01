@@ -23,7 +23,7 @@ static constexpr int SERIAL_SCREEN_MARGIN    = 8;   // 叠层窗口与帧缓冲�
 static constexpr int SERIAL_SCREEN_MIN_COLS  = 32;  // 低分辨率下仍保持可读的最小列数
 static constexpr int SERIAL_SCREEN_MAX_COLS  = 96;  // 避免叠层窗口覆盖整个屏幕的最大列数
 static constexpr int SERIAL_SCREEN_MIN_LINES = 6;   // 最少可见日志行数
-static constexpr int SERIAL_SCREEN_MAX_LINES = 42;  // 最多可见日志行数
+static constexpr int SERIAL_SCREEN_MAX_LINES = 14;  // 最多可见日志行数
 static constexpr int SERIAL_LOG_RING_LINES   = 128; // 环形缓冲区保留的日志行数
 static constexpr int SERIAL_LOG_LINE_CAP     = 128; // 单行叠层日志最多保存的字节数
 
@@ -82,10 +82,10 @@ static void serial_screen_update_layout()
     int width  = (int)fbc_addr->horizontal_resolution;
     int height = (int)fbc_addr->vertical_resolution;
 
-    g_serial_screen_cols = serial_clamp_int(width / SERIAL_CHAR_WIDTH / 1,
+    g_serial_screen_cols = serial_clamp_int(width / SERIAL_CHAR_WIDTH / 3,
                                             SERIAL_SCREEN_MIN_COLS,
                                             SERIAL_SCREEN_MAX_COLS);
-    g_serial_screen_rows = serial_clamp_int(height / SERIAL_CHAR_HEIGHT / 1,
+    g_serial_screen_rows = serial_clamp_int(height / SERIAL_CHAR_HEIGHT / 4,
                                             SERIAL_SCREEN_MIN_LINES,
                                             SERIAL_SCREEN_MAX_LINES);
     g_serial_screen_width =
