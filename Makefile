@@ -359,12 +359,6 @@ generate_image: all
 	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
 
 grmti: generate_image
-	cp -rf /tmp/xj380-vdisk-1000/XJ380 .
-	@rm -rf $(VDISK_ROOT) || { \
-		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
-		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
-		exit 1; \
-	}
 
 vdisk: generate_image
 	@find $(VDISK_ROOT) -xtype l -delete
