@@ -358,12 +358,6 @@ generate_image: all
 	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
 	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
 
-	@find $(VDISK_ROOT) -xtype l -delete
-	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
-	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
-
-	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
-
 grmti: generate_image
 	cp -rf /tmp/xj380-vdisk-1000/XJ380 .
 	@rm -rf $(VDISK_ROOT) || { \
@@ -373,6 +367,11 @@ grmti: generate_image
 	}
 
 vdisk: generate_image
+	@find $(VDISK_ROOT) -xtype l -delete
+	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
+	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
+
+	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
 		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
