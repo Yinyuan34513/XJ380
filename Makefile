@@ -29,7 +29,7 @@ endif
 BUILD_DIR := out
 VDISK_SIZE_MIB ?= 3072
 VDISK_FAT_MIB ?= 3072
-VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
+VDISK_ROOT ?= ./xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
@@ -263,7 +263,7 @@ clean.clangd:
 gen.clangd: clean.clangd $(CLANGD_TEMPLATE_CONFS:%.clangd_template=%.clangd)
 	@echo "\033[1;32m[Done]\033[0m .clangd configurations was generated.\n"
 
-generate_image: all
+vdisk: all
 	@rm -rf XJ380.img
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 	@rm -rf $(VDISK_ROOT) || { \
@@ -358,9 +358,6 @@ generate_image: all
 	@cp ./out/layout.elf $(VDISK_ROOT)/apps/builtin
 	@if [ -d ./frameworks/StardustUI/examples/duckchat ] && [ -f ./out/duckchat.elf ]; then cp ./out/duckchat.elf $(VDISK_ROOT)/apps/builtin; fi
 
-grmti: generate_image
-
-vdisk: generate_image
 	@find $(VDISK_ROOT) -xtype l -delete
 	@find $(VDISK_ROOT) -type l -exec sh -c 'for lnk do tmp=$${lnk}.xj380-copy; cp -aL "$$lnk" "$$tmp" 2>/dev/null && rm -f "$$lnk" && mv "$$tmp" "$$lnk" || { rm -rf "$$tmp"; rm -f "$$lnk"; }; done' sh {} +
 	@mcopy -o -s -i XJ380.img@@$$((2048*512)) $(VDISK_ROOT)/* ::
