@@ -365,7 +365,7 @@ generate_image: all
 	@chmod -R u+rwX $(VDISK_ROOT) 2>/dev/null || true
 
 grmti: generate_image
-	cp -a /tmp/xj380-vdisk-1000/XJ380 .
+	cp -rf /tmp/xj380-vdisk-1000/XJ380 .
 	@rm -rf $(VDISK_ROOT) || { \
 		echo "Cannot remove $(VDISK_ROOT); fix ownership with:"; \
 		echo "  sudo chown -R $$(id -u):$$(id -g) $(VDISK_ROOT)"; \
