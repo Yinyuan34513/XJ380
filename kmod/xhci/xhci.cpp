@@ -2861,25 +2861,34 @@ static int xhci_probe(pci_device_t *pci_dev) {
     usb_scan_all_hubs();
 
     g_xhci = xhci;
-    if (!xhci->service_worker_started) {
-        size_t tid =
-            create_kernel_thread((void *)xhci_service_worker, xhci,
-                                 (char *)"xhci-svc", NULL);
-        xhci->service_worker_started = true;
-        xhci->hid_worker_started = true;
-        pr_info("xhci: service worker started tid=%u hid=%s\n",
-               (unsigned int)tid, xhci_has_active_hid(xhci) ? "yes" : "no");
+    return 0;
+}
+
+void xhci_start_workers(void) {
+    usb_core_start_workers();
+
+    xhci_controller *xhci = g_xhci;
+    if (!xhci || xhci->service_worker_started) {
+        return;
     }
-    return 0;
+
+    size_t tid = create_kernel_thread((void *)xhci_service_worker, xhci,
+                                      (char *)"xhci-svc", NULL);
+    if ((int64_t)tid < 0) {
+        return;
+    }
+
+    xhci->service_worker_started = true;
+    xhci->hid_worker_started = true;
+    pr_info("xhci: service worker started tid=%u hid=%s\n",
+            (unsigned int)tid, xhci_has_active_hid(xhci) ? "yes" : "no");
 }
 
-extern "C" __attribute__((used)) __attribute__((visibility("default"))) int
-dlstart(void) {
-    return 0;
-}
+int xhci_setup(void) {
+    if (g_xhci) {
+        return 0;
+    }
 
-extern "C" __attribute__((used)) __attribute__((visibility("default"))) int
-dlmain(void) {
     pci_device_t *xhci_dev = pci_find_class(XHCI_PCI_CLASS);
     if (!xhci_dev) {
         pr_info("xhci: no xHCI controller found\n");
@@ -2887,4 +2896,19 @@ dlmain(void) {
     }
 
     return xhci_probe(xhci_dev);
+}
+
+extern "C" __attribute__((used)) __attribute__((visibility("default"))) int
+dlstart(void) {
+    xhci_start_workers();
+    return 0;
+}
+
+extern "C" __attribute__((used)) __attribute__((visibility("default"))) int
+dlmain(void) {
+    int rc = xhci_setup();
+    if (rc == 0) {
+        xhci_start_workers();
+    }
+    return rc;
 }

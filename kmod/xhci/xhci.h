@@ -1,13 +1,17 @@
 #pragma once
 
+#ifndef XHCI_BUILTIN
 extern "C" {
+#endif
 #include "../../include/errno.h"
 #include "../../include/device.h"
 #include "../../include/krlibc.h"
 #include "../../include/mm/page.h"
 #include "../../include/pci/pci.h"
 #include "../../include/proto.hpp"
+#ifndef XHCI_BUILTIN
 }
+#endif
 
 #include "../../include/task/pcb.h"
 #include <stdint.h>
@@ -672,6 +676,7 @@ struct usb_driver {
 };
 
 void usb_core_init(void);
+void usb_core_start_workers(void);
 void usb_register_driver(usb_driver *driver);
 void usb_register_hub(usb_hub *hub);
 void usb_hub_mark_port_changed(usb_hub *hub, uint32_t port_idx);
@@ -729,3 +734,5 @@ int xhci_hub_detect_port(xhci_controller *xhci, xhci_slot_state *slot,
 int xhci_hub_reset_port(xhci_controller *xhci, xhci_slot_state *slot,
                         uint8_t port, uint8_t *speed_out);
 int xhci_setup_hub(xhci_controller *xhci, xhci_slot_state *slot);
+int xhci_setup(void);
+void xhci_start_workers(void);

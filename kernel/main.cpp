@@ -1,4 +1,5 @@
 #include "build_settings.h"
+#include "build_config.h"
 #include <ahci/ahci.h>
 #include <cpu/regio.h>
 #include <device.h>
@@ -634,6 +635,10 @@ void init_heap()
 
 
 extern void     nvme_setup();
+#if CONFIG_KERNEL_BUILTIN_XHCI
+extern int      xhci_setup();
+extern void     xhci_start_workers();
+#endif
 extern void     mount_root();
 extern void     stdio_init();
 extern int      socketfs_setup();
@@ -710,6 +715,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: ide_setup begin\n");
     ide_setup();
     write_serial_string("BOOT: ide_setup done\n");
+#if CONFIG_KERNEL_BUILTIN_XHCI
+    write_serial_string("BOOT: xhci_setup begin\n");
+    xhci_setup();
+    write_serial_string("BOOT: xhci_setup done\n");
+#endif
     write_serial_string("BOOT: partition_init begin\n");
     partition_init();
     write_serial_string("BOOT: partition_init done\n");
@@ -764,6 +774,10 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     memset(phys_to_virt(get_cr3()), 0, PAGE_SIZE / 2);
 
     disable_scheduler();
+
+#if CONFIG_KERNEL_BUILTIN_XHCI
+    xhci_start_workers();
+#endif
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 

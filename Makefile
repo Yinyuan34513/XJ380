@@ -9,6 +9,8 @@ SMP ?= 4
 SUDO ?= 1
 VDISK_SUDO ?=
 KVM ?= 1
+USB_BOOT ?= 0
+BUILTIN_XHCI ?= 1
 
 ifeq ($(DEBUG), 1)
 DEBUG_FLAG = -s -S
@@ -42,7 +44,14 @@ DISPLAY_BACKEND ?= gtk
 USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
 AUDIO_BACKEND ?= sdl
 HDA_CODEC ?= hda-output
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
+
+ifeq ($(USB_BOOT), 1)
+QEMU_BOOT_STORAGE = -drive if=none,id=usbdisk,file=XJ380.img,index=0,format=raw -device usb-storage,bus=xhci.0,port=3,drive=usbdisk,bootindex=0
+else
+QEMU_BOOT_STORAGE = -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk,bootindex=0
+endif
+
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -device qemu-xhci,id=xhci $(QEMU_BOOT_STORAGE) $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?=
 
@@ -51,6 +60,10 @@ NASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.as
 ASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.S")
 C_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.c")
 CPP_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.cpp")
+ifeq ($(BUILTIN_XHCI), 1)
+CPP_FLAGS += -DXHCI_BUILTIN
+CPP_FILES += $(shell find ./kmod/xhci -name "*.cpp")
+endif
 HEADER_FILES := $(shell find ./include -name "*.h" -o -name "*.hpp")
 
 export CC = $(COMPILER_PREFIX)clang
@@ -126,6 +139,7 @@ $(BUILD_CONFIG_HEADER): FORCE
 	{ \
 		echo "#pragma once"; \
 		echo "#define CONFIG_KERNEL_BUSYBOX_ALIASES $(KERNEL_BUSYBOX_ALIASES)"; \
+		echo "#define CONFIG_KERNEL_BUILTIN_XHCI $(BUILTIN_XHCI)"; \
 	} > "$$tmp"; \
 	if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm -f "$$tmp"; fi
 
@@ -332,7 +346,11 @@ generate_image: all
 
 	@cp -a ./graphics/icon/*.* $(VDISK_ROOT)/system/icon
 
-	@cp -a ./out/*.km $(VDISK_ROOT)/mod
+	@for km in ./out/*.km; do \
+		[ -e "$$km" ] || continue; \
+		if [ "$(BUILTIN_XHCI)" = "1" ] && [ "$$(basename "$$km")" = "xhci.km" ]; then continue; fi; \
+		cp -a "$$km" $(VDISK_ROOT)/mod; \
+	done
 
 	@cp -a ./resources/* $(VDISK_ROOT)/system/resources
 
@@ -417,7 +435,11 @@ installer.system.stage: all installer.prepare
 	@cp -a ./graphics/peek.png $(INSTALLER_SYSTEM_ROOT)/system/foxland
 	@cp -a ./graphics/logo/*.* $(INSTALLER_SYSTEM_ROOT)/system
 	@cp -a ./graphics/icon/*.* $(INSTALLER_SYSTEM_ROOT)/system/icon
-	@cp -a ./out/*.km $(INSTALLER_SYSTEM_ROOT)/mod
+	@for km in ./out/*.km; do \
+		[ -e "$$km" ] || continue; \
+		if [ "$(BUILTIN_XHCI)" = "1" ] && [ "$$(basename "$$km")" = "xhci.km" ]; then continue; fi; \
+		cp -a "$$km" $(INSTALLER_SYSTEM_ROOT)/mod; \
+	done
 	@cp -a ./resources/* $(INSTALLER_SYSTEM_ROOT)/system/resources
 	@cp ./out/helloworld.elf $(INSTALLER_SYSTEM_ROOT)/apps/builtin
 	@cp ./out/layout.elf $(INSTALLER_SYSTEM_ROOT)/apps/builtin

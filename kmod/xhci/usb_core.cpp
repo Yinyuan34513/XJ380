@@ -169,9 +169,17 @@ void usb_core_init(void) {
     }
 
     g_usb_core_inited = true;
+}
+
+void usb_core_start_workers(void) {
+    usb_core_init();
+
     if (!g_usb_hotplug_started) {
         size_t tid = create_kernel_thread((void *)usb_hotplug_worker, NULL,
                                           (char *)"usb-hotplug", NULL);
+        if ((int64_t)tid < 0) {
+            return;
+        }
         g_usb_hotplug_started = true;
         printk("usb: hotplug worker started tid=%u\n", (unsigned int)tid);
     }
