@@ -16,16 +16,16 @@ extern BOOT_CONFIG *EFI_BC;
 int serial_x     = 0;
 int serial_y     = 0;
 int serial_x_max = 0;
-static constexpr int SERIAL_CHAR_WIDTH  = 8;
-static constexpr int SERIAL_CHAR_HEIGHT = 16;
-static constexpr int SERIAL_SCREEN_PADDING   = 8;
-static constexpr int SERIAL_SCREEN_MARGIN    = 8;
-static constexpr int SERIAL_SCREEN_MIN_COLS  = 32;
-static constexpr int SERIAL_SCREEN_MAX_COLS  = 96;
-static constexpr int SERIAL_SCREEN_MIN_LINES = 6;
-static constexpr int SERIAL_SCREEN_MAX_LINES = 14;
-static constexpr int SERIAL_LOG_RING_LINES   = 128;
-static constexpr int SERIAL_LOG_LINE_CAP     = 128;
+static constexpr int SERIAL_CHAR_WIDTH       = 8;   // 内置位图字体的字符宽度，单位为像素
+static constexpr int SERIAL_CHAR_HEIGHT      = 16;  // 内置位图字体的字符高度，单位为像素
+static constexpr int SERIAL_SCREEN_PADDING   = 8;   // 边框与文本之间的内部留白
+static constexpr int SERIAL_SCREEN_MARGIN    = 8;   // 叠层窗口与帧缓冲边缘的最小距离
+static constexpr int SERIAL_SCREEN_MIN_COLS  = 32;  // 低分辨率下仍保持可读的最小列数
+static constexpr int SERIAL_SCREEN_MAX_COLS  = 96;  // 避免叠层窗口覆盖整个屏幕的最大列数
+static constexpr int SERIAL_SCREEN_MIN_LINES = 6;   // 最少可见日志行数
+static constexpr int SERIAL_SCREEN_MAX_LINES = 14;  // 最多可见日志行数
+static constexpr int SERIAL_LOG_RING_LINES   = 128; // 环形缓冲区保留的日志行数
+static constexpr int SERIAL_LOG_LINE_CAP     = 128; // 单行叠层日志最多保存的字节数
 
 static constexpr PixelColor SERIAL_SCREEN_WHITE  = {0xff, 0xff, 0xff};
 static constexpr PixelColor SERIAL_SCREEN_GRAY   = {0x80, 0x80, 0x80};
