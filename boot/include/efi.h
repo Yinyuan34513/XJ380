@@ -54,6 +54,13 @@ typedef UINTN EFI_VIRTUAL_ADDRESS;
 typedef VOID *EFI_HANDLE;
 typedef VOID *EFI_EVENT;
 
+typedef enum
+{
+    AllHandles,
+    ByRegisterNotify,
+    ByProtocol
+} EFI_LOCATE_SEARCH_TYPE;
+
 #define EFI_ERROR_MASK           0x8000000000000000
 #define EFIERR(a)                (EFI_ERROR_MASK | a)
 #define EFI_ERROR(status)        (((long long)status) < 0)
@@ -258,7 +265,10 @@ struct EFI_BOOT_SERVICES
     UINTN _buf9[2];
 
     // Library Services
-    UINTN _buf10[2];
+    UINTN _buf10[1];
+    EFIAPI
+    EFI_STATUS (*LocateHandleBuffer)(EFI_LOCATE_SEARCH_TYPE SearchType, EFI_GUID *Protocol, VOID *SearchKey,
+                                     UINTN *NoHandles, EFI_HANDLE **Buffer);
     EFIAPI
     EFI_STATUS (*LocateProtocol)(EFI_GUID *Protocol, VOID *Registration, VOID **Interface);
     UINTN _buf10_2[2];

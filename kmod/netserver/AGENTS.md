@@ -15,7 +15,7 @@ kmod/netserver/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Module build | `Makefile` | Produces `../../out/netserver.km`. |
+| Module build | `Makefile` | Produces `../../out/netserver.sys`. |
 | Socket/provider glue | `netserver.cpp` | Main first-party networking behavior. |
 | lwIP OS port | `arch/sys_arch.cpp`, `arch/utils.cpp` | Scheduler/mutex/timer bridge. |
 | Network ABI | `include/net/`, `include/netdev.h` | Shared with kernel/user callers. |

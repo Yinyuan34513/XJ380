@@ -883,7 +883,7 @@ static int installer_build_precheck(size_t disk_id, uint32_t mode, uint64_t comp
     }
 
     if (mode == XJ380_INSTALLER_MODE_REPAIR_BOOT)
-        installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "仅修复引导", "该模式需要已有 EFI 分区，只会重写 EFI/BOOT/BOOTX64.efi 和 /system/kernel.elf。");
+        installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "仅修复引导", "该模式需要已有 EFI 分区，只会重写 EFI/BOOT/BOOTX64.efi 和 /system/kernel.krl。");
     else if (mode == XJ380_INSTALLER_MODE_KEEP_USERS)
         installer_precheck_add(check, XJ380_INSTALLER_CHECK_WARN, 0, "保留用户目录", "该模式需要已有 XJ380 分区，会覆盖系统文件并跳过 /users，不会格式化硬盘。");
     else if (mode == XJ380_INSTALLER_MODE_DEVELOPER)
@@ -1287,7 +1287,7 @@ static int installer_repair_boot_on_mounted_target(const uint8_t *payload, size_
     int ret = installer_copy_payload_file_by_rel(payload, payload_size, "/EFI/BOOT/BOOTX64.efi", "/target");
     if (ret < 0) return ret;
     installer_set_progress(XJ380_INSTALLER_RUNNING, 75, 0, "正在修复引导", "正在写入系统内核。");
-    ret = installer_copy_payload_file_by_rel(payload, payload_size, "/system/kernel.elf", "/target");
+    ret = installer_copy_payload_file_by_rel(payload, payload_size, "/system/kernel.krl", "/target");
     if (ret < 0) return ret;
     installer_set_progress(XJ380_INSTALLER_RUNNING, 92, 0, "正在修复引导", "引导文件已重建。");
     return EOK;

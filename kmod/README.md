@@ -1,6 +1,6 @@
 # Kernel Modules
 
-`system/kmod/` contains loadable kernel modules that are built into `.km` artifacts
+`system/kmod/` contains loadable kernel modules that are built into `.sys` artifacts
 and copied into `/system` in the disk image.
 
 Current layout:
@@ -13,7 +13,7 @@ Boundary rule:
 
 - Put code here only if it is intended to be linked as a shared kernel module.
 - Keep code in `kernel/` only if it must be part of the core kernel image.
-- Keep code in `driver/` only if it is a built-in driver linked into `kernel.elf`.
+- Keep code in `driver/` only if it is a built-in driver linked into `kernel.krl`.
 
 Compatibility:
 

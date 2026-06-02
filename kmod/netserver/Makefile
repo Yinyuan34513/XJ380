@@ -48,9 +48,9 @@ CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-bu
 INCLUDES = -I../../include -I./lwip/include -I./
 LDFLAGS := -nostdlib -Wl,-e,dlmain -Wl,-z,muldefs
 
-all: ../../out/netserver.km
+all: ../../out/netserver.sys
 
-../../out/netserver.km: $(C_OBJECTS) $(CPP_OBJECTS)
+../../out/netserver.sys: $(C_OBJECTS) $(CPP_OBJECTS)
 	$(CXX) -shared $(CPP_OBJECTS) $(C_OBJECTS) $(LDFLAGS) -o $@
 
 %.o: %.c

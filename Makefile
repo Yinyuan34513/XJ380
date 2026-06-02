@@ -30,6 +30,7 @@ BUILD_DIR := out
 VDISK_SIZE_MIB ?= 3072
 VDISK_FAT_MIB ?= 3072
 VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
+VDISK_COMPLETE ?= 0
 KMOD_DIR := kmod
 STARDUSTUI_EXAMPLE_DIRS := \
 	frameworks/StardustUI/examples/helloworld \
@@ -198,7 +199,7 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 	@$(OBJC) -I binary -O elf64-x86-64 ./graphics/logo/xj380_2.png ./graphics/logo/xj380_2.o
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.elf $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
+	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.krl $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user
@@ -208,7 +209,7 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 liballoc-x86_64.a:
 	curl -Lo liballoc-x86_64.a https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
 
-.PHONY: clean format check gen.clangd prepare stage.selfhost-user stardustui.examples.copy installer.prepare installer.system.stage installer.root.stage installer.iso
+.PHONY: clean format check gen.clangd prepare stage.selfhost-user stage.linux-compat stardustui.examples.copy installer.prepare installer.system.stage installer.root.stage installer.iso complete
 
 clean:
 # 事实上直接删out/最简单了
@@ -246,6 +247,35 @@ stage.selfhost-user:
 	done
 	@find $(VDISK_ROOT)/apps/user $(VDISK_ROOT)/apps/third_party -type d -name .git -prune -exec rm -rf {} +
 
+stage.linux-compat:
+	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(VDISK_ROOT)"
+	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
+	@cp -a resources/musl/ld-musl-x86_64.so.1 $(VDISK_ROOT)/lib/ld-musl-x86_64.so.1
+	@cp -a resources/musl/libc.so $(VDISK_ROOT)/lib/libc.so
+	@cp -a resources/musl/libc.musl-x86_64.so.1 $(VDISK_ROOT)/lib/libc.musl-x86_64.so.1
+	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
+	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
+	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
+	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
+	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
+	@cp ./1.c $(VDISK_ROOT)/apps/1.c
+	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
+	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
+	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
+		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
+		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
+			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
+				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
+				echo "run: make prepare" >&2; \
+				exit 1; \
+			fi; \
+			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
+		fi; \
+	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
+		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected xbps or none)" >&2; \
+		exit 1; \
+	fi
+
 stardustui.examples.copy:
 	@for dir in $(STARDUSTUI_EXAMPLE_DIRS); do \
 		$(MAKE) -C $$dir copy PLATFORM=xj380 || exit $$?; \
@@ -282,7 +312,7 @@ vdisk: all
 	@cp -a ./user/fmanager/fm_bg.png $(VDISK_ROOT)/system/resources/image
 
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(VDISK_ROOT)/EFI/BOOT
-	@cp -a $(BUILD_DIR)/kernel.elf $(VDISK_ROOT)/system
+	@cp -a $(BUILD_DIR)/kernel.krl $(VDISK_ROOT)/system
 
 	@cp -a $(BUILD_DIR)/shell.elf    $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
@@ -304,35 +334,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
-	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(VDISK_ROOT)"
-	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(VDISK_ROOT)/lib64/ld-linux-x86-64.so.2
-
-	@cp -a resources/musl/ld-musl-x86_64.so.1 $(VDISK_ROOT)/lib/ld-musl-x86_64.so.1
-	@cp -a resources/musl/libc.so $(VDISK_ROOT)/lib/libc.so
-	@cp -a resources/musl/libc.musl-x86_64.so.1 $(VDISK_ROOT)/lib/libc.musl-x86_64.so.1
-	@cp -a resources/musl/libgcc_s.so.1 $(VDISK_ROOT)/lib/libgcc_s.so.1
-
-	@cp -a /lib/$(HOST_GCC_TRIPLE)/libc.so.6 $(VDISK_ROOT)/lib64/libc.so.6
-	@if [ "$(IMAGE_BUSYBOX)" = "1" ]; then cp -a $(APP_BUSYBOX) $(VDISK_ROOT)/apps/busybox; fi
-	@if [ -f ./lolcat_100.0.1-3_all.deb ]; then cp -a ./lolcat_100.0.1-3_all.deb $(VDISK_ROOT)/apps/lolcat.deb; fi
-	@cp -a $(APP_FASTFETCH) $(VDISK_ROOT)/apps/fastfetch
-	@cp ./1.c $(VDISK_ROOT)/apps/1.c
-	@IMAGE_TOOLCHAIN="$(IMAGE_TOOLCHAIN)" HOST_GCC="$(HOST_GCC)" HOST_CLANG="$(HOST_CLANG)" HOST_CLANGXX="$(HOST_CLANGXX)" HOST_LLVM_AR="$(HOST_LLVM_AR)" HOST_LLVM_RANLIB="$(HOST_LLVM_RANLIB)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_TOOLCHAIN) $(VDISK_ROOT)
-	@$(STAGE_ELF_DEPS) $(VDISK_ROOT) $(APP_FASTFETCH)
-	@if [ "$(IMAGE_PACKAGE_MANAGER)" = "xbps" ]; then \
-		IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" APP_BUSYBOX="$(APP_BUSYBOX)" STAGE_ELF_DEPS="$(STAGE_ELF_DEPS)" sh $(STAGE_IMAGE_XBPS) $(VDISK_ROOT); \
-		if [ -n "$(XBPS_BOOTSTRAP)" ]; then \
-			if [ ! -d "$(XBPS_PREPARE_ROOT)/var/db/xbps" ]; then \
-				echo "missing prepared xbps root: $(XBPS_PREPARE_ROOT)" >&2; \
-				echo "run: make prepare" >&2; \
-				exit 1; \
-			fi; \
-			IMAGE_BUSYBOX="$(IMAGE_BUSYBOX)" sh $(STAGE_PREPARED_ROOT) "$(XBPS_PREPARE_ROOT)" $(VDISK_ROOT); \
-		fi; \
-	elif [ "$(IMAGE_PACKAGE_MANAGER)" != "none" ]; then \
-		echo "unsupported IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER) (expected xbps or none)" >&2; \
-		exit 1; \
-	fi
+	@if [ "$(VDISK_COMPLETE)" = "1" ]; then $(MAKE) stage.linux-compat VDISK_ROOT="$(VDISK_ROOT)"; fi
 
 	@cp -a ./font/ttf/XJ380F.ttf $(VDISK_ROOT)/system/font
 	@cp -a ./font/ttf/XJ380C.ttf $(VDISK_ROOT)/system/font
@@ -346,10 +348,10 @@ vdisk: all
 
 	@cp -a ./graphics/icon/*.* $(VDISK_ROOT)/system/icon
 
-	@for km in ./out/*.km; do \
-		[ -e "$$km" ] || continue; \
-		if [ "$(BUILTIN_XHCI)" = "1" ] && [ "$$(basename "$$km")" = "xhci.km" ]; then continue; fi; \
-		cp -a "$$km" $(VDISK_ROOT)/mod; \
+	@for sys in ./out/*.sys; do \
+		[ -e "$$sys" ] || continue; \
+		if [ "$(BUILTIN_XHCI)" = "1" ] && [ "$$(basename "$$sys")" = "xhci.sys" ]; then continue; fi; \
+		cp -a "$$sys" $(VDISK_ROOT)/mod; \
 	done
 
 	@cp -a ./resources/* $(VDISK_ROOT)/system/resources
@@ -375,7 +377,7 @@ installer.system.stage: all installer.prepare
 	@sh $(STAGE_IMAGE_BASE) $(INSTALLER_SYSTEM_ROOT)
 	@cp -a ./user/fmanager/fm_bg.png $(INSTALLER_SYSTEM_ROOT)/system/resources/image
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(INSTALLER_SYSTEM_ROOT)/EFI/BOOT
-	@cp -a $(BUILD_DIR)/kernel.elf $(INSTALLER_SYSTEM_ROOT)/system
+	@cp -a $(BUILD_DIR)/kernel.krl $(INSTALLER_SYSTEM_ROOT)/system
 	@cp -a $(BUILD_DIR)/shell.elf    $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/fmanager.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
@@ -425,10 +427,10 @@ installer.system.stage: all installer.prepare
 	@cp -a ./graphics/peek.png $(INSTALLER_SYSTEM_ROOT)/system/foxland
 	@cp -a ./graphics/logo/*.* $(INSTALLER_SYSTEM_ROOT)/system
 	@cp -a ./graphics/icon/*.* $(INSTALLER_SYSTEM_ROOT)/system/icon
-	@for km in ./out/*.km; do \
-		[ -e "$$km" ] || continue; \
-		if [ "$(BUILTIN_XHCI)" = "1" ] && [ "$$(basename "$$km")" = "xhci.km" ]; then continue; fi; \
-		cp -a "$$km" $(INSTALLER_SYSTEM_ROOT)/mod; \
+	@for sys in ./out/*.sys; do \
+		[ -e "$$sys" ] || continue; \
+		if [ "$(BUILTIN_XHCI)" = "1" ] && [ "$$(basename "$$sys")" = "xhci.sys" ]; then continue; fi; \
+		cp -a "$$sys" $(INSTALLER_SYSTEM_ROOT)/mod; \
 	done
 	@cp -a ./resources/* $(INSTALLER_SYSTEM_ROOT)/system/resources
 	@cp ./out/helloworld.elf $(INSTALLER_SYSTEM_ROOT)/apps/builtin
@@ -456,12 +458,15 @@ installer.root.stage: all
 
 installer.iso: installer.system.stage installer.root.stage
 	@rm -f XJ380-installer.iso
-	@sh $(MAKE_INSTALLER_ISO) $(INSTALLER_ISO_ROOT) $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/kernel.elf $(INSTALLER_ROOT_PAK) $(INSTALLER_SYSTEM_PAK)
+	@sh $(MAKE_INSTALLER_ISO) $(INSTALLER_ISO_ROOT) $(BUILD_DIR)/BOOTX64.efi $(BUILD_DIR)/kernel.krl $(INSTALLER_ROOT_PAK) $(INSTALLER_SYSTEM_PAK)
 
 
 vmdk: vdisk
 	@rm -rf XJ380.vmdk
 	@qemu-img convert -O vmdk XJ380.img XJ380.vmdk
+
+complete: VDISK_COMPLETE=1
+complete: vdisk
 
 run: vdisk
 	@$(QEMU_CMD)

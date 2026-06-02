@@ -7,9 +7,9 @@ CXX_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-bu
 
 LDFLAGS := -nostdlib -Wl,-e,dlmain -Wl,-Bsymbolic -zmuldefs
 
-all: ../../out/xhci.km
+all: ../../out/xhci.sys
 
-../../out/xhci.km: $(OBJECTS)
+../../out/xhci.sys: $(OBJECTS)
 	$(CXX) -shared usb_core.o usb_hub.o usb_msc.o xhci.o $(LDFLAGS) -o $@
 
 %.o: %.cpp

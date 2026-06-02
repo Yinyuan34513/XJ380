@@ -1,5 +1,5 @@
-DEP_TARGET := ../../out/00_dlinker_dep.km
-TEST_TARGET := ../../out/01_dlinker_test.km
+DEP_TARGET := ../../out/00_dlinker_dep.sys
+TEST_TARGET := ../../out/01_dlinker_test.sys
 
 CXX ?= clang++
 
@@ -9,10 +9,10 @@ LDFLAGS := -nostdlib -Wl,-e,dlmain
 all: $(DEP_TARGET) $(TEST_TARGET)
 
 $(DEP_TARGET): dep.o
-	$(CXX) -shared dep.o $(LDFLAGS) -Wl,-soname,00_dlinker_dep.km -o $@
+	$(CXX) -shared dep.o $(LDFLAGS) -Wl,-soname,00_dlinker_dep.sys -o $@
 
 $(TEST_TARGET): test.o $(DEP_TARGET)
-	$(CXX) -shared test.o -L../../out -l:00_dlinker_dep.km $(LDFLAGS) -Wl,-soname,01_dlinker_test.km -o $@
+	$(CXX) -shared test.o -L../../out -l:00_dlinker_dep.sys $(LDFLAGS) -Wl,-soname,01_dlinker_test.sys -o $@
 
 %.o: %.cpp
 	$(CXX) $(CXX_FLAGS) -I../../include/ -c $< -o $@

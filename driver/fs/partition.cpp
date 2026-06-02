@@ -486,33 +486,69 @@ extern "C" void partition_device_added(size_t vdisk_id)
     partition_scan_single_device(vdisk_id, true);
 }
 EXPORT_SYMBOL(partition_device_added);
+
+static bool root_probe_has_file(const char *path)
+{
+    vfs_node_t node = vfs_open(path);
+    if (node == NULL) return false;
+    bool found = (node->type & file_dir) == 0;
+    vfs_close(node);
+    return found;
+}
+
+static bool root_probe_has_system_markers(void)
+{
+    return (root_probe_has_file("/__root_probe/EFI/BOOT/BOOTX64.EFI") ||
+            root_probe_has_file("/__root_probe/EFI/BOOT/BOOTX64.efi")) &&
+           root_probe_has_file("/__root_probe/system/kernel.krl");
+}
+
+static bool root_probe_partition(const char *dev_path)
+{
+    vfs_mkdir("/__root_probe");
+
+    vfs_node_t probe = vfs_open("/__root_probe");
+    if (probe == NULL) return false;
+
+    bool found = false;
+    if (vfs_mount(dev_path, probe) == VFS_STATUS_SUCCESS)
+    {
+        found = root_probe_has_system_markers();
+        vfs_unmount("/__root_probe");
+    }
+
+    vfs_delete(probe);
+    return found;
+}
+
 void mount_root()
 {
-    bool err = true;
-
     for (uint64_t i = 0; i < partition_num; i++)
     {
         partition_t p         = partitions[i];
         device_t   *src_dev   = get_device(p.vdisk_id);
+        if (src_dev == NULL) continue;
+
         char        buf[1024] = {};
         sprintf(buf, "/dev/%sp%zu", src_dev->drive_name, i);
         write_serial_string(buf);
         write_serial_string("\n");
 
-        if (!vfs_mount((const char *)buf, rootdir))
+        if (!root_probe_partition(buf))
         {
-            err = false;
-            pr_info("Mount root OK!\n");
-            break;
+            continue;
+        }
+
+        if (vfs_mount((const char *)buf, rootdir) == VFS_STATUS_SUCCESS)
+        {
+            pr_info("Mount root OK: %s\n", buf);
+            return;
         }
     }
 
-    if (err)
+    write_serial_string("system not found\n");
+    while (1)
     {
-        pr_info("Mount root failed\n");
-        while (1)
-        {
-            __asm__ volatile("pause\n\t");
-        }
+        __asm__ volatile("pause\n\t");
     }
 }

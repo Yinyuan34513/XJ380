@@ -1,7 +1,7 @@
 # KMOD KNOWLEDGE BASE
 
 ## OVERVIEW
-Loadable kernel module subtree. Modules build as shared `.km` artifacts, load through the kernel dynamic linker, and are copied into the disk image `/mod`.
+Loadable kernel module subtree. Modules build as shared `.sys` artifacts, load through the kernel dynamic linker, and are copied into the disk image `/mod`.
 
 ## STRUCTURE
 ```
@@ -17,10 +17,10 @@ kmod/
 | Task | Location | Notes |
 |------|----------|-------|
 | Module policy | `README.md` | Boundary rule for `kmod/` vs `kernel/` vs `driver/`. |
-| Module loader | `kernel/dlinker.cpp`, `include/dlinker.h` | Loads `.km`, resolves symbols/deps. |
+| Module loader | `kernel/dlinker.cpp`, `include/dlinker.h` | Loads `.sys`, resolves symbols/deps. |
 | Top-level build | `Makefile` | Builds e1000 -> netserver -> xhci. |
 | Module entry | `*/Makefile`, `*/*.cpp` | Linker entry symbol is `dlmain`. |
-| Image copy | root `Makefile` | Copies `out/*.km` into image `/mod`. |
+| Image copy | root `Makefile` | Copies `out/*.sys` into image `/mod`. |
 
 ## CONVENTIONS
 - Put code here only if it is intended to be linked as a shared loadable kernel module.
@@ -33,7 +33,7 @@ kmod/
 ## ANTI-PATTERNS
 - Do not put mandatory boot drivers in `kmod/`; safe mode/boot flags can disable module loading.
 - Do not create Linux-style `init_module` expectations; this repo uses `dlmain`.
-- Do not assume `.km` files land under `/system`; root image copy places `out/*.km` into `/mod`.
+- Do not assume `.sys` files land under `/system`; root image copy places `out/*.sys` into `/mod`.
 - Do not edit module object order casually where a Makefile hardcodes link order.
 
 ## VERIFY

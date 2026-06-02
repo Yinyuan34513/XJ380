@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -ne 5 ]; then
-    echo "usage: $0 <iso-root> <bootx64.efi> <installer-kernel.elf> <installer-root.pak> <system-payload.pak>" >&2
+    echo "usage: $0 <iso-root> <bootx64.efi> <installer-kernel.krl> <installer-root.pak> <system-payload.pak>" >&2
     exit 2
 fi
 

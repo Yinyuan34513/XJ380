@@ -7,9 +7,9 @@ CXX_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-bu
 
 LDFLAGS := -nostdlib -Wl,-e,dlmain 
 
-all: ../../out/e1000.km
+all: ../../out/e1000.sys
 
-../../out/e1000.km: $(OBJECTS)
+../../out/e1000.sys: $(OBJECTS)
 	$(CXX) -shared $(OBJECTS) $(LDFLAGS) -o $@
 
 %.o: %.cpp

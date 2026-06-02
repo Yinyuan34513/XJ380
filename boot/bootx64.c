@@ -438,6 +438,59 @@ static EFI_STATUS open_boot_file(struct EFI_FILE_PROTOCOL *root, CHAR16 *path, s
     return root->Open(root, file, path, EFI_FILE_MODE_READ, 0);
 }
 
+static EFI_STATUS boot_file_exists(struct EFI_FILE_PROTOCOL *root, CHAR16 *path)
+{
+    if (root == NULL || path == NULL) return EFI_INVALID_PARAMETER;
+
+    struct EFI_FILE_PROTOCOL *file = NULL;
+    EFI_STATUS status = open_boot_file(root, path, &file);
+    if (EFI_ERROR(status)) return status;
+
+    file->Close(file);
+    return EFI_SUCCESS;
+}
+
+static int boot_volume_has_system_markers(struct EFI_FILE_PROTOCOL *root)
+{
+    return !EFI_ERROR(boot_file_exists(root, L"\\EFI\\BOOT\\BOOTX64.EFI")) &&
+           !EFI_ERROR(boot_file_exists(root, L"\\system\\kernel.krl"));
+}
+
+static EFI_STATUS open_system_volume(struct EFI_FILE_PROTOCOL **out_root)
+{
+    if (out_root == NULL) return EFI_INVALID_PARAMETER;
+    *out_root = NULL;
+
+    EFI_HANDLE *handles = NULL;
+    UINTN       handle_count = 0;
+    EFI_STATUS  status = BS->LocateHandleBuffer(ByProtocol, &sfsp_guid, NULL, &handle_count, &handles);
+    if (EFI_ERROR(status)) return status;
+
+    for (UINTN i = 0; i < handle_count; i++)
+    {
+        struct EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs = NULL;
+        status = BS->OpenProtocol(handles[i], &sfsp_guid, (void **)&fs, IM, NULL,
+                                  EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
+        if (EFI_ERROR(status) || fs == NULL) continue;
+
+        struct EFI_FILE_PROTOCOL *candidate = NULL;
+        status = fs->OpenVolume(fs, &candidate);
+        if (EFI_ERROR(status) || candidate == NULL) continue;
+
+        if (boot_volume_has_system_markers(candidate))
+        {
+            *out_root = candidate;
+            BS->FreePool(handles);
+            return EFI_SUCCESS;
+        }
+
+        candidate->Close(candidate);
+    }
+
+    BS->FreePool(handles);
+    return EFI_NOT_FOUND;
+}
+
 static EFI_STATUS boot_file_size(struct EFI_FILE_PROTOCOL *file, UINTN *out_size)
 {
     if (file == NULL || out_size == NULL) return EFI_INVALID_PARAMETER;
@@ -754,7 +807,18 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     }
     else
     {
-        status = read_boot_file(root, L"\\system\\kernel.elf", &kernel_buffer, &kernel_size);
+        root->Close(root);
+        root = NULL;
+
+        status = open_system_volume(&root);
+        if (EFI_ERROR(status))
+        {
+            write_serial_string("system not found\n");
+            while (1)
+                ;
+        }
+
+        status = read_boot_file(root, L"\\system\\kernel.krl", &kernel_buffer, &kernel_size);
     }
 
     if (EFI_ERROR(status))
@@ -995,7 +1059,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     Kernel kernel = (Kernel)entry_addr;
     kernel((struct FrameBufferConfig *)((UINT64)&config + 0xFFFF800000000000), SystemTable, BootConfig); // 滚进去！
 
-    // 此处=kernel.elf
+    // 此处=kernel.krl
 
     while (1)
         ; // 趋势

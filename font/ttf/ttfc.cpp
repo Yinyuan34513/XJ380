@@ -17,80 +17,11 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 void         put_bitmap(SHEET_INFO *sht, SHEET *csheet, unsigned char *bitmap, unsigned x, unsigned y, unsigned width,
                         unsigned heigh, unsigned bitmap_xsize, SHEET_BUFFER fc);
 void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt, ...);
+unsigned char *TTF_PrintFont(stbtt_fontinfo *font_info, int *buf, unsigned *width, unsigned *heigh, int size);
 
 unsigned char *TTF_Print_c(int *buf, unsigned *width, unsigned *heigh, int size)
 {
-    /* 创建位图 */
-    int            bitmap_w = 2560; /* 位图的宽 */
-    int            bitmap_h = 1440; /* 位图的高 */
-    unsigned char *bitmap =
-        (unsigned char *)(phys_to_virt(alloc_frames((bitmap_w * bitmap_h + PAGE_SIZE - 1) / PAGE_SIZE)));
-    memset((void *)(bitmap), 0, bitmap_w * bitmap_h);
-
-    /* "STB"的 unicode 编码 */
-    int *word = buf;
-
-    /* 计算字体缩放 */
-    float pixels = size * 2;                                   /* 字体大小（字号） */
-    float scale  = stbtt_ScaleForPixelHeight(&font_c, pixels); /* scale = pixels / (ascent - descent) */
-
-    /**
-	 * 获取垂直方向上的度量
-	 * ascent：字体从基线到顶部的高度；
-	 * descent：基线到底部的高度，通常为负值；
-	 * lineGap：两个字体之间的间距；
-	 * 行间距为：ascent - descent + lineGap。
-	 */
-    int ascent  = 0;
-    int descent = 0;
-    int lineGap = 0;
-    stbtt_GetFontVMetrics(&font_c, &ascent, &descent, &lineGap);
-
-    /* 根据缩放调整字高 */
-    ascent  = roundf(ascent * scale);
-    descent = roundf(descent * scale);
-
-    int x = 0; /*位图的x*/
-
-    float    offset_x = 0; /* 整体的x偏移量 */
-    /* 循环加载word中每个字符 */
-    unsigned h = (int)((float)(ascent - descent + lineGap * scale));
-    for (int i = 0; word[i] != 0; ++i)
-    {
-        /**
-		 * 获取水平方向上的度量
-		 * advanceWidth：字宽；
-		 * leftSideBearing：左侧位置；
-		 */
-        int advanceWidth    = 0;
-        int leftSideBearing = 0;
-        stbtt_GetCodepointHMetrics(&font_c, word[i], &advanceWidth, &leftSideBearing);
-
-        /* 获取字符的边框（边界） */
-        int c_x1, c_y1, c_x2, c_y2;
-        stbtt_GetCodepointBitmapBox(&font_c, word[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
-
-        /* 计算位图的y (不同字符的高度不同） */
-        int y = ascent + c_y1;
-
-        /* 渲染字符 */
-        if (i <= 0) { offset_x = (float)(-leftSideBearing) * scale; } /* 把首个字符的左侧偏移，给整体偏移回去 */
-        int byteOffset = x + leftSideBearing * scale + (y * bitmap_w) + (int)roundf(offset_x);
-        stbtt_MakeCodepointBitmap(&font_c, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, bitmap_w, scale, scale,
-                                  word[i]);
-
-        /* 调整x */
-        x += roundf(advanceWidth * scale);
-
-        /* 调整字距 */
-        int kern;
-        kern  = stbtt_GetCodepointKernAdvance(&font_c, word[i], word[i + 1]);
-        x    += roundf(kern * scale);
-    }
-    *width = x;
-    *heigh = h;
-
-    return bitmap;
+    return TTF_PrintFont(&font_c, buf, width, heigh, size);
 }
 
 void print_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, char *buf, SHEET_BUFFER fc,
@@ -147,6 +78,12 @@ static void flush_ttf_buffer_c(FbTTFWriterData *data)
     unsigned int   width  = 0;
     unsigned int   height = 0;
     unsigned char *bitmap = TTF_Print_c(r, &width, &height, data->size);
+    if (bitmap == NULL)
+    {
+        write_serial_string("TTF Print Failed. Reason: Memory Allocate Failed.\n");
+        if (free_rune) { free(r); }
+        return;
+    }
     put_bitmap(data->sht, data->ct_sheet, bitmap, data->x, data->y, width, height, 2560, data->color);
     refresh_part_sheet(data->sht, data->x, data->y, data->x + (int)width, data->y + (int)height);
 
@@ -182,10 +119,15 @@ uint8_t fb_ttf_writer_handler_c(Writer *writer, char ch)
 void print_fmt_box_ttf_c(SHEET_INFO *sht, SHEET *csheet, SHEET_BUFFER fc, int x, int y, int size, const char *fmt, ...)
 {
     char *buf = (char *)malloc(TTF_BUF_SIZE * sizeof(char));
-    // char buf[TTF_BUF_SIZE];
-    buf[0]         = '\0';
     Rune *rune_buf = (Rune *)malloc(TTF_BUF_SIZE * sizeof(Rune));
-    // Rune rune_buf[TTF_BUF_SIZE];
+    if (buf == NULL || rune_buf == NULL)
+    {
+        free(buf);
+        free(rune_buf);
+        write_serial_string("print_fmt_box_ttf_c: buffer allocation failed\n");
+        return;
+    }
+    buf[0] = '\0';
 
     // 初始化写入器数据
     FbTTFWriterData fb_ttf_writer_data = {

@@ -468,10 +468,10 @@ void module_setup() {
     vfs_close(mr);
 }
 
-static bool ends_with_km(const char *str) {
+static bool ends_with_sys(const char *str) {
     size_t len = strlen(str);
-    if (len < 3) return false;
-    return strcmp(str + len - 3, ".km") == 0;
+    if (len < 4) return false;
+    return strcmp(str + len - 4, ".sys") == 0;
 }
 
 void start_all_kernel_module() {
@@ -492,7 +492,7 @@ void load_all_kernel_module() {
     kmod_allocator = id_allocator_create(MAX_KERNEL_MODULE);
     for (size_t i = 0; i < module_count; i++) {
         if (module_ls[i].is_use) {
-            if (ends_with_km(module_ls[i].raw_name)) {
+            if (ends_with_sys(module_ls[i].raw_name)) {
                 cp_module_t *mod = get_module(module_ls[i].module_name);
                 if (mod) {
                     int id = id_alloc(kmod_allocator);
@@ -1311,7 +1311,7 @@ void* dlopen(const char* filename, int flags) {
     
     // 判断是否是内核模块
     bool is_kernel = false;
-    if (strstr(filename, ".km") || strstr(filename, "/system/")) {
+    if (strstr(filename, ".sys") || strstr(filename, "/system/")) {
         is_kernel = true;
         flags |= RTLD_KERNEL;
     }
