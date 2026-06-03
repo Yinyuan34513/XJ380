@@ -487,20 +487,85 @@ extern "C" void partition_device_added(size_t vdisk_id)
 }
 EXPORT_SYMBOL(partition_device_added);
 
-static bool root_probe_has_file(const char *path)
+static int root_probe_ascii_lower(int ch)
 {
-    vfs_node_t node = vfs_open(path);
-    if (node == NULL) return false;
-    bool found = (node->type & file_dir) == 0;
-    vfs_close(node);
+    return (ch >= 'A' && ch <= 'Z') ? ch + ('a' - 'A') : ch;
+}
+
+static bool root_probe_name_equals(const char *a, const char *b)
+{
+    if (a == NULL || b == NULL) return a == b;
+    while (*a != '\0' && *b != '\0')
+    {
+        if (root_probe_ascii_lower((unsigned char)*a) != root_probe_ascii_lower((unsigned char)*b)) return false;
+        a++;
+        b++;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+static vfs_node_t root_probe_find_child(vfs_node_t parent, const char *name)
+{
+    if (parent == NULL || name == NULL) return NULL;
+    vfs_update(parent);
+
+    vfs_node_t child = NULL;
+    vfs_child_lock();
+    list_foreach(parent->child, item)
+    {
+        vfs_node_t candidate = (vfs_node_t)item->data;
+        if (root_probe_name_equals(candidate->name, name))
+        {
+            child = candidate;
+            break;
+        }
+    }
+    vfs_child_unlock();
+    return child;
+}
+
+static bool root_probe_has_file_from(vfs_node_t root, const char *path)
+{
+    if (root == NULL || path == NULL || path[0] == '\0') return false;
+
+    char *copy = strdup(path);
+    if (copy == NULL) return false;
+
+    vfs_node_t current = root;
+    char      *part    = copy;
+    while (*part == '/') part++;
+
+    while (*part != '\0')
+    {
+        char *next = part;
+        while (*next != '\0' && *next != '/') next++;
+        if (*next == '/')
+        {
+            *next = '\0';
+            next++;
+            while (*next == '/') next++;
+        }
+
+        current = root_probe_find_child(current, part);
+        if (current == NULL)
+        {
+            free(copy);
+            return false;
+        }
+
+        part = next;
+    }
+
+    bool found = (current->type & file_dir) == 0;
+    free(copy);
     return found;
 }
 
-static bool root_probe_has_system_markers(void)
+static bool root_probe_has_system_markers(vfs_node_t root)
 {
-    return (root_probe_has_file("/__root_probe/EFI/BOOT/BOOTX64.EFI") ||
-            root_probe_has_file("/__root_probe/EFI/BOOT/BOOTX64.efi")) &&
-           root_probe_has_file("/__root_probe/system/kernel.krl");
+    bool has_boot = root_probe_has_file_from(root, "EFI/BOOT/BOOTX64.EFI");
+    bool has_kernel = root_probe_has_file_from(root, "system/kernel.krl");
+    return has_boot && has_kernel;
 }
 
 static bool root_probe_partition(const char *dev_path)
@@ -513,12 +578,67 @@ static bool root_probe_partition(const char *dev_path)
     bool found = false;
     if (vfs_mount(dev_path, probe) == VFS_STATUS_SUCCESS)
     {
-        found = root_probe_has_system_markers();
+        found = root_probe_has_system_markers(probe);
         vfs_unmount("/__root_probe");
     }
 
     vfs_delete(probe);
     return found;
+}
+
+static bool partition_name_equals_ascii(const partition_t &partition, const char *name)
+{
+    if (name == NULL) return false;
+
+    size_t i = 0;
+    for (; i < 36 && name[i] != '\0'; i++)
+    {
+        if (partition.partition_name[i] != (uint16_t)name[i]) return false;
+    }
+    return name[i] == '\0' && (i >= 36 || partition.partition_name[i] == 0);
+}
+
+static bool mount_partition_index(uint64_t index, const char *reason)
+{
+    partition_t p       = partitions[index];
+    device_t   *src_dev = get_device(p.vdisk_id);
+    if (src_dev == NULL) return false;
+
+    char buf[1024] = {};
+    sprintf(buf, "/dev/%sp%zu", src_dev->drive_name, index);
+    write_serial_string(buf);
+    write_serial_string("\n");
+
+    if (vfs_mount((const char *)buf, rootdir) == VFS_STATUS_SUCCESS)
+    {
+        pr_info("Mount root OK: %s (%s)\n", buf, reason != NULL ? reason : "system markers");
+        return true;
+    }
+
+    return false;
+}
+
+static bool mount_named_root_partition(const char *name, const char *reason, const char *message)
+{
+    for (uint64_t i = 0; i < partition_num; i++)
+    {
+        if (!partition_name_equals_ascii(partitions[i], name)) continue;
+        if (mount_partition_index(i, reason))
+        {
+            write_serial_string(message);
+            write_serial_string("\n");
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool mount_named_root_fallback()
+{
+    if (mount_named_root_partition("XJ380", "XJ380 fallback", "system not found, found XJ380")) return true;
+    if (mount_named_root_partition("ESP", "ESP fallback", "system not found, found ESP")) return true;
+    return false;
 }
 
 void mount_root()
@@ -545,6 +665,8 @@ void mount_root()
             return;
         }
     }
+
+    if (mount_named_root_fallback()) return;
 
     write_serial_string("system not found\n");
     while (1)
