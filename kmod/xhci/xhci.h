@@ -17,7 +17,7 @@ extern "C" {
 #include <stdint.h>
 
 #define XHCI_PCI_CLASS 0x0C0330U
-#define XHCI_MMIO_PTE_FLAGS (PTE_PRESENT | PTE_WRITEABLE | (1ULL << 5))
+#define XHCI_MMIO_PTE_FLAGS (PTE_PRESENT | PTE_WRITEABLE | (1ULL << 3) | (1ULL << 4))
 
 #define XHCI_RING_TRBS 256U
 #define XHCI_CONTEXTS 32U
@@ -32,12 +32,15 @@ extern "C" {
 
 #define XHCI_PORTSC_CCS (1U << 0)
 #define XHCI_PORTSC_PED (1U << 1)
+#define XHCI_PORTSC_OCA (1U << 3)
 #define XHCI_PORTSC_PR (1U << 4)
 #define XHCI_PORTSC_PLS_SHIFT 5
 #define XHCI_PORTSC_PLS_MASK 0xFU
 #define XHCI_PORTSC_PP (1U << 9)
 #define XHCI_PORTSC_SPEED_SHIFT 10
 #define XHCI_PORTSC_SPEED_MASK 0xFU
+#define XHCI_PORTSC_PIC_MASK (0x3U << 14)
+#define XHCI_PORTSC_LWS (1U << 16)
 #define XHCI_PORTSC_CSC (1U << 17)
 #define XHCI_PORTSC_PEC (1U << 18)
 #define XHCI_PORTSC_WRC (1U << 19)
@@ -45,6 +48,16 @@ extern "C" {
 #define XHCI_PORTSC_PRC (1U << 21)
 #define XHCI_PORTSC_PLC (1U << 22)
 #define XHCI_PORTSC_CEC (1U << 23)
+#define XHCI_PORTSC_CAS (1U << 24)
+#define XHCI_PORTSC_WAKE_MASK (0x7U << 25)
+#define XHCI_PORTSC_DR (1U << 30)
+
+#define XHCI_PORTSC_RO_BITS                                                  \
+    (XHCI_PORTSC_CCS | XHCI_PORTSC_OCA |                                     \
+     (XHCI_PORTSC_SPEED_MASK << XHCI_PORTSC_SPEED_SHIFT) | XHCI_PORTSC_DR)
+#define XHCI_PORTSC_RWS_BITS                                                 \
+    ((XHCI_PORTSC_PLS_MASK << XHCI_PORTSC_PLS_SHIFT) | XHCI_PORTSC_PP |      \
+     XHCI_PORTSC_PIC_MASK | XHCI_PORTSC_WAKE_MASK)
 
 #define XHCI_PORTSC_CHANGE_BITS                                                 \
     (XHCI_PORTSC_CSC | XHCI_PORTSC_PEC | XHCI_PORTSC_WRC | XHCI_PORTSC_OCC |   \
@@ -67,8 +80,10 @@ extern "C" {
 
 #define XHCI_TRB_C (1U << 0)
 #define XHCI_TRB_LINK_TC (1U << 1)
+#define XHCI_TRB_ISP (1U << 2)
 #define XHCI_TRB_IOC (1U << 5)
 #define XHCI_TRB_IDT (1U << 6)
+#define XHCI_TRB_BSR (1U << 9)
 #define XHCI_TRB_DIR (1U << 16)
 
 #define XHCI_TRB_TYPE_SHIFT 10
@@ -96,7 +111,8 @@ extern "C" {
 #define XHCI_EP_CTX_TYPE_SHIFT 3
 #define XHCI_EP_CTX_MAX_BURST_SHIFT 8
 #define XHCI_EP_CTX_MAX_PACKET_SHIFT 16
-#define XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT 16
+#define XHCI_EP_TX_AVG_TRB_LENGTH_MASK 0xFFFFU
+#define XHCI_EP_TX_MAX_ESIT_PAYLOAD_SHIFT 16
 
 #define XHCI_EP_TYPE_CONTROL 4U
 #define XHCI_EP_TYPE_BULK_OUT 2U
@@ -423,8 +439,10 @@ struct xhci_ring {
     uint32_t count;
     uint32_t enqueue_idx;
     uint32_t completion_idx;
+    uint32_t wait_target_idx;
     uint32_t cycle_state;
     bool link_trb;
+    bool target_waiting;
     xhci_trb event;
 };
 
@@ -547,6 +565,7 @@ struct xhci_slot_state {
 
 struct xhci_controller {
     pci_device_t *pci_dev;
+    xhci_controller *next;
     void *mmio;
     xhci_cap_regs *caps;
     xhci_op_regs *op;

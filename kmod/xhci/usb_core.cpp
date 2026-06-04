@@ -128,13 +128,39 @@ static void usb_scan_hub(usb_hub *hub) {
         if (rc != 0) {
             continue;
         }
+        uint64_t recovery_ms = 100;
+        if (speed_id == XHCI_SPEED_LOW) {
+            recovery_ms = 500;
+        } else if (speed_id == XHCI_SPEED_FULL) {
+            recovery_ms = 200;
+        }
+        delay_ms_hp(recovery_ms);
 
         usb_device *usbdev = NULL;
         rc = xhci_usb_enumerate_device(hub->controller, hub,
                                        (uint8_t)(port + 1), speed_id, &usbdev);
         if (rc != 0 || !usbdev) {
+            delay_ms_hp(100);
+            rc = hub->ops->reset(hub, port, &speed_id);
+            if (rc == 0) {
+                recovery_ms = 100;
+                if (speed_id == XHCI_SPEED_LOW) {
+                    recovery_ms = 500;
+                } else if (speed_id == XHCI_SPEED_FULL) {
+                    recovery_ms = 200;
+                }
+                delay_ms_hp(recovery_ms);
+                rc = xhci_usb_enumerate_device(hub->controller, hub,
+                                               (uint8_t)(port + 1), speed_id,
+                                               &usbdev);
+            }
+        }
+        if (rc != 0 || !usbdev) {
             printk("usb: enumerate failed port=%u rc=%d\n",
                    (unsigned int)(port + 1), rc);
+            if (hub->port_changed) {
+                hub->port_changed[port] = 0;
+            }
             continue;
         }
 
@@ -188,6 +214,12 @@ void usb_core_start_workers(void) {
 void usb_register_driver(usb_driver *driver) {
     if (!driver) {
         return;
+    }
+
+    for (usb_driver *cur = g_usb_drivers; cur; cur = cur->next) {
+        if (cur == driver) {
+            return;
+        }
     }
 
     driver->next = g_usb_drivers;

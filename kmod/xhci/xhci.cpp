@@ -5,6 +5,14 @@ static const uint32_t XHCI_INVALID_INDEX = (uint32_t)-1;
 
 static void xhci_process_events(xhci_controller *xhci);
 
+#define XHCI_DIAG_PENDING(slot) ((void)0)
+#define XHCI_DIAG_OK(slot) ((void)0)
+#define XHCI_DIAG_FAIL(slot) ((void)0)
+#define XHCI_DIAG_INFO(slot) ((void)0)
+#define XHCI_DIAG_WARN(slot) ((void)0)
+#define xhci_diag_byte(first_slot, value) ((void)0)
+#define xhci_diag_portsc(portsc) ((void)0)
+
 static void *xhci_zero_alloc(size_t bytes) {
     void *ptr = malloc(bytes);
     if (!ptr) {
@@ -38,6 +46,15 @@ static inline void xhci_write32(volatile uint32_t *reg, uint32_t value) {
     __sync_synchronize();
     *reg = value;
     __sync_synchronize();
+}
+
+static inline uint32_t xhci_portsc_neutral(uint32_t portsc) {
+    return portsc & (XHCI_PORTSC_RO_BITS | XHCI_PORTSC_RWS_BITS);
+}
+
+static inline uint32_t xhci_portsc_write_value(uint32_t portsc,
+                                               uint32_t set_bits) {
+    return xhci_portsc_neutral(portsc) | set_bits;
 }
 
 static inline uint64_t xhci_trb_ptr(const xhci_trb *trb) {
@@ -409,7 +426,7 @@ static int xhci_dma_alloc(size_t bytes, void **virt_out, uint64_t *phys_out) {
         pages = 1;
     }
 
-    uint64_t phys = alloc_frames(pages);
+    uint64_t phys = alloc_frames_dma32(pages);
     if (phys == 0) {
         return -ENOMEM;
     }
@@ -476,6 +493,21 @@ static inline bool xhci_ring_busy(const xhci_ring *ring) {
     return ring->completion_idx != ring->enqueue_idx;
 }
 
+static bool xhci_ring_index_before_or_at_target(const xhci_ring *ring,
+                                                uint32_t index) {
+    if (!ring->target_waiting || index >= ring->count ||
+        ring->wait_target_idx >= ring->count) {
+        return false;
+    }
+
+    uint32_t start = ring->completion_idx;
+    uint32_t target = ring->wait_target_idx;
+    if (start <= target) {
+        return index >= start && index <= target;
+    }
+    return index >= start || index <= target;
+}
+
 static void xhci_ring_write_trb(xhci_ring *ring, uint32_t index, uint64_t ptr,
                                 uint32_t status, uint32_t control,
                                 bool inline_data, const void *data) {
@@ -502,6 +534,16 @@ static void xhci_ring_wrap(xhci_ring *ring) {
                         false, NULL);
     ring->enqueue_idx = 0;
     ring->cycle_state ^= 1U;
+}
+
+static void xhci_ring_ensure_contiguous(xhci_ring *ring, uint32_t trb_count) {
+    if (!ring->link_trb || trb_count == 0) {
+        return;
+    }
+
+    if (ring->enqueue_idx + trb_count > ring->count - 1) {
+        xhci_ring_wrap(ring);
+    }
 }
 
 static void xhci_ring_enqueue_ptr(xhci_ring *ring, uint64_t ptr,
@@ -544,10 +586,52 @@ static uint32_t xhci_ring_index_from_phys(const xhci_ring *ring,
 static void xhci_ring_complete(xhci_ring *ring, uint32_t trb_index,
                                const xhci_trb *evt) {
     ring->event = *evt;
+    if (ring->target_waiting &&
+        xhci_ring_index_before_or_at_target(ring, trb_index)) {
+        uint32_t cc = xhci_trb_completion_code(evt->status);
+        if (trb_index != ring->wait_target_idx &&
+            cc == XHCI_CC_SUCCESS) {
+            return;
+        }
+        trb_index = ring->wait_target_idx;
+    }
+
     ring->completion_idx = trb_index + 1;
     if (ring->completion_idx >= ring->count) {
         ring->completion_idx = 0;
     }
+}
+
+static uint32_t xhci_ring_enqueue_inline_deferred(xhci_ring *ring,
+                                                  const void *data,
+                                                  uint32_t status,
+                                                  uint32_t control) {
+    if (ring->link_trb && ring->enqueue_idx >= ring->count - 1) {
+        xhci_ring_wrap(ring);
+    }
+
+    uint32_t index = ring->enqueue_idx;
+    xhci_trb *dst = &ring->trbs[index];
+    memset(dst, 0, sizeof(*dst));
+    if (data) {
+        memcpy(&dst->ptr_low, data, sizeof(uint64_t));
+    }
+    dst->status = status;
+    __sync_synchronize();
+    dst->control = control | (ring->cycle_state ? 0 : XHCI_TRB_C);
+    __sync_synchronize();
+    ring->enqueue_idx++;
+    return index;
+}
+
+static void xhci_ring_give_deferred(xhci_ring *ring, uint32_t index) {
+    __sync_synchronize();
+    if (ring->cycle_state) {
+        ring->trbs[index].control |= XHCI_TRB_C;
+    } else {
+        ring->trbs[index].control &= ~XHCI_TRB_C;
+    }
+    __sync_synchronize();
 }
 
 static void xhci_doorbell(xhci_controller *xhci, uint32_t slot_id,
@@ -565,7 +649,7 @@ static void xhci_clear_port_change_bits(xhci_controller *xhci, uint32_t port) {
     uint32_t portsc = xhci_read32(&xhci->ports[port].portsc);
     uint32_t change = portsc & XHCI_PORTSC_CHANGE_BITS;
     if (change != 0) {
-        xhci_write32(&xhci->ports[port].portsc, change);
+        xhci_write32(&xhci->ports[port].portsc, xhci_portsc_write_value(portsc, change));
     }
 }
 
@@ -619,6 +703,7 @@ static void xhci_process_events(xhci_controller *xhci) {
                         uint32_t cc = xhci_trb_completion_code(evt->status);
                         if (cc == XHCI_CC_SUCCESS ||
                             cc == XHCI_CC_SHORT_PACKET) {
+                            XHCI_DIAG_OK(XHCI_DIAG_HID_REPORT);
                             uint32_t residue =
                                 evt->status & 0x00FFFFFFU;
                             uint32_t actual =
@@ -630,6 +715,7 @@ static void xhci_process_events(xhci_controller *xhci) {
                                 slot, (const uint8_t *)slot->hid.report_buffer,
                                 actual);
                         } else {
+                            XHCI_DIAG_FAIL(XHCI_DIAG_HID_REPORT);
                             pr_info("xhci: hid transfer failed slot=%u kind=%s cc=%u status=0x%x control=0x%x\n",
                                    slot->slot_id,
                                    xhci_hid_kind_name(slot->hid.kind), cc,
@@ -709,7 +795,19 @@ static int xhci_wait_for_ring(xhci_controller *xhci, xhci_ring *ring,
     }
 
     ring->completion_idx = ring->enqueue_idx;
+    XHCI_DIAG_FAIL(XHCI_DIAG_CMD_TIMEOUT);
     return XHCI_CC_USB_TRANSACTION_ERROR;
+}
+
+static int xhci_wait_for_ring_target(xhci_controller *xhci, xhci_ring *ring,
+                                     uint32_t target_idx,
+                                     uint32_t timeout_ms) {
+    ring->wait_target_idx = target_idx;
+    ring->target_waiting = true;
+    int cc = xhci_wait_for_ring(xhci, ring, timeout_ms);
+    ring->target_waiting = false;
+    ring->wait_target_idx = 0;
+    return cc;
 }
 
 static int xhci_cmd_submit(xhci_controller *xhci, uint64_t input_ctx_phys,
@@ -739,14 +837,20 @@ static int xhci_cmd_disable_slot(xhci_controller *xhci, uint32_t slot_id) {
 }
 
 static int xhci_cmd_address_device(xhci_controller *xhci, uint32_t slot_id,
-                                   uint64_t input_ctx_phys) {
+                                   uint64_t input_ctx_phys, bool block_set_address) {
+    uint32_t control = (XHCI_TRB_TYPE_ADDRESS_DEVICE_CMD << XHCI_TRB_TYPE_SHIFT) |
+                       (slot_id << XHCI_TRB_SLOT_ID_SHIFT);
+    if (block_set_address) {
+        control |= XHCI_TRB_BSR;
+    }
+
     int cc = xhci_cmd_submit(
-        xhci, input_ctx_phys,
-        (XHCI_TRB_TYPE_ADDRESS_DEVICE_CMD << XHCI_TRB_TYPE_SHIFT) |
-            (slot_id << XHCI_TRB_SLOT_ID_SHIFT));
+        xhci, input_ctx_phys, control);
     if (cc != XHCI_CC_SUCCESS) {
-        pr_info("xhci: address device failed slot=%u cc=%d status=0x%x control=0x%x\n",
-               slot_id, cc, xhci->cmd_ring.event.status,
+        xhci_diag_byte(XHCI_DIAG_ADDRESS_CC0, (uint8_t)cc);
+        pr_info("xhci: address device failed slot=%u bsr=%u cc=%d status=0x%x control=0x%x\n",
+               slot_id, block_set_address ? 1U : 0U, cc,
+               xhci->cmd_ring.event.status,
                xhci->cmd_ring.event.control);
     }
     return (cc == XHCI_CC_SUCCESS) ? 0 : -EIO;
@@ -839,9 +943,26 @@ static void xhci_fill_ep0_ctx(xhci_slot_state *slot, xhci_ep_ctx *ep0_ctx) {
                        << XHCI_EP_CTX_MAX_PACKET_SHIFT);
     ep0_ctx->deq_low = (uint32_t)(slot->ep0_ring.phys | 1U);
     ep0_ctx->deq_high = (uint32_t)(slot->ep0_ring.phys >> 32);
-    ep0_ctx->tx_info =
-        (uint32_t)slot->max_packet0 |
-        (8U << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+    ep0_ctx->tx_info = 8U & XHCI_EP_TX_AVG_TRB_LENGTH_MASK;
+}
+
+static int xhci_address_device(xhci_controller *xhci, xhci_slot_state *slot,
+                               bool block_set_address) {
+    uint64_t input_ctx_phys = 0;
+    void *input_ctx = xhci_alloc_input_ctx(xhci, &input_ctx_phys);
+    if (!input_ctx) {
+        return -ENOMEM;
+    }
+
+    xhci_input_control_ctx *ctrl_ctx = xhci_input_ctrl_ctx(input_ctx);
+    ctrl_ctx->add_flags = XHCI_INPUT_ADD_SLOT | XHCI_INPUT_ADD_EP0;
+    xhci_fill_slot_ctx(xhci_input_slot_ctx(xhci, input_ctx), slot, 1);
+    xhci_fill_ep0_ctx(slot, xhci_input_ep0_ctx(xhci, input_ctx));
+
+    int rc = xhci_cmd_address_device(xhci, slot->slot_id, input_ctx_phys,
+                                     block_set_address);
+    xhci_free_input_ctx(xhci, input_ctx, input_ctx_phys);
+    return rc;
 }
 
 static void xhci_fill_interrupt_ep_ctx(xhci_slot_state *slot,
@@ -857,8 +978,8 @@ static void xhci_fill_interrupt_ep_ctx(xhci_slot_state *slot,
     ep_ctx->deq_low = (uint32_t)(hid->ring.phys | 1U);
     ep_ctx->deq_high = (uint32_t)(hid->ring.phys >> 32);
     ep_ctx->tx_info =
-        (uint32_t)hid->max_packet |
-        ((uint32_t)hid->report_buffer_len << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+        ((uint32_t)hid->report_buffer_len & XHCI_EP_TX_AVG_TRB_LENGTH_MASK) |
+        ((uint32_t)hid->max_packet << XHCI_EP_TX_MAX_ESIT_PAYLOAD_SHIFT);
 }
 
 static void xhci_fill_bulk_ep_ctx(xhci_msc_state *msc, bool in_dir,
@@ -878,9 +999,7 @@ static void xhci_fill_bulk_ep_ctx(xhci_msc_state *msc, bool in_dir,
                      ((uint32_t)max_packet << XHCI_EP_CTX_MAX_PACKET_SHIFT);
     ep_ctx->deq_low = (uint32_t)(ring->phys | 1U);
     ep_ctx->deq_high = (uint32_t)(ring->phys >> 32);
-    ep_ctx->tx_info =
-        (uint32_t)max_packet |
-        ((uint32_t)max_packet << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+    ep_ctx->tx_info = (uint32_t)max_packet & XHCI_EP_TX_AVG_TRB_LENGTH_MASK;
 }
 
 static int xhci_update_ep0_packet(xhci_controller *xhci, xhci_slot_state *slot,
@@ -953,26 +1072,35 @@ static int xhci_control_transfer(xhci_controller *xhci, xhci_slot_state *slot,
     }
 
     uint32_t status_dir = (data_len == 0) ? 1U : (in_dir ? 0U : 1U);
-    xhci_ring_enqueue_inline(
+    uint32_t trb_count = (data_len != 0) ? 3U : 2U;
+    xhci_ring_ensure_contiguous(&slot->ep0_ring, trb_count);
+
+    uint32_t setup_index = xhci_ring_enqueue_inline_deferred(
         &slot->ep0_ring, setup, xhci_trb_status_field(sizeof(*setup), 0),
         (XHCI_TRB_TYPE_SETUP << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_IDT |
             (trt << 16));
 
     if (data_len != 0) {
+        uint32_t data_control = XHCI_TRB_TYPE_DATA << XHCI_TRB_TYPE_SHIFT;
+        if (in_dir) {
+            data_control |= XHCI_TRB_DIR | XHCI_TRB_ISP;
+        }
         xhci_ring_enqueue_ptr(
             &slot->ep0_ring, dma_phys, xhci_trb_status_field(data_len, 0),
-            (XHCI_TRB_TYPE_DATA << XHCI_TRB_TYPE_SHIFT) |
-                (in_dir ? XHCI_TRB_DIR : 0));
+            data_control);
     }
 
+    uint32_t status_index = slot->ep0_ring.enqueue_idx;
     xhci_ring_enqueue_ptr(
         &slot->ep0_ring, 0, xhci_trb_status_field(0, 0),
         (XHCI_TRB_TYPE_STATUS << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_IOC |
             (status_dir ? XHCI_TRB_DIR : 0));
 
+    xhci_ring_give_deferred(&slot->ep0_ring, setup_index);
     xhci_doorbell(xhci, slot->slot_id, 1);
 
-    int cc = xhci_wait_for_ring(xhci, &slot->ep0_ring, 1000);
+    int cc = xhci_wait_for_ring_target(xhci, &slot->ep0_ring, status_index,
+                                       5000);
     if (cc != XHCI_CC_SUCCESS && cc != XHCI_CC_SHORT_PACKET) {
         pr_info("xhci: control transfer failed slot=%u req=0x%x type=0x%x len=%u cc=%d status=0x%x control=0x%x\n",
                slot->slot_id, setup->bRequest, setup->bmRequestType, data_len,
@@ -1732,10 +1860,19 @@ static bool xhci_has_active_hid(const xhci_controller *xhci) {
     return false;
 }
 
+static bool xhci_is_registered_controller(const xhci_controller *xhci) {
+    for (xhci_controller *cur = g_xhci; cur; cur = cur->next) {
+        if (cur == xhci) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void xhci_hid_worker(void *arg) {
     xhci_controller *xhci = (xhci_controller *)arg;
     for (;;) {
-        if (!xhci || xhci != g_xhci) {
+        if (!xhci || !xhci_is_registered_controller(xhci)) {
             delay_ms_hp(10);
             continue;
         }
@@ -1937,7 +2074,7 @@ int xhci_setup_hub(xhci_controller *xhci, xhci_slot_state *slot) {
 static int xhci_prepare_slot(xhci_controller *xhci,
                              const xhci_slot_state *parent_slot,
                              uint8_t parent_port, uint8_t speed_id,
-                             xhci_slot_state *slot) {
+                             bool block_set_address, xhci_slot_state *slot) {
     memset(slot, 0, sizeof(*slot));
     slot->port_id = parent_slot ? parent_slot->port_id : parent_port;
     slot->parent_port = parent_port;
@@ -1966,23 +2103,30 @@ static int xhci_prepare_slot(xhci_controller *xhci,
 
     int rc = xhci_ring_alloc(&slot->ep0_ring, true);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_EP0_RING);
         return rc;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_EP0_RING);
 
     rc = xhci_dma_alloc(xhci->context_size * XHCI_CONTEXTS, &slot->output_ctx,
                         &slot->output_ctx_phys);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_OUTPUT_CTX);
         xhci_ring_free(&slot->ep0_ring);
         return rc;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_OUTPUT_CTX);
 
+    XHCI_DIAG_PENDING(XHCI_DIAG_ENABLE_SLOT);
     int slot_id = xhci_cmd_enable_slot(xhci);
     if (slot_id <= 0 || (uint32_t)slot_id > xhci->num_slots) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_ENABLE_SLOT);
         xhci_dma_free(slot->output_ctx, slot->output_ctx_phys,
                       xhci->context_size * XHCI_CONTEXTS);
         xhci_ring_free(&slot->ep0_ring);
         return -EIO;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_ENABLE_SLOT);
 
     slot->slot_id = (uint32_t)slot_id;
     slot->used = true;
@@ -1990,25 +2134,12 @@ static int xhci_prepare_slot(xhci_controller *xhci,
     xhci->dcbaa[slot_id].ptr_low = (uint32_t)slot->output_ctx_phys;
     xhci->dcbaa[slot_id].ptr_high = (uint32_t)(slot->output_ctx_phys >> 32);
 
-    uint64_t input_ctx_phys = 0;
-    void *input_ctx = xhci_alloc_input_ctx(xhci, &input_ctx_phys);
-    if (!input_ctx) {
-        xhci_cmd_disable_slot(xhci, slot->slot_id);
-        xhci_dma_free(slot->output_ctx, slot->output_ctx_phys,
-                      xhci->context_size * XHCI_CONTEXTS);
-        xhci_ring_free(&slot->ep0_ring);
-        memset(slot, 0, sizeof(*slot));
-        return -ENOMEM;
-    }
-
-    xhci_input_control_ctx *ctrl_ctx = xhci_input_ctrl_ctx(input_ctx);
-    ctrl_ctx->add_flags = XHCI_INPUT_ADD_SLOT | XHCI_INPUT_ADD_EP0;
-    xhci_fill_slot_ctx(xhci_input_slot_ctx(xhci, input_ctx), slot, 1);
-    xhci_fill_ep0_ctx(slot, xhci_input_ep0_ctx(xhci, input_ctx));
-
-    rc = xhci_cmd_address_device(xhci, slot->slot_id, input_ctx_phys);
-    xhci_free_input_ctx(xhci, input_ctx, input_ctx_phys);
+    XHCI_DIAG_PENDING(XHCI_DIAG_ADDRESS_DEVICE);
+    XHCI_DIAG_PENDING(XHCI_DIAG_INPUT_CTX);
+    rc = xhci_address_device(xhci, slot, block_set_address);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_INPUT_CTX);
+        XHCI_DIAG_FAIL(XHCI_DIAG_ADDRESS_DEVICE);
         xhci_cmd_disable_slot(xhci, slot->slot_id);
         xhci_dma_free(slot->output_ctx, slot->output_ctx_phys,
                       xhci->context_size * XHCI_CONTEXTS);
@@ -2016,6 +2147,8 @@ static int xhci_prepare_slot(xhci_controller *xhci,
         memset(slot, 0, sizeof(*slot));
         return rc;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_INPUT_CTX);
+    XHCI_DIAG_OK(XHCI_DIAG_ADDRESS_DEVICE);
 
     return 0;
 }
@@ -2081,27 +2214,34 @@ static void xhci_release_slot_tree(xhci_controller *xhci, uint32_t slot_id) {
 
 static int xhci_reset_port(xhci_controller *xhci, uint32_t port_idx,
                            uint8_t *speed_out) {
+    XHCI_DIAG_PENDING(XHCI_DIAG_PORT_RESET);
     volatile uint32_t *portsc_reg = &xhci->ports[port_idx].portsc;
     uint32_t portsc = xhci_read32(portsc_reg);
     if ((portsc & XHCI_PORTSC_CCS) == 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_PORT_PRESENT);
         return -ENODEV;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_PORT_PRESENT);
 
-    if ((portsc & XHCI_PORTSC_PED) == 0) {
-        uint32_t pls = xhci_field(portsc, XHCI_PORTSC_PLS_SHIFT,
-                                  XHCI_PORTSC_PLS_MASK);
-        if (pls == XHCI_PLS_POLLING || pls == XHCI_PLS_U0) {
-            xhci_write32(portsc_reg, portsc | XHCI_PORTSC_PR);
-        } else {
-            xhci_write32(portsc_reg, portsc | XHCI_PORTSC_PR);
-        }
+    uint32_t port_number = port_idx + 1;
+    bool is_usb2_port =
+        (xhci->usb2.start != 0 && port_number >= xhci->usb2.start &&
+         port_number < (uint32_t)xhci->usb2.start + xhci->usb2.count);
+
+    if (is_usb2_port || (portsc & XHCI_PORTSC_PED) == 0) {
+        xhci_clear_port_change_bits(xhci, port_idx);
+        portsc = xhci_read32(portsc_reg);
+        xhci_write32(portsc_reg, xhci_portsc_write_value(portsc, XHCI_PORTSC_PR));
 
         for (uint32_t waited = 0; waited < 2000; ++waited) {
             portsc = xhci_read32(portsc_reg);
             if ((portsc & XHCI_PORTSC_CCS) == 0) {
+                xhci_diag_portsc(portsc);
+                XHCI_DIAG_FAIL(XHCI_DIAG_PORT_RESET);
                 return -ENODEV;
             }
-            if (portsc & XHCI_PORTSC_PED) {
+            if ((portsc & XHCI_PORTSC_PR) == 0 &&
+                (portsc & XHCI_PORTSC_PRC) != 0) {
                 break;
             }
             delay_ms_hp(1);
@@ -2109,31 +2249,58 @@ static int xhci_reset_port(xhci_controller *xhci, uint32_t port_idx,
     }
 
     portsc = xhci_read32(portsc_reg);
+    if (is_usb2_port) {
+        for (uint32_t waited = 0; waited < 500; ++waited) {
+            uint32_t pls = (portsc >> XHCI_PORTSC_PLS_SHIFT) &
+                           XHCI_PORTSC_PLS_MASK;
+            if (pls == XHCI_PLS_U0) {
+                break;
+            }
+            delay_ms_hp(1);
+            portsc = xhci_read32(portsc_reg);
+        }
+    }
     if ((portsc & XHCI_PORTSC_PED) == 0) {
+        xhci_diag_portsc(portsc);
+        XHCI_DIAG_FAIL(XHCI_DIAG_PORT_RESET);
         return -ETIMEDOUT;
     }
 
     xhci_clear_port_change_bits(xhci, port_idx);
+    delay_ms_hp(10);
+    portsc = xhci_read32(portsc_reg);
+    xhci_diag_portsc(portsc);
+    if ((portsc & XHCI_PORTSC_CCS) == 0 ||
+        (portsc & XHCI_PORTSC_PED) == 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_PORT_RESET);
+        return -ENODEV;
+    }
+
     *speed_out = (uint8_t)xhci_field(portsc, XHCI_PORTSC_SPEED_SHIFT,
                                      XHCI_PORTSC_SPEED_MASK);
+    XHCI_DIAG_OK(XHCI_DIAG_PORT_RESET);
     return 0;
 }
 
 int xhci_usb_enumerate_device(xhci_controller *xhci, usb_hub *parent_hub,
                               uint8_t parent_port, uint8_t speed_id,
                               usb_device **device_out) {
+    XHCI_DIAG_PENDING(XHCI_DIAG_SLOT);
     const xhci_slot_state *parent_slot =
         (parent_hub && parent_hub->usbdev) ? parent_hub->usbdev->slot : NULL;
     xhci_slot_state temp_slot;
+    bool use_bsr_address = (speed_id == XHCI_SPEED_LOW);
     int rc = xhci_prepare_slot(xhci, parent_slot, parent_port, speed_id,
-                               &temp_slot);
+                               use_bsr_address, &temp_slot);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_SLOT);
         pr_info("xhci: prepare slot failed root-port=%u parent-slot=%u parent-port=%u speed=%u rc=%d\n",
                parent_slot ? parent_slot->port_id : parent_port,
                parent_slot ? parent_slot->slot_id : 0, parent_port, speed_id,
                rc);
         return rc;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_SLOT);
 
     xhci_slot_state *slot = &xhci->slots[temp_slot.slot_id];
     *slot = temp_slot;
@@ -2150,9 +2317,11 @@ int xhci_usb_enumerate_device(xhci_controller *xhci, usb_hub *parent_hub,
     };
 
     uint32_t actual = 0;
+    XHCI_DIAG_PENDING(XHCI_DIAG_DESCRIPTOR);
     rc = xhci_control_transfer(xhci, slot, &first_read, &first_desc, 8,
                                true, &actual);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_DESCRIPTOR);
         pr_info("xhci: initial device descriptor read failed slot=%u root-port=%u rc=%d\n",
                slot->slot_id, slot->port_id, rc);
         xhci_release_slot(xhci, slot);
@@ -2162,25 +2331,57 @@ int xhci_usb_enumerate_device(xhci_controller *xhci, usb_hub *parent_hub,
     uint16_t desc_ep0 = xhci_descriptor_ep0_packet(speed_id, &first_desc);
     if (desc_ep0 != 0 && desc_ep0 != slot->max_packet0 &&
         speed_id != XHCI_SPEED_SUPER) {
-        rc = xhci_update_ep0_packet(xhci, slot, desc_ep0);
+        if (use_bsr_address) {
+            slot->max_packet0 = desc_ep0;
+        } else {
+            rc = xhci_update_ep0_packet(xhci, slot, desc_ep0);
+            if (rc != 0) {
+                pr_info("xhci: update ep0 packet failed slot=%u root-port=%u mps=%u rc=%d\n",
+                       slot->slot_id, slot->port_id, desc_ep0, rc);
+                xhci_release_slot(xhci, slot);
+                return rc;
+            }
+        }
+    }
+
+    if (use_bsr_address) {
+        xhci_ring_free(&slot->ep0_ring);
+        rc = xhci_ring_alloc(&slot->ep0_ring, true);
         if (rc != 0) {
-            pr_info("xhci: update ep0 packet failed slot=%u root-port=%u mps=%u rc=%d\n",
-                   slot->slot_id, slot->port_id, desc_ep0, rc);
+            XHCI_DIAG_FAIL(XHCI_DIAG_EP0_RING);
+            pr_info("xhci: reset ep0 ring failed slot=%u root-port=%u rc=%d\n",
+                   slot->slot_id, slot->port_id, rc);
             xhci_release_slot(xhci, slot);
             return rc;
         }
+        XHCI_DIAG_OK(XHCI_DIAG_EP0_RING);
+
+        XHCI_DIAG_PENDING(XHCI_DIAG_ADDRESS_DEVICE);
+        rc = xhci_address_device(xhci, slot, false);
+        if (rc != 0) {
+            XHCI_DIAG_FAIL(XHCI_DIAG_ADDRESS_DEVICE);
+            pr_info("xhci: finalize address failed slot=%u root-port=%u rc=%d\n",
+                   slot->slot_id, slot->port_id, rc);
+            xhci_release_slot(xhci, slot);
+            return rc;
+        }
+        XHCI_DIAG_OK(XHCI_DIAG_ADDRESS_DEVICE);
+        delay_ms_hp(10);
     }
 
     rc = xhci_read_device_descriptor(xhci, slot, &slot->device_desc);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_DESCRIPTOR);
         pr_info("xhci: full device descriptor read failed slot=%u root-port=%u rc=%d\n",
                slot->slot_id, slot->port_id, rc);
         xhci_release_slot(xhci, slot);
         return rc;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_DESCRIPTOR);
     slot->is_hub = (slot->device_desc.bDeviceClass == USB_CLASS_HUB);
 
     if (slot->device_desc.bNumConfigurations != 0) {
+        XHCI_DIAG_PENDING(XHCI_DIAG_CONFIG);
         void *config_buffer = NULL;
         uint16_t config_length = 0;
         rc = xhci_read_config_descriptor(xhci, slot, &config_buffer,
@@ -2201,34 +2402,42 @@ int xhci_usb_enumerate_device(xhci_controller *xhci, usb_hub *parent_hub,
                 }
             }
         } else {
+            XHCI_DIAG_FAIL(XHCI_DIAG_CONFIG);
             pr_info("xhci: config descriptor read failed slot=%u root-port=%u rc=%d\n",
                    slot->slot_id, slot->port_id, rc);
         }
     }
+    if (slot->configured) {
+        XHCI_DIAG_OK(XHCI_DIAG_CONFIG);
+    }
 
     if (slot->configured && slot->hid.supported) {
+        XHCI_DIAG_PENDING(XHCI_DIAG_HID);
         rc = xhci_hid_set_protocol(xhci, slot, 0);
         if (rc != 0) {
-            pr_info("xhci: slot %u hid set protocol failed iface=%u rc=%d\n",
+            XHCI_DIAG_WARN(XHCI_DIAG_HID);
+            pr_info("xhci: slot %u hid set protocol failed iface=%u rc=%d, continuing\n",
                    slot->slot_id, slot->hid.interface_number, rc);
-            xhci_release_hid(slot);
         } else {
             if (slot->hid.kind == XHCI_HID_KEYBOARD) {
                 rc = xhci_hid_set_idle(xhci, slot, 0, 0);
                 if (rc != 0) {
-                    pr_info("xhci: slot %u hid set idle failed iface=%u rc=%d\n",
+                    XHCI_DIAG_WARN(XHCI_DIAG_HID);
+                    pr_info("xhci: slot %u hid set idle failed iface=%u rc=%d, continuing\n",
                            slot->slot_id, slot->hid.interface_number, rc);
-                    xhci_release_hid(slot);
                 }
             }
+        }
 
-            if (slot->hid.supported) {
-                rc = xhci_configure_hid_endpoint(xhci, slot);
-                if (rc != 0) {
-                    pr_info("xhci: slot %u hid endpoint configure failed ep=0x%02x rc=%d\n",
-                           slot->slot_id, slot->hid.endpoint_address, rc);
-                    xhci_release_hid(slot);
-                }
+        if (slot->hid.supported) {
+            rc = xhci_configure_hid_endpoint(xhci, slot);
+            if (rc != 0) {
+                XHCI_DIAG_FAIL(XHCI_DIAG_HID);
+                pr_info("xhci: slot %u hid endpoint configure failed ep=0x%02x rc=%d\n",
+                       slot->slot_id, slot->hid.endpoint_address, rc);
+                xhci_release_hid(slot);
+            } else {
+                XHCI_DIAG_OK(XHCI_DIAG_HID);
             }
         }
     }
@@ -2314,6 +2523,7 @@ int xhci_usb_enumerate_device(xhci_controller *xhci, usb_hub *parent_hub,
     }
 
     if (slot->hid.ready) {
+        XHCI_DIAG_OK(XHCI_DIAG_HID_ARMED);
         pr_info("xhci: slot %u boot %s armed iface=%u ep=0x%02x epid=%u mps=%u interval=%u\n",
                slot->slot_id, xhci_hid_kind_name(slot->hid.kind),
                slot->hid.interface_number, slot->hid.endpoint_address,
@@ -2392,7 +2602,7 @@ static const usb_hub_ops g_xhci_root_hub_ops = {
 static void xhci_service_worker(void *arg) {
     xhci_controller *xhci = (xhci_controller *)arg;
     for (;;) {
-        if (!xhci || xhci != g_xhci) {
+        if (!xhci || !xhci_is_registered_controller(xhci)) {
             delay_ms_hp(10);
             continue;
         }
@@ -2630,25 +2840,30 @@ static void xhci_runtime_free(xhci_controller *xhci) {
 }
 
 static int xhci_start_controller(xhci_controller *xhci) {
+    XHCI_DIAG_PENDING(XHCI_DIAG_CONTROLLER);
     uint32_t cmd = xhci_read32(&xhci->op->usb_cmd);
     if (cmd & XHCI_CMD_RS) {
         xhci_write32(&xhci->op->usb_cmd, cmd & ~XHCI_CMD_RS);
         if (xhci_wait_bit(&xhci->op->usb_sts, XHCI_STS_HCH, XHCI_STS_HCH,
                           3000) != 0) {
+            XHCI_DIAG_FAIL(XHCI_DIAG_CONTROLLER);
             return -EIO;
         }
     }
 
     xhci_write32(&xhci->op->usb_cmd, XHCI_CMD_HCRST);
     if (xhci_wait_bit(&xhci->op->usb_cmd, XHCI_CMD_HCRST, 0, 3000) != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_CONTROLLER);
         return -EIO;
     }
     if (xhci_wait_bit(&xhci->op->usb_sts, XHCI_STS_CNR, 0, 3000) != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_CONTROLLER);
         return -EIO;
     }
 
     int rc = xhci_runtime_alloc(xhci);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_CONTROLLER);
         return rc;
     }
 
@@ -2671,6 +2886,7 @@ static int xhci_start_controller(xhci_controller *xhci) {
     rc = xhci_setup_scratchpad(xhci);
     if (rc != 0) {
         xhci_runtime_free(xhci);
+        XHCI_DIAG_FAIL(XHCI_DIAG_CONTROLLER);
         return rc;
     }
 
@@ -2683,17 +2899,20 @@ static int xhci_start_controller(xhci_controller *xhci) {
 
     if (xhci_wait_bit(&xhci->op->usb_sts, XHCI_STS_HCH, 0, 1000) != 0) {
         xhci_runtime_free(xhci);
+        XHCI_DIAG_FAIL(XHCI_DIAG_CONTROLLER);
         return -EIO;
     }
 
     for (uint32_t port = 0; port < xhci->num_ports; ++port) {
         uint32_t portsc = xhci_read32(&xhci->ports[port].portsc);
         if ((portsc & XHCI_PORTSC_PP) == 0) {
-            xhci_write32(&xhci->ports[port].portsc, portsc | XHCI_PORTSC_PP);
+            xhci_write32(&xhci->ports[port].portsc,
+                         xhci_portsc_write_value(portsc, XHCI_PORTSC_PP));
         }
     }
 
     delay_ms_hp(20);
+    XHCI_DIAG_OK(XHCI_DIAG_CONTROLLER);
     return 0;
 }
 
@@ -2799,13 +3018,16 @@ static xhci_controller *xhci_create_controller(pci_device_t *pci_dev,
 }
 
 static int xhci_probe(pci_device_t *pci_dev) {
+    XHCI_DIAG_PENDING(XHCI_DIAG_PROBE);
     uint64_t mmio_base = 0;
     uint64_t mmio_size = 0;
     int rc = xhci_find_mmio_bar(pci_dev, &mmio_base, &mmio_size);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_MMIO);
         pr_info("xhci: no MMIO BAR found\n");
         return rc;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_MMIO);
 
     xhci_enable_pci_device(pci_dev);
 
@@ -2815,11 +3037,13 @@ static int xhci_probe(pci_device_t *pci_dev) {
 
     xhci_controller *xhci = xhci_create_controller(pci_dev, mmio_vaddr);
     if (!xhci) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_PROBE);
         return -ENOMEM;
     }
 
     rc = xhci_start_controller(xhci);
     if (rc != 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_PROBE);
         pr_info("xhci: failed to start controller (%d)\n", rc);
         xhci_free_controller(xhci);
         return rc;
@@ -2836,6 +3060,7 @@ static int xhci_probe(pci_device_t *pci_dev) {
     usb_hub *root_hub = (usb_hub *)malloc(sizeof(*root_hub));
     usb_device *root_dev = (usb_device *)malloc(sizeof(*root_dev));
     if (!root_hub || !root_dev) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_ROOT_HUB);
         free(root_hub);
         free(root_dev);
         xhci_free_controller(xhci);
@@ -2857,45 +3082,77 @@ static int xhci_probe(pci_device_t *pci_dev) {
 
     xhci->root_hub = root_hub;
     xhci->root_usbdev = root_dev;
-    usb_register_hub(root_hub);
-    usb_scan_all_hubs();
-
+    xhci->next = g_xhci;
     g_xhci = xhci;
+    XHCI_DIAG_OK(XHCI_DIAG_ROOT_HUB);
+    usb_register_hub(root_hub);
+    XHCI_DIAG_PENDING(XHCI_DIAG_SCAN);
+    usb_scan_all_hubs();
+    XHCI_DIAG_OK(XHCI_DIAG_SCAN);
+
+    XHCI_DIAG_OK(XHCI_DIAG_PROBE);
     return 0;
 }
 
 void xhci_start_workers(void) {
     usb_core_start_workers();
 
-    xhci_controller *xhci = g_xhci;
-    if (!xhci || xhci->service_worker_started) {
-        return;
-    }
+    for (xhci_controller *xhci = g_xhci; xhci; xhci = xhci->next) {
+        if (xhci->service_worker_started) {
+            continue;
+        }
 
-    size_t tid = create_kernel_thread((void *)xhci_service_worker, xhci,
-                                      (char *)"xhci-svc", NULL);
-    if ((int64_t)tid < 0) {
-        return;
-    }
+        size_t tid = create_kernel_thread((void *)xhci_service_worker, xhci,
+                                          (char *)"xhci-svc", NULL);
+        if ((int64_t)tid < 0) {
+            continue;
+        }
 
-    xhci->service_worker_started = true;
-    xhci->hid_worker_started = true;
-    pr_info("xhci: service worker started tid=%u hid=%s\n",
-            (unsigned int)tid, xhci_has_active_hid(xhci) ? "yes" : "no");
+        xhci->service_worker_started = true;
+        xhci->hid_worker_started = true;
+        XHCI_DIAG_OK(XHCI_DIAG_WORKER);
+        pr_info("xhci: service worker started tid=%u hid=%s\n",
+                (unsigned int)tid, xhci_has_active_hid(xhci) ? "yes" : "no");
+    }
 }
 
 int xhci_setup(void) {
+    XHCI_DIAG_PENDING(XHCI_DIAG_SETUP);
     if (g_xhci) {
+        XHCI_DIAG_OK(XHCI_DIAG_SETUP);
         return 0;
     }
 
-    pci_device_t *xhci_dev = pci_find_class(XHCI_PCI_CLASS);
-    if (!xhci_dev) {
+    pci_device_t *xhci_devs[PCI_DEVICE_MAX];
+    uint32_t xhci_count = 0;
+    XHCI_DIAG_PENDING(XHCI_DIAG_PCI_SEARCH);
+    pci_find_class_n(xhci_devs, &xhci_count, XHCI_PCI_CLASS);
+    if (xhci_count == 0) {
+        XHCI_DIAG_FAIL(XHCI_DIAG_PCI_SEARCH);
+        XHCI_DIAG_FAIL(XHCI_DIAG_SETUP);
         pr_info("xhci: no xHCI controller found\n");
         return -ENODEV;
     }
+    XHCI_DIAG_OK(XHCI_DIAG_PCI_SEARCH);
 
-    return xhci_probe(xhci_dev);
+    int first_rc = -ENODEV;
+    uint32_t ready_count = 0;
+    for (uint32_t i = 0; i < xhci_count; ++i) {
+        int rc = xhci_probe(xhci_devs[i]);
+        if (rc == 0) {
+            ready_count++;
+        } else if (first_rc == -ENODEV) {
+            first_rc = rc;
+        }
+    }
+
+    if (ready_count != 0) {
+        XHCI_DIAG_OK(XHCI_DIAG_SETUP);
+        pr_info("xhci: initialized %u/%u controller(s)\n", ready_count, xhci_count);
+        return 0;
+    }
+    XHCI_DIAG_FAIL(XHCI_DIAG_SETUP);
+    return first_rc;
 }
 
 extern "C" __attribute__((used)) __attribute__((visibility("default"))) int

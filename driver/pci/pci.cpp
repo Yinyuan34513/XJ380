@@ -599,6 +599,7 @@ void pci_find_class_n(pci_device_t **result, uint32_t *n, uint32_t class_code)
     int idx = 0;
     for (uint32_t i = 0; i < device_number; i++)
     {
+        if (idx >= PCI_DEVICE_MAX) break;
         if (pci_devices[i]->class_code == class_code)
         {
             result[idx] = pci_devices[i];
@@ -614,6 +615,8 @@ void pci_find_class_n(pci_device_t **result, uint32_t *n, uint32_t class_code)
     }
     *n = idx;
 }
+
+EXPORT_SYMBOL(pci_find_class_n);
 
 void pci_setup(uint64_t mcfg0)
 {
