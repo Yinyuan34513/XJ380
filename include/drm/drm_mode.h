@@ -67,7 +67,21 @@
 #define DRM_PROP_PLANE_CRTC_Y   0x100d
 #define DRM_PROP_PLANE_CRTC_W   0x100e
 #define DRM_PROP_PLANE_CRTC_H   0x100f
-
+/* Mode flags */
+#define DRM_MODE_FLAG_PHSYNC       (1 << 0)
+#define DRM_MODE_FLAG_NHSYNC       (1 << 1)
+#define DRM_MODE_FLAG_PVSYNC       (1 << 2)
+#define DRM_MODE_FLAG_NVSYNC       (1 << 3)
+#define DRM_MODE_FLAG_INTERLACE    (1 << 4)
+#define DRM_MODE_FLAG_DBLSCAN      (1 << 5)
+#define DRM_MODE_FLAG_CSYNC        (1 << 6)
+#define DRM_MODE_FLAG_PCSYNC       (1 << 7)
+#define DRM_MODE_FLAG_NCSYNC       (1 << 8)
+#define DRM_MODE_FLAG_HSKEW        (1 << 9)
+#define DRM_MODE_FLAG_BCAST        (1 << 10)
+#define DRM_MODE_FLAG_PIXMUX       (1 << 11)
+#define DRM_MODE_FLAG_DBLCLK       (1 << 12)
+#define DRM_MODE_FLAG_CLKDIV2      (1 << 13)
 /* Plane types */
 enum { DRM_PLANE_TYPE_OVERLAY = 0, DRM_PLANE_TYPE_PRIMARY = 1, DRM_PLANE_TYPE_CURSOR = 2 };
 
@@ -218,6 +232,14 @@ struct drm_mode_destroy_dumb {
 struct drm_mode_closefb {
     uint32_t fb_id;
     uint32_t pad;
+};
+
+struct drm_mode_fb_dirty_cmd {
+    uint32_t fb_id;
+    uint32_t flags;
+    uint32_t color;
+    uint32_t num_clips;
+    uint64_t clips_ptr;
 };
 
 struct drm_mode_get_plane_res {

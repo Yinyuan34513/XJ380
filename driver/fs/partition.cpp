@@ -34,7 +34,7 @@ static bool partition_name_is_slice(const char *name)
 static void partition_register_device_node(size_t partition_index)
 {
     partition_t partition = partitions[partition_index];
-    device_t    part;
+    device_t    part = {};
     memset(&part, 0, sizeof(part));
     part.sector_size  = partition.sector_size;
     part.flag         = 1;

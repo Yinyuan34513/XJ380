@@ -267,6 +267,8 @@ void fbdev_setup(const FrameBufferConfig &fbc)
     fb.sector_size = 1;
     fb.type = DEVICE_FB;
     fb.max_size = g_fbdev.total_bytes;
+    fb.major = 29;
+    fb.minor = 0;
     strcpy(fb.drive_name, "fb0");
 
     regist_device(NULL, fb);
@@ -285,6 +287,12 @@ uint8_t *fbdev_active_framebuffer()
 uint8_t *fbdev_kernel_framebuffer()
 {
     return fbdev_page_framebuffer(0);
+}
+
+size_t fbdev_framebuffer_pitch()
+{
+    if (!g_fbdev.ready) return 0;
+    return fbdev_pitch();
 }
 
 void fbdev_present_region(uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2)

@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#define NCCS 20
+#define NCCS 19
 
 #define VINTR    0
 #define VQUIT    1

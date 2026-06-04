@@ -187,6 +187,7 @@ struct vfs_node {           // vfs节点
     bool       is_mount;    // 是否是挂载点
     uint64_t   dev;         // 设备号
     uint64_t   rdev;        // 真实设备号
+    void      *delete_parent_handle; // unlink 后延迟删除时保留的父目录句柄
 };
 
 struct fd {
@@ -273,6 +274,8 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name);
  * @return 非0 代表错误返回
  */
 errno_t vfs_close(vfs_node_t node);
+
+void vfs_detach(vfs_node_t node);
 
 /**
  * 释放一个 vfs 节点

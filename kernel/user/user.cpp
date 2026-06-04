@@ -44,6 +44,13 @@ UserInfo root_user = {
     .envp = current_user_envp,
 };
 
+void init_root_user()
+{
+    current_user = &root_user;
+    vfs_mkdir("/users");
+    vfs_mkdir("/users/Root");
+}
+
 static uint32_t stable_user_name_id(const char *name)
 {
     uint32_t hash = 2166136261u;

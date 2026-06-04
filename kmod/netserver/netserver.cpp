@@ -412,6 +412,13 @@ static void xj380_dns_found_cb(const char *name, const ip_addr_t *ipaddr, void *
 
 static ssize_t xj380_socket_read_impl(xj380_lwip_socket_t *socket, void *buffer, size_t size, uint64_t flags)
 {
+    if (socket == NULL || socket->conn == NULL || (buffer == NULL && size > 0)) {
+        return -EINVAL;
+    }
+    if (size == 0) {
+        return 0;
+    }
+
     u8_t    api_flags = NETCONN_NOAUTORCVD;
     ssize_t recvd     = 0;
     size_t  left      = size;
@@ -502,6 +509,9 @@ static ssize_t xj380_socket_recvfrom_impl(xj380_lwip_socket_t *socket,
                                           struct sockaddr *addr,
                                           socklen_t *addrlen)
 {
+    if (socket == NULL || socket->conn == NULL || (buffer == NULL && size > 0)) {
+        return -EINVAL;
+    }
     if (size > 0xffffU) {
         size = 0xffffU;
     }
@@ -521,7 +531,9 @@ static ssize_t xj380_socket_recvfrom_impl(xj380_lwip_socket_t *socket,
     }
 
     u16_t copy_len = (u16_t)MIN(size, (size_t)netbuf_len(buf));
-    netbuf_copy_partial(buf, buffer, copy_len, 0);
+    if (copy_len > 0) {
+        netbuf_copy_partial(buf, buffer, copy_len, 0);
+    }
     if (addrlen != NULL) {
         xj380_ip_to_sockaddr(netbuf_fromaddr(buf), netbuf_fromport(buf), addr, addrlen);
     }
@@ -537,6 +549,9 @@ static ssize_t xj380_socket_sendto_impl(xj380_lwip_socket_t *socket,
                                         socklen_t addrlen)
 {
     (void)flags;
+    if (socket == NULL || socket->conn == NULL || (buffer == NULL && size > 0)) {
+        return -EINVAL;
+    }
     if (size > 0xffffU) {
         return -EMSGSIZE;
     }
@@ -645,7 +660,7 @@ static int xj380_provider_close(void *socket_ptr)
 static ssize_t xj380_provider_read(void *socket_ptr, void *buffer, size_t size, uint64_t flags)
 {
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
-    if (socket == NULL || buffer == NULL) {
+    if (socket == NULL || (buffer == NULL && size > 0)) {
         return -EINVAL;
     }
     if (xj380_socket_is_udp(socket)) {
@@ -657,11 +672,14 @@ static ssize_t xj380_provider_read(void *socket_ptr, void *buffer, size_t size, 
 static ssize_t xj380_provider_write(void *socket_ptr, const void *buffer, size_t size, uint64_t flags)
 {
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
-    if (socket == NULL || buffer == NULL) {
+    if (socket == NULL || (buffer == NULL && size > 0)) {
         return -EINVAL;
     }
     if (xj380_socket_is_udp(socket)) {
         return xj380_socket_sendto_impl(socket, buffer, size, flags, NULL, 0);
+    }
+    if (size == 0) {
+        return 0;
     }
 
     size_t written   = 0;
@@ -714,7 +732,7 @@ static ssize_t xj380_provider_recvfrom(void *socket_ptr,
                                        socklen_t *addrlen)
 {
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
-    if (socket == NULL || buffer == NULL) {
+    if (socket == NULL || (buffer == NULL && size > 0)) {
         return -EINVAL;
     }
     if (xj380_socket_is_udp(socket)) {
@@ -731,7 +749,7 @@ static ssize_t xj380_provider_sendto(void *socket_ptr,
                                      socklen_t addrlen)
 {
     xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
-    if (socket == NULL || buffer == NULL) {
+    if (socket == NULL || (buffer == NULL && size > 0)) {
         return -EINVAL;
     }
     if (xj380_socket_is_udp(socket)) {
@@ -897,6 +915,66 @@ static int xj380_provider_getsockopt(void *socket_ptr, int level, int optname, v
         g_getsockopt_log_count++;
     }
     return 0;
+}
+
+static int xj380_provider_setsockopt(void *socket_ptr, int level, int optname, const void *optval, socklen_t optlen)
+{
+    xj380_lwip_socket_t *socket = (xj380_lwip_socket_t *)socket_ptr;
+    if (socket == NULL || socket->conn == NULL) {
+        return -EINVAL;
+    }
+    if (optlen != 0 && optval == NULL) {
+        return -EINVAL;
+    }
+    if (optlen < sizeof(int)) {
+        return -EINVAL;
+    }
+
+    int value = *(const int *)optval;
+    switch (level) {
+    case SOL_SOCKET:
+        if (socket->conn->pcb.ip == NULL) {
+            return -ENOTCONN;
+        }
+        switch (optname) {
+        case SO_REUSEADDR:
+            if (value) ip_set_option(socket->conn->pcb.ip, SOF_REUSEADDR);
+            else ip_reset_option(socket->conn->pcb.ip, SOF_REUSEADDR);
+            return 0;
+        case SO_KEEPALIVE:
+            if (value) ip_set_option(socket->conn->pcb.ip, SOF_KEEPALIVE);
+            else ip_reset_option(socket->conn->pcb.ip, SOF_KEEPALIVE);
+            return 0;
+        case SO_BROADCAST:
+            if (NETCONNTYPE_GROUP(netconn_type(socket->conn)) != NETCONN_UDP) {
+                return -ENOPROTOOPT;
+            }
+            if (value) ip_set_option(socket->conn->pcb.ip, SOF_BROADCAST);
+            else ip_reset_option(socket->conn->pcb.ip, SOF_BROADCAST);
+            return 0;
+        default:
+            return -ENOPROTOOPT;
+        }
+
+    case IPPROTO_TCP:
+        if (NETCONNTYPE_GROUP(netconn_type(socket->conn)) != NETCONN_TCP || socket->conn->pcb.tcp == NULL) {
+            return -ENOPROTOOPT;
+        }
+        switch (optname) {
+        case TCP_NODELAY:
+            if (value) tcp_nagle_disable(socket->conn->pcb.tcp);
+            else tcp_nagle_enable(socket->conn->pcb.tcp);
+            return 0;
+        case TCP_KEEPALIVE:
+            socket->conn->pcb.tcp->keep_idle = (u32_t)value;
+            return 0;
+        default:
+            return -ENOPROTOOPT;
+        }
+
+    default:
+        return -ENOPROTOOPT;
+    }
 }
 
 static int xj380_provider_listen(void *socket_ptr, int backlog)
@@ -1276,6 +1354,7 @@ static socket_provider_t g_socket_provider = {
     .getsockname = xj380_provider_getsockname,
     .getpeername = xj380_provider_getpeername,
     .getsockopt = xj380_provider_getsockopt,
+    .setsockopt = xj380_provider_setsockopt,
     .listen    = xj380_provider_listen,
     .accept    = xj380_provider_accept,
     .shutdown  = xj380_provider_shutdown,

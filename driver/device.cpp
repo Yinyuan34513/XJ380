@@ -5,6 +5,7 @@
 #include "mutex.h"
 #include <proto.hpp>
 #include <fs/partition.h>
+#include <fs/vfs/sys.h>
 #include <dlinker.h>
 #include <mm/uaccess.h>
 #include <task/pcb.h>
@@ -161,14 +162,74 @@ static bool blk_user_buffer_valid(const void *buffer, size_t length) {
 int regist_device(const char *path, device_t vd) {
     int i = id_alloc(dev_allocator);
     if (i == -1) return -1;
+    write_serial_fmt("[udev-trace] device:register-begin id=%d request_path=%s drive=%s type=%d major=%u minor=%u flag=%d read=0x%llx write=0x%llx ioctl=0x%llx poll=0x%llx map=0x%llx ready=0x%llx\n",
+                     i,
+                     path != NULL ? path : "(null)",
+                     vd.drive_name,
+                     vd.type,
+                     vd.major,
+                     vd.minor,
+                     vd.flag,
+                     (unsigned long long)(uintptr_t)vd.read,
+                     (unsigned long long)(uintptr_t)vd.write,
+                     (unsigned long long)(uintptr_t)vd.ioctl,
+                     (unsigned long long)(uintptr_t)vd.poll,
+                     (unsigned long long)(uintptr_t)vd.map,
+                     (unsigned long long)(uintptr_t)vd.ready);
     device_ctl[i]         = vd;
+    device_ctl[i].path    = NULL;
     device_ctl[i].vdiskid = i;
+    if (device_ctl[i].major == 0 && device_ctl[i].minor == 0)
+    {
+        device_ctl[i].major = vd.type == DEVICE_BLOCK ? 8 : 13;
+        device_ctl[i].minor = (uint32_t)i;
+    }
     // write_serial_fmt("path: %s id %d\n",path,i);
     errno_t ret;
     if ((ret = devfs_register(path, i)) != EOK) {
+        write_serial_fmt("[udev-trace] device:devfs-register-fail id=%d request_path=%s drive=%s ret=%d\n",
+                         i,
+                         path != NULL ? path : "(null)",
+                         vd.drive_name,
+                         ret);
         write_serial_fmt("Registers (%s)device error: %d\n", vd.drive_name, ret);
     }else{
-        write_serial_fmt("Registers (%s)device success\n", vd.drive_name);
+        write_serial_fmt("Registers (%s)device success path=%s major=%u minor=%u\n",
+                         vd.drive_name,
+                         device_ctl[i].path != NULL ? device_ctl[i].path : vd.drive_name,
+                         device_ctl[i].major,
+                         device_ctl[i].minor);
+        const char *published_path = device_ctl[i].path != NULL ? device_ctl[i].path : vd.drive_name;
+        char node_name[64] = {};
+        strncpy(node_name, vd.drive_name, sizeof(node_name) - 1);
+        if (published_path != NULL)
+        {
+            const char *slash = strrchr(published_path, '/');
+            if (slash != NULL && slash[1] != '\0') strncpy(node_name, slash + 1, sizeof(node_name) - 1);
+        }
+        if (sysfs_is_ready())
+        {
+            write_serial_fmt("[udev-trace] device:sysfs-publish id=%d devname=%s node_name=%s type=%c major=%u minor=%u\n",
+                             i,
+                             published_path != NULL ? published_path : "(null)",
+                             node_name,
+                             vd.type == DEVICE_BLOCK ? 'b' : 'c',
+                             device_ctl[i].major,
+                             device_ctl[i].minor);
+            sysfs_publish_kernel_device(published_path,
+                                        node_name,
+                                        vd.type == DEVICE_BLOCK ? 'b' : 'c',
+                                        (int)device_ctl[i].major,
+                                        (int)device_ctl[i].minor);
+        }
+        else
+        {
+            write_serial_fmt("[udev-trace] device:sysfs-not-ready id=%d devname=%s major=%u minor=%u\n",
+                             i,
+                             published_path != NULL ? published_path : "(null)",
+                             device_ctl[i].major,
+                             device_ctl[i].minor);
+        }
         if (device_ctl[i].type == DEVICE_BLOCK) {
             partition_device_added((size_t)i);
         }
@@ -180,6 +241,13 @@ EXPORT_SYMBOL(regist_device);
 
 void delete_device(int vdiskid) {
     if (vdiskid >= 256) return;
+    write_serial_fmt("[udev-trace] device:delete-begin id=%d path=%s drive=%s flag=%d major=%u minor=%u\n",
+                     vdiskid,
+                     device_ctl[vdiskid].path != NULL ? device_ctl[vdiskid].path : "(null)",
+                     device_ctl[vdiskid].drive_name,
+                     device_ctl[vdiskid].flag,
+                     device_ctl[vdiskid].major,
+                     device_ctl[vdiskid].minor);
     if (mutex_trylock(&blk_cached_bounce_lock[vdiskid]) == 0) {
         if (blk_cached_bounce[vdiskid] != NULL) {
             blk_free_bounce(blk_cached_bounce[vdiskid], blk_cached_bounce_bytes[vdiskid]);
@@ -189,7 +257,11 @@ void delete_device(int vdiskid) {
         mutex_unlock(&blk_cached_bounce_lock[vdiskid]);
     }
     device_t dev = device_ctl[vdiskid];
-    devfs_delete(dev.path);
+    errno_t del_ret = devfs_delete(dev.path);
+    write_serial_fmt("[udev-trace] device:devfs-delete id=%d path=%s ret=%d\n",
+                     vdiskid,
+                     dev.path != NULL ? dev.path : "(null)",
+                     del_ret);
     free(dev.path);
     id_free(dev_allocator, dev.vdiskid);
     dev.path    = NULL;

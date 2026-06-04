@@ -26,20 +26,29 @@
 #include <task/pcb.h>
 #include <user/user.h>
 
-void write_ulog(char *str)
+void write_ulog(const char *str)
 {
+    if (str == NULL) return;
     vfs_node_t v = vfs_open("/system/oslog.log");
-    vfs_write(v, str, v->size, strlen(str) * sizeof(char));
+    if (v == NULL) return;
+    vfs_write(v, (void *)str, v->size, strlen(str) * sizeof(char));
+    vfs_close(v);
+}
+
+void ulog_err(const char *err_type)
+{
+    tcb_t task = get_current_task();
+    write_ulog("[XULS][Error] Task \"");
+    write_ulog(task != NULL ? task->name : "(null)");
+    write_ulog("\" Was Broken. Error Type: ");
+    write_ulog(err_type != NULL ? err_type : "(null)");
+    write_ulog("\n");
+
 }
 
 void ulog_err(char *err_type)
 {
-    write_ulog("[XULS][Error] Task \"");
-    write_ulog(get_current_task()->name);
-    write_ulog("\" Was Broken. Error Type: ");
-    write_ulog(err_type);
-    write_ulog("\n");
-
+    ulog_err((const char *)err_type);
 }
 
 // 启动日志系统

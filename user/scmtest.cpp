@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <poll.h>
 #include "xapi/include/xposix/socket.h"
 
 #ifndef FD_CLOEXEC
@@ -93,6 +94,57 @@ static int recv_fd_with_payload(int sockfd, char *payload_buf, size_t payload_bu
     return ret;
 }
 
+static void test_zero_len_dgram_passcred()
+{
+    int sv[2] = {-1, -1};
+    int sp_ret = socketpair(AF_UNIX, SOCK_DGRAM, 0, sv);
+    log_result("socketpair(AF_UNIX, SOCK_DGRAM)", sp_ret == 0);
+    if (sp_ret != 0) return;
+
+    int one = 1;
+    log_result("setsockopt SO_PASSCRED", setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &one, sizeof(one)) == 0);
+
+    struct iovec send_iov = {};
+    struct msghdr send_msg = {};
+    send_msg.msg_iov = &send_iov;
+    send_msg.msg_iovlen = 1;
+    int send_ret = (int)sendmsg(sv[0], &send_msg, 0);
+    log_result("sendmsg zero-length datagram", send_ret == 0);
+
+    struct pollfd pfd = {};
+    pfd.fd = sv[1];
+    pfd.events = POLLIN;
+    int poll_ret = poll(&pfd, 1, 0);
+    log_result("poll zero-length datagram readable", poll_ret == 1 && (pfd.revents & POLLIN));
+
+    char control[CMSG_SPACE(sizeof(struct ucred))];
+    memset(control, 0, sizeof(control));
+
+    struct iovec recv_iov = {};
+    struct msghdr recv_msg = {};
+    recv_msg.msg_iov = &recv_iov;
+    recv_msg.msg_iovlen = 1;
+    recv_msg.msg_control = control;
+    recv_msg.msg_controllen = sizeof(control);
+
+    int recv_ret = (int)recvmsg(sv[1], &recv_msg, MSG_DONTWAIT);
+    log_result("recvmsg zero-length datagram", recv_ret == 0);
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&recv_msg);
+    bool has_cred = cmsg != NULL &&
+                    cmsg->cmsg_level == SOL_SOCKET &&
+                    cmsg->cmsg_type == SCM_CREDENTIALS &&
+                    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct ucred));
+    log_result("recvmsg SCM_CREDENTIALS", has_cred);
+    if (has_cred) {
+        struct ucred *cred = (struct ucred *)CMSG_DATA(cmsg);
+        log_result("SCM_CREDENTIALS pid valid", cred->pid == getpid());
+    }
+
+    close_if_valid(sv[0]);
+    close_if_valid(sv[1]);
+}
+
 static int scmtest_main_impl()
 {
     out("scmtest: start\n");
@@ -115,6 +167,8 @@ static int scmtest_main_impl()
         close_if_valid(data_fd);
         return 1;
     }
+
+    test_zero_len_dgram_passcred();
 
     const char msg1[] = "hello-fd";
     int send_ret = send_fd_with_payload(sv[0], data_fd, msg1);

@@ -37,6 +37,17 @@ extern "C" int shutdown(int sockfd, int how)
     return (int)__xposix_ret(enter_syscall(SYS_SHUTDOWN, sockfd, how, 0, 0, 0, 0));
 }
 
+extern "C" int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_SETSOCKOPT, sockfd, level, optname, (uint64_t)optval, optlen, 0));
+}
+
+extern "C" int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_GETSOCKOPT, sockfd, level, optname, (uint64_t)optval,
+                                           (uint64_t)optlen, 0));
+}
+
 extern "C" ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
 {
     return (ssize_t)__xposix_ret(enter_syscall(SYS_SENDMSG, sockfd, (uint64_t)msg, flags, 0, 0, 0));

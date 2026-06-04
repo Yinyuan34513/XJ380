@@ -22,6 +22,9 @@
 #define DRM_IOCTL_GEM_CLOSE       DRM_IOW(0x09, struct drm_gem_close)
 #define DRM_IOCTL_GEM_FLINK       DRM_IOWR(0x0a, struct drm_gem_flink)
 #define DRM_IOCTL_GEM_OPEN        DRM_IOWR(0x0b, struct drm_gem_open)
+#define DRM_IOCTL_SET_VERSION     DRM_IOWR(0x07, struct drm_set_version)
+#define DRM_IOCTL_GET_STATS       DRM_IOR(0x06, struct drm_stats)
+#define DRM_IOCTL_WAIT_VBLANK     DRM_IOWR(0x3a, union drm_wait_vblank)
 
 /* Modesetting ioctls */
 #define DRM_IOCTL_MODE_GETRESOURCES    DRM_IOWR(0xA0, struct drm_mode_card_res)
@@ -35,6 +38,7 @@
 #define DRM_IOCTL_MODE_ADDFB           DRM_IOWR(0xAE, struct drm_mode_fb_cmd)
 #define DRM_IOCTL_MODE_RMFB            DRM_IOWR(0xAF, uint32_t)
 #define DRM_IOCTL_MODE_PAGE_FLIP       DRM_IOWR(0xB0, struct drm_mode_crtc_page_flip)
+#define DRM_IOCTL_MODE_DIRTYFB         DRM_IOWR(0xB1, struct drm_mode_fb_dirty_cmd)
 #define DRM_IOCTL_MODE_CREATE_DUMB     DRM_IOWR(0xB2, struct drm_mode_create_dumb)
 #define DRM_IOCTL_MODE_MAP_DUMB        DRM_IOWR(0xB3, struct drm_mode_map_dumb)
 #define DRM_IOCTL_MODE_DESTROY_DUMB    DRM_IOWR(0xB4, struct drm_mode_destroy_dumb)
@@ -54,10 +58,18 @@
 
 /* Capabilities */
 #define DRM_CAP_DUMB_BUFFER        0x1
+#define DRM_CAP_VBLANK_HIGH_CRTC   0x2
+#define DRM_CAP_DUMB_PREFERRED_DEPTH 0x3
+#define DRM_CAP_DUMB_PREFER_SHADOW 0x4
 #define DRM_CAP_PRIME              0x5
+#define DRM_CAP_TIMESTAMP_MONOTONIC 0x6
 #define DRM_CAP_ASYNC_PAGE_FLIP    0x7
 #define DRM_CAP_CURSOR_WIDTH       0x8
 #define DRM_CAP_CURSOR_HEIGHT      0x9
+#define DRM_CAP_ADDFB2_MODIFIERS   0x10
+#define DRM_CAP_PAGE_FLIP_TARGET   0x11
+#define DRM_CAP_CRTC_IN_VBLANK_EVENT 0x12
+#define DRM_CAP_ATOMIC_ASYNC_PAGE_FLIP 0x15
 
 /* Client capabilities */
 #define DRM_CLIENT_CAP_STEREO_3D    1
@@ -122,6 +134,39 @@ struct drm_gem_open {
     uint32_t name;
     uint32_t handle;
     uint64_t size;
+};
+
+struct drm_set_version {
+    int drm_di_major;
+    int drm_di_minor;
+    int drm_dd_major;
+    int drm_dd_minor;
+};
+
+struct drm_stats {
+    uint32_t count;
+    struct {
+        uint64_t value;
+        uint32_t type;
+    } data[15];
+};
+
+struct drm_wait_vblank_request {
+    uint32_t type;
+    uint32_t sequence;
+    uint64_t signal;
+};
+
+struct drm_wait_vblank_reply {
+    uint32_t type;
+    uint32_t sequence;
+    int64_t tval_sec;
+    int64_t tval_usec;
+};
+
+union drm_wait_vblank {
+    struct drm_wait_vblank_request request;
+    struct drm_wait_vblank_reply reply;
 };
 
 struct drm_clip_rect {

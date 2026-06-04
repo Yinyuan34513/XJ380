@@ -349,5 +349,12 @@ int tmpfs_setup(void)
     vfs_node_t tmp = vfs_open("/tmp");
     if (tmp == NULL) return -ENOENT;
     if (vfs_mount((const char *)TMPFS_REGISTER_ID, tmp) == VFS_STATUS_FAILED) return -EIO;
+    vfs_close(tmp);
+
+    vfs_mkdir("/run");
+    vfs_node_t run = vfs_open("/run");
+    if (run == NULL) return -ENOENT;
+    if (vfs_mount((const char *)TMPFS_REGISTER_ID, run) == VFS_STATUS_FAILED) return -EIO;
+    vfs_close(run);
     return 0;
 }

@@ -17,6 +17,7 @@
 #include <rtc.h>
 #include <tty.h>
 #include <vt.h>
+#include <input/evdev.h>
 #include <task/ipc.h>
 #include <mutex.h>
 #include <math.hpp>
@@ -28,10 +29,12 @@ static constexpr size_t USER_IO_BOUNCE_BYTES = 0x10000UL;
 static constexpr size_t USER_PATH_MAX        = 4096UL;
 static constexpr size_t USER_IOV_MAX         = 1024UL;
 static constexpr size_t USER_POLL_MAX        = FD_SETSIZE;
+static constexpr size_t SOCKET_ADDR_MIN      = sizeof(sa_family_t);
 static constexpr size_t SOCKET_ADDR_MAX      = sizeof(struct sockaddr_un) > sizeof(struct sockaddr_in6)
                                                    ? sizeof(struct sockaddr_un)
                                                    : sizeof(struct sockaddr_in6);
 static constexpr uint64_t CLONE_THREAD_FLAG  = 0x00010000ULL;
+static constexpr uint64_t CLONE_PIDFD_FLAG   = 0x00001000ULL;
 
 static void epoll_close_node(vfs_node_t node);
 
@@ -91,9 +94,13 @@ static bool add_u64_i64(uint64_t base, int64_t offset, uint64_t *out)
 
 static bool trace_xbps_wait_task()
 {
+#if !CONFIG_KERNEL_XBPS_WAIT_DEBUG
+    return false;
+#else
     tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
     return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL;
+#endif
 }
 
 static size_t bounded_strlen(const char *str, size_t max_len)
@@ -198,6 +205,7 @@ union socket_addr_storage
     struct sockaddr    base;
     struct sockaddr_in6 in6;
     struct sockaddr_un un;
+    struct sockaddr_nl nl;
     uint8_t            bytes[SOCKET_ADDR_MAX];
 };
 
@@ -320,23 +328,27 @@ static void unix_msg_release_rights(fd_file_handle **handles, size_t fd_count)
     free(handles);
 }
 
-static int unix_msg_install_rights_to_user(page_directory_t *pagedir, struct msghdr *msg, struct msghdr *kmsg,
-                                           fd_file_handle **handles, size_t fd_count, uint64_t flags)
+static int unix_msg_install_ancillary_to_user(page_directory_t *pagedir, struct msghdr *msg, struct msghdr *kmsg,
+                                              fd_file_handle **handles, size_t fd_count, uint64_t flags,
+                                              const struct ucred *cred, bool has_cred)
 {
-    if (handles == NULL || fd_count == 0) {
+    if ((handles == NULL || fd_count == 0) && !has_cred) {
         kmsg->msg_controllen = 0;
         kmsg->msg_flags = 0;
         return 0;
     }
 
-    if (kmsg->msg_control == NULL || kmsg->msg_controllen < CMSG_SPACE(fd_count * sizeof(int))) {
+    size_t rights_len = handles != NULL && fd_count > 0 ? CMSG_SPACE(fd_count * sizeof(int)) : 0;
+    size_t cred_len = has_cred ? CMSG_SPACE(sizeof(struct ucred)) : 0;
+    size_t out_len = cred_len + rights_len;
+
+    if (kmsg->msg_control == NULL || kmsg->msg_controllen < out_len) {
         unix_msg_release_rights(handles, fd_count);
         kmsg->msg_controllen = 0;
-        kmsg->msg_flags = 0;
+        kmsg->msg_flags = out_len != 0 ? MSG_CTRUNC : 0;
         return 0;
     }
 
-    size_t out_len = CMSG_SPACE(fd_count * sizeof(int));
     uint8_t *control = (uint8_t *)calloc(1, out_len);
     if (control == NULL) {
         unix_msg_release_rights(handles, fd_count);
@@ -353,32 +365,51 @@ static int unix_msg_install_rights_to_user(page_directory_t *pagedir, struct msg
         return -EINVAL;
     }
 
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    cmsg->cmsg_len = CMSG_LEN(fd_count * sizeof(int));
-    int *fds = (int *)CMSG_DATA(cmsg);
-    memset(fds, 0, fd_count * sizeof(int));
-
     bool cloexec = (flags & MSG_CMSG_CLOEXEC) != 0;
-    for (size_t i = 0; i < fd_count; i++) {
-        fd_file_handle *handle = handles[i];
-        if (handle == NULL) continue;
-        if (cloexec) handle->flags |= O_CLOEXEC;
-        else handle->flags &= ~O_CLOEXEC;
-        handle->fd = queue_enqueue_lowest(get_current_task()->parent_group->file_open, handle);
-        if ((int)handle->fd < 0) {
-            handle->fd = (size_t)-1;
+
+    if (has_cred && cred != NULL) {
+        cmsg->cmsg_level = SOL_SOCKET;
+        cmsg->cmsg_type = SCM_CREDENTIALS;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(struct ucred));
+        memcpy(CMSG_DATA(cmsg), cred, sizeof(struct ucred));
+        cmsg = rights_len != 0 ? CMSG_NXTHDR(&local_msg, cmsg) : NULL;
+    }
+
+    if (handles != NULL && fd_count > 0) {
+        if (cmsg == NULL) {
             free(control);
-            for (size_t j = i; j < fd_count; j++) {
-                if (handles[j] != NULL) {
-                    vfs_close(handles[j]->node);
-                    free(handles[j]);
-                }
-            }
-            free(handles);
-            return -EMFILE;
+            unix_msg_release_rights(handles, fd_count);
+            return -EINVAL;
         }
-        fds[i] = (int)handle->fd;
+
+        cmsg->cmsg_level = SOL_SOCKET;
+        cmsg->cmsg_type = SCM_RIGHTS;
+        cmsg->cmsg_len = CMSG_LEN(fd_count * sizeof(int));
+        int *fds = (int *)CMSG_DATA(cmsg);
+        memset(fds, 0, fd_count * sizeof(int));
+
+        for (size_t i = 0; i < fd_count; i++) {
+            fd_file_handle *handle = handles[i];
+            if (handle == NULL) continue;
+            if (cloexec) handle->flags |= O_CLOEXEC;
+            else handle->flags &= ~O_CLOEXEC;
+            handle->fd = queue_enqueue_lowest(get_current_task()->parent_group->file_open, handle);
+            if ((int)handle->fd < 0) {
+                handle->fd = (size_t)-1;
+                free(control);
+                for (size_t j = i; j < fd_count; j++) {
+                    if (handles[j] != NULL) {
+                        vfs_close(handles[j]->node);
+                        free(handles[j]);
+                    }
+                }
+                free(handles);
+                return -EMFILE;
+            }
+            fds[i] = (int)handle->fd;
+        }
+        free(handles);
+        handles = NULL;
     }
 
     if (!copy_to_user_pagedir(pagedir, kmsg->msg_control, control, out_len)) {
@@ -387,7 +418,6 @@ static int unix_msg_install_rights_to_user(page_directory_t *pagedir, struct msg
         return -EFAULT;
     }
     free(control);
-    free(handles);
     kmsg->msg_controllen = out_len;
     kmsg->msg_flags = 0;
     return 0;
@@ -542,8 +572,12 @@ static uint64_t lstat_kernel_path(const char *path, struct stat *out)
 
 static bool busybox_debug_current_linux_abi()
 {
+#if !CONFIG_KERNEL_BUSYBOX_DEBUG
+    return false;
+#else
     tcb_t task = get_current_task();
     return task != NULL && task->parent_group != NULL && task->parent_group->linux_abi;
+#endif
 }
 
 static uint64_t copy_stat_to_user(struct stat *user_stat, const struct stat *kstat)
@@ -605,8 +639,8 @@ static int resolve_user_path_at(int dirfd, char *pathname, char **resolved)
 
 static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buffer, size_t size, bool socket_mode)
 {
-    if (handle == NULL || buffer == NULL) return -EINVAL;
-    if (size == 0) return 0;
+    if (handle == NULL || (buffer == NULL && size > 0)) return -EINVAL;
+    if (size == 0) return socket_mode ? socket_write(handle->node, NULL, 0) : 0;
 
     pcb_t process = get_current_task()->parent_group;
     size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
@@ -662,13 +696,163 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
 
 static bool trace_xbps_task()
 {
+#if !CONFIG_KERNEL_LINUX_OUTPUT_MIRROR
+    return false;
+#else
     tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
-    return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL;
+    return strstr(task->name, "xbps") != NULL || strstr(task->parent_group->name, "xbps") != NULL ||
+           strstr(task->name, "bash") != NULL || strstr(task->parent_group->name, "bash") != NULL ||
+           strstr(task->name, "dbus") != NULL || strstr(task->parent_group->name, "dbus") != NULL ||
+           strstr(task->name, "udev") != NULL || strstr(task->parent_group->name, "udev") != NULL ||
+           strstr(task->name, "weston") != NULL || strstr(task->parent_group->name, "weston") != NULL ||
+           strstr(task->name, "seatd") != NULL || strstr(task->parent_group->name, "seatd") != NULL;
+#endif
+}
+
+static bool trace_udev_task()
+{
+#if !CONFIG_KERNEL_UDEV_TRACE
+    return false;
+#else
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "bash") != NULL || strstr(task->parent_group->name, "bash") != NULL ||
+           strstr(task->name, "dbus") != NULL || strstr(task->parent_group->name, "dbus") != NULL ||
+           strstr(task->name, "udev") != NULL || strstr(task->parent_group->name, "udev") != NULL ||
+           strstr(task->name, "weston") != NULL || strstr(task->parent_group->name, "weston") != NULL ||
+           strstr(task->name, "seatd") != NULL || strstr(task->parent_group->name, "seatd") != NULL ||
+           strstr(task->name, "find") != NULL || strstr(task->parent_group->name, "find") != NULL ||
+           strstr(task->name, "ls") != NULL || strstr(task->parent_group->name, "ls") != NULL;
+#endif
+}
+
+static bool trace_udev_path(const char *path)
+{
+#if !CONFIG_KERNEL_UDEV_TRACE
+    (void)path;
+    return false;
+#else
+    if (path == NULL) return trace_udev_task();
+    return trace_udev_task() || strstr(path, "/dev") != NULL || strstr(path, "/sys") != NULL ||
+           strstr(path, "/run/udev") != NULL || strstr(path, "/run/dbus") != NULL ||
+           strstr(path, "card0") != NULL || strstr(path, "event") != NULL;
+#endif
+}
+
+static void trace_udev_node(const char *op, const char *path, vfs_node_t node, int64_t ret)
+{
+    if (!trace_udev_path(path)) return;
+    write_serial_fmt("[udev-trace] sys:%s task=%s path=%s ret=%lld node=%p type=0x%x fsid=%u handle=%p rdev=%llu size=%llu child=%llu ref=%u\n",
+                     op != NULL ? op : "?",
+                     get_current_task() != NULL ? get_current_task()->name : "(null)",
+                     path != NULL ? path : "(null)",
+                     (long long)ret,
+                     node,
+                     node != NULL ? node->type : 0,
+                     node != NULL ? node->fsid : 0,
+                     node != NULL ? node->handle : NULL,
+                     node != NULL ? (unsigned long long)node->rdev : 0,
+                     node != NULL ? (unsigned long long)node->size : 0,
+                     node != NULL ? (unsigned long long)list_length(node->child) : 0,
+                     node != NULL ? node->refcount : 0);
+}
+
+static void trace_udev_fd_result(const char *op, int fd, fd_file_handle *handle, uint64_t arg_a, uint64_t arg_b,
+                                 int64_t ret)
+{
+    vfs_node_t node = handle != NULL ? handle->node : NULL;
+    char *path = node != NULL ? vfs_get_fullpath(node) : NULL;
+    if (!trace_udev_path(path))
+    {
+        free(path);
+        return;
+    }
+
+    write_serial_fmt("[udev-trace] sys:%s task=%s fd=%d path=%s ret=%lld arg_a=%llu arg_b=%llu flags=0x%llx off=%llu node=%p type=0x%x fsid=%u handle=%p rdev=%llu size=%llu child=%llu ref=%u\n",
+                     op != NULL ? op : "?",
+                     get_current_task() != NULL ? get_current_task()->name : "(null)",
+                     fd,
+                     path != NULL ? path : "(null)",
+                     (long long)ret,
+                     (unsigned long long)arg_a,
+                     (unsigned long long)arg_b,
+                     handle != NULL ? (unsigned long long)handle->flags : 0ULL,
+                     handle != NULL ? (unsigned long long)handle->offset : 0ULL,
+                     node,
+                     node != NULL ? node->type : 0,
+                     node != NULL ? node->fsid : 0,
+                     node != NULL ? node->handle : NULL,
+                     node != NULL ? (unsigned long long)node->rdev : 0,
+                     node != NULL ? (unsigned long long)node->size : 0,
+                     node != NULL ? (unsigned long long)list_length(node->child) : 0,
+                     node != NULL ? node->refcount : 0);
+    free(path);
+}
+
+static void trace_udev_sockaddr(const char *op, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (!trace_udev_task()) return;
+    if (addr == NULL)
+    {
+        write_serial_fmt("[udev-trace] sys:%s sockaddr=null len=%u\n",
+                         op != NULL ? op : "?",
+                         (unsigned)addrlen);
+        return;
+    }
+
+    switch (addr->sa_family)
+    {
+    case AF_NETLINK:
+    {
+        const struct sockaddr_nl *nl = (const struct sockaddr_nl *)addr;
+        uint32_t pid = addrlen >= sizeof(struct sockaddr_nl) ? nl->nl_pid : 0;
+        uint32_t groups = addrlen >= sizeof(struct sockaddr_nl) ? nl->nl_groups : 0;
+        write_serial_fmt("[udev-trace] sys:%s sockaddr=netlink len=%u pid=%u groups=0x%x\n",
+                         op != NULL ? op : "?",
+                         (unsigned)addrlen,
+                         pid,
+                         groups);
+        break;
+    }
+    case AF_UNIX:
+    {
+        const struct sockaddr_un *un = (const struct sockaddr_un *)addr;
+        size_t path_len = addrlen > sizeof(sa_family_t) ? (size_t)addrlen - sizeof(sa_family_t) : 0;
+        write_serial_fmt("[udev-trace] sys:%s sockaddr=unix len=%u path=%.*s\n",
+                         op != NULL ? op : "?",
+                         (unsigned)addrlen,
+                         (int)MIN(path_len, (size_t)100),
+                         un->sun_path);
+        break;
+    }
+    case AF_INET:
+    {
+        const struct sockaddr_in *in = (const struct sockaddr_in *)addr;
+        write_serial_fmt("[udev-trace] sys:%s sockaddr=inet len=%u addr=0x%x port=0x%x\n",
+                         op != NULL ? op : "?",
+                         (unsigned)addrlen,
+                         addrlen >= sizeof(struct sockaddr_in) ? in->sin_addr.s_addr : 0,
+                         addrlen >= sizeof(struct sockaddr_in) ? in->sin_port : 0);
+        break;
+    }
+    default:
+        write_serial_fmt("[udev-trace] sys:%s sockaddr=family-%u len=%u\n",
+                         op != NULL ? op : "?",
+                         (unsigned)addr->sa_family,
+                         (unsigned)addrlen);
+        break;
+    }
 }
 
 static void mirror_linux_output_to_serial(const char *tag, const uint8_t *buffer, size_t size)
 {
+#if !CONFIG_KERNEL_LINUX_OUTPUT_MIRROR
+    (void)tag;
+    (void)buffer;
+    (void)size;
+    return;
+#else
     static constexpr size_t OUTPUT_SERIAL_CHUNK = 256;
     if (buffer == NULL || size == 0) return;
 
@@ -685,10 +869,47 @@ static void mirror_linux_output_to_serial(const char *tag, const uint8_t *buffer
         write_serial_fmt("[%s %s] %s", tag, task->name, bounce);
         total += chunk;
     }
+#endif
 }
 
-static size_t ioctl_arg_size(int request)
+static size_t ioctl_arg_size(uint32_t request)
 {
+    /*
+     * DRM has nested userspace pointers and the DRM driver already follows the
+     * Linux/naos model of copying the top-level ioctl struct itself.
+     */
+    if (_IOC_TYPE(request) == 'd') return 0;
+
+    if (_IOC_TYPE(request) == 'E')
+    {
+        switch (_IOC_NR(request))
+        {
+        case 0x90: /* EVIOCGRAB */
+        case 0x91: /* EVIOCREVOKE */
+            return 0;
+        default:
+            break;
+        }
+    }
+
+    size_t encoded = _IOC_SIZE(request);
+    if (encoded != 0 && encoded <= 4096) return encoded;
+    if (_IOC_TYPE(request) == 'E')
+    {
+        switch (_IOC_NR(request))
+        {
+        case 0x01:
+            return sizeof(int);
+        case 0x02:
+            return sizeof(struct input_id);
+        case 0x03:
+            return sizeof(unsigned int) * 2;
+        default:
+            if (_IOC_NR(request) >= 0x40 && _IOC_NR(request) < 0x40 + ABS_CNT)
+                return sizeof(struct input_absinfo);
+            return 0;
+        }
+    }
     switch (request)
     {
     case TCGETS:
@@ -696,6 +917,11 @@ static size_t ioctl_arg_size(int request)
     case TCSETSW:
     case TCSETSF:
         return sizeof(struct termios);
+    case TCGETS2:
+    case TCSETS2:
+    case TCSETSW2:
+    case TCSETSF2:
+        return sizeof(struct termios2);
     case TIOCGWINSZ:
     case TIOCSWINSZ:
         return sizeof(struct winsize);
@@ -704,6 +930,16 @@ static size_t ioctl_arg_size(int request)
     case TIOCGPTLCK:
     case TIOCGPGRP:
     case TIOCSPGRP:
+    case TIOCGETD:
+    case TIOCSETD:
+    case TIOCGSID:
+    case TIOCGDEV:
+    case TIOCOUTQ:
+    case FIONREAD:
+    case TIOCMGET:
+    case TIOCMBIS:
+    case TIOCMBIC:
+    case TIOCMSET:
     case FIONBIO:
     case KDGETMODE:
     case KDGKBMODE:
@@ -725,15 +961,29 @@ static size_t ioctl_arg_size(int request)
     }
 }
 
-static bool ioctl_writes_user(int request)
+static bool ioctl_writes_user(uint32_t request)
 {
+    if (_IOC_DIR(request) & _IOC_READ) return true;
+    if (_IOC_TYPE(request) == 'E')
+    {
+        uint32_t nr = _IOC_NR(request);
+        return nr == 0x01 || nr == 0x02 || nr == 0x03 || nr == 0x06 || nr == 0x07 || nr == 0x08 || nr == 0x09 ||
+               nr == 0x18 || nr == 0x19 || nr == 0x1a || nr == 0x1b || nr >= 0x20;
+    }
     switch (request)
     {
     case TCGETS:
+    case TCGETS2:
     case TIOCGWINSZ:
     case TIOCGPTN:
     case TIOCGPTLCK:
     case TIOCGPGRP:
+    case TIOCGETD:
+    case TIOCGSID:
+    case TIOCGDEV:
+    case TIOCOUTQ:
+    case FIONREAD:
+    case TIOCMGET:
     case KDGETMODE:
     case KDGKBMODE:
     case VT_OPENQRY:
@@ -749,16 +999,29 @@ static bool ioctl_writes_user(int request)
     }
 }
 
-static bool ioctl_reads_user(int request)
+static bool ioctl_reads_user(uint32_t request)
 {
+    if (_IOC_DIR(request) & _IOC_WRITE) return true;
+    if (_IOC_TYPE(request) == 'E')
+    {
+        uint32_t nr = _IOC_NR(request);
+        return nr == 0xa0 || nr == 0x90 || (nr >= 0xc0 && nr < 0xc0 + ABS_CNT);
+    }
     switch (request)
     {
     case TCSETS:
     case TCSETSW:
     case TCSETSF:
+    case TCSETS2:
+    case TCSETSW2:
+    case TCSETSF2:
     case TIOCSWINSZ:
     case TIOCSPTLCK:
     case TIOCSPGRP:
+    case TIOCSETD:
+    case TIOCMBIS:
+    case TIOCMBIC:
+    case TIOCMSET:
     case FIONBIO:
     case VT_SETMODE:
     case FBIOPUT_VSCREENINFO:
@@ -856,6 +1119,26 @@ static bool wait4_pid_matches(pcb_t child, long pid)
     return pid == -1 ? true : (long)child->pid == pid;
 }
 
+static bool waitid_child_matches(pcb_t parent, pcb_t child, int idtype, uint64_t id)
+{
+    if (child == NULL) return false;
+
+    switch (idtype)
+    {
+    case 0: /* P_ALL */
+        return true;
+    case 1: /* P_PID */
+        return child->pid == id;
+    case 2: /* P_PGID */
+    {
+        uint64_t pgid = id != 0 ? id : (parent != NULL ? parent->pid : 0);
+        return child->pid == pgid;
+    }
+    default:
+        return false;
+    }
+}
+
 static pcb_t wait4_find_child(pcb_t parent, long pid)
 {
     if (parent == NULL || parent->child_pcb == NULL) return NULL;
@@ -869,6 +1152,19 @@ static pcb_t wait4_find_child(pcb_t parent, long pid)
     return NULL;
 }
 
+static pcb_t waitid_find_child(pcb_t parent, int idtype, uint64_t id)
+{
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
+
+    queue_foreach(parent->child_pcb, node)
+    {
+        pcb_t child = (pcb_t)node->data;
+        if (waitid_child_matches(parent, child, idtype, id)) return child;
+    }
+
+    return NULL;
+}
+
 static pcb_t wait4_find_zombie_child(pcb_t parent, long pid)
 {
     if (parent == NULL || parent->child_pcb == NULL) return NULL;
@@ -877,6 +1173,19 @@ static pcb_t wait4_find_zombie_child(pcb_t parent, long pid)
     {
         pcb_t child = (pcb_t)node->data;
         if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid)) return child;
+    }
+
+    return NULL;
+}
+
+static pcb_t waitid_find_zombie_child(pcb_t parent, int idtype, uint64_t id)
+{
+    if (parent == NULL || parent->child_pcb == NULL) return NULL;
+
+    queue_foreach(parent->child_pcb, node)
+    {
+        pcb_t child = (pcb_t)node->data;
+        if (child != NULL && child->status == ZOMBIE && waitid_child_matches(parent, child, idtype, id)) return child;
     }
 
     return NULL;
@@ -905,10 +1214,44 @@ static ipc_message_t wait4_pop_exit_message(pcb_t parent, long pid, bool wait)
     }
 }
 
+static ipc_message_t waitid_pop_exit_message(pcb_t parent, int idtype, uint64_t id, bool wait)
+{
+    if (parent == NULL || parent->ipc_queue == NULL) return NULL;
+
+    while (true)
+    {
+        size_t remaining = parent->ipc_queue->size;
+        for (size_t i = 0; i < remaining; ++i)
+        {
+            ipc_message_t message = (ipc_message_t)queue_dequeue(parent->ipc_queue);
+            if (message == NULL) break;
+
+            pcb_t child = message->type == IPC_MSG_TYPE_EPID ? waitid_find_child(parent, 1, (uint64_t)message->pid) : NULL;
+            if (message->type == IPC_MSG_TYPE_EPID && waitid_child_matches(parent, child, idtype, id)) return message;
+
+            message->index = lock_queue_enqueue(parent->ipc_queue, message);
+        }
+
+        if (!wait) return NULL;
+
+        scheduler_sleep_ns(1000000ULL);
+    }
+}
+
 static void wait4_discard_exit_message(pcb_t parent, int pid)
 {
     ipc_message_t message = wait4_pop_exit_message(parent, pid, false);
     if (message != NULL) free(message);
+}
+
+static void waitid_requeue_exit_message(pcb_t parent, ipc_message_t message)
+{
+    if (parent == NULL || parent->ipc_queue == NULL || message == NULL)
+    {
+        free(message);
+        return;
+    }
+    message->index = lock_queue_enqueue(parent->ipc_queue, message);
 }
 
 static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
@@ -938,6 +1281,23 @@ static uint64_t wait4_reap_child(pcb_t parent, pcb_t child, int *status)
     }
     kill_proc(child, child->exit_code, false);
     return child_pid;
+}
+
+static int waitid_copy_siginfo(pcb_t parent, pcb_t child, siginfo_t *infop)
+{
+    if (infop == NULL) return 0;
+
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    info.si_signo = SIGCHLD;
+    info.si_errno = 0;
+    info.si_code  = 1; /* CLD_EXITED */
+    info._sifields._sigchld.si_pid = (int32_t)child->pid;
+    info._sifields._sigchld.si_uid = 0;
+    info._sifields._sigchld.si_status = child->exit_code & 0xff;
+
+    if (!copy_to_user_pagedir(parent->pagedir, infop, &info, sizeof(info))) return -EFAULT;
+    return 0;
 }
 
 sys_(exit, int exit_code)
@@ -975,6 +1335,15 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
     vfs_node_t node = vfs_open(path0);
     if (node == NULL)
     {
+        if (trace_udev_path(path0))
+        {
+            write_serial_fmt("[udev-trace] sys:open lookup-miss task=%s path=%s flags=0x%llx mode=0%llo creat=%d\n",
+                             get_current_task() != NULL ? get_current_task()->name : "(null)",
+                             path0 != NULL ? path0 : "(null)",
+                             (unsigned long long)flags,
+                             (unsigned long long)mode,
+                             (flags & O_CREAT) ? 1 : 0);
+        }
         if (flags & O_CREAT)
         {
             if (mode & O_DIRECTORY) { vfs_mkdir(normalized_path); }
@@ -994,12 +1363,18 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
         else
         err:
             free(normalized_path);
+        if (trace_udev_path(path0))
+            write_serial_fmt("[udev-trace] sys:open fail path=%s ret=-ENOENT\n", path0 != NULL ? path0 : "(null)");
         return SYSCALL_FAULT_(ENOENT);
     }
 next:
     vfs_update(node);
-    if (!(node->type & (file_dir | file_symlink)) && node->handle == NULL)
+    trace_udev_node("open-after-update", path0, node, 0);
+    if ((node->type & (file_block | file_stream | file_fbdev | file_keyboard | file_mouse | file_pipe | file_socket |
+                       file_epoll | file_ptmx | file_pts | file_proxy | file_anon)) &&
+        node->handle == NULL)
     {
+        trace_udev_node("open-enodev", path0, node, -ENODEV);
         vfs_close(node);
         free(normalized_path);
         return SYSCALL_FAULT_(ENODEV);
@@ -1008,6 +1383,7 @@ next:
     {
         if (vfs_resize(node, 0) != VFS_STATUS_SUCCESS)
         {
+            trace_udev_node("open-trunc-fail", path0, node, -EIO);
             vfs_close(node);
             free(normalized_path);
             return SYSCALL_FAULT_(EIO);
@@ -1025,11 +1401,13 @@ next:
     if (index == -1)
     {
         write_serial_fmt("sys_open: open %s failed.\n", normalized_path);
+        trace_udev_node("open-fd-fail", path0, node, -ENOENT);
         vfs_close(node);
         free(fd_handle);
         free(normalized_path);
         return SYSCALL_FAULT_(ENOENT);
     }
+    trace_udev_node("open-ok", path0, node, index);
     free(normalized_path);
     return index;
 }
@@ -1056,7 +1434,16 @@ sys_(close, int fd)
     if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle = (fd_file_handle *)queue_remove_at(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    char *close_path = handle->node != NULL ? vfs_get_fullpath(handle->node) : NULL;
+    bool trace_close_done = trace_udev_path(close_path);
+    trace_udev_fd_result("close", fd, handle, 0, 0, 0);
     vfs_close(handle->node);
+    if (trace_close_done)
+        write_serial_fmt("[udev-trace] sys:close-done task=%s fd=%d path=%s\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         fd,
+                         close_path != NULL ? close_path : "(null)");
+    free(close_path);
     free(handle);
     return 0;
 }
@@ -1128,19 +1515,24 @@ sys_(write, int fd, uint8_t *buffer, size_t size)
     {
         // write_serial_fmt("[busybox-debug] sys_write fd=%d size=%llu\n", fd, (unsigned long long)size);
     }
-    if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
-    if (unlikely(size == 0)) return 0;
+    if (unlikely(fd < 0 || (buffer == NULL && size > 0))) return SYSCALL_FAULT_(EINVAL);
     if (fd == 2) mirror_linux_output_to_serial("stderr", buffer, size);
     else if (fd == 1 && trace_xbps_task()) mirror_linux_output_to_serial("stdout", buffer, size);
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
-    if (!handle) return SYSCALL_FAULT_(EBADF);
+    if (!handle)
+    {
+        trace_udev_fd_result("write-badfd", fd, NULL, size, 0, -EBADF);
+        return SYSCALL_FAULT_(EBADF);
+    }
     if (handle->node->type & file_socket)
     {
         int64_t ret = write_from_user_buffer(handle, buffer, size, true);
+        trace_udev_fd_result("write-socket", fd, handle, size, 0, ret);
         if (ret < 0) return SYSCALL_FAULT_((int)-ret);
         return (uint64_t)ret;
     }
     int64_t ret = write_from_user_buffer(handle, buffer, size, false);
+    trace_udev_fd_result("write", fd, handle, size, 0, ret);
     if (ret < 0) return SYSCALL_FAULT_((int)-ret);
     return (uint64_t)ret;
 }
@@ -1155,10 +1547,16 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     if (unlikely(fd < 0 || buffer == NULL)) return SYSCALL_FAULT_(EINVAL);
     if (unlikely(size == 0)) return 0;
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
-    if (!handle) return SYSCALL_FAULT_(EBADF);
+    if (!handle)
+    {
+        trace_udev_fd_result("read-badfd", fd, NULL, size, 0, -EBADF);
+        return SYSCALL_FAULT_(EBADF);
+    }
     if (handle->node->type & file_socket)
     {
         int64_t ret = read_to_user_buffer(handle, buffer, size, true, 0, false);
+        if (ret < 0 && ret != -EWOULDBLOCK && ret != -EAGAIN)
+            trace_udev_fd_result("read-socket-error", fd, handle, size, 0, ret);
         return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     if (handle->node->type & file_pipe)
@@ -1168,9 +1566,14 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
         {
             pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
             pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
-            if (pipe == NULL || pipe->write_fds != 0) return SYSCALL_FAULT_(EWOULDBLOCK);
+            if (pipe == NULL || pipe->write_fds != 0)
+            {
+                return SYSCALL_FAULT_(EWOULDBLOCK);
+            }
         }
         int64_t ret = pipe_read_to_user_buffer(handle, buffer, size);
+        if (ret < 0 && ret != -EWOULDBLOCK && ret != -EAGAIN)
+            trace_udev_fd_result("read-pipe-error", fd, handle, size, 0, ret);
         return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
     }
     if (handle->node->type & file_pipe && handle->node->size == 0 && handle->flags & O_NONBLOCK)
@@ -1188,6 +1591,8 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
 read:;
     {
         int64_t read_ret = read_to_user_buffer(handle, buffer, size, false, handle->offset, true);
+        if (read_ret < 0 && read_ret != -EWOULDBLOCK && read_ret != -EAGAIN)
+            trace_udev_fd_result("read-error", fd, handle, size, 0, read_ret);
         return read_ret < 0 ? SYSCALL_FAULT_((int)-read_ret) : (uint64_t)read_ret;
     }
 pipe:;
@@ -1202,7 +1607,7 @@ pipe:;
 sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (fd < 0 || (buffer == NULL && size > 0)) return SYSCALL_FAULT_(EINVAL);
-    if (addr != NULL && (addrlen < sizeof(struct sockaddr) || addrlen > SOCKET_ADDR_MAX))
+    if (addr != NULL && (addrlen < SOCKET_ADDR_MIN || addrlen > SOCKET_ADDR_MAX))
         return SYSCALL_FAULT_(EINVAL);
 
     page_directory_t *pagedir = current_user_pagedir();
@@ -1216,8 +1621,15 @@ sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const stru
         if (!copy_from_user_pagedir(pagedir, &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
         kaddr_ptr = (const struct sockaddr *)&kaddr;
     }
+    trace_udev_sockaddr("sendto", kaddr_ptr, addrlen);
 
-    if (size == 0) return 0;
+    if (size == 0)
+    {
+        ssize_t ret = socket_sendto(fd, NULL, 0, flags, kaddr_ptr, addrlen);
+        fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+        trace_udev_fd_result("sendto", fd, handle, 0, flags, ret);
+        return ret < 0 ? SYSCALL_FAULT_((int)-ret) : (uint64_t)ret;
+    }
 
     size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
     uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
@@ -1234,6 +1646,8 @@ sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const stru
         }
 
         ssize_t ret = socket_sendto(fd, bounce, chunk, flags, kaddr_ptr, addrlen);
+        fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+        trace_udev_fd_result("sendto", fd, handle, chunk, flags, ret);
         if (ret < 0)
         {
             free(bounce);
@@ -1264,7 +1678,25 @@ sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockadd
     if (kaddrlen > sizeof(kaddr)) kaddrlen = sizeof(kaddr);
     memset(&kaddr, 0, sizeof(kaddr));
 
-    if (size == 0) return 0;
+    if (size == 0)
+    {
+        ssize_t ret = socket_recvfrom(fd, NULL, 0, flags,
+                                      addr != NULL ? (struct sockaddr *)&kaddr : NULL,
+                                      addrlen != NULL ? &kaddrlen : NULL);
+        fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+        trace_udev_fd_result("recvfrom", fd, handle, 0, flags, ret);
+        if (ret >= 0) trace_udev_sockaddr("recvfrom", addr != NULL ? (const struct sockaddr *)&kaddr : NULL, kaddrlen);
+        if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+
+        if (addr != NULL)
+        {
+            socklen_t copy_len = MIN(user_addr_capacity, kaddrlen);
+            if (copy_len > 0 && !copy_to_user_pagedir(pagedir, addr, &kaddr, copy_len)) return SYSCALL_FAULT_(EFAULT);
+        }
+        if (addrlen != NULL && !copy_to_user_pagedir(pagedir, addrlen, &kaddrlen, sizeof(kaddrlen)))
+            return SYSCALL_FAULT_(EFAULT);
+        return (uint64_t)ret;
+    }
 
     size_t bounce_bytes = MIN(size, USER_IO_BOUNCE_BYTES);
     uint8_t *bounce = (uint8_t *)malloc(bounce_bytes);
@@ -1273,6 +1705,9 @@ sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockadd
     ssize_t ret = socket_recvfrom(fd, bounce, bounce_bytes, flags,
                                   addr != NULL ? (struct sockaddr *)&kaddr : NULL,
                                   addrlen != NULL ? &kaddrlen : NULL);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result("recvfrom", fd, handle, bounce_bytes, flags, ret);
+    if (ret >= 0) trace_udev_sockaddr("recvfrom", addr != NULL ? (const struct sockaddr *)&kaddr : NULL, kaddrlen);
     if (ret < 0)
     {
         free(bounce);
@@ -1308,7 +1743,7 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
     if (kmsg.msg_iovlen > USER_IOV_MAX) return SYSCALL_FAULT_(EINVAL);
     if (kmsg.msg_iovlen > 0 && kmsg.msg_iov == NULL) return SYSCALL_FAULT_(EINVAL);
     if (kmsg.msg_name != NULL &&
-        (kmsg.msg_namelen < sizeof(struct sockaddr) || kmsg.msg_namelen > SOCKET_ADDR_MAX))
+        (kmsg.msg_namelen < SOCKET_ADDR_MIN || kmsg.msg_namelen > SOCKET_ADDR_MAX))
         return SYSCALL_FAULT_(EINVAL);
 
     void *socket_impl = NULL;
@@ -1325,6 +1760,7 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
             return SYSCALL_FAULT_(EFAULT);
         kaddr_ptr = (const struct sockaddr *)&kaddr;
     }
+    trace_udev_sockaddr("sendmsg", kaddr_ptr, kmsg.msg_namelen);
 
     size_t iov_bytes = 0;
     if (!checked_mul_size(kmsg.msg_iovlen, sizeof(struct iovec), &iov_bytes)) return SYSCALL_FAULT_(EINVAL);
@@ -1399,6 +1835,8 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
 
         ssize_t ret = unix_sendmsg_kernel(socket_impl, buffer, total_len, flags, kaddr_ptr, kmsg.msg_namelen,
                                           rights, fd_count);
+        fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+        trace_udev_fd_result("sendmsg-unix", fd, handle, total_len, flags, ret);
         free(buffer);
         free(bounce);
         free(kiov);
@@ -1427,6 +1865,8 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
                 return total > 0 ? total : SYSCALL_FAULT_(EFAULT);
             }
             ssize_t ret = socket_sendto(fd, bounce, chunk, flags, kaddr_ptr, kmsg.msg_namelen);
+            fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+            trace_udev_fd_result("sendmsg", fd, handle, chunk, flags, ret);
             if (ret < 0)
             {
                 free(bounce);
@@ -1546,10 +1986,18 @@ sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
 
         fd_file_handle **received_rights = NULL;
         size_t received_fd_count = 0;
+        struct ucred received_cred = {};
+        bool received_has_cred = false;
         ssize_t ret = unix_recvmsg_kernel(socket_impl, buffer, total_len, flags,
                                           kmsg.msg_name != NULL ? (struct sockaddr *)&kaddr : NULL,
                                           kmsg.msg_name != NULL ? &kaddrlen : NULL,
-                                          &received_rights, &received_fd_count);
+                                          &received_rights, &received_fd_count,
+                                          &received_cred, &received_has_cred);
+        fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+        trace_udev_fd_result("recvmsg-unix", fd, handle, total_len, flags, ret);
+        if (ret >= 0)
+            trace_udev_sockaddr("recvmsg-unix", kmsg.msg_name != NULL ? (const struct sockaddr *)&kaddr : NULL,
+                                kaddrlen);
         if (ret < 0)
         {
             free(buffer);
@@ -1593,7 +2041,9 @@ sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
             kmsg.msg_namelen = 0;
         }
 
-        int install_ret = unix_msg_install_rights_to_user(pagedir, msg, &kmsg, received_rights, received_fd_count, flags);
+        int install_ret = unix_msg_install_ancillary_to_user(pagedir, msg, &kmsg,
+                                                             received_rights, received_fd_count, flags,
+                                                             &received_cred, received_has_cred);
         if (install_ret < 0) return SYSCALL_FAULT_(-install_ret);
         if (!copy_to_user_pagedir(pagedir, msg, &kmsg, sizeof(kmsg))) return SYSCALL_FAULT_(EFAULT);
         return (uint64_t)ret;
@@ -1619,6 +2069,11 @@ sys_(recvmsg, int fd, struct msghdr *msg, uint64_t flags)
             ssize_t ret = socket_recvfrom(fd, bounce, chunk, flags,
                                           kmsg.msg_name != NULL ? (struct sockaddr *)&kaddr : NULL,
                                           kmsg.msg_name != NULL ? &recv_addrlen : NULL);
+            fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+            trace_udev_fd_result("recvmsg", fd, handle, chunk, flags, ret);
+            if (ret >= 0)
+                trace_udev_sockaddr("recvmsg", kmsg.msg_name != NULL ? (const struct sockaddr *)&kaddr : NULL,
+                                    recv_addrlen);
             if (ret < 0)
             {
                 free(bounce);
@@ -1654,7 +2109,37 @@ recv_out:
     {
         kmsg.msg_namelen = 0;
     }
-    kmsg.msg_controllen = 0;
+    if (got_packet && kmsg.msg_control != NULL && kmsg.msg_controllen >= CMSG_SPACE(sizeof(struct ucred)))
+    {
+        uint8_t control[CMSG_SPACE(sizeof(struct ucred))];
+        memset(control, 0, sizeof(control));
+        struct msghdr control_msg = {};
+        control_msg.msg_control = control;
+        control_msg.msg_controllen = sizeof(control);
+        struct cmsghdr *cmsg = CMSG_FIRSTHDR(&control_msg);
+        if (cmsg != NULL)
+        {
+            struct ucred cred = {};
+            cred.pid = 0;
+            cred.uid = 0;
+            cred.gid = 0;
+            cmsg->cmsg_level = SOL_SOCKET;
+            cmsg->cmsg_type = SCM_CREDENTIALS;
+            cmsg->cmsg_len = CMSG_LEN(sizeof(cred));
+            memcpy(CMSG_DATA(cmsg), &cred, sizeof(cred));
+            if (!copy_to_user_pagedir(pagedir, kmsg.msg_control, control, sizeof(control)))
+                return SYSCALL_FAULT_(EFAULT);
+            kmsg.msg_controllen = sizeof(control);
+        }
+        else
+        {
+            kmsg.msg_controllen = 0;
+        }
+    }
+    else
+    {
+        kmsg.msg_controllen = 0;
+    }
     kmsg.msg_flags = 0;
     if (!copy_to_user_pagedir(pagedir, msg, &kmsg, sizeof(kmsg))) return SYSCALL_FAULT_(EFAULT);
     return total;
@@ -1670,9 +2155,22 @@ sys_(setsockopt, int fd, int level, int optname, const void *optval, socklen_t o
     if (optlen > 4096) return SYSCALL_FAULT_(EINVAL);
     if (optlen != 0 && !user_range_mapped(current_user_pagedir(), optval, optlen)) return SYSCALL_FAULT_(EFAULT);
 
-    (void)level;
-    (void)optname;
-    return 0;
+    void *koptval = NULL;
+    if (optlen != 0)
+    {
+        koptval = malloc(optlen);
+        if (koptval == NULL) return SYSCALL_FAULT_(ENOMEM);
+        if (!copy_from_user_pagedir(current_user_pagedir(), koptval, optval, optlen))
+        {
+            free(koptval);
+            return SYSCALL_FAULT_(EFAULT);
+        }
+    }
+
+    int ret = socket_setsockopt(fd, level, optname, koptval, optlen);
+    trace_udev_fd_result("setsockopt", fd, handle, ((uint64_t)(uint32_t)level << 32) | (uint32_t)optname, optlen, ret);
+    free(koptval);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : 0;
 }
 
 sys_(getsockopt, int fd, int level, int optname, void *optval, socklen_t *optlen)
@@ -1695,6 +2193,8 @@ sys_(getsockopt, int fd, int level, int optname, void *optval, socklen_t *optlen
     if (kbuf == NULL) return SYSCALL_FAULT_(ENOMEM);
 
     int sock_ret = socket_getsockopt(fd, level, optname, kbuf, &koptlen);
+    trace_udev_fd_result("getsockopt", fd, handle, ((uint64_t)(uint32_t)level << 32) | (uint32_t)optname, koptlen,
+                         sock_ret);
     if (sock_ret < 0) { free(kbuf); return SYSCALL_FAULT_(-sock_ret); }
 
     if (!copy_to_user_pagedir(pagedir, optval, kbuf, koptlen)) { free(kbuf); return SYSCALL_FAULT_(EFAULT); }
@@ -1719,6 +2219,9 @@ static uint64_t socket_name_to_user(int fd, struct sockaddr *addr, socklen_t *ad
 
     int ret = peer ? socket_getpeername(fd, (struct sockaddr *)&kaddr, &kaddrlen)
                    : socket_getsockname(fd, (struct sockaddr *)&kaddr, &kaddrlen);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result(peer ? "getpeername" : "getsockname", fd, handle, user_addr_capacity, 0, ret);
+    if (ret >= 0) trace_udev_sockaddr(peer ? "getpeername" : "getsockname", (const struct sockaddr *)&kaddr, kaddrlen);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
 
     if (addr != NULL)
@@ -1839,6 +2342,95 @@ sys_(wait4, unsigned long pid_value, int *status, int options, void *rusage)
     }
 }
 
+sys_(waitid, int idtype, uint64_t id, siginfo_t *infop, int options, void *rusage)
+{
+    static constexpr int LINUX_P_ALL      = 0;
+    static constexpr int LINUX_P_PID      = 1;
+    static constexpr int LINUX_P_PGID     = 2;
+    static constexpr int LINUX_P_PIDFD    = 3;
+    static constexpr int LINUX_WNOHANG    = 1;
+    static constexpr int LINUX_WSTOPPED   = 2;
+    static constexpr int LINUX_WEXITED    = 4;
+    static constexpr int LINUX_WCONTINUED = 8;
+    static constexpr int LINUX_WNOWAIT    = 0x01000000;
+
+    pcb_t parent = get_current_task()->parent_group;
+    (void)rusage;
+    if (parent == NULL || parent->child_pcb == NULL) return SYSCALL_FAULT_(ECHILD);
+    if (idtype < LINUX_P_ALL || idtype > LINUX_P_PIDFD) return SYSCALL_FAULT_(EINVAL);
+    if (idtype == LINUX_P_PIDFD) return SYSCALL_FAULT_(EINVAL);
+    if ((options & ~(LINUX_WNOHANG | LINUX_WSTOPPED | LINUX_WEXITED | LINUX_WCONTINUED | LINUX_WNOWAIT)) != 0)
+        return SYSCALL_FAULT_(EINVAL);
+    if ((options & (LINUX_WEXITED | LINUX_WSTOPPED | LINUX_WCONTINUED)) == 0) return SYSCALL_FAULT_(EINVAL);
+    if ((options & LINUX_WEXITED) == 0) return SYSCALL_FAULT_(ECHILD);
+    if (waitid_find_child(parent, idtype, id) == NULL) return SYSCALL_FAULT_(ECHILD);
+
+    while (true)
+    {
+        pcb_t zombie = waitid_find_zombie_child(parent, idtype, id);
+        if (zombie != NULL)
+        {
+            int ret = waitid_copy_siginfo(parent, zombie, infop);
+            if (ret < 0) return SYSCALL_FAULT_(-ret);
+
+            if ((options & LINUX_WNOWAIT) == 0)
+            {
+                wait4_discard_exit_message(parent, (int)zombie->pid);
+                kill_proc(zombie, zombie->exit_code, false);
+            }
+            return 0;
+        }
+
+        if (waitid_find_child(parent, idtype, id) == NULL) return SYSCALL_FAULT_(ECHILD);
+
+        ipc_message_t message = waitid_pop_exit_message(parent, idtype, id, false);
+        if (message != NULL)
+        {
+            int exit_code = (int)message->data[0] | ((int)message->data[1] << 8) |
+                            ((int)message->data[2] << 16) | ((int)message->data[3] << 24);
+            pcb_t child = waitid_find_child(parent, LINUX_P_PID, (uint64_t)message->pid);
+            if (child == NULL)
+            {
+                free(message);
+                continue;
+            }
+
+            child->exit_code = exit_code;
+            child->status    = ZOMBIE;
+            int ret = waitid_copy_siginfo(parent, child, infop);
+            if (ret < 0)
+            {
+                waitid_requeue_exit_message(parent, message);
+                return SYSCALL_FAULT_(-ret);
+            }
+
+            if (options & LINUX_WNOWAIT)
+            {
+                waitid_requeue_exit_message(parent, message);
+                return 0;
+            }
+
+            free(message);
+            kill_proc(child, child->exit_code, false);
+            return 0;
+        }
+
+        if (options & LINUX_WNOHANG)
+        {
+            if (infop != NULL)
+            {
+                siginfo_t empty_info;
+                memset(&empty_info, 0, sizeof(empty_info));
+                if (!copy_to_user_pagedir(parent->pagedir, infop, &empty_info, sizeof(empty_info)))
+                    return SYSCALL_FAULT_(EFAULT);
+            }
+            return 0;
+        }
+
+        scheduler_sleep_ns(1000000ULL);
+    }
+}
+
 sys_(sigret)
 {
     return signal_return(regs);
@@ -1860,6 +2452,14 @@ sys_(socket, int domain, int type, int protocol)
     if (type & SOCK_NONBLOCK) fd_flags |= O_NONBLOCK;
 
     int ret = socket_open(domain, sock_type, protocol);
+    if (trace_udev_task() || domain == AF_NETLINK)
+        write_serial_fmt("[udev-trace] sys:socket task=%s domain=%d type=0x%x sock_type=%d protocol=%d ret=%d\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         domain,
+                         type,
+                         sock_type,
+                         protocol,
+                         ret);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     if (fd_flags != 0)
     {
@@ -1875,6 +2475,9 @@ sys_(socket, int domain, int type, int protocol)
             }
         }
     }
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, ret);
+    trace_udev_fd_result("socket-ok", ret, handle, ((uint64_t)(uint32_t)domain << 32) | (uint32_t)sock_type,
+                         (uint32_t)protocol, ret);
     return ret;
 }
 
@@ -1882,11 +2485,42 @@ sys_(socketpair, int domain, int type, int protocol, int *sv)
 {
     if (sv == NULL) return SYSCALL_FAULT_(EFAULT);
     int sock_type = type & SOCK_TYPE_MASK;
+    uint64_t fd_flags = 0;
+    if (type & SOCK_CLOEXEC) fd_flags |= O_CLOEXEC;
+    if (type & SOCK_NONBLOCK) fd_flags |= O_NONBLOCK;
+
     if (domain == AF_UNIX || domain == AF_LOCAL)
     {
         int fds[2] = {-1, -1};
         int ret = unix_socketpair(sock_type, protocol, fds);
+        if (trace_udev_task())
+            write_serial_fmt("[udev-trace] sys:socketpair task=%s domain=%d type=0x%x protocol=%d ret=%d fd0=%d fd1=%d\n",
+                             get_current_task() != NULL ? get_current_task()->name : "(null)",
+                             domain,
+                             type,
+                             protocol,
+                             ret,
+                             fds[0],
+                             fds[1]);
         if (ret < 0) return SYSCALL_FAULT_(-ret);
+
+        if (fd_flags != 0)
+        {
+            for (size_t i = 0; i < 2; i++)
+            {
+                fd_file_handle *handle =
+                    (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fds[i]);
+                if (handle == NULL || handle->node == NULL) continue;
+                handle->flags |= fd_flags;
+                handle->node->flags |= fd_flags;
+                if (handle->node->type & file_socket)
+                {
+                    int flags_ret = socket_apply_flags(handle->node, handle->node->flags);
+                    if (flags_ret < 0) return SYSCALL_FAULT_(-flags_ret);
+                }
+            }
+        }
+
         page_directory_t *pagedir = current_user_pagedir();
         if (!copy_to_user_pagedir(pagedir, sv, fds, sizeof(fds))) return SYSCALL_FAULT_(EFAULT);
         return 0;
@@ -1897,11 +2531,14 @@ sys_(socketpair, int domain, int type, int protocol, int *sv)
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
-    if (addrlen < sizeof(struct sockaddr) || addrlen > SOCKET_ADDR_MAX) return SYSCALL_FAULT_(EINVAL);
+    if (addrlen < SOCKET_ADDR_MIN || addrlen > SOCKET_ADDR_MAX) return SYSCALL_FAULT_(EINVAL);
     socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     if (!copy_from_user_pagedir(current_user_pagedir(), &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
+    trace_udev_sockaddr("connect", (const struct sockaddr *)&kaddr, addrlen);
     int ret = socket_connect(fd, (const struct sockaddr *)&kaddr, addrlen);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result("connect", fd, handle, addrlen, 0, ret);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     return ret;
 }
@@ -1913,15 +2550,45 @@ sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
         return SYSCALL_FAULT_(EFAULT);
     if (addr != NULL && addrlen == NULL) return SYSCALL_FAULT_(EINVAL);
     if (kaddrlen > SOCKET_ADDR_MAX) kaddrlen = SOCKET_ADDR_MAX;
+    socklen_t user_addr_capacity = kaddrlen;
 
     socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     int ret = socket_accept(fd, addr ? (struct sockaddr *)&kaddr : NULL, addr ? &kaddrlen : NULL);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result("accept", fd, handle, kaddrlen, 0, ret);
+    if (ret >= 0) trace_udev_sockaddr("accept", addr ? (const struct sockaddr *)&kaddr : NULL, kaddrlen);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
-    if (addr != NULL && !copy_to_user_pagedir(current_user_pagedir(), addr, &kaddr, kaddrlen))
+    if (addr != NULL && !copy_to_user_pagedir(current_user_pagedir(), addr, &kaddr, MIN(user_addr_capacity, kaddrlen)))
         return SYSCALL_FAULT_(EFAULT);
     if (addrlen != NULL && !copy_to_user_pagedir(current_user_pagedir(), addrlen, &kaddrlen, sizeof(kaddrlen)))
         return SYSCALL_FAULT_(EFAULT);
+    return ret;
+}
+
+sys_(accept4, int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
+{
+    if ((flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK)) != 0) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t ret = sys_accept(fd, addr, addrlen, 0, 0, 0, regs);
+    if ((int64_t)ret < 0) return ret;
+
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, (size_t)ret);
+    if (handle != NULL)
+    {
+        if (flags & SOCK_CLOEXEC) handle->flags |= O_CLOEXEC;
+        if (flags & SOCK_NONBLOCK)
+        {
+            handle->flags |= O_NONBLOCK;
+            handle->node->flags |= O_NONBLOCK;
+            if (handle->node->type & file_socket)
+            {
+                int flag_ret = socket_apply_flags(handle->node, handle->node->flags);
+                if (flag_ret < 0) return SYSCALL_FAULT_(-flag_ret);
+            }
+        }
+    }
+
     return ret;
 }
 
@@ -1940,6 +2607,16 @@ sys_(stat, char *fn, struct stat *buf)
 
     struct stat kstat;
     uint64_t stat_ret = stat_kernel_path(path, &kstat);
+    if (trace_udev_path(path))
+    {
+        write_serial_fmt("[udev-trace] sys:stat task=%s path=%s ret=%lld mode=0%llo rdev=%llu size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         path,
+                         (long long)stat_ret,
+                         (unsigned long long)kstat.st_mode,
+                         (unsigned long long)kstat.st_rdev,
+                         (unsigned long long)kstat.st_size);
+    }
     free(path);
     if ((int64_t)stat_ret < 0) return stat_ret;
     return copy_stat_to_user(buf, &kstat);
@@ -2095,30 +2772,40 @@ sys_(clock_nanosleep, int clockid, int flags, const struct timespec *request, st
     return 0;
 }
 
-sys_(ioctl, int fd, int options, void *arg2)
+
+sys_(ioctl, int fd, uint64_t options, void *arg2)
 {
     pcb_t process = get_current_task()->parent_group;
-    if (process != NULL && process->linux_abi)
-    {
-        // write_serial_fmt("[busybox-debug] sys_ioctl fd=%d req=0x%x arg=0x%llx\n",
-        //                  fd,
-        //                  options,
-        //                  (unsigned long long)(uintptr_t)arg2);
-    }
     if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
+    uint32_t request = (uint32_t)options;
+    if (trace_udev_task())
+    {
+        write_serial_fmt("[udev-trace] sys:ioctl task=%s fd=%d req=0x%x raw=0x%llx arg=0x%llx node=%p type=0x%x fsid=%u handle=%p rdev=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         fd,
+                         request,
+                         (unsigned long long)options,
+                         (unsigned long long)(uintptr_t)arg2,
+                         handle->node,
+                         handle->node != NULL ? handle->node->type : 0,
+                         handle->node != NULL ? handle->node->fsid : 0,
+                         handle->node != NULL ? handle->node->handle : NULL,
+                         handle->node != NULL ? (unsigned long long)handle->node->rdev : 0);
+    }
 
-    bool immediate_int_arg = options == KDSETMODE || options == KDSKBMODE || options == VT_ACTIVATE ||
-                             options == VT_WAITACTIVE;
-    size_t arg_size = immediate_int_arg ? 0 : ioctl_arg_size(options);
+    bool immediate_int_arg = request == KDSETMODE || request == KDSKBMODE || request == VT_ACTIVATE ||
+                             request == VT_WAITACTIVE ||
+                             (_IOC_TYPE(request) == 'E' && (_IOC_NR(request) == 0x90 || _IOC_NR(request) == 0x91));
+    size_t arg_size = immediate_int_arg ? 0 : ioctl_arg_size(request);
     void *karg = immediate_int_arg ? (void *)(uintptr_t)arg2 : arg2;
     if (arg_size > 0)
     {
         if (arg2 == NULL) return SYSCALL_FAULT_(EFAULT);
         karg = calloc(1, arg_size);
         if (karg == NULL) return SYSCALL_FAULT_(ENOMEM);
-        if (ioctl_reads_user(options) && !copy_from_user_pagedir(current_user_pagedir(), karg, arg2, arg_size))
+        if (ioctl_reads_user(request) && !copy_from_user_pagedir(current_user_pagedir(), karg, arg2, arg_size))
         {
             free(karg);
             return SYSCALL_FAULT_(EFAULT);
@@ -2129,7 +2816,7 @@ sys_(ioctl, int fd, int options, void *arg2)
         karg = NULL;
     }
 
-    if ((handle->node->type & file_socket) && options == FIONBIO)
+    if ((handle->node->type & file_socket) && request == FIONBIO)
     {
         int nonblock = 0;
         if (karg == NULL)
@@ -2146,21 +2833,19 @@ sys_(ioctl, int fd, int options, void *arg2)
         }
         int ret = socket_apply_flags(handle->node, handle->node->flags);
         if (arg_size > 0) free(karg);
+        if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:ioctl-fionbio ret=%d\n", ret);
         return ret < 0 ? SYSCALL_FAULT_(-ret) : 0;
     }
 
-    int ret = vfs_ioctl(handle->node, options, karg);
-    if (ret == EOK && arg_size > 0 && ioctl_writes_user(options) &&
+    int ret = vfs_ioctl(handle->node, request, karg);
+    if (ret >= 0 && arg_size > 0 && ioctl_writes_user(request) &&
         !copy_to_user_pagedir(current_user_pagedir(), arg2, karg, arg_size))
     {
         free(karg);
         return SYSCALL_FAULT_(EFAULT);
     }
     if (arg_size > 0) free(karg);
-    if (process != NULL && process->linux_abi)
-    {
-        // write_serial_fmt("[busybox-debug] sys_ioctl ret=%d\n", ret);
-    }
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:ioctl ret=%d fd=%d req=0x%x\n", ret, fd, request);
     return ret;
 }
 
@@ -3425,10 +4110,12 @@ sys_(dup2, int fd, int newfd)
 
     fd_file_handle *handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, fd);
     if (unlikely(handle == NULL)) return SYSCALL_FAULT_(EBADF);
+    trace_udev_fd_result("dup2-src", fd, handle, newfd, 0, 0);
 
     fd_file_handle *old_handle =  (fd_file_handle*)queue_get(get_current_task()->parent_group->file_open, newfd);
     if (old_handle != NULL)
     {
+        trace_udev_fd_result("dup2-replace", newfd, old_handle, fd, 0, 0);
         queue_remove_at(get_current_task()->parent_group->file_open, newfd);
         vfs_close(old_handle->node);
         free(old_handle);
@@ -3444,6 +4131,7 @@ sys_(dup2, int fd, int newfd)
         free(new_handle);
         return SYSCALL_FAULT_(EBADF);
     }
+    trace_udev_fd_result("dup2-done", newfd, new_handle, fd, 0, newfd);
     return newfd;
 }
 
@@ -3506,16 +4194,32 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
 
     switch (cmd)
     {
-    case F_GETFD: return (handle->flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+    case F_GETFD:
+    {
+        int ret = (handle->flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+        trace_udev_fd_result("fcntl-getfd", fd, handle, cmd, arg, ret);
+        return ret;
+    }
     case F_SETFD:
         if (arg & FD_CLOEXEC) handle->flags |= O_CLOEXEC;
         else handle->flags &= ~O_CLOEXEC;
+        trace_udev_fd_result("fcntl-setfd", fd, handle, cmd, arg, 0);
         return 0;
     case F_DUPFD_CLOEXEC:
-        return fd_dup_from(handle, (int)arg, true);
+    {
+        int ret = fd_dup_from(handle, (int)arg, true);
+        trace_udev_fd_result("fcntl-dupfd-cloexec", fd, handle, cmd, arg, ret);
+        return ret;
+    }
     case F_DUPFD:
-        return fd_dup_from(handle, (int)arg, false);
-    case F_GETFL: return handle->flags;
+    {
+        int ret = fd_dup_from(handle, (int)arg, false);
+        trace_udev_fd_result("fcntl-dupfd", fd, handle, cmd, arg, ret);
+        return ret;
+    }
+    case F_GETFL:
+        trace_udev_fd_result("fcntl-getfl", fd, handle, cmd, arg, handle->flags);
+        return handle->flags;
     case F_SETFL:
         {uint32_t valid_flags  = O_APPEND | O_DIRECT | O_NOATIME | O_NONBLOCK;
         handle->node->flags  &= ~valid_flags;
@@ -3526,13 +4230,16 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
             int ret = socket_apply_flags(handle->node, handle->node->flags);
             if (ret < 0) return SYSCALL_FAULT_(-ret);
         }}
+        trace_udev_fd_result("fcntl-setfl", fd, handle, cmd, arg, 0);
         return 0;
     case F_GETLK:
     case F_SETLK:
     case F_SETLKW:
+        trace_udev_fd_result("fcntl-lock", fd, handle, cmd, arg, 0);
         return 0;
     default: break;
     }
+    trace_udev_fd_result("fcntl-unknown", fd, handle, cmd, arg, 0);
     return 0;
 }
 
@@ -3557,7 +4264,7 @@ sys_(clone3, struct clone_args *cl_args, size_t size)
     memset(&args, 0, sizeof(args));
     if (!copy_from_user_pagedir(pagedir, &args, cl_args, size)) return SYSCALL_FAULT_(EFAULT);
 
-    if (args.pidfd != 0) return SYSCALL_FAULT_(EINVAL);
+    if ((args.flags & CLONE_PIDFD_FLAG) != 0) return SYSCALL_FAULT_(EINVAL);
     if ((args.flags & 0xffULL) != 0) return SYSCALL_FAULT_(EINVAL);
     if ((args.exit_signal & ~0xffULL) != 0) return SYSCALL_FAULT_(EINVAL);
 
@@ -3711,6 +4418,18 @@ sys_(fstat, int fd, struct stat *buf)
     if (unlikely(handle == NULL)) return SYSCALL_FAULT_(EBADF);
     struct stat kstat;
     uint64_t ret = fill_stat_from_node(handle->node, &kstat);
+    if (trace_udev_task())
+    {
+        write_serial_fmt("[udev-trace] sys:fstat task=%s fd=%d ret=%lld node=%p type=0x%x mode=0%llo rdev=%llu size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         fd,
+                         (long long)ret,
+                         handle->node,
+                         handle->node != NULL ? handle->node->type : 0,
+                         (unsigned long long)kstat.st_mode,
+                         (unsigned long long)kstat.st_rdev,
+                         (unsigned long long)kstat.st_size);
+    }
     if ((int64_t)ret < 0) return ret;
     return copy_stat_to_user(buf, &kstat);
 }
@@ -3787,6 +4506,8 @@ sys_(clock_getres)
 sys_(shutdown, int fd, int how)
 {
     int ret = socket_shutdown(fd, how);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result("shutdown", fd, handle, (uint64_t)how, 0, ret);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     return ret;
 }
@@ -3803,6 +4524,12 @@ sys_(mkdir, char *name, uint64_t mode)
     free(user_path);
     if (npath == NULL) return SYSCALL_FAULT_(ENOMEM);
     size_t ret   = vfs_mkdir(npath) == VFS_STATUS_FAILED ? SYSCALL_FAULT_(EIO) : 0;
+    if (trace_udev_path(npath))
+        write_serial_fmt("[udev-trace] sys:mkdir task=%s path=%s mode=0%llo ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         npath,
+                         (unsigned long long)mode,
+                         (long long)ret);
     if (ret == 0)
     {
         vfs_node_t node = vfs_open(npath);
@@ -3820,11 +4547,14 @@ sys_(mkdir, char *name, uint64_t mode)
 sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr == NULL) return SYSCALL_FAULT_(EINVAL);
-    if (addrlen < sizeof(struct sockaddr) || addrlen > SOCKET_ADDR_MAX) return SYSCALL_FAULT_(EINVAL);
+    if (addrlen < SOCKET_ADDR_MIN || addrlen > SOCKET_ADDR_MAX) return SYSCALL_FAULT_(EINVAL);
     socket_addr_storage kaddr;
     memset(&kaddr, 0, sizeof(kaddr));
     if (!copy_from_user_pagedir(current_user_pagedir(), &kaddr, addr, addrlen)) return SYSCALL_FAULT_(EFAULT);
+    trace_udev_sockaddr("bind", (const struct sockaddr *)&kaddr, addrlen);
     int ret = socket_bind(fd, (const struct sockaddr *)&kaddr, addrlen);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result("bind", fd, handle, addrlen, 0, ret);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     return ret;
 }
@@ -3832,6 +4562,8 @@ sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen)
 sys_(listen, int fd, int backlog)
 {
     int ret = socket_listen(fd, backlog);
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    trace_udev_fd_result("listen", fd, handle, (uint64_t)backlog, 0, ret);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
     return ret;
 }
@@ -4102,6 +4834,17 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
     if (unlikely(handle == NULL)) { return SYSCALL_FAULT_(EBADF); }
     if (handle->node->type != file_dir) { return SYSCALL_FAULT_(ENOTDIR); }
     size_t   child_count   = (uint64_t)list_length(handle->node->child);
+    if (trace_udev_task())
+    {
+        write_serial_fmt("[udev-trace] sys:getdents task=%s fd=%d node=%p name=%s child=%llu offset=%llu size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         fd,
+                         handle->node,
+                         handle->node != NULL && handle->node->name != NULL ? handle->node->name : "(null)",
+                         (unsigned long long)child_count,
+                         (unsigned long long)handle->offset,
+                         (unsigned long long)size);
+    }
     size_t   max_dents_num = size / sizeof(struct dirent);
     size_t   read_count    = 0;
     uint64_t offset        = 0;
@@ -4113,6 +4856,16 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
         if (handle->offset >= (child_count * sizeof(struct dirent))) { break; }
         if (read_count >= max_dents_num) { break; }
         child_node = (vfs_node_t)i->data;
+        if (trace_udev_task())
+        {
+            write_serial_fmt("[udev-trace] sys:getdents entry fd=%d name=%s type=0x%x fsid=%u rdev=%llu handle=%p\n",
+                             fd,
+                             child_node != NULL && child_node->name != NULL ? child_node->name : "(null)",
+                             child_node != NULL ? child_node->type : 0,
+                             child_node != NULL ? child_node->fsid : 0,
+                             child_node != NULL ? (unsigned long long)child_node->rdev : 0,
+                             child_node != NULL ? child_node->handle : NULL);
+        }
         struct dirent kd;
         memset(&kd, 0, sizeof(kd));
         kd.d_ino    = (long)child_node->inode;
@@ -4131,6 +4884,10 @@ sys_(getdents, int fd, struct dirent *dents, size_t size)
         offset += sizeof(struct dirent);
     }
     vfs_child_unlock();
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:getdents ret=%llu fd=%d\n",
+                                            (unsigned long long)(read_count * sizeof(struct dirent)),
+                                            fd);
+    trace_udev_fd_result("getdents", fd, handle, size, 0, (int64_t)(read_count * sizeof(struct dirent)));
     return read_count * sizeof(struct dirent);
 }
 
@@ -4153,12 +4910,34 @@ sys_(getdents64, int fd, void *dents, size_t size)
     if (unlikely(handle == NULL)) { return SYSCALL_FAULT_(EBADF); }
     if (handle->node->type != file_dir) { return SYSCALL_FAULT_(ENOTDIR); }
 
+    if (trace_udev_task())
+    {
+        write_serial_fmt("[udev-trace] sys:getdents64 task=%s fd=%d node=%p name=%s child=%llu offset=%llu size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         fd,
+                         handle->node,
+                         handle->node != NULL && handle->node->name != NULL ? handle->node->name : "(null)",
+                         (unsigned long long)list_length(handle->node->child),
+                         (unsigned long long)handle->offset,
+                         (unsigned long long)size);
+    }
+
     size_t written = 0;
     size_t offset = 0;
     vfs_child_lock();
     list_foreach(handle->node->child, i)
     {
         vfs_node_t child_node = (vfs_node_t)i->data;
+        if (trace_udev_task())
+        {
+            write_serial_fmt("[udev-trace] sys:getdents64 entry fd=%d name=%s type=0x%x fsid=%u rdev=%llu handle=%p\n",
+                             fd,
+                             child_node != NULL && child_node->name != NULL ? child_node->name : "(null)",
+                             child_node != NULL ? child_node->type : 0,
+                             child_node != NULL ? child_node->fsid : 0,
+                             child_node != NULL ? (unsigned long long)child_node->rdev : 0,
+                             child_node != NULL ? child_node->handle : NULL);
+        }
         size_t name_len = strlen(child_node->name);
         if (name_len > 255) name_len = 255;
         size_t reclen = offsetof(struct linux_dirent64, d_name) + name_len + 1;
@@ -4200,6 +4979,10 @@ sys_(getdents64, int fd, void *dents, size_t size)
         handle->offset = offset;
     }
     vfs_child_unlock();
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:getdents64 ret=%llu fd=%d\n",
+                                            (unsigned long long)written,
+                                            fd);
+    trace_udev_fd_result("getdents64", fd, handle, size, 0, (int64_t)written);
     return written;
 }
 
@@ -4214,6 +4997,18 @@ sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
     uint64_t ret = (flags & AT_SYMLINK_NOFOLLOW) ?
                    lstat_kernel_path(resolved, &kstat) :
                    stat_kernel_path(resolved, &kstat);
+    if (trace_udev_path(resolved))
+    {
+        write_serial_fmt("[udev-trace] sys:newfstatat task=%s dirfd=%d path=%s flags=0x%llx ret=%lld mode=0%llo rdev=%llu size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         dirfd,
+                         resolved,
+                         (unsigned long long)flags,
+                         (long long)ret,
+                         (unsigned long long)kstat.st_mode,
+                         (unsigned long long)kstat.st_rdev,
+                         (unsigned long long)kstat.st_size);
+    }
 
     free(resolved);
     if ((int64_t)ret < 0) return ret;
@@ -4230,6 +5025,19 @@ sys_(statx, int dirfd, char *pathname, uint64_t flags, uint64_t mask, struct sta
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     uint64_t ret = stat_kernel_path(resolved, &simple);
+    if (trace_udev_path(resolved))
+    {
+        write_serial_fmt("[udev-trace] sys:statx task=%s dirfd=%d path=%s flags=0x%llx mask=0x%llx ret=%lld mode=0%llo rdev=%llu size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         dirfd,
+                         resolved,
+                         (unsigned long long)flags,
+                         (unsigned long long)mask,
+                         (long long)ret,
+                         (unsigned long long)simple.st_mode,
+                         (unsigned long long)simple.st_rdev,
+                         (unsigned long long)simple.st_size);
+    }
     free(resolved);
     if ((int64_t)ret < 0) return ret;
 
@@ -4367,9 +5175,11 @@ sys_(unlink)
     free(user_path);
     if (npath == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t node  = vfs_open_no_follow(npath);
+    trace_udev_node("unlink-lookup", npath, node, node != NULL ? 0 : -ENOENT);
     if (node == NULL) { free(npath); return SYSCALL_FAULT_(ENOENT); }
     if (node->type != file_none && node->type != file_symlink && !(node->type & file_socket))
     {
+        trace_udev_node("unlink-not-file", npath, node, -ENOTDIR);
         vfs_close(node);
         free(npath);
         return SYSCALL_FAULT_(ENOTDIR);
@@ -4377,11 +5187,17 @@ sys_(unlink)
     if (node->type & file_socket)
     {
         unix_unbind_path(npath);
+        trace_udev_node("unlink-socket", npath, node, 0);
         vfs_close(node);
         free(npath);
         return 0;
     }
     size_t ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    if (trace_udev_path(npath))
+        write_serial_fmt("[udev-trace] sys:unlink task=%s path=%s ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         npath,
+                         (long long)ret);
     free(npath);
     return ret;
 }
@@ -4398,14 +5214,21 @@ sys_(rmdir)
     free(user_path);
     if (n_name == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t node   = vfs_open_no_follow(n_name);
+    trace_udev_node("rmdir-lookup", n_name, node, node != NULL ? 0 : -ENOENT);
     if (node == NULL) { free(n_name); return SYSCALL_FAULT_(ENOENT); }
     if (node->type != file_dir)
     {
+        trace_udev_node("rmdir-not-dir", n_name, node, -ENOTDIR);
         vfs_close(node);
         free(n_name);
         return SYSCALL_FAULT_(ENOTDIR);
     }
     size_t ret = vfs_delete(node);
+    if (trace_udev_path(n_name))
+        write_serial_fmt("[udev-trace] sys:rmdir task=%s path=%s ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         n_name,
+                         (long long)ret);
     free(n_name);
     return ret;
 }
@@ -4421,6 +5244,7 @@ sys_(unlinkat)
     if (!path) return -ENOENT;
 
     vfs_node_t node = vfs_open_no_follow(path);
+    trace_udev_node("unlinkat-lookup", path, node, node != NULL ? 0 : -ENOENT);
     if (node == NULL)
     {
         free(path);
@@ -4428,6 +5252,7 @@ sys_(unlinkat)
     }
     if (node->type != file_none && node->type != file_symlink && !(node->type & file_socket))
     {
+        trace_udev_node("unlinkat-not-file", path, node, -ENOTDIR);
         vfs_close(node);
         free(path);
         return SYSCALL_FAULT_(ENOTDIR);
@@ -4436,24 +5261,19 @@ sys_(unlinkat)
     if (node->type & file_socket)
     {
         unix_unbind_path(path);
+        trace_udev_node("unlinkat-socket", path, node, 0);
         vfs_close(node);
         free(path);
         return 0;
     }
 
-    uint64_t ret;
-    if (node->refcount > 1)
-    {
-        node->refcount--;
-        ret = 0;
-    }
-    else
-    {
-        ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
-        node = NULL;
-    }
-
-    if (node != NULL) vfs_close(node);
+    uint64_t ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    if (trace_udev_path(path))
+        write_serial_fmt("[udev-trace] sys:unlinkat task=%s dirfd=%d path=%s ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         dirfd,
+                         path,
+                         (long long)ret);
     free(path);
     return ret;
 }
@@ -4471,6 +5291,15 @@ sys_(access, char *filename)
 
     struct stat buf;
     uint64_t stat_ret = stat_kernel_path(path, &buf);
+    if (trace_udev_path(path))
+    {
+        write_serial_fmt("[udev-trace] sys:access task=%s path=%s ret=%lld mode=0%llo rdev=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         path,
+                         (long long)stat_ret,
+                         (unsigned long long)buf.st_mode,
+                         (unsigned long long)buf.st_rdev);
+    }
     if (busybox_debug_current_linux_abi())
     {
         write_serial_fmt("[busybox-debug] access path=%s ret=%lld\n", path, (long long)stat_ret);
@@ -4493,6 +5322,17 @@ sys_(faccessat)
 
     struct stat buf;
     uint64_t ret = stat_kernel_path(resolved, &buf);
+    if (trace_udev_path(resolved))
+    {
+        write_serial_fmt("[udev-trace] sys:faccessat task=%s dirfd=%d path=%s mode=0x%llx ret=%lld stat_mode=0%llo rdev=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         dirfd,
+                         resolved,
+                         (unsigned long long)mode,
+                         (long long)ret,
+                         (unsigned long long)buf.st_mode,
+                         (unsigned long long)buf.st_rdev);
+    }
     if (busybox_debug_current_linux_abi())
     {
         write_serial_fmt("[busybox-debug] faccessat dirfd=%d path=%s mode=0x%llx ret=%lld\n",
@@ -4523,6 +5363,18 @@ sys_(faccessat2)
 
     struct stat buf;
     uint64_t ret = stat_kernel_path(resolved, &buf);
+    if (trace_udev_path(resolved))
+    {
+        write_serial_fmt("[udev-trace] sys:faccessat2 task=%s dirfd=%llu path=%s mode=0x%llx flags=0x%llx ret=%lld stat_mode=0%llo rdev=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         (unsigned long long)dirfd,
+                         resolved,
+                         (unsigned long long)mode,
+                         (unsigned long long)flag,
+                         (long long)ret,
+                         (unsigned long long)buf.st_mode,
+                         (unsigned long long)buf.st_rdev);
+    }
     if (busybox_debug_current_linux_abi())
     {
         write_serial_fmt("[busybox-debug] faccessat2 dirfd=%llu path=%s mode=0x%llx flags=0x%llx ret=%lld\n",
@@ -4550,6 +5402,16 @@ sys_(openat)
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     uint64_t ret = open_kernel_path(path, flags, mode);
+    if (trace_udev_path(path))
+    {
+        write_serial_fmt("[udev-trace] sys:openat task=%s dirfd=%d path=%s flags=0x%llx mode=0%llo ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         dirfd,
+                         path,
+                         (unsigned long long)flags,
+                         (unsigned long long)mode,
+                         (long long)ret);
+    }
 
     free(path);
 
@@ -4566,6 +5428,13 @@ sys_(mkdirat, int dirfd, char *pathname, uint64_t mode)
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     errno_t ret = vfs_mkdir(resolved);
+    if (trace_udev_path(resolved))
+        write_serial_fmt("[udev-trace] sys:mkdirat task=%s dirfd=%d path=%s mode=0%llo ret=%d\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         dirfd,
+                         resolved,
+                         (unsigned long long)mode,
+                         ret);
     free(resolved);
     return ret == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(EIO);
 }
@@ -4711,6 +5580,7 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
     free(udir_name);
     if (ndir_name == NULL) return SYSCALL_FAULT_(ENOMEM);
     vfs_node_t dir       = vfs_open((const char *)ndir_name);
+    trace_udev_node("mount-dir", ndir_name, dir, dir != NULL ? 0 : -ENOENT);
     if (!dir)
     {
         free(ndir_name);
@@ -4732,6 +5602,7 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
         free(udev_name);
         if (old_root_p == NULL) { free(ndir_name); return SYSCALL_FAULT_(ENOMEM); }
         vfs_node_t old_root   = vfs_open(old_root_p);
+        trace_udev_node("mount-move-src", old_root_p, old_root, old_root != NULL ? 0 : -EINVAL);
         free(old_root_p);
         if (old_root == NULL || !old_root->is_mount) return SYSCALL_FAULT_(EINVAL);
         if (dir != rootdir) list_append(dir->parent->child, old_root);
@@ -4752,6 +5623,11 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
 
         vfs_close(old_root);
         vfs_close(dir);
+        if (trace_udev_path(ndir_name))
+            write_serial_fmt("[udev-trace] sys:mount-move task=%s target=%s flags=0x%llx ret=0\n",
+                             get_current_task() != NULL ? get_current_task()->name : "(null)",
+                             ndir_name,
+                             (unsigned long long)flags);
         return 0;
     }
 
@@ -4780,10 +5656,22 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
 mount:
     if (vfs_mount((const char *)ndev_name, dir) == VFS_STATUS_FAILED)
     {
+        if (trace_udev_path(ndir_name))
+            write_serial_fmt("[udev-trace] sys:mount task=%s source=%s target=%s flags=0x%llx ret=-ENOENT\n",
+                             get_current_task() != NULL ? get_current_task()->name : "(null)",
+                             filesystem->id != 0 ? "(virtual)" : (ndev_name != NULL ? ndev_name : "(null)"),
+                             ndir_name,
+                             (unsigned long long)flags);
         free(ndir_name);
         free(ndev_name);
         return SYSCALL_FAULT_(ENOENT);
     }
+    if (trace_udev_path(ndir_name))
+        write_serial_fmt("[udev-trace] sys:mount task=%s source=%s target=%s flags=0x%llx ret=0\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         filesystem->id != 0 ? "(virtual)" : (ndev_name != NULL ? ndev_name : "(null)"),
+                         ndir_name,
+                         (unsigned long long)flags);
     free(ndir_name);
     if (filesystem->id == 0) free(ndev_name);
     return 0;
@@ -4929,6 +5817,7 @@ sys_(rename, char *oldpath, char *newpath)
         return SYSCALL_FAULT_(ENOMEM);
     }
     vfs_node_t oldnode  = vfs_open_no_follow(noldpath);
+    trace_udev_node("rename-old", noldpath, oldnode, oldnode != NULL ? 0 : -ENOENT);
     if (!oldnode)
     {
         free(noldpath);
@@ -4936,14 +5825,23 @@ sys_(rename, char *oldpath, char *newpath)
         return SYSCALL_FAULT_(ENOENT);
     }
     vfs_node_t newnode = vfs_open_no_follow(nnewpath);
+    trace_udev_node("rename-new", nnewpath, newnode, newnode != NULL ? 0 : -ENOENT);
     if (newnode == oldnode)
     {
+        vfs_close(newnode);
+        vfs_close(oldnode);
         free(noldpath);
         free(nnewpath);
         return 0;
     }
     if (newnode) { vfs_delete(newnode); }
     size_t     ret    = vfs_rename(oldnode, nnewpath) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    if (trace_udev_path(noldpath) || trace_udev_path(nnewpath))
+        write_serial_fmt("[udev-trace] sys:rename task=%s old=%s new=%s ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         noldpath,
+                         nnewpath,
+                         (long long)ret);
     char      *parent = get_parent_path(nnewpath);
     vfs_node_t parent_dir = vfs_open(parent);
     if (!parent_dir)
@@ -4955,6 +5853,7 @@ sys_(rename, char *oldpath, char *newpath)
     vfs_close(parent_dir); // 更新父目录的信息
     free(parent);
 end_rename:
+    vfs_close(oldnode);
     free(noldpath);
     free(nnewpath);
     return ret;
@@ -4976,6 +5875,7 @@ sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath)
     }
 
     vfs_node_t oldnode = vfs_open_no_follow(resolved_old);
+    trace_udev_node("renameat-old", resolved_old, oldnode, oldnode != NULL ? 0 : -ENOENT);
     if (!oldnode)
     {
         free(resolved_old);
@@ -4984,8 +5884,11 @@ sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath)
     }
 
     vfs_node_t newnode = vfs_open_no_follow(resolved_new);
+    trace_udev_node("renameat-new", resolved_new, newnode, newnode != NULL ? 0 : -ENOENT);
     if (newnode == oldnode)
     {
+        vfs_close(newnode);
+        vfs_close(oldnode);
         free(resolved_old);
         free(resolved_new);
         return 0;
@@ -4993,6 +5896,14 @@ sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath)
     if (newnode) { vfs_delete(newnode); }
 
     uint64_t ret = vfs_rename(oldnode, resolved_new) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    if (trace_udev_path(resolved_old) || trace_udev_path(resolved_new))
+        write_serial_fmt("[udev-trace] sys:renameat task=%s olddirfd=%d old=%s newdirfd=%d new=%s ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         olddirfd,
+                         resolved_old,
+                         newdirfd,
+                         resolved_new,
+                         (long long)ret);
     vfs_close(oldnode);
     free(resolved_old);
     free(resolved_new);
@@ -5015,6 +5926,12 @@ sys_(symlink, char *name, char *nw)
     }
 
     errno_t ret = vfs_symlink(knw, kname);
+    if (trace_udev_path(knw) || trace_udev_path(kname))
+        write_serial_fmt("[udev-trace] sys:symlink task=%s link=%s target=%s ret=%d\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         knw,
+                         kname,
+                         ret);
     free(kname);
     free(knw);
     return ret;
@@ -5037,6 +5954,13 @@ sys_(symlinkat, char *target, int newdirfd, char *linkpath)
     }
 
     errno_t ret = vfs_symlink(klinkpath, ktarget);
+    if (trace_udev_path(klinkpath) || trace_udev_path(ktarget))
+        write_serial_fmt("[udev-trace] sys:symlinkat task=%s dirfd=%d link=%s target=%s ret=%d\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         newdirfd,
+                         klinkpath,
+                         ktarget,
+                         ret);
     free(ktarget);
     free(klinkpath);
     return ret;
@@ -5051,7 +5975,13 @@ sys_(link, char *name, char *nw)
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
     path_ret = resolve_user_path_at(AT_FDCWD, nw, &knw);
     if (path_ret < 0) { free(kname); return SYSCALL_FAULT_((int)-path_ret); }
-    errno_t ret = vfs_link(kname, knw);
+    errno_t ret = vfs_link(knw, kname);
+    if (trace_udev_path(kname) || trace_udev_path(knw))
+        write_serial_fmt("[udev-trace] sys:link task=%s old=%s new=%s ret=%d\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         kname,
+                         knw,
+                         ret);
     free(kname);
     free(knw);
 
@@ -5074,7 +6004,15 @@ sys_(linkat, int olddirfd, char *oldpath, int newdirfd, char *newpath, int flags
         return SYSCALL_FAULT_((int)-path_ret);
     }
 
-    errno_t ret = vfs_link(resolved_old, resolved_new);
+    errno_t ret = vfs_link(resolved_new, resolved_old);
+    if (trace_udev_path(resolved_old) || trace_udev_path(resolved_new))
+        write_serial_fmt("[udev-trace] sys:linkat task=%s olddirfd=%d old=%s newdirfd=%d new=%s ret=%d\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         olddirfd,
+                         resolved_old,
+                         newdirfd,
+                         resolved_new,
+                         ret);
     free(resolved_old);
     free(resolved_new);
     return ret;
@@ -5094,6 +6032,12 @@ sys_(umount2)
 
     uint64_t status = vfs_unmount(path);
     if (status == VFS_STATUS_FAILED) status = SYSCALL_FAULT_(EBUSY);
+    if (trace_udev_path(path))
+        write_serial_fmt("[udev-trace] sys:umount2 task=%s path=%s flags=0x%x ret=%lld\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         path,
+                         flags,
+                         (long long)status);
     free(path);
     return status;
 }
@@ -5114,6 +6058,7 @@ sys_(readlink)
     if (resolved == NULL) return SYSCALL_FAULT_(ENOMEM);
 
     vfs_node_t node = vfs_open_no_follow(resolved);
+    trace_udev_node("readlink-lookup", resolved, node, node != NULL ? 0 : -ENOENT);
     free(resolved);
     if (node == NULL) { return SYSCALL_FAULT_(ENOENT); }
     if (!(node->type & file_symlink))
@@ -5123,7 +6068,7 @@ sys_(readlink)
     }
 
     size_t copy_size = MIN((size_t)size, USER_PATH_MAX);
-    char *kbuf = (char *)malloc(copy_size);
+    char *kbuf = (char *)calloc(1, copy_size + 1);
     if (kbuf == NULL)
     {
         vfs_close(node);
@@ -5131,6 +6076,16 @@ sys_(readlink)
     }
 
     size_t read = vfs_readlink(node, kbuf, copy_size);
+    size_t log_len = read != (size_t)VFS_STATUS_FAILED ? MIN(read, copy_size) : 0;
+    kbuf[log_len] = '\0';
+    if (trace_udev_task())
+    {
+        write_serial_fmt("[udev-trace] sys:readlink node=%p name=%s read=%lld target=%s\n",
+                         node,
+                         node->name != NULL ? node->name : "(null)",
+                         (long long)read,
+                         read != (size_t)VFS_STATUS_FAILED ? kbuf : "");
+    }
     vfs_close(node);
     if (read == (size_t)VFS_STATUS_FAILED)
     {
@@ -5155,6 +6110,7 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     vfs_node_t node = vfs_open_no_follow(resolved);
+    trace_udev_node("readlinkat-lookup", resolved, node, node != NULL ? 0 : -ENOENT);
     free(resolved);
     if (node == NULL) return SYSCALL_FAULT_(ENOENT);
     if (!(node->type & file_symlink))
@@ -5164,7 +6120,7 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
     }
 
     size_t copy_size = MIN(size, USER_PATH_MAX);
-    char *kbuf = (char *)malloc(copy_size);
+    char *kbuf = (char *)calloc(1, copy_size + 1);
     if (kbuf == NULL)
     {
         vfs_close(node);
@@ -5172,6 +6128,16 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
     }
 
     size_t read = vfs_readlink(node, kbuf, copy_size);
+    size_t log_len = read != (size_t)VFS_STATUS_FAILED ? MIN(read, copy_size) : 0;
+    kbuf[log_len] = '\0';
+    if (trace_udev_task())
+    {
+        write_serial_fmt("[udev-trace] sys:readlinkat node=%p name=%s read=%lld target=%s\n",
+                         node,
+                         node->name != NULL ? node->name : "(null)",
+                         (long long)read,
+                         read != (size_t)VFS_STATUS_FAILED ? kbuf : "");
+    }
     vfs_close(node);
     if (read == (size_t)VFS_STATUS_FAILED)
     {
@@ -5224,6 +6190,27 @@ sys_(ftruncate, int fd, uint64_t length)
     if (handle->node->type == file_dir) return SYSCALL_FAULT_(EISDIR);
     if (vfs_resize(handle->node, length) != VFS_STATUS_SUCCESS) return SYSCALL_FAULT_(EIO);
     if (handle->offset > length) handle->offset = length;
+    return 0;
+}
+
+sys_(fallocate, int fd, int mode, int64_t offset, int64_t len)
+{
+    if (fd < 0) return SYSCALL_FAULT_(EBADF);
+    if (offset < 0 || len <= 0) return SYSCALL_FAULT_(EINVAL);
+    if (mode != 0) return SYSCALL_FAULT_(EOPNOTSUPP);
+
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    if (handle->node->type == file_dir) return SYSCALL_FAULT_(EISDIR);
+    if (handle->node->size == (uint64_t)-1) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t start = (uint64_t)offset;
+    uint64_t length = (uint64_t)len;
+    if (start > UINT64_MAX - length) return SYSCALL_FAULT_(EFBIG);
+    uint64_t end = start + length;
+    if (end <= handle->node->size) return 0;
+
+    if (vfs_resize(handle->node, end) != VFS_STATUS_SUCCESS) return SYSCALL_FAULT_(EIO);
     return 0;
 }
 
@@ -5766,6 +6753,13 @@ sys_(getppid)
     return get_current_task()->parent_group->parent_task->pid;
 }
 
+sys_(pidfd_open, int pid, uint32_t flags)
+{
+    (void)pid;
+    (void)flags;
+    return SYSCALL_FAULT_(ENOSYS);
+}
+
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec)
 {
     if (size == 0) { return 0; }
@@ -5870,6 +6864,47 @@ sys_(eventfd, uint64_t initial_value)
 sys_(eventfd2, uint64_t initial_value, uint64_t flags)
 {
     int ret = anonfs_create_eventfd(initial_value, (uint32_t)flags);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(inotify_init)
+{
+    int ret = anonfs_create_inotify(0);
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:inotify_init task=%s ret=%d\n",
+                                            get_current_task() != NULL ? get_current_task()->name : "(null)",
+                                            ret);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(inotify_init1, int flags)
+{
+    int ret = anonfs_create_inotify((uint32_t)flags);
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:inotify_init1 task=%s flags=0x%x ret=%d\n",
+                                            get_current_task() != NULL ? get_current_task()->name : "(null)",
+                                            flags,
+                                            ret);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(inotify_add_watch, int fd, const char *pathname, uint32_t mask)
+{
+    int ret = anonfs_inotify_add_watch(fd, pathname, mask);
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:inotify_add_watch task=%s fd=%d mask=0x%x ret=%d\n",
+                                            get_current_task() != NULL ? get_current_task()->name : "(null)",
+                                            fd,
+                                            mask,
+                                            ret);
+    return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
+}
+
+sys_(inotify_rm_watch, int fd, int wd)
+{
+    int ret = anonfs_inotify_rm_watch(fd, wd);
+    if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:inotify_rm_watch task=%s fd=%d wd=%d ret=%d\n",
+                                            get_current_task() != NULL ? get_current_task()->name : "(null)",
+                                            fd,
+                                            wd,
+                                            ret);
     return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
 }
 

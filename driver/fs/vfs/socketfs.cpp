@@ -7,12 +7,30 @@
 #include <krlibc.h>
 #include <net/socket.h>
 #include <syscall/syscall.h>
+#include <task/poll.h>
 #include <task/pcb.h>
 
 typedef struct socketfs_handle {
     socket_provider_t provider;
     void             *socket;
 } socketfs_handle_t;
+
+typedef struct netlink_socket {
+    int      protocol;
+    int      type;
+    uint32_t pid;
+    uint32_t groups;
+    uint64_t flags;
+    bool     passcred;
+    int      recv_buffer_size;
+    int      send_buffer_size;
+    spin_t   lock;
+    size_t   head;
+    size_t   tail;
+    size_t   count;
+    char    *messages[64];
+    size_t   lengths[64];
+} netlink_socket_t;
 
 static int        socketfs_id      = 0;
 static int        socketfs_next_id = 0;
@@ -21,6 +39,9 @@ static vfs_node_t socketfs_root    = NULL;
 static spin_t           g_socket_provider_lock  = SPIN_INIT;
 static socket_provider_t g_socket_provider_data = {};
 static bool              g_socket_provider_ready = false;
+static spin_t            g_netlink_lock = SPIN_INIT;
+static netlink_socket_t *g_netlink_sockets[64];
+static uint32_t          g_netlink_next_pid = 1;
 
 static inline bool socketfs_provider_valid(const socket_provider_t *provider)
 {
@@ -28,7 +49,7 @@ static inline bool socketfs_provider_valid(const socket_provider_t *provider)
            provider->read != NULL && provider->write != NULL && provider->bind != NULL &&
            provider->recvfrom != NULL && provider->sendto != NULL &&
            provider->getsockname != NULL && provider->getpeername != NULL &&
-           provider->getsockopt != NULL &&
+           provider->getsockopt != NULL && provider->setsockopt != NULL &&
            provider->connect != NULL && provider->listen != NULL && provider->accept != NULL &&
            provider->shutdown != NULL && provider->poll != NULL && provider->set_flags != NULL &&
            provider->resolve_ipv4 != NULL && provider->resolve_ipv6 != NULL &&
@@ -294,6 +315,457 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
     return socketfs_alloc_fd_with_provider(impl, flags, &provider);
 }
 
+static ssize_t netlink_read_impl(netlink_socket_t *sock, void *buffer, size_t size, uint64_t flags)
+{
+    if (sock == NULL || (buffer == NULL && size > 0)) return -EINVAL;
+    while (true)
+    {
+        spin_lock(&sock->lock);
+        if (sock->count != 0) break;
+        spin_unlock(&sock->lock);
+        if (((flags | sock->flags) & O_NONBLOCK) || (flags & MSG_DONTWAIT)) return -EAGAIN;
+        scheduler_sleep_ns(1000000ULL);
+    }
+
+    char *msg = sock->messages[sock->head];
+    size_t len = sock->lengths[sock->head];
+    size_t copy = MIN(size, len);
+    if (copy > 0) memcpy(buffer, msg, copy);
+    free(msg);
+    sock->messages[sock->head] = NULL;
+    sock->lengths[sock->head] = 0;
+    sock->head = (sock->head + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
+    sock->count--;
+    spin_unlock(&sock->lock);
+    return (ssize_t)copy;
+}
+
+static int netlink_close_impl(void *socket)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL) return 0;
+
+    spin_lock(&g_netlink_lock);
+    for (size_t i = 0; i < sizeof(g_netlink_sockets) / sizeof(g_netlink_sockets[0]); i++)
+    {
+        if (g_netlink_sockets[i] == sock) g_netlink_sockets[i] = NULL;
+    }
+    spin_unlock(&g_netlink_lock);
+
+    spin_lock(&sock->lock);
+    for (size_t i = 0; i < sizeof(sock->messages) / sizeof(sock->messages[0]); i++)
+        free(sock->messages[i]);
+    spin_unlock(&sock->lock);
+    free(sock);
+    return 0;
+}
+
+static int netlink_create_impl(int domain, int type, int protocol, void **out_socket)
+{
+    if (domain != AF_NETLINK || out_socket == NULL) return -EAFNOSUPPORT;
+    int sock_type = type & SOCK_TYPE_MASK;
+    if (sock_type != SOCK_RAW && sock_type != SOCK_DGRAM) return -EPROTONOSUPPORT;
+    if (protocol != NETLINK_KOBJECT_UEVENT && protocol != NETLINK_ROUTE && protocol != NETLINK_GENERIC)
+        return -EPROTONOSUPPORT;
+    netlink_socket_t *sock = (netlink_socket_t *)calloc(1, sizeof(netlink_socket_t));
+    if (sock == NULL) return -ENOMEM;
+    sock->protocol = protocol;
+    sock->type = sock_type;
+    sock->pid = __atomic_fetch_add(&g_netlink_next_pid, 1, __ATOMIC_SEQ_CST);
+    sock->recv_buffer_size = 65536;
+    sock->send_buffer_size = 65536;
+    sock->lock = SPIN_INIT;
+    spin_lock(&g_netlink_lock);
+    for (size_t i = 0; i < sizeof(g_netlink_sockets) / sizeof(g_netlink_sockets[0]); i++)
+    {
+        if (g_netlink_sockets[i] == NULL)
+        {
+            g_netlink_sockets[i] = sock;
+            break;
+        }
+    }
+    spin_unlock(&g_netlink_lock);
+    *out_socket = sock;
+    write_serial_fmt("[udev-trace] netlink:create type=%d protocol=%d pid=%u sock=%p\n",
+                     sock_type,
+                     protocol,
+                     sock->pid,
+                     sock);
+    return 0;
+}
+
+static ssize_t netlink_read_provider(void *socket, void *buffer, size_t size, uint64_t flags)
+{
+    return netlink_read_impl((netlink_socket_t *)socket, buffer, size, flags);
+}
+
+static ssize_t netlink_write_provider(void *socket, const void *buffer, size_t size, uint64_t flags)
+{
+    (void)socket;
+    (void)buffer;
+    (void)flags;
+    return (ssize_t)size;
+}
+
+static ssize_t netlink_recvfrom_provider(void *socket, void *buffer, size_t size, uint64_t flags,
+                                         struct sockaddr *addr, socklen_t *addrlen)
+{
+    ssize_t ret = netlink_read_impl((netlink_socket_t *)socket, buffer, size, flags);
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    write_serial_fmt("[udev-trace] netlink:recvfrom sock=%p protocol=%d flags=0x%llx req=%llu ret=%lld remaining=%llu\n",
+                     sock,
+                     sock != NULL ? sock->protocol : -1,
+                     (unsigned long long)flags,
+                     (unsigned long long)size,
+                     (long long)ret,
+                     sock != NULL ? (unsigned long long)sock->count : 0);
+    if (ret >= 0 && addr != NULL && addrlen != NULL && *addrlen >= sizeof(struct sockaddr_nl))
+    {
+        struct sockaddr_nl nl = {};
+        nl.nl_family = AF_NETLINK;
+        nl.nl_pid = 0;
+        nl.nl_groups = 1;
+        memcpy(addr, &nl, sizeof(nl));
+        *addrlen = sizeof(nl);
+    }
+    return ret;
+}
+
+static ssize_t netlink_sendto_provider(void *socket, const void *buffer, size_t size, uint64_t flags,
+                                       const struct sockaddr *addr, socklen_t addrlen)
+{
+    (void)buffer;
+    (void)addr;
+    (void)addrlen;
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    write_serial_fmt("[udev-trace] netlink:sendto sock=%p protocol=%d flags=0x%llx size=%llu\n",
+                     sock,
+                     sock != NULL ? sock->protocol : -1,
+                     (unsigned long long)flags,
+                     (unsigned long long)size);
+    return (ssize_t)size;
+}
+
+static int netlink_bind_provider(void *socket, const struct sockaddr *addr, socklen_t addrlen)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL || addr == NULL || addrlen < sizeof(struct sockaddr_nl)) return -EINVAL;
+    const struct sockaddr_nl *nl = (const struct sockaddr_nl *)addr;
+    if (nl->nl_family != AF_NETLINK) return -EAFNOSUPPORT;
+    sock->groups = nl->nl_groups;
+    if (nl->nl_pid != 0) sock->pid = nl->nl_pid;
+    write_serial_fmt("[udev-trace] netlink:bind sock=%p protocol=%d pid=%u groups=0x%x\n",
+                     sock,
+                     sock->protocol,
+                     sock->pid,
+                     sock->groups);
+
+    spin_lock(&g_netlink_lock);
+    bool present = false;
+    for (size_t i = 0; i < sizeof(g_netlink_sockets) / sizeof(g_netlink_sockets[0]); i++)
+        if (g_netlink_sockets[i] == sock) present = true;
+    if (!present)
+    {
+        for (size_t i = 0; i < sizeof(g_netlink_sockets) / sizeof(g_netlink_sockets[0]); i++)
+        {
+            if (g_netlink_sockets[i] == NULL)
+            {
+                g_netlink_sockets[i] = sock;
+                break;
+            }
+        }
+    }
+    spin_unlock(&g_netlink_lock);
+    return 0;
+}
+
+static int netlink_getsockname_provider(void *socket, struct sockaddr *addr, socklen_t *addrlen)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL || addrlen == NULL) return -EINVAL;
+    if (addr != NULL && *addrlen >= sizeof(struct sockaddr_nl))
+    {
+        struct sockaddr_nl nl = {};
+        nl.nl_family = AF_NETLINK;
+        nl.nl_pid = sock->pid;
+        nl.nl_groups = sock->groups;
+        memcpy(addr, &nl, sizeof(nl));
+    }
+    *addrlen = sizeof(struct sockaddr_nl);
+    return 0;
+}
+
+static int netlink_getsockopt_provider(void *socket, int level, int optname, void *optval, socklen_t *optlen)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL) return -EINVAL;
+    if (optval == NULL || optlen == NULL || *optlen < sizeof(int)) return -EINVAL;
+    int value = 0;
+    if (level == SOL_SOCKET)
+    {
+        switch (optname)
+        {
+        case SO_TYPE:
+            value = sock->type;
+            break;
+        case SO_PROTOCOL:
+            value = sock->protocol;
+            break;
+        case SO_DOMAIN:
+            value = AF_NETLINK;
+            break;
+        case SO_PASSCRED:
+            value = sock->passcred ? 1 : 0;
+            break;
+        case SO_RCVBUF:
+        case SO_RCVBUFFORCE:
+            value = sock->recv_buffer_size;
+            break;
+        case SO_SNDBUF:
+        case SO_SNDBUFFORCE:
+            value = sock->send_buffer_size;
+            break;
+        case SO_ERROR:
+        case SO_REUSEADDR:
+            value = 0;
+            break;
+        default:
+            return -ENOPROTOOPT;
+        }
+    }
+    else if (level != SOL_NETLINK)
+    {
+        return -ENOPROTOOPT;
+    }
+    memcpy(optval, &value, sizeof(value));
+    *optlen = sizeof(value);
+    return 0;
+}
+
+static int netlink_setsockopt_provider(void *socket, int level, int optname, const void *optval, socklen_t optlen)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL) return -EINVAL;
+    if (level == SOL_NETLINK)
+    {
+        if (optname != NETLINK_ADD_MEMBERSHIP && optname != NETLINK_DROP_MEMBERSHIP) return -ENOPROTOOPT;
+        if (optval == NULL || optlen < (socklen_t)sizeof(uint32_t)) return -EINVAL;
+        uint32_t group = *(const uint32_t *)optval;
+        if (group == 0 || group > 32) return -EINVAL;
+        uint32_t bit = 1U << (group - 1);
+        spin_lock(&sock->lock);
+        if (optname == NETLINK_ADD_MEMBERSHIP) sock->groups |= bit;
+        else sock->groups &= ~bit;
+        spin_unlock(&sock->lock);
+        return 0;
+    }
+
+    if (level != SOL_SOCKET) return -ENOPROTOOPT;
+    switch (optname)
+    {
+    case SO_PASSCRED:
+        if (optval == NULL || optlen < (socklen_t)sizeof(int)) return -EINVAL;
+        spin_lock(&sock->lock);
+        sock->passcred = (*(const int *)optval) != 0;
+        spin_unlock(&sock->lock);
+        return 0;
+    case SO_RCVBUF:
+    case SO_RCVBUFFORCE:
+    case SO_SNDBUF:
+    case SO_SNDBUFFORCE: {
+        if (optval == NULL || optlen < (socklen_t)sizeof(int)) return -EINVAL;
+        int value = *(const int *)optval;
+        if (value <= 0) value = 65536;
+        spin_lock(&sock->lock);
+        if (optname == SO_RCVBUF || optname == SO_RCVBUFFORCE) sock->recv_buffer_size = value;
+        else sock->send_buffer_size = value;
+        spin_unlock(&sock->lock);
+        return 0;
+    }
+    case SO_ATTACH_FILTER:
+    case SO_DETACH_FILTER:
+    case SO_REUSEADDR:
+        return 0;
+    default:
+        return -ENOPROTOOPT;
+    }
+}
+
+static int netlink_poll_provider(void *socket, size_t events)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL) return EPOLLERR;
+    int revents = 0;
+    spin_lock(&sock->lock);
+    if ((events & EPOLLIN) && sock->count != 0) revents |= EPOLLIN;
+    if (events & EPOLLOUT) revents |= EPOLLOUT;
+    spin_unlock(&sock->lock);
+    return revents;
+}
+
+static int netlink_set_flags_provider(void *socket, uint64_t flags)
+{
+    netlink_socket_t *sock = (netlink_socket_t *)socket;
+    if (sock == NULL) return -EINVAL;
+    sock->flags = flags;
+    return 0;
+}
+
+static int netlink_ok0(void *socket)
+{
+    (void)socket;
+    return 0;
+}
+
+static int netlink_connect_provider(void *socket, const struct sockaddr *addr, socklen_t addrlen)
+{
+    (void)socket;
+    (void)addr;
+    (void)addrlen;
+    return 0;
+}
+
+static int netlink_listen_provider(void *socket, int backlog)
+{
+    (void)socket;
+    (void)backlog;
+    return -EOPNOTSUPP;
+}
+
+static int netlink_accept_provider(void *socket, void **out_socket, struct sockaddr *addr, socklen_t *addrlen)
+{
+    (void)socket;
+    (void)out_socket;
+    (void)addr;
+    (void)addrlen;
+    return -EOPNOTSUPP;
+}
+
+static int netlink_shutdown_provider(void *socket, int how)
+{
+    (void)socket;
+    (void)how;
+    return 0;
+}
+
+static int netlink_resolve_ipv4_provider(const char *hostname, uint32_t *out_addr)
+{
+    (void)hostname;
+    (void)out_addr;
+    return -EAFNOSUPPORT;
+}
+
+static int netlink_resolve_ipv6_provider(const char *hostname, uint8_t out_addr[16])
+{
+    (void)hostname;
+    (void)out_addr;
+    return -EAFNOSUPPORT;
+}
+
+static int netlink_set_dns_provider(uint32_t addr)
+{
+    (void)addr;
+    return -EAFNOSUPPORT;
+}
+
+static int netlink_get_dns_provider(uint32_t *out_addr)
+{
+    (void)out_addr;
+    return -EAFNOSUPPORT;
+}
+
+static int netlink_ipv4_config_provider(const socket_ipv4_config_t *config)
+{
+    (void)config;
+    return -EAFNOSUPPORT;
+}
+
+static int netlink_netinfo_provider(socket_netinfo_t *out_info)
+{
+    (void)out_info;
+    return -EAFNOSUPPORT;
+}
+
+static socket_provider_t g_netlink_provider = {
+    .create = netlink_create_impl,
+    .close = netlink_close_impl,
+    .read = netlink_read_provider,
+    .write = netlink_write_provider,
+    .recvfrom = netlink_recvfrom_provider,
+    .sendto = netlink_sendto_provider,
+    .bind = netlink_bind_provider,
+    .connect = netlink_connect_provider,
+    .getsockname = netlink_getsockname_provider,
+    .getpeername = netlink_getsockname_provider,
+    .getsockopt = netlink_getsockopt_provider,
+    .setsockopt = netlink_setsockopt_provider,
+    .listen = netlink_listen_provider,
+    .accept = netlink_accept_provider,
+    .shutdown = netlink_shutdown_provider,
+    .poll = netlink_poll_provider,
+    .set_flags = netlink_set_flags_provider,
+    .resolve_ipv4 = netlink_resolve_ipv4_provider,
+    .resolve_ipv6 = netlink_resolve_ipv6_provider,
+    .set_dns_server = netlink_set_dns_provider,
+    .get_dns_server = netlink_get_dns_provider,
+    .set_ipv4_config = netlink_ipv4_config_provider,
+    .get_netinfo = netlink_netinfo_provider,
+};
+
+int netlink_open(int type, int protocol)
+{
+    void *impl = NULL;
+    int ret = netlink_create_impl(AF_NETLINK, type, protocol, &impl);
+    if (ret < 0) return ret;
+    return socketfs_alloc_fd_with_provider(impl, 0, &g_netlink_provider);
+}
+
+void netlink_kernel_uevent_send(const char *buf, int len)
+{
+    if (buf == NULL || len <= 0) return;
+    size_t delivered = 0;
+    spin_lock(&g_netlink_lock);
+    for (size_t i = 0; i < sizeof(g_netlink_sockets) / sizeof(g_netlink_sockets[0]); i++)
+    {
+        netlink_socket_t *sock = g_netlink_sockets[i];
+        if (sock == NULL || sock->protocol != NETLINK_KOBJECT_UEVENT) continue;
+        spin_lock(&sock->lock);
+        if (sock->count == sizeof(sock->messages) / sizeof(sock->messages[0]))
+        {
+            free(sock->messages[sock->head]);
+            sock->messages[sock->head] = NULL;
+            sock->head = (sock->head + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
+            sock->count--;
+        }
+        char *copy = (char *)malloc((size_t)len + 1);
+        if (copy != NULL)
+        {
+            memcpy(copy, buf, (size_t)len);
+            copy[len] = '\0';
+            sock->messages[sock->tail] = copy;
+            sock->lengths[sock->tail] = (size_t)len;
+            sock->tail = (sock->tail + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
+            sock->count++;
+            delivered++;
+            write_serial_fmt("[udev-trace] netlink:uevent queued sock=%p pid=%u groups=0x%x len=%d count=%llu first=%.*s\n",
+                             sock,
+                             sock->pid,
+                             sock->groups,
+                             len,
+                             (unsigned long long)sock->count,
+                             MIN(len, 96),
+                             copy);
+        }
+        spin_unlock(&sock->lock);
+    }
+    spin_unlock(&g_netlink_lock);
+    write_serial_fmt("[udev-trace] netlink:uevent-send len=%d delivered=%llu first=%.*s\n",
+                     len,
+                     (unsigned long long)delivered,
+                     MIN(len, 96),
+                     buf);
+}
+
 #include <net/unixsock.h>
 
 extern socket_provider_t g_unix_provider;
@@ -329,6 +801,10 @@ int socketfs_setup(void)
 
 int socket_open(int domain, int type, int protocol)
 {
+    if (domain == AF_NETLINK) {
+        return netlink_open(type, protocol);
+    }
+
     if (domain == AF_UNIX || domain == AF_LOCAL) {
         init_unix_provider();
         void *impl = NULL;
@@ -436,6 +912,21 @@ int socket_getsockopt(int fd, int level, int optname, void *optval, socklen_t *o
     return handle->provider.getsockopt(handle->socket, level, optname, optval, optlen);
 }
 
+int socket_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+{
+    fd_file_handle *fd_handle = NULL;
+    if (!socketfs_is_socket_fd(fd, &fd_handle) || (optval == NULL && optlen != 0)) {
+        return -EBADF;
+    }
+
+    socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
+    if (handle == NULL || handle->provider.setsockopt == NULL) {
+        return -EBADF;
+    }
+
+    return handle->provider.setsockopt(handle->socket, level, optname, optval, optlen);
+}
+
 int socket_listen(int fd, int backlog)
 {
     fd_file_handle *fd_handle = NULL;
@@ -496,7 +987,7 @@ int socket_shutdown(int fd, int how)
 ssize_t socket_read(vfs_node_t node, void *buffer, size_t size)
 {
     socketfs_handle_t *handle = socketfs_get_handle(node);
-    if (handle == NULL || buffer == NULL || handle->provider.read == NULL) {
+    if (handle == NULL || (buffer == NULL && size > 0) || handle->provider.read == NULL) {
         return -EBADF;
     }
     socketfs_sync_flags(handle, node->flags);
@@ -506,7 +997,7 @@ ssize_t socket_read(vfs_node_t node, void *buffer, size_t size)
 ssize_t socket_write(vfs_node_t node, const void *buffer, size_t size)
 {
     socketfs_handle_t *handle = socketfs_get_handle(node);
-    if (handle == NULL || buffer == NULL || handle->provider.write == NULL) {
+    if (handle == NULL || (buffer == NULL && size > 0) || handle->provider.write == NULL) {
         return -EBADF;
     }
     socketfs_sync_flags(handle, node->flags);
@@ -521,7 +1012,7 @@ ssize_t socket_recvfrom(int fd, void *buffer, size_t size, uint64_t flags, struc
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL || buffer == NULL || handle->provider.recvfrom == NULL) {
+    if (handle == NULL || (buffer == NULL && size > 0) || handle->provider.recvfrom == NULL) {
         return -EBADF;
     }
     socketfs_sync_flags(handle, fd_handle->node->flags);
@@ -537,7 +1028,7 @@ ssize_t socket_sendto(int fd, const void *buffer, size_t size, uint64_t flags,
     }
 
     socketfs_handle_t *handle = socketfs_get_handle(fd_handle->node);
-    if (handle == NULL || buffer == NULL || handle->provider.sendto == NULL) {
+    if (handle == NULL || (buffer == NULL && size > 0) || handle->provider.sendto == NULL) {
         return -EBADF;
     }
     socketfs_sync_flags(handle, fd_handle->node->flags);

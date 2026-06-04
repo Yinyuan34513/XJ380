@@ -77,6 +77,10 @@
 #define TIOCSBRK     0x5427
 #define TIOCCBRK     0x5428
 #define TIOCGSID     0x5429
+#define TCGETS2      _IOR('T', 0x2A, struct termios2)
+#define TCSETS2      _IOW('T', 0x2B, struct termios2)
+#define TCSETSW2     _IOW('T', 0x2C, struct termios2)
+#define TCSETSF2     _IOW('T', 0x2D, struct termios2)
 #define TIOCGRS485   0x542E
 #define TIOCSRS485   0x542F
 #define TIOCGPTN     0x80045430
@@ -192,6 +196,18 @@ struct fb_var_screeninfo
     uint32_t rotate;
     uint32_t colorspace;
     uint32_t reserved[4];
+};
+
+struct termios2
+{
+    uint32_t c_iflag;
+    uint32_t c_oflag;
+    uint32_t c_cflag;
+    uint32_t c_lflag;
+    uint8_t  c_line;
+    uint8_t  c_cc[19];
+    uint32_t c_ispeed;
+    uint32_t c_ospeed;
 };
 
 #define CSIZE  0000060

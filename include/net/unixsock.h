@@ -34,6 +34,7 @@ struct unix_sock {
 
     struct unix_sock *peer;
     lock_queue *conn_queue;
+    uint64_t flags;
 
     uint8_t *in_buf;
     size_t   in_head, in_tail, in_cap;
@@ -46,6 +47,7 @@ struct unix_sock {
     bool    closed;
     bool    namespace_registered;
     bool    path_node_created;
+    bool    passcred;
 };
 
 struct unix_stream_packet {
@@ -53,11 +55,17 @@ struct unix_stream_packet {
     size_t          offset;
     size_t          fd_count;
     fd_file_handle **fds;
+    struct ucred    cred;
+    bool            has_cred;
     uint8_t         data[];
 };
 
 struct unix_dgram {
     struct sockaddr_un addr;
+    struct ucred       cred;
+    bool               has_cred;
+    size_t             fd_count;
+    fd_file_handle   **fds;
     size_t             len;
     uint8_t            data[];
 };
@@ -70,6 +78,7 @@ int  unix_accept(void *impl, void **out_new, struct sockaddr *addr, socklen_t *a
 int  unix_getsockname(void *impl, struct sockaddr *addr, socklen_t *addrlen);
 int  unix_getpeername(void *impl, struct sockaddr *addr, socklen_t *addrlen);
 int  unix_getsockopt(void *impl, int level, int optname, void *optval, socklen_t *optlen);
+int  unix_setsockopt(void *impl, int level, int optname, const void *optval, socklen_t optlen);
 int  unix_shutdown(void *impl, int how);
 ssize_t unix_read(void *impl, void *buf, size_t size, uint64_t flags);
 ssize_t unix_write(void *impl, const void *buf, size_t size, uint64_t flags);
@@ -82,7 +91,8 @@ ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_
                             fd_file_handle **fds, size_t fd_count);
 ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flags,
                             struct sockaddr *addr, socklen_t *addrlen,
-                            fd_file_handle ***out_fds, size_t *out_fd_count);
+                            fd_file_handle ***out_fds, size_t *out_fd_count,
+                            struct ucred *out_cred, bool *out_has_cred);
 int  unix_poll(void *impl, size_t events);
 int  unix_close(void *impl);
 int  unix_set_flags(void *impl, uint64_t flags);

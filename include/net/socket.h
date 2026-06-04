@@ -16,10 +16,13 @@ typedef uint32_t socklen_t;
 #define AF_LOCAL  AF_UNIX
 #define AF_INET   2
 #define AF_INET6  10
+#define AF_NETLINK 16
+#define PF_NETLINK AF_NETLINK
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM  2
 #define SOCK_RAW    3
+#define SOCK_SEQPACKET 5
 #define SOCK_TYPE_MASK 0xf
 #define SOCK_CLOEXEC 02000000
 #define SOCK_NONBLOCK 00004000
@@ -35,9 +38,16 @@ typedef uint32_t socklen_t;
 #define SO_RCVBUF 8
 #define SO_KEEPALIVE 9
 #define SO_LINGER 13
+#define SO_PASSCRED 16
 #define SO_RCVLOWAT 18
 #define SO_SNDLOWAT 19
+#define SO_ATTACH_FILTER 26
+#define SO_DETACH_FILTER 27
 #define SO_ACCEPTCONN 30
+#define SO_SNDBUFFORCE 32
+#define SO_RCVBUFFORCE 33
+#define SO_PROTOCOL 38
+#define SO_DOMAIN 39
 #define SO_SNDTIMEO 66
 #define SO_RCVTIMEO 67
 
@@ -51,15 +61,25 @@ typedef uint32_t socklen_t;
 #define TCP_KEEPINTVL 4
 #define TCP_KEEPCNT 5
 
-#define MSG_PEEK 0x01
-#define MSG_WAITALL 0x02
-#define MSG_OOB 0x04
-#define MSG_DONTWAIT 0x08
-#define MSG_MORE 0x10
-#define MSG_NOSIGNAL 0x20
+#define MSG_OOB 0x01
+#define MSG_PEEK 0x02
+#define MSG_CTRUNC 0x08
+#define MSG_TRUNC 0x20
+#define MSG_DONTWAIT 0x40
+#define MSG_WAITALL 0x100
+#define MSG_NOSIGNAL 0x4000
+#define MSG_MORE 0x8000
 #define MSG_CMSG_CLOEXEC 0x40000000U
 
 #define SCM_RIGHTS 0x01
+#define SCM_CREDENTIALS 0x02
+
+#define SOL_NETLINK 270
+#define NETLINK_ROUTE 0
+#define NETLINK_KOBJECT_UEVENT 15
+#define NETLINK_GENERIC 16
+#define NETLINK_ADD_MEMBERSHIP 1
+#define NETLINK_DROP_MEMBERSHIP 2
 
 #define SHUT_RD   0
 #define SHUT_WR   1
@@ -93,10 +113,23 @@ struct sockaddr_in6 {
     uint32_t        sin6_scope_id;
 };
 
+struct sockaddr_nl {
+    sa_family_t nl_family;
+    unsigned short nl_pad;
+    uint32_t nl_pid;
+    uint32_t nl_groups;
+};
+
 struct cmsghdr {
     size_t cmsg_len;
     int    cmsg_level;
     int    cmsg_type;
+};
+
+struct ucred {
+    int pid;
+    int uid;
+    int gid;
 };
 
 #define CMSG_ALIGN(len) (((size_t)(len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))
@@ -162,6 +195,7 @@ typedef struct socket_provider {
     int     (*getsockname)(void *socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*getpeername)(void *socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*getsockopt)(void *socket, int level, int optname, void *optval, socklen_t *optlen);
+    int     (*setsockopt)(void *socket, int level, int optname, const void *optval, socklen_t optlen);
     int     (*listen)(void *socket, int backlog);
     int     (*accept)(void *socket, void **out_socket, struct sockaddr *addr, socklen_t *addrlen);
     int     (*shutdown)(void *socket, int how);
@@ -180,11 +214,14 @@ int     socketfs_setup(void);
 int     socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_provider_t *provider);
 int     socketfs_get_socket_impl(int fd, void **out_impl, socket_provider_t *out_provider);
 int     socket_open(int domain, int type, int protocol);
+int     netlink_open(int type, int protocol);
+void    netlink_kernel_uevent_send(const char *buf, int len);
 int     socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int     socket_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int     socket_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen);
+int     socket_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
 int     socket_listen(int fd, int backlog);
 int     socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int     socket_shutdown(int fd, int how);

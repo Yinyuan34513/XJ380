@@ -41,6 +41,7 @@ typedef struct
 } UserRegisterList;
 
 void init_user();
+void init_root_user();
 void copy_args(char *dst[], char *src[], int n);
 uint32_t user_uid(const UserInfo *user);
 uint32_t user_gid(const UserInfo *user);

@@ -35,11 +35,16 @@ sys_(utimes, char *filename, const struct timeval *times);
 sys_(close_range, uint32_t first, uint32_t last, uint32_t flags);
 sys_(eventfd, uint64_t initial_value);
 sys_(eventfd2, uint64_t initial_value, uint64_t flags);
+sys_(inotify_init);
+sys_(inotify_init1, int flags);
+sys_(inotify_add_watch, int fd, const char *pathname, uint32_t mask);
+sys_(inotify_rm_watch, int fd, int wd);
 sys_(signalfd, int ufd, sigset_t *mask, size_t sizemask);
 sys_(signalfd4, int ufd, sigset_t *mask, size_t sizemask, uint64_t flags);
 sys_(timerfd_create, int clockid, int flags);
 sys_(timerfd_settime, int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value);
 sys_(memfd_create, const char *name, uint64_t flags);
+sys_(waitid, int idtype, uint64_t id, siginfo_t *infop, int options, void *rusage);
 
 static const char *debug_syscall_name(uint64_t nr)
 {
@@ -73,6 +78,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_CONNECT: return "connect";
     case SYS_SENDTO: return "sendto";
     case SYS_RECVFROM: return "recvfrom";
+    case SYS_ACCEPT4: return "accept4";
     case SYS_SENDMSG: return "sendmsg";
     case SYS_RECVMSG: return "recvmsg";
     case SYS_GETSOCKNAME: return "getsockname";
@@ -86,6 +92,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_EXECVE: return "execve";
     case SYS_EXIT: return "exit";
     case SYS_WAIT4: return "wait4";
+    case SYS_WAITID: return "waitid";
     case SYS_UNAME: return "uname";
     case SYS_FCNTL: return "fcntl";
     case SYS_FLOCK: return "flock";
@@ -136,7 +143,12 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_TIMERFD_SETTIME: return "timerfd_settime";
     case SYS_SIGNALFD4: return "signalfd4";
     case SYS_EVENTFD2: return "eventfd2";
+    case SYS_INOTIFY_INIT: return "inotify_init";
+    case SYS_INOTIFY_INIT1: return "inotify_init1";
+    case SYS_INOTIFY_ADD_WATCH: return "inotify_add_watch";
+    case SYS_INOTIFY_RM_WATCH: return "inotify_rm_watch";
     case SYS_FTRUNCATE: return "ftruncate";
+    case SYS_FALLOCATE: return "fallocate";
     case SYS_FSTATFS: return "fstatfs";
     case SYS_PRLIMIT64: return "prlimit64";
     case SYS_SENDMMSG: return "sendmmsg";
@@ -157,6 +169,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_COPY_FILE_RANGE: return "copy_file_range";
     case SYS_SET_ROBUST_LIST: return "set_robust_list";
     case SYS_RSEQ: return "rseq";
+    case SYS_PIDFD_OPEN: return "pidfd_open";
     case SYS_CLONE3: return "clone3";
     case SYS_CLOSE_RANGE: return "close_range";
     default: return "?";
@@ -301,6 +314,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax =
             (uint64_t)sys_accept(regs->rdi, (struct sockaddr *)regs->rsi, (socklen_t *)regs->rdx, 0, 0, 0, regs);
         break;
+    case SYS_ACCEPT4:
+        regs->rax = (uint64_t)sys_accept4(regs->rdi, (struct sockaddr *)regs->rsi,
+                                          (socklen_t *)regs->rdx, regs->r10, 0, 0, regs);
+        break;
     case SYS_SENDTO:
         regs->rax = (uint64_t)sys_sendto(regs->rdi, (const void *)regs->rsi, regs->rdx, regs->r10,
                                          (const struct sockaddr *)regs->r8, regs->r9, regs);
@@ -344,7 +361,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
                                      AT_SYMLINK_NOFOLLOW, 0, 0, regs);
         break;
     case SYS_FSTAT: regs->rax = (uint64_t)sys_fstat(regs->rdi, (struct stat *)regs->rsi, 0, 0, 0, 0, regs); break;
-    case SYS_IOCTL: regs->rax = (uint64_t)sys_ioctl(regs->rdi, regs->rsi, (void *)regs->rdx, 0, 0, 0, regs); break;
+    case SYS_IOCTL: regs->rax = (uint64_t)sys_ioctl((int)regs->rdi, (uint64_t)regs->rsi, (void *)regs->rdx, 0, 0, 0, regs); break;
     case SYS_READV:
         regs->rax = (uint64_t)sys_readv(regs->rdi, (struct iovec *)regs->rsi, regs->rdx, 0, 0, 0, regs);
         break;
@@ -397,6 +414,19 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_EVENTFD2:
         regs->rax = (uint64_t)sys_eventfd2(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_INOTIFY_INIT:
+        regs->rax = (uint64_t)sys_inotify_init(0, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_INOTIFY_INIT1:
+        regs->rax = (uint64_t)sys_inotify_init1(regs->rdi, 0, 0, 0, 0, 0, regs);
+        break;
+    case SYS_INOTIFY_ADD_WATCH:
+        regs->rax =
+            (uint64_t)sys_inotify_add_watch(regs->rdi, (const char *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_INOTIFY_RM_WATCH:
+        regs->rax = (uint64_t)sys_inotify_rm_watch(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
     case SYS_TIMERFD_CREATE:
         regs->rax = (uint64_t)sys_timerfd_create(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
@@ -465,6 +495,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_WAIT4:
         regs->rax = (uint64_t)sys_wait4(regs->rdi, (int *)regs->rsi, regs->rdx, (void *)regs->r10, 0, 0, regs);
+        break;
+    case SYS_WAITID:
+        regs->rax = (uint64_t)sys_waitid(regs->rdi, regs->rsi, (siginfo_t *)regs->rdx, regs->r10,
+                                         (void *)regs->r8, 0, regs);
         break;
     case SYS_KILL: regs->rax = (uint64_t)sys_kill(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_UNAME: regs->rax = (uint64_t)sys_uname((struct utsname *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
@@ -613,6 +647,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_SYMLINK: regs->rax = (uint64_t)sys_symlink((char *)regs->rdi, (char *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_RENAME: regs->rax = (uint64_t)sys_rename((char *)regs->rdi, (char *)regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_FTRUNCATE: regs->rax = (uint64_t)sys_ftruncate(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_FALLOCATE:
+        regs->rax = (uint64_t)sys_fallocate(regs->rdi, regs->rsi, (int64_t)regs->rdx, (int64_t)regs->r10, 0, 0, regs);
+        break;
     case SYS_PRLIMIT64:
         regs->rax =
             (uint64_t)sys_prlimit64(regs->rdi, regs->rsi, (struct rlimit *)regs->rdx, (struct rlimit *)regs->r10, 0, 0, regs);
@@ -643,6 +680,9 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_RSEQ:
         regs->rax = (uint64_t)sys_rseq((void *)regs->rdi, (uint32_t)regs->rsi, (int)regs->rdx, (uint32_t)regs->r10, 0, 0, regs);
+        break;
+    case SYS_PIDFD_OPEN:
+        regs->rax = (uint64_t)sys_pidfd_open(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
 
 

@@ -4,7 +4,7 @@ C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-buil
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
-DEBUG ?= 0
+DEBUG ?= 1
 SMP ?= 4
 SUDO ?= 1
 VDISK_SUDO ?=
@@ -31,8 +31,8 @@ FONT_BIN_OBJ := $(BUILD_DIR)/font/hankaku.o
 LOGO_BIN_OBJ := $(BUILD_DIR)/graphics/logo/xj380_2.o
 VDISK_IMAGE := XJ380.img
 VMDK_IMAGE := XJ380.vmdk
-VDISK_SIZE_MIB ?= 5120
-VDISK_FAT_MIB ?= 5120
+VDISK_SIZE_MIB ?= 14096
+VDISK_FAT_MIB ?= 13000
 VDISK_OFFSET_SECTORS ?= 2048
 VDISK_ROOT ?= /tmp/xj380-vdisk-$$(id -u)/XJ380
 KMOD_DIR := kmod
@@ -47,7 +47,7 @@ SELFHOST_USER_THIRD_PARTY := \
 	third_party/libvterm
 SYSTEM_APPS := shell.elf fmanager.elf taskmgr.elf ctrlmenu.elf
 BUILTIN_APPS := calc.elf texter.elf picturer.elf browser.elf nut.elf
-USER_APPS := terminal.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf scmtest.elf anonfdtest.elf dyn-hello
+USER_APPS := init.elf terminal.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf scmtest.elf anonfdtest.elf dyn-hello
 STARDUSTUI_BUILTIN_APPS := helloworld.elf layout.elf duckchat.elf
 MUSL_RUNTIME_FILES := ld-musl-x86_64.so.1 libc.so libc.musl-x86_64.so.1 libgcc_s.so.1
 
@@ -87,8 +87,14 @@ IMAGE_TOOLCHAIN ?= clang
 IMAGE_PACKAGE_MANAGER ?= xbps
 IMAGE_BUSYBOX ?= 1
 KERNEL_BUSYBOX_ALIASES ?= $(IMAGE_BUSYBOX)
+KERNEL_START_DESKTOP ?= 0
+KERNEL_START_COMPONENT_FLUSHER ?= $(KERNEL_START_DESKTOP)
+KERNEL_UDEV_TRACE ?= 0
+KERNEL_BUSYBOX_DEBUG ?= 0
+KERNEL_LINUX_OUTPUT_MIRROR ?= 0
+KERNEL_XBPS_WAIT_DEBUG ?= 0
 BF_DIR ?= Bf
-XBPS_BOOTSTRAP_EXTRA ?= weston
+XBPS_BOOTSTRAP_EXTRA ?= weston seatd eudev dbus wayland wayland-protocols libxkbcommon pixman xkeyboard-config adwaita-icon-theme dejavu-fonts-ttf
 HOST_GCC_TRIPLE := $(shell $(HOST_GCC) -dumpmachine 2>/dev/null)
 HOST_GCC_VERSION := $(shell $(HOST_GCC) -dumpversion 2>/dev/null)
 HOST_GCC_REAL := $(shell readlink -f "$$(command -v $(HOST_GCC))" 2>/dev/null)
@@ -105,6 +111,13 @@ APP_FASTFETCH := resources/apps/fastfetch
 XBPS_PREPARE_ROOT ?= Bf/xbps-root
 XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which fastfetch gcc binutils make strace inetutils bind-utils curl
 XBPS_BOOTSTRAP ?= $(strip $(XBPS_BOOTSTRAP_BASE) $(XBPS_BOOTSTRAP_EXTRA))
+KERNEL_TRACE_DEFS := \
+	-DCONFIG_KERNEL_UDEV_TRACE=$(KERNEL_UDEV_TRACE) \
+	-DCONFIG_KERNEL_BUSYBOX_DEBUG=$(KERNEL_BUSYBOX_DEBUG) \
+	-DCONFIG_KERNEL_LINUX_OUTPUT_MIRROR=$(KERNEL_LINUX_OUTPUT_MIRROR) \
+	-DCONFIG_KERNEL_XBPS_WAIT_DEBUG=$(KERNEL_XBPS_WAIT_DEBUG)
+C_FLAGS += $(KERNEL_TRACE_DEFS)
+CPP_FLAGS += $(KERNEL_TRACE_DEFS)
 
 NASM_OBJS := $(patsubst ./%.asm, ./$(BUILD_DIR)/%.o, $(NASM_FILES))
 ASM_OBJS := $(patsubst ./%.S, ./$(BUILD_DIR)/%.o, $(ASM_FILES))
@@ -160,6 +173,12 @@ $(BUILD_CONFIG_HEADER): FORCE
 	{ \
 		echo "#pragma once"; \
 		echo "#define CONFIG_KERNEL_BUSYBOX_ALIASES $(KERNEL_BUSYBOX_ALIASES)"; \
+		echo "#define CONFIG_KERNEL_START_DESKTOP $(KERNEL_START_DESKTOP)"; \
+		echo "#define CONFIG_KERNEL_START_COMPONENT_FLUSHER $(KERNEL_START_COMPONENT_FLUSHER)"; \
+		echo "#define CONFIG_KERNEL_UDEV_TRACE $(KERNEL_UDEV_TRACE)"; \
+		echo "#define CONFIG_KERNEL_BUSYBOX_DEBUG $(KERNEL_BUSYBOX_DEBUG)"; \
+		echo "#define CONFIG_KERNEL_LINUX_OUTPUT_MIRROR $(KERNEL_LINUX_OUTPUT_MIRROR)"; \
+		echo "#define CONFIG_KERNEL_XBPS_WAIT_DEBUG $(KERNEL_XBPS_WAIT_DEBUG)"; \
 	} > "$$tmp"; \
 	if ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm -f "$$tmp"; fi
 

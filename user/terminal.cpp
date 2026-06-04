@@ -94,7 +94,7 @@ static const char *const g_shell_candidates[] = {
 };
 
 static const char g_autorun_command[] =
-    "seatd -u root -l info & sleep 1 && weston --backend=drm-backend.so --renderer=pixman --socket=wayland-1 --idle-time=0 \n";
+    "/system/resources/start-wayland.sh\n";
 
 static UINT32 g_palette[16] = {
     0x0b0f14ff, 0xff7b72ff, 0x3fb950ff, 0xd29922ff,

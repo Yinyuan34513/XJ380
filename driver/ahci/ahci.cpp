@@ -496,7 +496,7 @@ void ahci_setup() {
         struct hba_device *hbadev = port->device;
         char name_buf[20];
         sprintf(name_buf, "sata%d", i);
-        device_t sata;
+        device_t sata = {};
         sata.size = hbadev->max_lba * hbadev->block_size;
         sata.sector_size = hbadev->block_size;
         sata.type = DEVICE_BLOCK;

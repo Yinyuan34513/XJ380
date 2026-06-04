@@ -12,6 +12,36 @@ spin_t serial_lock;
 spin_t fmt_lock; // For write_serial_fmt
 extern BOOT_CONFIG *EFI_BC;
 
+static bool serial_has_prefix(const char *str, const char *prefix)
+{
+    if (str == NULL || prefix == NULL) return false;
+    while (*prefix != '\0')
+    {
+        if (*str++ != *prefix++) return false;
+    }
+    return true;
+}
+
+static bool serial_is_suppressed_prefix(const char *str)
+{
+    if (str == NULL) return false;
+#if !CONFIG_KERNEL_UDEV_TRACE
+    if (serial_has_prefix(str, "[udev-trace]")) return true;
+#endif
+#if !CONFIG_KERNEL_BUSYBOX_DEBUG
+    if (serial_has_prefix(str, "[busybox-debug]")) return true;
+    if (serial_has_prefix(str, "[xbps-debug]")) return true;
+#endif
+#if !CONFIG_KERNEL_XBPS_WAIT_DEBUG
+    if (serial_has_prefix(str, "[DEBUG-xbps-wait]")) return true;
+#endif
+#if !CONFIG_KERNEL_LINUX_OUTPUT_MIRROR
+    if (serial_has_prefix(str, "[stderr ")) return true;
+    if (serial_has_prefix(str, "[stdout ")) return true;
+#endif
+    return false;
+}
+
 #if BUILD_EDITION == DEBUG_VERSION
 int serial_x     = 0;
 int serial_y     = 0;
@@ -371,6 +401,7 @@ static void write_serial_string_colored(const char *str, const PixelColor &color
 
 void write_serial_string(const char *str)
 {
+    if (serial_is_suppressed_prefix(str)) return;
 #if BUILD_EDITION == DEBUG_VERSION
     write_serial_string_colored(str, SERIAL_SCREEN_WHITE);
 #else
@@ -754,6 +785,7 @@ void serial_wprintf(const char *fmt, ...)
  */
 int write_serial_fmt(const char *fmt, ...)
 {
+    if (serial_is_suppressed_prefix(fmt)) return 0;
     spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);
@@ -1009,6 +1041,7 @@ EXPORT_SYMBOL(snprintf);
  */
 void write_serial_fmt_heapless(const char *fmt, ...) // same as write_serial_fmt
 {
+    if (serial_is_suppressed_prefix(fmt)) return;
     spin_lock(&fmt_lock);
     va_list args;
     va_start(args, fmt);

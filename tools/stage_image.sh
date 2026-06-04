@@ -22,7 +22,7 @@ SELFHOST_USER_THIRD_PARTY_DEFAULT='third_party/mbedtls-src third_party/litehtml 
 SELFHOST_USER_THIRD_PARTY=${SELFHOST_USER_THIRD_PARTY:-$SELFHOST_USER_THIRD_PARTY_DEFAULT}
 SYSTEM_APPS=${SYSTEM_APPS:-shell.elf fmanager.elf taskmgr.elf ctrlmenu.elf}
 BUILTIN_APPS=${BUILTIN_APPS:-calc.elf texter.elf picturer.elf browser.elf nut.elf}
-USER_APPS=${USER_APPS:-terminal.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello}
+USER_APPS=${USER_APPS:-init.elf terminal.elf bcms-sp.elf sigtest.elf posixdemo.elf libctest.elf dyn-hello}
 STARDUSTUI_BUILTIN_APPS=${STARDUSTUI_BUILTIN_APPS:-helloworld.elf layout.elf duckchat.elf}
 MUSL_RUNTIME_FILES=${MUSL_RUNTIME_FILES:-ld-musl-x86_64.so.1 libc.so libc.musl-x86_64.so.1 libgcc_s.so.1}
 XBPS_PREPARE_ROOT=${XBPS_PREPARE_ROOT:-$BF_DIR/xbps-root}
@@ -145,6 +145,7 @@ stage_base_dirs()
         "$root/dev" \
         "$root/etc/fastfetch" \
         "$root/etc/ssl/certs" \
+        "$root/etc/xdg/weston" \
         "$root/etc/xbps.d" \
         "$root/home" \
         "$root/lib" \
@@ -168,6 +169,7 @@ stage_base_dirs()
         "$root/usr/bin" \
         "$root/usr/include" \
         "$root/usr/lib" \
+        "$root/usr/lib/xj380" \
         "$root/usr/libexec" \
         "$root/usr/local/bin" \
         "$root/usr/local/lib" \
@@ -203,6 +205,12 @@ stage_base_dirs()
     chmod 1777 "$root/tmp" "$root/var/tmp"
 }
 
+stage_weston_files()
+{
+    copy_to ./resources/weston/weston.ini "$root/etc/xdg/weston/weston.ini"
+    copy_to ./resources/weston/start-weston.sh "$root/system/resources/start-wayland.sh"
+}
+
 stage_base_files()
 {
     printf 'nameserver 223.5.5.5\n' > "$root/etc/resolv.conf"
@@ -224,6 +232,7 @@ EOF
     if [ -d "$BF_DIR/terminfo" ]; then
         cp -aL "$BF_DIR/terminfo/." "$root/usr/share/terminfo/"
     fi
+    stage_weston_files
 }
 
 cmd_base()
@@ -468,6 +477,8 @@ cmd_prepared_root()
         link_bin_tool sh usr/bin/dash
     elif [ -x "$dst_root/usr/bin/bash" ]; then
         link_bin_tool sh usr/bin/bash
+    fi
+    if [ -x "$dst_root/usr/bin/bash" ]; then
         link_bin_tool bash usr/bin/bash
     fi
 
@@ -1026,7 +1037,6 @@ cmd_populate_root()
             exit 1
             ;;
     esac
-
     copy_to ./font/ttf/XJ380F.ttf "$root/system/font/XJ380F.ttf"
     copy_to ./font/ttf/XJ380C.ttf "$root/system/font/XJ380C.ttf"
     copy_contents_to_root_dir ./graphics/window/theme/skyglass system/theme/skyglass
@@ -1035,6 +1045,8 @@ cmd_populate_root()
     copy_contents_to_root_dir ./graphics/icon system/icon
     copy_glob_to_dir "$root/mod" "./$BUILD_DIR/*.km"
     copy_contents_to_root_dir ./resources system/resources
+
+    stage_weston_files
 
     flatten_root_links
 }

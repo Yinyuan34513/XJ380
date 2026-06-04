@@ -18,6 +18,10 @@ static int        anonfs_id           = 0;
 static int        anonfs_next_inode   = 1;
 static vfs_node_t anonfs_root         = NULL;
 static spin_t     anonfs_alloc_lock   = SPIN_INIT;
+static spin_t     anonfs_inotify_global_lock = SPIN_INIT;
+static anonfs_handle_t *anonfs_inotify_handles[64];
+
+static constexpr size_t ANONFS_PATH_MAX = 4096UL;
 
 static int anonfs_dummy()
 {
@@ -40,6 +44,45 @@ static size_t anonfs_bounded_strlen_user(const char *str, size_t max_len)
     while (len < max_len && str[len] != '\0')
         len++;
     return len;
+}
+
+static page_directory_t *anonfs_current_user_pagedir()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL) return NULL;
+    return task->parent_group->pagedir;
+}
+
+static int anonfs_copy_string_from_user(char **out, const char *src, size_t max_len)
+{
+    if (out == NULL) return -EINVAL;
+    *out = NULL;
+    if (src == NULL || max_len == 0) return -EFAULT;
+
+    page_directory_t *pagedir = anonfs_current_user_pagedir();
+    if (pagedir == NULL) return -EFAULT;
+
+    char *tmp = (char *)malloc(max_len);
+    if (tmp == NULL) return -ENOMEM;
+
+    for (size_t i = 0; i < max_len; i++)
+    {
+        char c = 0;
+        if (!copy_from_user_pagedir(pagedir, &c, src + i, sizeof(c)))
+        {
+            free(tmp);
+            return -EFAULT;
+        }
+        tmp[i] = c;
+        if (c == '\0')
+        {
+            *out = tmp;
+            return 0;
+        }
+    }
+
+    free(tmp);
+    return -ENAMETOOLONG;
 }
 
 static uint64_t anonfs_clock_now_ns(int clockid)
@@ -124,6 +167,10 @@ static void anonfs_open(void *parent, const char *name, vfs_node_t node)
         node->type = file_none | file_anon;
         node->size = handle->u.memfd.size;
         break;
+    case ANONFS_INOTIFY:
+        node->type = file_stream | file_anon;
+        node->size = (uint64_t)-1;
+        break;
     default:
         node->type = file_none;
         break;
@@ -156,6 +203,10 @@ static errno_t anonfs_stat(void *file, vfs_node_t node)
         spin_lock(&handle->u.memfd.lock);
         node->size = handle->u.memfd.size;
         spin_unlock(&handle->u.memfd.lock);
+        break;
+    case ANONFS_INOTIFY:
+        node->type = file_stream | file_anon;
+        node->size = (uint64_t)-1;
         break;
     default:
         return -EINVAL;
@@ -323,6 +374,63 @@ static size_t anonfs_memfd_write(anonfs_memfd_t *memfd, const void *addr, size_t
     return size;
 }
 
+static size_t anonfs_inotify_event_size(const anonfs_inotify_event_record_t *event)
+{
+    size_t name_len = event->name[0] == '\0' ? 0 : strlen(event->name) + 1;
+    if (name_len != 0) name_len = (name_len + sizeof(uint32_t) - 1) & ~(sizeof(uint32_t) - 1);
+    return sizeof(struct inotify_event) + name_len;
+}
+
+static size_t anonfs_inotify_read(anonfs_inotify_t *inotify, void *addr, size_t size)
+{
+    if (size < sizeof(struct inotify_event)) return (size_t)-EINVAL;
+
+    while (true)
+    {
+        spin_lock(&inotify->lock);
+        if (inotify->event_count != 0) break;
+        spin_unlock(&inotify->lock);
+
+        if (inotify->flags & IN_NONBLOCK) return (size_t)-EWOULDBLOCK;
+        scheduler_sleep_ns(1000000ULL);
+    }
+
+    size_t written = 0;
+    while (inotify->event_count != 0)
+    {
+        anonfs_inotify_event_record_t event = inotify->events[inotify->event_head];
+        size_t event_size = anonfs_inotify_event_size(&event);
+        if (written != 0 && written + event_size > size) break;
+        if (event_size > size)
+        {
+            spin_unlock(&inotify->lock);
+            return (size_t)-EINVAL;
+        }
+
+        inotify->event_head = (inotify->event_head + 1) % (sizeof(inotify->events) / sizeof(inotify->events[0]));
+        inotify->event_count--;
+        spin_unlock(&inotify->lock);
+
+        struct inotify_event raw = {};
+        raw.wd = event.wd;
+        raw.mask = event.mask;
+        raw.cookie = event.cookie;
+        raw.len = event.name[0] == '\0' ? 0 : (uint32_t)(event_size - sizeof(raw));
+        memcpy((uint8_t *)addr + written, &raw, sizeof(raw));
+        if (raw.len != 0)
+        {
+            memset((uint8_t *)addr + written + sizeof(raw), 0, raw.len);
+            strcpy((char *)addr + written + sizeof(raw), event.name);
+        }
+        written += event_size;
+
+        spin_lock(&inotify->lock);
+        if (written + sizeof(struct inotify_event) > size) break;
+    }
+    spin_unlock(&inotify->lock);
+    return written;
+}
+
 static size_t anonfs_read(void *file, void *addr, size_t offset, size_t size)
 {
     (void)offset;
@@ -337,6 +445,7 @@ static size_t anonfs_read(void *file, void *addr, size_t offset, size_t size)
         anonfs_timerfd_refresh(handle);
         return anonfs_timerfd_read(&handle->u.timerfd, addr, size);
     case ANONFS_MEMFD: return anonfs_memfd_read(&handle->u.memfd, addr, offset, size);
+    case ANONFS_INOTIFY: return anonfs_inotify_read(&handle->u.inotify, addr, size);
     default: return VFS_STATUS_FAILED;
     }
 }
@@ -404,6 +513,12 @@ static errno_t anonfs_poll(void *file, size_t events)
     case ANONFS_MEMFD:
         if ((events & EPOLLIN) || (events & EPOLLOUT)) out |= (events & (EPOLLIN | EPOLLOUT));
         break;
+    case ANONFS_INOTIFY:
+        spin_lock(&handle->u.inotify.lock);
+        if ((events & EPOLLIN) && handle->u.inotify.event_count != 0) out |= EPOLLIN;
+        if (events & EPOLLOUT) out |= EPOLLOUT;
+        spin_unlock(&handle->u.inotify.lock);
+        break;
     default:
         out |= EPOLLERR;
         break;
@@ -436,7 +551,7 @@ static void *anonfs_map(void *file, void *addr, size_t offset, size_t size, size
 
     pcb_t process = get_current_task()->parent_group;
     uint64_t pte_flags = PTE_USER;
-    if (prot & PROT_READ) pte_flags |= PTE_PRESENT;
+    if (prot != PROT_NONE) pte_flags |= PTE_PRESENT;
     if (prot & PROT_WRITE) pte_flags |= PTE_WRITEABLE;
     if (!(prot & PROT_EXEC)) pte_flags |= PTE_NO_EXECUTE;
 
@@ -475,6 +590,17 @@ static errno_t anonfs_del(void *parent, vfs_node_t node)
     (void)parent;
     if (node == NULL || node->handle == NULL) return EOK;
     anonfs_handle_t *handle = (anonfs_handle_t *)node->handle;
+    if (handle->kind == ANONFS_INOTIFY)
+    {
+        spin_lock(&anonfs_inotify_global_lock);
+        for (size_t i = 0; i < sizeof(anonfs_inotify_handles) / sizeof(anonfs_inotify_handles[0]); i++)
+        {
+            if (anonfs_inotify_handles[i] == handle) anonfs_inotify_handles[i] = NULL;
+        }
+        spin_unlock(&anonfs_inotify_global_lock);
+        for (size_t i = 0; i < handle->u.inotify.watch_count; i++)
+            free(handle->u.inotify.watches[i].path);
+    }
     if (handle->kind == ANONFS_MEMFD)
     {
         free(handle->u.memfd.name);
@@ -566,6 +692,12 @@ static vfs_node_t anonfs_alloc_node(const char *name, anonfs_kind_t kind, uint64
         node->size = 0;
         handle->u.memfd.lock = SPIN_INIT;
         break;
+    case ANONFS_INOTIFY:
+        node->type = file_stream | file_anon;
+        node->size = (uint64_t)-1;
+        handle->u.inotify.lock = SPIN_INIT;
+        handle->u.inotify.next_wd = 1;
+        break;
     default:
         free(handle);
         free(node->name);
@@ -629,6 +761,212 @@ int anonfs_create_eventfd(uint64_t initial_value, uint32_t flags)
     handle->u.eventfd.counter = initial_value;
     handle->u.eventfd.flags = flags;
     return anonfs_install_fd(node, flags & (EFD_CLOEXEC | EFD_NONBLOCK));
+}
+
+int anonfs_create_inotify(uint32_t flags)
+{
+    if ((flags & ~(IN_CLOEXEC | IN_NONBLOCK)) != 0) return -EINVAL;
+    vfs_node_t node = anonfs_alloc_node("inotify", ANONFS_INOTIFY, flags & (IN_CLOEXEC | IN_NONBLOCK));
+    if (node == NULL) return -ENOMEM;
+
+    anonfs_handle_t *handle = (anonfs_handle_t *)node->handle;
+    handle->u.inotify.flags = flags;
+    spin_lock(&anonfs_inotify_global_lock);
+    for (size_t i = 0; i < sizeof(anonfs_inotify_handles) / sizeof(anonfs_inotify_handles[0]); i++)
+    {
+        if (anonfs_inotify_handles[i] == NULL)
+        {
+            anonfs_inotify_handles[i] = handle;
+            break;
+        }
+    }
+    spin_unlock(&anonfs_inotify_global_lock);
+    int fd = anonfs_install_fd(node, flags & (IN_CLOEXEC | IN_NONBLOCK));
+    write_serial_fmt("[udev-trace] inotify:create flags=0x%x fd=%d handle=%p\n", flags, fd, handle);
+    return fd;
+}
+
+static anonfs_handle_t *anonfs_get_inotify_handle(int fd)
+{
+    if (fd < 0) return NULL;
+    fd_file_handle *fd_handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, (size_t)fd);
+    if (fd_handle == NULL || fd_handle->node == NULL || fd_handle->node->handle == NULL) return NULL;
+    anonfs_handle_t *handle = (anonfs_handle_t *)fd_handle->node->handle;
+    return handle->kind == ANONFS_INOTIFY ? handle : NULL;
+}
+
+int anonfs_inotify_add_watch(int fd, const char *pathname, uint32_t mask)
+{
+    if (pathname == NULL) return -EFAULT;
+    anonfs_handle_t *handle = anonfs_get_inotify_handle(fd);
+    if (handle == NULL) return -EINVAL;
+
+    char *path = NULL;
+    int ret = anonfs_copy_string_from_user(&path, pathname, ANONFS_PATH_MAX);
+    if (ret < 0) return ret;
+    write_serial_fmt("[udev-trace] inotify:add-watch request fd=%d path=%s mask=0x%x\n", fd, path, mask);
+    vfs_node_t node = vfs_open(path);
+    if (node == NULL)
+    {
+        write_serial_fmt("[udev-trace] inotify:add-watch open-miss path=%s\n", path);
+        free(path);
+        return -ENOENT;
+    }
+    vfs_close(node);
+
+    char *normalized = normalize_path(path);
+    if (normalized != NULL)
+    {
+        free(path);
+        path = normalized;
+    }
+
+    spin_lock(&handle->u.inotify.lock);
+    for (size_t i = 0; i < handle->u.inotify.watch_count; i++)
+    {
+        if (strcmp(handle->u.inotify.watches[i].path, path) == 0)
+        {
+            if (mask & IN_MASK_CREATE)
+            {
+                spin_unlock(&handle->u.inotify.lock);
+                free(path);
+                return -EEXIST;
+            }
+            handle->u.inotify.watches[i].mask = (mask & IN_MASK_ADD) ?
+                                                    (handle->u.inotify.watches[i].mask | (mask & ~IN_MASK_ADD)) :
+                                                    mask;
+            int existing_wd = handle->u.inotify.watches[i].wd;
+            spin_unlock(&handle->u.inotify.lock);
+            write_serial_fmt("[udev-trace] inotify:add-watch update path=%s wd=%d mask=0x%x\n",
+                             path,
+                             existing_wd,
+                             handle->u.inotify.watches[i].mask);
+            free(path);
+            return existing_wd;
+        }
+    }
+
+    if (handle->u.inotify.watch_count >= sizeof(handle->u.inotify.watches) / sizeof(handle->u.inotify.watches[0]))
+    {
+        spin_unlock(&handle->u.inotify.lock);
+        free(path);
+        return -ENOSPC;
+    }
+
+    int wd = handle->u.inotify.next_wd++;
+    if (handle->u.inotify.next_wd <= 0) handle->u.inotify.next_wd = 1;
+    size_t index = handle->u.inotify.watch_count++;
+    handle->u.inotify.watches[index].wd = wd;
+    handle->u.inotify.watches[index].mask = mask == 0 ? IN_ALL_EVENTS : mask;
+    handle->u.inotify.watches[index].path = path;
+    spin_unlock(&handle->u.inotify.lock);
+    write_serial_fmt("[udev-trace] inotify:add-watch ok fd=%d wd=%d path=%s mask=0x%x watches=%llu\n",
+                     fd,
+                     wd,
+                     path,
+                     mask == 0 ? IN_ALL_EVENTS : mask,
+                     (unsigned long long)handle->u.inotify.watch_count);
+    return wd;
+}
+
+int anonfs_inotify_rm_watch(int fd, int wd)
+{
+    if (wd <= 0) return -EINVAL;
+    anonfs_handle_t *handle = anonfs_get_inotify_handle(fd);
+    if (handle == NULL) return -EINVAL;
+    spin_lock(&handle->u.inotify.lock);
+    for (size_t i = 0; i < handle->u.inotify.watch_count; i++)
+    {
+        if (handle->u.inotify.watches[i].wd == wd)
+        {
+            write_serial_fmt("[udev-trace] inotify:rm-watch fd=%d wd=%d path=%s\n",
+                             fd,
+                             wd,
+                             handle->u.inotify.watches[i].path != NULL ? handle->u.inotify.watches[i].path : "(null)");
+            free(handle->u.inotify.watches[i].path);
+            handle->u.inotify.watches[i] = handle->u.inotify.watches[handle->u.inotify.watch_count - 1];
+            memset(&handle->u.inotify.watches[handle->u.inotify.watch_count - 1], 0,
+                   sizeof(handle->u.inotify.watches[0]));
+            handle->u.inotify.watch_count--;
+            spin_unlock(&handle->u.inotify.lock);
+            return 0;
+        }
+    }
+    spin_unlock(&handle->u.inotify.lock);
+    return -EINVAL;
+}
+
+static bool anonfs_path_is_child_event(const char *watch_path, const char *path, const char **out_name)
+{
+    if (watch_path == NULL || path == NULL) return false;
+    size_t watch_len = strlen(watch_path);
+    if (strcmp(watch_path, path) == 0)
+    {
+        if (out_name != NULL) *out_name = "";
+        return true;
+    }
+    if (watch_len == 0 || strncmp(path, watch_path, watch_len) != 0) return false;
+    if (watch_path[watch_len - 1] != '/' && path[watch_len] != '/') return false;
+    const char *name = path + watch_len + (watch_path[watch_len - 1] == '/' ? 0 : 1);
+    if (strchr(name, '/') != NULL) return false;
+    if (out_name != NULL) *out_name = name;
+    return true;
+}
+
+void anonfs_notify_path_event(const char *path, uint32_t mask)
+{
+    if (path == NULL || *path == '\0') return;
+
+    char *normalized = normalize_path(path);
+    const char *event_path = normalized != NULL ? normalized : path;
+    size_t delivered = 0;
+
+    spin_lock(&anonfs_inotify_global_lock);
+    for (size_t h = 0; h < sizeof(anonfs_inotify_handles) / sizeof(anonfs_inotify_handles[0]); h++)
+    {
+        anonfs_handle_t *handle = anonfs_inotify_handles[h];
+        if (handle == NULL || handle->kind != ANONFS_INOTIFY) continue;
+
+        spin_lock(&handle->u.inotify.lock);
+        for (size_t i = 0; i < handle->u.inotify.watch_count; i++)
+        {
+            const char *name = "";
+            anonfs_inotify_watch_t *watch = &handle->u.inotify.watches[i];
+            if ((watch->mask & mask) == 0) continue;
+            if (!anonfs_path_is_child_event(watch->path, event_path, &name)) continue;
+
+            if (handle->u.inotify.event_count == sizeof(handle->u.inotify.events) / sizeof(handle->u.inotify.events[0]))
+            {
+                handle->u.inotify.event_head =
+                    (handle->u.inotify.event_head + 1) % (sizeof(handle->u.inotify.events) / sizeof(handle->u.inotify.events[0]));
+                handle->u.inotify.event_count--;
+            }
+            anonfs_inotify_event_record_t *event = &handle->u.inotify.events[handle->u.inotify.event_tail];
+            memset(event, 0, sizeof(*event));
+            event->wd = watch->wd;
+            event->mask = mask;
+            strncpy(event->name, name, sizeof(event->name) - 1);
+            handle->u.inotify.event_tail =
+                (handle->u.inotify.event_tail + 1) % (sizeof(handle->u.inotify.events) / sizeof(handle->u.inotify.events[0]));
+            handle->u.inotify.event_count++;
+            delivered++;
+            write_serial_fmt("[udev-trace] inotify:queue path=%s watch=%s wd=%d mask=0x%x name=%s count=%llu\n",
+                             event_path,
+                             watch->path != NULL ? watch->path : "(null)",
+                             watch->wd,
+                             mask,
+                             name != NULL ? name : "",
+                             (unsigned long long)handle->u.inotify.event_count);
+        }
+        spin_unlock(&handle->u.inotify.lock);
+    }
+    spin_unlock(&anonfs_inotify_global_lock);
+    if (delivered == 0 && (strstr(event_path, "/dev") != NULL || strstr(event_path, "/sys") != NULL ||
+                           strstr(event_path, "/run/udev") != NULL))
+    {
+        write_serial_fmt("[udev-trace] inotify:notify-no-watch path=%s mask=0x%x\n", event_path, mask);
+    }
+    free(normalized);
 }
 
 static void anonfs_signalfd_copy_info(struct signalfd_siginfo *dst, int sig, const siginfo_t *info)
@@ -809,10 +1147,11 @@ int anonfs_create_memfd(const char *name, uint32_t flags)
     return anonfs_install_fd(node, (flags & MFD_CLOEXEC) ? O_CLOEXEC : 0);
 }
 
-void anonfs_notify_signal(pcb_t process, int sig, const siginfo_t *info)
+size_t anonfs_notify_signal(pcb_t process, int sig, const siginfo_t *info)
 {
-    if (process == NULL || process->file_open == NULL || sig < MINSIG || sig > MAXSIG) return;
+    if (process == NULL || process->file_open == NULL || sig < MINSIG || sig > MAXSIG) return 0;
 
+    size_t delivered = 0;
     spin_lock(&process->file_open->lock);
     for (lock_node *node = process->file_open->head; node != NULL; node = node->next)
     {
@@ -830,8 +1169,19 @@ void anonfs_notify_signal(pcb_t process, int sig, const siginfo_t *info)
             anonfs_signalfd_copy_info(entry, sig, info);
             sfd->tail = (sfd->tail + 1) % (sizeof(sfd->queue) / sizeof(sfd->queue[0]));
             sfd->count++;
+            delivered++;
         }
         spin_unlock(&sfd->lock);
     }
     spin_unlock(&process->file_open->lock);
+    if (sig == SIGCHLD)
+    {
+        write_serial_fmt("[udev-trace] signalfd:notify-sigchld process=%s pid=%llu child=%d status=%d delivered=%llu\n",
+                         process->name,
+                         (unsigned long long)process->pid,
+                         info != NULL ? info->_sifields._sigchld.si_pid : 0,
+                         info != NULL ? info->_sifields._sigchld.si_status : 0,
+                         (unsigned long long)delivered);
+    }
+    return delivered;
 }

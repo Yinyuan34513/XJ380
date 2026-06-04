@@ -204,6 +204,7 @@ static uint64_t ino = 2;
 static bool fatfs_should_prune_child(vfs_node_t node) {
     if (node == NULL) return false;
     if (node->is_mount) return false;
+    if (node->handle != NULL || node->refcount > 1) return false;
     return (node->type & (file_none | file_dir)) != 0;
 }
 
@@ -493,9 +494,9 @@ int fatfs_stat(void *handle, vfs_node_t node) {
                     break;
                 }
             }
-            if (exist != NULL) node->child = list_delete(node->child, exist);//虽然但是，保险点吧
             vfs_child_unlock();
             if (exist == NULL) break;
+            vfs_detach(exist);//虽然但是，保险点吧
             vfs_free(exist);
         } while (true);
     } else {
@@ -539,14 +540,28 @@ int fatfs_rename(file_t file, const char *nw) {
         target_path = fat_target;
     }
 
+    char *new_path = strdup(target_path);
+    if (new_path == NULL)
+    {
+        free(fat_target);
+        return -ENOMEM;
+    }
+
     fatfs_lock();
     
     FRESULT res = f_rename((const char *)file->path, target_path);
 
     fatfs_unlock();
-    free(fat_target);
 
-    if (res != FR_OK) return -1;
+    if (res != FR_OK) {
+        free(fat_target);
+        free(new_path);
+        return -1;
+    }
+
+    free(fat_target);
+    free(file->path);
+    file->path = new_path;
     return 0;
 }
 

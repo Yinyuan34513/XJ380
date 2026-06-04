@@ -528,7 +528,7 @@ NVME_CONTROLLER *nvme_driver_init(uint64_t bar0, uint64_t bar_size)
     // regist_blkdev((char *)"nvme", ns, ns->BSZ, ns->NLBA * ns->BSZ, ns->MXRS * ns->BSZ, nvme_read, nvme_write);
     char name_buf[20];
     sprintf(name_buf, "nvme%d", 1);
-    device_t sata;
+    device_t sata = {};
     sata.size = ns->NLBA*ns->BSZ;
     sata.sector_size = ns->BSZ;
     sata.type = DEVICE_BLOCK;

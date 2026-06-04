@@ -20,6 +20,7 @@
 #include <graphics/sheet.h>
 #include <hda/hda.h>
 #include <hda/pcspk.h>
+#include <input/evdev.h>
 #include <krlibc.h>
 #include <mm/alloc/alloc.h>
 #include <mm/frame.h>
@@ -768,6 +769,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 20 * 11, 7, {0x00, 0xa2, 0xe8}); // 多任务好了来一下
 
     mount_root();
+    write_serial_string("BOOT: devfs remount begin\n");
+    devfs_setup();
+    write_serial_string("BOOT: devfs remount done\n");
 #if CONFIG_KERNEL_BUSYBOX_ALIASES
     setup_busybox_vfs_aliases();
 #endif
@@ -782,6 +786,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     dnsfs_setup();
     nmfs_setup();
     stdio_init();
+    sysfs_init();
+    evdev_init();
+    sysfs_publish_all_devices();
 
     signal_init();
     init_syscall();
@@ -818,8 +825,20 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     } else {
         write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
     }
-    create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
-    create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+    bool start_kernel_desktop = CONFIG_KERNEL_START_DESKTOP != 0;
+    if (start_kernel_desktop)
+    {
+        create_kernel_thread((void *)desktop_flusher, NULL, (char *)"desktop_flusher", NULL);
+#if CONFIG_KERNEL_START_COMPONENT_FLUSHER
+        create_kernel_thread((void *)components_flusher, NULL, (char *)"components_flusher", NULL);
+#endif
+    }
+    else
+    {
+        write_serial_string("BOOT: kernel desktop disabled by build config\n");
+        if (current_user == NULL) init_root_user();
+        desktop_done = true;
+    }
 
     // delay_s_hp(60);
 
@@ -834,6 +853,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (!desktop_done)
         cpu_relax();
+
+    create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
 
     // no_interrupt = true;
     // close_interrupt;

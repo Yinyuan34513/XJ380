@@ -54,6 +54,8 @@
 #define SYS_SENDMSG 46
 #define SYS_SOCKETPAIR 53
 #define SYS_RECVMSG 47
+#define SYS_SETSOCKOPT 54
+#define SYS_GETSOCKOPT 55
 
 #define SYS_SHUTDOWN 48
 

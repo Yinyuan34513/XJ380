@@ -247,6 +247,15 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
         msg->data[2]      = (exit_code >> 16) & 0xFF;
         msg->data[3]      = (exit_code >> 24) & 0xFF;
         ipc_send(pcb->parent_task, msg);
+
+        siginfo_t info;
+        memset(&info, 0, sizeof(info));
+        info.si_signo = SIGCHLD;
+        info.si_code  = 1; // CLD_EXITED
+        info._sifields._sigchld.si_pid = (int32_t)pcb->pid;
+        info._sifields._sigchld.si_uid = 0;
+        info._sifields._sigchld.si_status = exit_code & 0xff;
+        signal_send_process_info(pcb->parent_task, SIGCHLD, &info);
     }
     else
     {
@@ -469,6 +478,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
         return 0;
     }
     if (argc > (int)EXECVE_VECTOR_MAX) argc = (int)EXECVE_VECTOR_MAX;
+#if CONFIG_KERNEL_BUSYBOX_DEBUG
     write_serial_fmt("[busybox-debug] build_user_stack proc=%s pid=%llu argc=%d argv_source=%s cmdline=%s\n",
                      task->parent_group ? task->parent_group->name : "(null)",
                      task->parent_group ? (unsigned long long)task->parent_group->pid : 0ULL,
@@ -482,6 +492,7 @@ static uint64_t build_user_stack(tcb_t task, uint64_t sp, uint64_t entry_point, 
             write_serial_fmt("[busybox-debug] build_user_stack argv[%d]=%s\n", i, argv[i]);
         }
     }
+#endif
 
     char **envp = task->parent_group->envp ? task->parent_group->envp : current_user->envp;
 
@@ -678,8 +689,14 @@ static void switch_task_to_user_mode(tcb_t task)
     bool need_stdio = task->parent_group->file_open == NULL || queue_get(task->parent_group->file_open, 0) == NULL;
     if (need_stdio)
     {
-        char *new_path = (char *)malloc(strlen("/dev/") + 10);
-        sprintf(new_path, "/dev/stdio");
+        const char *stdio_path = "/dev/stdio";
+        char *new_path = (char *)malloc(strlen(stdio_path) + 1);
+        if (new_path == NULL)
+        {
+            write_serial_string("Warning: cannot allocate stdio path for user task bootstrap.\n");
+            goto skip_stdio_bootstrap;
+        }
+        strcpy(new_path, stdio_path);
         vfs_node_t stdio        = vfs_open(new_path);
         if (stdio != NULL)
         {
@@ -699,10 +716,11 @@ static void switch_task_to_user_mode(tcb_t task)
         }
         else
         {
-            write_serial_string("Warning: /dev/stdio not available for user task bootstrap.\n");
+            write_serial_fmt("Warning: %s not available for user task bootstrap.\n", new_path);
         }
         free(new_path);
     }
+skip_stdio_bootstrap:
 
     write_kgsbase((uint64_t)get_current_cpu());
     write_gsbase(0);
@@ -1011,6 +1029,7 @@ static int rewrite_shebang_exec(vfs_node_t *node, char **norm_path, char ***argv
         return -ENOENT;
     }
 
+#if CONFIG_KERNEL_BUSYBOX_DEBUG
     if (get_current_task() != NULL && get_current_task()->parent_group != NULL &&
         get_current_task()->parent_group->linux_abi)
     {
@@ -1019,6 +1038,7 @@ static int rewrite_shebang_exec(vfs_node_t *node, char **norm_path, char ***argv
                          interp,
                          (unsigned long long)out_i);
     }
+#endif
 
     vfs_close(*node);
     *node = interp_node;
@@ -1042,17 +1062,19 @@ static constexpr uint64_t CLONE_SETTLS_FLAG         = 0x00080000;
 static constexpr uint64_t CLONE_PARENT_SETTID_FLAG  = 0x00100000;
 static constexpr uint64_t CLONE_CHILD_CLEARTID_FLAG = 0x00200000;
 static constexpr uint64_t CLONE_CHILD_SETTID_FLAG   = 0x01000000;
+static constexpr uint64_t CLONE_EXIT_SIGNAL_MASK    = 0x000000ff;
 
 uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int *parent_tid, int *child_tid,
                       uint64_t tls)
 {
     if (reg == NULL) return SYSCALL_FAULT_(EINVAL);
+    flags &= ~CLONE_EXIT_SIGNAL_MASK;
 
     if ((flags & CLONE_THREAD_FLAG) == 0)
         return process_fork(reg, (flags & CLONE_VFORK_FLAG) != 0, stack, flags, parent_tid, child_tid);
 
-    const uint64_t required = CLONE_VM_FLAG | CLONE_FS_FLAG | CLONE_FILES_FLAG | CLONE_SIGHAND_FLAG;
-    if ((flags & required) != required) return SYSCALL_FAULT_(EINVAL);
+    if ((flags & CLONE_SIGHAND_FLAG) == 0) return SYSCALL_FAULT_(EINVAL);
+    if ((flags & CLONE_VM_FLAG) == 0) return SYSCALL_FAULT_(EINVAL);
 
     bool is_sti                = are_interrupts_enabled();
     bool was_scheduler_enabled = is_scheduler;
@@ -1261,6 +1283,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         return (uint64_t)-ENOMEM;
     }
     vfs_node_t node      = vfs_open(norm_path);
+#if CONFIG_KERNEL_BUSYBOX_DEBUG
     if (process != NULL && process->linux_abi)
     {
         write_serial_fmt("[busybox-debug] execve request path=%s argv0=%s open=%s\n",
@@ -1268,6 +1291,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
                          (kargv != NULL && kargv[0] != NULL) ? kargv[0] : "(null)",
                          node == NULL ? "miss" : "hit");
     }
+#endif
     if (node == NULL)
     {
         free(norm_path);

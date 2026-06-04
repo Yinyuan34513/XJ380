@@ -3,6 +3,7 @@
 #include <drm/drm_mode.h>
 #include <errno.h>
 #include <fbdev.h>
+#include <fs/vfs/vfs.h>
 #include <ioctl.h>
 #include <krlibc.h>
 #include <lock_queue.h>
@@ -41,6 +42,7 @@ struct drm_fb_obj {
     uint32_t fb_id;
     uint32_t handle;
     uint32_t width, height, pitch;
+    uint32_t offset;
     uint32_t format;
 };
 
@@ -92,6 +94,7 @@ struct xj380_drm {
     /* event ring (per-device, single reader for now) */
     struct event_entry  events[EVENT_RING_SIZE];
     uint32_t            event_head, event_count;
+    uint32_t            vblank_sequence;
     bool                event_awaiting;  /* reader is sleeping */
 };
 
@@ -101,6 +104,13 @@ static bool g_inited = false;
 /* ---- Helpers ---- */
 
 static inline bool drm_initialized() { return g_inited; }
+
+static void drm_monotonic_timeval(uint32_t *sec, uint32_t *usec)
+{
+    uint64_t now_ns = bootNanoTime();
+    *sec  = (uint32_t)(now_ns / 1000000000ULL);
+    *usec = (uint32_t)((now_ns % 1000000000ULL) / 1000ULL);
+}
 
 static uint32_t drm_connector_edid_blob_id(uint32_t connector_id)
 {
@@ -160,6 +170,160 @@ static int drm_copy_from_user_ptr(void *dst, uint64_t user_ptr, size_t size)
                : -EFAULT;
 }
 
+static int drm_copy_counted_array_to_user(uint64_t user_ptr, const void *src, uint32_t capacity, uint32_t count,
+                                          size_t elem_size)
+{
+    size_t copy_count = MIN((size_t)capacity, (size_t)count);
+    if (copy_count == 0) return 0;
+    return drm_copy_to_user_ptr(user_ptr, src, copy_count * elem_size);
+}
+
+static void drm_init_mode(struct drm_mode_modeinfo *mode, uint32_t width, uint32_t height, uint32_t refresh)
+{
+    memset(mode, 0, sizeof(*mode));
+    
+    /* CVT-RB 标准时序（Reduced Blanking） */
+    if (width == 1024 && height == 768) {
+        /* 标准 1024x768@60 时序 */
+        mode->clock = 65000;           /* 65 MHz */
+        mode->hdisplay = 1024;
+        mode->hsync_start = 1024 + 24;   /* 1048 */
+        mode->hsync_end = 1024 + 24 + 136; /* 1184 */
+        mode->htotal = 1024 + 24 + 136 + 160; /* 1344 */
+        mode->vdisplay = 768;
+        mode->vsync_start = 768 + 3;     /* 771 */
+        mode->vsync_end = 768 + 3 + 6;   /* 777 */
+        mode->vtotal = 768 + 3 + 6 + 29; /* 806 */
+        mode->vrefresh = 60;
+        mode->flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC;
+        strncpy(mode->name, "1024x768", DRM_DISPLAY_MODE_LEN - 1);
+    } 
+    else if (width == 1920 && height == 1080) {
+        /* 1080p@60 时序 */
+        mode->clock = 148500;
+        mode->hdisplay = 1920;
+        mode->hsync_start = 1920 + 88;
+        mode->hsync_end = 1920 + 88 + 44;
+        mode->htotal = 1920 + 88 + 44 + 148;
+        mode->vdisplay = 1080;
+        mode->vsync_start = 1080 + 4;
+        mode->vsync_end = 1080 + 4 + 5;
+        mode->vtotal = 1080 + 4 + 5 + 36;
+        mode->vrefresh = 60;
+        mode->flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC;
+        strncpy(mode->name, "1920x1080", DRM_DISPLAY_MODE_LEN - 1);
+    }
+    else {
+        /*  CVT-RB 公式 */
+        mode->hdisplay = width;
+        mode->vdisplay = height;
+        mode->vrefresh = refresh;
+        
+        /* Reduced blanking timings */
+        mode->htotal = width + 160;
+        mode->hsync_start = width + 32;
+        mode->hsync_end = width + 80;
+        mode->vtotal = height + 30;
+        mode->vsync_start = height + 3;
+        mode->vsync_end = height + 9;
+        mode->clock = (mode->htotal * mode->vtotal * refresh) / 1000;
+        mode->flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC;
+        snprintf(mode->name, DRM_DISPLAY_MODE_LEN, "%dx%d", width, height);
+    }
+    
+    mode->type = DRM_MODE_TYPE_PREFERRED | DRM_MODE_TYPE_DRIVER;
+    mode->hskew = 0;
+    mode->vscan = 0;
+}
+
+static void drm_build_edid(const struct drm_mode_modeinfo *mode, uint8_t *edid, size_t edid_size)
+{
+    if (mode == NULL || edid == NULL || edid_size < 128) return;
+
+    memset(edid, 0, edid_size);
+    static const uint8_t header[8] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00};
+    memcpy(edid, header, sizeof(header));
+
+    /* Manufacturer "XJX". */
+    edid[8] = (uint8_t)((24 << 2) | (10 >> 3));
+    edid[9] = (uint8_t)(((10 & 0x7) << 5) | 24);
+    edid[10] = 0x80;
+    edid[11] = 0x03;
+    edid[12] = 0x01;
+    edid[16] = 1;
+    edid[17] = 36;
+    edid[18] = 1;
+    edid[19] = 4;
+    edid[20] = 0xa5;
+    edid[21] = (uint8_t)MIN((uint32_t)255, ((uint32_t)mode->hdisplay * 264u) / 10000u);
+    edid[22] = (uint8_t)MIN((uint32_t)255, ((uint32_t)mode->vdisplay * 264u) / 10000u);
+    edid[23] = 0x78;
+    edid[24] = 0x0a;
+    edid[25] = 0xee;
+    edid[26] = 0x91;
+    edid[27] = 0xa3;
+    edid[28] = 0x54;
+    edid[29] = 0x4c;
+    edid[30] = 0x99;
+    edid[31] = 0x26;
+    edid[32] = 0x0f;
+    edid[33] = 0x50;
+    edid[34] = 0x54;
+    memset(edid + 38, 0x01, 16);
+
+    uint8_t *dtd = edid + 54;
+    uint32_t pixel_clock = (mode->clock + 5) / 10;
+    if (pixel_clock > 0xffff) pixel_clock = 0xffff;
+    uint32_t hblank = mode->htotal > mode->hdisplay ? mode->htotal - mode->hdisplay : 160;
+    uint32_t vblank = mode->vtotal > mode->vdisplay ? mode->vtotal - mode->vdisplay : 30;
+    uint32_t hsync_offset = mode->hsync_start > mode->hdisplay ? mode->hsync_start - mode->hdisplay : 32;
+    uint32_t hsync_width = mode->hsync_end > mode->hsync_start ? mode->hsync_end - mode->hsync_start : 48;
+    uint32_t vsync_offset = mode->vsync_start > mode->vdisplay ? mode->vsync_start - mode->vdisplay : 3;
+    uint32_t vsync_width = mode->vsync_end > mode->vsync_start ? mode->vsync_end - mode->vsync_start : 6;
+    uint32_t hsize = MIN((uint32_t)4095, ((uint32_t)mode->hdisplay * 264u) / 1000u);
+    uint32_t vsize = MIN((uint32_t)4095, ((uint32_t)mode->vdisplay * 264u) / 1000u);
+
+    dtd[0] = (uint8_t)(pixel_clock & 0xff);
+    dtd[1] = (uint8_t)(pixel_clock >> 8);
+    dtd[2] = (uint8_t)(mode->hdisplay & 0xff);
+    dtd[3] = (uint8_t)(hblank & 0xff);
+    dtd[4] = (uint8_t)(((mode->hdisplay >> 8) & 0xf) << 4 | ((hblank >> 8) & 0xf));
+    dtd[5] = (uint8_t)(mode->vdisplay & 0xff);
+    dtd[6] = (uint8_t)(vblank & 0xff);
+    dtd[7] = (uint8_t)(((mode->vdisplay >> 8) & 0xf) << 4 | ((vblank >> 8) & 0xf));
+    dtd[8] = (uint8_t)(hsync_offset & 0xff);
+    dtd[9] = (uint8_t)(hsync_width & 0xff);
+    dtd[10] = (uint8_t)(((vsync_offset & 0xf) << 4) | (vsync_width & 0xf));
+    dtd[11] = (uint8_t)(((hsync_offset >> 8) & 0x3) << 6 | (((hsync_width >> 8) & 0x3) << 4) |
+                        (((vsync_offset >> 4) & 0x3) << 2) | ((vsync_width >> 4) & 0x3));
+    dtd[12] = (uint8_t)(hsize & 0xff);
+    dtd[13] = (uint8_t)(vsize & 0xff);
+    dtd[14] = (uint8_t)(((hsize >> 8) & 0xf) << 4 | ((vsize >> 8) & 0xf));
+    dtd[17] = 0x18;
+    if (mode->flags & DRM_MODE_FLAG_PHSYNC) dtd[17] |= 0x02;
+    if (mode->flags & DRM_MODE_FLAG_PVSYNC) dtd[17] |= 0x04;
+
+    uint8_t *name = edid + 72;
+    name[3] = 0xfc;
+    name[4] = 0x00;
+    memset(name + 5, ' ', 13);
+    const char monitor_name[] = "XJ380 DRM\n";
+    memcpy(name + 5, monitor_name, sizeof(monitor_name) - 1);
+
+    uint8_t *serial = edid + 90;
+    serial[3] = 0xff;
+    serial[4] = 0x00;
+    memset(serial + 5, ' ', 13);
+    const char monitor_serial[] = "XJ380-0001\n";
+    memcpy(serial + 5, monitor_serial, sizeof(monitor_serial) - 1);
+
+    uint8_t *dummy = edid + 108;
+    dummy[3] = 0x10;
+
+    uint8_t sum = 0;
+    for (size_t i = 0; i < 127; i++) sum = (uint8_t)(sum + edid[i]);
+    edid[127] = (uint8_t)(0 - sum);
+}
 struct drm_format_modifier_blob {
     uint32_t version;
     uint32_t flags;
@@ -211,17 +375,50 @@ static struct prop_blob *blob_find_by_id(struct xj380_drm *d, uint32_t blob_id)
     return NULL;
 }
 
+static bool drm_mode_blob_to_mode(struct xj380_drm *drm, uint32_t blob_id, struct drm_mode_modeinfo *mode)
+{
+    if (drm == NULL || mode == NULL || blob_id == 0) return false;
+
+    uint32_t crtc_id = 0;
+    if (drm_mode_blob_to_crtc_id(blob_id, &crtc_id)) {
+        if (crtc_id != drm->crtc_id) return false;
+        *mode = drm->mode;
+        return true;
+    }
+
+    struct prop_blob *blob = blob_find_by_id(drm, blob_id);
+    if (blob == NULL || blob->data == NULL || blob->length < sizeof(*mode)) return false;
+
+    memcpy(mode, blob->data, sizeof(*mode));
+    if (mode->hdisplay == 0 || mode->vdisplay == 0) return false;
+    if (mode->htotal < mode->hdisplay || mode->vtotal < mode->vdisplay) return false;
+    return true;
+}
+
 static void ev_queue(struct xj380_drm *drm, uint64_t user_data)
 {
-    if (drm->event_count >= EVENT_RING_SIZE) return;
+    uint32_t sec;
+    uint32_t usec;
+    drm_monotonic_timeval(&sec, &usec);
+
+    spin_lock(&drm->lock);
+    if (drm->event_count >= EVENT_RING_SIZE)
+    {
+        spin_unlock(&drm->lock);
+        return;
+    }
     uint32_t idx = (drm->event_head + drm->event_count) % EVENT_RING_SIZE;
     struct event_entry *ev = &drm->events[idx];
     memset(ev, 0, sizeof(*ev));
     ev->vbl.base.type   = DRM_EVENT_FLIP_COMPLETE;
     ev->vbl.base.length = sizeof(ev->vbl);
     ev->vbl.user_data   = user_data;
+    ev->vbl.tv_sec      = sec;
+    ev->vbl.tv_usec     = usec;
+    ev->vbl.sequence    = ++drm->vblank_sequence;
     ev->vbl.crtc_id     = drm->crtc_id;
     drm->event_count++;
+    spin_unlock(&drm->lock);
 }
 
 static int drm_poll(size_t events)
@@ -238,7 +435,26 @@ static int drm_poll(size_t events)
 }
 
 /* ---- Present: copy dumb buffer to gop framebuffer ---- */
-static int present(struct xj380_drm *drm, uint32_t fb_id)
+static bool drm_format_is_rgb_order(uint32_t format)
+{
+    return format == DRM_FORMAT_XRGB8888 || format == DRM_FORMAT_ARGB8888 ||
+           format == DRM_FORMAT_RGBX8888 || format == DRM_FORMAT_RGBA8888;
+}
+
+static bool drm_format_is_bgr_order(uint32_t format)
+{
+    return format == DRM_FORMAT_XBGR8888 || format == DRM_FORMAT_ABGR8888 ||
+           format == DRM_FORMAT_BGRX8888 || format == DRM_FORMAT_BGRA8888;
+}
+
+static int present_rect(struct xj380_drm *drm,
+                        uint32_t fb_id,
+                        uint32_t src_x,
+                        uint32_t src_y,
+                        uint32_t crtc_x,
+                        uint32_t crtc_y,
+                        uint32_t width,
+                        uint32_t height)
 {
     struct drm_fb_obj *fb = fb_find_by_id(drm, fb_id);
     if (!fb) return -ENOENT;
@@ -248,23 +464,62 @@ static int present(struct xj380_drm *drm, uint32_t fb_id)
 
     struct dumb_buffer *db = &drm->dumb[idx];
     uint8_t *src = (uint8_t *)driver_phys_to_virt(db->phys_addr);
-    uint32_t w = MIN(drm->fb_width, fb->width);
-    uint32_t h = MIN(drm->fb_height, fb->height);
-    uint32_t bpp = 4;
 
     uint8_t *dst = fbdev_kernel_framebuffer();
     if (!dst) return -ENODEV;
 
-    size_t row_bytes = (size_t)w * bpp;
-    for (uint32_t y = 0; y < h; y++) {
-        memcpy(dst + (size_t)y * (size_t)drm->fb_width * bpp,
-               src + (size_t)y * (size_t)db->pitch,
-               row_bytes);
+    const FrameBufferConfig *fbc = fbdev_get_fbc();
+    if (!fbc) return -ENODEV;
+
+    size_t dst_pitch = fbdev_framebuffer_pitch();
+    if (dst_pitch == 0) return -ENODEV;
+
+    if (src_x >= fb->width || src_y >= fb->height) return 0;
+    if (crtc_x >= drm->fb_width || crtc_y >= drm->fb_height) return 0;
+
+    uint32_t w = MIN(width, fb->width - src_x);
+    uint32_t h = MIN(height, fb->height - src_y);
+    w = MIN(w, drm->fb_width - crtc_x);
+    h = MIN(h, drm->fb_height - crtc_y);
+    if (w == 0 || h == 0) return 0;
+
+    bool src_rgb = drm_format_is_rgb_order(fb->format);
+    bool src_bgr = drm_format_is_bgr_order(fb->format);
+    if (!src_rgb && !src_bgr) return -EINVAL;
+    bool dst_rgb = fbc->pixel_format == PixelFormat::kRGBR;
+    bool same_order = (src_rgb && dst_rgb) || (src_bgr && !dst_rgb);
+
+    src += fb->offset;
+    size_t row_bytes = (size_t)w * 4;
+    for (uint32_t y = 0; y < h; y++)
+    {
+        uint8_t *dst_row = dst + (size_t)(crtc_y + y) * dst_pitch + (size_t)crtc_x * 4;
+        uint8_t *src_row = src + (size_t)(src_y + y) * (size_t)fb->pitch + (size_t)src_x * 4;
+        if (same_order)
+        {
+            memcpy(dst_row, src_row, row_bytes);
+            continue;
+        }
+
+        for (uint32_t x = 0; x < w; x++)
+        {
+            dst_row[x * 4 + 0] = src_row[x * 4 + 2];
+            dst_row[x * 4 + 1] = src_row[x * 4 + 1];
+            dst_row[x * 4 + 2] = src_row[x * 4 + 0];
+            dst_row[x * 4 + 3] = src_row[x * 4 + 3];
+        }
     }
 
     /* Tell fbdev to actually flush to GOP */
-    fbdev_present_kernel_region(0, 0, w, h);
+    fbdev_present_kernel_region(crtc_x, crtc_y, crtc_x + w, crtc_y + h);
     return 0;
+}
+
+static int present(struct xj380_drm *drm, uint32_t fb_id)
+{
+    struct drm_fb_obj *fb = fb_find_by_id(drm, fb_id);
+    if (!fb) return -ENOENT;
+    return present_rect(drm, fb_id, 0, 0, 0, 0, fb->width, fb->height);
 }
 
 /* ---- IOCTL handlers ---- */
@@ -312,14 +567,90 @@ static int drm_get_cap(struct drm_get_cap *cap)
 
     switch (kc.capability) {
     case DRM_CAP_DUMB_BUFFER:       kc.value = 1; break;
-    case DRM_CAP_PRIME:             kc.value = 1; break;
+    case DRM_CAP_DUMB_PREFERRED_DEPTH: kc.value = 24; break;
+    case DRM_CAP_DUMB_PREFER_SHADOW: kc.value = 1; break;
+    case DRM_CAP_TIMESTAMP_MONOTONIC: kc.value = 1; break;
+    case DRM_CAP_PRIME:             kc.value = 0; break;
     case DRM_CAP_ASYNC_PAGE_FLIP:   kc.value = 1; break;
     case DRM_CAP_CURSOR_WIDTH:      kc.value = 64; break;
     case DRM_CAP_CURSOR_HEIGHT:     kc.value = 64; break;
+    case DRM_CAP_ADDFB2_MODIFIERS:  kc.value = 0; break;
+    case DRM_CAP_PAGE_FLIP_TARGET:  kc.value = 0; break;
+    case DRM_CAP_CRTC_IN_VBLANK_EVENT: kc.value = 1; break;
+    case DRM_CAP_ATOMIC_ASYNC_PAGE_FLIP: kc.value = 0; break;
     default:                        kc.value = 0; break;
     }
 
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, cap, &kc, sizeof(kc)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_get_unique(struct xj380_drm *drm, struct drm_unique *unique)
+{
+    (void)drm;
+    if (!unique) return -EFAULT;
+    struct drm_unique ku;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &ku, unique, sizeof(ku)))
+        return -EFAULT;
+
+    const char busid[] = "platform:xj380";
+    size_t busid_len = sizeof(busid) - 1;
+    if (ku.unique && ku.unique_len > 0) {
+        size_t n = MIN(ku.unique_len, busid_len);
+        if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, ku.unique, (void *)busid, n))
+            return -EFAULT;
+    }
+    ku.unique_len = busid_len;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, unique, &ku, sizeof(ku)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_set_version(struct drm_set_version *version)
+{
+    if (!version) return -EFAULT;
+    struct drm_set_version kv;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kv, version, sizeof(kv)))
+        return -EFAULT;
+
+    if (kv.drm_di_major < 1) return -EINVAL;
+    kv.drm_di_major = 1;
+    kv.drm_di_minor = 4;
+    kv.drm_dd_major = 1;
+    kv.drm_dd_minor = 0;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, version, &kv, sizeof(kv)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_get_stats(struct drm_stats *stats)
+{
+    if (!stats) return -EFAULT;
+    struct drm_stats ks;
+    memset(&ks, 0, sizeof(ks));
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, stats, &ks, sizeof(ks)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_wait_vblank(union drm_wait_vblank *vblank)
+{
+    if (!vblank) return -EFAULT;
+    union drm_wait_vblank kv;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kv, vblank, sizeof(kv)))
+        return -EFAULT;
+
+    uint32_t sec;
+    uint32_t usec;
+    drm_monotonic_timeval(&sec, &usec);
+
+    spin_lock(&g_drm.lock);
+    kv.reply.sequence = ++g_drm.vblank_sequence;
+    spin_unlock(&g_drm.lock);
+    kv.reply.tval_sec = sec;
+    kv.reply.tval_usec = usec;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, vblank, &kv, sizeof(kv)))
         return -EFAULT;
     return 0;
 }
@@ -365,6 +696,11 @@ static int drm_mode_getresources(struct xj380_drm *drm, struct drm_mode_card_res
     if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kr, res, sizeof(kr)))
         return -EFAULT;
 
+    uint32_t fb_cap        = kr.count_fbs;
+    uint32_t crtc_cap      = kr.count_crtcs;
+    uint32_t connector_cap = kr.count_connectors;
+    uint32_t encoder_cap   = kr.count_encoders;
+
     kr.count_fbs        = 0;
     kr.count_crtcs      = 1;
     kr.count_connectors = 1;
@@ -377,15 +713,16 @@ static int drm_mode_getresources(struct xj380_drm *drm, struct drm_mode_card_res
     uint32_t conn_id = drm->connector_id;
     uint32_t enc_id  = drm->encoder_id;
 
-    if (kr.crtc_id_ptr && !copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-            (void *)(uintptr_t)kr.crtc_id_ptr, &crtc_id, sizeof(crtc_id)))
+    if (kr.crtc_id_ptr && drm_copy_counted_array_to_user(kr.crtc_id_ptr, &crtc_id, crtc_cap,
+                                                         kr.count_crtcs, sizeof(crtc_id)) != 0)
         return -EFAULT;
-    if (kr.connector_id_ptr && !copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-            (void *)(uintptr_t)kr.connector_id_ptr, &conn_id, sizeof(conn_id)))
+    if (kr.connector_id_ptr && drm_copy_counted_array_to_user(kr.connector_id_ptr, &conn_id, connector_cap,
+                                                              kr.count_connectors, sizeof(conn_id)) != 0)
         return -EFAULT;
-    if (kr.encoder_id_ptr && !copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-            (void *)(uintptr_t)kr.encoder_id_ptr, &enc_id, sizeof(enc_id)))
+    if (kr.encoder_id_ptr && drm_copy_counted_array_to_user(kr.encoder_id_ptr, &enc_id, encoder_cap,
+                                                            kr.count_encoders, sizeof(enc_id)) != 0)
         return -EFAULT;
+    (void)fb_cap;
 
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, res, &kr, sizeof(kr)))
         return -EFAULT;
@@ -469,6 +806,10 @@ static int drm_mode_getconnector(struct xj380_drm *drm, struct drm_mode_get_conn
 
     if (kc.connector_id != drm->connector_id) return -ENOENT;
 
+    uint32_t modes_cap    = kc.count_modes;
+    uint32_t props_cap    = kc.count_props;
+    uint32_t encoders_cap = kc.count_encoders;
+
     kc.encoder_id       = drm->encoder_id;
     kc.connector_type   = DRM_MODE_CONNECTOR_VIRTUAL;
     kc.connector_type_id = 1;
@@ -483,30 +824,26 @@ static int drm_mode_getconnector(struct xj380_drm *drm, struct drm_mode_get_conn
     /* Write mode */
     if (kc.modes_ptr) {
         struct drm_mode_modeinfo m = drm->mode;
-        if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-                (void *)(uintptr_t)kc.modes_ptr, &m, sizeof(m)))
+        if (drm_copy_counted_array_to_user(kc.modes_ptr, &m, modes_cap, kc.count_modes, sizeof(m)) != 0)
             return -EFAULT;
     }
 
     /* Write encoder id */
     if (kc.encoders_ptr) {
         uint32_t eid = drm->encoder_id;
-        if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-                (void *)(uintptr_t)kc.encoders_ptr, &eid, sizeof(eid)))
+        if (drm_copy_counted_array_to_user(kc.encoders_ptr, &eid, encoders_cap, kc.count_encoders, sizeof(eid)) != 0)
             return -EFAULT;
     }
 
     /* Property IDs + values: DPMS, CRTC_ID */
     if (kc.props_ptr) {
         uint32_t pids[3] = { DRM_PROP_CONNECTOR_DPMS, DRM_PROP_CONNECTOR_EDID, DRM_PROP_CONNECTOR_CRTC_ID };
-        if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-                (void *)(uintptr_t)kc.props_ptr, pids, sizeof(pids)))
+        if (drm_copy_counted_array_to_user(kc.props_ptr, pids, props_cap, kc.count_props, sizeof(pids[0])) != 0)
             return -EFAULT;
     }
     if (kc.prop_values_ptr) {
         uint64_t pvals[3] = { DRM_MODE_DPMS_ON, drm_connector_edid_blob_id(drm->connector_id), drm->crtc_id };
-        if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-                (void *)(uintptr_t)kc.prop_values_ptr, pvals, sizeof(pvals)))
+        if (drm_copy_counted_array_to_user(kc.prop_values_ptr, pvals, props_cap, kc.count_props, sizeof(pvals[0])) != 0)
             return -EFAULT;
     }
 
@@ -630,6 +967,7 @@ static int drm_mode_addfb(struct xj380_drm *drm, struct drm_mode_fb_cmd *args)
     drm->fbs[fi].width  = ka.width;
     drm->fbs[fi].height = ka.height;
     drm->fbs[fi].pitch  = ka.pitch;
+    drm->fbs[fi].offset = 0;
     drm->fbs[fi].format = DRM_FORMAT_XRGB8888;
 
     ka.fb_id = fb_id;
@@ -660,6 +998,7 @@ static int drm_mode_addfb2(struct xj380_drm *drm, struct drm_mode_fb_cmd2 *args)
     drm->fbs[fi].width  = ka.width;
     drm->fbs[fi].height = ka.height;
     drm->fbs[fi].pitch  = ka.pitches[0] ? ka.pitches[0] : drm->dumb[idx].pitch;
+    drm->fbs[fi].offset = ka.offsets[0];
     drm->fbs[fi].format = ka.pixel_format;
 
     ka.fb_id = fb_id;
@@ -727,10 +1066,12 @@ static int drm_mode_getplane_resources(struct xj380_drm *drm, struct drm_mode_ge
     if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &ka, args, sizeof(ka)))
         return -EFAULT;
 
+    uint32_t plane_cap = ka.count_planes;
+
     ka.count_planes = 1;
     uint32_t pid = drm->plane_id;
-    if (ka.plane_id_ptr && !copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-            (void *)(uintptr_t)ka.plane_id_ptr, &pid, sizeof(pid)))
+    if (ka.plane_id_ptr && drm_copy_counted_array_to_user(ka.plane_id_ptr, &pid, plane_cap,
+                                                          ka.count_planes, sizeof(pid)) != 0)
         return -EFAULT;
 
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, args, &ka, sizeof(ka)))
@@ -747,6 +1088,8 @@ static int drm_mode_getplane(struct xj380_drm *drm, struct drm_mode_get_plane *a
 
     if (ka.plane_id != drm->plane_id) return -ENOENT;
 
+    uint32_t formats_cap = ka.count_format_types;
+
     ka.crtc_id       = drm->crtc_id;
     ka.fb_id         = drm->current_fb_id;
     ka.possible_crtcs = 1;
@@ -754,13 +1097,48 @@ static int drm_mode_getplane(struct xj380_drm *drm, struct drm_mode_get_plane *a
     ka.count_format_types = 4;
     uint32_t formats[4] = { DRM_FORMAT_XRGB8888, DRM_FORMAT_ARGB8888,
                             DRM_FORMAT_XBGR8888, DRM_FORMAT_ABGR8888 };
-    if (ka.format_type_ptr && !copy_to_user_pagedir(get_current_task()->parent_group->pagedir,
-            (void *)(uintptr_t)ka.format_type_ptr, formats, sizeof(formats)))
+    if (ka.format_type_ptr && drm_copy_counted_array_to_user(ka.format_type_ptr, formats, formats_cap,
+                                                             ka.count_format_types, sizeof(formats[0])) != 0)
         return -EFAULT;
 
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, args, &ka, sizeof(ka)))
         return -EFAULT;
     return 0;
+}
+
+static int drm_mode_setplane(struct xj380_drm *drm, struct drm_mode_set_plane *args)
+{
+    if (!args) return -EFAULT;
+    struct drm_mode_set_plane ka;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &ka, args, sizeof(ka)))
+        return -EFAULT;
+
+    if (ka.plane_id != drm->plane_id) return -ENOENT;
+    if (ka.crtc_id != 0 && ka.crtc_id != drm->crtc_id) return -ENOENT;
+    if (ka.fb_id == 0) {
+        drm->current_fb_id = 0;
+        return 0;
+    }
+
+    struct drm_fb_obj *fb = fb_find_by_id(drm, ka.fb_id);
+    if (!fb) return -ENOENT;
+
+    int ret = present(drm, ka.fb_id);
+    if (ret) return ret;
+    drm->current_fb_id = ka.fb_id;
+    return 0;
+}
+
+static int drm_mode_dirtyfb(struct xj380_drm *drm, struct drm_mode_fb_dirty_cmd *args)
+{
+    if (!args) return -EFAULT;
+    struct drm_mode_fb_dirty_cmd ka;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &ka, args, sizeof(ka)))
+        return -EFAULT;
+
+    if (fb_find_by_id(drm, ka.fb_id) == NULL) return -ENOENT;
+    if (drm->current_fb_id != ka.fb_id) return 0;
+    return present(drm, ka.fb_id);
 }
 
 static int drm_mode_getproperty(struct xj380_drm *drm, struct drm_mode_get_property *args)
@@ -1105,7 +1483,17 @@ static int drm_mode_atomic(struct xj380_drm *drm, struct drm_mode_atomic *args)
     bool page_flip_event = (ka.flags & DRM_MODE_PAGE_FLIP_EVENT) != 0;
     uint32_t new_fb_id = 0;
     uint64_t new_mode_blob = 0;
+    struct drm_mode_modeinfo new_mode;
+    bool has_new_mode = false;
     bool crtc_active = true;
+    uint32_t src_x = 0;
+    uint32_t src_y = 0;
+    uint32_t src_w = drm->fb_width;
+    uint32_t src_h = drm->fb_height;
+    int32_t crtc_x = 0;
+    int32_t crtc_y = 0;
+    uint32_t crtc_w = drm->fb_width;
+    uint32_t crtc_h = drm->fb_height;
 
     if (ka.count_objs > 64) return -E2BIG;
 
@@ -1175,6 +1563,22 @@ static int drm_mode_atomic(struct xj380_drm *drm, struct drm_mode_atomic *args)
 
             if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_FB_ID) {
                 new_fb_id = (uint32_t)val;
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_SRC_X) {
+                src_x = (uint32_t)(val >> 16);
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_SRC_Y) {
+                src_y = (uint32_t)(val >> 16);
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_SRC_W) {
+                src_w = (uint32_t)(val >> 16);
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_SRC_H) {
+                src_h = (uint32_t)(val >> 16);
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_CRTC_X) {
+                crtc_x = (int32_t)val;
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_CRTC_Y) {
+                crtc_y = (int32_t)val;
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_CRTC_W) {
+                crtc_w = (uint32_t)val;
+            } else if (obj_id == drm->plane_id && pid == DRM_PROP_PLANE_CRTC_H) {
+                crtc_h = (uint32_t)val;
             } else if (obj_id == drm->crtc_id && pid == DRM_PROP_CRTC_ACTIVE) {
                 crtc_active = val != 0;
             } else if (obj_id == drm->crtc_id && pid == DRM_PROP_CRTC_MODE_ID) {
@@ -1188,8 +1592,12 @@ static int drm_mode_atomic(struct xj380_drm *drm, struct drm_mode_atomic *args)
     free(prop_ids);
     free(prop_vals);
 
-    if (new_mode_blob != 0 && new_mode_blob != drm->crtc_id) return -EINVAL;
+    if (new_mode_blob != 0) {
+        if (!drm_mode_blob_to_mode(drm, (uint32_t)new_mode_blob, &new_mode)) return -EINVAL;
+        has_new_mode = true;
+    }
     if (test_only) return 0;
+    if (has_new_mode) drm->mode = new_mode;
     if (!crtc_active) {
         drm->current_fb_id = 0;
         return 0;
@@ -1199,7 +1607,10 @@ static int drm_mode_atomic(struct xj380_drm *drm, struct drm_mode_atomic *args)
     struct drm_fb_obj *fb = fb_find_by_id(drm, new_fb_id);
     if (!fb) return -ENOENT;
 
-    int ret = present(drm, new_fb_id);
+    if (crtc_x < 0 || crtc_y < 0) return -EINVAL;
+    if (src_w != crtc_w || src_h != crtc_h) return -EINVAL;
+
+    int ret = present_rect(drm, new_fb_id, src_x, src_y, (uint32_t)crtc_x, (uint32_t)crtc_y, crtc_w, crtc_h);
     if (ret) return ret;
 
     drm->current_fb_id = new_fb_id;
@@ -1230,7 +1641,10 @@ static int drm_mode_getpropblob(struct xj380_drm *drm, struct drm_mode_get_blob 
 
     if (drm_connector_edid_blob_to_connector_id(kbl.blob_id, &connector_id)) {
         if (connector_id != drm->connector_id) return -ENOENT;
-        kbl.length = 0;
+        uint8_t edid[128];
+        drm_build_edid(&drm->mode, edid, sizeof(edid));
+        kbl.length = sizeof(edid);
+        if (kbl.data && drm_copy_to_user_ptr(kbl.data, edid, sizeof(edid)) != 0) return -EFAULT;
         if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, args, &kbl, sizeof(kbl)))
             return -EFAULT;
         return 0;
@@ -1285,12 +1699,20 @@ static int drm_ioctl(device_t *dev, size_t req, void *arg)
     struct xj380_drm *drm = &g_drm;
     if (!drm_initialized()) return -ENODEV;
 
-    /* arg is the ioctl number, the caller has already mapped it */
-    /* opaque void* is actually the raw argument from userspace */
+    /*
+     * Linux ioctl commands are 32-bit values. The syscall path may sign-extend
+     * commands with bit 31 set before they reach devfs, so normalize before the
+     * switch just like naos does in its DRM ioctl dispatcher.
+     */
+    uint32_t cmd = (uint32_t)req;
 
-    switch (req) {
+    switch (cmd) {
     case DRM_IOCTL_VERSION:          return drm_version(drm, (struct drm_version *)arg);
+    case DRM_IOCTL_GET_UNIQUE:       return drm_get_unique(drm, (struct drm_unique *)arg);
     case DRM_IOCTL_GET_CAP:          return drm_get_cap((struct drm_get_cap *)arg);
+    case DRM_IOCTL_SET_VERSION:      return drm_set_version((struct drm_set_version *)arg);
+    case DRM_IOCTL_GET_STATS:        return drm_get_stats((struct drm_stats *)arg);
+    case DRM_IOCTL_WAIT_VBLANK:      return drm_wait_vblank((union drm_wait_vblank *)arg);
     case DRM_IOCTL_SET_CLIENT_CAP:   return 0;
 
     case DRM_IOCTL_MODE_GETRESOURCES: return drm_mode_getresources(drm, (struct drm_mode_card_res *)arg);
@@ -1309,6 +1731,8 @@ static int drm_ioctl(device_t *dev, size_t req, void *arg)
     case DRM_IOCTL_MODE_CLOSEFB:      return drm_mode_closefb(drm, (struct drm_mode_closefb *)arg);
     case DRM_IOCTL_MODE_GETPLANERESOURCES: return drm_mode_getplane_resources(drm, (struct drm_mode_get_plane_res *)arg);
     case DRM_IOCTL_MODE_GETPLANE:      return drm_mode_getplane(drm, (struct drm_mode_get_plane *)arg);
+    case DRM_IOCTL_MODE_SETPLANE:      return drm_mode_setplane(drm, (struct drm_mode_set_plane *)arg);
+    case DRM_IOCTL_MODE_DIRTYFB:       return drm_mode_dirtyfb(drm, (struct drm_mode_fb_dirty_cmd *)arg);
     case DRM_IOCTL_MODE_GETPROPERTY:   return drm_mode_getproperty(drm, (struct drm_mode_get_property *)arg);
     case DRM_IOCTL_MODE_CREATEPROPBLOB:return drm_mode_createpropblob(drm, (struct drm_mode_create_blob *)arg);
     case DRM_IOCTL_MODE_DESTROYPROPBLOB: return drm_mode_destroypropblob(drm, (struct drm_mode_destroy_blob *)arg);
@@ -1327,6 +1751,8 @@ static int drm_ioctl(device_t *dev, size_t req, void *arg)
         return drm_gem_close(drm, (struct drm_gem_close *)arg);
 
     default:
+        write_serial_fmt("[udev-trace] drm:unsupported ioctl req=0x%llx cmd=0x%x\n",
+                         (unsigned long long)req, cmd);
         return -ENOSYS;
     }
 }
@@ -1381,7 +1807,9 @@ static void *drm_map(int drive, void *addr, size_t len, size_t offset)
 
 void drm_init()
 {
+    write_serial_string("[udev-trace] drm:init begin\n");
     if (!fbdev_ready()) {
+        write_serial_string("[udev-trace] drm:init fbdev-not-ready skip\n");
         write_serial_string("drm: fbdev not ready, skipping\n");
         return;
     }
@@ -1402,7 +1830,15 @@ void drm_init()
         g_drm.fb_width  = fbc->horizontal_resolution;
         g_drm.fb_height = fbc->vertical_resolution;
     }
-
+    write_serial_fmt("[udev-trace] drm:init fb=%ux%u fbc=%p\n", g_drm.fb_width, g_drm.fb_height, fbc);
+    drm_init_mode(&g_drm.mode, g_drm.fb_width, g_drm.fb_height, 60);
+    
+    /* 调试输出 */
+    write_serial_fmt("[drm] mode: %dx%d, clock=%d kHz, htotal=%d, vtotal=%d, vrefresh=%d\n",
+                     g_drm.mode.hdisplay, g_drm.mode.vdisplay,
+                     g_drm.mode.clock, g_drm.mode.htotal, 
+                     g_drm.mode.vtotal, g_drm.mode.vrefresh);
+    
     /* Object IDs */
     g_drm.crtc_id      = 1;
     g_drm.connector_id = 2;
@@ -1410,17 +1846,8 @@ void drm_init()
     g_drm.plane_id     = 4;
     g_drm.next_fb_id   = 10;
 
-    /* Default mode */
-    memset(&g_drm.mode, 0, sizeof(g_drm.mode));
-    g_drm.mode.hdisplay = g_drm.fb_width;
-    g_drm.mode.vdisplay = g_drm.fb_height;
-    g_drm.mode.vrefresh = 60;
-    g_drm.mode.type     = DRM_MODE_TYPE_PREFERRED;
-    strncpy(g_drm.mode.name, DEFAULT_MODE_NAME, DRM_DISPLAY_MODE_LEN - 1);
-
     /* Register /dev/dri/card0 */
-    device_t dev;
-    memset(&dev, 0, sizeof(dev));
+    device_t dev = {};
     dev.read   = drm_read;
     dev.write  = NULL;
     dev.ioctl  = drm_ioctl;
@@ -1431,10 +1858,19 @@ void drm_init()
     dev.size   = 0;
     dev.sector_size = 1;
     dev.max_size = 0;
+    dev.major = 226;
+    dev.minor = 0;
     strcpy(dev.drive_name, "card0");
 
-    regist_device("dri", dev);
     g_inited = true;
+
+    errno_t mkdir_ret = vfs_mkdir("/dev/dri");
+    write_serial_fmt("[udev-trace] drm:init mkdir /dev/dri ret=%d\n", mkdir_ret);
+    int dev_id = regist_device("dri/card0", dev);
+    write_serial_fmt("[udev-trace] drm:init regist_device dri/card0 id=%d major=%u minor=%u\n",
+                     dev_id,
+                     dev.major,
+                     dev.minor);
 
     write_serial_fmt("drm: XJ380 DRM initialized, fb=%ux%u\n", g_drm.fb_width, g_drm.fb_height);
 }

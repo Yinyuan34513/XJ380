@@ -148,25 +148,33 @@ int syscall_sigaltstack(stack_t *ss, stack_t *old_ss)
     return 0;
 }
 
-int signal_send_process(pcb_t process, int sig)
+int signal_send_process_info(pcb_t process, int sig, const siginfo_t *info)
 {
     if (process == NULL) return -EINVAL;
     if (sig == 0) return 0;
     if (sig < MINSIG || sig > MAXSIG) return -EINVAL;
     if (process->thread_queue == NULL) return -ESRCH;
 
+    anonfs_notify_signal(process, sig, info);
+    if (sig == SIGCHLD) return 0;
+
+    bool queued = false;
     spin_lock(&process->thread_queue->lock);
     queue_foreach(process->thread_queue, node)
     {
         tcb_t thread = (tcb_t)node->data;
         if (thread == NULL || thread->status == DEATH || thread->status == OUT) continue;
         thread->signal |= SIGMASK(sig);
-        anonfs_notify_signal(process, sig, NULL);
-        spin_unlock(&process->thread_queue->lock);
-        return 0;
+        queued = true;
     }
     spin_unlock(&process->thread_queue->lock);
-    return -ESRCH;
+    if (!queued) return -ESRCH;
+    return 0;
+}
+
+int signal_send_process(pcb_t process, int sig)
+{
+    return signal_send_process_info(process, sig, NULL);
 }
 
 static int find_deliverable_signal(tcb_t task)

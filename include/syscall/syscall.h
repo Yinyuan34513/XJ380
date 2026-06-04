@@ -272,6 +272,7 @@
 #define SYS_SOCKET 41
 #define SYS_CONNECT 42
 #define SYS_ACCEPT 43
+#define SYS_ACCEPT4 288
 #define SYS_SENDTO 44
 #define SYS_RECVFROM 45
 #define SYS_SENDMSG 46
@@ -360,6 +361,7 @@
 #define SYS_TIME 201
 #define SYS_FUTEX 202
 #define SYS_SCHED_GETAFFINITY 204
+#define SYS_INOTIFY_INIT 253
 #define SYS_EPOLL_CREATE 213
 #define SYS_GETDENTS64 217
 
@@ -375,6 +377,7 @@
 #define SYS_EPOLL_CTL 233
 #define SYS_TGKILL 234
 #define SYS_UTIMES 235
+#define SYS_WAITID 247
 
 #define SYS_OPENAT 257
 #define SYS_MKDIRAT 258
@@ -396,9 +399,13 @@
 #define SYS_SIGNALFD 282
 #define SYS_TIMERFD_CREATE 283
 #define SYS_EVENTFD 284
+#define SYS_FALLOCATE 285
 #define SYS_EPOLL_CREATE1 291
 #define SYS_EVENTFD2 290
 #define SYS_PIPE2 293
+#define SYS_INOTIFY_INIT1 294
+#define SYS_INOTIFY_ADD_WATCH 254
+#define SYS_INOTIFY_RM_WATCH 255
 #define SYS_SIGNALFD4 289
 #define SYS_TIMERFD_SETTIME 286
 #define SYS_PRLIMIT64 302
@@ -413,6 +420,7 @@
 
 #define SYS_RSEQ 334
 #define SYS_FSOPEN 430
+#define SYS_PIDFD_OPEN 434
 #define SYS_CLONE3 435
 #define SYS_CLOSE_RANGE 436
 #define SYS_FACCESSAT2 439
@@ -653,6 +661,7 @@ sys_(getpid);
 sys_(socket, int domain, int type, int protocol);
 sys_(connect, int fd, const struct sockaddr *addr, socklen_t addrlen);
 sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen);
+sys_(accept4, int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 sys_(sendto, int fd, const void *buffer, size_t size, uint64_t flags, const struct sockaddr *addr, socklen_t addrlen);
 sys_(recvfrom, int fd, void *buffer, size_t size, uint64_t flags, struct sockaddr *addr, socklen_t *addrlen);
 sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags);
@@ -670,7 +679,7 @@ sys_(yield);
 sys_(uname, struct utsname *utsname);
 sys_(nano_sleep, void *time_handle);
 sys_(clock_nanosleep, int clockid, int flags, const struct timespec *request, struct timespec *remain);
-sys_(ioctl, int fd, int options, void *arg2);
+sys_(ioctl, int fd, uint64_t options, void *arg2);
 sys_(writev, int fd, struct iovec *iov, int iovcnt);
 sys_(readv, int fd, struct iovec *iov, int iovcnt0);
 uint64_t sys_brk(uint64_t brk);//SB
@@ -688,6 +697,7 @@ sys_(chdir, char *s);
 sys_(fchdir, int fd);
 
 sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
+sys_(waitid, int idtype, uint64_t id, siginfo_t *infop, int options, void *rusage);
 sys_(exit_group, int exit_code);
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
 sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout,
@@ -725,6 +735,10 @@ sys_(fstatfs, int fd, struct statfs *buf);
 sys_(pivot_root, char *new_root, char *put_old);
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec);
 sys_(madvise, uint64_t addr, size_t length, int advice);
+sys_(inotify_init);
+sys_(inotify_init1, int flags);
+sys_(inotify_add_watch, int fd, const char *pathname, uint32_t mask);
+sys_(inotify_rm_watch, int fd, int wd);
 sys_(getppid);
 sys_(setsid);
 sys_(getsid, int pid);
@@ -751,6 +765,7 @@ sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath);
 sys_(linkat, int olddirfd, char *oldpath, int newdirfd, char *newpath, int flags);
 sys_(symlinkat, char *target, int newdirfd, char *linkpath);
 sys_(ftruncate, int fd, uint64_t length);
+sys_(fallocate, int fd, int mode, int64_t offset, int64_t len);
 sys_(fsync, int fd);
 sys_(fdatasync, int fd);
 sys_(fadvise64, int fd, uint64_t offset, uint64_t len, int advice);
@@ -768,6 +783,7 @@ sys_(getpgid);
 sys_(setpgid, int pid, int pgid);
 sys_(flock, int fd, int operation);
 sys_(chroot, char *path);
+sys_(pidfd_open, int pid, uint32_t flags);
 sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *data);
 sys_(pwrite, int fd, uint8_t *buffer, size_t size, int64_t offset);
 sys_(pread, int fd, uint8_t *buffer, size_t size, uint64_t offset);
@@ -800,3 +816,4 @@ sys_(umask, uint64_t mask);
 sys_(shutdown, int fd, int how);
 sys_(bind, int fd, const struct sockaddr *addr, socklen_t addrlen);
 sys_(listen, int fd, int backlog);
+sys_(memfd_create, const char * name, unsigned int flags);

@@ -18,7 +18,9 @@ typedef size_t (*readf)(int drive, uint8_t *buffer, size_t number, size_t lba);
 typedef size_t (*writef)(int drive, uint8_t *buffer, size_t number, size_t lba);
 typedef int (*ioctlf)(struct _device *device, size_t req, void *handle);
 typedef int (*pollf)(size_t events);
+struct _device;
 typedef void *(*mapf)(int drive, void *addr, size_t len, size_t offset);
+typedef void (*device_readyf)(struct _device *device);
 typedef struct _device
 {
     size_t (*read_vbuf)(int drive, struct vecbuf *buffer, size_t number, size_t lba);
@@ -36,6 +38,9 @@ typedef struct _device
     size_t        vdiskid; // 设备号
     char         *path;    // 设备注册路径
     uint64_t      max_size;
+    uint32_t      major;
+    uint32_t      minor;
+    device_readyf ready;
 } device_t; // 设备句柄
 
 size_t disk_size(int drive);

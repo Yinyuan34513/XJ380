@@ -16,6 +16,7 @@
 #include "task/pcb.h"
 #include <ioctl.h>
 #include <cpu/lock.h>
+#include <fs/vfs/anonfs.h>
 // #include "pipefs.h"
 #include <syscall/syscall.h>
 #include <device.h>
@@ -56,6 +57,54 @@ static vfs_alias_entry_t vfs_aliases[VFS_ALIAS_MAX];
 static spin_t vfs_alias_lock = SPIN_INIT;
 
 #define callbackof(node, _name_) (fs_callbacks[(node)->fsid]->_name_)
+
+static bool vfs_udev_trace_path(const char *path)
+{
+    if (path == NULL) return false;
+    if ((uintptr_t)path < PAGE_SIZE) return false;
+    return strstr(path, "/dev") != NULL || strstr(path, "/sys") != NULL ||
+           strstr(path, "/run/udev") != NULL || strstr(path, "/run/dbus") != NULL ||
+           strstr(path, "card0") != NULL || strstr(path, "renderD") != NULL ||
+           strstr(path, "event") != NULL || strstr(path, "input") != NULL;
+}
+
+static const char *vfs_udev_safe_path(const char *path)
+{
+    if (path == NULL) return "(null)";
+    if ((uintptr_t)path < PAGE_SIZE) return "(virtual)";
+    return path;
+}
+
+static bool vfs_udev_trace_node(vfs_node_t node)
+{
+    if (node == NULL) return false;
+    if (node->type & (file_socket | file_pipe | file_anon | file_epoll)) return true;
+    char *path = vfs_get_fullpath(node);
+    bool trace = vfs_udev_trace_path(path);
+    free(path);
+    return trace;
+}
+
+static void vfs_udev_log_node(const char *op, const char *path, vfs_node_t node, int64_t ret)
+{
+    if (!vfs_udev_trace_path(path) && !vfs_udev_trace_node(node)) return;
+    write_serial_fmt("[udev-trace] vfs:%s path=%s ret=%lld node=%p parent=%p type=0x%x fsid=%u root=%p mount=%d handle=%p rdev=%llu size=%llu child=%llu ref=%u name=%s\n",
+                     op != NULL ? op : "?",
+                     vfs_udev_safe_path(path),
+                     (long long)ret,
+                     node,
+                     node != NULL ? node->parent : NULL,
+                     node != NULL ? node->type : 0,
+                     node != NULL ? node->fsid : 0,
+                     node != NULL ? node->root : NULL,
+                     node != NULL && node->is_mount ? 1 : 0,
+                     node != NULL ? node->handle : NULL,
+                     node != NULL ? (unsigned long long)node->rdev : 0,
+                     node != NULL ? (unsigned long long)node->size : 0,
+                     node != NULL ? (unsigned long long)list_length(node->child) : 0,
+                     node != NULL ? node->refcount : 0,
+                     node != NULL && node->name != NULL ? node->name : "(null)");
+}
 
 void vfs_child_lock() {
     spin_lock(&vfs_child_list_lock);
@@ -116,6 +165,162 @@ static inline void do_update(vfs_node_t file) {
     if (file->type & file_none || file->handle == NULL || file->type & file_dir ||
         file->type & file_symlink || file->type & file_pipe)
         do_open(file);
+}
+
+static inline bool vfs_ref_drop(vfs_node_t node)
+{
+    if (node == NULL) return false;
+    if (node->refcount == 0)
+    {
+        write_serial_fmt("vfs_close: refcount underflow avoided for %s\n", node->name != NULL ? node->name : "(null)");
+        return false;
+    }
+    node->refcount--;
+    return node->refcount == 0;
+}
+
+static void vfs_detach_from_parent(vfs_node_t node)
+{
+    if (node == NULL || node->parent == NULL) return;
+    vfs_child_lock();
+    node->parent->child = list_delete(node->parent->child, node);
+    vfs_child_unlock();
+    node->parent = NULL;
+}
+
+static void vfs_node_destroy(vfs_node_t node)
+{
+    if (node == NULL) return;
+    if (node->linkto != NULL && node->linkto != node)
+    {
+        vfs_close(node->linkto);
+        node->linkto = NULL;
+    }
+    free(node->name);
+    free(node->linkname);
+    free(node);
+}
+
+static bool vfs_node_has_persistent_handle(vfs_node_t node)
+{
+    if (node == NULL) return false;
+    if (node->type & file_proxy) return true;
+
+    vfs_filesystem_t fs = get_filesystem_node(node);
+    if (fs == NULL) return false;
+    return strcmp(fs->name, "devfs") == 0 || strcmp(fs->name, "tmpfs") == 0 ||
+           strcmp(fs->name, "proc") == 0 || strcmp(fs->name, "proc_self") == 0 ||
+           strcmp(fs->name, "sysfs") == 0 || strcmp(fs->name, "nmfs") == 0 ||
+           strcmp(fs->name, "dnsfs") == 0 || strcmp(fs->name, "unixpath") == 0;
+}
+
+static errno_t vfs_release_final(vfs_node_t node, bool force_destroy, bool per_fd_close_done)
+{
+    if (node == NULL) return VFS_STATUS_FAILED;
+
+    if (node->type & (file_ptmx | file_pts))
+    {
+        if (!per_fd_close_done && node->handle != NULL) callbackof(node, close)(node->handle);
+        node->handle = NULL;
+        if (force_destroy || node->parent == NULL)
+        {
+            vfs_detach_from_parent(node);
+            vfs_node_destroy(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (node->type & file_pipe)
+    {
+        if (!per_fd_close_done && node->handle != NULL) callbackof(node, close)(node->handle);
+        node->handle = NULL;
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (node->type & file_epoll)
+    {
+        epoll_file_t *ep = (epoll_file_t *)node->handle;
+        if (ep != NULL)
+        {
+            if (ep->watches != NULL)
+            {
+                while (true)
+                {
+                    epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
+                    if (watch == NULL) break;
+                    free(watch);
+                }
+                queue_destroy(ep->watches);
+            }
+            free(ep);
+            node->handle = NULL;
+        }
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (node->type & file_anon)
+    {
+        if (node->handle != NULL) callbackof(node, del)(NULL, node);
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (node->type & file_delete)
+    {
+        if (node->handle != NULL && !((node->type & file_symlink) && node->linkname != NULL))
+        {
+            void *parent_handle = node->delete_parent_handle != NULL ? node->delete_parent_handle :
+                                                                   (node->parent != NULL ? node->parent->handle : NULL);
+            errno_t res = callbackof(node, del)(parent_handle, node);
+            if (res < 0) return res;
+            if (node->handle != NULL && !vfs_node_has_persistent_handle(node))
+                callbackof(node, close)(node->handle);
+        }
+        node->handle = NULL;
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (node->handle == NULL)
+    {
+        if (force_destroy)
+        {
+            vfs_detach_from_parent(node);
+            vfs_node_destroy(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (node->type & file_proxy)
+    {
+        if (force_destroy)
+        {
+            void *parent_handle = node->parent != NULL ? node->parent->handle : NULL;
+            callbackof(node, del)(parent_handle, node);
+            node->handle = NULL;
+            vfs_detach_from_parent(node);
+            vfs_node_destroy(node);
+        }
+        return VFS_STATUS_SUCCESS;
+    }
+
+    if (!vfs_node_has_persistent_handle(node))
+    {
+        callbackof(node, close)(node->handle);
+        node->handle = NULL;
+    }
+    if (force_destroy)
+    {
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+    }
+    return VFS_STATUS_SUCCESS;
 }
 
 vfs_filesystem_t get_filesystem(char *type) {
@@ -214,8 +419,44 @@ static char *vfs_alias_target_dup(const char *path)
     return target;
 }
 
+static char *vfs_join_abs_path(vfs_node_t parent, const char *name)
+{
+    if (parent == NULL || name == NULL) return NULL;
+    char *parent_path = vfs_get_fullpath(parent);
+    if (parent_path == NULL) return NULL;
+    size_t parent_len = strlen(parent_path);
+    size_t name_len = strlen(name);
+    char *out = (char *)malloc(parent_len + name_len + 2);
+    if (out == NULL)
+    {
+        free(parent_path);
+        return NULL;
+    }
+    sprintf(out, "%s%s%s", parent_path, parent_len > 1 ? "/" : "", name);
+    free(parent_path);
+    return out;
+}
+
+static void vfs_notify_path(vfs_node_t parent, const char *name, uint32_t mask)
+{
+    char *path = vfs_join_abs_path(parent, name);
+    if (path == NULL) return;
+    if (vfs_udev_trace_path(path))
+        write_serial_fmt("[udev-trace] vfs:notify path=%s mask=0x%x parent=%p name=%s\n",
+                         path,
+                         mask,
+                         parent,
+                         name != NULL ? name : "(null)");
+    anonfs_notify_path_event(path, mask);
+    free(path);
+}
+
 errno_t vfs_mkdir(const char *name) {
-    if (name[0] != '/') return VFS_STATUS_FAILED;
+    if (name[0] != '/')
+    {
+        vfs_udev_log_node("mkdir-invalid", name, NULL, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
     char      *path     = strdup(name + 1);
     char      *save_ptr = path;
     vfs_node_t current  = rootdir;
@@ -236,18 +477,30 @@ errno_t vfs_mkdir(const char *name) {
         if (current == NULL) {
             current       = vfs_node_alloc(father, buf);
             current->type = file_dir;
-            callbackof(father, mkdir)(father->handle, buf, current);
+            errno_t mk_ret = callbackof(father, mkdir)(father->handle, buf, current);
+            char *created_path = vfs_get_fullpath(current);
+            vfs_udev_log_node("mkdir-created", created_path, current, mk_ret);
+            free(created_path);
+            vfs_notify_path(father, buf, IN_CREATE | IN_ISDIR);
             do_update(current);
         } else {
             do_update(current);
-            if (!(current->type & file_dir)) goto err;
+            if (!(current->type & file_dir))
+            {
+                char *bad_path = vfs_get_fullpath(current);
+                vfs_udev_log_node("mkdir-not-dir", bad_path, current, VFS_STATUS_FAILED);
+                free(bad_path);
+                goto err;
+            }
         }
     }
 
+    vfs_udev_log_node("mkdir-ok", name, current, EOK);
     free(path);
     return EOK;
 
 err:
+    vfs_udev_log_node("mkdir-fail", name, current, VFS_STATUS_FAILED);
     free(path);
     return VFS_STATUS_FAILED;
 }
@@ -255,6 +508,9 @@ err:
 errno_t vfs_link(const char *name, const char *target_name) {
     vfs_node_t current = rootdir;
     char      *path    = strdup(name + 1);
+    errno_t    link_ret = VFS_STATUS_FAILED;
+    char      *created_path = NULL;
+    vfs_node_t node = NULL;
 
     char *save_ptr = path;
     char *filename = path + strlen(path);
@@ -270,7 +526,6 @@ errno_t vfs_link(const char *name, const char *target_name) {
         free(path);
         return -ENOENT;
     }
-    vfs_node_t node ;
     for (const char *buf = pathtok(&save_ptr); buf; buf = pathtok(&save_ptr)) {
         if (streq(buf, ".")) continue;
         if (streq(buf, "..")) {
@@ -291,9 +546,30 @@ errno_t vfs_link(const char *name, const char *target_name) {
     }
 
 create:
+    if (filename == NULL || *filename == '\0') goto err;
+    if (vfs_child_find(current, filename) != NULL)
+    {
+        link_ret = -EEXIST;
+        goto err;
+    }
     node = vfs_child_append(current, filename, NULL);
+    if (node == NULL)
+    {
+        link_ret = -ENOMEM;
+        goto err;
+    }
     node->type      = file_none;
-    callbackof(current, link)(current->handle, target_name, node);
+    link_ret = callbackof(current, link)(current->handle, target_name, node);
+    created_path = vfs_get_fullpath(node);
+    vfs_udev_log_node("link-created", created_path, node, link_ret);
+    free(created_path);
+    if (link_ret < 0)
+    {
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+        free(path);
+        return link_ret;
+    }
     node->linkto = vfs_open(target_name);
 
     free(path);
@@ -301,13 +577,16 @@ create:
     return EOK;
 
 err:
+    vfs_udev_log_node("link-fail", name, current, VFS_STATUS_FAILED);
     free(path);
-    return VFS_STATUS_FAILED;
+    return link_ret;
 }
 
 errno_t vfs_symlink(const char *name, const char *target_name) {
     vfs_node_t current = rootdir;
     char      *path    = strdup(name + 1);
+    errno_t    symlink_ret = -EIO;
+    char      *created_path = NULL;
 
     char *save_ptr = path;
     char *filename = path + strlen(path);
@@ -348,7 +627,16 @@ create:
     node->type      = file_symlink;
     node->linkname  = strdup(target_name);
     node->size      = node->linkname != NULL ? strlen(node->linkname) : 0;
-    callbackof(current, symlink)(current->handle, target_name, node);
+    symlink_ret = callbackof(current, symlink)(current->handle, target_name, node);
+    created_path = vfs_get_fullpath(node);
+    vfs_udev_log_node("symlink-created", created_path, node, symlink_ret);
+    if (vfs_udev_trace_path(created_path) || vfs_udev_trace_path(target_name))
+        write_serial_fmt("[udev-trace] vfs:symlink-target link=%s target=%s ret=%d\n",
+                         created_path != NULL ? created_path : "(null)",
+                         target_name != NULL ? target_name : "(null)",
+                         symlink_ret);
+    free(created_path);
+    vfs_notify_path(current, filename, IN_CREATE);
     node->linkto = vfs_open(target_name);
 
     free(path);
@@ -356,6 +644,7 @@ create:
     return EOK;
 
 err:
+    vfs_udev_log_node("symlink-fail", name, current, -EIO);
     free(path);
     return -EIO;
 }
@@ -385,46 +674,113 @@ errno_t vfs_mkfile(const char *name) {
         parent = vfs_open(fullpath);
     }
 
-    if (parent == NULL || parent->type != file_dir) { return VFS_STATUS_FAILED; }
+    if (parent == NULL || parent->type != file_dir)
+    {
+        if (parent != NULL && parent != rootdir) vfs_close(parent);
+        free(fullpath);
+        return VFS_STATUS_FAILED;
+    }
 
     // 创建文件
     vfs_node_t node = vfs_child_append(parent, filename, NULL);
+    if (node == NULL)
+    {
+        if (parent != rootdir) vfs_close(parent);
+        free(fullpath);
+        return -ENOMEM;
+    }
     node->type      = file_none;
     errno_t status  = callbackof(parent, mkfile)(parent->handle, filename, node);
+    vfs_udev_log_node("mkfile-created", name, node, status);
+    if (status == EOK) vfs_notify_path(parent, filename, IN_CREATE);
+    else
+    {
+        vfs_detach_from_parent(node);
+        vfs_node_destroy(node);
+    }
+    if (parent != rootdir) vfs_close(parent);
     free(fullpath);
     return status;
 }
 
 errno_t vfs_delete(vfs_node_t node) {
-    if (node == rootdir) return VFS_STATUS_FAILED;
-    if (node == NULL || node->parent == NULL) return VFS_STATUS_FAILED;
-    if ((node->type & file_dir) && node->child != NULL) return -ENOTEMPTY;
-
-    if (!((node->type & file_symlink) && node->linkname != NULL))
+    if (node == rootdir)
     {
-        errno_t res = callbackof(node, del)(node->parent->handle, node);
-        if (res < 0) return res;
+        vfs_udev_log_node("delete-root", NULL, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+    if (node == NULL || node->parent == NULL)
+    {
+        vfs_udev_log_node("delete-invalid", NULL, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+    if ((node->type & file_dir) && node->child != NULL)
+    {
+        vfs_udev_log_node("delete-not-empty", NULL, node, -ENOTEMPTY);
+        return -ENOTEMPTY;
     }
 
-    vfs_child_lock();
-    node->parent->child = list_delete(node->parent->child, node);
-    vfs_child_unlock();
+    char *deleted_path = vfs_get_fullpath(node);
+    vfs_udev_log_node("delete-begin", deleted_path, node, 0);
+    node->delete_parent_handle = node->parent != NULL ? node->parent->handle : NULL;
+    node->type |= file_delete;
+    uint32_t delete_mask = (node->type & file_dir) ? (IN_DELETE | IN_ISDIR) : IN_DELETE;
+    uint32_t last_delete_ref = vfs_node_has_persistent_handle(node) ? 1 : 0;
+    if (node->refcount > last_delete_ref + 1)
+    {
+        vfs_detach_from_parent(node);
+        errno_t ret = vfs_close(node);
+        if (ret == VFS_STATUS_SUCCESS && deleted_path != NULL) anonfs_notify_path_event(deleted_path, delete_mask);
+        vfs_udev_log_node("delete-deferred", deleted_path, node, ret);
+        free(deleted_path);
+        return ret;
+    }
 
-    node->parent = NULL;
-    node->handle = NULL;
-    vfs_free(node);
-    return VFS_STATUS_SUCCESS;
+    errno_t ret = vfs_release_final(node, true, false);
+    if (ret < 0)
+    {
+        node->type &= (uint16_t)~file_delete;
+        node->delete_parent_handle = NULL;
+    }
+    else if (deleted_path != NULL)
+    {
+        anonfs_notify_path_event(deleted_path, delete_mask);
+    }
+    if (vfs_udev_trace_path(deleted_path))
+        write_serial_fmt("[udev-trace] vfs:delete-finish path=%s ret=%d mask=0x%x\n",
+                         deleted_path,
+                         ret,
+                         delete_mask);
+    free(deleted_path);
+    return ret;
+}
+
+void vfs_detach(vfs_node_t node)
+{
+    vfs_detach_from_parent(node);
 }
 
 errno_t vfs_rename(vfs_node_t node, const char *nw) {
-    if (node == NULL || nw == NULL) return VFS_STATUS_FAILED;
+    if (node == NULL || nw == NULL)
+    {
+        vfs_udev_log_node("rename-invalid", nw, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
     if ((node->type & file_symlink) && node->linkname != NULL)
     {
         char *new_name = strrchr(nw, '/');
         new_name = new_name != NULL ? new_name + 1 : (char *)nw;
-        if (*new_name == '\0') return VFS_STATUS_FAILED;
+        if (*new_name == '\0')
+        {
+            vfs_udev_log_node("rename-empty-name", nw, node, VFS_STATUS_FAILED);
+            return VFS_STATUS_FAILED;
+        }
         char *copy = strdup(new_name);
-        if (copy == NULL) return VFS_STATUS_FAILED;
+        if (copy == NULL)
+        {
+            vfs_udev_log_node("rename-alloc-fail", nw, node, VFS_STATUS_FAILED);
+            return VFS_STATUS_FAILED;
+        }
 
         char *parent_path = strdup(nw);
         if (parent_path == NULL)
@@ -446,19 +802,23 @@ errno_t vfs_rename(vfs_node_t node, const char *nw) {
             strcpy(parent_path, ".");
         }
 
-        vfs_node_t new_parent = streq(parent_path, ".") ? node->parent : vfs_open(parent_path);
+        bool new_parent_opened = !streq(parent_path, ".");
+        vfs_node_t new_parent = new_parent_opened ? vfs_open(parent_path) : node->parent;
         free(parent_path);
         if (new_parent == NULL || !(new_parent->type & file_dir))
         {
-            if (new_parent != NULL && new_parent != node->parent) vfs_close(new_parent);
+            if (new_parent != NULL && new_parent_opened) vfs_close(new_parent);
             free(copy);
+            vfs_udev_log_node("rename-parent-fail", nw, node, VFS_STATUS_FAILED);
             return VFS_STATUS_FAILED;
         }
 
+        char *old_path = vfs_get_fullpath(node);
         if (new_parent != node->parent)
         {
+            vfs_node_t old_parent = node->parent;
             vfs_child_lock();
-            node->parent->child = list_delete(node->parent->child, node);
+            old_parent->child = list_delete(old_parent->child, node);
             new_parent->child = list_prepend(new_parent->child, node);
             node->parent = new_parent;
             node->fsid = new_parent->fsid;
@@ -466,14 +826,107 @@ errno_t vfs_rename(vfs_node_t node, const char *nw) {
             node->dev = new_parent->dev;
             vfs_child_unlock();
         }
+        if (new_parent_opened) vfs_close(new_parent);
 
         free(node->name);
         node->name = copy;
+        vfs_udev_log_node("rename-symlink", nw, node, VFS_STATUS_SUCCESS);
+        if (old_path != NULL)
+        {
+            anonfs_notify_path_event(old_path, IN_MOVED_FROM);
+            free(old_path);
+        }
+        anonfs_notify_path_event(nw, IN_MOVED_TO);
         return VFS_STATUS_SUCCESS;
     }
+    char *new_name = strrchr(nw, '/');
+    new_name = new_name != NULL ? new_name + 1 : (char *)nw;
+    if (*new_name == '\0')
+    {
+        vfs_udev_log_node("rename-empty-name", nw, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+
+    char *new_name_copy = strdup(new_name);
+    if (new_name_copy == NULL)
+    {
+        vfs_udev_log_node("rename-alloc-fail", nw, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+
+    char *parent_path = strdup(nw);
+    if (parent_path == NULL)
+    {
+        free(new_name_copy);
+        return VFS_STATUS_FAILED;
+    }
+    char *last_slash = strrchr(parent_path, '/');
+    if (last_slash == parent_path)
+    {
+        parent_path[1] = '\0';
+    }
+    else if (last_slash != NULL)
+    {
+        *last_slash = '\0';
+    }
+    else
+    {
+        strcpy(parent_path, ".");
+    }
+
+    vfs_node_t old_parent = node->parent;
+    bool new_parent_opened = !streq(parent_path, ".");
+    vfs_node_t new_parent = new_parent_opened ? vfs_open(parent_path) : old_parent;
+    free(parent_path);
+    if (new_parent == NULL || !(new_parent->type & file_dir) || new_parent->fsid != node->fsid)
+    {
+        if (new_parent != NULL && new_parent_opened) vfs_close(new_parent);
+        free(new_name_copy);
+        vfs_udev_log_node("rename-parent-fail", nw, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+
     do_update(node);
-    if (node->handle == NULL) return VFS_STATUS_FAILED;
-    return callbackof(node, rename)(node->handle, nw);
+    if (node->handle == NULL)
+    {
+        if (new_parent_opened) vfs_close(new_parent);
+        free(new_name_copy);
+        vfs_udev_log_node("rename-no-handle", nw, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+    char *old_path = vfs_get_fullpath(node);
+    errno_t ret = callbackof(node, rename)(node->handle, nw);
+    if (vfs_udev_trace_path(old_path) || vfs_udev_trace_path(nw))
+        write_serial_fmt("[udev-trace] vfs:rename old=%s new=%s node=%p ret=%d\n",
+                         old_path != NULL ? old_path : "(null)",
+                         nw,
+                         node,
+                         ret);
+    if (ret == EOK)
+    {
+        if (new_parent != old_parent)
+        {
+            vfs_child_lock();
+            if (old_parent != NULL) old_parent->child = list_delete(old_parent->child, node);
+            new_parent->child = list_prepend(new_parent->child, node);
+            node->parent = new_parent;
+            node->fsid   = new_parent->fsid;
+            node->root   = new_parent->root;
+            node->dev    = new_parent->dev;
+            vfs_child_unlock();
+        }
+        free(node->name);
+        node->name = new_name_copy;
+        if (old_path != NULL) anonfs_notify_path_event(old_path, IN_MOVED_FROM);
+        anonfs_notify_path_event(nw, IN_MOVED_TO);
+    }
+    else
+    {
+        free(new_name_copy);
+    }
+    if (new_parent_opened) vfs_close(new_parent);
+    free(old_path);
+    return ret;
 }
 
 errno_t vfs_resize(vfs_node_t node, uint64_t size) {
@@ -515,7 +968,10 @@ vfs_node_t vfs_do_search(vfs_node_t dir, const char *name) {
 static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool allow_alias) {
     if (unlikely(str == NULL)) return NULL;
     if (unlikely(str[0] != '/')) return NULL;
-    if (str[1] == '\0') return rootdir; // 根目录
+    if (str[1] == '\0') { // 根目录
+        if (rootdir != NULL) rootdir->refcount++;
+        return rootdir;
+    }
 
     char *path = strdup(str + 1);
     if (unlikely(path == NULL)) return NULL;
@@ -696,113 +1152,29 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
 
 errno_t vfs_close(vfs_node_t node) {
     if (unlikely(node == NULL)) return VFS_STATUS_FAILED;
+    bool had_ref = node->refcount > 0;
+    bool final_ref = vfs_ref_drop(node);
+
     if (node == rootdir) return VFS_STATUS_SUCCESS;
 
-    if (node->refcount > 0) node->refcount--;
-
-    if (node->type & (file_ptmx | file_pts)) {
-        if (node->handle != NULL) callbackof(node, close)(node->handle);
-        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
-        node->handle = NULL;
-        if (node->parent == NULL) {
-            free(node->name);
-            free(node);
-        }
-        return VFS_STATUS_SUCCESS;
-    }
-
-    if (node->type & file_pipe) {
-        if (node->handle != NULL) {
-            callbackof(node, close)(node->handle);
-        }
-
-        if (node->refcount <= 0) {
-            if (node->parent != NULL) {
-                vfs_child_lock();
-                node->parent->child = list_delete(node->parent->child, node);
-                vfs_child_unlock();
-            }
-            node->handle = NULL;
-            free(node->name);
-            free(node);
-        }
-        return VFS_STATUS_SUCCESS;
-    }
-
-    if (node->type & file_epoll) {
-        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
-        epoll_file_t *ep = (epoll_file_t *)node->handle;
-        if (ep != NULL) {
-            if (ep->watches != NULL) {
-                while (true) {
-                    epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
-                    if (watch == NULL) break;
-                    free(watch);
-                }
-                queue_destroy(ep->watches);
-            }
-            free(ep);
-            node->handle = NULL;
-        }
-        if (node->parent == NULL) {
-            free(node->name);
-            free(node);
-        }
-        return VFS_STATUS_SUCCESS;
-    }
-
-    if (node->type & file_anon) {
-        if (node->refcount > 0) return VFS_STATUS_SUCCESS;
-        if (node->handle != NULL) {
-            callbackof(node, del)(NULL, node);
-        }
-        if (node->parent != NULL) {
-            vfs_child_lock();
-            node->parent->child = list_delete(node->parent->child, node);
-            vfs_child_unlock();
-        }
-        free(node->name);
-        free(node);
-        return VFS_STATUS_SUCCESS;
-    }
-
-    if (unlikely(node->handle == NULL)) return VFS_STATUS_SUCCESS;
-
-    if ((node->type & file_socket) && node->refcount > 0) {
-        return VFS_STATUS_SUCCESS;
-    }
-
-    if (node->type & file_proxy){
-         return VFS_STATUS_SUCCESS;
-    }
-    if ((node->type & file_dir) && !(node->type & file_delete))
-    {
-        return VFS_STATUS_SUCCESS;
-    } 
-    if (!(node->type & file_delete) && node->refcount > 0) {
-        return VFS_STATUS_SUCCESS;
-    }
-    if (node->type & file_delete && node->refcount <= 0) {
-        errno_t res = callbackof(node, del)(node->parent->handle, node);
-        if (res < 0) return res;
-        vfs_child_lock();
-        node->parent->child = list_delete(node->parent->child, node);
-        vfs_child_unlock();
-        node->handle = NULL;
-        vfs_free(node);
-    } else {
+    bool per_fd_close_done = had_ref && (node->type & (file_ptmx | file_pts | file_pipe)) && node->handle != NULL;
+    if (per_fd_close_done)
         callbackof(node, close)(node->handle);
-        node->handle = NULL;
-    }
-    return VFS_STATUS_SUCCESS;
+    uint32_t last_delete_ref = vfs_node_has_persistent_handle(node) ? 1 : 0;
+    bool unlinked_final_ref = had_ref && (node->type & file_delete) && node->parent == NULL &&
+                              node->refcount <= last_delete_ref;
+    if (!final_ref && !unlinked_final_ref) return VFS_STATUS_SUCCESS;
+
+    return vfs_release_final(node, false, per_fd_close_done);
 }
 
 bool is_virtual_fs(const char *src) {
     return ((uint64_t)src) == DEVFS_REGISTER_ID || ((uint64_t)src) == MODFS_REGISTER_ID ||
            ((uint64_t)src) == TMPFS_REGISTER_ID || ((uint64_t)src) == TMPFS_REGISTER_ID + 1000 ||
-           ((uint64_t)src) == PIEFS_REGISTER_ID || ((uint64_t)src) == NETFS_REGISTER_ID ||
-           ((uint64_t)src) == CPFS_REGISTER_ID || ((uint64_t)src) == PROC_REGISTER_ID ||
-           ((uint64_t)src) == DNS_REGISTER_ID || ((uint64_t)src) == NM_REGISTER_ID;
+           ((uint64_t)src) == TMPFS_REGISTER_ID + 2000 || ((uint64_t)src) == PIEFS_REGISTER_ID ||
+           ((uint64_t)src) == NETFS_REGISTER_ID || ((uint64_t)src) == CPFS_REGISTER_ID ||
+           ((uint64_t)src) == PROC_REGISTER_ID || ((uint64_t)src) == DNS_REGISTER_ID ||
+           ((uint64_t)src) == NM_REGISTER_ID;
 }
 
 void vfs_free(vfs_node_t vfs) {
@@ -810,12 +1182,15 @@ void vfs_free(vfs_node_t vfs) {
     vfs_child_lock();
     list_t child = vfs->child;
     vfs->child   = NULL;
+    for (list_t cur = child; cur != NULL; cur = cur->next)
+    {
+        vfs_node_t child_node = (vfs_node_t)cur->data;
+        if (child_node != NULL) child_node->parent = NULL;
+    }
     vfs_child_unlock();
     list_free_with(child, (void (*)(void *))vfs_free);
-    vfs_close(vfs);
-    free(vfs->name);
-    free(vfs->linkname);
-    free(vfs);
+    if (vfs != rootdir)
+        vfs_release_final(vfs, true, false);
 }
 
 void vfs_free_child(vfs_node_t vfs) {
@@ -828,16 +1203,41 @@ void vfs_free_child(vfs_node_t vfs) {
 }
 
 errno_t vfs_mount(const char *src, vfs_node_t node) {
-    if (node == NULL) return VFS_STATUS_FAILED;
-    if (node->type != file_dir) return VFS_STATUS_FAILED;
+    const bool src_virtual = is_virtual_fs(src);
+    if (node == NULL)
+    {
+        vfs_udev_log_node("mount-null", src_virtual ? NULL : src, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+    if (node->type != file_dir)
+    {
+        vfs_udev_log_node("mount-not-dir", src_virtual ? NULL : src, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+    char *target_path = vfs_get_fullpath(node);
+    vfs_udev_log_node("mount-begin", target_path, node, 0);
     for (int i = 1; i < fs_nextid; i++) {
         if (fs_callbacks[i]->mount(src, node) == 0) {
             node->fsid     = i;
             node->root     = node;
             node->is_mount = true;
+            if (vfs_udev_trace_path(target_path))
+            {
+                vfs_filesystem_t fs = get_filesystem_node(node);
+                write_serial_fmt("[udev-trace] vfs:mount-ok target=%s source=0x%llx fsid=%d fs=%s child=%llu handle=%p\n",
+                                 target_path != NULL ? target_path : "(null)",
+                                 (unsigned long long)(uintptr_t)src,
+                                 i,
+                                 fs != NULL ? fs->name : "(null)",
+                                 (unsigned long long)list_length(node->child),
+                                 node->handle);
+            }
+            free(target_path);
             return VFS_STATUS_SUCCESS;
         }
     }
+    vfs_udev_log_node("mount-fail", target_path, node, VFS_STATUS_FAILED);
+    free(target_path);
     return VFS_STATUS_FAILED;
 }
 
@@ -845,7 +1245,24 @@ size_t vfs_read(vfs_node_t file, void *addr, size_t offset, size_t size) {
     if (file == NULL || addr == NULL) return VFS_STATUS_FAILED;
     do_update(file);
     if (file->type == file_dir) return VFS_STATUS_FAILED;
-    return callbackof(file, read)(file->handle, addr, offset, size);
+    size_t ret = callbackof(file, read)(file->handle, addr, offset, size);
+    if ((ret == (size_t)VFS_STATUS_FAILED || ((ssize_t)ret < 0 && (ssize_t)ret != -EWOULDBLOCK &&
+                                               (ssize_t)ret != -EAGAIN)) &&
+        vfs_udev_trace_node(file))
+    {
+        char *path = vfs_get_fullpath(file);
+        write_serial_fmt("[udev-trace] vfs:read-error path=%s node=%p offset=%llu size=%llu ret=%lld handle=%p type=0x%x fsid=%u\n",
+                         path != NULL ? path : "(null)",
+                         file,
+                         (unsigned long long)offset,
+                         (unsigned long long)size,
+                         (long long)ret,
+                         file->handle,
+                         file->type,
+                         file->fsid);
+        free(path);
+    }
+    return ret;
 }
 
 size_t vfs_write(vfs_node_t file, void *addr, size_t offset, size_t size) {
@@ -853,6 +1270,29 @@ size_t vfs_write(vfs_node_t file, void *addr, size_t offset, size_t size) {
     do_update(file);
     if (file->type == file_dir) return VFS_STATUS_FAILED;
     size_t ret = callbackof(file, write)(file->handle, addr, offset, size);
+    if (vfs_udev_trace_node(file))
+    {
+        char *path = vfs_get_fullpath(file);
+        write_serial_fmt("[udev-trace] vfs:write path=%s node=%p offset=%llu size=%llu ret=%lld handle=%p type=0x%x fsid=%u\n",
+                         path != NULL ? path : "(null)",
+                         file,
+                         (unsigned long long)offset,
+                         (unsigned long long)size,
+                         (long long)ret,
+                         file->handle,
+                         file->type,
+                         file->fsid);
+        free(path);
+    }
+    if (ret != (size_t)VFS_STATUS_FAILED)
+    {
+        char *path = vfs_get_fullpath(file);
+        if (path != NULL)
+        {
+            anonfs_notify_path_event(path, IN_MODIFY);
+            free(path);
+        }
+    }
     do_update(file);
     return ret;
 }
@@ -861,24 +1301,71 @@ errno_t vfs_ioctl(vfs_node_t device, size_t options, void *arg) {
     if (device == NULL) return VFS_STATUS_FAILED;
     do_update(device);
     if (device->type == file_dir) return VFS_STATUS_FAILED;
-    return callbackof(device, ioctl)(device->handle, options, arg);
+    errno_t ret = callbackof(device, ioctl)(device->handle, options, arg);
+    if (vfs_udev_trace_node(device))
+    {
+        char *path = vfs_get_fullpath(device);
+        write_serial_fmt("[udev-trace] vfs:ioctl path=%s node=%p req=0x%llx ret=%d handle=%p type=0x%x fsid=%u\n",
+                         path != NULL ? path : "(null)",
+                         device,
+                         (unsigned long long)options,
+                         ret,
+                         device->handle,
+                         device->type,
+                         device->fsid);
+        free(path);
+    }
+    return ret;
 }
 
 errno_t vfs_poll(vfs_node_t node, size_t event) {
     do_update(node);
     if (node->type & file_dir) return -1;
-    return callbackof(node, poll)(node->handle, event);
+    if (node->type & file_epoll)
+    {
+        epoll_file_t *ep = (epoll_file_t *)node->handle;
+        if (ep == NULL || ep->watches == NULL) return EPOLLERR;
+        spin_lock(&ep->watches->lock);
+        bool has_watches = ep->watches->size != 0;
+        spin_unlock(&ep->watches->lock);
+        return has_watches ? (event & EPOLLIN) : 0;
+    }
+    errno_t ret = callbackof(node, poll)(node->handle, event);
+    if (ret < 0 && vfs_udev_trace_node(node))
+    {
+        char *path = vfs_get_fullpath(node);
+        write_serial_fmt("[udev-trace] vfs:poll-error path=%s node=%p events=0x%llx ret=%d handle=%p type=0x%x fsid=%u\n",
+                         path != NULL ? path : "(null)",
+                         node,
+                         (unsigned long long)event,
+                         ret,
+                         node->handle,
+                         node->type,
+                         node->fsid);
+        free(path);
+    }
+    return ret;
 }
 
 errno_t vfs_unmount(const char *path) {
     vfs_node_t node = vfs_open(path);
+    vfs_udev_log_node("unmount-lookup", path, node, node != NULL ? 0 : VFS_STATUS_FAILED);
     if (node == NULL) return VFS_STATUS_FAILED;
-    if (node->type != file_dir) return VFS_STATUS_FAILED;
-    if (node->fsid == 0) return VFS_STATUS_FAILED;
+    if (node->type != file_dir)
+    {
+        vfs_udev_log_node("unmount-not-dir", path, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
+    if (node->fsid == 0)
+    {
+        vfs_udev_log_node("unmount-rootfsid", path, node, VFS_STATUS_FAILED);
+        return VFS_STATUS_FAILED;
+    }
     if (node->parent) {
         vfs_node_t cur = node;
         node           = node->parent;
         if (cur->root == cur) {
+            vfs_udev_log_node("unmount-begin", path, cur, 0);
             vfs_free_child(cur);
             callbackof(cur, unmount)(cur->handle);
             cur->fsid     = node->fsid; // 交给上级
@@ -887,9 +1374,11 @@ errno_t vfs_unmount(const char *path) {
             cur->child    = NULL;
             cur->is_mount = false;
             if (cur->fsid) do_update(cur);
+            vfs_udev_log_node("unmount-ok", path, cur, VFS_STATUS_SUCCESS);
             return VFS_STATUS_SUCCESS;
         }
     }
+    vfs_udev_log_node("unmount-fail", path, node, VFS_STATUS_FAILED);
     return VFS_STATUS_FAILED;
 }
 
@@ -1084,7 +1573,7 @@ static void tty_kernel_print(tty_t *tty, const char *msg)
 {
     (void)tty;
     write_serial_fmt("%s", msg);
-    p_xapi_output_kernel(msg);
+    if (current_xtttp_terminal() != NULL) p_xapi_output_kernel(msg);
 }
 
 static void tty_kernel_putc(tty_t *tty, int c)
@@ -1092,7 +1581,7 @@ static void tty_kernel_putc(tty_t *tty, int c)
     (void)tty;
     char buf[2] = {(char)c, '\0'};
     write_serial_fmt("%s", buf);
-    p_xapi_output_kernel(buf);
+    if (current_xtttp_terminal() != NULL) p_xapi_output_kernel(buf);
 }
 
 static void tty_termios_default(termios_t *termios)
@@ -1117,6 +1606,29 @@ static void tty_termios_default(termios_t *termios)
     termios->c_cc[VDISCARD] = 15;
     termios->c_cc[VWERASE] = 23;
     termios->c_cc[VLNEXT] = 22;
+}
+
+static void tty_termios_to_termios2(const termios_t *termios, struct termios2 *termios2)
+{
+    memset(termios2, 0, sizeof(*termios2));
+    termios2->c_iflag = termios->c_iflag;
+    termios2->c_oflag = termios->c_oflag;
+    termios2->c_cflag = termios->c_cflag;
+    termios2->c_lflag = termios->c_lflag;
+    termios2->c_line = termios->c_line;
+    memcpy(termios2->c_cc, termios->c_cc, MIN(sizeof(termios2->c_cc), sizeof(termios->c_cc)));
+    termios2->c_ispeed = B38400;
+    termios2->c_ospeed = B38400;
+}
+
+static void tty_termios_from_termios2(termios_t *termios, const struct termios2 *termios2)
+{
+    termios->c_iflag = termios2->c_iflag;
+    termios->c_oflag = termios2->c_oflag;
+    termios->c_cflag = termios2->c_cflag;
+    termios->c_lflag = termios2->c_lflag;
+    termios->c_line = termios2->c_line;
+    memcpy(termios->c_cc, termios2->c_cc, MIN(sizeof(termios->c_cc), sizeof(termios2->c_cc)));
 }
 
 tty_t *alloc_default_tty()
@@ -1267,6 +1779,13 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
         memcpy(termios, &tty->termios, sizeof(struct termios));
         break;
     }
+    case TCGETS2:
+    {
+        struct termios2 *termios2 = (struct termios2 *)arg;
+        if (termios2 == NULL) return -EFAULT;
+        tty_termios_to_termios2(&tty->termios, termios2);
+        break;
+    }
     case TCSETS:
     case TCSETSF:
     case TCSETSW:
@@ -1276,6 +1795,15 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
         memcpy(&tty->termios, termios, sizeof(struct termios));
         break;
     }
+    case TCSETS2:
+    case TCSETSF2:
+    case TCSETSW2:
+    {
+        const struct termios2 *termios2 = (const struct termios2 *)arg;
+        if (termios2 == NULL) return -EFAULT;
+        tty_termios_from_termios2(&tty->termios, termios2);
+        break;
+    }
     case TIOCGPGRP:
         if (arg == NULL) return -EFAULT;
         *(int *)arg = get_current_task()->parent_group->pid;
@@ -1283,6 +1811,43 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
         break;
     case TIOCSPGRP:
     case TIOCSCTTY:
+        break;
+    case TIOCGETD:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = tty->termios.c_line;
+        break;
+    case TIOCSETD:
+        if (arg == NULL) return -EFAULT;
+        tty->termios.c_line = (uint8_t)(*(int *)arg);
+        break;
+    case TIOCGSID:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = get_current_task()->parent_group->pid;
+        break;
+    case TIOCGDEV:
+        if (arg == NULL) return -EFAULT;
+        *(unsigned int *)arg = (5U << 8) | 1U;
+        break;
+    case TIOCOUTQ:
+    case FIONREAD:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = 0;
+        break;
+    case TIOCMGET:
+        if (arg == NULL) return -EFAULT;
+        *(int *)arg = TIOCM_DTR | TIOCM_RTS | TIOCM_CTS | TIOCM_CAR | TIOCM_DSR;
+        break;
+    case TIOCMBIS:
+    case TIOCMBIC:
+    case TIOCMSET:
+    case TCFLSH:
+    case TIOCNXCL:
+    case TIOCEXCL:
+    case TIOCNOTTY:
+    case TCSBRK:
+    case TCSBRKP:
+    case TIOCSBRK:
+    case TIOCCBRK:
         break;
     case KDGETMODE:
         if (arg == NULL) return -EFAULT;
@@ -1310,6 +1875,17 @@ static errno_t tty_ioctl(device_t *device, size_t req, void *arg)
         if (arg == NULL) return -EFAULT;
         *(int *)arg = 1;
         break;
+    case VT_ACTIVATE:
+    case VT_WAITACTIVE:
+        break;
+    case VT_GETSTATE:
+    {
+        if (arg == NULL) return -EFAULT;
+        struct vt_state *state = (struct vt_state *)arg;
+        state->v_active = 1;
+        state->v_state = 1;
+        break;
+    }
     default:
         return -ENOTTY;
     }
@@ -1387,7 +1963,7 @@ static size_t urandom_write(int drive, uint8_t *buffer, size_t number, size_t lb
 
 void build_tty_device()
 {
-    device_t stdio;
+    device_t stdio = {};
     stdio.type = DEVICE_STREAM;
     strcpy(stdio.drive_name, "stdio");
     stdio.flag        = 1;
@@ -1403,6 +1979,14 @@ void build_tty_device()
     device_t ttydev = stdio;
     strcpy(ttydev.drive_name, "tty");
     regist_device(NULL, ttydev);
+
+    device_t console = stdio;
+    strcpy(console.drive_name, "console");
+    regist_device(NULL, console);
+
+    device_t serial_console = stdio;
+    strcpy(serial_console.drive_name, "ttyS0");
+    regist_device(NULL, serial_console);
 
     device_t null_dev = {};
     null_dev.type = DEVICE_STREAM;

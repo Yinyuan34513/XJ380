@@ -265,7 +265,7 @@ void ide_setup(void) {
         char name_buf[20];
         sprintf(name_buf, "ide%d", i);
         
-        device_t ide_dev;
+        device_t ide_dev = {};
         ide_dev.size = ide_devices[i].sectors * ide_devices[i].sector_size;
         ide_dev.sector_size = ide_devices[i].sector_size;
         ide_dev.type = DEVICE_BLOCK;

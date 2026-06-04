@@ -159,6 +159,22 @@ int pipefs_ioctl(void *file, ssize_t cmd, ssize_t arg) {
     }
 }
 
+static void pipefs_trace_close(const char *stage, pipe_specific_t *spec, pipe_info_t *pipe) {
+    if (spec == NULL || pipe == NULL) return;
+
+    write_serial_fmt("[udev-trace] pipefs:close-%s name=%s node=%p spec=%p pipe=%p end=%s read_fds=%d write_fds=%d ref=%u ptr=%u\n",
+                     stage != NULL ? stage : "?",
+                     spec->node != NULL && spec->node->name != NULL ? spec->node->name : "(null)",
+                     spec->node,
+                     spec,
+                     pipe,
+                     spec->write ? "write" : "read",
+                     pipe->read_fds,
+                     pipe->write_fds,
+                     spec->node != NULL ? spec->node->refcount : 0,
+                     pipe->ptr);
+}
+
 bool pipefs_close(void *current) {
     pipe_specific_t *spec = (pipe_specific_t *)current;
     if (spec == NULL) return true;
@@ -169,39 +185,37 @@ bool pipefs_close(void *current) {
         return true;
     }
 
-    bool free_spec  = false;
-    bool free_pipe  = false;
-    pipe_specific_t *other_spec = NULL;
+    bool release_spec = spec->node == NULL || spec->node->refcount == 0;
+    bool free_pipe    = false;
 
     spin_lock(&pipe->lock);
+    pipefs_trace_close("begin", spec, pipe);
     if (spec->write) {
         if (pipe->write_fds > 0) pipe->write_fds--;
-        free_spec = (pipe->write_fds == 0);
-        if (free_spec) {
+        if (pipe->write_fds == 0) {
             pipe_wake_waiters(&pipe->blocking_read);
-            pipe->write_spec = NULL;
-            other_spec = pipe->read_spec;
         }
     } else {
         if (pipe->read_fds > 0) pipe->read_fds--;
-        free_spec = (pipe->read_fds == 0);
-        if (free_spec) {
+        if (pipe->read_fds == 0) {
             pipe_wake_waiters(&pipe->blocking_write);
-            pipe->read_spec = NULL;
-            other_spec = pipe->write_spec;
         }
     }
-    free_pipe = (pipe->write_fds == 0 && pipe->read_fds == 0);
+    if (release_spec) {
+        if (spec->write && pipe->write_spec == spec) pipe->write_spec = NULL;
+        if (!spec->write && pipe->read_spec == spec) pipe->read_spec = NULL;
+        if (spec->node != NULL && spec->node->handle == spec) spec->node->handle = NULL;
+        spec->info = NULL;
+    }
+    free_pipe = (pipe->write_fds == 0 && pipe->read_fds == 0 &&
+                 pipe->read_spec == NULL && pipe->write_spec == NULL);
+    pipefs_trace_close("end", spec, pipe);
     spin_unlock(&pipe->lock);
 
-    if (free_spec) {
+    if (release_spec) {
         free(spec);
     }
     if (free_pipe) {
-        if (other_spec) {
-            other_spec->info = NULL;
-            free(other_spec);
-        }
         free(pipe->buf);
         free(pipe);
     }
