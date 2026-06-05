@@ -6,7 +6,7 @@
 #    include <graphics/sheet.h>
 #    include <proto.hpp>
 
-#define KB_BUF_SIZE 100
+#define KB_BUF_SIZE 128
 
 #define MOUSE_BBIT 0x01
 #define MOUSE_ABIT 0x02

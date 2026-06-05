@@ -1,9 +1,11 @@
 #include <proto.hpp>
+#include <atom_queue.h>
 #include <dlinker.h>
 #include <syscall/syscall.h>
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
+static atom_queue kb_fifo_queue;
 static volatile bool kb_fifo_ready = false;
 static uint8_t kb_synth_buf[KB_BUF_SIZE];
 static uint8_t *kb_synth_head = kb_synth_buf;
@@ -70,6 +72,7 @@ static void keyboard_prepare_fifo()
     kb_fifo.alt    = false;
     kb_fifo.caps   = false;
     memset(kb_fifo.buf, 0, KB_BUF_SIZE);
+    init_atom_queue(&kb_fifo_queue, kb_fifo.buf, KB_BUF_SIZE);
     kb_synth_head  = kb_synth_buf;
     kb_synth_tail  = kb_synth_buf;
     memset(kb_synth_buf, 0, sizeof(kb_synth_buf));
@@ -303,26 +306,11 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         return;
     }
 
-    if (kb_fifo.p_head == kb_fifo.buf + KB_BUF_SIZE)
+    if (!atom_push(&kb_fifo_queue, fifo_value))
     {
-        kb_fifo.p_head = kb_fifo.buf;
+        atom_pop(&kb_fifo_queue);
+        atom_push(&kb_fifo_queue, fifo_value);
     }
-
-    if (kb_fifo.count >= KB_BUF_SIZE)
-    {
-        kb_fifo.p_tail++;
-        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE)
-        {
-            kb_fifo.p_tail = kb_fifo.buf;
-        }
-
-        kb_fifo.count = KB_BUF_SIZE - 1;
-    }
-
-    *kb_fifo.p_head = fifo_value;
-
-    kb_fifo.count++;
-    kb_fifo.p_head++;
 
     send_eoi();
 }
@@ -337,15 +325,14 @@ uint8_t get_keyboard_input()
         return synthetic;
     }
 
-    if (kb_fifo.p_tail != kb_fifo.p_head)
+    int raw_input = atom_pop(&kb_fifo_queue);
+    if (raw_input >= 0)
     {
         // 有没有读的
-        uint8_t raw = *kb_fifo.p_tail;
+        uint8_t raw = (uint8_t)raw_input;
         uint8_t temp = raw >= 128 ? raw :
                        keyboard_translate_base_make_code(raw, kb_fifo.shift, kb_fifo.caps);
 
-        if (kb_fifo.p_tail == kb_fifo.buf + KB_BUF_SIZE) { kb_fifo.p_tail = kb_fifo.buf; }
-        kb_fifo.p_tail++;
         return temp;
     }
     return NULL;

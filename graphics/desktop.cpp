@@ -201,7 +201,7 @@ void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
     vfs_mkdir(desktop_folder_path);
 
     PrintPicture_blend(sht, csheet, 20, 30 + 0 * 110, 74, 74, "/system/icon/d_system.png");
-    print_box_ttf(sht, csheet, "系统", BLACK, 57 - calc_ttf_length("系统", 11) / 2, 105 + 1 * 110 + 1, 11);
+    print_box_ttf(sht, csheet, "系统", BLACK, 57 - calc_ttf_length("系统", 11) / 2, 105 + 0 * 110 + 1, 11);
     print_box_ttf(sht, csheet, "系统", WHITE, 57 - calc_ttf_length("系统", 11) / 2, 105 + 0 * 110, 11);
 
     PrintPicture_blend(sht, csheet, 20, 30 + 1 * 110, 74, 74, "/system/icon/bin.png");

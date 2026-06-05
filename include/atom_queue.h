@@ -11,6 +11,7 @@ typedef struct {
 } atom_queue;
 
 atom_queue *create_atom_queue(uint64_t size);
+bool        init_atom_queue(atom_queue *queue, uint8_t *buffer, uint64_t size);
 bool        atom_push(atom_queue *queue, uint8_t data);
 int         atom_pop(atom_queue *queue);
 void        free_queue(atom_queue *queue);

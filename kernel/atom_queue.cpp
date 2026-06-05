@@ -9,7 +9,7 @@ static uint64_t load(uint64_t *addr) {
     return ret;
 }
 
-static void store(uint64_t *addr, uint32_t value) {
+static void store(uint64_t *addr, uint64_t value) {
     __asm__ volatile("lock xchg %[value], %[addr] \n\t"
                      : [addr] "+m"(*addr), [value] "+r"(value)
                      :
@@ -24,15 +24,30 @@ static bool cas(uint64_t *addr, uint64_t exp, uint64_t upd) {
                      : "memory");
     return (bool)ret;
 }
-atom_queue *create_atom_queue(uint64_t size) {
-    if (size == 0 || (size & (size - 1)) != 0) { return NULL; }
-    atom_queue *queue = (atom_queue *)malloc(sizeof(atom_queue));
+bool init_atom_queue(atom_queue *queue, uint8_t *buffer, uint64_t size) {
+    if (queue == NULL || buffer == NULL || size == 0 || (size & (size - 1)) != 0) { return false; }
     memset(queue, 0, sizeof(atom_queue));
-    queue->buf  = (uint8_t *)malloc(size * sizeof(uint8_t));
+    queue->buf  = buffer;
     queue->mask = size - 1;
     queue->head = 0;
     queue->tail = 0;
     queue->size = 0;
+    return true;
+}
+
+atom_queue *create_atom_queue(uint64_t size) {
+    if (size == 0 || (size & (size - 1)) != 0) { return NULL; }
+    atom_queue *queue = (atom_queue *)malloc(sizeof(atom_queue));
+    if (queue == NULL) { return NULL; }
+
+    uint8_t *buffer = (uint8_t *)malloc(size * sizeof(uint8_t));
+    if (buffer == NULL)
+    {
+        free(queue);
+        return NULL;
+    }
+
+    init_atom_queue(queue, buffer, size);
     return queue;
 }
 
