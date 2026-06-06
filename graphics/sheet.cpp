@@ -517,6 +517,8 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
         return NULL;
     }
 
+    int px = (int)x;
+    int py = (int)y;
     SHEET *front_p = sht->start;
     while (front_p->next != NULL) {
         front_p = front_p->next;
@@ -524,7 +526,7 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
 
     while (front_p != NULL)
     {
-        if (!is_point_in_sheet_rect(front_p, (int)x, (int)y)) {
+        if (!is_point_in_sheet_rect(front_p, px, py)) {
             front_p = front_p->front;
             continue;
         }
@@ -532,15 +534,15 @@ SHEET *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y)
             front_p = front_p->front;
             continue;
         }
-        if (!is_sheet_pixel_opaque_at(front_p, (int)x, (int)y)) {
+        if (!is_sheet_pixel_opaque_at(front_p, px, py)) {
             front_p = front_p->front;
             continue;
         }
 
         if (front_p->type == MovableSheetType)
         {
-            if (front_p->bx + 22 <= x && front_p->bx + (int)front_p->width - 32 >= x &&
-                front_p->by <= y && front_p->by + 22 >= y)
+            if (front_p->bx + 22 <= px && front_p->bx + (int)front_p->width - 32 >= px &&
+                front_p->by <= py && front_p->by + 22 >= py)
             {
                 return front_p;
             }
