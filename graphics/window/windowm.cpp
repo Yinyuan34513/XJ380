@@ -548,6 +548,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     while (true)
     {
         if (!WindowIsCreating) { break; }
+        scheduler_yield();
     }
 
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls)) return;

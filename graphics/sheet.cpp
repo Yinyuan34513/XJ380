@@ -266,6 +266,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
+        scheduler_yield();
     }
 
     SheetIsCreating  = true;
@@ -592,6 +593,7 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     while (true)
     {
         if (!SheetIsCreating && !SheetIsRefreshing) { break; }
+        scheduler_yield();
     }
 
     SheetIsCreating = true;
@@ -625,6 +627,7 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
+        scheduler_yield();
     }
 
     SheetIsCreating  = true;
