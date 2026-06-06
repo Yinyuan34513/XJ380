@@ -35,8 +35,105 @@ static constexpr size_t SOCKET_ADDR_MAX      = sizeof(struct sockaddr_un) > size
                                                    : sizeof(struct sockaddr_in6);
 static constexpr uint64_t CLONE_THREAD_FLAG  = 0x00010000ULL;
 static constexpr uint64_t CLONE_PIDFD_FLAG   = 0x00001000ULL;
+static constexpr uint64_t SLOW_PATH_SYSCALL_NS = 200000000ULL;
 
 static void epoll_close_node(vfs_node_t node);
+static const char *trace_task_name();
+static bool task_shm_trace_enabled();
+static bool path_shm_trace_enabled(const char *path);
+static bool fd_shm_trace_enabled(fd_file_handle *handle);
+
+static anonfs_memfd_t *sys_fd_memfd(fd_file_handle *handle)
+{
+    if (handle == NULL || handle->node == NULL || handle->node->handle == NULL) return NULL;
+    if ((handle->node->type & file_anon) == 0) return NULL;
+
+    anonfs_handle_t *anon = (anonfs_handle_t *)handle->node->handle;
+    if (anon->kind != ANONFS_MEMFD) return NULL;
+    return &anon->u.memfd;
+}
+
+static bool sys_memfd_resize_sealed(anonfs_memfd_t *memfd, uint64_t new_size, uint64_t *old_size_out)
+{
+    if (memfd == NULL) return false;
+
+    spin_lock(&memfd->lock);
+    uint64_t old_size = memfd->size;
+    uint32_t seals = memfd->seals;
+    spin_unlock(&memfd->lock);
+
+    if (old_size_out != NULL) *old_size_out = old_size;
+    return (new_size < old_size && (seals & F_SEAL_SHRINK)) || (new_size > old_size && (seals & F_SEAL_GROW));
+}
+
+static void print_kernel_duration(uint64_t ns)
+{
+    write_serial_fmt("%llu.%03llums",
+                     (unsigned long long)(ns / 1000000ULL),
+                     (unsigned long long)((ns / 1000ULL) % 1000ULL));
+}
+
+static void trace_slow_path_syscall(const char *syscall, int dirfd, const char *path, uint64_t flags,
+                                    int64_t ret, uint64_t elapsed_ns)
+{
+#if !CONFIG_KERNEL_PROFILER
+    (void)syscall;
+    (void)dirfd;
+    (void)path;
+    (void)flags;
+    (void)ret;
+    (void)elapsed_ns;
+#else
+    if (elapsed_ns < SLOW_PATH_SYSCALL_NS) return;
+
+    tcb_t task = get_current_task();
+    pcb_t proc = task != NULL ? task->parent_group : NULL;
+    write_serial_fmt("[prof] slow path syscall=%s task=%s pid=%llu dirfd=%d flags=0x%llx ret=%lld dur=",
+                     syscall != NULL ? syscall : "?",
+                     task != NULL ? task->name : "?",
+                     (unsigned long long)(proc != NULL ? proc->pid : 0),
+                     dirfd,
+                     (unsigned long long)flags,
+                     (long long)ret);
+    print_kernel_duration(elapsed_ns);
+    write_serial_fmt(" path=%s\n", path != NULL ? path : "(null)");
+#endif
+}
+
+static void trace_slow_mmap_syscall(uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
+                                    uint64_t offset, fd_file_handle *handle, uint64_t ret, uint64_t elapsed_ns)
+{
+#if !CONFIG_KERNEL_PROFILER
+    (void)addr;
+    (void)length;
+    (void)prot;
+    (void)flags;
+    (void)fd;
+    (void)offset;
+    (void)handle;
+    (void)ret;
+    (void)elapsed_ns;
+#else
+    if (elapsed_ns < SLOW_PATH_SYSCALL_NS) return;
+
+    char *path = handle != NULL && handle->node != NULL ? vfs_get_fullpath(handle->node) : NULL;
+    tcb_t task = get_current_task();
+    pcb_t proc = task != NULL ? task->parent_group : NULL;
+    write_serial_fmt("[prof] slow mmap task=%s pid=%llu addr=0x%llx len=%llu prot=0x%llx flags=0x%llx fd=%d off=%llu ret=0x%llx dur=",
+                     task != NULL ? task->name : "?",
+                     (unsigned long long)(proc != NULL ? proc->pid : 0),
+                     (unsigned long long)addr,
+                     (unsigned long long)length,
+                     (unsigned long long)prot,
+                     (unsigned long long)flags,
+                     fd,
+                     (unsigned long long)offset,
+                     (unsigned long long)ret);
+    print_kernel_duration(elapsed_ns);
+    write_serial_fmt(" path=%s\n", path != NULL ? path : "(anonymous)");
+    free(path);
+#endif
+}
 
 struct futex_waiter
 {
@@ -216,11 +313,33 @@ static int64_t vfs_io_status(size_t status)
     return signed_status < 0 ? signed_status : (int64_t)status;
 }
 
+static void unix_msg_release_rights(fd_file_handle **handles, size_t fd_count);
+
+static struct ucred unix_msg_current_cred()
+{
+    tcb_t task = get_current_task();
+    struct ucred cred = {};
+    cred.pid = task != NULL && task->parent_group != NULL ? (int)task->parent_group->pid : 0;
+    cred.uid = (int)user_uid(task_effective_user());
+    cred.gid = (int)user_gid(task_effective_user());
+    return cred;
+}
+
+static bool unix_msg_cred_matches_current(const struct ucred *cred)
+{
+    if (cred == NULL) return false;
+    struct ucred current = unix_msg_current_cred();
+    return cred->pid == current.pid && cred->uid == current.uid && cred->gid == current.gid;
+}
+
 static fd_file_handle **unix_msg_copy_rights_from_user(page_directory_t *pagedir, const struct msghdr *kmsg,
-                                                       size_t *out_fd_count, int *out_error)
+                                                       size_t *out_fd_count, int *out_error,
+                                                       struct ucred *out_cred, bool *out_has_cred)
 {
     if (out_fd_count != NULL) *out_fd_count = 0;
     if (out_error != NULL) *out_error = 0;
+    if (out_has_cred != NULL) *out_has_cred = false;
+    if (out_cred != NULL) memset(out_cred, 0, sizeof(*out_cred));
     if (kmsg == NULL || kmsg->msg_controllen == 0 || kmsg->msg_control == NULL) {
         return NULL;
     }
@@ -247,74 +366,81 @@ static fd_file_handle **unix_msg_copy_rights_from_user(page_directory_t *pagedir
 
     fd_file_handle **out_handles = NULL;
     size_t fd_count = 0;
+    struct ucred parsed_cred = {};
+    bool has_cred = false;
+    int error = 0;
     for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&control_msg);
          cmsg != NULL;
          cmsg = CMSG_NXTHDR(&control_msg, cmsg))
     {
-        if (cmsg->cmsg_level != SOL_SOCKET) continue;
-        if (cmsg->cmsg_type != SCM_RIGHTS) {
-            free(control);
-            if (out_error != NULL) *out_error = -EINVAL;
-            return NULL;
+        if (cmsg->cmsg_len < CMSG_LEN(0)) {
+            error = -EINVAL;
+            goto fail;
         }
-        if (cmsg->cmsg_len < CMSG_LEN(sizeof(int))) {
-            free(control);
-            if (out_error != NULL) *out_error = -EINVAL;
-            return NULL;
+        if (cmsg->cmsg_level != SOL_SOCKET) continue;
+        if (cmsg->cmsg_type == SCM_CREDENTIALS) {
+            if (cmsg->cmsg_len < CMSG_LEN(sizeof(struct ucred)) || has_cred) {
+                error = -EINVAL;
+                goto fail;
+            }
+            memcpy(&parsed_cred, CMSG_DATA(cmsg), sizeof(parsed_cred));
+            if (!unix_msg_cred_matches_current(&parsed_cred)) {
+                error = -EPERM;
+                goto fail;
+            }
+            has_cred = true;
+            continue;
+        }
+        if (cmsg->cmsg_type != SCM_RIGHTS) {
+            error = -EINVAL;
+            goto fail;
+        }
+        if (cmsg->cmsg_len < CMSG_LEN(sizeof(int)) || out_handles != NULL) {
+            error = -EINVAL;
+            goto fail;
         }
 
         size_t payload_len = cmsg->cmsg_len - CMSG_LEN(0);
         if ((payload_len % sizeof(int)) != 0) {
-            free(control);
-            if (out_error != NULL) *out_error = -EINVAL;
-            return NULL;
+            error = -EINVAL;
+            goto fail;
         }
         fd_count = payload_len / sizeof(int);
         out_handles = (fd_file_handle **)calloc(fd_count, sizeof(fd_file_handle *));
         if (out_handles == NULL) {
-            free(control);
-            if (out_error != NULL) *out_error = -ENOMEM;
-            return NULL;
+            error = -ENOMEM;
+            goto fail;
         }
 
         int *fds = (int *)CMSG_DATA(cmsg);
         for (size_t i = 0; i < fd_count; i++) {
             fd_file_handle *src = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fds[i]);
             if (src == NULL) {
-                for (size_t j = 0; j < i; j++) {
-                    if (out_handles[j] != NULL) {
-                        vfs_close(out_handles[j]->node);
-                        free(out_handles[j]);
-                    }
-                }
-                free(out_handles);
-                free(control);
-                if (out_error != NULL) *out_error = -EBADF;
-                return NULL;
+                error = -EBADF;
+                goto fail;
             }
 
             fd_file_handle *dup = fd_dup(src);
             if (dup == NULL) {
-                for (size_t j = 0; j < i; j++) {
-                    if (out_handles[j] != NULL) {
-                        vfs_close(out_handles[j]->node);
-                        free(out_handles[j]);
-                    }
-                }
-                free(out_handles);
-                free(control);
-                if (out_error != NULL) *out_error = -ENOMEM;
-                return NULL;
+                error = -ENOMEM;
+                goto fail;
             }
             dup->fd = (size_t)-1;
             out_handles[i] = dup;
         }
-        break;
     }
 
     free(control);
     if (out_fd_count != NULL) *out_fd_count = fd_count;
+    if (out_cred != NULL) *out_cred = parsed_cred;
+    if (out_has_cred != NULL) *out_has_cred = has_cred;
     return out_handles;
+
+fail:
+    unix_msg_release_rights(out_handles, fd_count);
+    free(control);
+    if (out_error != NULL) *out_error = error;
+    return NULL;
 }
 
 static void unix_msg_release_rights(fd_file_handle **handles, size_t fd_count)
@@ -1332,6 +1458,7 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
     char *normalized_path = strdup(path0);
     if (normalized_path == NULL) return SYSCALL_FAULT_(ENOMEM);
 
+    bool created = false;
     vfs_node_t node = vfs_open(path0);
     if (node == NULL)
     {
@@ -1346,13 +1473,21 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
         }
         if (flags & O_CREAT)
         {
-            if (mode & O_DIRECTORY) { vfs_mkdir(normalized_path); }
-            else
-                vfs_mkfile(normalized_path);
+            errno_t create_ret = (flags & O_DIRECTORY) ? vfs_mkdir(normalized_path) : vfs_mkfile(normalized_path);
+            if (path_shm_trace_enabled(path0))
+            {
+                write_serial_fmt("[shm-trace] open-create task=%s path=%s flags=0x%llx mode=0%llo ret=%d\n",
+                                 trace_task_name(),
+                                 path0,
+                                 (unsigned long long)flags,
+                                 (unsigned long long)mode,
+                                 create_ret);
+            }
             node = vfs_open(normalized_path);
             if (node == NULL)
                 goto err;
             else {
+                created = true;
                 stamp_node_owner(node);
                 pcb_t process = get_current_task()->parent_group;
                 uint64_t create_mode = mode & ~(process != NULL ? process->umask : 0);
@@ -1363,6 +1498,14 @@ static uint64_t open_kernel_path(char *path0, uint64_t flags, uint64_t mode)
         else
         err:
             free(normalized_path);
+        if (path_shm_trace_enabled(path0))
+        {
+            write_serial_fmt("[shm-trace] open task=%s path=%s flags=0x%llx mode=0%llo ret=-ENOENT\n",
+                             trace_task_name(),
+                             path0,
+                             (unsigned long long)flags,
+                             (unsigned long long)mode);
+        }
         if (trace_udev_path(path0))
             write_serial_fmt("[udev-trace] sys:open fail path=%s ret=-ENOENT\n", path0 != NULL ? path0 : "(null)");
         return SYSCALL_FAULT_(ENOENT);
@@ -1389,7 +1532,20 @@ next:
             return SYSCALL_FAULT_(EIO);
         }
     }
-
+    if ((flags & O_CREAT) && (flags & O_EXCL) && !created)
+    {
+        if (path_shm_trace_enabled(path0))
+        {
+            write_serial_fmt("[shm-trace] open task=%s path=%s flags=0x%llx mode=0%llo ret=-EEXIST\n",
+                             trace_task_name(),
+                             path0,
+                             (unsigned long long)flags,
+                             (unsigned long long)mode);
+        }
+        vfs_close(node);
+        free(normalized_path);
+        return SYSCALL_FAULT_(EEXIST);
+    }
     fd_file_handle *fd_handle = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
     // not_null_assets(fd_handle, "sys_open: null alloc fd");
     fd_handle->offset = flags & O_APPEND ? node->size : 0;
@@ -1408,6 +1564,21 @@ next:
         return SYSCALL_FAULT_(ENOENT);
     }
     trace_udev_node("open-ok", path0, node, index);
+    if (path_shm_trace_enabled(path0))
+    {
+        write_serial_fmt("[shm-trace] open task=%s path=%s flags=0x%llx mode=0%llo fd=%d created=%d node=%p type=0x%x fsid=%u handle=%p size=%llu\n",
+                         trace_task_name(),
+                         path0,
+                         (unsigned long long)flags,
+                         (unsigned long long)mode,
+                         index,
+                         created ? 1 : 0,
+                         node,
+                         node->type,
+                         node->fsid,
+                         node->handle,
+                         (unsigned long long)node->size);
+    }
     free(normalized_path);
     return index;
 }
@@ -1824,7 +1995,10 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
 
         int ancillary_error = 0;
         size_t fd_count = 0;
-        fd_file_handle **rights = unix_msg_copy_rights_from_user(pagedir, &kmsg, &fd_count, &ancillary_error);
+        struct ucred explicit_cred = {};
+        bool has_explicit_cred = false;
+        fd_file_handle **rights = unix_msg_copy_rights_from_user(pagedir, &kmsg, &fd_count, &ancillary_error,
+                                                                 &explicit_cred, &has_explicit_cred);
         if (ancillary_error < 0)
         {
             free(buffer);
@@ -1834,7 +2008,7 @@ sys_(sendmsg, int fd, const struct msghdr *msg, uint64_t flags)
         }
 
         ssize_t ret = unix_sendmsg_kernel(socket_impl, buffer, total_len, flags, kaddr_ptr, kmsg.msg_namelen,
-                                          rights, fd_count);
+                                          rights, fd_count, &explicit_cred, has_explicit_cred);
         fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
         trace_udev_fd_result("sendmsg-unix", fd, handle, total_len, flags, ret);
         free(buffer);
@@ -2988,6 +3162,73 @@ static bool user_range_available(pcb_t process, uint64_t start, uint64_t length)
     return true;
 }
 
+static uint64_t find_free_pagetable_range(page_directory_t *pagedir, uint64_t start, uint64_t end, uint64_t length)
+{
+    if (pagedir == NULL || start >= end || length == 0 || length > end - start) return 0;
+
+    uint64_t candidate = start;
+    uint64_t limit = end - length;
+    while (candidate <= limit)
+    {
+        bool occupied = false;
+        for (uint64_t offset = 0; offset < length; offset += PAGE_SIZE)
+        {
+            if (translate_address(pagedir, candidate + offset) != 0)
+            {
+                candidate = ((candidate + offset) & PAGE_MASK) + PAGE_SIZE;
+                occupied = true;
+                break;
+            }
+        }
+        if (!occupied) return candidate;
+    }
+    return 0;
+}
+
+static const char *trace_task_name()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL) return "?";
+    if (task->name[0] != '\0') return task->name;
+    if (task->parent_group != NULL && task->parent_group->name[0] != '\0') return task->parent_group->name;
+    return "?";
+}
+
+static bool trace_name_contains(const char *name, const char *needle)
+{
+    return name != NULL && needle != NULL && strstr(name, needle) != NULL;
+}
+
+static bool task_shm_trace_enabled()
+{
+    tcb_t task = get_current_task();
+    if (task == NULL) return false;
+    const char *task_name = task->name;
+    const char *proc_name = task->parent_group != NULL ? task->parent_group->name : NULL;
+    return trace_name_contains(task_name, "labwc") || trace_name_contains(proc_name, "labwc") ||
+           trace_name_contains(task_name, "weston") || trace_name_contains(proc_name, "weston") ||
+           trace_name_contains(task_name, "seatd") || trace_name_contains(proc_name, "seatd") ||
+           trace_name_contains(task_name, "pango") || trace_name_contains(proc_name, "pango") ||
+           trace_name_contains(task_name, "fontcon") || trace_name_contains(proc_name, "fontcon");
+}
+
+static bool path_shm_trace_enabled(const char *path)
+{
+    return path != NULL && strstr(path, "/dev/shm") != NULL;
+}
+
+static bool fd_shm_trace_enabled(fd_file_handle *handle)
+{
+    if (handle == NULL || handle->node == NULL) return false;
+
+    char *path = vfs_get_fullpath(handle->node);
+    bool trace = path_shm_trace_enabled(path);
+    free(path);
+    if (trace) return true;
+
+    return task_shm_trace_enabled() && (handle->node->type & file_anon);
+}
+
 static uint64_t find_user_mmap_range(pcb_t process, uint64_t hint, uint64_t length)
 {
     if (process == NULL || length == 0) return 0;
@@ -2995,15 +3236,21 @@ static uint64_t find_user_mmap_range(pcb_t process, uint64_t hint, uint64_t leng
     uint64_t start_addr = hint >= USER_MMAP_START ? (hint & PAGE_MASK) : USER_MMAP_START;
     if (start_addr >= USER_BRK_START || length > USER_BRK_START - start_addr) return 0;
 
-    uint64_t limit = USER_BRK_START - length;
-    while (start_addr <= limit)
+    uint64_t candidate = start_addr;
+    for (vma_t *vma = process->vma_manager.vma_list; vma != NULL; vma = vma->vm_next)
     {
-        if (user_range_available(process, start_addr, length)) return start_addr;
-        if (start_addr > limit - PAGE_SIZE) return 0;
-        start_addr += PAGE_SIZE;
+        if (vma->vm_end <= candidate) continue;
+        if (vma->vm_start > candidate)
+        {
+            uint64_t gap_end = MIN((uint64_t)vma->vm_start, USER_BRK_START);
+            uint64_t found = find_free_pagetable_range(process->pagedir, candidate, gap_end, length);
+            if (found != 0) return found;
+        }
+        if (vma->vm_end > candidate) candidate = (vma->vm_end + PAGE_SIZE - 1) & PAGE_MASK;
+        if (candidate >= USER_BRK_START || length > USER_BRK_START - candidate) return 0;
     }
 
-    return 0;
+    return find_free_pagetable_range(process->pagedir, candidate, USER_BRK_START, length);
 }
 
 static uint64_t prot_to_pte_flags(uint64_t prot)
@@ -3185,6 +3432,8 @@ uint64_t sys_brk(uint64_t brk) {
 sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
          uint64_t offset) {
 
+    uint64_t trace_start_ns = bootNanoTime();
+    uint64_t requested_addr = addr;
     addr = addr & (~(PAGE_SIZE - 1));
 
     uint64_t aligned_len = 0;
@@ -3278,7 +3527,32 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
 
     if (!(flags & MAP_ANONYMOUS)) {
         uint64_t ret = (uint64_t)vfs_map(file_handle->node, start_addr, aligned_len, prot, flags, offset);
+        if (ret == 0) ret = (uint64_t)SYSCALL_FAULT_(ENODEV);
+        if ((int64_t)ret < 0) {
+            vma_unmap_range(mgr, start_addr, end_addr);
+        }
         mm_op_lock_release();
+        if (fd_shm_trace_enabled(file_handle) || ((int64_t)ret < 0 && task_shm_trace_enabled()))
+        {
+            char *path = vfs_get_fullpath(file_handle->node);
+            write_serial_fmt("[shm-trace] mmap task=%s fd=%d path=%s len=%llu prot=0x%llx flags=0x%llx off=%llu ret=%lld node=%p type=0x%x fsid=%u handle=%p size=%llu\n",
+                             trace_task_name(),
+                             fd,
+                             path != NULL ? path : "(null)",
+                             (unsigned long long)length,
+                             (unsigned long long)prot,
+                             (unsigned long long)flags,
+                             (unsigned long long)offset,
+                             (long long)ret,
+                             file_handle->node,
+                             file_handle->node->type,
+                             file_handle->node->fsid,
+                             file_handle->node->handle,
+                             (unsigned long long)file_handle->node->size);
+            free(path);
+        }
+        trace_slow_mmap_syscall(requested_addr, length, prot, flags, fd, offset, file_handle, ret,
+                                bootNanoTime() - trace_start_ns);
         return ret;
     }
 
@@ -3293,6 +3567,8 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
     lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags);
     mm_op_lock_release();
 
+    trace_slow_mmap_syscall(requested_addr, length, prot, flags, fd, offset, NULL, start_addr,
+                            bootNanoTime() - trace_start_ns);
     return start_addr;
 
     return addr;
@@ -4237,6 +4513,68 @@ sys_(fcntl, int fd, int cmd, uint64_t arg)
     case F_SETLKW:
         trace_udev_fd_result("fcntl-lock", fd, handle, cmd, arg, 0);
         return 0;
+    case F_GET_SEALS:
+    {
+        anonfs_memfd_t *memfd = sys_fd_memfd(handle);
+        if (memfd == NULL)
+        {
+            trace_udev_fd_result("fcntl-get-seals", fd, handle, cmd, arg, -EINVAL);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+        spin_lock(&memfd->lock);
+        int ret = (int)memfd->seals;
+        spin_unlock(&memfd->lock);
+        if (fd_shm_trace_enabled(handle))
+        {
+            write_serial_fmt("[shm-trace] fcntl task=%s fd=%d cmd=F_GET_SEALS ret=%d\n",
+                             trace_task_name(),
+                             fd,
+                             ret);
+        }
+        trace_udev_fd_result("fcntl-get-seals", fd, handle, cmd, arg, ret);
+        return ret;
+    }
+    case F_ADD_SEALS:
+    {
+        uint32_t seals = (uint32_t)arg;
+        uint32_t valid_seals = F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE |
+                               F_SEAL_FUTURE_WRITE | F_SEAL_EXEC;
+        anonfs_memfd_t *memfd = sys_fd_memfd(handle);
+        if (memfd == NULL || (seals & ~valid_seals) != 0)
+        {
+            trace_udev_fd_result("fcntl-add-seals", fd, handle, cmd, arg, -EINVAL);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+
+        spin_lock(&memfd->lock);
+        bool allowed = (memfd->flags & MFD_ALLOW_SEALING) != 0 && (memfd->seals & F_SEAL_SEAL) == 0;
+        if (allowed) memfd->seals |= seals;
+        spin_unlock(&memfd->lock);
+
+        if (!allowed)
+        {
+            if (fd_shm_trace_enabled(handle))
+            {
+                write_serial_fmt("[shm-trace] fcntl task=%s fd=%d cmd=F_ADD_SEALS seals=0x%x ret=-EPERM flags=0x%x current=0x%x\n",
+                                 trace_task_name(),
+                                 fd,
+                                 seals,
+                                 memfd->flags,
+                                 memfd->seals);
+            }
+            trace_udev_fd_result("fcntl-add-seals", fd, handle, cmd, arg, -EPERM);
+            return SYSCALL_FAULT_(EPERM);
+        }
+        if (fd_shm_trace_enabled(handle))
+        {
+            write_serial_fmt("[shm-trace] fcntl task=%s fd=%d cmd=F_ADD_SEALS seals=0x%x ret=0\n",
+                             trace_task_name(),
+                             fd,
+                             seals);
+        }
+        trace_udev_fd_result("fcntl-add-seals", fd, handle, cmd, arg, 0);
+        return 0;
+    }
     default: break;
     }
     trace_udev_fd_result("fcntl-unknown", fd, handle, cmd, arg, 0);
@@ -4989,6 +5327,7 @@ sys_(getdents64, int fd, void *dents, size_t size)
 sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
 {
     if (buf == NULL) return SYSCALL_FAULT_(EINVAL);
+    uint64_t start_ns = bootNanoTime();
     char *resolved = NULL;
     int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
@@ -4997,6 +5336,7 @@ sys_(newfstatat, int dirfd, char *pathname, struct stat *buf, uint64_t flags)
     uint64_t ret = (flags & AT_SYMLINK_NOFOLLOW) ?
                    lstat_kernel_path(resolved, &kstat) :
                    stat_kernel_path(resolved, &kstat);
+    trace_slow_path_syscall("newfstatat", dirfd, resolved, flags, (int64_t)ret, bootNanoTime() - start_ns);
     if (trace_udev_path(resolved))
     {
         write_serial_fmt("[udev-trace] sys:newfstatat task=%s dirfd=%d path=%s flags=0x%llx ret=%lld mode=0%llo rdev=%llu size=%llu\n",
@@ -5193,6 +5533,18 @@ sys_(unlink)
         return 0;
     }
     size_t ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    if (path_shm_trace_enabled(npath))
+    {
+        write_serial_fmt("[shm-trace] unlink task=%s path=%s ret=%lld node=%p type=0x%x fsid=%u handle=%p ref=%u\n",
+                         trace_task_name(),
+                         npath,
+                         (long long)ret,
+                         node,
+                         node->type,
+                         node->fsid,
+                         node->handle,
+                         node->refcount);
+    }
     if (trace_udev_path(npath))
         write_serial_fmt("[udev-trace] sys:unlink task=%s path=%s ret=%lld\n",
                          get_current_task() != NULL ? get_current_task()->name : "(null)",
@@ -5268,6 +5620,19 @@ sys_(unlinkat)
     }
 
     uint64_t ret = vfs_delete(node) == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(ENOENT);
+    if (path_shm_trace_enabled(path))
+    {
+        write_serial_fmt("[shm-trace] unlinkat task=%s dirfd=%d path=%s ret=%lld node=%p type=0x%x fsid=%u handle=%p ref=%u\n",
+                         trace_task_name(),
+                         dirfd,
+                         path,
+                         (long long)ret,
+                         node,
+                         node->type,
+                         node->fsid,
+                         node->handle,
+                         node->refcount);
+    }
     if (trace_udev_path(path))
         write_serial_fmt("[udev-trace] sys:unlinkat task=%s dirfd=%d path=%s ret=%lld\n",
                          get_current_task() != NULL ? get_current_task()->name : "(null)",
@@ -5397,11 +5762,13 @@ sys_(openat)
     uint64_t flags = arg2;
     uint64_t mode  = arg3;
 
+    uint64_t start_ns = bootNanoTime();
     char *path = NULL;
     int path_ret = resolve_user_path_at(dirfd, name, &path);
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     uint64_t ret = open_kernel_path(path, flags, mode);
+    trace_slow_path_syscall("openat", dirfd, path, flags, (int64_t)ret, bootNanoTime() - start_ns);
     if (trace_udev_path(path))
     {
         write_serial_fmt("[udev-trace] sys:openat task=%s dirfd=%d path=%s flags=0x%llx mode=0%llo ret=%lld\n",
@@ -5439,16 +5806,154 @@ sys_(mkdirat, int dirfd, char *pathname, uint64_t mode)
     return ret == VFS_STATUS_SUCCESS ? 0 : SYSCALL_FAULT_(EIO);
 }
 
-sys_(flistxattr, int fd, char *list, size_t size)
+static uint64_t xattr_check_name(const char *name)
 {
-    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
-    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
-    if (size != 0 && list == NULL) return SYSCALL_FAULT_(EFAULT);
-    if (size != 0 && !user_range_mapped(current_user_pagedir(), list, size)) return SYSCALL_FAULT_(EFAULT);
+    char *kname = NULL;
+    int ret = copy_string_from_user(&kname, name, USER_PATH_MAX);
+    if (ret < 0) return SYSCALL_FAULT_((int)-ret);
+    free(kname);
     return 0;
 }
 
+static uint64_t xattr_check_path(char *path, bool no_follow)
+{
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(AT_FDCWD, path, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
+    vfs_node_t node = no_follow ? vfs_open_no_follow(resolved) : vfs_open(resolved);
+    free(resolved);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    vfs_close(node);
+    return 0;
+}
+
+static uint64_t xattr_check_fd(int fd)
+{
+    fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
+    if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
+    return 0;
+}
+
+static uint64_t xattr_check_user_buffer(const void *buffer, size_t size)
+{
+    if (size == 0) return 0;
+    if (buffer == NULL) return SYSCALL_FAULT_(EFAULT);
+    if (!user_range_mapped(current_user_pagedir(), buffer, size)) return SYSCALL_FAULT_(EFAULT);
+    return 0;
+}
+
+static uint64_t xattr_check_path_and_name(char *path, const char *name, bool no_follow)
+{
+    uint64_t ret = xattr_check_path(path, no_follow);
+    if ((int64_t)ret < 0) return ret;
+    return xattr_check_name(name);
+}
+
+sys_(setxattr, char *path, const char *name, const void *value, size_t size, int flags)
+{
+    (void)flags;
+    uint64_t ret = xattr_check_path_and_name(path, name, false);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_user_buffer(value, size);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(EOPNOTSUPP);
+}
+
+sys_(lsetxattr, char *path, const char *name, const void *value, size_t size, int flags)
+{
+    (void)flags;
+    uint64_t ret = xattr_check_path_and_name(path, name, true);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_user_buffer(value, size);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(EOPNOTSUPP);
+}
+
+sys_(fsetxattr, int fd, const char *name, const void *value, size_t size, int flags)
+{
+    (void)flags;
+    uint64_t ret = xattr_check_fd(fd);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_name(name);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_user_buffer(value, size);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(EOPNOTSUPP);
+}
+
+sys_(getxattr, char *path, const char *name, void *value, size_t size)
+{
+    uint64_t ret = xattr_check_path_and_name(path, name, false);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_user_buffer(value, size);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(ENODATA);
+}
+
+sys_(lgetxattr, char *path, const char *name, void *value, size_t size)
+{
+    uint64_t ret = xattr_check_path_and_name(path, name, true);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_user_buffer(value, size);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(ENODATA);
+}
+
+sys_(fgetxattr, int fd, const char *name, void *value, size_t size)
+{
+    uint64_t ret = xattr_check_fd(fd);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_name(name);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_user_buffer(value, size);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(ENODATA);
+}
+
+sys_(listxattr, char *path, char *list, size_t size)
+{
+    uint64_t ret = xattr_check_path(path, false);
+    if ((int64_t)ret < 0) return ret;
+    return xattr_check_user_buffer(list, size);
+}
+
+sys_(llistxattr, char *path, char *list, size_t size)
+{
+    uint64_t ret = xattr_check_path(path, true);
+    if ((int64_t)ret < 0) return ret;
+    return xattr_check_user_buffer(list, size);
+}
+
+sys_(flistxattr, int fd, char *list, size_t size)
+{
+    uint64_t ret = xattr_check_fd(fd);
+    if ((int64_t)ret < 0) return ret;
+    return xattr_check_user_buffer(list, size);
+}
+
+sys_(removexattr, char *path, const char *name)
+{
+    uint64_t ret = xattr_check_path_and_name(path, name, false);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(EOPNOTSUPP);
+}
+
+sys_(lremovexattr, char *path, const char *name)
+{
+    uint64_t ret = xattr_check_path_and_name(path, name, true);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(EOPNOTSUPP);
+}
+
+sys_(fremovexattr, int fd, const char *name)
+{
+    uint64_t ret = xattr_check_fd(fd);
+    if ((int64_t)ret < 0) return ret;
+    ret = xattr_check_name(name);
+    if ((int64_t)ret < 0) return ret;
+    return SYSCALL_FAULT_(EOPNOTSUPP);
+}
 
 sys_(copy_file_range, int fd_in, uint64_t *off_in, int fd_out, uint64_t *off_out, size_t len, uint64_t flags)
 {
@@ -5583,6 +6088,12 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
     trace_udev_node("mount-dir", ndir_name, dir, dir != NULL ? 0 : -ENOENT);
     if (!dir)
     {
+        if (path_shm_trace_enabled(ndir_name))
+        {
+            write_serial_fmt("[shm-trace] mount task=%s target=%s ret=-ENOENT\n",
+                             trace_task_name(),
+                             ndir_name);
+        }
         free(ndir_name);
         return SYSCALL_FAULT_(ENOENT);
     }
@@ -5639,6 +6150,15 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
     copy_ret = copy_string_from_user(&ktype, type, USER_PATH_MAX);
     if (copy_ret < 0) { free(ndir_name); return SYSCALL_FAULT_((int)-copy_ret); }
     vfs_filesystem_t filesystem = get_filesystem(ktype);
+    if (path_shm_trace_enabled(ndir_name))
+    {
+        write_serial_fmt("[shm-trace] mount-begin task=%s target=%s type=%s flags=0x%llx fs=%s\n",
+                         trace_task_name(),
+                         ndir_name,
+                         ktype,
+                         (unsigned long long)flags,
+                         filesystem != NULL ? filesystem->name : "(null)");
+    }
     free(ktype);
     if (filesystem == NULL) { free(ndir_name); return SYSCALL_FAULT_(EINVAL); }
     if (filesystem->id != 0)
@@ -5656,6 +6176,18 @@ sys_(mount, char *dev_name, char *dir_name, char *type, uint64_t flags, void *da
 mount:
     if (vfs_mount((const char *)ndev_name, dir) == VFS_STATUS_FAILED)
     {
+        if (path_shm_trace_enabled(ndir_name))
+        {
+            write_serial_fmt("[shm-trace] mount task=%s source=%s target=%s flags=0x%llx ret=-ENOENT node=%p type=0x%x fsid=%u handle=%p\n",
+                             trace_task_name(),
+                             filesystem->id != 0 ? "(virtual)" : (ndev_name != NULL ? ndev_name : "(null)"),
+                             ndir_name,
+                             (unsigned long long)flags,
+                             dir,
+                             dir != NULL ? dir->type : 0,
+                             dir != NULL ? dir->fsid : 0,
+                             dir != NULL ? dir->handle : NULL);
+        }
         if (trace_udev_path(ndir_name))
             write_serial_fmt("[udev-trace] sys:mount task=%s source=%s target=%s flags=0x%llx ret=-ENOENT\n",
                              get_current_task() != NULL ? get_current_task()->name : "(null)",
@@ -5663,8 +6195,20 @@ mount:
                              ndir_name,
                              (unsigned long long)flags);
         free(ndir_name);
-        free(ndev_name);
+        if (filesystem->id == 0) free(ndev_name);
         return SYSCALL_FAULT_(ENOENT);
+    }
+    if (path_shm_trace_enabled(ndir_name))
+    {
+        write_serial_fmt("[shm-trace] mount task=%s source=%s target=%s flags=0x%llx ret=0 node=%p type=0x%x fsid=%u handle=%p\n",
+                         trace_task_name(),
+                         filesystem->id != 0 ? "(virtual)" : (ndev_name != NULL ? ndev_name : "(null)"),
+                         ndir_name,
+                         (unsigned long long)flags,
+                         dir,
+                         dir != NULL ? dir->type : 0,
+                         dir != NULL ? dir->fsid : 0,
+                         dir != NULL ? dir->handle : NULL);
     }
     if (trace_udev_path(ndir_name))
         write_serial_fmt("[udev-trace] sys:mount task=%s source=%s target=%s flags=0x%llx ret=0\n",
@@ -6049,6 +6593,7 @@ sys_(readlink)
     uint64_t size = arg2;
     if (path == NULL || buf == NULL || size == 0) { return SYSCALL_FAULT_(EINVAL); }
 
+    uint64_t start_ns = bootNanoTime();
     char *kpath = NULL;
     int ret = copy_string_from_user(&kpath, path, USER_PATH_MAX);
     if (ret < 0) return SYSCALL_FAULT_((int)-ret);
@@ -6059,11 +6604,19 @@ sys_(readlink)
 
     vfs_node_t node = vfs_open_no_follow(resolved);
     trace_udev_node("readlink-lookup", resolved, node, node != NULL ? 0 : -ENOENT);
-    free(resolved);
-    if (node == NULL) { return SYSCALL_FAULT_(ENOENT); }
+    if (node == NULL)
+    {
+        uint64_t fault = SYSCALL_FAULT_(ENOENT);
+        trace_slow_path_syscall("readlink", AT_FDCWD, resolved, 0, (int64_t)fault, bootNanoTime() - start_ns);
+        free(resolved);
+        return fault;
+    }
     if (!(node->type & file_symlink))
     {
+        uint64_t fault = SYSCALL_FAULT_(EINVAL);
+        trace_slow_path_syscall("readlink", AT_FDCWD, resolved, 0, (int64_t)fault, bootNanoTime() - start_ns);
         vfs_close(node);
+        free(resolved);
         return SYSCALL_FAULT_(EINVAL);
     }
 
@@ -6072,6 +6625,7 @@ sys_(readlink)
     if (kbuf == NULL)
     {
         vfs_close(node);
+        free(resolved);
         return SYSCALL_FAULT_(ENOMEM);
     }
 
@@ -6086,7 +6640,10 @@ sys_(readlink)
                          (long long)read,
                          read != (size_t)VFS_STATUS_FAILED ? kbuf : "");
     }
+    uint64_t syscall_ret = read == (size_t)VFS_STATUS_FAILED ? SYSCALL_FAULT_(EIO) : (uint64_t)read;
+    trace_slow_path_syscall("readlink", AT_FDCWD, resolved, 0, (int64_t)syscall_ret, bootNanoTime() - start_ns);
     vfs_close(node);
+    free(resolved);
     if (read == (size_t)VFS_STATUS_FAILED)
     {
         free(kbuf);
@@ -6105,17 +6662,26 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
 {
     if (path == NULL || buf == NULL || size == 0) return SYSCALL_FAULT_(EINVAL);
 
+    uint64_t start_ns = bootNanoTime();
     char *resolved = NULL;
     int path_ret = resolve_user_path_at(dirfd, path, &resolved);
     if (path_ret < 0) return SYSCALL_FAULT_((int)-path_ret);
 
     vfs_node_t node = vfs_open_no_follow(resolved);
     trace_udev_node("readlinkat-lookup", resolved, node, node != NULL ? 0 : -ENOENT);
-    free(resolved);
-    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+    if (node == NULL)
+    {
+        uint64_t fault = SYSCALL_FAULT_(ENOENT);
+        trace_slow_path_syscall("readlinkat", dirfd, resolved, 0, (int64_t)fault, bootNanoTime() - start_ns);
+        free(resolved);
+        return fault;
+    }
     if (!(node->type & file_symlink))
     {
+        uint64_t fault = SYSCALL_FAULT_(EINVAL);
+        trace_slow_path_syscall("readlinkat", dirfd, resolved, 0, (int64_t)fault, bootNanoTime() - start_ns);
         vfs_close(node);
+        free(resolved);
         return SYSCALL_FAULT_(EINVAL);
     }
 
@@ -6124,6 +6690,7 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
     if (kbuf == NULL)
     {
         vfs_close(node);
+        free(resolved);
         return SYSCALL_FAULT_(ENOMEM);
     }
 
@@ -6138,7 +6705,10 @@ sys_(readlinkat, int dirfd, char *path, char *buf, size_t size)
                          (long long)read,
                          read != (size_t)VFS_STATUS_FAILED ? kbuf : "");
     }
+    uint64_t syscall_ret = read == (size_t)VFS_STATUS_FAILED ? SYSCALL_FAULT_(EIO) : (uint64_t)read;
+    trace_slow_path_syscall("readlinkat", dirfd, resolved, 0, (int64_t)syscall_ret, bootNanoTime() - start_ns);
     vfs_close(node);
+    free(resolved);
     if (read == (size_t)VFS_STATUS_FAILED)
     {
         free(kbuf);
@@ -6188,7 +6758,36 @@ sys_(ftruncate, int fd, uint64_t length)
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
     if (handle->node->type == file_dir) return SYSCALL_FAULT_(EISDIR);
-    if (vfs_resize(handle->node, length) != VFS_STATUS_SUCCESS) return SYSCALL_FAULT_(EIO);
+    anonfs_memfd_t *memfd = sys_fd_memfd(handle);
+    if (sys_memfd_resize_sealed(memfd, length, NULL))
+    {
+        if (fd_shm_trace_enabled(handle))
+        {
+            write_serial_fmt("[shm-trace] ftruncate task=%s fd=%d len=%llu ret=-EPERM\n",
+                             trace_task_name(),
+                             fd,
+                             (unsigned long long)length);
+        }
+        return SYSCALL_FAULT_(EPERM);
+    }
+    errno_t resize_ret = vfs_resize(handle->node, length);
+    if (fd_shm_trace_enabled(handle) || (memfd != NULL && task_shm_trace_enabled()))
+    {
+        char *path = vfs_get_fullpath(handle->node);
+        write_serial_fmt("[shm-trace] ftruncate task=%s fd=%d path=%s len=%llu ret=%d node=%p type=0x%x fsid=%u handle=%p size=%llu\n",
+                         trace_task_name(),
+                         fd,
+                         path != NULL ? path : "(null)",
+                         (unsigned long long)length,
+                         resize_ret,
+                         handle->node,
+                         handle->node->type,
+                         handle->node->fsid,
+                         handle->node->handle,
+                         (unsigned long long)handle->node->size);
+        free(path);
+    }
+    if (resize_ret != VFS_STATUS_SUCCESS) return SYSCALL_FAULT_(EIO);
     if (handle->offset > length) handle->offset = length;
     return 0;
 }
@@ -6209,6 +6808,10 @@ sys_(fallocate, int fd, int mode, int64_t offset, int64_t len)
     if (start > UINT64_MAX - length) return SYSCALL_FAULT_(EFBIG);
     uint64_t end = start + length;
     if (end <= handle->node->size) return 0;
+
+    uint64_t old_size = handle->node->size;
+    anonfs_memfd_t *memfd = sys_fd_memfd(handle);
+    if (memfd != NULL && sys_memfd_resize_sealed(memfd, end, &old_size)) return SYSCALL_FAULT_(EPERM);
 
     if (vfs_resize(handle->node, end) != VFS_STATUS_SUCCESS) return SYSCALL_FAULT_(EIO);
     return 0;
@@ -6511,6 +7114,20 @@ sys_(fchmod, int fd, uint64_t mode)
     fd_file_handle *handle = (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fd);
     if (handle == NULL || handle->node == NULL) return SYSCALL_FAULT_(EBADF);
     handle->node->mode = (uint16_t)((handle->node->mode & ~07777) | (mode & 07777));
+    if (fd_shm_trace_enabled(handle))
+    {
+        char *path = vfs_get_fullpath(handle->node);
+        write_serial_fmt("[shm-trace] fchmod task=%s fd=%d path=%s mode=0%llo ret=0 node=%p type=0x%x fsid=%u handle=%p\n",
+                         trace_task_name(),
+                         fd,
+                         path != NULL ? path : "(null)",
+                         (unsigned long long)(mode & 07777),
+                         handle->node,
+                         handle->node->type,
+                         handle->node->fsid,
+                         handle->node->handle);
+        free(path);
+    }
     return 0;
 }
 
@@ -6935,6 +7552,13 @@ sys_(timerfd_settime, int fd, int flags, const struct itimerspec *new_value, str
 sys_(memfd_create, const char *name, uint64_t flags)
 {
     int ret = anonfs_create_memfd(name, (uint32_t)flags);
+    if (task_shm_trace_enabled())
+    {
+        write_serial_fmt("[shm-trace] memfd_create task=%s flags=0x%llx ret=%d\n",
+                         trace_task_name(),
+                         (unsigned long long)flags,
+                         ret);
+    }
     return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
 }
 

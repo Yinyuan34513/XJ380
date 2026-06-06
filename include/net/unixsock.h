@@ -88,7 +88,8 @@ ssize_t unix_recvfrom(void *impl, void *buf, size_t size, uint64_t flags,
                       struct sockaddr *addr, socklen_t *addrlen);
 ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_t flags,
                             const struct sockaddr *addr, socklen_t addrlen,
-                            fd_file_handle **fds, size_t fd_count);
+                            fd_file_handle **fds, size_t fd_count,
+                            const struct ucred *cred, bool has_cred);
 ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flags,
                             struct sockaddr *addr, socklen_t *addrlen,
                             fd_file_handle ***out_fds, size_t *out_fd_count,

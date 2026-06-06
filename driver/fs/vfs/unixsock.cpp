@@ -436,7 +436,8 @@ static size_t ring_read(struct unix_sock *sk, uint8_t *data, size_t len)
 }
 
 static struct unix_stream_packet *unix_stream_packet_alloc(const uint8_t *data, size_t len,
-                                                           fd_file_handle **fds, size_t fd_count)
+                                                           fd_file_handle **fds, size_t fd_count,
+                                                           const struct ucred *cred, bool has_cred)
 {
     struct unix_stream_packet *packet =
         (struct unix_stream_packet *)malloc(sizeof(struct unix_stream_packet) + len);
@@ -446,7 +447,7 @@ static struct unix_stream_packet *unix_stream_packet_alloc(const uint8_t *data, 
     packet->offset   = 0;
     packet->fd_count = fd_count;
     packet->fds      = fds;
-    packet->cred     = unix_current_cred();
+    packet->cred     = has_cred && cred != NULL ? *cred : unix_current_cred();
     packet->has_cred = true;
     if (len > 0 && data != NULL) {
         memcpy(packet->data, data, len);
@@ -455,17 +456,18 @@ static struct unix_stream_packet *unix_stream_packet_alloc(const uint8_t *data, 
 }
 
 static ssize_t unix_stream_enqueue_locked(struct unix_sock *peer, const uint8_t *data, size_t len,
-                                          fd_file_handle **fds, size_t fd_count)
+                                          fd_file_handle **fds, size_t fd_count,
+                                          const struct ucred *cred, bool has_cred)
 {
     if (peer == NULL) return -EPIPE;
-    if (len == 0 && fd_count == 0) return 0;
+    if (len == 0 && fd_count == 0 && !has_cred) return 0;
 
     if (peer->stream_queue == NULL) {
         peer->stream_queue = queue_init();
         if (peer->stream_queue == NULL) return -ENOMEM;
     }
 
-    struct unix_stream_packet *packet = unix_stream_packet_alloc(data, len, fds, fd_count);
+    struct unix_stream_packet *packet = unix_stream_packet_alloc(data, len, fds, fd_count, cred, has_cred);
     if (packet == NULL) return -ENOMEM;
     if (queue_enqueue(peer->stream_queue, packet) == (size_t)-1) {
         packet->fds = NULL;
@@ -476,7 +478,8 @@ static ssize_t unix_stream_enqueue_locked(struct unix_sock *peer, const uint8_t 
 }
 
 static struct unix_dgram *unix_dgram_alloc(const struct sockaddr_un *addr, const uint8_t *data, size_t len,
-                                           fd_file_handle **fds, size_t fd_count)
+                                           fd_file_handle **fds, size_t fd_count,
+                                           const struct ucred *cred, bool has_cred)
 {
     struct unix_dgram *dg = (struct unix_dgram *)malloc(sizeof(struct unix_dgram) + len);
     if (dg == NULL) return NULL;
@@ -486,7 +489,7 @@ static struct unix_dgram *unix_dgram_alloc(const struct sockaddr_un *addr, const
     else
         memset(&dg->addr, 0, sizeof(dg->addr));
     dg->addr.sun_family = AF_UNIX;
-    dg->cred = unix_current_cred();
+    dg->cred = has_cred && cred != NULL ? *cred : unix_current_cred();
     dg->has_cred = true;
     dg->fd_count = fd_count;
     dg->fds = fds;
@@ -499,7 +502,8 @@ static struct unix_dgram *unix_dgram_alloc(const struct sockaddr_un *addr, const
 
 static ssize_t unix_dgram_enqueue_locked(struct unix_sock *peer, const struct sockaddr_un *addr,
                                          const uint8_t *data, size_t len,
-                                         fd_file_handle **fds, size_t fd_count)
+                                         fd_file_handle **fds, size_t fd_count,
+                                         const struct ucred *cred, bool has_cred)
 {
     if (peer == NULL) {
         unix_release_fd_array(fds, fd_count);
@@ -517,7 +521,7 @@ static ssize_t unix_dgram_enqueue_locked(struct unix_sock *peer, const struct so
         }
     }
 
-    struct unix_dgram *dg = unix_dgram_alloc(addr, data, len, fds, fd_count);
+    struct unix_dgram *dg = unix_dgram_alloc(addr, data, len, fds, fd_count, cred, has_cred);
     if (dg == NULL) {
         unix_release_fd_array(fds, fd_count);
         return -ENOMEM;
@@ -533,7 +537,8 @@ static ssize_t unix_dgram_enqueue_locked(struct unix_sock *peer, const struct so
 
 static ssize_t unix_dgram_send_to_peer(struct unix_sock *sk, struct unix_sock *peer,
                                        const uint8_t *data, size_t len,
-                                       fd_file_handle **fds, size_t fd_count)
+                                       fd_file_handle **fds, size_t fd_count,
+                                       const struct ucred *cred, bool has_cred)
 {
     if (peer == NULL) {
         unix_release_fd_array(fds, fd_count);
@@ -546,14 +551,15 @@ static ssize_t unix_dgram_send_to_peer(struct unix_sock *sk, struct unix_sock *p
     from.sun_family = AF_UNIX;
 
     spin_lock(&peer->lock);
-    ssize_t ret = unix_dgram_enqueue_locked(peer, &from, data, len, fds, fd_count);
+    ssize_t ret = unix_dgram_enqueue_locked(peer, &from, data, len, fds, fd_count, cred, has_cred);
     spin_unlock(&peer->lock);
     return ret;
 }
 
 static ssize_t unix_dgram_send_to_path(struct unix_sock *sk, const char *path,
                                        const uint8_t *data, size_t len,
-                                       fd_file_handle **fds, size_t fd_count)
+                                       fd_file_handle **fds, size_t fd_count,
+                                       const struct ucred *cred, bool has_cred)
 {
     if (path == NULL || path[0] == '\0') {
         unix_release_fd_array(fds, fd_count);
@@ -566,7 +572,7 @@ static ssize_t unix_dgram_send_to_path(struct unix_sock *sk, const char *path,
         return -ECONNREFUSED;
     }
 
-    ssize_t ret = unix_dgram_send_to_peer(sk, peer, data, len, fds, fd_count);
+    ssize_t ret = unix_dgram_send_to_peer(sk, peer, data, len, fds, fd_count, cred, has_cred);
     peer->refcount--;
     return ret;
 }
@@ -972,11 +978,11 @@ ssize_t unix_write(void *impl, const void *buf, size_t size, uint64_t flags)
 
     if (sk->type == SOCK_DGRAM) {
         if (sk->peer != NULL)
-            return unix_dgram_send_to_peer(sk, sk->peer, (const uint8_t *)buf, size, NULL, 0);
+            return unix_dgram_send_to_peer(sk, sk->peer, (const uint8_t *)buf, size, NULL, 0, NULL, false);
 
         if (sk->peer_addr.sun_family != AF_UNIX || sk->peer_addr.sun_path[0] == '\0')
             return -EDESTADDRREQ;
-        return unix_dgram_send_to_path(sk, sk->peer_addr.sun_path, (const uint8_t *)buf, size, NULL, 0);
+        return unix_dgram_send_to_path(sk, sk->peer_addr.sun_path, (const uint8_t *)buf, size, NULL, 0, NULL, false);
     }
 
     struct unix_sock *peer = sk->peer;
@@ -987,7 +993,7 @@ ssize_t unix_write(void *impl, const void *buf, size_t size, uint64_t flags)
         spin_unlock(&peer->lock);
         return -EPIPE;
     }
-    ssize_t ret = unix_stream_enqueue_locked(peer, (const uint8_t *)buf, size, NULL, 0);
+    ssize_t ret = unix_stream_enqueue_locked(peer, (const uint8_t *)buf, size, NULL, 0, NULL, false);
     spin_unlock(&peer->lock);
     return ret;
 }
@@ -1006,7 +1012,7 @@ ssize_t unix_sendto(void *impl, const void *buf, size_t size, uint64_t flags,
 
         char *peer_path = unix_bound_path_dup(sunaddr, addrlen);
         if (peer_path == NULL) return -EINVAL;
-        ssize_t ret = unix_dgram_send_to_path(sk, peer_path, (const uint8_t *)buf, size, NULL, 0);
+        ssize_t ret = unix_dgram_send_to_path(sk, peer_path, (const uint8_t *)buf, size, NULL, 0, NULL, false);
         free(peer_path);
         return ret;
     }
@@ -1135,7 +1141,8 @@ int unix_set_flags(void *impl, uint64_t flags)
 
 ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_t flags,
                             const struct sockaddr *addr, socklen_t addrlen,
-                            fd_file_handle **fds, size_t fd_count)
+                            fd_file_handle **fds, size_t fd_count,
+                            const struct ucred *cred, bool has_cred)
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL) {
@@ -1159,15 +1166,15 @@ ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_
                 unix_release_fd_array(fds, fd_count);
                 return -EINVAL;
             }
-            ssize_t ret = unix_dgram_send_to_path(sk, peer_path, buf, size, fds, fd_count);
+            ssize_t ret = unix_dgram_send_to_path(sk, peer_path, buf, size, fds, fd_count, cred, has_cred);
             free(peer_path);
             return ret;
         }
 
         if (sk->peer != NULL)
-            return unix_dgram_send_to_peer(sk, sk->peer, buf, size, fds, fd_count);
+            return unix_dgram_send_to_peer(sk, sk->peer, buf, size, fds, fd_count, cred, has_cred);
         if (sk->peer_addr.sun_family == AF_UNIX && sk->peer_addr.sun_path[0] != '\0')
-            return unix_dgram_send_to_path(sk, sk->peer_addr.sun_path, buf, size, fds, fd_count);
+            return unix_dgram_send_to_path(sk, sk->peer_addr.sun_path, buf, size, fds, fd_count, cred, has_cred);
 
         unix_release_fd_array(fds, fd_count);
         return -EDESTADDRREQ;
@@ -1189,7 +1196,7 @@ ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_
         unix_release_fd_array(fds, fd_count);
         return -EPIPE;
     }
-    ssize_t ret = unix_stream_enqueue_locked(peer, buf, size, fds, fd_count);
+    ssize_t ret = unix_stream_enqueue_locked(peer, buf, size, fds, fd_count, cred, has_cred);
     spin_unlock(&peer->lock);
     if (ret < 0) {
         unix_release_fd_array(fds, fd_count);

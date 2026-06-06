@@ -442,28 +442,57 @@ extern "C" void partition_device_added(size_t vdisk_id)
     partition_scan_single_device(vdisk_id, true);
 }
 EXPORT_SYMBOL(partition_device_added);
+
+static bool partition_is_efi_system(const partition_t *partition)
+{
+    static const uint8_t efi_system_guid[16] = {
+        0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11,
+        0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b,
+    };
+
+    if (partition == NULL || partition->type != partition->GPT) return false;
+    return memcmp(partition->partition_type_guid, efi_system_guid, sizeof(efi_system_guid)) == 0;
+}
+
+static bool mount_root_partition(size_t partition_index)
+{
+    partition_t partition = partitions[partition_index];
+    device_t   *src_dev   = get_device(partition.vdisk_id);
+    if (src_dev == NULL) return false;
+
+    char buf[1024] = {};
+    sprintf(buf, "/dev/%sp%zu", src_dev->drive_name, partition_index);
+    write_serial_string(buf);
+    write_serial_string("\n");
+
+    if (vfs_mount((const char *)buf, rootdir) == EOK)
+    {
+        pr_info("Mount root OK!\n");
+        return true;
+    }
+    return false;
+}
+
 void mount_root()
 {
-    bool err = true;
+    bool mounted = false;
 
     for (uint64_t i = 0; i < partition_num; i++)
     {
-        partition_t p         = partitions[i];
-        device_t   *src_dev   = get_device(p.vdisk_id);
-        char        buf[1024] = {};
-        sprintf(buf, "/dev/%sp%zu", src_dev->drive_name, i);
-        write_serial_string(buf);
-        write_serial_string("\n");
-
-        if (!vfs_mount((const char *)buf, rootdir))
+        if (partition_is_efi_system(&partitions[i])) continue;
+        if (mount_root_partition(i))
         {
-            err = false;
-            pr_info("Mount root OK!\n");
+            mounted = true;
             break;
         }
     }
 
-    if (err)
+    for (uint64_t i = 0; !mounted && i < partition_num; i++)
+    {
+        if (mount_root_partition(i)) mounted = true;
+    }
+
+    if (!mounted)
     {
         pr_info("Mount root failed\n");
         while (1)

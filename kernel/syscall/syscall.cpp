@@ -10,6 +10,7 @@
 #include <pctable/gdt.h>
 #include <pctable/idt.h>
 #include <pipe.h>
+#include <profiler.h>
 #include <proto.hpp>
 #include <rtc.h>
 #include <syscall/signal.h>
@@ -163,7 +164,18 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_PRCTL: return "prctl";
     case SYS_ARCH_PRCTL: return "arch_prctl";
     case SYS_CHROOT: return "chroot";
+    case SYS_SETXATTR: return "setxattr";
+    case SYS_LSETXATTR: return "lsetxattr";
+    case SYS_FSETXATTR: return "fsetxattr";
+    case SYS_GETXATTR: return "getxattr";
+    case SYS_LGETXATTR: return "lgetxattr";
+    case SYS_FGETXATTR: return "fgetxattr";
+    case SYS_LISTXATTR: return "listxattr";
+    case SYS_LLISTXATTR: return "llistxattr";
     case SYS_FLISTXATTR: return "flistxattr";
+    case SYS_REMOVEXATTR: return "removexattr";
+    case SYS_LREMOVEXATTR: return "lremovexattr";
+    case SYS_FREMOVEXATTR: return "fremovexattr";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
     case SYS_FADVISE64: return "fadvise64";
     case SYS_COPY_FILE_RANGE: return "copy_file_range";
@@ -252,6 +264,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     }
 
     uint64_t syscall_number = regs->rax;
+    uint64_t profiler_start_ns = bootNanoTime();
     bool trace_grep = debug_trace_grep_task();
     if (trace_grep)
     {
@@ -481,8 +494,53 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETPID: regs->rax = get_current_task()->parent_group->pid; break;
     case SYS_GETTID: regs->rax = get_current_task()->tid; break;
     case SYS_TIME: regs->rax = (uint64_t)sys_time((int64_t *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SETXATTR:
+        regs->rax =
+            (uint64_t)sys_setxattr((char *)regs->rdi, (const char *)regs->rsi, (const void *)regs->rdx,
+                                   regs->r10, regs->r8, 0, regs);
+        break;
+    case SYS_LSETXATTR:
+        regs->rax =
+            (uint64_t)sys_lsetxattr((char *)regs->rdi, (const char *)regs->rsi, (const void *)regs->rdx,
+                                    regs->r10, regs->r8, 0, regs);
+        break;
+    case SYS_FSETXATTR:
+        regs->rax =
+            (uint64_t)sys_fsetxattr(regs->rdi, (const char *)regs->rsi, (const void *)regs->rdx, regs->r10,
+                                    regs->r8, 0, regs);
+        break;
+    case SYS_GETXATTR:
+        regs->rax =
+            (uint64_t)sys_getxattr((char *)regs->rdi, (const char *)regs->rsi, (void *)regs->rdx, regs->r10,
+                                   0, 0, regs);
+        break;
+    case SYS_LGETXATTR:
+        regs->rax =
+            (uint64_t)sys_lgetxattr((char *)regs->rdi, (const char *)regs->rsi, (void *)regs->rdx, regs->r10,
+                                    0, 0, regs);
+        break;
+    case SYS_FGETXATTR:
+        regs->rax =
+            (uint64_t)sys_fgetxattr(regs->rdi, (const char *)regs->rsi, (void *)regs->rdx, regs->r10, 0, 0,
+                                    regs);
+        break;
+    case SYS_LISTXATTR:
+        regs->rax = (uint64_t)sys_listxattr((char *)regs->rdi, (char *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_LLISTXATTR:
+        regs->rax = (uint64_t)sys_llistxattr((char *)regs->rdi, (char *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
     case SYS_FLISTXATTR:
         regs->rax = (uint64_t)sys_flistxattr(regs->rdi, (char *)regs->rsi, regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_REMOVEXATTR:
+        regs->rax = (uint64_t)sys_removexattr((char *)regs->rdi, (const char *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_LREMOVEXATTR:
+        regs->rax = (uint64_t)sys_lremovexattr((char *)regs->rdi, (const char *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
+    case SYS_FREMOVEXATTR:
+        regs->rax = (uint64_t)sys_fremovexattr(regs->rdi, (const char *)regs->rsi, 0, 0, 0, 0, regs);
         break;
     case SYS_GETTIMEOFDAY:
         regs->rax = (uint64_t)sys_gettimeofday((struct timeval *)regs->rdi, (void *)regs->rsi, 0, 0, 0, 0, regs);
@@ -832,6 +890,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     //                      regs->r8,
     //                      (long long)regs->rax);
     // }
+    profiler_syscall_exit(syscall_number, bootNanoTime() - profiler_start_ns, (int64_t)regs->rax);
     signal_deliver_pending(regs);
     tcb_t return_task = get_current_task();
     if (return_task != NULL && return_task->task_level == TASK_APPLICATION_LEVEL)

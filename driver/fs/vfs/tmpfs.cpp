@@ -2,16 +2,21 @@
 #include <cpu/lock.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
+#include <mm/hhdm.h>
+#include <mm/page.h>
 #include <proto.hpp>
+#include <syscall/syscall.h>
+#include <task/pcb.h>
 
 typedef struct tmpfs_entry {
     vfs_node_t          node;
     struct tmpfs_entry *parent;
     struct tmpfs_entry *next;
     char               *name;
-    uint8_t            *data;
     size_t              size;
-    size_t              capacity;
+    uint64_t           *pages;
+    size_t              page_count;
+    size_t              page_capacity;
     bool                is_dir;
     uint64_t            inode;
 } tmpfs_entry_t;
@@ -84,6 +89,98 @@ static char *tmpfs_basename_dup(const char *path)
     if (path == NULL) return NULL;
     const char *slash = strrchr(path, '/');
     return strdup(slash != NULL ? slash + 1 : path);
+}
+
+static size_t tmpfs_pages_for_size(size_t size)
+{
+    return size == 0 ? 0 : (size + PAGE_SIZE - 1) / PAGE_SIZE;
+}
+
+static bool tmpfs_reserve_page_slots(tmpfs_entry_t *entry, size_t page_count)
+{
+    if (page_count <= entry->page_capacity) return true;
+
+    size_t new_capacity = entry->page_capacity == 0 ? 4 : entry->page_capacity;
+    while (new_capacity < page_count) {
+        if (new_capacity > ((size_t)-1) / 2) return false;
+        new_capacity *= 2;
+    }
+
+    uint64_t *new_pages = (uint64_t *)realloc(entry->pages, new_capacity * sizeof(uint64_t));
+    if (new_pages == NULL) return false;
+    memset(new_pages + entry->page_capacity, 0, (new_capacity - entry->page_capacity) * sizeof(uint64_t));
+    entry->pages         = new_pages;
+    entry->page_capacity = new_capacity;
+    return true;
+}
+
+static bool tmpfs_ensure_pages(tmpfs_entry_t *entry, size_t size)
+{
+    size_t needed_pages = tmpfs_pages_for_size(size);
+    if (needed_pages <= entry->page_count) return true;
+    if (!tmpfs_reserve_page_slots(entry, needed_pages)) return false;
+
+    size_t old_page_count = entry->page_count;
+    for (size_t i = old_page_count; i < needed_pages; i++) {
+        uint64_t frame = alloc_frames(1);
+        if (frame == 0) {
+            for (size_t j = old_page_count; j < i; j++) {
+                free_frames(entry->pages[j], 1);
+                entry->pages[j] = 0;
+            }
+            return false;
+        }
+        memset(phys_to_virt(frame), 0, PAGE_SIZE);
+        entry->pages[i] = frame;
+    }
+
+    entry->page_count = needed_pages;
+    return true;
+}
+
+static void tmpfs_copy_from_pages(tmpfs_entry_t *entry, void *addr, size_t offset, size_t size)
+{
+    uint8_t *dst = (uint8_t *)addr;
+    size_t copied = 0;
+    while (copied < size) {
+        size_t absolute = offset + copied;
+        size_t page_index = absolute / PAGE_SIZE;
+        size_t page_offset = absolute & (PAGE_SIZE - 1);
+        size_t chunk = MIN(size - copied, PAGE_SIZE - page_offset);
+        uint8_t *src = (uint8_t *)phys_to_virt(entry->pages[page_index]);
+        memcpy(dst + copied, src + page_offset, chunk);
+        copied += chunk;
+    }
+}
+
+static void tmpfs_copy_to_pages(tmpfs_entry_t *entry, const void *addr, size_t offset, size_t size)
+{
+    const uint8_t *src = (const uint8_t *)addr;
+    size_t copied = 0;
+    while (copied < size) {
+        size_t absolute = offset + copied;
+        size_t page_index = absolute / PAGE_SIZE;
+        size_t page_offset = absolute & (PAGE_SIZE - 1);
+        size_t chunk = MIN(size - copied, PAGE_SIZE - page_offset);
+        uint8_t *dst = (uint8_t *)phys_to_virt(entry->pages[page_index]);
+        memcpy(dst + page_offset, src + copied, chunk);
+        copied += chunk;
+    }
+}
+
+static void tmpfs_zero_range(tmpfs_entry_t *entry, size_t start, size_t end)
+{
+    size_t cleared = 0;
+    size_t size = end - start;
+    while (cleared < size) {
+        size_t absolute = start + cleared;
+        size_t page_index = absolute / PAGE_SIZE;
+        size_t page_offset = absolute & (PAGE_SIZE - 1);
+        size_t chunk = MIN(size - cleared, PAGE_SIZE - page_offset);
+        uint8_t *dst = (uint8_t *)phys_to_virt(entry->pages[page_index]);
+        memset(dst + page_offset, 0, chunk);
+        cleared += chunk;
+    }
 }
 
 static void tmpfs_apply_stat(tmpfs_entry_t *entry, vfs_node_t node)
@@ -195,28 +292,14 @@ static size_t tmpfs_read(void *file, void *addr, size_t offset, size_t size)
     }
     size_t available = entry->size - offset;
     if (size > available) size = available;
-    memcpy(addr, entry->data + offset, size);
+    tmpfs_copy_from_pages(entry, addr, offset, size);
     spin_unlock(&tmpfs_lock);
     return size;
 }
 
 static bool tmpfs_reserve(tmpfs_entry_t *entry, size_t want)
 {
-    if (want <= entry->capacity) return true;
-    size_t new_capacity = entry->capacity == 0 ? 4096 : entry->capacity;
-    while (new_capacity < want) {
-        if (new_capacity > ((size_t)-1) / 2) return false;
-        new_capacity *= 2;
-    }
-    // realloc failure leaves entry->data valid and unchanged; keep the old file contents.
-    uint8_t *new_data = (uint8_t *)realloc(entry->data, new_capacity);
-    if (new_data == NULL) return false;
-    if (new_capacity > entry->capacity) {
-        memset(new_data + entry->capacity, 0, new_capacity - entry->capacity);
-    }
-    entry->data     = new_data;
-    entry->capacity = new_capacity;
-    return true;
+    return tmpfs_ensure_pages(entry, want);
 }
 
 static size_t tmpfs_write(void *file, const void *addr, size_t offset, size_t size)
@@ -228,7 +311,7 @@ static size_t tmpfs_write(void *file, const void *addr, size_t offset, size_t si
         spin_unlock(&tmpfs_lock);
         return VFS_STATUS_FAILED;
     }
-    memcpy(entry->data + offset, addr, size);
+    tmpfs_copy_to_pages(entry, addr, offset, size);
     if (offset + size > entry->size) entry->size = offset + size;
     spin_unlock(&tmpfs_lock);
     return size;
@@ -239,12 +322,47 @@ static void tmpfs_resize(void *file, uint64_t size)
     spin_lock(&tmpfs_lock);
     tmpfs_entry_t *entry = (tmpfs_entry_t *)file;
     if (entry != NULL && !entry->is_dir && size <= (uint64_t)((size_t)-1) && tmpfs_reserve(entry, (size_t)size)) {
-        if ((size_t)size > entry->size) {
-            memset(entry->data + entry->size, 0, (size_t)size - entry->size);
-        }
+        if ((size_t)size > entry->size) tmpfs_zero_range(entry, entry->size, (size_t)size);
+        else if ((size_t)size < entry->size) tmpfs_zero_range(entry, (size_t)size, entry->size);
         entry->size = (size_t)size;
     }
     spin_unlock(&tmpfs_lock);
+}
+
+static void *tmpfs_map(void *file, void *addr, size_t offset, size_t size, size_t prot, size_t flags)
+{
+    (void)flags;
+    tmpfs_entry_t *entry = (tmpfs_entry_t *)file;
+    if (entry == NULL || entry->is_dir) return (void *)SYSCALL_FAULT_(ENODEV);
+    if ((offset & (PAGE_SIZE - 1)) != 0 || offset > (size_t)-1 - size)
+        return (void *)SYSCALL_FAULT_(EINVAL);
+
+    spin_lock(&tmpfs_lock);
+    size_t end = offset + size;
+    if (!tmpfs_ensure_pages(entry, end)) {
+        spin_unlock(&tmpfs_lock);
+        return (void *)SYSCALL_FAULT_(ENOMEM);
+    }
+    if (end > entry->size) entry->size = end;
+
+    pcb_t process = get_current_task() != NULL ? get_current_task()->parent_group : NULL;
+    if (process == NULL || process->pagedir == NULL) {
+        spin_unlock(&tmpfs_lock);
+        return (void *)SYSCALL_FAULT_(EFAULT);
+    }
+
+    uint64_t pte_flags = PTE_USER;
+    if (prot != PROT_NONE) pte_flags |= PTE_PRESENT;
+    if (prot & PROT_WRITE) pte_flags |= PTE_WRITEABLE;
+    if (!(prot & PROT_EXEC)) pte_flags |= PTE_NO_EXECUTE;
+
+    for (size_t pos = 0; pos < size; pos += PAGE_SIZE) {
+        size_t page_index = (offset + pos) / PAGE_SIZE;
+        page_map_to(process->pagedir, (uint64_t)addr + pos, entry->pages[page_index], pte_flags);
+    }
+
+    spin_unlock(&tmpfs_lock);
+    return addr;
 }
 
 static errno_t tmpfs_delete(void *parent, vfs_node_t node)
@@ -262,7 +380,10 @@ static errno_t tmpfs_delete(void *parent, vfs_node_t node)
     }
     tmpfs_unlink_entry(entry);
     free(entry->name);
-    free(entry->data);
+    for (size_t i = 0; i < entry->page_count; i++) {
+        if (entry->pages[i] != 0) free_frames(entry->pages[i], 1);
+    }
+    free(entry->pages);
     free(entry);
     node->handle = NULL;
     spin_unlock(&tmpfs_lock);
@@ -334,7 +455,7 @@ static struct vfs_callback tmpfs_callbacks = {
     .ioctl    = (vfs_ioctl_t)tmpfs_dummy,
     .dup      = tmpfs_dup,
     .poll     = tmpfs_poll,
-    .map      = (vfs_mapfile_t)tmpfs_dummy,
+    .map      = tmpfs_map,
     .resize   = tmpfs_resize,
     .del      = tmpfs_delete,
     .rename   = tmpfs_rename,
@@ -356,5 +477,12 @@ int tmpfs_setup(void)
     if (run == NULL) return -ENOENT;
     if (vfs_mount((const char *)TMPFS_REGISTER_ID, run) == VFS_STATUS_FAILED) return -EIO;
     vfs_close(run);
+
+    vfs_mkdir("/dev/shm");
+    vfs_node_t shm = vfs_open("/dev/shm");
+    if (shm == NULL) return -ENOENT;
+    if (vfs_mount((const char *)TMPFS_REGISTER_ID, shm) == VFS_STATUS_FAILED) return -EIO;
+    write_serial_fmt("tmpfs: mounted /dev/shm\n");
+    vfs_close(shm);
     return 0;
 }

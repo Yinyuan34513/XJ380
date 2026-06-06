@@ -8,17 +8,18 @@ export XDG_SESSION_TYPE="wayland"
 export XDG_CONFIG_DIRS="/etc/xdg"
 export XDG_RUNTIME_DIR="/run/user/0"
 export NO_AT_BRIDGE=1
-export LANG="en_US.UTF-8"
-export PATH="/apps:/system:/bin:/usr/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/sbin"
+export LANG=en_US.UTF-8
+export PATH="/bin:/usr/bin:/usr/sbin:/sbin:/bin:/usr/local/bin:/usr/local/sbin"
 export XCURSOR_THEME="Adwaita"
 export XCURSOR_SIZE="24"
 export XCURSOR_PATH="/usr/share/icons:/usr/share/pixmaps"
-export SDL_VIDEODRIVER="wayland"
-export SDL_AUDIODRIVER="pipewire"
+export SDL_VIDEODRIVER=wayland
+export SDL_AUDIODRIVER=pipewire
 export LIBGL_ALWAYS_SOFTWARE=1
 export WLR_RENDERER_ALLOW_SOFTWARE=1
-export WLR_RENDERER="pixman"
-export WAYLAND_DISPLAY="wayland-1"
+export WLR_RENDERER=pixman
+export XKB_DEFAULT_LAYOUT=us
+export XKB_DEFAULT_MODEL=pc104
 
 mkdir -p /tmp/.X11-unix
 mkdir -p /tmp/.ICE-unix
@@ -54,8 +55,6 @@ if [ ! -e /run/udev/control ]; then
     done
 fi
 
-udevadm trigger --action=add --type=subsystems
-udevadm trigger --action=add --type=devices
 udevadm settle
 
 dump_tree() {
@@ -75,4 +74,4 @@ dump_tree() {
 
 exec dbus-run-session -- \
     seatd-launch -- \
-    weston --backend=drm-backend.so --shell=desktop-shell.so --socket=wayland-1 --debug --drm-device=card0 --use-pixman -- weston-terminal
+    startxfce4 --wayland

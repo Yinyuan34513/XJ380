@@ -2,6 +2,7 @@
 
 #include <cpu/lock.h>
 #include <fs/vfs/vfs.h>
+#include <ioctl.h>
 #include <syscall/signal.h>
 
 #ifdef __cplusplus
@@ -32,6 +33,24 @@ struct itimerspec {
 
 #define MFD_CLOEXEC       0x0001U
 #define MFD_ALLOW_SEALING 0x0002U
+#define MFD_HUGETLB       0x0004U
+#define MFD_NOEXEC_SEAL   0x0008U
+#define MFD_EXEC          0x0010U
+
+#define DMA_BUF_BASE 'b'
+#define DMA_BUF_NAME_LEN 32
+
+#define DMA_BUF_SYNC_READ  (1U << 0)
+#define DMA_BUF_SYNC_WRITE (2U << 0)
+#define DMA_BUF_SYNC_RW    (DMA_BUF_SYNC_READ | DMA_BUF_SYNC_WRITE)
+#define DMA_BUF_SYNC_END   (1U << 2)
+
+struct dma_buf_sync {
+    uint64_t flags;
+};
+
+#define DMA_BUF_IOCTL_SYNC     _IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
+#define DMA_BUF_IOCTL_SET_NAME _IOW(DMA_BUF_BASE, 1, char[DMA_BUF_NAME_LEN])
 
 #define IN_NONBLOCK O_NONBLOCK
 #define IN_CLOEXEC  O_CLOEXEC
@@ -151,6 +170,8 @@ typedef struct anonfs_memfd {
     size_t   size;
     size_t   capacity;
     uint32_t flags;
+    uint32_t seals;
+    bool     borrowed_phys;
 } anonfs_memfd_t;
 
 typedef struct anonfs_inotify {
@@ -182,6 +203,7 @@ int  anonfs_create_signalfd(int ufd, const sigset_t *mask, size_t sizemask, uint
 int  anonfs_create_timerfd(int clockid, uint32_t flags);
 int  anonfs_timerfd_settime(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value);
 int  anonfs_create_memfd(const char *name, uint32_t flags);
+int  anonfs_create_phys_memfd(const char *name, uint64_t phys, size_t size, uint32_t flags);
 int  anonfs_create_inotify(uint32_t flags);
 int  anonfs_inotify_add_watch(int fd, const char *pathname, uint32_t mask);
 int  anonfs_inotify_rm_watch(int fd, int wd);

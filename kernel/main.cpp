@@ -9,6 +9,7 @@
 #include <efi/fbc.h>
 #include <font.h>
 #include <fs/fatfs/fatfs.h>
+#include <fs/lwext4/lwext4fs.h>
 #include <fs/partition.h>
 #include <fs/vfs/anonfs.h>
 #include <fs/vfs/devfs.h>
@@ -675,6 +676,9 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     write_serial_string("BOOT: fatfs_init begin\n");
     fatfs_init();
     write_serial_string("BOOT: fatfs_init done\n");
+    write_serial_string("BOOT: lwext4fs_init begin\n");
+    lwext4fs_init();
+    write_serial_string("BOOT: lwext4fs_init done\n");
     write_serial_string("BOOT: devfs_setup begin\n");
     devfs_setup();
     write_serial_string("BOOT: devfs_setup done\n");
@@ -821,7 +825,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_SAFE_STORAGE_IO)) != 0) {
         write_serial_string("AHCI: keeping conservative IO path by boot menu\n");
     } else if (ahci_is_qemu_environment()) {
-        ahci_set_accel(true);
+        write_serial_string("AHCI: fast completion path disabled; using conservative IO on ext4\n");
     } else {
         write_serial_string("AHCI: keeping conservative IO path on vmware/real hardware\n");
     }

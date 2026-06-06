@@ -47,4 +47,4 @@ scsi.txt
 
 venv/
 
-./xj380-vdisk-1000/*
+xj380-vdisk/*

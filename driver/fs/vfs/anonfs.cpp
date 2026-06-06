@@ -332,6 +332,7 @@ static size_t anonfs_memfd_read(anonfs_memfd_t *memfd, void *addr, size_t offset
 static bool anonfs_memfd_reserve(anonfs_memfd_t *memfd, size_t needed)
 {
     if (needed <= memfd->capacity) return true;
+    if (memfd->borrowed_phys) return false;
     size_t new_capacity = memfd->capacity == 0 ? PAGE_SIZE : memfd->capacity;
     while (new_capacity < needed)
     {
@@ -352,10 +353,20 @@ static bool anonfs_memfd_reserve(anonfs_memfd_t *memfd, size_t needed)
     return true;
 }
 
+static bool anonfs_memfd_write_sealed(const anonfs_memfd_t *memfd)
+{
+    return (memfd->seals & (F_SEAL_WRITE | F_SEAL_FUTURE_WRITE)) != 0;
+}
+
 static size_t anonfs_memfd_write(anonfs_memfd_t *memfd, const void *addr, size_t offset, size_t size)
 {
     if (size == 0) return 0;
     spin_lock(&memfd->lock);
+    if (anonfs_memfd_write_sealed(memfd))
+    {
+        spin_unlock(&memfd->lock);
+        return VFS_STATUS_FAILED;
+    }
     size_t end = 0;
     if (offset > (size_t)-1 - size)
     {
@@ -474,9 +485,40 @@ static size_t anonfs_readlink(void *file, void *addr, size_t offset, size_t size
 
 static errno_t anonfs_ioctl(void *file, size_t req, void *arg)
 {
-    (void)file;
-    (void)req;
-    (void)arg;
+    if (file == NULL) return -ENOTTY;
+    anonfs_handle_t *handle = (anonfs_handle_t *)file;
+    if (handle->kind != ANONFS_MEMFD) return -ENOTTY;
+
+    switch ((uint32_t)req)
+    {
+    case DMA_BUF_IOCTL_SYNC:
+    {
+        if (arg == NULL) return -EFAULT;
+        struct dma_buf_sync *sync = (struct dma_buf_sync *)arg;
+        uint64_t valid = DMA_BUF_SYNC_RW | DMA_BUF_SYNC_END;
+        return (sync->flags & ~valid) == 0 ? 0 : -EINVAL;
+    }
+    case DMA_BUF_IOCTL_SET_NAME:
+        if (arg == NULL) return -EFAULT;
+    {
+        const char *name = (const char *)arg;
+        size_t name_len = 0;
+        while (name_len < DMA_BUF_NAME_LEN && name[name_len] != '\0')
+            name_len++;
+        char *copy = (char *)malloc(name_len + 1);
+        if (copy == NULL) return -ENOMEM;
+        memcpy(copy, name, name_len);
+        copy[name_len] = '\0';
+
+        spin_lock(&handle->u.memfd.lock);
+        free(handle->u.memfd.name);
+        handle->u.memfd.name = copy;
+        spin_unlock(&handle->u.memfd.lock);
+        return 0;
+    }
+    default:
+        break;
+    }
     return -ENOTTY;
 }
 
@@ -535,6 +577,11 @@ static void *anonfs_map(void *file, void *addr, size_t offset, size_t size, size
 
     anonfs_memfd_t *memfd = &handle->u.memfd;
     spin_lock(&memfd->lock);
+    if ((prot & PROT_WRITE) && anonfs_memfd_write_sealed(memfd))
+    {
+        spin_unlock(&memfd->lock);
+        return (void *)SYSCALL_FAULT_(EPERM);
+    }
     size_t end = 0;
     if (offset > (size_t)-1 - size)
     {
@@ -573,6 +620,12 @@ static void anonfs_resize(void *file, uint64_t size)
 
     anonfs_memfd_t *memfd = &handle->u.memfd;
     spin_lock(&memfd->lock);
+    if ((size < memfd->size && (memfd->seals & F_SEAL_SHRINK)) ||
+        (size > memfd->size && (memfd->seals & F_SEAL_GROW)))
+    {
+        spin_unlock(&memfd->lock);
+        return;
+    }
     if (size < memfd->size) memfd->size = (size_t)size;
     else if ((size_t)size > memfd->size)
     {
@@ -604,7 +657,7 @@ static errno_t anonfs_del(void *parent, vfs_node_t node)
     if (handle->kind == ANONFS_MEMFD)
     {
         free(handle->u.memfd.name);
-        if (handle->u.memfd.phys != 0)
+        if (handle->u.memfd.phys != 0 && !handle->u.memfd.borrowed_phys)
         {
             size_t pages = (handle->u.memfd.capacity + PAGE_SIZE - 1) / PAGE_SIZE;
             if (pages != 0) free_frames(handle->u.memfd.phys, pages);
@@ -1113,7 +1166,9 @@ int anonfs_timerfd_settime(int fd, int flags, const struct itimerspec *new_value
 
 int anonfs_create_memfd(const char *name, uint32_t flags)
 {
-    if ((flags & ~(MFD_CLOEXEC | MFD_ALLOW_SEALING)) != 0) return -EINVAL;
+    if ((flags & MFD_HUGETLB) != 0) return -EINVAL;
+    if ((flags & ~(MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_NOEXEC_SEAL | MFD_EXEC)) != 0) return -EINVAL;
+    if ((flags & (MFD_NOEXEC_SEAL | MFD_EXEC)) == (MFD_NOEXEC_SEAL | MFD_EXEC)) return -EINVAL;
 
     char *kname = NULL;
     if (name != NULL)
@@ -1144,7 +1199,37 @@ int anonfs_create_memfd(const char *name, uint32_t flags)
     anonfs_handle_t *handle = (anonfs_handle_t *)node->handle;
     handle->u.memfd.name  = kname;
     handle->u.memfd.flags = flags;
+    handle->u.memfd.seals = (flags & MFD_ALLOW_SEALING) ? 0 : F_SEAL_SEAL;
     return anonfs_install_fd(node, (flags & MFD_CLOEXEC) ? O_CLOEXEC : 0);
+}
+
+int anonfs_create_phys_memfd(const char *name, uint64_t phys, size_t size, uint32_t flags)
+{
+    if (phys == 0 || size == 0) return -EINVAL;
+
+    char *kname = strdup(name != NULL ? name : "dma-buf");
+    if (kname == NULL) return -ENOMEM;
+
+    uint32_t fd_flags = flags & (O_CLOEXEC | O_RDWR);
+    vfs_node_t node = anonfs_alloc_node("dma-buf", ANONFS_MEMFD, fd_flags);
+    if (node == NULL)
+    {
+        free(kname);
+        return -ENOMEM;
+    }
+
+    size_t capacity = PADDING_UP(size, PAGE_SIZE);
+    anonfs_handle_t *handle = (anonfs_handle_t *)node->handle;
+    handle->u.memfd.name          = kname;
+    handle->u.memfd.phys          = phys;
+    handle->u.memfd.data          = (uint8_t *)phys_to_virt(phys);
+    handle->u.memfd.size          = size;
+    handle->u.memfd.capacity      = capacity;
+    handle->u.memfd.flags         = flags;
+    handle->u.memfd.seals         = F_SEAL_SEAL;
+    handle->u.memfd.borrowed_phys = true;
+    node->size = size;
+    return anonfs_install_fd(node, fd_flags);
 }
 
 size_t anonfs_notify_signal(pcb_t process, int sig, const siginfo_t *info)

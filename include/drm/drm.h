@@ -17,8 +17,11 @@
 #define DRM_IOCTL_IRQ_BUSID       DRM_IOWR(0x03, struct drm_irq_busid)
 #define DRM_IOCTL_GET_CAP         DRM_IOWR(0x0c, struct drm_get_cap)
 #define DRM_IOCTL_SET_CLIENT_CAP  DRM_IOW(0x0d, struct drm_set_client_cap)
+#define DRM_IOCTL_AUTH_MAGIC      DRM_IOW(0x11, struct drm_auth)
 #define DRM_IOCTL_SET_MASTER      DRM_IO(0x1e)
 #define DRM_IOCTL_DROP_MASTER     DRM_IO(0x1f)
+#define DRM_IOCTL_PRIME_HANDLE_TO_FD DRM_IOWR(0x2d, struct drm_prime_handle)
+#define DRM_IOCTL_PRIME_FD_TO_HANDLE DRM_IOWR(0x2e, struct drm_prime_handle)
 #define DRM_IOCTL_GEM_CLOSE       DRM_IOW(0x09, struct drm_gem_close)
 #define DRM_IOCTL_GEM_FLINK       DRM_IOWR(0x0a, struct drm_gem_flink)
 #define DRM_IOCTL_GEM_OPEN        DRM_IOWR(0x0b, struct drm_gem_open)
@@ -54,6 +57,11 @@
 #define DRM_IOCTL_MODE_CREATEPROPBLOB    DRM_IOWR(0xBD, struct drm_mode_create_blob)
 #define DRM_IOCTL_MODE_DESTROYPROPBLOB   DRM_IOWR(0xBE, struct drm_mode_destroy_blob)
 
+#define DRM_IOCTL_MODE_CREATE_LEASE      DRM_IOWR(0xC6, struct drm_mode_create_lease)
+#define DRM_IOCTL_MODE_LIST_LESSEES      DRM_IOWR(0xC7, struct drm_mode_list_lessees)
+#define DRM_IOCTL_MODE_GET_LEASE         DRM_IOWR(0xC8, struct drm_mode_get_lease)
+#define DRM_IOCTL_MODE_REVOKE_LEASE      DRM_IOWR(0xC9, struct drm_mode_revoke_lease)
+
 #define DRM_IOCTL_MODE_GETFB2            DRM_IOWR(0xCE, struct drm_mode_fb_cmd2)
 
 /* Capabilities */
@@ -62,6 +70,8 @@
 #define DRM_CAP_DUMB_PREFERRED_DEPTH 0x3
 #define DRM_CAP_DUMB_PREFER_SHADOW 0x4
 #define DRM_CAP_PRIME              0x5
+#define DRM_PRIME_CAP_IMPORT       0x1
+#define DRM_PRIME_CAP_EXPORT       0x2
 #define DRM_CAP_TIMESTAMP_MONOTONIC 0x6
 #define DRM_CAP_ASYNC_PAGE_FLIP    0x7
 #define DRM_CAP_CURSOR_WIDTH       0x8
@@ -77,6 +87,9 @@
 #define DRM_CLIENT_CAP_ATOMIC       3
 #define DRM_CLIENT_CAP_ASPECT_RATIO 4
 #define DRM_CLIENT_CAP_WRITEBACK_CONNECTORS 5
+
+#define DRM_RDWR    02
+#define DRM_CLOEXEC 02000000
 
 /* ----------------------------------------------------------------------
  * DRM structures
@@ -134,6 +147,12 @@ struct drm_gem_open {
     uint32_t name;
     uint32_t handle;
     uint64_t size;
+};
+
+struct drm_prime_handle {
+    uint32_t handle;
+    uint32_t flags;
+    int32_t  fd;
 };
 
 struct drm_set_version {

@@ -113,6 +113,16 @@ static void evdev_bitmap_to_string(char *out, size_t out_size, const uint8_t *bi
     }
 }
 
+static void evdev_input_path(int index, char *out, size_t out_size)
+{
+    snprintf(out, out_size, "/sys/devices/platform/i8042/serio%d/input%d", index, index);
+}
+
+static void evdev_event_path(int index, char *out, size_t out_size)
+{
+    snprintf(out, out_size, "/sys/devices/platform/i8042/serio%d/input%d/event%d", index, index, index);
+}
+
 static evdev_device_t *evdev_by_drive(int drive)
 {
     for (size_t i = 0; i < sizeof(g_evdev_device_ids) / sizeof(g_evdev_device_ids[0]); i++)
@@ -343,8 +353,8 @@ static void evdev_publish_metadata(int index)
     char content[2048];
     snprintf(input_name, sizeof(input_name), "input%d", index);
     snprintf(event_name, sizeof(event_name), "event%d", index);
-    snprintf(input_path, sizeof(input_path), "/sys/devices/virtual/input/%s", input_name);
-    snprintf(event_path, sizeof(event_path), "%s/%s", input_path, event_name);
+    evdev_input_path(index, input_path, sizeof(input_path));
+    evdev_event_path(index, event_path, sizeof(event_path));
     write_serial_fmt("[udev-trace] evdev:publish begin index=%d input_path=%s event_path=%s name=%s\n",
                      index,
                      input_path,
@@ -421,6 +431,9 @@ static void evdev_publish_metadata(int index)
     evdev_write_sysfs_file(path, content);
     snprintf(path, sizeof(path), "%s/capabilities/abs", input_path);
     evdev_bitmap_to_string(content, sizeof(content), dev->absbit, sizeof(dev->absbit));
+    evdev_write_sysfs_file(path, content);
+    snprintf(path, sizeof(path), "%s/capabilities/prop", input_path);
+    evdev_bitmap_to_string(content, sizeof(content), dev->propbit, sizeof(dev->propbit));
     evdev_write_sysfs_file(path, content);
     snprintf(path, sizeof(path), "%s/capabilities/msc", input_path);
     evdev_write_sysfs_file(path, "0\n");
@@ -535,7 +548,7 @@ static void evdev_setup_one(int index, const char *name, bool mouse)
         g_evdev_device_ids[index] = device_id;
         char event_path[128];
         char real_path[128];
-        snprintf(event_path, sizeof(event_path), "/sys/devices/virtual/input/input%d/event%d", index, index);
+        evdev_event_path(index, event_path, sizeof(event_path));
         snprintf(real_path, sizeof(real_path), "input/event%d", index);
         write_serial_fmt("[udev-trace] evdev:sysfs-regist-dev index=%d event_path=%s real_path=%s\n",
                          index,
@@ -550,7 +563,7 @@ static void evdev_setup_one(int index, const char *name, bool mouse)
                          "/sys/class/input",
                          "/sys/class/input",
                          device.drive_name,
-                         "/sys/devices/virtual/input");
+                         "/sys/devices/platform/i8042");
         evdev_publish_metadata(index);
     }
 }

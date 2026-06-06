@@ -2,6 +2,7 @@
 #include <drm/drm.h>
 #include <drm/drm_mode.h>
 #include <errno.h>
+#include <fs/vfs/anonfs.h>
 #include <fbdev.h>
 #include <fs/vfs/vfs.h>
 #include <ioctl.h>
@@ -11,6 +12,7 @@
 #include <mm/page.h>
 #include <mm/uaccess.h>
 #include <proto.hpp>
+#include <syscall/syscall.h>
 #include <task/poll.h>
 #include <task/pcb.h>
 
@@ -18,8 +20,10 @@
 #define MAX_DUMB_BUFFERS     32
 #define MAX_FB_OBJECTS       32
 #define MAX_PROP_BLOBS       16
+#define MAX_PRIME_FDS        32
 #define EVENT_RING_SIZE      16
 #define DEFAULT_MODE_NAME    "1024x768"
+#define XJ380_DRM_AUTH_MAGIC 0x12345678U
 #define DRM_PROP_CONNECTOR_EDID  0x1010
 #define DRM_PROP_PLANE_IN_FORMATS 0x1011
 #define DRM_BLOB_ID_CRTC_MODE_BASE 0x10000000U
@@ -54,6 +58,16 @@ struct prop_blob {
     uint32_t length;
 };
 
+/* ---- Minimal PRIME fd export tracking ---- */
+struct prime_fd_entry {
+    bool       used;
+    pcb_t      process;
+    vfs_node_t node;
+    uint64_t   inode;
+    int32_t    fd;
+    uint32_t   handle;
+};
+
 /* ---- Per-open file state ---- */
 struct drm_file {
     uint64_t client_caps;   /* bitmask of client capabilities */
@@ -83,6 +97,7 @@ struct xj380_drm {
     struct dumb_buffer  dumb[MAX_DUMB_BUFFERS];
     struct drm_fb_obj   fbs[MAX_FB_OBJECTS];
     struct prop_blob    blobs[MAX_PROP_BLOBS];
+    struct prime_fd_entry prime_fds[MAX_PRIME_FDS];
     uint32_t            next_fb_id;
 
     /* version */
@@ -347,6 +362,66 @@ static int dumb_find_by_handle(struct xj380_drm *d, uint32_t handle)
     return -1;
 }
 
+static size_t dumb_buffer_pages(const struct dumb_buffer *buffer)
+{
+    if (buffer == NULL || !buffer->used || buffer->pitch == 0 || buffer->height == 0) return 0;
+    return PADDING_UP((size_t)buffer->pitch * (size_t)buffer->height, PAGE_SIZE) / PAGE_SIZE;
+}
+
+static bool dumb_handle_has_fb(struct xj380_drm *d, uint32_t handle)
+{
+    for (int i = 0; i < MAX_FB_OBJECTS; i++)
+        if (d->fbs[i].used && d->fbs[i].handle == handle) return true;
+    return false;
+}
+
+static int dumb_get(struct xj380_drm *d, uint32_t handle)
+{
+    int idx = dumb_find_by_handle(d, handle);
+    if (idx < 0) return -EINVAL;
+    if (d->dumb[idx].refs == DRM_U32_MAX) return -EOVERFLOW;
+    d->dumb[idx].refs++;
+    write_serial_fmt("[drm-trace] dumb-get handle=%u refs=%u\n", handle, d->dumb[idx].refs);
+    return 0;
+}
+
+static int dumb_put(struct xj380_drm *d, uint32_t handle, const char *reason)
+{
+    int idx = dumb_find_by_handle(d, handle);
+    if (idx < 0) return -EINVAL;
+
+    struct dumb_buffer *buffer = &d->dumb[idx];
+    if (buffer->refs == 0)
+    {
+        write_serial_fmt("[drm-trace] dumb-put-underflow handle=%u reason=%s\n",
+                         handle,
+                         reason != NULL ? reason : "?");
+        return -EINVAL;
+    }
+
+    buffer->refs--;
+    write_serial_fmt("[drm-trace] dumb-put handle=%u reason=%s refs=%u fb_refs=%d phys=0x%llx\n",
+                     handle,
+                     reason != NULL ? reason : "?",
+                     buffer->refs,
+                     dumb_handle_has_fb(d, handle) ? 1 : 0,
+                     (unsigned long long)buffer->phys_addr);
+    if (buffer->refs != 0) return 0;
+
+    if (dumb_handle_has_fb(d, handle))
+    {
+        write_serial_fmt("[drm-trace] dumb-put-keep-fb handle=%u\n", handle);
+        buffer->refs = 1;
+        return 0;
+    }
+
+    size_t pages = dumb_buffer_pages(buffer);
+    uint64_t phys = buffer->phys_addr;
+    if (phys != 0 && pages != 0) free_frames(phys, pages);
+    memset(buffer, 0, sizeof(*buffer));
+    return 0;
+}
+
 static int fb_find_free(struct xj380_drm *d)
 {
     for (int i = 0; i < MAX_FB_OBJECTS; i++)
@@ -570,7 +645,7 @@ static int drm_get_cap(struct drm_get_cap *cap)
     case DRM_CAP_DUMB_PREFERRED_DEPTH: kc.value = 24; break;
     case DRM_CAP_DUMB_PREFER_SHADOW: kc.value = 1; break;
     case DRM_CAP_TIMESTAMP_MONOTONIC: kc.value = 1; break;
-    case DRM_CAP_PRIME:             kc.value = 0; break;
+    case DRM_CAP_PRIME:             kc.value = DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT; break;
     case DRM_CAP_ASYNC_PAGE_FLIP:   kc.value = 1; break;
     case DRM_CAP_CURSOR_WIDTH:      kc.value = 64; break;
     case DRM_CAP_CURSOR_HEIGHT:     kc.value = 64; break;
@@ -605,6 +680,27 @@ static int drm_get_unique(struct xj380_drm *drm, struct drm_unique *unique)
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, unique, &ku, sizeof(ku)))
         return -EFAULT;
     return 0;
+}
+
+static int drm_get_magic(struct drm_auth *auth)
+{
+    if (!auth) return -EFAULT;
+
+    struct drm_auth ka;
+    ka.magic = XJ380_DRM_AUTH_MAGIC;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, auth, &ka, sizeof(ka)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_auth_magic(struct drm_auth *auth)
+{
+    if (!auth) return -EFAULT;
+
+    struct drm_auth ka;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &ka, auth, sizeof(ka)))
+        return -EFAULT;
+    return ka.magic == XJ380_DRM_AUTH_MAGIC ? 0 : -EINVAL;
 }
 
 static int drm_set_version(struct drm_set_version *version)
@@ -664,6 +760,7 @@ static int drm_set_client_cap(struct xj380_drm *drm, struct drm_set_client_cap *
         return -EFAULT;
 
     struct drm_file *f = (struct drm_file *)file_priv;
+    if (f == NULL) return 0;
     if (kc.value)
         f->client_caps |= (1ULL << kc.capability);
     else
@@ -681,12 +778,200 @@ static int drm_gem_close(struct xj380_drm *drm, struct drm_gem_close *gc)
     int idx = dumb_find_by_handle(drm, kc.handle);
     if (idx < 0) return -EINVAL;
 
-    if (--drm->dumb[idx].refs == 0) {
-        free_frames(drm->dumb[idx].phys_addr,
-                    PADDING_UP((size_t)drm->dumb[idx].pitch * drm->dumb[idx].height, PAGE_SIZE) / PAGE_SIZE);
-        memset(&drm->dumb[idx], 0, sizeof(drm->dumb[idx]));
+    write_serial_fmt("[drm-trace] gem-close handle=%u refs=%u no-op\n", kc.handle, drm->dumb[idx].refs);
+    return 0;
+}
+
+static size_t drm_dumb_buffer_size(const struct dumb_buffer *buffer)
+{
+    if (buffer == NULL || !buffer->used) return 0;
+    return (size_t)buffer->pitch * (size_t)buffer->height;
+}
+
+static void drm_close_exported_fd(pcb_t process, int fd)
+{
+    if (process == NULL || process->file_open == NULL || fd < 0) return;
+    fd_file_handle *handle = (fd_file_handle *)queue_remove_at(process->file_open, (size_t)fd);
+    if (handle == NULL) return;
+    vfs_close(handle->node);
+    free(handle);
+}
+
+static int drm_prime_remember_fd(struct xj380_drm *drm, pcb_t process, int fd, vfs_node_t node, uint32_t handle)
+{
+    if (drm == NULL || process == NULL || node == NULL || fd < 0) return -EINVAL;
+
+    spin_lock(&drm->lock);
+    int free_slot = -1;
+    for (int i = 0; i < MAX_PRIME_FDS; i++)
+    {
+        if (!drm->prime_fds[i].used)
+        {
+            if (free_slot < 0) free_slot = i;
+            continue;
+        }
+        if (drm->prime_fds[i].node == node && drm->prime_fds[i].inode == node->inode)
+        {
+            drm->prime_fds[i].process = process;
+            drm->prime_fds[i].fd      = fd;
+            drm->prime_fds[i].handle  = handle;
+            spin_unlock(&drm->lock);
+            return 0;
+        }
+    }
+
+    if (free_slot < 0)
+    {
+        spin_unlock(&drm->lock);
+        return -EMFILE;
+    }
+
+    drm->prime_fds[free_slot].used    = true;
+    drm->prime_fds[free_slot].process = process;
+    drm->prime_fds[free_slot].node    = node;
+    drm->prime_fds[free_slot].inode   = node->inode;
+    drm->prime_fds[free_slot].fd      = fd;
+    drm->prime_fds[free_slot].handle  = handle;
+    spin_unlock(&drm->lock);
+    return 0;
+}
+
+static int drm_prime_lookup_handle(struct xj380_drm *drm, pcb_t process, int fd, vfs_node_t node, uint32_t *handle)
+{
+    if (drm == NULL || process == NULL || node == NULL || handle == NULL || fd < 0) return -EINVAL;
+
+    int ret = -EBADF;
+    spin_lock(&drm->lock);
+    for (int i = 0; i < MAX_PRIME_FDS; i++)
+    {
+        struct prime_fd_entry *entry = &drm->prime_fds[i];
+        if (!entry->used) continue;
+        if (entry->node != node || entry->inode != node->inode) continue;
+        *handle = entry->handle;
+        ret = 0;
+        break;
+    }
+    spin_unlock(&drm->lock);
+    return ret;
+}
+
+static int drm_prime_handle_to_fd(struct xj380_drm *drm, struct drm_prime_handle *prime)
+{
+    if (!prime) return -EFAULT;
+    struct drm_prime_handle kp;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kp, prime, sizeof(kp)))
+        return -EFAULT;
+
+    if (kp.flags & ~(DRM_CLOEXEC | DRM_RDWR)) return -EINVAL;
+
+    int idx = dumb_find_by_handle(drm, kp.handle);
+    if (idx < 0) return -ENOENT;
+
+    size_t size = drm_dumb_buffer_size(&drm->dumb[idx]);
+    uint32_t fd_flags = 0;
+    if (kp.flags & DRM_CLOEXEC) fd_flags |= O_CLOEXEC;
+    if (kp.flags & DRM_RDWR) fd_flags |= O_RDWR;
+    int fd = anonfs_create_phys_memfd("xj380-dma-buf", drm->dumb[idx].phys_addr, size, fd_flags);
+    if (fd < 0) return fd;
+
+    pcb_t process = get_current_task()->parent_group;
+    fd_file_handle *fd_handle = (fd_file_handle *)queue_get(process->file_open, (size_t)fd);
+    if (fd_handle == NULL || fd_handle->node == NULL)
+    {
+        drm_close_exported_fd(process, fd);
+        return -EBADF;
+    }
+
+    int remember = drm_prime_remember_fd(drm, process, fd, fd_handle->node, kp.handle);
+    if (remember < 0)
+    {
+        drm_close_exported_fd(process, fd);
+        return remember;
+    }
+
+    kp.fd = fd;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, prime, &kp, sizeof(kp)))
+    {
+        drm_close_exported_fd(process, fd);
+        return -EFAULT;
     }
     return 0;
+}
+
+static int drm_prime_fd_to_handle(struct xj380_drm *drm, struct drm_prime_handle *prime)
+{
+    if (!prime) return -EFAULT;
+    struct drm_prime_handle kp;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kp, prime, sizeof(kp)))
+        return -EFAULT;
+
+    pcb_t process = get_current_task()->parent_group;
+    if (kp.fd < 0 || process == NULL || process->file_open == NULL) return -EBADF;
+
+    fd_file_handle *fd_handle = (fd_file_handle *)queue_get(process->file_open, (size_t)kp.fd);
+    if (fd_handle == NULL || fd_handle->node == NULL) return -EBADF;
+
+    uint32_t handle = 0;
+    int ret = drm_prime_lookup_handle(drm, process, kp.fd, fd_handle->node, &handle);
+    if (ret < 0) return ret;
+
+    int idx = dumb_find_by_handle(drm, handle);
+    if (idx < 0) return -ENOENT;
+
+    kp.handle = handle;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, prime, &kp, sizeof(kp)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_mode_create_lease(struct drm_mode_create_lease *lease)
+{
+    if (!lease) return -EFAULT;
+    struct drm_mode_create_lease kl;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kl, lease, sizeof(kl)))
+        return -EFAULT;
+
+    /*
+     * XJ380 exposes a single primary DRM device and does not implement object
+     * ownership splitting yet. Report the ioctl as present but unsupported so
+     * userspace can fall back instead of treating the command as missing.
+     */
+    return -EOPNOTSUPP;
+}
+
+static int drm_mode_list_lessees(struct drm_mode_list_lessees *lessees)
+{
+    if (!lessees) return -EFAULT;
+    struct drm_mode_list_lessees kl;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kl, lessees, sizeof(kl)))
+        return -EFAULT;
+
+    kl.count_lessees = 0;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, lessees, &kl, sizeof(kl)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_mode_get_lease(struct drm_mode_get_lease *lease)
+{
+    if (!lease) return -EFAULT;
+    struct drm_mode_get_lease kl;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kl, lease, sizeof(kl)))
+        return -EFAULT;
+
+    kl.count_objects = 0;
+    if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, lease, &kl, sizeof(kl)))
+        return -EFAULT;
+    return 0;
+}
+
+static int drm_mode_revoke_lease(struct drm_mode_revoke_lease *lease)
+{
+    if (!lease) return -EFAULT;
+    struct drm_mode_revoke_lease kl;
+    if (!copy_from_user_pagedir(get_current_task()->parent_group->pagedir, &kl, lease, sizeof(kl)))
+        return -EFAULT;
+    return -ENOENT;
 }
 
 static int drm_mode_getresources(struct xj380_drm *drm, struct drm_mode_card_res *res)
@@ -939,12 +1224,8 @@ static int drm_mode_destroy_dumb(struct xj380_drm *drm, struct drm_mode_destroy_
     int idx = dumb_find_by_handle(drm, ka.handle);
     if (idx < 0) return -EINVAL;
 
-    if (--drm->dumb[idx].refs == 0) {
-        free_frames(drm->dumb[idx].phys_addr,
-                    PADDING_UP((size_t)drm->dumb[idx].pitch * drm->dumb[idx].height, PAGE_SIZE) / PAGE_SIZE);
-        memset(&drm->dumb[idx], 0, sizeof(drm->dumb[idx]));
-    }
-    return 0;
+    (void)idx;
+    return dumb_put(drm, ka.handle, "destroy-dumb");
 }
 
 static int drm_mode_addfb(struct xj380_drm *drm, struct drm_mode_fb_cmd *args)
@@ -960,6 +1241,9 @@ static int drm_mode_addfb(struct xj380_drm *drm, struct drm_mode_fb_cmd *args)
     int fi = fb_find_free(drm);
     if (fi < 0) return -ENOSPC;
 
+    int get_ret = dumb_get(drm, ka.handle);
+    if (get_ret < 0) return get_ret;
+
     uint32_t fb_id = drm->next_fb_id++;
     drm->fbs[fi].used   = true;
     drm->fbs[fi].fb_id  = fb_id;
@@ -972,7 +1256,11 @@ static int drm_mode_addfb(struct xj380_drm *drm, struct drm_mode_fb_cmd *args)
 
     ka.fb_id = fb_id;
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, args, &ka, sizeof(ka)))
+    {
+        memset(&drm->fbs[fi], 0, sizeof(drm->fbs[fi]));
+        dumb_put(drm, ka.handle, "addfb-fault");
         return -EFAULT;
+    }
     return 0;
 }
 
@@ -991,6 +1279,9 @@ static int drm_mode_addfb2(struct xj380_drm *drm, struct drm_mode_fb_cmd2 *args)
     int fi = fb_find_free(drm);
     if (fi < 0) return -ENOSPC;
 
+    int get_ret = dumb_get(drm, ka.handles[0]);
+    if (get_ret < 0) return get_ret;
+
     uint32_t fb_id = drm->next_fb_id++;
     drm->fbs[fi].used   = true;
     drm->fbs[fi].fb_id  = fb_id;
@@ -1003,7 +1294,11 @@ static int drm_mode_addfb2(struct xj380_drm *drm, struct drm_mode_fb_cmd2 *args)
 
     ka.fb_id = fb_id;
     if (!copy_to_user_pagedir(get_current_task()->parent_group->pagedir, args, &ka, sizeof(ka)))
+    {
+        memset(&drm->fbs[fi], 0, sizeof(drm->fbs[fi]));
+        dumb_put(drm, ka.handles[0], "addfb2-fault");
         return -EFAULT;
+    }
     return 0;
 }
 
@@ -1040,7 +1335,9 @@ static int drm_mode_rmfb(struct xj380_drm *drm, uint32_t *fb_id)
     if (!fb) return -ENOENT;
 
     if (drm->current_fb_id == kfb) drm->current_fb_id = 0;
+    uint32_t handle = fb->handle;
     memset(fb, 0, sizeof(*fb));
+    dumb_put(drm, handle, "rmfb");
     return 0;
 }
 
@@ -1055,7 +1352,9 @@ static int drm_mode_closefb(struct xj380_drm *drm, struct drm_mode_closefb *args
     if (!fb) return -ENOENT;
 
     if (drm->current_fb_id == ka.fb_id) drm->current_fb_id = 0;
+    uint32_t handle = fb->handle;
     memset(fb, 0, sizeof(*fb));
+    dumb_put(drm, handle, "closefb");
     return 0;
 }
 
@@ -1709,11 +2008,15 @@ static int drm_ioctl(device_t *dev, size_t req, void *arg)
     switch (cmd) {
     case DRM_IOCTL_VERSION:          return drm_version(drm, (struct drm_version *)arg);
     case DRM_IOCTL_GET_UNIQUE:       return drm_get_unique(drm, (struct drm_unique *)arg);
+    case DRM_IOCTL_GET_MAGIC:        return drm_get_magic((struct drm_auth *)arg);
+    case DRM_IOCTL_AUTH_MAGIC:       return drm_auth_magic((struct drm_auth *)arg);
     case DRM_IOCTL_GET_CAP:          return drm_get_cap((struct drm_get_cap *)arg);
     case DRM_IOCTL_SET_VERSION:      return drm_set_version((struct drm_set_version *)arg);
     case DRM_IOCTL_GET_STATS:        return drm_get_stats((struct drm_stats *)arg);
     case DRM_IOCTL_WAIT_VBLANK:      return drm_wait_vblank((union drm_wait_vblank *)arg);
-    case DRM_IOCTL_SET_CLIENT_CAP:   return 0;
+    case DRM_IOCTL_SET_CLIENT_CAP:   return drm_set_client_cap(drm, (struct drm_set_client_cap *)arg, NULL);
+    case DRM_IOCTL_PRIME_HANDLE_TO_FD: return drm_prime_handle_to_fd(drm, (struct drm_prime_handle *)arg);
+    case DRM_IOCTL_PRIME_FD_TO_HANDLE: return drm_prime_fd_to_handle(drm, (struct drm_prime_handle *)arg);
 
     case DRM_IOCTL_MODE_GETRESOURCES: return drm_mode_getresources(drm, (struct drm_mode_card_res *)arg);
     case DRM_IOCTL_MODE_GETCRTC:      return drm_mode_getcrtc(drm, (struct drm_mode_crtc *)arg);
@@ -1739,11 +2042,14 @@ static int drm_ioctl(device_t *dev, size_t req, void *arg)
     case DRM_IOCTL_MODE_OBJ_GETPROPERTIES: return drm_mode_obj_getproperties(drm, (struct drm_mode_obj_get_properties *)arg);
     case DRM_IOCTL_MODE_ATOMIC:        return drm_mode_atomic(drm, (struct drm_mode_atomic *)arg);
     case DRM_IOCTL_MODE_GETPROPBLOB:   return drm_mode_getpropblob(drm, (struct drm_mode_get_blob *)arg);
+    case DRM_IOCTL_MODE_CREATE_LEASE:  return drm_mode_create_lease((struct drm_mode_create_lease *)arg);
+    case DRM_IOCTL_MODE_LIST_LESSEES:  return drm_mode_list_lessees((struct drm_mode_list_lessees *)arg);
+    case DRM_IOCTL_MODE_GET_LEASE:     return drm_mode_get_lease((struct drm_mode_get_lease *)arg);
+    case DRM_IOCTL_MODE_REVOKE_LEASE:  return drm_mode_revoke_lease((struct drm_mode_revoke_lease *)arg);
 
     /* Legacy / no-ops that userspace might call */
     case DRM_IOCTL_SET_MASTER:
     case DRM_IOCTL_DROP_MASTER:
-    case DRM_IOCTL_GET_MAGIC:
         return 0;
 
     /* Stubs for unused ioctls */

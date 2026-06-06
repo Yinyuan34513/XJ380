@@ -14,8 +14,6 @@ static vfs_node_t sysfs_root = NULL;
 static spin_t     sysfs_lock = SPIN_INIT;
 static int        sysfs_seqnum = 1;
 
-static void sysfs_emit_uevent_from_node(sysfs_handle_t *handle);
-
 static size_t sysfs_child_count(vfs_node_t node)
 {
     return node != NULL ? list_length(node->child) : 0;
@@ -149,16 +147,6 @@ static size_t sysfs_write(void *file, const void *addr, size_t offset, size_t si
                      (unsigned long long)offset,
                      (unsigned long long)size,
                      sysfs_node_is_uevent(handle) ? 1 : 0);
-
-    if (sysfs_node_is_uevent(handle) && addr != NULL && size >= 3)
-    {
-        const char *command = (const char *)addr;
-        if (strncmp(command, "add", 3) == 0)
-        {
-            sysfs_emit_uevent_from_node(handle);
-            return size;
-        }
-    }
 
     if (!sysfs_reserve(handle, offset + size + 1)) return VFS_STATUS_FAILED;
     memcpy(handle->content + offset, addr, size);
@@ -603,6 +591,13 @@ static const char *sysfs_devpath_from_path(const char *path)
     return strncmp(path, "/sys", 4) == 0 ? path + 4 : path;
 }
 
+static bool sysfs_device_is_driver_owned(const char *dev_path, const char *dev_name, const device_t *device)
+{
+    if (device == NULL || device->type != DEVICE_STREAM) return false;
+    if (dev_name != NULL && strncmp(dev_name, "event", 5) == 0) return true;
+    return dev_path != NULL && strstr(dev_path, "input/event") != NULL;
+}
+
 static void sysfs_write_text_file(const char *path, const char *content)
 {
     if (path == NULL || content == NULL) return;
@@ -644,52 +639,6 @@ static void sysfs_normalize_uevent_payload(char *payload, size_t *payload_len)
 
     if (dst_len == 0 || payload[dst_len - 1] != '\0') payload[dst_len++] = '\0';
     *payload_len = dst_len;
-}
-
-static void sysfs_emit_uevent_from_node(sysfs_handle_t *handle)
-{
-    if (handle == NULL || handle->node == NULL)
-    {
-        write_serial_fmt("[udev-trace] sysfs:uevent-emit skipped handle=%p\n", handle);
-        return;
-    }
-
-    char *uevent_path = vfs_get_fullpath(handle->node);
-    if (uevent_path == NULL)
-    {
-        write_serial_fmt("[udev-trace] sysfs:uevent-emit no_path handle=%p\n", handle);
-        return;
-    }
-
-    char *last = strrchr(uevent_path, '/');
-    if (last == NULL || strcmp(last + 1, "uevent") != 0)
-    {
-        free(uevent_path);
-        return;
-    }
-    *last = '\0';
-
-    const char *devpath = sysfs_devpath_from_path(uevent_path);
-    int current_seq = __atomic_fetch_add(&sysfs_seqnum, 1, __ATOMIC_SEQ_CST);
-
-    char action[1536];
-    snprintf(action,
-             sizeof(action),
-             "add@%s\nACTION=add\nSEQNUM=%d\nTAGS=:systemd:\n%s%s",
-             devpath,
-             current_seq,
-             handle->content != NULL ? handle->content : "",
-             handle->content != NULL && handle->size != 0 && handle->content[handle->size - 1] == '\n' ? "" : "\n");
-
-    size_t action_len = 0;
-    sysfs_normalize_uevent_payload(action, &action_len);
-    write_serial_fmt("[udev-trace] sysfs:uevent-emit path=%s devpath=%s len=%llu seq=%d\n",
-                     uevent_path,
-                     devpath,
-                     (unsigned long long)action_len,
-                     current_seq);
-    if (action_len > 0) netlink_kernel_uevent_send(action, (int)MIN(action_len, sizeof(action)));
-    free(uevent_path);
 }
 
 vfs_node_t sysfs_regist_dev(char type,
@@ -910,6 +859,15 @@ void sysfs_publish_all_devices()
         {
             memset(node_name, 0, sizeof(node_name));
             strncpy(node_name, slash + 1, sizeof(node_name) - 1);
+        }
+        if (sysfs_device_is_driver_owned(path, node_name, &device_ctl[i]))
+        {
+            write_serial_fmt("[udev-trace] sysfs:publish-all-skip-driver-owned path=%s name=%s major=%u minor=%u\n",
+                             path != NULL ? path : "(null)",
+                             node_name,
+                             device_ctl[i].major,
+                             device_ctl[i].minor);
+            continue;
         }
         sysfs_publish_kernel_device(path,
                                     node_name,

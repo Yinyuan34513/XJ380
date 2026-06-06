@@ -88,7 +88,7 @@ static bool vfs_udev_trace_node(vfs_node_t node)
 static void vfs_udev_log_node(const char *op, const char *path, vfs_node_t node, int64_t ret)
 {
     if (!vfs_udev_trace_path(path) && !vfs_udev_trace_node(node)) return;
-    write_serial_fmt("[udev-trace] vfs:%s path=%s ret=%lld node=%p parent=%p type=0x%x fsid=%u root=%p mount=%d handle=%p rdev=%llu size=%llu child=%llu ref=%u name=%s\n",
+    write_serial_fmt("[udev-trace] vfs:%s path=%s ret=%lld node=%p parent=%p type=0x%x fsid=%u root=%p mount=%d handle=%p rdev=%llu size=%llu child=%llu ref=%u name_ptr=%p\n",
                      op != NULL ? op : "?",
                      vfs_udev_safe_path(path),
                      (long long)ret,
@@ -103,7 +103,7 @@ static void vfs_udev_log_node(const char *op, const char *path, vfs_node_t node,
                      node != NULL ? (unsigned long long)node->size : 0,
                      node != NULL ? (unsigned long long)list_length(node->child) : 0,
                      node != NULL ? node->refcount : 0,
-                     node != NULL && node->name != NULL ? node->name : "(null)");
+                     node != NULL ? node->name : NULL);
 }
 
 void vfs_child_lock() {
@@ -172,7 +172,12 @@ static inline bool vfs_ref_drop(vfs_node_t node)
     if (node == NULL) return false;
     if (node->refcount == 0)
     {
-        write_serial_fmt("vfs_close: refcount underflow avoided for %s\n", node->name != NULL ? node->name : "(null)");
+        write_serial_fmt("vfs_close: refcount underflow avoided node=%p parent=%p type=0x%x fsid=%u name_ptr=%p\n",
+                         node,
+                         node->parent,
+                         node->type,
+                         node->fsid,
+                         node->name);
         return false;
     }
     node->refcount--;
@@ -1121,9 +1126,11 @@ void set_rootdir(vfs_node_t node) {
 
 void *vfs_map(vfs_node_t node, uint64_t addr, uint64_t len, uint64_t prot, uint64_t flags,
               uint64_t offset) {
-    if (unlikely(node == NULL)) return NULL;
-    if (unlikely(node->type == file_dir)) return NULL;
-    return callbackof(node, map)(node->handle, (void *)addr, offset, len, prot, flags);
+    if (unlikely(node == NULL)) return (void *)SYSCALL_FAULT_(ENODEV);
+    if (unlikely(node->type == file_dir)) return (void *)SYSCALL_FAULT_(EACCES);
+    if (unlikely(node->handle == NULL)) return (void *)SYSCALL_FAULT_(ENODEV);
+    void *ret = callbackof(node, map)(node->handle, (void *)addr, offset, len, prot, flags);
+    return ret != NULL ? ret : (void *)SYSCALL_FAULT_(ENODEV);
 }
 
 vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
@@ -1396,20 +1403,26 @@ size_t vfs_readlink(vfs_node_t node, char *buf, size_t bufsize) {
 void *general_map(vfs_read_t read_callback, void *file, uint64_t addr, uint64_t len, uint64_t prot,
                   uint64_t flags, uint64_t offset) {
     UNUSED(flags);
-    pcb_t current_task        = get_current_task()->parent_group;
-    // current_task->mmap_start += (len + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    if (read_callback == NULL || file == NULL || len == 0) return (void *)SYSCALL_FAULT_(EINVAL);
 
-    uint64_t pt_flags = PTE_USER | PTE_WRITEABLE | PTE_PRESENT;
+    uint64_t map_addr = addr & (~(PAGE_SIZE - 1));
+    uint64_t map_len  = (len + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
+    if (map_len == 0) return (void *)SYSCALL_FAULT_(EINVAL);
 
-    if (prot & PROT_READ) pt_flags |= PTE_PRESENT;
-    if (prot & PROT_WRITE) pt_flags |= PTE_WRITEABLE;
+    uint64_t pt_flags = PTE_USER | PTE_PRESENT | PTE_WRITEABLE;
+
     if (!(prot & PROT_EXEC)) pt_flags |= PTE_NO_EXECUTE;
 
-    page_map_range_to_random(get_current_directory(), addr & (~(PAGE_SIZE - 1)),
-                             (len + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1)), pt_flags);
+    page_map_range_to_random(get_current_directory(), map_addr, map_len, pt_flags);
 
     ssize_t ret = read_callback(file, (void *)addr, offset, len);
-    if (ret < 0) return (void *)-ENOMEM;
+    if (ret < 0) {
+        unmap_page_range(get_current_directory(), map_addr, map_len);
+        return (void *)SYSCALL_FAULT_(EIO);
+    }
+    if ((uint64_t)ret < len) {
+        memset((void *)(addr + (uint64_t)ret), 0, len - (uint64_t)ret);
+    }
 
     return (void *)addr;
 }

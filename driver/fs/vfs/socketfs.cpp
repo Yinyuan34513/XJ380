@@ -15,6 +15,10 @@ typedef struct socketfs_handle {
     void             *socket;
 } socketfs_handle_t;
 
+#define NETLINK_SOCKET_QUEUE_SIZE 1024
+#define NETLINK_UEVENT_HISTORY_SIZE 1024
+#define NETLINK_UEVENT_GROUP 1U
+
 typedef struct netlink_socket {
     int      protocol;
     int      type;
@@ -28,9 +32,15 @@ typedef struct netlink_socket {
     size_t   head;
     size_t   tail;
     size_t   count;
-    char    *messages[64];
-    size_t   lengths[64];
+    char    *messages[NETLINK_SOCKET_QUEUE_SIZE];
+    size_t   lengths[NETLINK_SOCKET_QUEUE_SIZE];
 } netlink_socket_t;
+
+typedef struct netlink_history_entry {
+    char  *message;
+    size_t length;
+    bool   valid;
+} netlink_history_entry_t;
 
 static int        socketfs_id      = 0;
 static int        socketfs_next_id = 0;
@@ -42,6 +52,9 @@ static bool              g_socket_provider_ready = false;
 static spin_t            g_netlink_lock = SPIN_INIT;
 static netlink_socket_t *g_netlink_sockets[64];
 static uint32_t          g_netlink_next_pid = 1;
+static spin_t            g_netlink_history_lock = SPIN_INIT;
+static netlink_history_entry_t g_netlink_uevent_history[NETLINK_UEVENT_HISTORY_SIZE];
+static size_t                  g_netlink_uevent_history_next = 0;
 
 static inline bool socketfs_provider_valid(const socket_provider_t *provider)
 {
@@ -315,6 +328,87 @@ static int socketfs_alloc_fd(void *impl, uint64_t flags)
     return socketfs_alloc_fd_with_provider(impl, flags, &provider);
 }
 
+static bool netlink_groups_match(uint32_t subscribed_groups, uint32_t target_groups)
+{
+    return target_groups != 0 && (subscribed_groups & target_groups) != 0;
+}
+
+static bool netlink_queue_message_locked(netlink_socket_t *sock, const char *buf, size_t len)
+{
+    if (sock == NULL || buf == NULL || len == 0) return false;
+
+    if (sock->count == sizeof(sock->messages) / sizeof(sock->messages[0]))
+    {
+        free(sock->messages[sock->head]);
+        sock->messages[sock->head] = NULL;
+        sock->lengths[sock->head] = 0;
+        sock->head = (sock->head + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
+        sock->count--;
+    }
+
+    char *copy = (char *)malloc(len + 1);
+    if (copy == NULL) return false;
+
+    memcpy(copy, buf, len);
+    copy[len] = '\0';
+    sock->messages[sock->tail] = copy;
+    sock->lengths[sock->tail] = len;
+    sock->tail = (sock->tail + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
+    sock->count++;
+    return true;
+}
+
+static void netlink_uevent_history_add(const char *buf, size_t len)
+{
+    if (buf == NULL || len == 0) return;
+
+    char *copy = (char *)malloc(len + 1);
+    if (copy == NULL) return;
+
+    memcpy(copy, buf, len);
+    copy[len] = '\0';
+
+    spin_lock(&g_netlink_history_lock);
+    netlink_history_entry_t *entry = &g_netlink_uevent_history[g_netlink_uevent_history_next];
+    free(entry->message);
+    entry->message = copy;
+    entry->length = len;
+    entry->valid = true;
+    g_netlink_uevent_history_next = (g_netlink_uevent_history_next + 1) % NETLINK_UEVENT_HISTORY_SIZE;
+    spin_unlock(&g_netlink_history_lock);
+}
+
+static size_t netlink_deliver_uevent_history(netlink_socket_t *sock)
+{
+    if (sock == NULL || sock->protocol != NETLINK_KOBJECT_UEVENT) return 0;
+
+    spin_lock(&sock->lock);
+    uint32_t groups = sock->groups;
+    spin_unlock(&sock->lock);
+    if (!netlink_groups_match(groups, NETLINK_UEVENT_GROUP)) return 0;
+
+    size_t delivered = 0;
+    spin_lock(&g_netlink_history_lock);
+    size_t start = g_netlink_uevent_history_next;
+    for (size_t i = 0; i < NETLINK_UEVENT_HISTORY_SIZE; i++)
+    {
+        netlink_history_entry_t *entry = &g_netlink_uevent_history[(start + i) % NETLINK_UEVENT_HISTORY_SIZE];
+        if (!entry->valid || entry->message == NULL || entry->length == 0) continue;
+
+        spin_lock(&sock->lock);
+        if (netlink_queue_message_locked(sock, entry->message, entry->length)) delivered++;
+        spin_unlock(&sock->lock);
+    }
+    spin_unlock(&g_netlink_history_lock);
+
+    write_serial_fmt("[udev-trace] netlink:history-deliver sock=%p groups=0x%x delivered=%llu queued=%llu\n",
+                     sock,
+                     groups,
+                     (unsigned long long)delivered,
+                     (unsigned long long)sock->count);
+    return delivered;
+}
+
 static ssize_t netlink_read_impl(netlink_socket_t *sock, void *buffer, size_t size, uint64_t flags)
 {
     if (sock == NULL || (buffer == NULL && size > 0)) return -EINVAL;
@@ -476,6 +570,7 @@ static int netlink_bind_provider(void *socket, const struct sockaddr *addr, sock
         }
     }
     spin_unlock(&g_netlink_lock);
+    netlink_deliver_uevent_history(sock);
     return 0;
 }
 
@@ -553,10 +648,22 @@ static int netlink_setsockopt_provider(void *socket, int level, int optname, con
         uint32_t group = *(const uint32_t *)optval;
         if (group == 0 || group > 32) return -EINVAL;
         uint32_t bit = 1U << (group - 1);
+        bool deliver_history = false;
         spin_lock(&sock->lock);
-        if (optname == NETLINK_ADD_MEMBERSHIP) sock->groups |= bit;
-        else sock->groups &= ~bit;
+        if (optname == NETLINK_ADD_MEMBERSHIP)
+        {
+            uint32_t old_groups = sock->groups;
+            sock->groups |= bit;
+            deliver_history = sock->protocol == NETLINK_KOBJECT_UEVENT &&
+                              netlink_groups_match(bit, NETLINK_UEVENT_GROUP) &&
+                              !netlink_groups_match(old_groups, NETLINK_UEVENT_GROUP);
+        }
+        else
+        {
+            sock->groups &= ~bit;
+        }
         spin_unlock(&sock->lock);
+        if (deliver_history) netlink_deliver_uevent_history(sock);
         return 0;
     }
 
@@ -723,6 +830,7 @@ int netlink_open(int type, int protocol)
 void netlink_kernel_uevent_send(const char *buf, int len)
 {
     if (buf == NULL || len <= 0) return;
+    netlink_uevent_history_add(buf, (size_t)len);
     size_t delivered = 0;
     spin_lock(&g_netlink_lock);
     for (size_t i = 0; i < sizeof(g_netlink_sockets) / sizeof(g_netlink_sockets[0]); i++)
@@ -730,22 +838,9 @@ void netlink_kernel_uevent_send(const char *buf, int len)
         netlink_socket_t *sock = g_netlink_sockets[i];
         if (sock == NULL || sock->protocol != NETLINK_KOBJECT_UEVENT) continue;
         spin_lock(&sock->lock);
-        if (sock->count == sizeof(sock->messages) / sizeof(sock->messages[0]))
+        if (netlink_groups_match(sock->groups, NETLINK_UEVENT_GROUP) &&
+            netlink_queue_message_locked(sock, buf, (size_t)len))
         {
-            free(sock->messages[sock->head]);
-            sock->messages[sock->head] = NULL;
-            sock->head = (sock->head + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
-            sock->count--;
-        }
-        char *copy = (char *)malloc((size_t)len + 1);
-        if (copy != NULL)
-        {
-            memcpy(copy, buf, (size_t)len);
-            copy[len] = '\0';
-            sock->messages[sock->tail] = copy;
-            sock->lengths[sock->tail] = (size_t)len;
-            sock->tail = (sock->tail + 1) % (sizeof(sock->messages) / sizeof(sock->messages[0]));
-            sock->count++;
             delivered++;
             write_serial_fmt("[udev-trace] netlink:uevent queued sock=%p pid=%u groups=0x%x len=%d count=%llu first=%.*s\n",
                              sock,
@@ -754,7 +849,7 @@ void netlink_kernel_uevent_send(const char *buf, int len)
                              len,
                              (unsigned long long)sock->count,
                              MIN(len, 96),
-                             copy);
+                             buf);
         }
         spin_unlock(&sock->lock);
     }

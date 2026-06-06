@@ -3,6 +3,7 @@
 #include "id_alloc.h"
 #include "krlibc.h"
 #include "mutex.h"
+#include <profiler.h>
 #include <proto.hpp>
 #include <fs/partition.h>
 #include <fs/vfs/sys.h>
@@ -159,6 +160,27 @@ static bool blk_user_buffer_valid(const void *buffer, size_t length) {
     return user_range_mapped(current->parent_group->pagedir, buffer, length);
 }
 
+static size_t blk_device_max_sectors(const device_t *device) {
+    if (device == NULL || device->sector_size == 0) return 1;
+
+    size_t bytes = blk_window_bytes(device);
+    size_t sectors = bytes / device->sector_size;
+    if (sectors == 0) sectors = 1;
+    return sectors;
+}
+
+static bool device_uses_driver_sysfs(const char *published_path, const char *node_name, const device_t *device) {
+    if (device == NULL || device->type != DEVICE_STREAM) return false;
+    if (node_name != NULL && strncmp(node_name, "event", 5) == 0) return true;
+    return published_path != NULL && strstr(published_path, "input/event") != NULL;
+}
+
+static size_t blk_profile_finish(bool write, int drive, uint64_t offset, uint64_t length,
+                                 uint64_t start_ns, size_t status) {
+    profiler_block_io(write, drive, offset, length, bootNanoTime() - start_ns, (int64_t)status);
+    return status;
+}
+
 int regist_device(const char *path, device_t vd) {
     int i = id_alloc(dev_allocator);
     if (i == -1) return -1;
@@ -207,7 +229,7 @@ int regist_device(const char *path, device_t vd) {
             const char *slash = strrchr(published_path, '/');
             if (slash != NULL && slash[1] != '\0') strncpy(node_name, slash + 1, sizeof(node_name) - 1);
         }
-        if (sysfs_is_ready())
+        if (sysfs_is_ready() && !device_uses_driver_sysfs(published_path, node_name, &device_ctl[i]))
         {
             write_serial_fmt("[udev-trace] device:sysfs-publish id=%d devname=%s node_name=%s type=%c major=%u minor=%u\n",
                              i,
@@ -221,6 +243,15 @@ int regist_device(const char *path, device_t vd) {
                                         vd.type == DEVICE_BLOCK ? 'b' : 'c',
                                         (int)device_ctl[i].major,
                                         (int)device_ctl[i].minor);
+        }
+        else if (sysfs_is_ready())
+        {
+            write_serial_fmt("[udev-trace] device:sysfs-driver-owned id=%d devname=%s node_name=%s major=%u minor=%u\n",
+                             i,
+                             published_path != NULL ? published_path : "(null)",
+                             node_name,
+                             device_ctl[i].major,
+                             device_ctl[i].minor);
         }
         else
         {
@@ -340,9 +371,10 @@ size_t device_read(size_t lba, size_t number, void *buffer, int drive) {
             (number != 0 && device_ctl[drive].sector_size > (size_t)-1 / number)) {
             return 0;
         }
+        size_t max_sectors = blk_device_max_sectors(&device_ctl[drive]);
         size_t ret_size = 0;
-        for (size_t i = 0; i < number; i += SECTORS_ONCE) {
-            int sectors  = ((number - i) >= SECTORS_ONCE) ? SECTORS_ONCE : (number - i);
+        for (size_t i = 0; i < number; i += max_sectors) {
+            size_t sectors  = MIN(number - i, max_sectors);
             ret_size    += rw_device(drive, lba + i,
                                      (uint8_t *)((uint64_t)buffer + i * device_ctl[drive].sector_size),
                                      sectors, 1);
@@ -357,9 +389,10 @@ size_t device_write(size_t lba, size_t number, const void *buffer, int drive) {
             (number != 0 && device_ctl[drive].sector_size > (size_t)-1 / number)) {
             return 0;
         }
+        size_t max_sectors = blk_device_max_sectors(&device_ctl[drive]);
         size_t ret_size = 0;
-        for (size_t i = 0; i < number; i += SECTORS_ONCE) {
-            int sectors  = ((number - i) >= SECTORS_ONCE) ? SECTORS_ONCE : (number - i);
+        for (size_t i = 0; i < number; i += max_sectors) {
+            size_t sectors  = MIN(number - i, max_sectors);
             ret_size    += rw_device(drive, lba + i,
                                      (uint8_t *)((uint64_t)buffer + i * device_ctl[drive].sector_size),
                                      sectors, 0);
@@ -370,20 +403,22 @@ size_t device_write(size_t lba, size_t number, const void *buffer, int drive) {
 }
 
 size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length) {
+    uint64_t profile_start_ns = bootNanoTime();
     if (!have_vdisk(drive) || length == 0) {
-        return 0;
+        return blk_profile_finish(false, drive, offset, length, profile_start_ns, 0);
     }
 
     device_t device = device_ctl[drive];
     if (device.type == DEVICE_STREAM) {
-        return device.read(drive, (uint8_t *)buffer, length, offset);
+        return blk_profile_finish(false, drive, offset, length, profile_start_ns,
+                                  device.read(drive, (uint8_t *)buffer, length, offset));
     }
     if (device.sector_size == 0 || device.read == NULL) {
-        return (uint64_t)-1;
+        return blk_profile_finish(false, drive, offset, length, profile_start_ns, (uint64_t)-1);
     }
     blk_bounce_ctx_t bounce_ctx;
     if (!blk_acquire_bounce(drive, blk_window_bytes(&device), &bounce_ctx)) {
-        return (uint64_t)-1;
+        return blk_profile_finish(false, drive, offset, length, profile_start_ns, (uint64_t)-1);
     }
     uint8_t *bounce = bounce_ctx.buffer;
 
@@ -463,28 +498,30 @@ size_t blk_device_read(int drive, void *buffer, size_t offset, size_t length) {
 
 out:
     blk_release_bounce(&bounce_ctx);
-    return status;
+    return blk_profile_finish(false, drive, offset, length, profile_start_ns, status);
 }
 
 size_t blk_device_write(device_t device, const void *buffer, size_t offset, size_t length) {
+    uint64_t profile_start_ns = bootNanoTime();
     if (length == 0) {
-        return 0;
+        return blk_profile_finish(true, (int)device.vdiskid, offset, length, profile_start_ns, 0);
     }
     if (!blk_user_buffer_valid(buffer, length)) {
         write_serial_fmt("blk_device_write: reject unmapped buffer=%#llx len=%#llx thread=%s\n",
                          (unsigned long long)(uint64_t)buffer, (unsigned long long)length,
                          get_current_task() ? get_current_task()->name : "<none>");
-        return (uint64_t)-1;
+        return blk_profile_finish(true, (int)device.vdiskid, offset, length, profile_start_ns, (uint64_t)-1);
     }
     if (device.type == DEVICE_STREAM) {
-        return device.write(device.vdiskid, (uint8_t *)buffer, length, offset);
+        return blk_profile_finish(true, (int)device.vdiskid, offset, length, profile_start_ns,
+                                  device.write(device.vdiskid, (uint8_t *)buffer, length, offset));
     }
     if (device.sector_size == 0 || device.write == NULL) {
-        return (uint64_t)-1;
+        return blk_profile_finish(true, (int)device.vdiskid, offset, length, profile_start_ns, (uint64_t)-1);
     }
     blk_bounce_ctx_t bounce_ctx;
     if (!blk_acquire_bounce(device.vdiskid, blk_window_bytes(&device), &bounce_ctx)) {
-        return (uint64_t)-1;
+        return blk_profile_finish(true, (int)device.vdiskid, offset, length, profile_start_ns, (uint64_t)-1);
     }
     uint8_t *bounce = bounce_ctx.buffer;
 
@@ -578,7 +615,7 @@ size_t blk_device_write(device_t device, const void *buffer, size_t offset, size
 
 out:
     blk_release_bounce(&bounce_ctx);
-    return status;
+    return blk_profile_finish(true, (int)device.vdiskid, offset, length, profile_start_ns, status);
 }
 
 

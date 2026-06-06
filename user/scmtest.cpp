@@ -145,6 +145,94 @@ static void test_zero_len_dgram_passcred()
     close_if_valid(sv[1]);
 }
 
+static void test_explicit_stream_credentials()
+{
+    int sv[2] = {-1, -1};
+    int sp_ret = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+    log_result("socketpair explicit SCM_CREDENTIALS", sp_ret == 0);
+    if (sp_ret != 0) return;
+
+    int one = 1;
+    log_result("setsockopt stream SO_PASSCRED", setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &one, sizeof(one)) == 0);
+
+    const char payload[] = "cred";
+    char control[CMSG_SPACE(sizeof(struct ucred))];
+    memset(control, 0, sizeof(control));
+
+    struct iovec iov = {};
+    iov.iov_base = (void *)payload;
+    iov.iov_len = sizeof(payload) - 1;
+
+    struct msghdr msg = {};
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control;
+    msg.msg_controllen = sizeof(control);
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    if (cmsg == NULL) {
+        log_result("prepare explicit SCM_CREDENTIALS", 0);
+        close_if_valid(sv[0]);
+        close_if_valid(sv[1]);
+        return;
+    }
+
+    struct ucred cred = {};
+    cred.pid = getpid();
+    cred.uid = getuid();
+    cred.gid = getgid();
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_CREDENTIALS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(cred));
+    memcpy(CMSG_DATA(cmsg), &cred, sizeof(cred));
+    msg.msg_controllen = CMSG_SPACE(sizeof(cred));
+
+    int send_ret = (int)sendmsg(sv[0], &msg, 0);
+    log_result("sendmsg explicit SCM_CREDENTIALS", send_ret == (int)(sizeof(payload) - 1));
+
+    char recv_buf[16];
+    memset(recv_buf, 0, sizeof(recv_buf));
+    char recv_control[CMSG_SPACE(sizeof(struct ucred))];
+    memset(recv_control, 0, sizeof(recv_control));
+
+    struct iovec recv_iov = {};
+    recv_iov.iov_base = recv_buf;
+    recv_iov.iov_len = sizeof(recv_buf) - 1;
+
+    struct msghdr recv_msg = {};
+    recv_msg.msg_iov = &recv_iov;
+    recv_msg.msg_iovlen = 1;
+    recv_msg.msg_control = recv_control;
+    recv_msg.msg_controllen = sizeof(recv_control);
+
+    int recv_ret = (int)recvmsg(sv[1], &recv_msg, 0);
+    log_result("recvmsg explicit SCM_CREDENTIALS payload", recv_ret == (int)(sizeof(payload) - 1));
+    log_result("explicit credential payload matches", strcmp(recv_buf, payload) == 0);
+
+    struct cmsghdr *recv_cmsg = CMSG_FIRSTHDR(&recv_msg);
+    bool has_cred = recv_cmsg != NULL &&
+                    recv_cmsg->cmsg_level == SOL_SOCKET &&
+                    recv_cmsg->cmsg_type == SCM_CREDENTIALS &&
+                    recv_cmsg->cmsg_len >= CMSG_LEN(sizeof(struct ucred));
+    log_result("recvmsg explicit SCM_CREDENTIALS", has_cred);
+    if (has_cred) {
+        struct ucred *received = (struct ucred *)CMSG_DATA(recv_cmsg);
+        log_result("explicit SCM_CREDENTIALS pid valid", received->pid == getpid());
+        log_result("explicit SCM_CREDENTIALS uid valid", received->uid == (int)getuid());
+        log_result("explicit SCM_CREDENTIALS gid valid", received->gid == (int)getgid());
+    }
+
+    cmsg = CMSG_FIRSTHDR(&msg);
+    if (cmsg != NULL) {
+        ((struct ucred *)CMSG_DATA(cmsg))->pid = getpid() + 1;
+        send_ret = (int)sendmsg(sv[0], &msg, 0);
+        log_result("sendmsg forged SCM_CREDENTIALS rejected", send_ret < 0);
+    }
+
+    close_if_valid(sv[0]);
+    close_if_valid(sv[1]);
+}
+
 static int scmtest_main_impl()
 {
     out("scmtest: start\n");
@@ -169,6 +257,7 @@ static int scmtest_main_impl()
     }
 
     test_zero_len_dgram_passcred();
+    test_explicit_stream_credentials();
 
     const char msg1[] = "hello-fd";
     int send_ret = send_fd_with_payload(sv[0], data_fd, msg1);

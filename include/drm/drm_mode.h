@@ -296,3 +296,27 @@ struct drm_mode_create_blob {
 struct drm_mode_destroy_blob {
     uint32_t blob_id;
 };
+
+struct drm_mode_create_lease {
+    uint64_t object_ids;
+    uint32_t object_count;
+    uint32_t flags;
+    uint32_t lessee_id;
+    uint32_t fd;
+};
+
+struct drm_mode_list_lessees {
+    uint32_t count_lessees;
+    uint32_t pad;
+    uint64_t lessees_ptr;
+};
+
+struct drm_mode_get_lease {
+    uint32_t count_objects;
+    uint32_t pad;
+    uint64_t objects_ptr;
+};
+
+struct drm_mode_revoke_lease {
+    uint32_t lessee_id;
+};

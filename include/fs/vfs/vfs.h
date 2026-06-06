@@ -26,7 +26,16 @@ char *normalize_path(const char *path);
 #define F_SETSIG        10
 #define F_GETSIG        11
 #define F_DUPFD_CLOEXEC 1030
+#define F_ADD_SEALS     1033
+#define F_GET_SEALS     1034
 #define FD_CLOEXEC      1
+
+#define F_SEAL_SEAL         0x0001
+#define F_SEAL_SHRINK       0x0002
+#define F_SEAL_GROW         0x0004
+#define F_SEAL_WRITE        0x0008
+#define F_SEAL_FUTURE_WRITE 0x0010
+#define F_SEAL_EXEC         0x0020
 
 #define SEEK_SET  0 /* Seek from beginning of file.  */
 #define SEEK_CUR  1 /* Seek from current position.  */
