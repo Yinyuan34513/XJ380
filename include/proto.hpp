@@ -285,7 +285,7 @@ void create_user_thread_from_file(char *path, pcb_t pcb);
 int create_user_process_from_file(char *path, pcb_t pcb, char *argv[]);
 void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
 void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, char *path);
-void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
+bool LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path);
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path);
 void GetPictureSize(int *w, int *h, char *path);
 void copy_buffer_by_id(SHEET_INFO *sht, SHEET *dst_sheet, SHEET_BUFFER *src, uint32_t dst_x, uint32_t dst_y,

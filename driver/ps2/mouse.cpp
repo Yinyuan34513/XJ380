@@ -35,8 +35,6 @@ extern bool logo_menu_is_open;
 extern bool allow_to_flush;
 extern bool desktop_done;
 
-static volatile bool desktop_refresh_pending = false;
-
 enum MouseCursorShape
 {
     MouseCursorStandard = 0,
@@ -289,6 +287,24 @@ static void update_hover_resize_cursor()
     uint8_t edges = 0;
     (void)find_resize_window_at(mouse_x, mouse_y, &edges);
     update_mouse_cursor_shape(sht_img, cursor_shape_for_resize_edges(edges));
+}
+
+static bool send_desktop_mouse_message(uint64_t type, uint64_t x, uint64_t y)
+{
+    WINDOWLSP desktop_window = sht_found_win_by_type(xwmii, sht_img, desktop_ct_sheet, XWIN_DESKTOP);
+    if (desktop_window == NULL) return false;
+
+    do_message(type, x, y, desktop_window->WinMPf, desktop_window->w_task);
+    return true;
+}
+
+static bool send_dock_mouse_message(uint64_t type, uint64_t x, uint64_t y)
+{
+    WINDOWLSP dock_window = sht_found_win_by_type(xwmii, sht_img, dock_ct_sheet, XWIN_DOCK);
+    if (dock_window == NULL) return false;
+
+    do_message(type, x, y, dock_window->WinMPf, dock_window->w_task);
+    return true;
 }
 
 static bool begin_window_resize_drag(WINDOWLS *window, uint8_t edges)
@@ -639,14 +655,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
 void process_mouse_info()
 {
     ms_dec.need_flush = false;
-
-    if (desktop_refresh_pending)
-    {
-        desktop_refresh_pending = false;
-        init_desktop(sht_img, desktop_ct_sheet, dock_ct_sheet);
-        refresh_sheet(sht_img);
-        flush_sheet_damage_queue(sht_img);
-    }
+    bool consumed_left_click = false;
 
     if (ms_dec.left_release_pending)
     {
@@ -657,12 +666,20 @@ void process_mouse_info()
         tbx = click_x;
         tby = click_y;
 
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (have_full_screen_app && current_window != NULL)
+        {
+            do_message(MSG_LBUTTON, click_x, click_y, current_window->WinMPf, current_window->w_task);
+            handled = true;
+        }
+
         if (!have_full_screen_app)
         {
             // 底栏和快捷栏点击优先，不依赖 ms_dec.sht_now，避免被错误命中窗口吞掉事件。
             if (click_x > 24 && click_y > sht_img->scry - 24 - 63 && click_x < 24 + 84)
             {
-                create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, NULL);
+                handled = send_dock_mouse_message(MSG_LBUTTON, click_x, click_y);
+                if (!handled) create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, NULL);
                 handled = true;
             }
             else if (click_x > 132 && click_y > sht_img->scry - 24 - 63)
@@ -692,44 +709,12 @@ void process_mouse_info()
             {
                 if (click_x > menu_x1 && click_x < menu_x1 + 32)
                 {
-                    // logo 徽标
                     draw_logo_menu();
                     handled = true;
                 }
-                else if (click_x > menu_x1 + 32 && click_x < menu_x1 + 32 + 25 + 8)
+                else
                 {
-                    // 文件
-                    create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, NULL);
-                    handled = true;
-                }
-                else if (click_x > menu_x1 + 32 + 25 + 8 && click_x < menu_x1 + 32 + 25 + 8 + 25 + 9)
-                {
-                    // 设置
-                    char *argv[2] = {"shortdock-open-settings", NULL};
-                    create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, argv);
-                    handled = true;
-                }
-                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 &&
-                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9)
-                {
-                    // 终端
-                    create_user_process_from_file((char *)"/apps/system/shell.elf", NULL, NULL);
-                    handled = true;
-                }
-                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 &&
-                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8)
-                {
-                    // 进程
-                    create_user_process_from_file((char *)"/apps/system/taskmgr.elf", NULL, NULL);
-                    handled = true;
-                }
-                else if (click_x > menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
-                         click_x < menu_x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
-                {
-                    // 关于
-                    char *argv[2] = {"shortdock-open-about", NULL};
-                    create_user_process_from_file((char *)"/apps/system/ctrlmenu.elf", NULL, argv);
-                    handled = true;
+                    handled = send_dock_mouse_message(MSG_LBUTTON, click_x, click_y);
                 }
             }
         }
@@ -751,19 +736,23 @@ void process_mouse_info()
             else if (click_y > 72 && click_y < 94)
             {
                 // 刷新
-                desktop_refresh_pending = true;
+                send_desktop_mouse_message(MSG_CRL, 0, 0);
                 handled = true;
             }
         }
 
-        (void)handled;
+        if (handled)
+        {
+            consumed_left_click = true;
+            ms_dec.double_click = false;
+        }
         close_menu(ms_dec.left_release_window, tbx, tby);
         delete_logo_menu();
         ms_dec.left_release_window  = NULL;
         ms_dec.left_release_pending = false;
     }
 
-    if (ms_dec.left)
+    if (!consumed_left_click && ms_dec.left)
     {
         if (ms_dec.win_resize_lock)
         {
@@ -812,7 +801,7 @@ void process_mouse_info()
                 if (ms_dec.double_click)
                 {
                     ms_dec.double_click = false;
-                    process_desktop_find_block(tbx, tby);
+                    send_desktop_mouse_message(MSG_LBUTTON, tbx, tby);
                 }
             }
             else

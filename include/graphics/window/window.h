@@ -55,6 +55,9 @@ void init_xwm(XWM_INFO *xwmi);
 void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
 void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height);
 void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+void create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+void create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+void create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color);
@@ -65,6 +68,7 @@ void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
+WINDOWLS *sht_found_win_by_type(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet, uint64_t type);
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 WINDOWLS *mpf_found_win(MsgPrcor mpf);
 bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);

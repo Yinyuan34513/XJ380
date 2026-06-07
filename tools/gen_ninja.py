@@ -277,10 +277,16 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         "fmanager/fm_pathp.cpp",
         "fmanager/fm_processp.cpp",
     ]
+    login_sources = ["login/login.cpp"]
+    dock_sources = ["dock/dock.cpp"]
+    desktop_sources = ["desktop/desktop.cpp"]
     ctrlmenu_sources = ["ctrlmenu/ctrlmenu.cpp", "ctrlmenu/cm_graph.cpp", "ctrlmenu/cm_processp.cpp"]
     installer_sources = ["installer/installer.cpp", "installer/installer_hidden.cpp"]
 
     targets.append(grouped_cpp_app(n, "shell", shell_sources, "shell", core_objs, liballoc, common_implicit))
+    targets.append(grouped_cpp_app(n, "login", login_sources, "login", core_objs, liballoc, common_implicit))
+    targets.append(grouped_cpp_app(n, "dock", dock_sources, "dock", core_objs, liballoc, common_implicit))
+    targets.append(grouped_cpp_app(n, "desktop", desktop_sources, "desktop", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "fmanager", fmanager_sources, "fmanager", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "ctrlmenu", ctrlmenu_sources, "ctrlmenu", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "calc", ["calc/calc.cpp"], "calc", core_objs, liballoc, common_implicit))
@@ -782,8 +788,18 @@ def main() -> None:
     phony(n, "stardustui.examples.copy", stardust_targets)
     phony(n, "kmods", kmod_targets)
 
-    n.build(["vdisk", "XJ380.img"], "python_cmd", all_deps, variables={"cmd": "vdisk", "desc": "VDISK XJ380.img"})
-    n.build("complete", "python_cmd", all_deps, variables={"cmd": "complete", "desc": "VDISK COMPLETE XJ380.img"})
+    n.build(
+        ["vdisk", "XJ380.img"],
+        "python_cmd",
+        all_deps,
+        variables={"cmd": "vdisk", "desc": "VDISK XJ380.img", "pool": "console"},
+    )
+    n.build(
+        "complete",
+        "python_cmd",
+        all_deps,
+        variables={"cmd": "complete", "desc": "VDISK COMPLETE XJ380.img", "pool": "console"},
+    )
     n.build(
         ["installer.system.stage", "out/system-payload.pak"],
         "python_cmd",
@@ -803,8 +819,8 @@ def main() -> None:
         variables={"cmd": "installer-iso", "desc": "ISO XJ380-installer.iso"},
     )
     n.build(["vmdk", "XJ380.vmdk"], "python_cmd", ["vdisk"], variables={"cmd": "vmdk", "desc": "VMDK XJ380.vmdk"})
-    n.build("run", "python_cmd", ["vdisk"], variables={"cmd": "run", "desc": "RUN QEMU"})
-    n.build("justrun", "python_cmd", variables={"cmd": "run", "desc": "RUN QEMU"})
+    n.build("run", "python_cmd", ["vdisk"], variables={"cmd": "run", "desc": "RUN QEMU", "pool": "console"})
+    n.build("justrun", "python_cmd", variables={"cmd": "run", "desc": "RUN QEMU", "pool": "console"})
     n.build("prepare", "python_cmd", variables={"cmd": "prepare", "desc": "PREPARE root"})
     n.build("installer.prepare", "python_cmd", variables={"cmd": "installer-prepare", "desc": "PREPARE installer root"})
     n.build("stage.selfhost-user", "python_cmd", variables={"cmd": "stage-selfhost-user", "desc": "STAGE selfhost user"})

@@ -720,6 +720,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_FLUSH_TIME: do_xapi_FlushTime(); break;
     case XAPI_GET_TASK_LIST: regs->rax = do_xapi_GetTaskList(regs->rdi, regs->rsi); break;
     case XAPI_KILL_PROCESS: regs->rax = do_xapi_KillProcess(regs->rdi); break;
+    case XAPI_USER_OOBE_REQUIRED: regs->rax = do_xapi_UserOobeRequired(); break;
+    case XAPI_USER_LIST: regs->rax = do_xapi_UserList(regs->rdi, regs->rsi); break;
+    case XAPI_USER_LOGIN: regs->rax = do_xapi_UserLogin(regs->rdi, regs->rsi); break;
+    case XAPI_USER_CREATE_FIRST: regs->rax = do_xapi_UserCreateFirst(regs->rdi, regs->rsi); break;
     case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
 
     /* XJ380API 隐藏版（严禁泄露） */

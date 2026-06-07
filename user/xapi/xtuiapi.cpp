@@ -257,6 +257,26 @@ extern "C" void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
 }
 
+extern "C" UINT64 xapi_UserOobeRequired(void)
+{
+	return enter_syscall(XAPI_USER_OOBE_REQUIRED, 0, 0, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_UserList(LoginUserInfo *buffer, UINT64 max_count)
+{
+	return enter_syscall(XAPI_USER_LIST, (uint64_t)buffer, max_count, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_UserLogin(WSTR username, WSTR password)
+{
+	return enter_syscall(XAPI_USER_LOGIN, (uint64_t)username, (uint64_t)password, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_UserCreateFirst(WSTR username, WSTR password)
+{
+	return enter_syscall(XAPI_USER_CREATE_FIRST, (uint64_t)username, (uint64_t)password, 0, 0, 0, 0);
+}
+
 extern "C" void	xapi_GetTimeX(TimeType *tm) {
 	enter_syscall(XAPI_GET_TIME_X, (uint64_t)tm, 0, 0, 0, 0, 0);
 }

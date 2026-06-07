@@ -115,6 +115,27 @@ static void setup_busybox_vfs_aliases()
     }
 }
 
+static uint8_t dispatch_keyboard_input_to_focused_window()
+{
+    uint8_t k_input = get_keyboard_input();
+    if (k_input != NULL)
+    {
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (current_window != NULL)
+        {
+            if (k_input != '\n' && k_input != '\b' && k_input < 128)
+            {
+                do_message(MSG_CHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
+            }
+            else
+            {
+                do_message(MSG_SPCHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
+            }
+        }
+    }
+    return k_input;
+}
+
 extern const uint8_t _binary___graphics_logo_xj380_2_png_start;
 extern const uint8_t _binary___graphics_logo_xj380_2_png_end;
 
@@ -180,6 +201,7 @@ typedef struct TimerWidgetsData
 TimerWidgetsData *tw_data = NULL;
 
 bool have_full_screen_app = false;
+extern bool user_dock_owns_dock_sheet;
 
 int clock_hour_offset = 0;
 
@@ -344,7 +366,7 @@ void components_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data != NULL && !have_full_screen_app)
+        if (tw_data != NULL && !have_full_screen_app && !user_dock_owns_dock_sheet)
         {
             tm         *time          = &tw_data->time;
             tm         *old_time      = &tw_data->old_time;
@@ -504,17 +526,13 @@ void desktop_flusher()
     enable_scheduler();
 
     if (!installer_mode) {
-        write_serial_string("desktop: init_user begin\n");
-        init_user();
-        write_serial_string("desktop: init_user done\n");
+        write_serial_string("desktop: prepare login session\n");
+        user_session_use_root();
         write_serial_string("desktop: init_xuls begin\n");
         init_xuls();
         write_serial_string("desktop: init_xuls done\n");
-        init_time();
 
         write_serial_string("user & settings initialized.\n");
-
-        init_desktop(&shtinf, desktop_ct_sheet, dock_ct_sheet);
 
         write_serial_string("desktop initialized.\n");
     } else {
@@ -533,23 +551,7 @@ void desktop_flusher()
     // EFIAPI EFI_STATUS (*GetTime)(EFI_TIME *, EFI_TIME_CAPABILITIES *) = (EFIAPI EFI_STATUS(*)(EFI_TIME *, EFI_TIME_CAPABILITIES *))convert_physical_to_virtual((uint64_t)RuntimeServices->GetTime);
     int scdx = fbc_addr->horizontal_resolution * 13 / 16;
 
-    tw_data = (TimerWidgetsData *)malloc(sizeof(TimerWidgetsData));
-    if (tw_data == NULL)
-    {
-        write_serial_string("timer widget allocation failed\n");
-        desktop_done = true;
-        goto skip_timer_widget_init;
-    }
-    memset(tw_data, 0, sizeof(TimerWidgetsData));
-    tw_data->sht      = &shtinf;
-    tw_data->ct_sheet = dock_ct_sheet;
-    tw_data->scdx     = scdx;
-    time_read(&tw_data->time);
-    tw_data->old_time = tw_data->time;
-
     desktop_done = true;
-
-skip_timer_widget_init:
 
     delay_s_hp(1);
 
@@ -565,6 +567,21 @@ skip_timer_widget_init:
     if (installer_mode) {
         installer_launch_app();
     } else {
+        create_user_process_from_file((char *)"/apps/system/login.elf", NULL, NULL);
+        while (current_user == NULL || current_user->user_type == XUT_Root)
+        {
+            dispatch_keyboard_input_to_focused_window();
+            scheduler_yield();
+            flush_sheet_damage_queue(&shtinf);
+        }
+        init_time();
+        create_user_process_from_file((char *)"/apps/system/desktop.elf", NULL, NULL);
+        for (int i = 0; i < 8; i++)
+        {
+            scheduler_yield();
+            flush_sheet_damage_queue(&shtinf);
+        }
+        create_user_process_from_file((char *)"/apps/system/dock.elf", NULL, NULL);
         create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
     }
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
@@ -578,28 +595,13 @@ skip_timer_widget_init:
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data != NULL && tw_data->need_flush)
+        if (tw_data != NULL && tw_data->need_flush && !user_dock_owns_dock_sheet)
         {
             tw_data->need_flush = false;
             refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
         }
 
-        k_input = get_keyboard_input();
-        if (k_input != NULL)
-        {
-            WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-            if (current_window != NULL)
-            {
-                if (k_input != '\n' && k_input != '\b' && k_input < 128)
-                {
-                    do_message(MSG_CHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
-                }
-                else
-                {
-                    do_message(MSG_SPCHAR, NULL, k_input, current_window->WinMPf, current_window->w_task);
-                }
-            }
-        }
+        k_input = dispatch_keyboard_input_to_focused_window();
 
 #if BUILD_EDITION == DEBUG_VERSION
         if (k_input != NULL && k_input != '\n' && k_input != '\b')
@@ -648,9 +650,13 @@ extern int      nmfs_setup();
 extern int      tmpfs_setup();
 EFI_SYSTEM_TABLE *EFI_ST;
 BOOT_CONFIG *EFI_BC;
+static BOOT_CONFIG g_kernel_boot_config;
 
-extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfig)
+extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &SystemTable, BOOT_CONFIG &BootConfigIn)
 {
+    memcpy(&g_kernel_boot_config, &BootConfigIn, sizeof(g_kernel_boot_config));
+    BOOT_CONFIG &BootConfig = g_kernel_boot_config;
+
     fbc_addr = &fbc;
     no_interrupt = true;
     disable_intr();

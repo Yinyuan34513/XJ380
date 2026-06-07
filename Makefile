@@ -52,7 +52,7 @@ else
 QEMU_BOOT_STORAGE = -drive if=none,id=harddisk,file=XJ380.img,index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk,bootindex=0
 endif
 
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -device qemu-xhci,id=xhci $(QEMU_BOOT_STORAGE) $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -device qemu-xhci,id=xhci $(QEMU_BOOT_STORAGE) -boot strict=on $(USB_XHCI_DEVICES) -serial file:serial.log -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0 -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -monitor stdio
 
 COMPILER_PREFIX ?=
 
@@ -315,6 +315,9 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/kernel.krl $(VDISK_ROOT)/system
 
 	@cp -a $(BUILD_DIR)/shell.elf    $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/login.elf    $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/dock.elf     $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/desktop.elf  $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
@@ -379,6 +382,9 @@ installer.system.stage: all installer.prepare
 	@cp -a $(BUILD_DIR)/BOOTX64.efi $(INSTALLER_SYSTEM_ROOT)/EFI/BOOT
 	@cp -a $(BUILD_DIR)/kernel.krl $(INSTALLER_SYSTEM_ROOT)/system
 	@cp -a $(BUILD_DIR)/shell.elf    $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/login.elf    $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/dock.elf     $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/desktop.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/fmanager.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
@@ -469,7 +475,9 @@ complete: VDISK_COMPLETE=1
 complete: vdisk
 
 run: vdisk
+	@rm -f serial.log
 	@$(QEMU_CMD)
 
 justrun:
+	@rm -f serial.log
 	@$(QEMU_CMD)

@@ -259,10 +259,18 @@ static inline bool is_sheet_pixel_opaque_at(const SHEET *sheet, int x, int y)
 
 void init_foxland(SHEET_INFO *sht)
 {
-    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)malloc(sht->scrx * sht->scry * 4);//不要乱用pagealloc
+    sht->foxland.enabled        = false;
+    sht->foxland.fl_peek_buffer = (SHEET_BUFFER *)calloc((size_t)sht->scrx * sht->scry, sizeof(SHEET_BUFFER));//不要乱用pagealloc
     sht->foxland.peek_sign      = (uint8_t *)calloc(sht->scrx * sht->scry, sizeof(uint8_t));
     sht->foxland.opaque_layer   = (uint16_t *)calloc(sht->scrx * sht->scry, sizeof(uint16_t));
-    LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, "/system/foxland/peek.png");
+    if (sht->foxland.fl_peek_buffer == NULL || sht->foxland.peek_sign == NULL || sht->foxland.opaque_layer == NULL)
+    {
+        write_serial_string("Foxland Peek disabled: allocation failed.\n");
+        return;
+    }
+    sht->foxland.enabled =
+        LoadPicture((SHEET_BUFFER *)sht->foxland.fl_peek_buffer, sht->scrx, sht->scry, "/system/foxland/peek.png");
+    if (!sht->foxland.enabled) write_serial_string("Foxland Peek disabled: /system/foxland/peek.png unavailable.\n");
 }
 void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
 {
@@ -794,8 +802,11 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
                     p_dst[x].g = (p_src[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
                     p_dst[x].b = (p_src[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
 
-                    p_sign[x] = 1;
-                    need_peek_overlay = true;
+                    if (sht->foxland.enabled && st->type != FixedSheetType)
+                    {
+                        p_sign[x] = 1;
+                        need_peek_overlay = true;
+                    }
                 }
                 x++;
             }
@@ -804,7 +815,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
     }
 
     // Foxland Peek 处理 - 优化：减少指针计算
-    if (need_peek_overlay) {
+    if (need_peek_overlay && sht->foxland.enabled) {
         SHEET_BUFFER *temp_peek = (SHEET_BUFFER *)sht->foxland.fl_peek_buffer;
         int peek_width = bex2 - bex1;
 

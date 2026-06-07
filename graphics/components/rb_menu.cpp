@@ -92,9 +92,12 @@ void unregister_right_rb_button_menu_components(WINDOWLSP win)
 }
 
 extern SHEET *dock_ct_sheet;
+extern bool   user_dock_owns_dock_sheet;
 
 void place_menu(rb_menu_regt_p regt)
 {
+    if (user_dock_owns_dock_sheet) return;
+
     draw_rect(sht_img, dock_ct_sheet, 
               regt->x, regt->y, 
               regt->x + 199, regt->y + 30 * regt->count - 1, 
@@ -113,6 +116,18 @@ void place_menu(rb_menu_regt_p regt)
 void close_menu(WINDOWLSP win, int x, int y)
 {
     if (win == NULL) return;
+    if (user_dock_owns_dock_sheet)
+    {
+        rb_menu_regt_p front_p = first_rb_menu;
+        while (front_p != NULL)
+        {
+            front_p->x = 0;
+            front_p->y = 0;
+            front_p->can_r = false;
+            front_p = front_p->next;
+        }
+        return;
+    }
     rb_menu_regt_p front_p = first_rb_menu;
     while (true)
     {
@@ -139,8 +154,8 @@ void close_menu(WINDOWLSP win, int x, int y)
                       {0,0,0,0});
             refresh_part_sheet(sht_img, front_p->x, front_p->y, 
                       front_p->x + 200, front_p->y + 30 * front_p->count);
-            init_dock(sht_img, dock_ct_sheet);
-            init_shortcut_dock(sht_img, dock_ct_sheet);
+            WINDOWLSP dock_win = sht_found_win_by_type(xwmii, sht_img, dock_ct_sheet, XWIN_DOCK);
+            if (dock_win != NULL) do_message(MSG_CRL, 0, 0, dock_win->WinMPf, dock_win->w_task);
             front_p->x = 0;
             front_p->y = 0;
             front_p->can_r = false;

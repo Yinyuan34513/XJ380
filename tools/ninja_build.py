@@ -168,7 +168,7 @@ def copy_system_apps(root: Path) -> None:
     system = root / "apps/system"
     builtin = root / "apps/builtin"
     apps = root / "apps"
-    for name in ("shell", "fmanager", "taskmgr", "ctrlmenu", "filedlg"):
+    for name in ("shell", "login", "dock", "desktop", "fmanager", "taskmgr", "ctrlmenu", "filedlg"):
         cp(ROOT / f"out/{name}.elf", system)
     for name in ("calc", "texter", "picturer", "browser", "nut"):
         cp(ROOT / f"out/{name}.elf", builtin)
@@ -342,6 +342,7 @@ def qemu_cmd() -> str:
     return (
         f"{sudo_cmd}qemu-system-x86_64 --display {env('DISPLAY_BACKEND', 'gtk')} -M q35 -bios OVMF.fd "
         f"-m 8192 -smp {env('SMP', '4')} {kvm_flag} -device qemu-xhci,id=xhci {storage} "
+        "-boot strict=on "
         f"{env('USB_XHCI_DEVICES', '-device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2')} "
         f"-serial file:serial.log -audiodev {env('AUDIO_BACKEND', 'sdl')},id=snd0 "
         f"-device ich9-intel-hda -device {env('HDA_CODEC', 'hda-output')},audiodev=snd0 "
@@ -351,6 +352,7 @@ def qemu_cmd() -> str:
 
 
 def run_qemu() -> None:
+    (ROOT / "serial.log").unlink(missing_ok=True)
     shell(qemu_cmd())
 
 

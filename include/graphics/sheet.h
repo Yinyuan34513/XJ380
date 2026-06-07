@@ -40,6 +40,7 @@ struct FoxLandPeek
     SHEET_BUFFER    *fl_peek_buffer;
     uint8_t         *peek_sign;
     uint16_t        *opaque_layer;
+    bool             enabled;
 };
 
 typedef struct SHEET *SHEETP;
@@ -122,8 +123,6 @@ void draw_point(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER
 void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color);
 void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
-// graphics/desktop.cpp
-void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet);
 void init_dock(SHEET_INFO *sht, SHEET *csheet);
 void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet);
 void draw_logo(SHEET_INFO *sht, SHEET *csheet, int xi, int yi);
@@ -141,7 +140,5 @@ void draw_app_message_box(char *title, char *text);
 
 void draw_logo_menu();
 void delete_logo_menu();
-
-void process_desktop_find_block(int x, int y);
 
 #endif

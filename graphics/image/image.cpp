@@ -34,6 +34,7 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 
     // 混合计算
     float blended_alpha = src_alpha + dst_a * (1.0f - src_alpha);
+    if (blended_alpha <= 0.0f) return {0, 0, 0, 0};
 
     // 颜色混合
     float blended_r = (src_r + dst_r * (1.0f - src_alpha)) / blended_alpha;
@@ -114,6 +115,7 @@ void PrintPicture_blend(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, in
             int dst_y = i + y;
             int dst_x = j + x;
             if (dst_x < 0 || dst_y < 0 || dst_x >= (int)front_p->width || dst_y >= (int)front_p->height) continue;
+            if (buff[i * ow + j].a == 0) continue;
             SheetBuffer[dst_y * front_p->width + dst_x] =
                 LCD_AlphaBlend(buff[i * ow + j], SheetBuffer[dst_y * front_p->width + dst_x], buff[i * ow + j].a);
         }
@@ -189,21 +191,21 @@ void PrintPicture(SHEET_INFO *sht, SHEET *csheet, int x, int y, int ow, int oh, 
     vfs_close(v);
 }
 
-void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
+bool LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
 {
     int        w, h, bpp;
     vfs_node_t v = vfs_open(path);
     if (!v)
     {
         write_serial_fmt("LoadPicture: cannot open '%s'\n", path);
-        return;
+        return false;
     }
     unsigned char *bf = (unsigned char *)malloc(v->size);
     if (!bf)
     {
         write_serial_fmt("LoadPicture: failed to allocate %u bytes for '%s'\n", (unsigned)v->size, path);
         vfs_close(v);
-        return;
+        return false;
     }
     vfs_read(v, (uint8_t *)bf, 0, v->size);
     stbi_uc *b = stbi_load_from_memory(bf, v->size, &w, &h, &bpp, 4);
@@ -212,11 +214,12 @@ void LoadPicture(SHEET_BUFFER *buffer, int ow, int oh, char *path)
     {
         write_serial_fmt("LoadPicture: decode failed for '%s' (%u bytes)\n", path, (unsigned)v->size);
         vfs_close(v);
-        return;
+        return false;
     }
-    stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, 4);
+    int ok = stbir_resize_uint8(b, w, h, 0, (uint8_t *)(buffer), ow, oh, 0, 4);
     stbi_image_free(b);
     vfs_close(v);
+    return ok != 0;
 }
 
 void LoadPictureOgM(SHEET_BUFFER **buffer, char *path)

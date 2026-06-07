@@ -235,7 +235,48 @@ void init_xwm(XWM_INFO *xwmi)
 }
 
 extern SHEET   *dock_ct_sheet;
+extern SHEET   *desktop_ct_sheet;
+extern SHEET   *middle_ct_sheet;
 extern bool have_full_screen_app;
+extern bool user_dock_owns_dock_sheet;
+
+static void append_window_node(XWM_INFO *xwmi, WINDOWLS *new_window)
+{
+    WINDOWLS *front_p = xwmi->start;
+    if (front_p == NULL)
+    {
+        xwmi->start = new_window;
+        return;
+    }
+
+    while (true)
+    {
+        if (front_p->next == NULL)
+        {
+            front_p->next = new_window;
+            return;
+        }
+        front_p = front_p->next;
+    }
+}
+
+static void init_overlay_window_common(WINDOWLS *new_window, uint64_t type, SHEET *sheet)
+{
+    new_window->WinMPf = NULL;
+    new_window->type   = type;
+    new_window->width  = sht_img->fbc->horizontal_resolution;
+    new_window->height = sht_img->fbc->vertical_resolution;
+    new_window->w_task = get_current_task();
+    get_current_task()->window_count++;
+    new_window->w_sheet = sheet;
+}
+
+static void clear_overlay_sheet(SHEET *sheet)
+{
+    if (sheet == NULL || !is_valid_gui_ptr(sheet->buffer)) return;
+    memset(sheet->buffer, 0, (size_t)sheet->width * sheet->height * sizeof(SHEET_BUFFER));
+    sheet->is_change = true;
+}
 
 void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 {
@@ -245,27 +286,7 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
     WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
     memset(new_window, 0, sizeof(WINDOWLS));
 
-    WINDOWLS *front_p = xwmi->start;
-    if (front_p == NULL)
-    {
-        // 哦亲爱的孩子我不说了你知道这是干什么的
-        xwmi->start = new_window;
-    }
-    else
-    {
-        WINDOWLS *front_p = xwmi->start;
-        while (true)
-        {
-            if (front_p->next == NULL)
-            {
-                // 链表.exe
-                front_p->next = new_window;
-                break;
-            }
-            front_p = front_p->next;
-        }
-    }
-
+    append_window_node(xwmi, new_window);
     *windowls = new_window;
     xwmi->win_num++;
     new_window->WinMPf = NULL;
@@ -279,13 +300,81 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    // create_sheet(sht, 0, 0,
-    //              sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution, FixedSheetType, -1, new_window->w_sheet);
-    new_window->w_sheet = dock_ct_sheet;
+    int16_t full_screen_sheet_index = sht->sheet_num > 1 ? (int16_t)(sht->sheet_num - 1) : -1;
+    create_sheet(sht, 0, 0, sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution,
+                 TopWindowSheetType, full_screen_sheet_index, &new_window->w_sheet);
     change_sheet_type(sht, new_window->w_sheet, TopWindowSheetType);
-    draw_rect(sht, new_window->w_sheet, 0, 0, sht_img->fbc->horizontal_resolution - 1, sht_img->fbc->vertical_resolution - 1, {0xff, 0xff, 0xff, 0xff});
+    draw_rect(sht, new_window->w_sheet, 0, 0, sht_img->fbc->horizontal_resolution - 1,
+              sht_img->fbc->vertical_resolution - 1, {0xff, 0xff, 0xff, 0xff});
+    ms_dec.sht_now = new_window->w_sheet;
 
     refresh_sheet(sht);
+    WindowIsCreating = false;
+}
+
+void create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+{
+    WindowIsCreating = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    append_window_node(xwmi, new_window);
+    *windowls = new_window;
+    xwmi->win_num++;
+    init_overlay_window_common(new_window, XWIN_DESKTOP, desktop_ct_sheet);
+    if (new_window->w_sheet != NULL)
+    {
+        change_sheet_type(sht, new_window->w_sheet, FixedSheetType);
+        refresh_sheet(sht);
+    }
+
+    WindowIsCreating = false;
+}
+
+void create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+{
+    WindowIsCreating = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    append_window_node(xwmi, new_window);
+    *windowls = new_window;
+    xwmi->win_num++;
+    init_overlay_window_common(new_window, XWIN_DOCK, dock_ct_sheet);
+    user_dock_owns_dock_sheet = true;
+    if (new_window->w_sheet != NULL)
+    {
+        clear_overlay_sheet(new_window->w_sheet);
+        change_sheet_type(sht, new_window->w_sheet, FixedSheetType);
+        refresh_sheet(sht);
+    }
+
+    WindowIsCreating = false;
+}
+
+void create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+{
+    WindowIsCreating = true;
+    have_full_screen_app = true;
+
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
+    memset(new_window, 0, sizeof(WINDOWLS));
+
+    append_window_node(xwmi, new_window);
+    *windowls = new_window;
+    xwmi->win_num++;
+    init_overlay_window_common(new_window, XWIN_LOGIN, middle_ct_sheet);
+    get_current_task()->hasfscr = true;
+    if (new_window->w_sheet != NULL)
+    {
+        change_sheet_type(sht, new_window->w_sheet, TopWindowSheetType);
+        draw_rect(sht, new_window->w_sheet, 0, 0, sht_img->fbc->horizontal_resolution - 1,
+                  sht_img->fbc->vertical_resolution - 1, {0, 0, 0, 0});
+        ms_dec.sht_now = new_window->w_sheet;
+    }
+
     WindowIsCreating = false;
 }
 
@@ -552,7 +641,9 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     }
 
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls)) return;
-    if (!is_valid_gui_ptr(windowls->w_sheet) && windowls->type != XWIN_FULL_SCR) return;
+    if (!is_valid_gui_ptr(windowls->w_sheet) && windowls->type != XWIN_FULL_SCR && windowls->type != XWIN_DESKTOP &&
+        windowls->type != XWIN_DOCK && windowls->type != XWIN_LOGIN)
+        return;
 
     if (ms_dec.sht_now == windowls->w_sheet)
     {
@@ -569,7 +660,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
 
     bool need_refresh = false;
 
-    if (windowls->type == XWIN_FULL_SCR)
+    if (windowls->type == XWIN_FULL_SCR || windowls->type == XWIN_LOGIN)
     {
         have_full_screen_app = false;
         SHEET *fs_sheet = found_sheet_byid(sht_img, windowls->w_sheet);
@@ -577,17 +668,20 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         {
             fs_sheet->type = FixedSheetType;
             memset(fs_sheet->buffer, 0, sizeof(SHEET_BUFFER) * fs_sheet->width * fs_sheet->height);
-            init_dock(sht_img, windowls->w_sheet);
-            init_shortcut_dock(sht_img, windowls->w_sheet);
             need_refresh = true;
         }
+    }
+    else if (windowls->type == XWIN_DOCK)
+    {
+        user_dock_owns_dock_sheet = false;
     }
 
     WindowIsCreating  = true;
     int       bx = 0, by = 0, ex = 0, ey = 0;
 
     unregister_right_rb_button_menu_components(windowls);
-    unregister_task_dock(windowls);
+    if (windowls->type != XWIN_DESKTOP && windowls->type != XWIN_DOCK && windowls->type != XWIN_LOGIN)
+        unregister_task_dock(windowls);
 
     if (is_valid_gui_ptr(windowls->w_sheet))
     {
@@ -610,7 +704,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             if (windowls->w_task != NULL && windowls->w_task->window_count > 0) windowls->w_task->window_count--;
             if (xwmi->win_num > 0) xwmi->win_num--;
 
-            if (windowls->type != XWIN_FULL_SCR)
+            if (windowls->type != XWIN_DESKTOP && windowls->type != XWIN_DOCK && windowls->type != XWIN_LOGIN)
             {
                 delete_sheet(sht, windowls->w_sheet);
             }
@@ -662,13 +756,27 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
     if (!is_valid_gui_ptr(xwmi) || csheet == NULL) { return NULL; }
 
     WINDOWLS *front_p = xwmi->start;
-    if (front_p == NULL) { return NULL; }
-    while (true)
+    WINDOWLS *matched = NULL;
+    while (front_p != NULL)
     {
-        if (front_p->w_sheet == csheet) { return front_p; }
-        else if (front_p->next == NULL) { return NULL; }
+        if (front_p->w_sheet == csheet) matched = front_p;
         front_p = front_p->next;
     }
+    return matched;
+}
+
+WINDOWLS *sht_found_win_by_type(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet, uint64_t type)
+{
+    if (!is_valid_gui_ptr(xwmi) || csheet == NULL) { return NULL; }
+
+    WINDOWLS *front_p = xwmi->start;
+    WINDOWLS *matched = NULL;
+    while (front_p != NULL)
+    {
+        if (front_p->w_sheet == csheet && front_p->type == type) matched = front_p;
+        front_p = front_p->next;
+    }
+    return matched;
 }
 
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread)

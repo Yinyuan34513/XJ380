@@ -38,7 +38,7 @@ typedef struct {
 #define XAPI_OFFEST 380
 
 // 一些隐藏的API，不对外开放，严禁泄露！
-#define SXAH_SYSCALL_RETURN         128956723895689201      // syscall返回 
+#define SXAH_SYSCALL_RETURN         128956723895689201      // syscall返回
 #define SXAH_CREATE_KERNEL_TERMINAL 128956723895689202      // 创建内核态进程
 #define SXAH_CHECK_USER_PASSWORD    128956723895689203      // 检查用户密码
 #define SXAH_MARK_IS_TERMINAL       128956723895689204      // 标记为命令行
@@ -74,6 +74,11 @@ typedef struct {
     UserType        user_type;  // 用户等级
 } xapi_type_UserInfo;
 
+typedef struct {
+    char     name[64];
+    UserType user_type;
+} xapi_type_LoginUserInfo;
+
 // P3.1
 #define XAPI_OUTPUT    7381
 #define XAPI_INPUT     7382
@@ -94,7 +99,7 @@ typedef struct {
 
 #define XAPI_MAKEDIR        7425
 #define XAPI_CREATE_FILE    7420
-#define XAPI_DELETE_FILE    7421  
+#define XAPI_DELETE_FILE    7421
 #define XAPI_RENAME_FILE    7422
 #define XAPI_READ_FILE      7423
 #define XAPI_WRITE_FILE     7424
@@ -125,6 +130,10 @@ typedef struct {
 
 #define XAPI_RUN            7439
 #define XAPI_RUN_ARGS       7451
+#define XAPI_USER_OOBE_REQUIRED 7452
+#define XAPI_USER_LIST          7453
+#define XAPI_USER_LOGIN         7454
+#define XAPI_USER_CREATE_FIRST  7455
 
 #define XAPI_FLUSH_TIME     7445
 
@@ -202,10 +211,13 @@ typedef struct {
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
+#define XWIN_DESKTOP            3
+#define XWIN_DOCK               4
+#define XWIN_LOGIN              5
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7449
+// 当前最大号：7455
 
 #define XAPI_TASK_NAME_LEN 32
 
@@ -283,6 +295,10 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 void do_xapi_FlushTime();
 uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count);
 uint64_t do_xapi_KillProcess(uint64_t pid);
+uint64_t do_xapi_UserOobeRequired();
+uint64_t do_xapi_UserList(uint64_t buffer, uint64_t max_count);
+uint64_t do_xapi_UserLogin(uint64_t username, uint64_t password);
+uint64_t do_xapi_UserCreateFirst(uint64_t username, uint64_t password);
 uint64_t do_xapi_InstallerEnumDisks(uint64_t list);
 uint64_t do_xapi_InstallerStart(uint64_t disk_id);
 uint64_t do_xapi_InstallerStartEx(uint64_t disk_id, uint64_t mode);

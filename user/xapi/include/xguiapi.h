@@ -60,6 +60,9 @@ typedef struct
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
+#define XWIN_DESKTOP            3
+#define XWIN_DOCK               4
+#define XWIN_LOGIN              5
 #define XWIN_TYPE_MASK         0x0f
 #define XWIN_SUPPORT_RESIZEABLE  0x80
 

@@ -204,6 +204,10 @@
 
 #define XAPI_RUN            7439
 #define XAPI_RUN_ARGS       7451
+#define XAPI_USER_OOBE_REQUIRED 7452
+#define XAPI_USER_LIST          7453
+#define XAPI_USER_LOGIN         7454
+#define XAPI_USER_CREATE_FIRST  7455
 
 #define XAPI_FLUSH_TIME     7445
 
@@ -294,8 +298,14 @@ typedef struct
 #define XAPI_REG_RB_MENU    7436
 #define XAPI_URG_RB_MENU    7437
 
-#define XWIN_TYPE_MASK         0x0f
-#define XWIN_SUPPORT_RESIZEABLE  0x80
+#define XWIN_NORMAL             0
+#define XWIN_FRAME_OFF          1
+#define XWIN_FULL_SCR           2
+#define XWIN_DESKTOP            3
+#define XWIN_DOCK               4
+#define XWIN_LOGIN              5
+#define XWIN_TYPE_MASK          0x0f
+#define XWIN_SUPPORT_RESIZEABLE 0x80
 
 #ifdef __cplusplus
 extern "C" {

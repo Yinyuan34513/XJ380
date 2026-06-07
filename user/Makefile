@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
+all: init.elf shell.elf cp537.elf login.elf dock.elf desktop.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
@@ -336,11 +336,14 @@ SHELL_SOURCES := ./shell/shell_main.cpp \
 FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
                 ./fmanager/fm_paint.cpp \
                 ./fmanager/fm_pathp.cpp \
-                ./fmanager/fm_processp.cpp 
+                ./fmanager/fm_processp.cpp
 
+DESKTOP_SOURCES := ./desktop/desktop.cpp
+LOGIN_SOURCES := ./login/login.cpp
+DOCK_SOURCES := ./dock/dock.cpp
 CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
                 ./ctrlmenu/cm_graph.cpp \
-                ./ctrlmenu/cm_processp.cpp 
+                ./ctrlmenu/cm_processp.cpp
 
 CALC_SOURCES := ./calc/calc.cpp
 
@@ -352,6 +355,9 @@ INSTALLER_SOURCES := ./installer/installer.cpp \
 
 
 SHELL_OBJECTS := $(patsubst ./shell/%.cpp, ../out/shell/%.o, $(SHELL_SOURCES))
+DESKTOP_OBJECTS := $(patsubst ./desktop/%.cpp, ../out/desktop/%.o, $(DESKTOP_SOURCES))
+LOGIN_OBJECTS := $(patsubst ./login/%.cpp, ../out/login/%.o, $(LOGIN_SOURCES))
+DOCK_OBJECTS := $(patsubst ./dock/%.cpp, ../out/dock/%.o, $(DOCK_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
 CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
 CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
@@ -380,6 +386,33 @@ fmanager.elf: $(FMANAGER_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(FMANAGER_OBJECTS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK fmanager objects -> ../out/$@"
+
+desktop.elf: $(DESKTOP_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(DESKTOP_OBJECTS) -o ../out/$@
+	@echo "LINK desktop objects -> ../out/$@"
+
+../out/desktop/%.o: ./desktop/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+login.elf: build_xapi $(LOGIN_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(LOGIN_OBJECTS) -o ../out/$@
+	@echo "LINK login objects -> ../out/$@"
+
+../out/login/%.o: ./login/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
+dock.elf: build_xapi $(DOCK_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(DOCK_OBJECTS) -o ../out/$@
+	@echo "LINK dock objects -> ../out/$@"
+
+../out/dock/%.o: ./dock/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
 
 calc.elf: $(CALC_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(CALC_OBJECTS) -o ../out/$@

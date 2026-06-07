@@ -252,7 +252,7 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     }
     memset(WindowHandle, 0, sizeof(WINDOW_HANDLE));
     uint8_t        window_type  = window_info.sets & XWIN_TYPE_MASK;
-    if (window_type == XWIN_NORMAL || window_type == NULL)
+    if (window_type == XWIN_NORMAL)
     {
         create_window(xwmii, sht_img, &WindowHandle->WindowNodePtr, title ? title : (char *)"", window_info.width,
                       window_info.height);
@@ -261,9 +261,28 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     {
         create_window_fmoff(xwmii, sht_img, &WindowHandle->WindowNodePtr, window_info.width, window_info.height);
     }
-    else
+    else if (window_type == XWIN_FULL_SCR)
     {
         create_window_fscr(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+    }
+    else if (window_type == XWIN_DESKTOP)
+    {
+        create_window_desktop(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+    }
+    else if (window_type == XWIN_DOCK)
+    {
+        create_window_dock(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+    }
+    else if (window_type == XWIN_LOGIN)
+    {
+        create_window_login(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+    }
+    else
+    {
+        free(WindowHandle);
+        *(uint64_t *)(handle) = 0;
+        free(title);
+        return false;
     }
 
     if (WindowHandle->WindowNodePtr != NULL)
