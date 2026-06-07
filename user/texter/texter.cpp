@@ -5,11 +5,16 @@
 #include <errno.h>
 #include "texter.h"
 
-static const int TXR_TOOLBAR_H = 40;
-static const int TXR_STATUS_H = 24;
-static const int TXR_MARGIN_X = 12;
-static const int TXR_MARGIN_Y = 10;
-static const int TXR_LINE_H = 16;
+static const int TXR_APPBAR_H = 58;
+static const int TXR_COMMAND_H = 44;
+static const int TXR_STATUS_H = 28;
+static const int TXR_MARGIN_X = 18;
+static const int TXR_MARGIN_Y = 14;
+static const int TXR_EDITOR_PAD_X = 10;
+static const int TXR_EDITOR_PAD_Y = 8;
+static const int TXR_GUTTER_W = 54;
+static const int TXR_SCROLLBAR_W = 10;
+static const int TXR_LINE_H = 18;
 static const int TXR_CHAR_W = 8;
 static const int TXR_MAX_PATH = 256;
 static const int TXR_GROW_STEP = 4096;
@@ -24,12 +29,45 @@ static const UINT64 TXR_KEY_PAGE_DOWN = 158;
 static const UINT64 TXR_KEY_INSERT = 159;
 static const UINT64 TXR_KEY_DELETE = 160;
 
-enum
-{
+static const UINT32 TXR_COLOR_APPBAR = 0x0f6cbfff;
+static const UINT32 TXR_COLOR_APPBAR_DARK = 0x074f91ff;
+static const UINT32 TXR_COLOR_BG = 0xf3f7fbff;
+static const UINT32 TXR_COLOR_COMMAND = 0xffffffff;
+static const UINT32 TXR_COLOR_EDITOR = 0xffffffff;
+static const UINT32 TXR_COLOR_GUTTER = 0xeef6ffff;
+static const UINT32 TXR_COLOR_BORDER = 0xcbd9e6ff;
+static const UINT32 TXR_COLOR_TEXT = 0x152433ff;
+static const UINT32 TXR_COLOR_MUTED = 0x637184ff;
+static const UINT32 TXR_COLOR_BLUE = 0x0f6cbfff;
+static const UINT32 TXR_COLOR_BLUE_LIGHT = 0xd7ebffff;
+static const UINT32 TXR_COLOR_BUTTON_BORDER = 0x9fc7ebff;
+static const UINT32 TXR_COLOR_BUTTON_TEXT = 0x084a83ff;
+static const UINT32 TXR_COLOR_SELECTION = 0xb8d8f8ff;
+static const UINT32 TXR_COLOR_STATUS = 0xeaf2fbff;
+static const UINT32 TXR_COLOR_WHITE = 0xffffffff;
+
+enum {
     BTN_NEW = 101,
     BTN_OPEN = 102,
     BTN_SAVE = 103,
     BTN_SAVE_AS = 104
+};
+
+struct TexterButton
+{
+    UINT64 id;
+    const char *label;
+    int x;
+    int y;
+    int w;
+    int h;
+};
+
+static TexterButton g_buttons[] = {
+    {BTN_NEW, "新建", 20, 0, 66, 28},
+    {BTN_OPEN, "打开", 94, 0, 66, 28},
+    {BTN_SAVE, "保存", 168, 0, 66, 28},
+    {BTN_SAVE_AS, "另存为", 242, 0, 78, 28},
 };
 
 static HDLE g_handle = 0;
@@ -51,10 +89,15 @@ static int g_scroll_x = 0;
 static bool g_dirty = false;
 
 static char g_file_path[TXR_MAX_PATH] = {0};
-static char g_status[160] = "Ready";
+static char g_status[160] = "就绪";
 
 static int txr_min(int a, int b) { return a < b ? a : b; }
 static int txr_max(int a, int b) { return a > b ? a : b; }
+
+static int txr_button_count()
+{
+    return (int)(sizeof(g_buttons) / sizeof(g_buttons[0]));
+}
 
 static void set_status(const char *text)
 {
@@ -91,9 +134,11 @@ static bool ensure_capacity(int need)
 
 static void mark_dirty(bool dirty)
 {
+    bool dirty_changed = g_dirty != dirty;
     g_dirty = dirty;
     update_title();
     g_need_status_redraw = true;
+    if (dirty_changed) g_need_layout_redraw = true;
     g_need_redraw = true;
 }
 
@@ -254,14 +299,14 @@ static void do_new()
 
 static int visible_rows()
 {
-    int h = g_height - TXR_TOOLBAR_H - TXR_STATUS_H - TXR_MARGIN_Y * 2;
+    int h = g_height - TXR_APPBAR_H - TXR_COMMAND_H - TXR_STATUS_H - TXR_MARGIN_Y * 2 - TXR_EDITOR_PAD_Y * 2;
     int rows = h / TXR_LINE_H;
     return rows < 1 ? 1 : rows;
 }
 
 static int visible_cols()
 {
-    int w = g_width - TXR_MARGIN_X * 2;
+    int w = g_width - TXR_MARGIN_X * 2 - TXR_GUTTER_W - TXR_SCROLLBAR_W - TXR_EDITOR_PAD_X * 2;
     int cols = w / TXR_CHAR_W;
     return cols < 1 ? 1 : cols;
 }
@@ -380,10 +425,19 @@ static void move_cursor_to(int pos, bool keep_selection)
     ensure_cursor_visible();
 }
 
-static int text_area_top() { return TXR_TOOLBAR_H + TXR_MARGIN_Y; }
-static int text_area_bottom() { return g_height - TXR_STATUS_H - TXR_MARGIN_Y; }
-static int text_area_left() { return TXR_MARGIN_X; }
-static int text_area_right() { return g_width - TXR_MARGIN_X - 1; }
+static int command_top() { return TXR_APPBAR_H; }
+static int editor_frame_top() { return TXR_APPBAR_H + TXR_COMMAND_H + TXR_MARGIN_Y; }
+static int editor_frame_bottom() { return g_height - TXR_STATUS_H - TXR_MARGIN_Y; }
+static int editor_frame_left() { return TXR_MARGIN_X; }
+static int editor_frame_right() { return g_width - TXR_MARGIN_X - 1; }
+static int text_area_top() { return editor_frame_top() + TXR_EDITOR_PAD_Y; }
+static int text_area_bottom() { return editor_frame_bottom() - TXR_EDITOR_PAD_Y; }
+static int text_area_left() { return editor_frame_left() + TXR_GUTTER_W + TXR_EDITOR_PAD_X; }
+static int text_area_right() { return editor_frame_right() - TXR_SCROLLBAR_W - TXR_EDITOR_PAD_X; }
+static int gutter_left() { return editor_frame_left(); }
+static int gutter_right() { return editor_frame_left() + TXR_GUTTER_W - 1; }
+static int scrollbar_left() { return editor_frame_right() - TXR_SCROLLBAR_W + 1; }
+static int scrollbar_right() { return editor_frame_right(); }
 
 static void request_text_redraw()
 {
@@ -392,21 +446,52 @@ static void request_text_redraw()
     g_need_redraw = true;
 }
 
+static void draw_command_button(const TexterButton &button)
+{
+    int y = command_top() + button.y + 8;
+    xapi_DrawRect(g_handle, button.x, y, button.x + button.w, y + button.h, TXR_COLOR_BLUE_LIGHT, true);
+    xapi_DrawLine(g_handle, button.x, y, button.x + button.w, y, TXR_COLOR_BUTTON_BORDER);
+    xapi_DrawLine(g_handle, button.x, y + button.h, button.x + button.w, y + button.h, TXR_COLOR_BUTTON_BORDER);
+    xapi_DrawLine(g_handle, button.x, y, button.x, y + button.h, TXR_COLOR_BUTTON_BORDER);
+    xapi_DrawLine(g_handle, button.x + button.w, y, button.x + button.w, y + button.h, TXR_COLOR_BUTTON_BORDER);
+    xapi_DrawSWText(g_handle, button.x + 15, y + 7, (char *)button.label, TXR_COLOR_BUTTON_TEXT);
+}
+
+static UINT64 hit_command_button(int x, int y)
+{
+    for (int i = 0; i < txr_button_count(); ++i) {
+        const TexterButton &button = g_buttons[i];
+        int by = command_top() + button.y + 8;
+        if (x >= button.x && x <= button.x + button.w && y >= by && y <= by + button.h) return button.id;
+    }
+    return 0;
+}
+
 static void render_layout()
 {
-    xapi_DrawRect(g_handle, 0, 0, g_width - 1, g_height - 1, 0xf7f4edff, true);
-    xapi_DrawRect(g_handle, 0, 0, g_width - 1, TXR_TOOLBAR_H - 1, 0x335c67ff, true);
-    xapi_DrawRect(g_handle, 0, TXR_TOOLBAR_H, g_width - 1, g_height - TXR_STATUS_H - 1, 0xfffdf8ff, true);
-    xapi_DrawRect(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - 1, 0xe7dfd2ff, true);
+    xapi_DrawRect(g_handle, 0, 0, g_width - 1, g_height - 1, TXR_COLOR_BG, true);
+    xapi_DrawRect(g_handle, 0, 0, g_width - 1, TXR_APPBAR_H - 1, TXR_COLOR_APPBAR, true);
+    xapi_DrawRect(g_handle, 0, TXR_APPBAR_H - 3, g_width - 1, TXR_APPBAR_H - 1, TXR_COLOR_APPBAR_DARK, true);
+    xapi_DrawRect(g_handle, 0, command_top(), g_width - 1, command_top() + TXR_COMMAND_H - 1, TXR_COLOR_COMMAND, true);
+    xapi_DrawLine(g_handle, 0, command_top() + TXR_COMMAND_H - 1, g_width - 1, command_top() + TXR_COMMAND_H - 1,
+                  TXR_COLOR_BORDER);
+    xapi_DrawRect(g_handle, editor_frame_left(), editor_frame_top(), editor_frame_right(), editor_frame_bottom(),
+                  TXR_COLOR_EDITOR, true);
+    xapi_DrawRect(g_handle, editor_frame_left(), editor_frame_top(), gutter_right(), editor_frame_bottom(), TXR_COLOR_GUTTER,
+                  true);
+    xapi_DrawLine(g_handle, gutter_right(), editor_frame_top(), gutter_right(), editor_frame_bottom(), TXR_COLOR_BORDER);
+    xapi_DrawRect(g_handle, scrollbar_left(), editor_frame_top(), scrollbar_right(), editor_frame_bottom(), 0xe7eef6ff,
+                  true);
+    xapi_DrawRect(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - 1, TXR_COLOR_STATUS, true);
+    xapi_DrawLine(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - TXR_STATUS_H, TXR_COLOR_BORDER);
 
-    xapi_DeleteButton(g_handle, BTN_NEW);
-    xapi_DeleteButton(g_handle, BTN_OPEN);
-    xapi_DeleteButton(g_handle, BTN_SAVE);
-    xapi_DeleteButton(g_handle, BTN_SAVE_AS);
-    xapi_Button(g_handle, BTN_NEW, 12, 8, (char *)"新建");
-    xapi_Button(g_handle, BTN_OPEN, 88, 8, (char *)"打开");
-    xapi_Button(g_handle, BTN_SAVE, 164, 8, (char *)"保存");
-    xapi_Button(g_handle, BTN_SAVE_AS, 240, 8, (char *)"另存为");
+    xapi_DrawSWText(g_handle, 20, 12, (char *)"文本编辑器", TXR_COLOR_WHITE);
+    xapi_DrawSWText(g_handle, 20, 34, g_file_path[0] ? g_file_path : (char *)"未命名文档", 0xd8ecffff);
+
+    for (int i = 0; i < txr_button_count(); ++i) {
+        draw_command_button(g_buttons[i]);
+    }
+    xapi_DrawSWText(g_handle, 350, command_top() + 13, (char *)"UTF-8 纯文本", TXR_COLOR_MUTED);
 
     g_need_layout_redraw = false;
     g_need_text_redraw = true;
@@ -415,7 +500,13 @@ static void render_layout()
 
 static void render_text_area()
 {
-    xapi_DrawRect(g_handle, text_area_left(), text_area_top(), text_area_right(), text_area_bottom(), 0xfffdf8ff, true);
+    xapi_DrawRect(g_handle, editor_frame_left(), editor_frame_top(), editor_frame_right(), editor_frame_bottom(),
+                  TXR_COLOR_EDITOR, true);
+    xapi_DrawRect(g_handle, gutter_left(), editor_frame_top(), gutter_right(), editor_frame_bottom(), TXR_COLOR_GUTTER,
+                  true);
+    xapi_DrawLine(g_handle, gutter_right(), editor_frame_top(), gutter_right(), editor_frame_bottom(), TXR_COLOR_BORDER);
+    xapi_DrawRect(g_handle, scrollbar_left(), editor_frame_top(), scrollbar_right(), editor_frame_bottom(), 0xe7eef6ff,
+                  true);
 
     int sel_start;
     int sel_end;
@@ -426,6 +517,15 @@ static void render_text_area()
     bool cursor_drawn = false;
     int rows = visible_rows();
     int cols = visible_cols();
+    int line_number = g_scroll_y + 1;
+
+    for (int row = 0; row < rows; ++row) {
+        int y = text_area_top() + row * TXR_LINE_H;
+        if (y + TXR_LINE_H > text_area_bottom()) break;
+        char line_label[16];
+        snprintf(line_label, sizeof(line_label), "%d", line_number + row);
+        xapi_DrawSWText(g_handle, gutter_left() + 10, y, line_label, TXR_COLOR_MUTED);
+    }
 
     for (int i = 0; i <= g_length; ++i) {
         bool end = i == g_length;
@@ -434,20 +534,20 @@ static void render_text_area()
         if (line_no >= g_scroll_y && line_no < g_scroll_y + rows) {
             int visible_col = col - g_scroll_x;
             if (!end && ch != '\n' && visible_col >= 0 && visible_col < cols) {
-                int x = TXR_MARGIN_X + visible_col * TXR_CHAR_W;
+                int x = text_area_left() + visible_col * TXR_CHAR_W;
                 int y = text_area_top() + (line_no - g_scroll_y) * TXR_LINE_H;
                 if (sel_start >= 0 && i >= sel_start && i < sel_end) {
-                    xapi_DrawRect(g_handle, x - 1, y, x + TXR_CHAR_W, y + TXR_LINE_H - 1, 0xb7d7e8ff, true);
+                    xapi_DrawRect(g_handle, x - 1, y, x + TXR_CHAR_W, y + TXR_LINE_H - 1, TXR_COLOR_SELECTION, true);
                 }
                 char buf[2] = {ch, '\0'};
-                xapi_DrawSWText(g_handle, x, y, buf, 0x111111ff);
+                xapi_DrawSWText(g_handle, x, y, buf, TXR_COLOR_TEXT);
             }
             if (i == g_cursor && !cursor_drawn) {
-                int cursor_x = TXR_MARGIN_X + (col - g_scroll_x) * TXR_CHAR_W;
+                int cursor_x = text_area_left() + (col - g_scroll_x) * TXR_CHAR_W;
                 int cursor_y = text_area_top() + (line_no - g_scroll_y) * TXR_LINE_H;
-                if (cursor_x < TXR_MARGIN_X) cursor_x = TXR_MARGIN_X;
-                if (cursor_x > g_width - TXR_MARGIN_X) cursor_x = g_width - TXR_MARGIN_X;
-                xapi_DrawLine(g_handle, cursor_x, cursor_y, cursor_x, cursor_y + TXR_LINE_H - 2, 0x005f73ff);
+                if (cursor_x < text_area_left()) cursor_x = text_area_left();
+                if (cursor_x > text_area_right()) cursor_x = text_area_right();
+                xapi_DrawLine(g_handle, cursor_x, cursor_y, cursor_x, cursor_y + TXR_LINE_H - 2, TXR_COLOR_BLUE);
                 cursor_drawn = true;
             }
         }
@@ -465,23 +565,41 @@ static void render_text_area()
         ensure_cursor_visible();
     }
 
+    int total_lines = 1;
+    for (int i = 0; i < g_length; ++i) {
+        if (g_text[i] == '\n') total_lines++;
+    }
+    if (total_lines > rows) {
+        int track_top = editor_frame_top() + 8;
+        int track_bottom = editor_frame_bottom() - 8;
+        int track_h = txr_max(1, track_bottom - track_top);
+        int thumb_h = txr_max(24, track_h * rows / total_lines);
+        int max_scroll = txr_max(1, total_lines - rows);
+        int thumb_y = track_top + (track_h - thumb_h) * g_scroll_y / max_scroll;
+        xapi_DrawRect(g_handle, scrollbar_left() + 2, thumb_y, scrollbar_right() - 2, thumb_y + thumb_h, TXR_COLOR_BLUE,
+                      true);
+    }
+
     g_need_text_redraw = false;
-    xapi_RefreshPartWindow(g_handle, text_area_left(), text_area_top(), text_area_right(), text_area_bottom());
+    xapi_RefreshPartWindow(g_handle, editor_frame_left(), editor_frame_top(), editor_frame_right(), editor_frame_bottom());
 }
 
 static void render_status_bar()
 {
-    xapi_DrawRect(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - 1, 0xe7dfd2ff, true);
+    xapi_DrawRect(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - 1, TXR_COLOR_STATUS, true);
+    xapi_DrawLine(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - TXR_STATUS_H, TXR_COLOR_BORDER);
     char info[256];
     int cursor_line;
     int cursor_col;
     cursor_line_col(g_cursor, &cursor_line, &cursor_col);
-    snprintf(info, sizeof(info), "%s | 行 %d, 列 %d | %s",
-             g_file_path[0] ? g_file_path : "Untitled",
+    snprintf(info, sizeof(info), "%s | 行 %d，列 %d | %d 字节 | %s%s",
+             g_file_path[0] ? g_file_path : "未命名",
              cursor_line + 1,
              cursor_col + 1,
+             g_length,
+             g_dirty ? "未保存 | " : "",
              g_status);
-    xapi_DrawSWText(g_handle, 8, g_height - 20, info, 0x3d405bff);
+    xapi_DrawSWText(g_handle, 14, g_height - 22, info, TXR_COLOR_MUTED);
     g_need_status_redraw = false;
     xapi_RefreshPartWindow(g_handle, 0, g_height - TXR_STATUS_H, g_width - 1, g_height - 1);
 }
@@ -499,7 +617,7 @@ static void render_editor()
 static int position_from_mouse(int x, int y)
 {
     int row = (y - text_area_top()) / TXR_LINE_H;
-    int col = (x - TXR_MARGIN_X) / TXR_CHAR_W;
+    int col = (x - text_area_left()) / TXR_CHAR_W;
     if (row < 0) row = 0;
     if (col < 0) col = 0;
     return position_from_line_col(g_scroll_y + row, g_scroll_x + col);
@@ -662,12 +780,18 @@ static void texter_message_proc(UINT64 type, UINT64 hData, UINT64 lData)
         handle_special(lData);
         break;
     case MSG_LBUTTON:
-        if ((int)lData >= text_area_top() && (int)lData < text_area_bottom()) {
+    {
+        UINT64 button_id = hit_command_button((int)hData, (int)lData);
+        if (button_id != 0) {
+            handle_control(button_id);
+        } else if ((int)hData >= text_area_left() && (int)hData <= text_area_right() && (int)lData >= text_area_top() &&
+                   (int)lData < text_area_bottom()) {
             g_select_anchor = -1;
             move_cursor_to(position_from_mouse((int)hData, (int)lData), false);
             request_text_redraw();
         }
         break;
+    }
     case MSG_CRL:
         handle_control(hData);
         break;
