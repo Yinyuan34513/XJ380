@@ -16,7 +16,8 @@ out/draw.o
 .config
 .ninja_deps
 .ninja_log
-tools/__pycache__/
+__pycache__/
+*.py[cod]
 include/generated/
 kernel/build_config.h
 
