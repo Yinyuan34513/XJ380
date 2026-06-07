@@ -343,7 +343,7 @@ void create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
     *windowls = new_window;
     xwmi->win_num++;
     init_overlay_window_common(new_window, XWIN_DOCK, dock_ct_sheet);
-    user_dock_owns_dock_sheet = true;
+    // user_dock_owns_dock_sheet = true;
     if (new_window->w_sheet != NULL)
     {
         clear_overlay_sheet(new_window->w_sheet);
