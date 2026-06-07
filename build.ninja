@@ -34,23 +34,23 @@ rule regen
   description = [1;35m[GEN][0m build.ninja
 
 rule nasm
-  command = mkdir -p $$(dirname $out) && $nasm $nasm_flags $in -o $out && printf "[ASM] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $nasm $nasm_flags $in -o $out
   description = [1;35m[ASM][0m $in -> $out
 
 rule root_as
-  command = mkdir -p $$(dirname $out) && $cc -mcmodel=large $asm_flags -MF $out.d -c $in -o $out && printf "[ASM] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $cc -mcmodel=large $asm_flags -MF $out.d -c $in -o $out
   description = [1;35m[ASM][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule root_cc
-  command = mkdir -p $$(dirname $out) && $cc -fno-pic -fno-pie -mcmodel=large $c_flags -MF $out.d -c $in -o $out && printf "[CC] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $cc -fno-pic -fno-pie -mcmodel=large $c_flags -MF $out.d -c $in -o $out
   description = [1;32m[CC][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule root_cxx
-  command = mkdir -p $$(dirname $out) && $cxx -fno-pic -fno-pie -mcmodel=large $cpp_flags -MF $out.d -c $in -o $out && printf "[CXX] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $cxx -fno-pic -fno-pie -mcmodel=large $cpp_flags -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in -> $out
   depfile = $out.d
   deps = gcc
@@ -72,7 +72,7 @@ rule kernel_link
   description = [1;33m[LD][0m $out
 
 rule download_liballoc
-  command = [ -f $out ] && echo FOUND $out || curl -Lo $out https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
+  command = [ -f $out ] || curl -Lo $out https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a
   description = [1;34m[FETCH][0m $out
 
 rule copy
@@ -80,51 +80,51 @@ rule copy
   description = [1;34m[CP][0m $in -> $out
 
 rule user_cxx_custom
-  command = mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out && printf "[CXX] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule user_cc_custom
-  command = mkdir -p $$(dirname $out) && $user_cc $cflags -MF $out.d -c $in -o $out && printf "[CC] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cc $cflags -MF $out.d -c $in -o $out
   description = [1;32m[CC][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule xapi_cxx
-  command = mkdir -p $$(dirname $out) && $user_cxx -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf "[CXX] %s\n" $in
+  command = mkdir -p $$(dirname $out) && $user_cxx -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in
   depfile = $out.d
   deps = gcc
 
 rule xapi_as
-  command = mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf "[ASM] %s\n" $in
+  command = mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out
   description = [1;35m[ASM][0m $in
   depfile = $out.d
   deps = gcc
 
 rule xapi_head
-  command = mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf "[CXX] start.cpp\n"
+  command = mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m start.cpp
   depfile = $out.d
   deps = gcc
 
 rule xapi_headcon
-  command = mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf "[CXX] constart.cpp\n"
+  command = mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m constart.cpp
   depfile = $out.d
   deps = gcc
 
 rule user_ld
-  command = $user_ld -Ttext=0x200000 $in -o $out && echo "$message"
+  command = $user_ld -Ttext=0x200000 $in -o $out
   description = [1;33m[LD][0m $out
 
 rule host_cc
-  command = mkdir -p $$(dirname $out) && $user_cc -O0 -g -Wall -Wextra $in -o $out && printf "[HOSTLD] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cc -O0 -g -Wall -Wextra $in -o $out
   description = [1;33m[HOSTLD][0m $in
 
 rule mbedtls_cc
-  command = mkdir -p $$(dirname $out) && $user_cc $mbedtls_ccflags -MF $out.d -c $in -o $out && printf "[CC] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cc $mbedtls_ccflags -MF $out.d -c $in -o $out
   description = [1;32m[CC][0m $in -> $out
   depfile = $out.d
   deps = gcc
@@ -134,39 +134,39 @@ rule browser_builtins
   description = [1;34m[FIND][0m browser builtins
 
 rule link_with_builtins
-  command = $user_ld $ldflags $in $$(cat out/browser-builtins.path) -o $out && echo "$message"
+  command = $user_ld $ldflags $in $$(cat out/browser-builtins.path) -o $out
   description = [1;33m[LD][0m $out
 
 rule browser_hosted_cxx
-  command = mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -MF $out.d -c $in -o $out && printf "[CXX] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule litehtml_cxx
-  command = mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fno-exceptions -MF $out.d -c $in -o $out && printf "[CXX] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fno-exceptions -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule litehtml_encodings_cxx
-  command = mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fexceptions -MF $out.d -c $in -o $out && printf "[CXX] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fexceptions -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule browser_hosted_cc
-  command = mkdir -p $$(dirname $out) && $user_cc $browser_hosted_cflags -MF $out.d -c $in -o $out && printf "[CC] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cc $browser_hosted_cflags -MF $out.d -c $in -o $out
   description = [1;32m[CC][0m $in -> $out
   depfile = $out.d
   deps = gcc
 
 rule link_browser
-  command = $user_ld -Ttext=0x200000 --gc-sections --wrap=free $in --start-group $browser_stdcpp $browser_supcpp $browser_libgcc_eh $browser_libgcc $$(cat out/browser-builtins.path) --end-group -o $out && printf "[LD] %s\n" $out
+  command = $user_ld -Ttext=0x200000 --gc-sections --wrap=free $in --start-group $browser_stdcpp $browser_supcpp $browser_libgcc_eh $browser_libgcc $$(cat out/browser-builtins.path) --end-group -o $out
   description = [1;33m[LD][0m $out
 
 rule libvterm_cc
-  command = mkdir -p $$(dirname $out) && $user_cc $libvterm_cflags -MF $out.d -c $in -o $out && printf "[CC] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cc $libvterm_cflags -MF $out.d -c $in -o $out
   description = [1;32m[CC][0m $in -> $out
   depfile = $out.d
   deps = gcc
@@ -200,13 +200,13 @@ rule kmod_link
   description = [1;33m[LD][0m $out
 
 rule stardust_cxx
-  command = mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out && printf "[CXX] %s -> %s\n" $in $out
+  command = mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out
   description = [1;36m[CXX][0m $in
   depfile = $out.d
   deps = gcc
 
 rule stardust_ld
-  command = mkdir -p $$(dirname $out) && $user_ld -Ttext=0x200000 -e xapi_start $in -o $out && echo "$message"
+  command = mkdir -p $$(dirname $out) && $user_ld -Ttext=0x200000 -e xapi_start $in -o $out
   description = [1;33m[LD][0m $out
 
 rule python_cmd
