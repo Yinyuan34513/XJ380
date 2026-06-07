@@ -320,6 +320,8 @@ struct EFI_SYSTEM_TABLE
         UINTN  _buf2[3];
         EFIAPI EFI_STATUS (*SetAttribute)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN Attribute);
         EFIAPI EFI_STATUS (*ClearScreen)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This);
+        EFIAPI EFI_STATUS (*SetCursorPosition)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, UINTN Column, UINTN Row);
+        EFIAPI EFI_STATUS (*EnableCursor)(struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *This, BOOLEAN Visible);
     }                           *ConOut;
     EFI_HANDLE                   StandardErrorHandle;
     struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *StdErr;
