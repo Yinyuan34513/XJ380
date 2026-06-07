@@ -150,22 +150,22 @@ FORCE:
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	@$(NASM) $(NASM_FLAGS) $< -o $@
-	@echo "NA $< -> $@"
+	@printf "\033[1;35m[ASM]\033[0m %s -> %s\n" $< $@
 
 $(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(@D)
 	@$(CC) -mcmodel=large $(ASM_FLAGS) -c $< -o $@
-	@echo "AS $< -> $@"
+	@printf "\033[1;35m[ASM]\033[0m %s -> %s\n" $< $@
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(@D)
 	@$(CC) -fno-pic -fno-pie -mcmodel=large $(C_FLAGS) -c $< -o $@
-	@echo "CC $< -> $@"
+	@printf "\033[1;32m[CC]\033[0m %s -> %s\n" $< $@
 
 $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
 	@$(CPP) -fno-pic -fno-pie -mcmodel=large  $(CPP_FLAGS) -c $< -o $@
-	@echo "CPP $< -> $@"
+	@printf "\033[1;36m[CXX]\033[0m %s -> %s\n" $< $@
 
 %.fmt: %
 	@echo "Formatting $<"

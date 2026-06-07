@@ -10,6 +10,41 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "build.ninja"
 
+LOG_RESET = "\033[0m"
+LOG_COLORS = {
+    "ASM": "\033[1;35m",
+    "BOOT": "\033[1;35m",
+    "CC": "\033[1;32m",
+    "CHECK": "\033[1;34m",
+    "CLEAN": "\033[1;31m",
+    "CP": "\033[1;34m",
+    "CXX": "\033[1;36m",
+    "FETCH": "\033[1;34m",
+    "FIND": "\033[1;34m",
+    "FMT": "\033[1;34m",
+    "GEN": "\033[1;35m",
+    "GRAPH": "\033[1;34m",
+    "HOSTLD": "\033[1;33m",
+    "ISO": "\033[1;35m",
+    "LD": "\033[1;33m",
+    "OBJCOPY": "\033[1;35m",
+    "PREP": "\033[1;34m",
+    "RUN": "\033[1;32m",
+    "SIZE": "\033[1;34m",
+    "STAGE": "\033[1;34m",
+    "VDISK": "\033[1;35m",
+    "VMDK": "\033[1;35m",
+}
+
+
+def log_label(tag: str) -> str:
+    return f"{LOG_COLORS[tag]}[{tag}]{LOG_RESET}"
+
+
+def log_desc(tag: str, text: str = "") -> str:
+    return log_label(tag) if not text else f"{log_label(tag)} {text}"
+
+
 
 def rel(path: Path | str) -> str:
     p = Path(path)
@@ -29,7 +64,7 @@ def paths(items: list[Path | str]) -> str:
 def cmd_output(command: list[str]) -> str:
     try:
         return subprocess.check_output(command, cwd=str(ROOT), text=True, stderr=subprocess.DEVNULL).strip()
-    except Exception:
+    except (FileNotFoundError, subprocess.CalledProcessError):
         return ""
 
 
@@ -59,16 +94,12 @@ def headers(*bases: str) -> list[Path]:
     return sorted(out)
 
 
-def write_line(lines: list[str], line: str = "") -> None:
-    lines.append(line)
-
-
 class Ninja:
     def __init__(self) -> None:
         self.lines: list[str] = []
 
     def line(self, text: str = "") -> None:
-        write_line(self.lines, text)
+        self.lines.append(text)
 
     def comment(self, text: str) -> None:
         self.line(f"# {text}")
@@ -198,7 +229,7 @@ def user_simple_app(
     target = Path(f"out/{name}")
     obj = Path(f"out/{name}.o")
     if c_source:
-        cflags = "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include"
+        cflags = "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -MMD -MP"
         user_compile_c(n, obj, src, cflags, implicit)
     else:
         user_compile(n, obj, src, "$user_cflags", implicit)
@@ -208,7 +239,7 @@ def user_simple_app(
         xobjs = core_objs
     else:
         xobjs = core_objs + [Path("out/xapi/start.cpp.o")]
-    n.build(target, "user_ld", xobjs + [liballoc, obj], variables={"message": f"CPPLD {src} -> {target.as_posix()}"})
+    n.build(target, "user_ld", xobjs + [liballoc, obj], variables={"message": log_desc("LD", target.as_posix())})
     return target
 
 
@@ -230,7 +261,7 @@ def grouped_cpp_app(
         user_compile(n, obj, f"user/{src}", "$user_cflags", implicit + (extra_implicit or []))
         objs.append(obj)
     target = Path(f"out/{name}.elf")
-    n.build(target, "user_ld", core_objs + [Path("out/xapi/start.cpp.o"), liballoc] + objs, variables={"message": f"LINK {name} objects -> {target.as_posix()}"})
+    n.build(target, "user_ld", core_objs + [Path("out/xapi/start.cpp.o"), liballoc] + objs, variables={"message": log_desc("LD", target.as_posix())})
     return target
 
 
@@ -307,7 +338,7 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     )
 
     bcms_obj = user_compile(n, Path("out/bcms-sp.elf.o"), "user/bcms-sp.cpp", "$user_cflags", common_implicit)
-    n.build("out/bcms-sp.elf", "user_ld", browser_core + [constart_obj, liballoc, bcms_obj], variables={"message": "CPPLD user/bcms-sp.cpp -> out/bcms-sp.elf"})
+    n.build("out/bcms-sp.elf", "user_ld", browser_core + [constart_obj, liballoc, bcms_obj], variables={"message": log_desc("LD", "out/bcms-sp.elf")})
     targets.append(Path("out/bcms-sp.elf"))
 
     libvterm_sources = find_files("third_party/libvterm/src", (".c",), max_depth=1)
@@ -317,7 +348,7 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         n.build(obj, "libvterm_cc", src)
         libvterm_objs.append(obj)
     busy_obj = user_compile(n, Path("out/busyterm.elf.o"), "user/busyterm.cpp", "$user_cflags -I ./third_party/libvterm/include", common_implicit)
-    n.build("out/busyterm.elf", "user_ld", gui_core + [liballoc, busy_obj] + libvterm_objs, variables={"message": "CPPLD user/busyterm.cpp -> out/busyterm.elf"})
+    n.build("out/busyterm.elf", "user_ld", gui_core + [liballoc, busy_obj] + libvterm_objs, variables={"message": log_desc("LD", "out/busyterm.elf")})
     targets.append(Path("out/busyterm.elf"))
 
     mbedtls_sources = [
@@ -428,7 +459,7 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         "link_with_builtins",
         gui_core + [liballoc] + httpget_objs + mbedtls_objs,
         implicit=[browser_builtins],
-        variables={"ldflags": "-Ttext=0x200000", "message": "LINK httpget objects -> out/httpget.elf"},
+        variables={"ldflags": "-Ttext=0x200000", "message": log_desc("LD", "out/httpget.elf")},
     )
     targets.append(Path("out/httpget.elf"))
 
@@ -446,7 +477,7 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         "link_with_builtins",
         gui_core + [liballoc] + nut_objs + mbedtls_objs,
         implicit=[browser_builtins],
-        variables={"ldflags": "-Ttext=0x200000", "message": "LINK nut objects -> out/nut.elf"},
+        variables={"ldflags": "-Ttext=0x200000", "message": log_desc("LD", "out/nut.elf")},
     )
     targets.append(Path("out/nut.elf"))
 
@@ -598,11 +629,6 @@ def stardust_example(
     base = Path(f"frameworks/StardustUI/examples/{name}")
     if not (ROOT / base).is_dir():
         return Path()
-    framework_headers = headers("frameworks/StardustUI/includes", "frameworks/StardustUI/platforms")
-    for extra in ("frameworks/StardustUI/settings.hpp",):
-        if (ROOT / extra).is_file():
-            framework_headers.append(ROOT / extra)
-    xapi_headers = headers("user/xapi/include", "frameworks/StardustUI/platforms/xj380/xapi")
     obj_dir = Path(f"out/stardustui/{name}/obj")
     objs: list[Path] = []
     app_obj = obj_dir / f"{name}.o"
@@ -610,17 +636,16 @@ def stardust_example(
         app_obj,
         "stardust_cxx",
         base / f"{name}.cpp",
-        implicit=framework_headers + xapi_headers,
         variables={"cflags": cxxflags},
     )
     objs.append(app_obj)
     for item in framework_sources + ["src/platforms/xj380.cpp"]:
         src = Path("frameworks/StardustUI") / item
         obj = obj_dir / "framework" / item.removeprefix("src/").replace(".cpp", ".o")
-        n.build(obj, "stardust_cxx", src, implicit=framework_headers + xapi_headers, variables={"cflags": cxxflags})
+        n.build(obj, "stardust_cxx", src, variables={"cflags": cxxflags})
         objs.append(obj)
     target = Path(f"frameworks/StardustUI/examples/{name}/build/xj380/{name}.elf")
-    n.build(target, "stardust_ld", core_objs + [start_obj, liballoc] + objs, variables={"message": f"LINK {target.as_posix()}"})
+    n.build(target, "stardust_ld", core_objs + [start_obj, liballoc] + objs, variables={"message": log_desc("LD", target.as_posix())})
     app_out = Path(f"out/{name}.elf")
     n.build(app_out, "copy", target)
     return app_out
@@ -659,8 +684,8 @@ def stardust(n: Ninja, core_objs: list[Path], start_obj: Path, liballoc: Path) -
         "src/components/textbox.cpp",
         "src/components/flex.cpp",
     ]
-    hello_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fshort-wchar -nostdinc -Wno-write-strings"
-    opt_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O2 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fshort-wchar -nostdinc -Wno-write-strings"
+    hello_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
+    opt_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O2 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
     targets = [
         stardust_example(n, "helloworld", hello_sources, hello_flags, core_objs, start_obj, liballoc),
         stardust_example(n, "layout", full_sources, opt_flags, core_objs, start_obj, liballoc),
@@ -698,23 +723,23 @@ def main() -> None:
     n.var("user_cxx", os.environ.get("CXX", "g++"))
     n.var("user_ld", os.environ.get("LD", "ld"))
     n.var("nasm_flags", "-f elf64 -DX86_64_TARGET -DUEFI")
-    n.var("asm_flags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387")
-    n.var("c_flags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include")
+    n.var("asm_flags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387 -MMD -MP")
+    n.var("c_flags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include -MMD -MP")
     n.var(
         "cpp_flags",
-        "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing"
+        "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing -MMD -MP"
         + cpp_extra,
     )
     n.var("boot_c_flags", "-g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar")
-    n.var("user_cflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings")
+    n.var("user_cflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings -MMD -MP")
     n.var("mbedtls_cflags", "-I ./user/include/mbed_compat -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"'")
-    n.var("mbedtls_ccflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION")
+    n.var("mbedtls_ccflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION -MMD -MP")
     litehtml_includes = "-I ./third_party/litehtml/include -I ./third_party/litehtml/include/litehtml -I ./third_party/litehtml/src -I ./third_party/litehtml/src/gumbo -I ./third_party/litehtml/src/gumbo/include -I ./third_party/litehtml/src/gumbo/include/gumbo"
     webp_includes = "-I ./user/browser/third_party/libwebp"
-    n.var("browser_hosted_cxxflags", f"-O0 -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./user/browser {litehtml_includes} {webp_includes} -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT")
-    n.var("browser_hosted_cflags", f"-O0 -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -ffunction-sections -fdata-sections {litehtml_includes} {webp_includes} -DNDEBUG -DHAVE_CONFIG_H")
-    n.var("libvterm_cflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./third_party/libvterm/include -I ./third_party/libvterm/src")
-    n.var("kmod_cxxflags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden")
+    n.var("browser_hosted_cxxflags", f"-O0 -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./user/browser {litehtml_includes} {webp_includes} -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT -MMD -MP")
+    n.var("browser_hosted_cflags", f"-O0 -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -ffunction-sections -fdata-sections {litehtml_includes} {webp_includes} -DNDEBUG -DHAVE_CONFIG_H -MMD -MP")
+    n.var("libvterm_cflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./third_party/libvterm/include -I ./third_party/libvterm/src -MMD -MP")
+    n.var("kmod_cxxflags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden -MMD -MP")
     n.var("netserver_cflags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
     n.var("netserver_cxxflags", "$kmod_cxxflags -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
     n.var("browser_stdcpp", cmd_output(["g++", "-print-file-name=libstdc++.a"]))
@@ -724,41 +749,41 @@ def main() -> None:
     n.var("host_gcc_triple", host_gcc_triple)
     n.line()
 
-    n.rule("regen", "python3 tools/gen_ninja.py --out build.ninja", "GEN build.ninja", depfile=None)
-    n.rule("nasm", "mkdir -p $$(dirname $out) && $nasm $nasm_flags $in -o $out && echo \"NA $in -> $out\"", "NA $in -> $out")
-    n.rule("root_as", "mkdir -p $$(dirname $out) && $cc -mcmodel=large $asm_flags -c $in -o $out && echo \"AS $in -> $out\"", "AS $in -> $out")
-    n.rule("root_cc", "mkdir -p $$(dirname $out) && $cc -fno-pic -fno-pie -mcmodel=large $c_flags -c $in -o $out && echo \"CC $in -> $out\"", "CC $in -> $out")
-    n.rule("root_cxx", "mkdir -p $$(dirname $out) && $cxx -fno-pic -fno-pie -mcmodel=large $cpp_flags -c $in -o $out && echo \"CPP $in -> $out\"", "CPP $in -> $out")
-    n.rule("gen_config", "tmp=$out.tmp; { echo '#pragma once'; echo '#define CONFIG_KERNEL_BUSYBOX_ALIASES '$${KERNEL_BUSYBOX_ALIASES:-1}; echo '#define CONFIG_KERNEL_BUILTIN_XHCI '$${BUILTIN_XHCI:-1}; } > $$tmp; if ! cmp -s $$tmp $out; then mv $$tmp $out; else rm -f $$tmp; fi", "GEN $out")
-    n.rule("boot", "mkdir -p $$(dirname $out) && x86_64-w64-mingw32-gcc $boot_c_flags -o $out boot/bootx64.c boot/bootlib.c", "BOOT $out")
-    n.rule("objcopy_bin", "mkdir -p $$(dirname $out) && $objc -I binary -O elf64-x86-64 $bin_input $out", "OBJCOPY $bin_input")
-    n.rule("kernel_link", "$ld -z muldefs -T linker.ld --static -o $out $in", "LINK $out")
-    n.rule("download_liballoc", "[ -f $out ] && echo FOUND $out || curl -Lo $out https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a", "FETCH $out")
-    n.rule("copy", "mkdir -p $$(dirname $out) && cp -a $in $out", "COPY $in -> $out")
-    n.rule("user_cxx_custom", "mkdir -p $$(dirname $out) && $user_cxx $cflags -c $in -o $out && echo \"CPP $in -> $out\"", "CPP $in -> $out")
-    n.rule("user_cc_custom", "mkdir -p $$(dirname $out) && $user_cc $cflags -c $in -o $out && echo \"CC $in -> $out\"", "CC $in -> $out")
-    n.rule("xapi_cxx", "mkdir -p $$(dirname $out) && $user_cxx -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -c $in -o $out && echo CPP $in", "CPP $in")
-    n.rule("xapi_as", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -c $in -o $out && echo AS $in", "AS $in")
-    n.rule("xapi_head", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -c $in -o $out && echo SP-CPP start.cpp", "SP-CPP start.cpp")
-    n.rule("xapi_headcon", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -c $in -o $out && echo SP-CPP constart.cpp", "SP-CPP constart.cpp")
-    n.rule("user_ld", "$user_ld -Ttext=0x200000 $in -o $out && echo \"$message\"", "LINK $out")
-    n.rule("host_cc", "mkdir -p $$(dirname $out) && $user_cc -O0 -g -Wall -Wextra $in -o $out && echo \"HOSTLD $in -> $out\"", "HOSTLD $in")
-    n.rule("mbedtls_cc", "mkdir -p $$(dirname $out) && $user_cc $mbedtls_ccflags -c $in -o $out && echo \"CC $in -> $out\"", "CC $in -> $out")
-    n.rule("browser_builtins", "mkdir -p $$(dirname $out) && python3 tools/ninja_build.py browser-builtins > $out", "FIND browser builtins")
-    n.rule("link_with_builtins", "$user_ld $ldflags $in $$(cat out/browser-builtins.path) -o $out && echo \"$message\"", "LINK $out")
-    n.rule("browser_hosted_cxx", "mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -c $in -o $out && echo \"CPP $in -> $out\"", "CPP $in -> $out")
-    n.rule("litehtml_cxx", "mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fno-exceptions -c $in -o $out && echo \"CPP $in -> $out\"", "CPP $in -> $out")
-    n.rule("litehtml_encodings_cxx", "mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fexceptions -c $in -o $out && echo \"CPP $in -> $out\"", "CPP $in -> $out")
-    n.rule("browser_hosted_cc", "mkdir -p $$(dirname $out) && $user_cc $browser_hosted_cflags -c $in -o $out && echo \"CC $in -> $out\"", "CC $in -> $out")
-    n.rule("link_browser", "$user_ld -Ttext=0x200000 --gc-sections --wrap=free $in --start-group $browser_stdcpp $browser_supcpp $browser_libgcc_eh $browser_libgcc $$(cat out/browser-builtins.path) --end-group -o $out && echo \"LINK browser objects -> $out\"", "LINK $out")
-    n.rule("libvterm_cc", "mkdir -p $$(dirname $out) && $user_cc $libvterm_cflags -c $in -o $out && echo \"CC $in -> $out\"", "CC $in -> $out")
-    n.rule("kmod_e1000_cxx", "mkdir -p $$(dirname $out) && $cxx $kmod_cxxflags -I./include -c $in -o $out", "CXX $in")
-    n.rule("kmod_xhci_cxx", "mkdir -p $$(dirname $out) && $cxx $kmod_cxxflags -I./include -I./kmod/xhci -c $in -o $out", "CXX $in")
-    n.rule("netserver_cc", "mkdir -p $$(dirname $out) && $cc $netserver_cflags -c $in -o $out", "CC $in", depfile="$out.d")
-    n.rule("netserver_cxx", "mkdir -p $$(dirname $out) && $cxx $netserver_cxxflags -c $in -o $out", "CXX $in", depfile="$out.d")
-    n.rule("kmod_link", "$cxx -shared $in $ldflags -o $out", "LINK $out")
-    n.rule("stardust_cxx", "mkdir -p $$(dirname $out) && $user_cxx $cflags -c $in -o $out && echo \"CPP $in -> $out\"", "CPP $in")
-    n.rule("stardust_ld", "mkdir -p $$(dirname $out) && $user_ld -Ttext=0x200000 -e xapi_start $in -o $out && echo \"$message\"", "LINK $out")
+    n.rule("regen", "python3 tools/gen_ninja.py --out build.ninja", log_desc("GEN", "build.ninja"), depfile=None)
+    n.rule("nasm", "mkdir -p $$(dirname $out) && $nasm $nasm_flags $in -o $out && printf \"[ASM] %s -> %s\\n\" $in $out", log_desc("ASM", "$in -> $out"))
+    n.rule("root_as", "mkdir -p $$(dirname $out) && $cc -mcmodel=large $asm_flags -MF $out.d -c $in -o $out && printf \"[ASM] %s -> %s\\n\" $in $out", log_desc("ASM", "$in -> $out"), depfile="$out.d")
+    n.rule("root_cc", "mkdir -p $$(dirname $out) && $cc -fno-pic -fno-pie -mcmodel=large $c_flags -MF $out.d -c $in -o $out && printf \"[CC] %s -> %s\\n\" $in $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
+    n.rule("root_cxx", "mkdir -p $$(dirname $out) && $cxx -fno-pic -fno-pie -mcmodel=large $cpp_flags -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
+    n.rule("gen_config", "tmp=$out.tmp; { echo '#pragma once'; echo '#define CONFIG_KERNEL_BUSYBOX_ALIASES '$${KERNEL_BUSYBOX_ALIASES:-1}; echo '#define CONFIG_KERNEL_BUILTIN_XHCI '$${BUILTIN_XHCI:-1}; } > $$tmp; if ! cmp -s $$tmp $out; then mv $$tmp $out; else rm -f $$tmp; fi", log_desc("GEN", "$out"))
+    n.rule("boot", "mkdir -p $$(dirname $out) && x86_64-w64-mingw32-gcc $boot_c_flags -o $out boot/bootx64.c boot/bootlib.c", log_desc("BOOT", "$out"))
+    n.rule("objcopy_bin", "mkdir -p $$(dirname $out) && $objc -I binary -O elf64-x86-64 $bin_input $out", log_desc("OBJCOPY", "$bin_input"))
+    n.rule("kernel_link", "$ld -z muldefs -T linker.ld --static -o $out $in", log_desc("LD", "$out"))
+    n.rule("download_liballoc", "[ -f $out ] && echo FOUND $out || curl -Lo $out https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a", log_desc("FETCH", "$out"))
+    n.rule("copy", "mkdir -p $$(dirname $out) && cp -a $in $out", log_desc("CP", "$in -> $out"))
+    n.rule("user_cxx_custom", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
+    n.rule("user_cc_custom", "mkdir -p $$(dirname $out) && $user_cc $cflags -MF $out.d -c $in -o $out && printf \"[CC] %s -> %s\\n\" $in $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
+    n.rule("xapi_cxx", "mkdir -p $$(dirname $out) && $user_cxx -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf \"[CXX] %s\\n\" $in", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("xapi_as", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf \"[ASM] %s\\n\" $in", log_desc("ASM", "$in"), depfile="$out.d")
+    n.rule("xapi_head", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf \"[CXX] start.cpp\\n\"", log_desc("CXX", "start.cpp"), depfile="$out.d")
+    n.rule("xapi_headcon", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out && printf \"[CXX] constart.cpp\\n\"", log_desc("CXX", "constart.cpp"), depfile="$out.d")
+    n.rule("user_ld", "$user_ld -Ttext=0x200000 $in -o $out && echo \"$message\"", log_desc("LD", "$out"))
+    n.rule("host_cc", "mkdir -p $$(dirname $out) && $user_cc -O0 -g -Wall -Wextra $in -o $out && printf \"[HOSTLD] %s -> %s\\n\" $in $out", log_desc("HOSTLD", "$in"))
+    n.rule("mbedtls_cc", "mkdir -p $$(dirname $out) && $user_cc $mbedtls_ccflags -MF $out.d -c $in -o $out && printf \"[CC] %s -> %s\\n\" $in $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
+    n.rule("browser_builtins", "mkdir -p $$(dirname $out) && python3 tools/ninja_build.py browser-builtins > $out", log_desc("FIND", "browser builtins"))
+    n.rule("link_with_builtins", "$user_ld $ldflags $in $$(cat out/browser-builtins.path) -o $out && echo \"$message\"", log_desc("LD", "$out"))
+    n.rule("browser_hosted_cxx", "mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
+    n.rule("litehtml_cxx", "mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fno-exceptions -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
+    n.rule("litehtml_encodings_cxx", "mkdir -p $$(dirname $out) && $user_cxx $browser_hosted_cxxflags -fexceptions -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
+    n.rule("browser_hosted_cc", "mkdir -p $$(dirname $out) && $user_cc $browser_hosted_cflags -MF $out.d -c $in -o $out && printf \"[CC] %s -> %s\\n\" $in $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
+    n.rule("link_browser", "$user_ld -Ttext=0x200000 --gc-sections --wrap=free $in --start-group $browser_stdcpp $browser_supcpp $browser_libgcc_eh $browser_libgcc $$(cat out/browser-builtins.path) --end-group -o $out && printf \"[LD] %s\\n\" $out", log_desc("LD", "$out"))
+    n.rule("libvterm_cc", "mkdir -p $$(dirname $out) && $user_cc $libvterm_cflags -MF $out.d -c $in -o $out && printf \"[CC] %s -> %s\\n\" $in $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
+    n.rule("kmod_e1000_cxx", "mkdir -p $$(dirname $out) && $cxx $kmod_cxxflags -I./include -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("kmod_xhci_cxx", "mkdir -p $$(dirname $out) && $cxx $kmod_cxxflags -I./include -I./kmod/xhci -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("netserver_cc", "mkdir -p $$(dirname $out) && $cc $netserver_cflags -MF $out.d -c $in -o $out", log_desc("CC", "$in"), depfile="$out.d")
+    n.rule("netserver_cxx", "mkdir -p $$(dirname $out) && $cxx $netserver_cxxflags -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("kmod_link", "$cxx -shared $in $ldflags -o $out", log_desc("LD", "$out"))
+    n.rule("stardust_cxx", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("stardust_ld", "mkdir -p $$(dirname $out) && $user_ld -Ttext=0x200000 -e xapi_start $in -o $out && echo \"$message\"", log_desc("LD", "$out"))
     n.rule("python_cmd", "python3 tools/ninja_build.py $cmd", "$desc")
     n.rule("shell_cmd", "$cmd", "$desc")
 
@@ -792,47 +817,47 @@ def main() -> None:
         ["vdisk", "XJ380.img"],
         "python_cmd",
         all_deps,
-        variables={"cmd": "vdisk", "desc": "VDISK XJ380.img", "pool": "console"},
+        variables={"cmd": "vdisk", "desc": log_desc("VDISK", "XJ380.img"), "pool": "console"},
     )
     n.build(
         "complete",
         "python_cmd",
         all_deps,
-        variables={"cmd": "complete", "desc": "VDISK COMPLETE XJ380.img", "pool": "console"},
+        variables={"cmd": "complete", "desc": log_desc("VDISK", "complete XJ380.img"), "pool": "console"},
     )
     n.build(
         ["installer.system.stage", "out/system-payload.pak"],
         "python_cmd",
         all_deps,
-        variables={"cmd": "installer-system-stage", "desc": "STAGE installer system"},
+        variables={"cmd": "installer-system-stage", "desc": log_desc("STAGE", "installer system")},
     )
     n.build(
         ["installer.root.stage", "out/installer-root.pak"],
         "python_cmd",
         all_deps,
-        variables={"cmd": "installer-root-stage", "desc": "STAGE installer root"},
+        variables={"cmd": "installer-root-stage", "desc": log_desc("STAGE", "installer root")},
     )
     n.build(
         ["installer.iso", "XJ380-installer.iso"],
         "python_cmd",
         ["installer.system.stage", "installer.root.stage"],
-        variables={"cmd": "installer-iso", "desc": "ISO XJ380-installer.iso"},
+        variables={"cmd": "installer-iso", "desc": log_desc("ISO", "XJ380-installer.iso")},
     )
-    n.build(["vmdk", "XJ380.vmdk"], "python_cmd", ["vdisk"], variables={"cmd": "vmdk", "desc": "VMDK XJ380.vmdk"})
-    n.build("run", "python_cmd", ["vdisk"], variables={"cmd": "run", "desc": "RUN QEMU", "pool": "console"})
-    n.build("justrun", "python_cmd", variables={"cmd": "run", "desc": "RUN QEMU", "pool": "console"})
-    n.build("prepare", "python_cmd", variables={"cmd": "prepare", "desc": "PREPARE root"})
-    n.build("installer.prepare", "python_cmd", variables={"cmd": "installer-prepare", "desc": "PREPARE installer root"})
-    n.build("stage.selfhost-user", "python_cmd", variables={"cmd": "stage-selfhost-user", "desc": "STAGE selfhost user"})
-    n.build("stage.linux-compat", "python_cmd", variables={"cmd": "stage-linux-compat", "desc": "STAGE linux compat"})
-    n.build("format", "python_cmd", variables={"cmd": "format", "desc": "FORMAT"})
-    n.build("check", "python_cmd", variables={"cmd": "check", "desc": "CHECK"})
-    n.build("gen.clangd", "python_cmd", variables={"cmd": "gen-clangd", "desc": "GEN clangd"})
-    n.build("size", "python_cmd", variables={"cmd": "size", "desc": "SIZE report"})
-    n.build("check.tools", "python_cmd", variables={"cmd": "check-tools", "desc": "CHECK tools"})
-    n.build("graph", "python_cmd", variables={"cmd": "graph", "desc": "GRAPH out/build-graph.dot"})
-    n.build("clean.clangd", "shell_cmd", variables={"cmd": "rm -f .clangd boot/.clangd", "desc": "CLEAN clangd"})
-    n.build("clean", "python_cmd", variables={"cmd": "clean", "desc": "CLEAN"})
+    n.build(["vmdk", "XJ380.vmdk"], "python_cmd", ["vdisk"], variables={"cmd": "vmdk", "desc": log_desc("VMDK", "XJ380.vmdk")})
+    n.build("run", "python_cmd", ["vdisk"], variables={"cmd": "run", "desc": log_desc("RUN", "QEMU"), "pool": "console"})
+    n.build("justrun", "python_cmd", variables={"cmd": "run", "desc": log_desc("RUN", "QEMU"), "pool": "console"})
+    n.build("prepare", "python_cmd", variables={"cmd": "prepare", "desc": log_desc("PREP", "root")})
+    n.build("installer.prepare", "python_cmd", variables={"cmd": "installer-prepare", "desc": log_desc("PREP", "installer root")})
+    n.build("stage.selfhost-user", "python_cmd", variables={"cmd": "stage-selfhost-user", "desc": log_desc("STAGE", "selfhost user")})
+    n.build("stage.linux-compat", "python_cmd", variables={"cmd": "stage-linux-compat", "desc": log_desc("STAGE", "linux compat")})
+    n.build("format", "python_cmd", variables={"cmd": "format", "desc": log_desc("FMT", "sources")})
+    n.build("check", "python_cmd", variables={"cmd": "check", "desc": log_desc("CHECK", "sources")})
+    n.build("gen.clangd", "python_cmd", variables={"cmd": "gen-clangd", "desc": log_desc("GEN", "clangd")})
+    n.build("size", "python_cmd", variables={"cmd": "size", "desc": log_desc("SIZE", "report")})
+    n.build("check.tools", "python_cmd", variables={"cmd": "check-tools", "desc": log_desc("CHECK", "tools")})
+    n.build("graph", "python_cmd", variables={"cmd": "graph", "desc": log_desc("GRAPH", "out/build-graph.dot")})
+    n.build("clean.clangd", "shell_cmd", variables={"cmd": "rm -f .clangd boot/.clangd", "desc": log_desc("CLEAN", "clangd")})
+    n.build("clean", "python_cmd", variables={"cmd": "clean", "desc": log_desc("CLEAN", "build outputs")})
     n.build("reconfigure", "regen", ["tools/gen_ninja.py", "tools/ninja_build.py"])
     n.line("default all")
 
