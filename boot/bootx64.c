@@ -29,6 +29,13 @@ EFI_HANDLE                              IM;
 #define BOOT_MENU_POLL_US 10000
 
 #define BOOT_MENU_OPTION_COUNT 9
+#define BOOT_COLOR_NORMAL 0x0f
+#define BOOT_COLOR_MUTED 0x07
+#define BOOT_COLOR_PANEL 0x1f
+#define BOOT_COLOR_SELECTED 0x1f
+#define BOOT_COLOR_TITLE 0x0b
+#define BOOT_COLOR_WARNING 0x0e
+
 typedef struct
 {
     const char *title;
@@ -40,6 +47,9 @@ typedef struct
 static UINT64 BootMenuFlags;
 static char   BootStatusLines[8][80];
 static int    BootStatusCount;
+static int    BootProgressStep;
+static int    BootRenderedProgressStep;
+static int    BootProgressScreenDrawn;
 
 static const BOOT_MENU_OPTION BootMenuOptions[BOOT_MENU_OPTION_COUNT] = {
     {"Safe Mode",
@@ -154,11 +164,106 @@ void puts(unsigned short *s)
 
 static void puts_ascii(const char *s)
 {
+    CHAR16 buffer[128];
+    UINTN  pos = 0;
+
     while (*s)
     {
-        putc((unsigned short)*s);
+        buffer[pos++] = (CHAR16)*s;
         s++;
+        if (pos == sizeof(buffer) / sizeof(buffer[0]) - 1)
+        {
+            buffer[pos] = L'\0';
+            puts(buffer);
+            pos = 0;
+        }
     }
+
+    if (pos > 0)
+    {
+        buffer[pos] = L'\0';
+        puts(buffer);
+    }
+}
+
+static void puts_repeat(char ch, int count)
+{
+    CHAR16 buffer[128];
+    while (count > 0)
+    {
+        int chunk = count;
+        if (chunk > (int)(sizeof(buffer) / sizeof(buffer[0]) - 1))
+            chunk = (int)(sizeof(buffer) / sizeof(buffer[0]) - 1);
+        for (int i = 0; i < chunk; i++)
+            buffer[i] = (CHAR16)ch;
+        buffer[chunk] = L'\0';
+        puts(buffer);
+        count -= chunk;
+    }
+}
+
+static void boot_console_attr(UINTN attr)
+{
+    ST->ConOut->SetAttribute(ST->ConOut, attr);
+}
+
+static void boot_clear(UINTN attr)
+{
+    boot_console_attr(attr);
+    ST->ConOut->ClearScreen(ST->ConOut);
+}
+
+static void boot_move(UINTN col, UINTN row)
+{
+    ST->ConOut->SetCursorPosition(ST->ConOut, col, row);
+}
+
+static void boot_hide_cursor(void)
+{
+    ST->ConOut->EnableCursor(ST->ConOut, 0);
+}
+
+static void boot_hr(void)
+{
+    boot_console_attr(BOOT_COLOR_PANEL);
+    puts_ascii("  ");
+    puts_repeat(' ', 76);
+    puts(L"\r\n");
+    boot_console_attr(BOOT_COLOR_NORMAL);
+}
+
+static void boot_header(const char *title, const char *subtitle)
+{
+    boot_clear(BOOT_COLOR_NORMAL);
+    boot_hide_cursor();
+    boot_console_attr(BOOT_COLOR_PANEL);
+    puts(L"  XJ380 Boot Manager                                                        \r\n");
+    puts(L"                                                                            \r\n");
+    boot_console_attr(BOOT_COLOR_TITLE);
+    puts_ascii("  ");
+    puts_ascii(title);
+    puts(L"\r\n");
+    boot_console_attr(BOOT_COLOR_MUTED);
+    if (subtitle != NULL)
+    {
+        puts_ascii("  ");
+        puts_ascii(subtitle);
+        puts(L"\r\n");
+    }
+    puts(L"\r\n");
+    boot_hr();
+}
+
+static void puts_ascii_padded(const char *s, int width)
+{
+    int len = 0;
+    if (s != NULL)
+    {
+        while (s[len] != '\0' && len < width)
+            len++;
+        puts_ascii(s);
+    }
+    if (width > len) puts_repeat(' ', width - len);
 }
 
 static void puts_dec(UINT64 value)
@@ -169,7 +274,7 @@ static void puts_dec(UINT64 value)
 
     if (value == 0)
     {
-        putc(L'0');
+        puts(L"0");
         return;
     }
 
@@ -179,44 +284,85 @@ static void puts_dec(UINT64 value)
         value /= 10;
     }
 
+    CHAR16 out[24];
     while (pos < len)
-        putc((unsigned short)buf[len - 1 - pos++]);
+    {
+        out[pos] = (CHAR16)buf[len - 1 - pos];
+        pos++;
+    }
+    out[pos] = L'\0';
+    puts(out);
+}
+
+static void boot_progress_bar(int step, int total)
+{
+    int width = 42;
+    int filled;
+    char bar[48];
+    if (total <= 0) total = 1;
+    if (step < 0) step = 0;
+    if (step > total) step = total;
+    filled = width * step / total;
+
+    boot_console_attr(BOOT_COLOR_NORMAL);
+    puts_ascii("  [");
+    boot_console_attr(BOOT_COLOR_TITLE);
+    for (int i = 0; i < width; i++)
+        bar[i] = i < filled ? '=' : ' ';
+    bar[width] = '\0';
+    puts_ascii(bar);
+    boot_console_attr(BOOT_COLOR_NORMAL);
+    puts_ascii("] ");
+    puts_dec((UINT64)(step * 100 / total));
+    puts_ascii("%");
+    puts(L"\r\n");
 }
 
 static void boot_text_status_screen(const char *status)
 {
-    ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
-    ST->ConOut->ClearScreen(ST->ConOut);
-    puts(L"XJ380 Bootloader\r\n");
-    puts(L"\r\n");
-    puts_ascii(status);
-    puts(L"\r\n\r\n");
-    puts(L"[");
-    for (int i = 0; i < 10; i++)
-        puts_ascii(i < BootStatusCount ? "=" : " ");
-    puts(L"]\r\n\r\n");
+    if (!BootProgressScreenDrawn)
+    {
+        boot_header("Starting XJ380", "Firmware is preparing the operating system.");
+        boot_console_attr(BOOT_COLOR_NORMAL);
+        puts(L"  Current stage: \r\n\r\n");
+        puts(L"\r\n");
+        boot_console_attr(BOOT_COLOR_MUTED);
+        puts(L"  Boot log\r\n");
+        BootProgressScreenDrawn = 1;
+    }
 
+    boot_move(17, 7);
+    boot_console_attr(BOOT_COLOR_TITLE);
+    puts_ascii_padded(status != NULL ? status : "working", 58);
+
+    boot_move(0, 9);
+    boot_progress_bar(BootProgressStep, 10);
+
+    boot_console_attr(BOOT_COLOR_NORMAL);
     for (int i = 0; i < BootStatusCount; i++)
     {
-        puts_ascii("  ");
-        puts_ascii(BootStatusLines[i]);
-        puts(L"\r\n");
+        boot_move(0, 12 + i);
+        puts_ascii("    ");
+        puts_ascii_padded(BootStatusLines[i], 70);
     }
 }
 
 static void boot_prompt_screen(void)
 {
-    ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
-    ST->ConOut->ClearScreen(ST->ConOut);
-    puts(L"XJ380 Bootloader\r\n");
+    boot_header("XJ380", "Press DELETE for Advanced Boot Options.");
+    boot_console_attr(BOOT_COLOR_NORMAL);
+    puts(L"  The system will start automatically.\r\n");
     puts(L"\r\n");
-    puts(L"Press DELETE for Advanced Boot Options\r\n");
+    boot_console_attr(BOOT_COLOR_MUTED);
+    puts(L"  DELETE  Advanced options\r\n");
+    puts(L"  ESC     Continue startup\r\n");
 }
 
 static void boot_status(const char *status)
 {
     if (status != NULL)
     {
+        if (BootProgressStep < 10) BootProgressStep++;
         if (BootStatusCount < 8)
         {
             UINTN i = 0;
@@ -242,13 +388,24 @@ static void boot_status(const char *status)
         }
     }
     if ((BootMenuFlags & BOOT_FLAG_SHOW_PROGRESS) != 0)
-        boot_text_status_screen(status);
+    {
+        int should_render = BootRenderedProgressStep == 0 || BootProgressStep >= 10 ||
+                            BootProgressStep >= BootRenderedProgressStep + 3;
+        if (should_render)
+        {
+            BootRenderedProgressStep = BootProgressStep;
+            boot_text_status_screen(status);
+        }
+    }
 }
 
 static void boot_menu_init_defaults(void)
 {
     BootMenuFlags = 0;
     BootStatusCount = 0;
+    BootProgressStep = 0;
+    BootRenderedProgressStep = 0;
+    BootProgressScreenDrawn = 0;
 }
 
 static int read_boot_key(struct EFI_INPUT_KEY *key)
@@ -277,6 +434,7 @@ static int wait_for_boot_menu_key(void)
         if (read_boot_key(&key))
         {
             if (key.ScanCode == EFI_SCAN_DELETE) return 1;
+            if (key.ScanCode == EFI_SCAN_ESC || key.UnicodeChar == L'\r') return 0;
         }
 
         BS->Stall(BOOT_MENU_POLL_US);
@@ -286,45 +444,72 @@ static int wait_for_boot_menu_key(void)
     return 0;
 }
 
-static void draw_nt6_menu_item(int index, int selected)
+static void draw_boot_menu_item_at(int index, int selected, int row)
 {
+    boot_move(0, (UINTN)row);
+    boot_console_attr(selected ? BOOT_COLOR_SELECTED : BOOT_COLOR_NORMAL);
+    puts_ascii("  ");
     if (selected)
     {
-        ST->ConOut->SetAttribute(ST->ConOut, 0x70);
-        puts_ascii(" ");
+        char number[2] = {(char)('1' + index), '\0'};
+        puts_ascii("> ");
+        puts_ascii(number);
+        puts_ascii(". ");
         puts_ascii(BootMenuOptions[index].title);
-        puts_ascii(" ");
-        ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
-        puts(L"\r\n");
+        int pad = 44 - (int)strlen(BootMenuOptions[index].title);
+        if (pad < 1) pad = 1;
+        puts_repeat(' ', pad);
     }
     else
     {
-        puts_ascii(" ");
+        char number[2] = {(char)('1' + index), '\0'};
+        puts_ascii("  ");
+        puts_ascii(number);
+        puts_ascii(". ");
         puts_ascii(BootMenuOptions[index].title);
-        puts(L"\r\n");
     }
+    boot_console_attr(BOOT_COLOR_NORMAL);
+    puts_repeat(' ', 28);
 }
 
-static void draw_boot_menu(int selected)
+static void draw_boot_menu_description(int selected)
 {
-    ST->ConOut->SetAttribute(ST->ConOut, 0x0f);
-    ST->ConOut->ClearScreen(ST->ConOut);
-    puts(L"Advanced Boot Options\r\n");
-    puts(L"\r\n");
-    puts(L"Choose Advanced Options for: XJ380 Operating System\r\n");
-    puts(L"\r\n");
-    puts(L"Use the arrow keys to highlight your choice.\r\n");
-    puts(L"\r\n");
-    puts(L"Advanced options:\r\n");
+    boot_move(0, 18);
+    boot_console_attr(BOOT_COLOR_PANEL);
+    puts(L"  Selected option                                                           ");
+    boot_move(0, 19);
+    boot_console_attr(BOOT_COLOR_NORMAL);
+    puts_ascii("  ");
+    puts_ascii_padded(BootMenuOptions[selected].title, 72);
+    boot_move(0, 20);
+    boot_console_attr(BOOT_COLOR_MUTED);
+    puts_ascii("  ");
+    puts_ascii_padded(BootMenuOptions[selected].description, 72);
+    boot_move(0, 22);
+    boot_console_attr(BOOT_COLOR_WARNING);
+    puts(L"  ENTER=Start selected    ESC=Start normally    DELETE=Stay in this menu   ");
+    boot_console_attr(BOOT_COLOR_NORMAL);
+}
+
+static void draw_boot_menu_full(int selected)
+{
+    boot_header("Advanced Boot Options", "Choose how XJ380 should start.");
+    boot_console_attr(BOOT_COLOR_MUTED);
+    puts(L"  Use UP/DOWN to select. Press ENTER to boot. Number keys choose directly.\r\n");
     puts(L"\r\n");
 
     for (int i = 0; i < BOOT_MENU_OPTION_COUNT; i++)
-        draw_nt6_menu_item(i, selected == i);
+        draw_boot_menu_item_at(i, selected == i, 7 + i);
 
-    puts(L"\r\n");
-    puts_ascii(BootMenuOptions[selected].description);
-    puts(L"\r\n\r\n");
-    puts(L"ENTER=Choose    ESC=Start normally\r\n");
+    draw_boot_menu_description(selected);
+}
+
+static void update_boot_menu_selection(int previous, int selected)
+{
+    if (previous >= 0 && previous < BOOT_MENU_OPTION_COUNT)
+        draw_boot_menu_item_at(previous, 0, 7 + previous);
+    draw_boot_menu_item_at(selected, 1, 7 + selected);
+    draw_boot_menu_description(selected);
 }
 
 static int apply_boot_menu_action(int selected)
@@ -343,22 +528,27 @@ static int apply_boot_menu_action(int selected)
 static void boot_menu(void)
 {
     int selected = 0;
+    int previous;
     struct EFI_INPUT_KEY key;
 
     drain_boot_keys();
+    draw_boot_menu_full(selected);
     while (1)
     {
-        draw_boot_menu(selected);
         while (!read_boot_key(&key))
             BS->Stall(BOOT_MENU_POLL_US);
 
         if (key.ScanCode == EFI_SCAN_UP)
         {
+            previous = selected;
             selected = selected == 0 ? BOOT_MENU_OPTION_COUNT - 1 : selected - 1;
+            update_boot_menu_selection(previous, selected);
         }
         else if (key.ScanCode == EFI_SCAN_DOWN)
         {
+            previous = selected;
             selected = selected == BOOT_MENU_OPTION_COUNT - 1 ? 0 : selected + 1;
+            update_boot_menu_selection(previous, selected);
         }
         else if (key.ScanCode == EFI_SCAN_ESC)
         {
@@ -371,7 +561,9 @@ static void boot_menu(void)
         }
         else if (key.UnicodeChar >= L'1' && key.UnicodeChar <= L'9')
         {
+            previous = selected;
             selected = (int)(key.UnicodeChar - L'1');
+            update_boot_menu_selection(previous, selected);
             if (apply_boot_menu_action(selected)) return;
         }
     }
