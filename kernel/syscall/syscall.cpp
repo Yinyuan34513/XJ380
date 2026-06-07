@@ -151,6 +151,10 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_FTRUNCATE: return "ftruncate";
     case SYS_FALLOCATE: return "fallocate";
     case SYS_FSTATFS: return "fstatfs";
+    case SYS_MLOCK: return "mlock";
+    case SYS_MUNLOCK: return "munlock";
+    case SYS_MLOCKALL: return "mlockall";
+    case SYS_MUNLOCKALL: return "munlockall";
     case SYS_PRLIMIT64: return "prlimit64";
     case SYS_SENDMMSG: return "sendmmsg";
     case SYS_MEMFD_CREATE: return "memfd_create";
@@ -582,6 +586,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         regs->rax = (uint64_t)sys_mremap(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, 0, regs);
         break;
     case SYS_MADVISE: regs->rax = (uint64_t)sys_madvise(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
+    case SYS_MLOCK: regs->rax = (uint64_t)sys_mlock(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_MUNLOCK: regs->rax = (uint64_t)sys_munlock(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_MLOCKALL: regs->rax = (uint64_t)sys_mlockall(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_MUNLOCKALL: regs->rax = (uint64_t)sys_munlockall(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_NANOSLEEP: regs->rax = (uint64_t)sys_nano_sleep((void *)regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_CLOCK_GETRES:
         regs->rax = (uint64_t)sys_clock_getres(regs->rdi, (uint64_t)regs->rsi, 0, 0, 0, 0, regs);

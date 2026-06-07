@@ -7,6 +7,12 @@
 #define POLLERR  0x0008 // 错误（不需要设置，由内核返回）
 #define POLLHUP  0x0010 // 挂起（对端关闭）
 #define POLLNVAL 0x0020 // fd 无效（文件描述符非法）
+#define POLLRDNORM 0x0040
+#define POLLRDBAND 0x0080
+#define POLLWRNORM 0x0100
+#define POLLWRBAND 0x0200
+#define POLLMSG    0x0400
+#define POLLRDHUP  0x2000
 
 #define EPOLLIN        0x001
 #define EPOLLPRI       0x002
@@ -33,7 +39,7 @@
 
 #include "krlibc.h"
 #include "lock_queue.h"
-
+#include "fs/vfs/vfs.h"
 struct pollfd {
     int   fd;
     short events;
@@ -47,6 +53,8 @@ typedef union epoll_data {
     uint64_t u64;
 } epoll_data_t;
 
+struct epoll_item;//前向声明
+
 struct epoll_event {
     uint32_t     events;
     epoll_data_t data;
@@ -54,11 +62,31 @@ struct epoll_event {
 
 typedef struct epoll_watch {
     int                fd;
+    void              *handle;
     struct epoll_event event;
 } epoll_watch_t;
 
+typedef struct epoll_item{
+    int fd;
+    struct epoll_event event;
+
+    vfs_node_t node;
+    list_t rl;
+
+    bool is_rdy;
+    uint32_t last_rdyevent;
+}epoll_item_t;
+
 typedef struct epoll_file {
     lock_queue *watches;
+
+    list_t rdy_list;
+    spin_t lock;
+    int rdy_count;
+
+    lock_queue *wait_queue;
+
+    int flag;
 } epoll_file_t;
 
 struct pollfd *select_add(struct pollfd **comp, size_t *compIndex, size_t *complength, int fd,
@@ -67,3 +95,9 @@ bool           select_bitmap(const uint8_t *map, int index);
 void           select_bitmap_set(uint8_t *map, int index);
 uint32_t       poll_to_epoll_comp(uint32_t poll_events);
 uint32_t       epoll_to_poll_comp(uint32_t epoll_events);
+uint32_t       epoll_file_poll(epoll_file_t *ep, uint32_t events);
+void           epoll_watch_free(epoll_watch_t *watch);
+uint64_t       poll_event_generation(void);
+void           poll_notify_event(void);
+void           poll_waiter_arm(void);
+void           poll_waiter_disarm(void);

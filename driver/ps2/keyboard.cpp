@@ -1,6 +1,8 @@
 #include <proto.hpp>
 #include <dlinker.h>
 #include <syscall/syscall.h>
+
+extern "C" void evdev_push_usb_keyboard_event(uint8_t usage, uint8_t pressed);
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
@@ -264,6 +266,7 @@ extern "C" void keyboard_push_input(uint8_t value)
 extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed)
 {
     keyboard_prepare_fifo();
+    evdev_push_usb_keyboard_event(usage, pressed);
 
     kb_synth_lock_acquire();
     keyboard_usb_repeat_slot *free_slot = NULL;

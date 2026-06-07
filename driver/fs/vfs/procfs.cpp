@@ -121,6 +121,13 @@ static size_t procfs_copy_task_cmdline(pcb_t task, void *addr, size_t offset, si
     return procfs_copy_content(addr, offset, size, task->cmdline ? task->cmdline : "", total);
 }
 
+static const char *procfs_anon_fd_name(vfs_node_t node)
+{
+    if (node == NULL || node->name == NULL || node->name[0] == '\0') return "anon";
+    if (strcmp(node->name, "anon_epoll") == 0) return "eventpoll";
+    return node->name;
+}
+
 static size_t procfs_task_cmdline_len(pcb_t task)
 {
     if (task == NULL) return 0;
@@ -890,10 +897,15 @@ size_t procfs_readlink(vfs_node_t node, void *addr, size_t offset, size_t size) 
                 sprintf(target, "pipe:[%llu]", (unsigned long long)fh->node->inode);
             else if (fh->node->type & file_socket)
                 sprintf(target, "socket:[%llu]", (unsigned long long)fh->node->inode);
-            else if (fh->node->name && fh->node->name[0])
-                sprintf(target, "/%s", fh->node->name);
+            else if (fh->node->type & (file_anon | file_epoll))
+                sprintf(target, "anon_inode:[%s]", procfs_anon_fd_name(fh->node));
             else
-                sprintf(target, "anon_inode:[%llu]", (unsigned long long)fh->node->inode);
+            {
+                char *path = vfs_get_fullpath(fh->node);
+                if (path == NULL) return VFS_STATUS_FAILED;
+                snprintf(target, sizeof(target), "%s", path);
+                free(path);
+            }
             return procfs_copy_content(addr, offset, size, target, strlen(target));
         }
     }
@@ -1233,20 +1245,6 @@ void procfs_update_task_list() {
 static void procfs_refresh_fd_dir(vfs_node_t fd_dir, pcb_t task)
 {
     if (fd_dir == NULL || task == NULL) return;
-    list_t child = fd_dir->child;
-    while (child != NULL) {
-        list_t next = child->next;
-        vfs_node_t child_node = (vfs_node_t)child->data;
-        if (child_node != NULL) {
-            if (child_node->handle) {
-                free(child_node->handle);
-                child_node->handle = NULL;
-            }
-            free(child_node);
-        }
-        fd_dir->child = list_delete_node(fd_dir->child, child);
-        child = next;
-    }
 
     if (task->file_open == NULL) return;
     spin_lock(&task->file_open->lock);
@@ -1256,16 +1254,28 @@ static void procfs_refresh_fd_dir(vfs_node_t fd_dir, pcb_t task)
         if (fh != NULL && fh->node != NULL) {
             char fdname[16];
             sprintf(fdname, "%zu", fh->fd);
-            vfs_node_t fd_entry = vfs_child_append(fd_dir, fdname, NULL);
+            vfs_node_t fd_entry = vfs_do_search(fd_dir, fdname);
+            if (fd_entry == NULL) fd_entry = vfs_child_append(fd_dir, fdname, NULL);
+            if (fd_entry == NULL) {
+                ln = ln->next;
+                continue;
+            }
             fd_entry->type = file_symlink;
             fd_entry->mode = 0400;
             fd_entry->fsid = procfs_id;
             fd_entry->owner = task->procfs_node ? task->procfs_node->owner : 0;
             fd_entry->group = task->procfs_node ? task->procfs_node->group : 0;
-            proc_handle_t *handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
+            proc_handle_t *handle = (proc_handle_t *)fd_entry->handle;
+            if (handle == NULL) {
+                handle = (proc_handle_t *)malloc(sizeof(proc_handle_t));
+                fd_entry->handle = handle;
+            }
+            if (handle == NULL) {
+                ln = ln->next;
+                continue;
+            }
             handle->task = task;
             sprintf(handle->name, "proc_fd");
-            fd_entry->handle = handle;
         }
         ln = ln->next;
     }

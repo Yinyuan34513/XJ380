@@ -1,8 +1,6 @@
 #!/bin/sh
 
-set -eu
-
-export HOME="/users/GuoqiFish"
+export HOME="/root"
 export SHELL="/bin/bash"
 export XDG_SESSION_TYPE="wayland"
 export XDG_CONFIG_DIRS="/etc/xdg"
@@ -23,54 +21,45 @@ export XKB_DEFAULT_MODEL=pc104
 
 mkdir -p /tmp/.X11-unix
 mkdir -p /tmp/.ICE-unix
-mkdir -p "$HOME/.config/dconf"
+mkdir -p $HOME/.config/dconf
 mkdir -p /run/dbus
-mkdir -p /run/udev
-mkdir -p /run/udev/data
 mkdir -p /var/lib/dbus
-mkdir -p "$XDG_RUNTIME_DIR"
-mkdir -p /run/user/0/libinput
+mkdir -p $XDG_RUNTIME_DIR
 
 chmod 01777 /tmp/.X11-unix
 chmod 0777 /tmp/.ICE-unix
-chmod 0700 "$XDG_RUNTIME_DIR"
+chmod 0700 $XDG_RUNTIME_DIR
 
-if [ ! -S /run/dbus/system_bus_socket ]; then
-dbus-daemon --system --fork
-    dbus-uuidgen --ensure
-    
-fi
-
-if [ ! -e /run/udev/control ]; then
-    udevd --daemon &
-
-    tries=0
-    while [ ! -e /run/udev/control ]; do
-        tries=$((tries + 1))
-        if [ "$tries" -ge 60 ]; then
-            echo "start-wayland: timed out waiting for /run/udev/control" >&2
-            exit 1
-        fi
-        sleep 0.5
-    done
-fi
-
-udevadm settle
-
-dump_tree() {
-    path="$1"
-    echo "start-wayland: recursive listing for $path"
-    if [ ! -e "$path" ]; then
-        echo "start-wayland: $path does not exist"
+setup_xcursor_aliases() {
+    cursor_dir="/usr/share/icons/Adwaita/cursors"
+    if [ ! -d "$cursor_dir" ]; then
         return 0
     fi
 
-    if command -v find >/dev/null 2>&1; then
-        find "$path" -maxdepth 8 -exec ls -ld {} \; 2>&1 || true
-    else
-        ls -laR "$path" 2>&1 || true
+    if [ ! -e "$cursor_dir/dnd-copy" ] && [ ! -L "$cursor_dir/dnd-copy" ]; then
+        ln -s copy "$cursor_dir/dnd-copy" 2>/dev/null || true
+    fi
+    if [ ! -e "$cursor_dir/dnd-none" ] && [ ! -L "$cursor_dir/dnd-none" ]; then
+        ln -s no-drop "$cursor_dir/dnd-none" 2>/dev/null || \
+            ln -s not-allowed "$cursor_dir/dnd-none" 2>/dev/null || true
+    fi
+    if [ ! -e "$cursor_dir/dnd-move" ] && [ ! -L "$cursor_dir/dnd-move" ]; then
+        ln -s default "$cursor_dir/dnd-move" 2>/dev/null || true
     fi
 }
+
+setup_xcursor_aliases
+
+dbus-daemon --system --fork
+dbus-uuidgen --ensure
+
+udevd --daemon
+
+while [ ! -e "/run/udev/control" ]; do
+    sleep 0.5
+done
+
+udevadm settle
 
 exec dbus-run-session -- \
     seatd-launch -- \

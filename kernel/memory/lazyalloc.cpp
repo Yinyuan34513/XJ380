@@ -34,7 +34,7 @@ errno_t lazy_tryalloc(pcb_t pcb, uint64_t address) {
         uint64_t page_addr   = virt_page->start + fault_index * PAGE_SIZE;
 
         uint64_t phys = alloc_frames(1);
-        page_map_to(pcb->pagedir, page_addr, phys, virt_page->pte_flags);
+        page_map_to(pcb->pagedir, page_addr, phys, virt_page->pte_flags | PTE_FRAME_ALLOCATED);
         
         // 直接通过物理地址映射到内核空间来清零页面，不需要切换页目录
         memset((void *)phys_to_virt(phys), 0, PAGE_SIZE);

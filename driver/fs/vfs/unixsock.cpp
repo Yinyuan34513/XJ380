@@ -267,6 +267,23 @@ static void unix_sock_init(struct unix_sock *sk, int type, int protocol)
     sk->namespace_registered = false;
     sk->path_node_created    = false;
     sk->passcred             = false;
+    sk->reuseaddr            = false;
+    sk->reuseport            = false;
+    sk->keepalive            = false;
+    sk->broadcast            = false;
+    sk->passsec              = false;
+    sk->timestamp_legacy     = false;
+    sk->timestampns_legacy   = false;
+    sk->timestamping_legacy  = false;
+    sk->recv_buffer_size     = UNIX_RING_SIZE;
+    sk->send_buffer_size     = UNIX_RING_SIZE;
+    sk->recv_lowat           = 1;
+    sk->send_lowat           = 1;
+    sk->priority             = 0;
+    sk->peek_off             = -1;
+    memset(&sk->recv_timeout, 0, sizeof(sk->recv_timeout));
+    memset(&sk->send_timeout, 0, sizeof(sk->send_timeout));
+    memset(&sk->linger_opt, 0, sizeof(sk->linger_opt));
     memset(&sk->local_addr, 0, sizeof(sk->local_addr));
     memset(&sk->peer_addr, 0, sizeof(sk->peer_addr));
 }
@@ -281,6 +298,8 @@ static struct ucred unix_current_cred(void)
     return cred;
 }
 
+extern fd_file_handle *fd_dup(fd_file_handle *src);
+
 static void unix_release_fd_array(fd_file_handle **fds, size_t fd_count)
 {
     if (fds == NULL) return;
@@ -290,6 +309,27 @@ static void unix_release_fd_array(fd_file_handle **fds, size_t fd_count)
         free(fds[i]);
     }
     free(fds);
+}
+
+static fd_file_handle **unix_copy_fd_array(fd_file_handle **fds, size_t fd_count)
+{
+    if (fds == NULL || fd_count == 0) return NULL;
+
+    fd_file_handle **out = (fd_file_handle **)calloc(fd_count, sizeof(fd_file_handle *));
+    if (out == NULL) return NULL;
+
+    for (size_t i = 0; i < fd_count; i++) {
+        if (fds[i] == NULL) continue;
+
+        out[i] = fd_dup(fds[i]);
+        if (out[i] == NULL) {
+            unix_release_fd_array(out, fd_count);
+            return NULL;
+        }
+        out[i]->fd = (size_t)-1;
+    }
+
+    return out;
 }
 
 static void unix_stream_packet_free(struct unix_stream_packet *packet)
@@ -474,6 +514,7 @@ static ssize_t unix_stream_enqueue_locked(struct unix_sock *peer, const uint8_t 
         unix_stream_packet_free(packet);
         return -ENOMEM;
     }
+    poll_notify_event();
     return (ssize_t)len;
 }
 
@@ -532,6 +573,7 @@ static ssize_t unix_dgram_enqueue_locked(struct unix_sock *peer, const struct so
         unix_release_fd_array(fds, fd_count);
         return -ENOMEM;
     }
+    poll_notify_event();
     return (ssize_t)len;
 }
 
@@ -734,6 +776,7 @@ int unix_connect(void *impl, const struct sockaddr *addr, socklen_t addrlen)
         spin_unlock(&sk->lock);
         return -ENOMEM;
     }
+    poll_notify_event();
     spin_unlock(&listener->lock);
     spin_unlock(&sk->lock);
     free(peer_path);
@@ -822,6 +865,35 @@ int unix_getpeername(void *impl, struct sockaddr *addr, socklen_t *addrlen)
     return 0;
 }
 
+static int unix_copy_sockopt(void *optval, socklen_t *optlen, const void *src, socklen_t len)
+{
+    if (optval == NULL || optlen == NULL || src == NULL) return -EINVAL;
+    if (*optlen < len) return -EINVAL;
+    memcpy(optval, src, len);
+    *optlen = len;
+    return 0;
+}
+
+static int unix_getsockopt_int(void *optval, socklen_t *optlen, int value)
+{
+    return unix_copy_sockopt(optval, optlen, &value, (socklen_t)sizeof(value));
+}
+
+static int unix_read_sockopt_int(const void *optval, socklen_t optlen, int *out_value)
+{
+    if (optval == NULL || out_value == NULL || optlen < (socklen_t)sizeof(int)) return -EINVAL;
+    memcpy(out_value, optval, sizeof(int));
+    return 0;
+}
+
+static bool unix_sock_has_input_locked(struct unix_sock *sk)
+{
+    if (sk == NULL) return false;
+    if (sk->type == SOCK_DGRAM)
+        return sk->dg_queue != NULL && sk->dg_queue->head != NULL;
+    return sk->stream_queue != NULL && sk->stream_queue->head != NULL;
+}
+
 int unix_getsockopt(void *impl, int level, int optname, void *optval, socklen_t *optlen)
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
@@ -829,46 +901,78 @@ int unix_getsockopt(void *impl, int level, int optname, void *optval, socklen_t 
 
     if (level == SOL_SOCKET) {
         switch (optname) {
-        case SO_TYPE: {
-            int val = sk->type;
-            size_t copy_len = *optlen < (socklen_t)sizeof(val) ? (size_t)*optlen : sizeof(val);
-            memcpy(optval, &val, copy_len);
-            *optlen = (socklen_t)sizeof(val);
-            return 0;
-        }
-        case SO_ERROR: {
-            int val = 0;
-            size_t copy_len = *optlen < (socklen_t)sizeof(val) ? (size_t)*optlen : sizeof(val);
-            memcpy(optval, &val, copy_len);
-            *optlen = (socklen_t)sizeof(val);
-            return 0;
-        }
+        case SO_TYPE:
+            return unix_getsockopt_int(optval, optlen, sk->type);
+        case SO_ERROR:
+            return unix_getsockopt_int(optval, optlen, 0);
+        case SO_ACCEPTCONN:
+            return unix_getsockopt_int(optval, optlen, sk->state == UNIX_LISTENING ? 1 : 0);
+        case SO_PROTOCOL:
+            return unix_getsockopt_int(optval, optlen, sk->protocol);
+        case SO_DOMAIN:
+            return unix_getsockopt_int(optval, optlen, AF_UNIX);
+        case SO_SNDBUF:
+        case SO_SNDBUFFORCE:
+            return unix_getsockopt_int(optval, optlen, sk->send_buffer_size);
+        case SO_RCVBUF:
+        case SO_RCVBUFFORCE:
+            return unix_getsockopt_int(optval, optlen, sk->recv_buffer_size);
+        case SO_SNDLOWAT:
+            return unix_getsockopt_int(optval, optlen, sk->send_lowat);
+        case SO_RCVLOWAT:
+            return unix_getsockopt_int(optval, optlen, sk->recv_lowat);
+        case SO_REUSEADDR:
+            return unix_getsockopt_int(optval, optlen, sk->reuseaddr ? 1 : 0);
+        case SO_REUSEPORT:
+            return unix_getsockopt_int(optval, optlen, sk->reuseport ? 1 : 0);
+        case SO_KEEPALIVE:
+            return unix_getsockopt_int(optval, optlen, sk->keepalive ? 1 : 0);
+        case SO_BROADCAST:
+            return unix_getsockopt_int(optval, optlen, sk->broadcast ? 1 : 0);
+        case SO_PASSCRED:
+            return unix_getsockopt_int(optval, optlen, sk->passcred ? 1 : 0);
+        case SO_PASSSEC:
+            return unix_getsockopt_int(optval, optlen, sk->passsec ? 1 : 0);
+        case SO_PRIORITY:
+            return unix_getsockopt_int(optval, optlen, sk->priority);
+        case SO_PEEK_OFF:
+            return unix_getsockopt_int(optval, optlen, sk->peek_off);
+        case SO_TIMESTAMP_OLD:
+        case SO_TIMESTAMP_NEW:
+            return unix_getsockopt_int(optval, optlen, sk->timestamp_legacy ? 1 : 0);
+        case SO_TIMESTAMPNS_OLD:
+        case SO_TIMESTAMPNS_NEW:
+            return unix_getsockopt_int(optval, optlen, sk->timestampns_legacy ? 1 : 0);
+        case SO_TIMESTAMPING_OLD:
+        case SO_TIMESTAMPING_NEW:
+            return unix_getsockopt_int(optval, optlen, sk->timestamping_legacy ? 1 : 0);
+        case SO_SNDTIMEO_OLD:
+        case SO_SNDTIMEO_NEW:
+            return unix_copy_sockopt(optval, optlen, &sk->send_timeout, (socklen_t)sizeof(sk->send_timeout));
+        case SO_RCVTIMEO_OLD:
+        case SO_RCVTIMEO_NEW:
+            return unix_copy_sockopt(optval, optlen, &sk->recv_timeout, (socklen_t)sizeof(sk->recv_timeout));
+        case SO_LINGER:
+            return unix_copy_sockopt(optval, optlen, &sk->linger_opt, (socklen_t)sizeof(sk->linger_opt));
         case SO_PEERCRED: {
-            /* struct ucred { pid_t pid; uid_t uid; gid_t gid; } — 12 bytes */
-            int    pid  = 0;
-            uint32_t uid  = 0;
-            uint32_t gid  = 0;
+            struct ucred cred = {};
+            spin_lock(&sk->lock);
             if (sk->peer != NULL) {
-                pid = sk->peer->owner_pid;
-                uid = sk->peer->owner_uid;
-                gid = sk->peer->owner_gid;
+                cred.pid = sk->peer->owner_pid;
+                cred.uid = (int)sk->peer->owner_uid;
+                cred.gid = (int)sk->peer->owner_gid;
+            } else {
+                cred.pid = sk->owner_pid;
+                cred.uid = (int)sk->owner_uid;
+                cred.gid = (int)sk->owner_gid;
             }
-            struct { int pid; int uid; int gid; } ucred_buf;
-            ucred_buf.pid = pid;
-            ucred_buf.uid = (int)uid;
-            ucred_buf.gid = (int)gid;
-            size_t copy_len = *optlen < sizeof(ucred_buf) ? (size_t)*optlen : sizeof(ucred_buf);
-            memcpy(optval, &ucred_buf, copy_len);
-            *optlen = sizeof(ucred_buf);
-            return 0;
+            spin_unlock(&sk->lock);
+            return unix_copy_sockopt(optval, optlen, &cred, (socklen_t)sizeof(cred));
         }
-        case SO_PASSCRED: {
-            int val = sk->passcred ? 1 : 0;
-            size_t copy_len = *optlen < (socklen_t)sizeof(val) ? (size_t)*optlen : sizeof(val);
-            memcpy(optval, &val, copy_len);
-            *optlen = (socklen_t)sizeof(val);
-            return 0;
-        }
+        case SO_PEERSEC:
+        case SO_PEERGROUPS:
+        case SO_PEERPIDFD:
+            return -ENOPROTOOPT;
         default: return -ENOPROTOOPT;
         }
     }
@@ -881,18 +985,138 @@ int unix_setsockopt(void *impl, int level, int optname, const void *optval, sock
     if (sk == NULL) return -EINVAL;
     if (level != SOL_SOCKET) return -ENOPROTOOPT;
 
+    int int_value = 0;
     switch (optname) {
     case SO_PASSCRED:
-        if (optval == NULL || optlen < (socklen_t)sizeof(int)) return -EINVAL;
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
         spin_lock(&sk->lock);
-        sk->passcred = (*(const int *)optval) != 0;
+        sk->passcred = int_value != 0;
         spin_unlock(&sk->lock);
         return 0;
     case SO_REUSEADDR:
-    case SO_KEEPALIVE:
-    case SO_BROADCAST:
-        if (optval == NULL || optlen < (socklen_t)sizeof(int)) return -EINVAL;
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->reuseaddr = int_value != 0;
+        spin_unlock(&sk->lock);
         return 0;
+    case SO_REUSEPORT:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->reuseport = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_KEEPALIVE:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->keepalive = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_BROADCAST:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->broadcast = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_PASSSEC:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->passsec = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_SNDBUF:
+    case SO_SNDBUFFORCE:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        if (int_value < UNIX_RING_SIZE) int_value = UNIX_RING_SIZE;
+        spin_lock(&sk->lock);
+        sk->send_buffer_size = int_value;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_RCVBUF:
+    case SO_RCVBUFFORCE:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        if (int_value < UNIX_RING_SIZE) int_value = UNIX_RING_SIZE;
+        spin_lock(&sk->lock);
+        sk->recv_buffer_size = int_value;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_SNDLOWAT:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        if (int_value <= 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->send_lowat = int_value;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_RCVLOWAT:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        if (int_value <= 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->recv_lowat = int_value;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_PRIORITY:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->priority = int_value;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_PEEK_OFF:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->peek_off = int_value;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_TIMESTAMP_OLD:
+    case SO_TIMESTAMP_NEW:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->timestamp_legacy = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_TIMESTAMPNS_OLD:
+    case SO_TIMESTAMPNS_NEW:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->timestampns_legacy = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_TIMESTAMPING_OLD:
+    case SO_TIMESTAMPING_NEW:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        spin_lock(&sk->lock);
+        sk->timestamping_legacy = int_value != 0;
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_SNDTIMEO_OLD:
+    case SO_SNDTIMEO_NEW:
+        if (optval == NULL || optlen < (socklen_t)sizeof(struct timeval)) return -EINVAL;
+        spin_lock(&sk->lock);
+        memcpy(&sk->send_timeout, optval, sizeof(sk->send_timeout));
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_RCVTIMEO_OLD:
+    case SO_RCVTIMEO_NEW:
+        if (optval == NULL || optlen < (socklen_t)sizeof(struct timeval)) return -EINVAL;
+        spin_lock(&sk->lock);
+        memcpy(&sk->recv_timeout, optval, sizeof(sk->recv_timeout));
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_LINGER:
+        if (optval == NULL || optlen < (socklen_t)sizeof(struct linger)) return -EINVAL;
+        spin_lock(&sk->lock);
+        memcpy(&sk->linger_opt, optval, sizeof(sk->linger_opt));
+        spin_unlock(&sk->lock);
+        return 0;
+    case SO_DEBUG:
+    case SO_DONTROUTE:
+    case SO_OOBINLINE:
+    case SO_MARK:
+        if (unix_read_sockopt_int(optval, optlen, &int_value) < 0) return -EINVAL;
+        return 0;
+    case SO_PEERCRED:
+    case SO_PEERSEC:
+    case SO_PEERGROUPS:
+    case SO_PEERPIDFD:
+        return -ENOPROTOOPT;
     default:
         return -ENOPROTOOPT;
     }
@@ -1027,6 +1251,29 @@ ssize_t unix_recvfrom(void *impl, void *buf, size_t size, uint64_t flags,
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || (buf == NULL && size > 0)) return -EINVAL;
+
+    if (sk->type != SOCK_DGRAM)
+    {
+        ssize_t ret = unix_read(impl, buf, size, flags);
+        if (ret >= 0 && addr != NULL && addrlen != NULL)
+        {
+            spin_lock(&sk->lock);
+            if (sk->peer != NULL)
+            {
+                socklen_t copy_len =
+                    *addrlen < (socklen_t)sizeof(sk->peer_addr) ? *addrlen : (socklen_t)sizeof(sk->peer_addr);
+                memcpy(addr, &sk->peer_addr, copy_len);
+                *addrlen = sizeof(sk->peer_addr);
+            }
+            else
+            {
+                *addrlen = 0;
+            }
+            spin_unlock(&sk->lock);
+        }
+        return ret;
+    }
+
     bool nonblock = ((sk->flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
 
     spin_lock(&sk->lock);
@@ -1059,34 +1306,62 @@ int unix_poll(void *impl, size_t events)
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL) return -EINVAL;
 
+    int requested = (int)events;
     int revents = 0;
     spin_lock(&sk->lock);
 
+    if (sk->closed)
+        revents |= EPOLLHUP | EPOLLERR;
+
+    if (sk->state == UNIX_LISTENING) {
+        if (sk->conn_queue != NULL && sk->conn_queue->head != NULL)
+            revents |= EPOLLIN | EPOLLRDNORM;
+        if (!sk->closed)
+            revents |= EPOLLOUT | EPOLLWRNORM;
+        spin_unlock(&sk->lock);
+        return revents & (requested | EPOLLERR | EPOLLHUP | EPOLLRDHUP);
+    }
+
+    bool has_input = unix_sock_has_input_locked(sk);
+    if (has_input)
+        revents |= EPOLLIN | EPOLLRDNORM;
+
     if (sk->type == SOCK_DGRAM) {
-        if (sk->dg_queue != NULL && sk->dg_queue->head != NULL)
-            revents |= POLLIN;
-    } else {
-        if (sk->stream_queue != NULL && sk->stream_queue->head != NULL)
-            revents |= POLLIN;
+        if (!sk->closed)
+            revents |= EPOLLOUT | EPOLLWRNORM;
+
+        if (sk->peer != NULL) {
+            spin_lock(&sk->peer->lock);
+            if (sk->peer->closed) {
+                revents |= EPOLLHUP;
+                if (requested & EPOLLRDHUP)
+                    revents |= EPOLLRDHUP;
+            }
+            spin_unlock(&sk->peer->lock);
+        }
+
+        spin_unlock(&sk->lock);
+        return revents & (requested | EPOLLERR | EPOLLHUP | EPOLLRDHUP);
     }
 
     if (sk->peer != NULL) {
         spin_lock(&sk->peer->lock);
-        if (!sk->peer->closed)
-            revents |= POLLOUT;
+        if (sk->peer->closed) {
+            revents |= EPOLLIN | EPOLLRDNORM | EPOLLHUP;
+            if (requested & EPOLLRDHUP)
+                revents |= EPOLLRDHUP;
+        } else if (!sk->closed) {
+            revents |= EPOLLOUT | EPOLLWRNORM;
+        }
         spin_unlock(&sk->peer->lock);
-    } else if (sk->type == SOCK_DGRAM) {
-        revents |= POLLOUT;
+    } else if (sk->state == UNIX_CONNECTED || sk->closed) {
+        revents |= EPOLLIN | EPOLLRDNORM | EPOLLHUP;
+        if (requested & EPOLLRDHUP)
+            revents |= EPOLLRDHUP;
     }
 
-    if (sk->closed)
-        revents |= POLLHUP;
-
-    if (sk->state == UNIX_LISTENING && sk->conn_queue != NULL && sk->conn_queue->head != NULL)
-        revents |= POLLIN;
-
     spin_unlock(&sk->lock);
-    return revents & (int)events;
+    return revents & (requested | EPOLLERR | EPOLLHUP | EPOLLRDHUP);
 }
 
 int unix_close(void *impl)
@@ -1105,6 +1380,7 @@ int unix_close(void *impl)
         sk->peer->closed = true;
         sk->peer->peer   = NULL;
         spin_unlock(&sk->peer->lock);
+        poll_notify_event();
         sk->peer = NULL;
     }
 
@@ -1212,6 +1488,7 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || (buf == NULL && size > 0)) return -EINVAL;
     bool nonblock = ((sk->flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
+    bool peek = (flags & MSG_PEEK) != 0;
     if (out_fds != NULL) *out_fds = NULL;
     if (out_fd_count != NULL) *out_fd_count = 0;
     if (out_has_cred != NULL) *out_has_cred = false;
@@ -1236,18 +1513,27 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
             *addrlen = sizeof(dg->addr);
         }
         if (out_fds != NULL && out_fd_count != NULL && dg->fd_count > 0) {
-            *out_fds = dg->fds;
+            fd_file_handle **fds = peek ? unix_copy_fd_array(dg->fds, dg->fd_count) : dg->fds;
+            if (fds == NULL) {
+                spin_unlock(&sk->lock);
+                return -ENOMEM;
+            }
+            *out_fds = fds;
             *out_fd_count = dg->fd_count;
-            dg->fds = NULL;
-            dg->fd_count = 0;
+            if (!peek) {
+                dg->fds = NULL;
+                dg->fd_count = 0;
+            }
         }
         if (out_cred != NULL && out_has_cred != NULL && dg->has_cred && sk->passcred) {
             *out_cred = dg->cred;
             *out_has_cred = true;
         }
 
-        queue_remove_node(sk->dg_queue, sk->dg_queue->head);
-        unix_dgram_free(dg);
+        if (!peek) {
+            queue_remove_node(sk->dg_queue, sk->dg_queue->head);
+            unix_dgram_free(dg);
+        }
         spin_unlock(&sk->lock);
         return (ssize_t)n;
     }
@@ -1276,13 +1562,27 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
 
     size_t total = 0;
     bool ancillary_taken = false;
-    while (total < size && sk->stream_queue != NULL && sk->stream_queue->head != NULL) {
-        struct unix_stream_packet *packet = (struct unix_stream_packet *)sk->stream_queue->head->data;
+    lock_node *stream_node = sk->stream_queue != NULL ? sk->stream_queue->head : NULL;
+    while (total < size && stream_node != NULL) {
+        struct unix_stream_packet *packet = (struct unix_stream_packet *)stream_node->data;
+        lock_node *next_node = stream_node->next;
+        if (packet == NULL) {
+            if (!peek) queue_remove_node(sk->stream_queue, stream_node);
+            stream_node = next_node;
+            continue;
+        }
         if (!ancillary_taken && packet->fd_count > 0 && out_fds != NULL && out_fd_count != NULL) {
-            *out_fds = packet->fds;
+            fd_file_handle **fds = peek ? unix_copy_fd_array(packet->fds, packet->fd_count) : packet->fds;
+            if (fds == NULL) {
+                spin_unlock(&sk->lock);
+                return -ENOMEM;
+            }
+            *out_fds = fds;
             *out_fd_count = packet->fd_count;
-            packet->fds = NULL;
-            packet->fd_count = 0;
+            if (!peek) {
+                packet->fds = NULL;
+                packet->fd_count = 0;
+            }
             ancillary_taken = true;
         }
         if (out_cred != NULL && out_has_cred != NULL && !*out_has_cred && packet->has_cred && sk->passcred) {
@@ -1290,17 +1590,19 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
             *out_has_cred = true;
         }
 
-        size_t remain = packet->len - packet->offset;
+        size_t read_offset = packet->offset;
+        size_t remain = packet->len - read_offset;
         size_t n = MIN(size - total, remain);
         if (n > 0) {
-            memcpy(buf + total, packet->data + packet->offset, n);
-            packet->offset += n;
+            memcpy(buf + total, packet->data + read_offset, n);
+            if (!peek) packet->offset += n;
             total += n;
         }
-        if (packet->offset >= packet->len) {
-            queue_remove_node(sk->stream_queue, sk->stream_queue->head);
+        if (!peek && packet->offset >= packet->len) {
+            queue_remove_node(sk->stream_queue, stream_node);
             unix_stream_packet_free(packet);
         }
+        stream_node = next_node;
         if (n == 0) break;
     }
 

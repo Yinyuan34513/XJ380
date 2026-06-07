@@ -91,8 +91,31 @@ static inline bool zone_contains_block(zone_t *zone, uint64_t base, size_t order
     return true;
 }
 
+static inline bool block_list_node_valid(zone_t *zone, uint64_t base, size_t order)
+{
+    if (!zone_contains_block(zone, base, order)) return false;
+    if ((base & (order_to_block_size(order) - 1)) != 0) return false;
+
+    uint64_t start_pfn = base / PAGE_SIZE;
+    size_t   pages     = order_to_pages(order);
+    for (size_t i = 0; i < pages; i++)
+    {
+        if (!bitmap_get(&frame_allocator.bitmap, start_pfn + i)) return false;
+        if (bitmap_get(&using_regions, start_pfn + i)) return false;
+    }
+    return true;
+}
+
 static inline void push_block(zone_t *zone, size_t order, uint64_t base)
 {
+    if (!block_list_node_valid(zone, base, order))
+    {
+        write_serial_fmt("buddy: refused corrupt push zone=%s order=%llu base=0x%llx\n",
+                         zone != NULL ? zone->name : "(null)",
+                         (unsigned long long)order,
+                         (unsigned long long)base);
+        return;
+    }
     size_t index = order_to_index(order);
     block_list_set_next(base, zone->allocator.free_area[index]);
     zone->allocator.free_area[index] = base;
@@ -104,6 +127,15 @@ static inline uint64_t pop_block(zone_t *zone, size_t order)
     uint64_t head  = zone->allocator.free_area[index];
 
     if (head == 0) return 0;
+    if (!block_list_node_valid(zone, head, order))
+    {
+        write_serial_fmt("buddy: corrupt free-list head zone=%s order=%llu head=0x%llx\n",
+                         zone != NULL ? zone->name : "(null)",
+                         (unsigned long long)order,
+                         (unsigned long long)head);
+        zone->allocator.free_area[index] = 0;
+        return 0;
+    }
 
     zone->allocator.free_area[index] = block_list_next(head);
     block_list_set_next(head, 0);
@@ -118,6 +150,18 @@ static bool remove_block(zone_t *zone, size_t order, uint64_t base)
 
     while (curr != 0)
     {
+        if (!block_list_node_valid(zone, curr, order))
+        {
+            write_serial_fmt("buddy: corrupt free-list node zone=%s order=%llu node=0x%llx prev=0x%llx want=0x%llx\n",
+                             zone != NULL ? zone->name : "(null)",
+                             (unsigned long long)order,
+                             (unsigned long long)curr,
+                             (unsigned long long)prev,
+                             (unsigned long long)base);
+            if (prev == 0) zone->allocator.free_area[index] = 0;
+            else block_list_set_next(prev, 0);
+            return false;
+        }
         uint64_t next = block_list_next(curr);
 
         if (curr == base)
@@ -345,35 +389,30 @@ EXPORT_SYMBOL(alloc_frames);
 void free_frames(uint64_t addr, size_t count)
 {
     if (addr == 0 || count == 0) return;
+    if ((addr & (PAGE_SIZE - 1)) != 0) return;
 
     size_t required_pages = count_to_block_pages(count);
-    size_t order          = count_to_order(count);
-    if (!order_valid(order)) return;
 
-    uint64_t idx = addr / PAGE_SIZE;
     for (size_t off = 0; off < required_pages; off++)
     {
-        if (bitmap_get(&using_regions, idx + off) == false) return;
-        if (bitmap_get(&frame_allocator.bitmap, idx + off) == false) return;
-    }
+        uint64_t page = addr + off * PAGE_SIZE;
+        uint64_t idx  = page / PAGE_SIZE;
 
-    enum zone_type type = phys_to_zone_type(addr);
-    zone_t        *zone = zones[type];
-    if (!zone) return;
+        if (bitmap_get(&using_regions, idx) == false) continue;
+        if (bitmap_get(&frame_allocator.bitmap, idx) == false) continue;
 
-    for (uint64_t a = addr; a < addr + required_pages * PAGE_SIZE; a += PAGE_SIZE)
-    {
-        address_unref(a);
-    }
-    for (uint64_t a = addr; a < addr + required_pages * PAGE_SIZE; a += PAGE_SIZE)
-    {
-        if (!address_can_free(a)) return;
-    }
+        enum zone_type type = phys_to_zone_type(page);
+        zone_t        *zone = zones[type];
+        if (!zone) continue;
 
-    spin_lock(&zone->allocator.lock);
-    buddy_free_zone(zone, addr, order);
-    bitmap_set_range(&using_regions, idx, idx + required_pages, false);
-    spin_unlock(&zone->allocator.lock);
+        address_unref(page);
+        if (!address_can_free(page)) continue;
+
+        spin_lock(&zone->allocator.lock);
+        bitmap_set(&using_regions, idx, false);
+        buddy_free_zone(zone, page, MIN_ORDER);
+        spin_unlock(&zone->allocator.lock);
+    }
 }
 
 EXPORT_SYMBOL(free_frames);

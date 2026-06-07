@@ -53,6 +53,17 @@ static anonfs_memfd_t *sys_fd_memfd(fd_file_handle *handle)
     return &anon->u.memfd;
 }
 
+static bool sys_fd_uses_offset(fd_file_handle *handle)
+{
+    if (handle == NULL || handle->node == NULL) return false;
+    if (handle->node->type & (file_pipe | file_socket)) return false;
+
+    // eventfd/timerfd/signalfd/inotify are stream-like anon fds; memfd is the seekable anon object.
+    if (handle->node->type & file_anon) return sys_fd_memfd(handle) != NULL;
+
+    return handle->node->size != (uint64_t)-1;
+}
+
 static bool sys_memfd_resize_sealed(anonfs_memfd_t *memfd, uint64_t new_size, uint64_t *old_size_out)
 {
     if (memfd == NULL) return false;
@@ -161,6 +172,63 @@ static bool checked_mul_size(size_t a, size_t b, size_t *out)
     if (a != 0 && b > (size_t)-1 / a) return false;
     *out = a * b;
     return true;
+}
+
+static bool checked_timespec_to_ns(const struct timespec *ts, uint64_t *out)
+{
+    if (ts == NULL || out == NULL) return false;
+    if (ts->tv_sec < 0 || ts->tv_nsec < 0 || ts->tv_nsec >= 1000000000L) return false;
+    if ((uint64_t)ts->tv_sec > UINT64_MAX / 1000000000ULL) return false;
+    uint64_t sec_ns = (uint64_t)ts->tv_sec * 1000000000ULL;
+    if (sec_ns > UINT64_MAX - (uint64_t)ts->tv_nsec) return false;
+    *out = sec_ns + (uint64_t)ts->tv_nsec;
+    return true;
+}
+
+static uint64_t poll_empty_wait_ns(uint64_t timeout_ns, bool infinite)
+{
+    if (timeout_ns == 0 && !infinite) return 0;
+
+    uint64_t remaining = timeout_ns;
+    while (infinite || remaining != 0)
+    {
+        if (signals_pending_quick(get_current_task())) return (uint64_t)-EINTR;
+        uint64_t sleep_ns = infinite || remaining > 100000000ULL ? 100000000ULL : remaining;
+        scheduler_sleep_ns(sleep_ns);
+        if (!infinite) remaining -= sleep_ns;
+    }
+
+    return 0;
+}
+
+static void poll_wait_slice(uint64_t start_time, uint64_t timeout_ns, bool infinite, uint64_t *seen_generation)
+{
+    if (seen_generation != NULL)
+    {
+        uint64_t current_generation = poll_event_generation();
+        if (current_generation != *seen_generation)
+        {
+            *seen_generation = current_generation;
+            return;
+        }
+    }
+
+    uint64_t sleep_ns = 100000ULL;
+    if (!infinite)
+    {
+        uint64_t elapsed = nanoTime() - start_time;
+        if (elapsed >= timeout_ns) return;
+        uint64_t remaining = timeout_ns - elapsed;
+        if (remaining < sleep_ns) sleep_ns = remaining;
+    }
+
+    open_interrupt;
+    poll_waiter_arm();
+    scheduler_sleep_ns(sleep_ns);
+    poll_waiter_disarm();
+    close_interrupt;
+
+    if (seen_generation != NULL) *seen_generation = poll_event_generation();
 }
 
 static bool align_up_u64(uint64_t value, uint64_t align, uint64_t *out)
@@ -574,10 +642,26 @@ static uint8_t dirent_type_from_node(vfs_node_t node)
     if (node->type & file_symlink) return DT_LNK;
     if (node->type & file_none) return DT_REG;
     if (node->type & file_block) return DT_BLK;
-    if (node->type & file_stream) return DT_CHR;
+    if (node->type & (file_stream | file_ptmx | file_pts)) return DT_CHR;
     if (node->type & file_socket) return DT_SOCK;
     if (node->type & file_dir) return DT_DIR;
     return DT_UNKNOWN;
+}
+
+static uint64_t linux_mkdev(uint32_t major, uint32_t minor)
+{
+    return ((uint64_t)(major & 0xfffU) << 8) | (uint64_t)(minor & 0xffU) |
+           ((uint64_t)(minor & 0xfffff00U) << 12);
+}
+
+static uint32_t linux_major(uint64_t dev)
+{
+    return (uint32_t)(((dev >> 8) & 0xfffU) | ((dev >> 32) & 0xfffff000U));
+}
+
+static uint32_t linux_minor(uint64_t dev)
+{
+    return (uint32_t)((dev & 0xffU) | ((dev >> 12) & 0xfffff00U));
 }
 
 static page_directory_t *current_user_pagedir()
@@ -646,11 +730,13 @@ static uint64_t fill_stat_from_node(vfs_node_t node, struct stat *out)
                                    : (node->type & file_socket) ? S_IFSOCK
                                    : (node->type & file_pipe)   ? S_IFIFO
                                    : (node->type & file_none)   ? S_IFREG
-                                   : (node->type & file_stream) ? S_IFCHR
+                                   : (node->type & (file_stream | file_ptmx | file_pts)) ? S_IFCHR
                                                                 : S_IFREG);
     out->st_nlink   = 1;
     out->st_dev     = (long)node->dev;
-    out->st_rdev    = (long)node->rdev;
+    out->st_rdev    = (long)(node->type & file_ptmx ? linux_mkdev(5, 2) :
+                             node->type & file_pts  ? linux_mkdev(136, node->inode) :
+                                                      node->rdev);
     out->st_blksize = PAGE_SIZE;
     out->st_blocks  = (node->size == (uint64_t)-1) ? 0 : (node->size + PAGE_SIZE - 1) / PAGE_SIZE;
     out->st_atim = (struct timespec){.tv_sec = atime_ns / 1000000000ULL, .tv_nsec = atime_ns % 1000000000ULL};
@@ -774,6 +860,7 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     if (bounce == NULL) return -ENOMEM;
 
     size_t total = 0;
+    bool   use_offset = !socket_mode && sys_fd_uses_offset(handle);
     while (total < size)
     {
         size_t chunk = MIN(size - total, bounce_bytes);
@@ -796,7 +883,7 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
             continue;
         }
 
-        size_t write_offset = (handle->node->type & file_pipe) ? 0 : handle->offset;
+        size_t write_offset = use_offset ? handle->offset : 0;
         size_t wrote        = vfs_write(handle->node, bounce, write_offset, chunk);
         int64_t wrote_status = vfs_io_status(wrote);
         if ((handle->node->type & file_pipe) && wrote_status == -EPIPE)
@@ -810,7 +897,7 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
             free(bounce);
             return total > 0 ? (int64_t)total : wrote_status;
         }
-        if (!(handle->node->type & file_pipe) && handle->node->size != (uint64_t)-1) handle->offset += (size_t)wrote_status;
+        if (use_offset) handle->offset += (size_t)wrote_status;
         total += (size_t)wrote_status;
         if ((size_t)wrote_status < chunk) break;
     }
@@ -832,7 +919,26 @@ static bool trace_xbps_task()
            strstr(task->name, "dbus") != NULL || strstr(task->parent_group->name, "dbus") != NULL ||
            strstr(task->name, "udev") != NULL || strstr(task->parent_group->name, "udev") != NULL ||
            strstr(task->name, "weston") != NULL || strstr(task->parent_group->name, "weston") != NULL ||
-           strstr(task->name, "seatd") != NULL || strstr(task->parent_group->name, "seatd") != NULL;
+           strstr(task->name, "ptyxis") != NULL || strstr(task->parent_group->name, "ptyxis") != NULL ||
+           strstr(task->name, "seatd") != NULL || strstr(task->parent_group->name, "seatd") != NULL ||
+           strstr(task->name, "xfce") != NULL || strstr(task->parent_group->name, "xfce") != NULL ||
+           strstr(task->name, "xfconf") != NULL || strstr(task->parent_group->name, "xfconf") != NULL ||
+           strstr(task->name, "Thunar") != NULL || strstr(task->parent_group->name, "Thunar") != NULL ||
+           strstr(task->name, "xfsettingsd") != NULL || strstr(task->parent_group->name, "xfsettingsd") != NULL ||
+           strstr(task->name, "gdbus") != NULL || strstr(task->parent_group->name, "gdbus") != NULL ||
+           strstr(task->name, "gio") != NULL || strstr(task->parent_group->name, "gio") != NULL;
+#endif
+}
+
+static bool trace_pango_task()
+{
+#if !CONFIG_KERNEL_UDEV_TRACE
+    return false;
+#else
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "pango") != NULL || strstr(task->parent_group->name, "pango") != NULL ||
+           strstr(task->name, "fontcon") != NULL || strstr(task->parent_group->name, "fontcon") != NULL;
 #endif
 }
 
@@ -843,11 +949,18 @@ static bool trace_udev_task()
 #else
     tcb_t task = get_current_task();
     if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
-    return strstr(task->name, "bash") != NULL || strstr(task->parent_group->name, "bash") != NULL ||
+    return trace_pango_task() || strstr(task->name, "bash") != NULL ||
+           strstr(task->parent_group->name, "bash") != NULL ||
            strstr(task->name, "dbus") != NULL || strstr(task->parent_group->name, "dbus") != NULL ||
            strstr(task->name, "udev") != NULL || strstr(task->parent_group->name, "udev") != NULL ||
            strstr(task->name, "weston") != NULL || strstr(task->parent_group->name, "weston") != NULL ||
            strstr(task->name, "seatd") != NULL || strstr(task->parent_group->name, "seatd") != NULL ||
+           strstr(task->name, "xfce") != NULL || strstr(task->parent_group->name, "xfce") != NULL ||
+           strstr(task->name, "xfconf") != NULL || strstr(task->parent_group->name, "xfconf") != NULL ||
+           strstr(task->name, "Thunar") != NULL || strstr(task->parent_group->name, "Thunar") != NULL ||
+           strstr(task->name, "xfsettingsd") != NULL || strstr(task->parent_group->name, "xfsettingsd") != NULL ||
+           strstr(task->name, "gdbus") != NULL || strstr(task->parent_group->name, "gdbus") != NULL ||
+           strstr(task->name, "gio") != NULL || strstr(task->parent_group->name, "gio") != NULL ||
            strstr(task->name, "find") != NULL || strstr(task->parent_group->name, "find") != NULL ||
            strstr(task->name, "ls") != NULL || strstr(task->parent_group->name, "ls") != NULL;
 #endif
@@ -893,6 +1006,15 @@ static void trace_udev_fd_result(const char *op, int fd, fd_file_handle *handle,
     {
         free(path);
         return;
+    }
+    if (trace_pango_task())
+    {
+        static uint32_t pango_fd_trace_count = 0;
+        if (pango_fd_trace_count++ >= 256)
+        {
+            free(path);
+            return;
+        }
     }
 
     write_serial_fmt("[udev-trace] sys:%s task=%s fd=%d path=%s ret=%lld arg_a=%llu arg_b=%llu flags=0x%llx off=%llu node=%p type=0x%x fsid=%u handle=%p rdev=%llu size=%llu child=%llu ref=%u\n",
@@ -969,6 +1091,23 @@ static void trace_udev_sockaddr(const char *op, const struct sockaddr *addr, soc
                          (unsigned)addrlen);
         break;
     }
+}
+
+static bool trace_xfce_task()
+{
+#if !CONFIG_KERNEL_UDEV_TRACE
+    return false;
+#else
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || !task->parent_group->linux_abi) return false;
+    return strstr(task->name, "xfce") != NULL || strstr(task->parent_group->name, "xfce") != NULL ||
+           strstr(task->name, "xfconf") != NULL || strstr(task->parent_group->name, "xfconf") != NULL ||
+           strstr(task->name, "Thunar") != NULL || strstr(task->parent_group->name, "Thunar") != NULL ||
+           strstr(task->name, "xfsettingsd") != NULL || strstr(task->parent_group->name, "xfsettingsd") != NULL ||
+           strstr(task->name, "gdbus") != NULL || strstr(task->parent_group->name, "gdbus") != NULL ||
+           strstr(task->name, "gio") != NULL || strstr(task->parent_group->name, "gio") != NULL ||
+           strstr(task->name, "dbus") != NULL || strstr(task->parent_group->name, "dbus") != NULL;
+#endif
 }
 
 static void mirror_linux_output_to_serial(const char *tag, const uint8_t *buffer, size_t size)
@@ -1059,6 +1198,8 @@ static size_t ioctl_arg_size(uint32_t request)
     case TIOCGETD:
     case TIOCSETD:
     case TIOCGSID:
+    case TIOCPKT:
+    case TIOCGPKT:
     case TIOCGDEV:
     case TIOCOUTQ:
     case FIONREAD:
@@ -1106,6 +1247,7 @@ static bool ioctl_writes_user(uint32_t request)
     case TIOCGPGRP:
     case TIOCGETD:
     case TIOCGSID:
+    case TIOCGPKT:
     case TIOCGDEV:
     case TIOCOUTQ:
     case FIONREAD:
@@ -1145,6 +1287,7 @@ static bool ioctl_reads_user(uint32_t request)
     case TIOCSPTLCK:
     case TIOCSPGRP:
     case TIOCSETD:
+    case TIOCPKT:
     case TIOCMBIS:
     case TIOCMBIC:
     case TIOCMSET:
@@ -1207,7 +1350,7 @@ static int64_t read_to_user_buffer(fd_file_handle *handle, uint8_t *buffer, size
     }
 
     free(bounce);
-    if (update_offset && handle->node->size != (uint64_t)-1) handle->offset += total;
+    if (update_offset && sys_fd_uses_offset(handle)) handle->offset += total;
     return (int64_t)total;
 }
 
@@ -1603,11 +1746,24 @@ sys_(open, char *path0, uint64_t flags, uint64_t mode)
 sys_(close, int fd)
 {
     if (unlikely(fd < 0)) return SYSCALL_FAULT_(EINVAL);
-    fd_file_handle *handle = (fd_file_handle *)queue_remove_at(get_current_task()->parent_group->file_open, fd);
+    pcb_t process = get_current_task()->parent_group;
+    fd_file_handle *handle = (fd_file_handle *)queue_remove_at(process->file_open, fd);
     if (handle == NULL) return SYSCALL_FAULT_(EBADF);
     char *close_path = handle->node != NULL ? vfs_get_fullpath(handle->node) : NULL;
     bool trace_close_done = trace_udev_path(close_path);
     trace_udev_fd_result("close", fd, handle, 0, 0, 0);
+    if (trace_close_done)
+    {
+        fd_file_handle *after_remove = (fd_file_handle *)queue_get(process->file_open, fd);
+        write_serial_fmt("[udev-trace] sys:close-removed task=%s pid=%llu tid=%llu fd=%d after=%p queue=%p size=%llu\n",
+                         get_current_task() != NULL ? get_current_task()->name : "(null)",
+                         process != NULL ? (unsigned long long)process->pid : 0ULL,
+                         get_current_task() != NULL ? (unsigned long long)get_current_task()->tid : 0ULL,
+                         fd,
+                         after_remove,
+                         process != NULL ? process->file_open : NULL,
+                         process != NULL && process->file_open != NULL ? (unsigned long long)process->file_open->size : 0ULL);
+    }
     vfs_close(handle->node);
     if (trace_close_done)
         write_serial_fmt("[udev-trace] sys:close-done task=%s fd=%d path=%s\n",
@@ -1751,7 +1907,8 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     {
         return SYSCALL_FAULT_(EWOULDBLOCK);
     }
-    if (handle->node->size != (uint64_t)-1)
+    bool use_offset = sys_fd_uses_offset(handle);
+    if (use_offset && handle->node->size != (uint64_t)-1)
     {
         if (handle->offset >= handle->node->size)
         {
@@ -1761,7 +1918,7 @@ sys_(read, int fd, uint8_t *buffer, size_t size)
     }
 read:;
     {
-        int64_t read_ret = read_to_user_buffer(handle, buffer, size, false, handle->offset, true);
+        int64_t read_ret = read_to_user_buffer(handle, buffer, size, false, use_offset ? handle->offset : 0, true);
         if (read_ret < 0 && read_ret != -EWOULDBLOCK && read_ret != -EAGAIN)
             trace_udev_fd_result("read-error", fd, handle, size, 0, read_ret);
         return read_ret < 0 ? SYSCALL_FAULT_((int)-read_ret) : (uint64_t)read_ret;
@@ -2970,6 +3127,7 @@ sys_(ioctl, int fd, uint64_t options, void *arg2)
     }
 
     bool immediate_int_arg = request == KDSETMODE || request == KDSKBMODE || request == VT_ACTIVATE ||
+                             request == TIOCGPTPEER ||
                              request == VT_WAITACTIVE ||
                              (_IOC_TYPE(request) == 'E' && (_IOC_NR(request) == 0x90 || _IOC_NR(request) == 0x91));
     size_t arg_size = immediate_int_arg ? 0 : ioctl_arg_size(request);
@@ -2990,7 +3148,7 @@ sys_(ioctl, int fd, uint64_t options, void *arg2)
         karg = NULL;
     }
 
-    if ((handle->node->type & file_socket) && request == FIONBIO)
+    if (request == FIONBIO)
     {
         int nonblock = 0;
         if (karg == NULL)
@@ -3005,7 +3163,8 @@ sys_(ioctl, int fd, uint64_t options, void *arg2)
             handle->flags &= ~O_NONBLOCK;
             handle->node->flags &= ~O_NONBLOCK;
         }
-        int ret = socket_apply_flags(handle->node, handle->node->flags);
+        int ret = 0;
+        if (handle->node->type & file_socket) ret = socket_apply_flags(handle->node, handle->node->flags);
         if (arg_size > 0) free(karg);
         if (trace_udev_task()) write_serial_fmt("[udev-trace] sys:ioctl-fionbio ret=%d\n", ret);
         return ret < 0 ? SYSCALL_FAULT_(-ret) : 0;
@@ -3587,6 +3746,44 @@ sys_(madvise, uint64_t addr, size_t length, int advice)//掩饰一下啦
     return 0;
 }
 
+static uint64_t validate_memory_lock_range(uint64_t addr, size_t length)
+{
+    if (length == 0) return 0;
+
+    uint64_t aligned_len = 0;
+    uint64_t page_addr = addr & ~(PAGE_SIZE - 1);
+    uint64_t page_offset = addr - page_addr;
+    if (!align_up_u64((uint64_t)length + page_offset, PAGE_SIZE, &aligned_len)) return SYSCALL_FAULT_(EINVAL);
+    if (check_user_overflow(page_addr, aligned_len)) return SYSCALL_FAULT_(ENOMEM);
+
+    return 0;
+}
+
+sys_(mlock, uint64_t addr, size_t length)
+{
+    return validate_memory_lock_range(addr, length);
+}
+
+sys_(munlock, uint64_t addr, size_t length)
+{
+    return validate_memory_lock_range(addr, length);
+}
+
+sys_(mlockall, int flags)
+{
+    static constexpr int MCL_CURRENT = 1;
+    static constexpr int MCL_FUTURE = 2;
+    static constexpr int MCL_ONFAULT = 4;
+
+    if ((flags & ~(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)) != 0) return SYSCALL_FAULT_(EINVAL);
+    return 0;
+}
+
+sys_(munlockall)
+{
+    return 0;
+}
+
 sys_(mprotect, uint64_t addr, size_t length, uint64_t prot)
 {
     if (length == 0) return 0;
@@ -3906,11 +4103,46 @@ sys_(exit_group, int exit_code)
     cpu_hlt;
 }
 
+static int poll_node_events(vfs_node_t node, short events)
+{
+    if (node == NULL) return -EBADF;
+
+    extern vfs_callback_t fs_callbacks[256];
+
+    uint32_t wanted = poll_to_epoll_comp(events);//转换
+    if (events & POLLIN) wanted |= EPOLLIN;
+    if (events & POLLOUT) wanted |= EPOLLOUT;//保险，其实已经有了喵
+
+    if (node->type & file_epoll)
+    {
+        errno_t ret = vfs_poll(node, wanted);
+        if (ret < 0) return 0;
+        return (int)epoll_to_poll_comp((uint32_t)ret);
+    }
+
+    if (fs_callbacks[node->fsid]->poll == (void *)empty)//empty怎么又好几个实现以前
+    {
+        if (node->type & (file_stream | file_pipe | file_socket | file_anon | file_ptmx | file_pts))
+            return 0;//这些
+
+        int out = 0;
+        if (events & POLLIN) out |= POLLIN;
+        if (events & POLLOUT) out |= POLLOUT;
+        return out;
+    }
+
+    errno_t ret = vfs_poll(node, wanted);//嗯嗯
+    if (ret < 0) return 0;
+
+    return (int)epoll_to_poll_comp((uint32_t)ret);//反过来
+}//大坑
+
 static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t timeout)
 {
     int      ready      = 0;
     uint64_t start_time = nanoTime();
     uint64_t timeout_ns = timeout == (size_t)-1 ? (uint64_t)-1 : timeout * 1000000ULL;
+    uint64_t seen_generation = poll_event_generation();
     bool     sigexit    = false;
 
     extern vfs_callback_t fs_callbacks[256];
@@ -3931,16 +4163,7 @@ static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t tim
                 continue;
             }
             vfs_node_t      node   = handle->node;
-            if (fs_callbacks[node->fsid]->poll == (void *)empty)
-            {
-                if (fds_user[i].events & POLLIN || fds_user[i].events & POLLOUT)
-                {
-                    fds_user[i].revents = fds_user[i].events & POLLIN ? POLLIN : POLLOUT;
-                    ready++;
-                }
-                continue;
-            }
-            int revents = (int)epoll_to_poll_comp(vfs_poll(node, poll_to_epoll_comp(fds_user[i].events)));
+            int revents = (int)poll_node_events(node,fds_user[i].events);//结合
             if (revents > 0)
             {
                 fds_user[i].revents = (short)revents;
@@ -3952,12 +4175,28 @@ static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t tim
 
         if (ready > 0 || sigexit) break;
 
-        open_interrupt;
-        scheduler_yield();
-        __asm__ volatile("pause");
-    } while (timeout != 0 && ((int)timeout == -1 || (nanoTime() - start_time) < timeout_ns));
+        poll_wait_slice(start_time, timeout_ns, timeout == (size_t)-1, &seen_generation);
+    } while (timeout != 0 && (timeout == (size_t)-1 || (nanoTime() - start_time) < timeout_ns));
 
     close_interrupt;
+
+    if (trace_xfce_task())
+    {
+        write_serial_fmt("[xfce-trace] sys:poll-scan task=%s nfds=%llu timeout=%lld ready=%d elapsed=%llu",
+                         trace_task_name(),
+                         (unsigned long long)nfds,
+                         timeout == (size_t)-1 ? -1LL : (long long)timeout,
+                         ready,
+                         (unsigned long long)(nanoTime() - start_time));
+        size_t sample = MIN(nfds, (size_t)4);
+        for (size_t i = 0; i < sample; i++)
+            write_serial_fmt(" fd%llu=%d ev=0x%x rev=0x%x",
+                             (unsigned long long)i,
+                             fds_user[i].fd,
+                             (unsigned)(uint16_t)fds_user[i].events,
+                             (unsigned)(uint16_t)fds_user[i].revents);
+        write_serial_fmt("\n");
+    }
 
     if (!ready && sigexit) return (size_t)-EINTR;
     return ready;
@@ -3974,7 +4213,7 @@ static epoll_file_t *epoll_from_fd(int epfd)
     return (epoll_file_t *)handle->node->handle;
 }
 
-static epoll_watch_t *epoll_find_watch(epoll_file_t *ep, int fd)
+static epoll_watch_t *epoll_find_watch_fd(epoll_file_t *ep, int fd)
 {
     if (ep == NULL || ep->watches == NULL) return NULL;
 
@@ -3993,6 +4232,66 @@ static epoll_watch_t *epoll_find_watch(epoll_file_t *ep, int fd)
     return found;
 }
 
+static uint32_t epoll_expand_event_aliases(uint32_t events)
+{
+    if (events & EPOLLIN) events |= EPOLLRDNORM;
+    if (events & EPOLLRDNORM) events |= EPOLLIN;
+    if (events & EPOLLOUT) events |= EPOLLWRNORM;
+    if (events & EPOLLWRNORM) events |= EPOLLOUT;
+    return events;
+}
+
+static uint32_t epoll_query_events(uint32_t events)
+{
+    return epoll_expand_event_aliases(events) | EPOLLERR | EPOLLHUP | EPOLLNVAL | EPOLLRDHUP;
+}
+
+static uint32_t epoll_filter_ready_events(uint32_t requested, uint32_t ready)
+{
+    uint32_t out = ready & (requested | EPOLLERR | EPOLLHUP | EPOLLNVAL | EPOLLRDHUP);
+    if ((requested & EPOLLIN) && (ready & EPOLLRDNORM)) out |= EPOLLIN;
+    if ((requested & EPOLLRDNORM) && (ready & EPOLLIN)) out |= EPOLLRDNORM;
+    if ((requested & EPOLLOUT) && (ready & EPOLLWRNORM)) out |= EPOLLOUT;
+    if ((requested & EPOLLWRNORM) && (ready & EPOLLOUT)) out |= EPOLLWRNORM;
+    return out;
+}
+
+static int epoll_poll_node(vfs_node_t node, uint32_t events, uint32_t *revents)
+{
+    if (revents == NULL) return -EINVAL;
+    *revents = 0;
+    if (node == NULL) return -EBADF;
+
+    extern vfs_callback_t fs_callbacks[256];
+    if (node->type & file_epoll)
+    {
+        errno_t ret = vfs_poll(node, epoll_query_events(events));
+        if (ret < 0)
+        {
+            *revents = 0;
+            return 0;
+        }
+        *revents = (uint32_t)ret;
+        return 0;
+    }
+
+    if (fs_callbacks[node->fsid]->poll == (void *)empty)
+    {
+        *revents = 0;
+        return 0;
+    }
+
+    uint32_t wanted = epoll_query_events(events);
+    errno_t ret = vfs_poll(node, wanted);
+    if(ret<0)
+    {
+        *revents=0;//重要的，这tm是指针
+        return 0;
+    }
+    *revents = (uint32_t)ret;
+    return 0;
+}
+
 static int epoll_poll_fd(int fd, uint32_t events, uint32_t *revents)
 {
     if (revents == NULL) return -EINVAL;
@@ -4005,23 +4304,50 @@ static int epoll_poll_fd(int fd, uint32_t events, uint32_t *revents)
     fd_file_handle *handle = (fd_file_handle *)queue_get(process->file_open, fd);
     if (handle == NULL || handle->node == NULL) return -EBADF;
 
-    extern vfs_callback_t fs_callbacks[256];
-    vfs_node_t node = handle->node;
-    if (fs_callbacks[node->fsid]->poll == (void *)empty)
-    {
-        if (events & (EPOLLIN | EPOLLOUT | EPOLLRDNORM | EPOLLWRNORM))
-        {
-            if (events & (EPOLLIN | EPOLLRDNORM)) *revents |= EPOLLIN;
-            if (events & (EPOLLOUT | EPOLLWRNORM)) *revents |= EPOLLOUT;
-        }
-        return 0;
-    }
+    return epoll_poll_node(handle->node, events, revents);
+}
 
-    uint32_t wanted = events;
-    if (events & EPOLLRDNORM) wanted |= EPOLLIN;
-    if (events & EPOLLWRNORM) wanted |= EPOLLOUT;
-    *revents = vfs_poll(node, wanted);
-    return 0;
+static fd_file_handle *epoll_watch_handle(epoll_watch_t *watch)
+{
+    return watch != NULL ? (fd_file_handle *)watch->handle : NULL;
+}
+
+uint32_t epoll_file_poll(epoll_file_t *ep, uint32_t events)
+{
+    if (ep == NULL || ep->watches == NULL) return EPOLLERR;
+    if ((events & (EPOLLIN | EPOLLRDNORM)) == 0) return 0;
+
+    uint32_t out = 0;
+    spin_lock(&ep->watches->lock);
+    queue_foreach(ep->watches, node)
+    {
+        epoll_watch_t *watch = (epoll_watch_t *)node->data;
+        fd_file_handle *handle = epoll_watch_handle(watch);
+        if (handle == NULL) continue;
+
+        uint32_t revents = 0;
+        int poll_ret = epoll_poll_node(handle->node, watch->event.events, &revents);
+        if (poll_ret < 0) revents = EPOLLERR;
+        revents = epoll_filter_ready_events(watch->event.events, revents);
+        if (revents == 0) continue;
+
+        out = EPOLLIN | EPOLLRDNORM;
+        break;
+    }
+    spin_unlock(&ep->watches->lock);
+    return out;
+}
+
+void epoll_watch_free(epoll_watch_t *watch)
+{
+    if (watch == NULL) return;
+    fd_file_handle *handle = epoll_watch_handle(watch);
+    if (handle != NULL)
+    {
+        vfs_close(handle->node);
+        free(handle);
+    }
+    free(watch);
 }
 
 static void epoll_free_file(epoll_file_t *ep)
@@ -4033,7 +4359,7 @@ static void epoll_free_file(epoll_file_t *ep)
         {
             epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
             if (watch == NULL) break;
-            free(watch);
+            epoll_watch_free(watch);
         }
         queue_destroy(ep->watches);
     }
@@ -4070,6 +4396,7 @@ static uint64_t epoll_create_common(int flags)
     node->handle = ep;
     node->fsid = 0;
     node->size = 0;
+    node->refcount = 1;
 
     fd_file_handle *fd_handle = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
     if (fd_handle == NULL)
@@ -4126,21 +4453,40 @@ sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event)
             return SYSCALL_FAULT_(EFAULT);
     }
 
-    epoll_watch_t *watch = epoll_find_watch(ep, fd);
+    if (trace_xfce_task())
+        write_serial_fmt("[xfce-trace] sys:epoll_ctl task=%s epfd=%d op=%d fd=%d events=0x%x data=0x%llx\n",
+                         trace_task_name(),
+                         epfd,
+                         op,
+                         fd,
+                         (unsigned)kev.events,
+                         (unsigned long long)kev.data.u64);
+
+    epoll_watch_t *watch = epoll_find_watch_fd(ep, fd);
     switch (op)
     {
     case EPOLL_CTL_ADD:
+    {
         if (watch != NULL) return SYSCALL_FAULT_(EEXIST);
         watch = (epoll_watch_t *)calloc(1, sizeof(epoll_watch_t));
         if (watch == NULL) return SYSCALL_FAULT_(ENOMEM);
         watch->fd = fd;
-        watch->event = kev;
-        if (lock_queue_enqueue(ep->watches, watch) == (size_t)-1)
+        fd_file_handle *watch_handle = fd_dup(target);
+        if (watch_handle == NULL)
         {
             free(watch);
             return SYSCALL_FAULT_(ENOMEM);
         }
+        watch_handle->fd = (size_t)-1;
+        watch->handle = watch_handle;
+        watch->event = kev;
+        if (lock_queue_enqueue(ep->watches, watch) == (size_t)-1)
+        {
+            epoll_watch_free(watch);
+            return SYSCALL_FAULT_(ENOMEM);
+        }
         return 0;
+    }
     case EPOLL_CTL_MOD:
         if (watch == NULL) return SYSCALL_FAULT_(ENOENT);
         watch->event = kev;
@@ -4161,7 +4507,7 @@ sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event)
             }
             spin_unlock(&ep->watches->lock);
             epoll_watch_t *removed = (epoll_watch_t *)queue_remove_node(ep->watches, found_node);
-            free(removed);
+            epoll_watch_free(removed);
         }
         return 0;
     default:
@@ -4177,6 +4523,7 @@ sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeou
 
     uint64_t start_time = nanoTime();
     uint64_t timeout_ns = timeout < 0 ? (uint64_t)-1 : (uint64_t)timeout * 1000000ULL;
+    uint64_t seen_generation = poll_event_generation();
     int ready = 0;
 
     do
@@ -4187,12 +4534,13 @@ sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeou
         {
             if (ready >= maxevents) break;
             epoll_watch_t *watch = (epoll_watch_t *)node->data;
-            if (watch == NULL) continue;
+            fd_file_handle *handle = epoll_watch_handle(watch);
+            if (handle == NULL) continue;
 
             uint32_t revents = 0;
-            int poll_ret = epoll_poll_fd(watch->fd, watch->event.events, &revents);
+            int poll_ret = epoll_poll_node(handle->node, watch->event.events, &revents);
             if (poll_ret < 0) revents = EPOLLERR;
-            revents &= watch->event.events | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
+            revents = epoll_filter_ready_events(watch->event.events, revents);
             if (revents == 0) continue;
 
             struct epoll_event out = watch->event;
@@ -4208,11 +4556,17 @@ sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeou
 
         if (ready > 0 || timeout == 0) break;
 
-        open_interrupt;
-        scheduler_yield();
-        __asm__ volatile("pause");
-        close_interrupt;
+        poll_wait_slice(start_time, timeout_ns, timeout < 0, &seen_generation);
     } while (timeout < 0 || (nanoTime() - start_time) < timeout_ns);
+
+    if (trace_xfce_task())
+        write_serial_fmt("[xfce-trace] sys:epoll_wait task=%s epfd=%d max=%d timeout=%d ready=%d elapsed=%llu\n",
+                         trace_task_name(),
+                         epfd,
+                         maxevents,
+                         timeout,
+                         ready,
+                         (unsigned long long)(nanoTime() - start_time));
 
     return ready;
 }
@@ -4226,7 +4580,16 @@ sys_(epoll_pwait, int epfd, struct epoll_event *events, int maxevents, int timeo
 
 sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 {
-    if (nfds == 0) return 0;
+    if (nfds == 0)
+    {
+        uint64_t timeout_ns = 0;
+        if (timeout != (size_t)-1)
+        {
+            if (timeout > UINT64_MAX / 1000000ULL) return SYSCALL_FAULT_(EINVAL);
+            timeout_ns = timeout * 1000000ULL;
+        }
+        return poll_empty_wait_ns(timeout_ns, timeout == (size_t)-1);
+    }
     if (fds_user == NULL) return SYSCALL_FAULT_(EINVAL);
     if (nfds > USER_POLL_MAX) return SYSCALL_FAULT_(EINVAL);
 
@@ -4241,6 +4604,12 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
     }
 
     uint64_t ret = poll_kernel_fds(fds, nfds, timeout);
+    if (trace_xfce_task())
+        write_serial_fmt("[xfce-trace] sys:poll task=%s nfds=%llu timeout=%lld ret=%lld\n",
+                         trace_task_name(),
+                         (unsigned long long)nfds,
+                         timeout == (size_t)-1 ? -1LL : (long long)timeout,
+                         (long long)ret);
     if ((int64_t)ret >= 0 && !copy_to_user_pagedir(current_user_pagedir(), fds_user, fds, fds_bytes))
     {
         free(fds);
@@ -4252,40 +4621,23 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
 }
 
 sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout,
-     const sigset_t *sigmask, size_t sigsetsize)
+     const sigset_t *sigmask, size_t sigsetsize)//万恶之源
 {
-    if (nfds == 0) return 0;
-    if (fds_user == NULL) return SYSCALL_FAULT_(EINVAL);
     if (nfds > USER_POLL_MAX) return SYSCALL_FAULT_(EINVAL);
 
     page_directory_t *pagedir = current_user_pagedir();
-    size_t fds_bytes = 0;
-    if (!checked_mul_size(nfds, sizeof(struct pollfd), &fds_bytes)) return SYSCALL_FAULT_(EFAULT);
-
-    struct pollfd *fds = (struct pollfd *)malloc(fds_bytes);
-    if (fds == NULL) return SYSCALL_FAULT_(ENOMEM);
-    if (!copy_from_user_pagedir(pagedir, fds, fds_user, fds_bytes))
-    {
-        free(fds);
-        return SYSCALL_FAULT_(EFAULT);
-    }
 
     size_t timeout_ms = (size_t)-1;
+    uint64_t timeout_ns = 0;
+    bool infinite_timeout = timeout == NULL;
     if (timeout != NULL)
     {
         struct timespec ktimeout = {};
         if (!copy_from_user_pagedir(pagedir, &ktimeout, timeout, sizeof(ktimeout)))
-        {
-            free(fds);
             return SYSCALL_FAULT_(EFAULT);
-        }
-        if (ktimeout.tv_sec < 0 || ktimeout.tv_nsec < 0 || ktimeout.tv_nsec >= 1000000000L)
-        {
-            free(fds);
+        if (!checked_timespec_to_ns(&ktimeout, &timeout_ns))
             return SYSCALL_FAULT_(EINVAL);
-        }
 
-        uint64_t timeout_ns = (uint64_t)ktimeout.tv_sec * 1000000000ULL + (uint64_t)ktimeout.tv_nsec;
         timeout_ms = (size_t)(timeout_ns / 1000000ULL);
         if ((timeout_ns % 1000000ULL) != 0) timeout_ms++;
     }
@@ -4295,28 +4647,58 @@ sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout
     if (sigmask != NULL)
     {
         if (sigsetsize < sizeof(sigset_t))
-        {
-            free(fds);
             return SYSCALL_FAULT_(EINVAL);
-        }
 
         sigset_t requested_mask = 0;
         if (!copy_from_user_pagedir(pagedir, &requested_mask, sigmask, sizeof(requested_mask)))
-        {
-            free(fds);
             return SYSCALL_FAULT_(EFAULT);
-        }
 
         int mask_ret = signal_setmask(SIG_SETMASK, &requested_mask, &origmask);
         if (mask_ret < 0)
-        {
-            free(fds);
             return SYSCALL_FAULT_(-mask_ret);
-        }
         mask_installed = true;
     }
 
+    if (nfds == 0)
+    {
+        uint64_t ret = poll_empty_wait_ns(timeout_ns, infinite_timeout);
+        if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
+        return ret;
+    }
+    if (fds_user == NULL)
+    {
+        if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
+        return SYSCALL_FAULT_(EINVAL);
+    }
+
+    size_t fds_bytes = 0;
+    if (!checked_mul_size(nfds, sizeof(struct pollfd), &fds_bytes))
+    {
+        if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
+    struct pollfd *fds = (struct pollfd *)malloc(fds_bytes);
+    if (fds == NULL)
+    {
+        if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
+        return SYSCALL_FAULT_(ENOMEM);
+    }
+    if (!copy_from_user_pagedir(pagedir, fds, fds_user, fds_bytes))
+    {
+        free(fds);
+        if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
+        return SYSCALL_FAULT_(EFAULT);
+    }
+
     uint64_t ret = poll_kernel_fds(fds, nfds, timeout_ms);
+    if (trace_xfce_task())
+        write_serial_fmt("[xfce-trace] sys:ppoll task=%s nfds=%llu timeout_ns=%llu timeout_ms=%lld ret=%lld\n",
+                         trace_task_name(),
+                         (unsigned long long)nfds,
+                         (unsigned long long)timeout_ns,
+                         infinite_timeout ? -1LL : (long long)timeout_ms,
+                         (long long)ret);
 
     if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
 
@@ -4668,7 +5050,7 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
     page_directory_t *pagedir = current_user_pagedir();
     if (pagedir == NULL || uaddr == NULL) return SYSCALL_FAULT_(EFAULT);
 
-    int cmd = op & 0x7f;
+    int cmd = op & FUTEX_CMD_MASK;
     uint32_t bitset = cmd == FUTEX_WAIT_BITSET ? val3 : 0xffffffffU;
 
     switch (cmd)
@@ -4680,7 +5062,17 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
         uint32_t current = 0;
         int read_ret = futex_read_user_word(pagedir, uaddr, &current);
         if (read_ret < 0) return SYSCALL_FAULT_(-read_ret);
-        if (current != val) return SYSCALL_FAULT_(EAGAIN);
+        if (current != val)
+        {
+            if (trace_xfce_task())
+                write_serial_fmt("[xfce-trace] sys:futex-wait task=%s op=0x%x uaddr=%p val=%u cur=%u ret=-EAGAIN\n",
+                                 trace_task_name(),
+                                 op,
+                                 uaddr,
+                                 val,
+                                 current);
+            return SYSCALL_FAULT_(EAGAIN);
+        }
 
         tcb_t task = get_current_task();
         if (task == NULL) return SYSCALL_FAULT_(ESRCH);
@@ -4694,6 +5086,16 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
         futex_enqueue_waiter(&waiter);
         task->wakeup_time = 0;
         task->status = FUTEX;
+        uint64_t futex_start = nanoTime();
+
+        if (trace_xfce_task())
+            write_serial_fmt("[xfce-trace] sys:futex-wait-enter task=%s op=0x%x uaddr=%p val=%u timeout=%s bitset=0x%x\n",
+                             trace_task_name(),
+                             op,
+                             uaddr,
+                             val,
+                             timeout != NULL ? "yes" : "no",
+                             bitset);
 
         if (timeout != NULL)
         {
@@ -4705,8 +5107,38 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
                 return SYSCALL_FAULT_(EFAULT);
             }
 
+            if (ktmo.tv_sec < 0 || ktmo.tv_nsec < 0 || ktmo.tv_nsec >= 1000000000L)
+            {
+                task->status = RUNNING;
+                futex_dequeue_waiter(&waiter);
+                return SYSCALL_FAULT_(EINVAL);
+            }
+
+            if ((uint64_t)ktmo.tv_sec > (UINT64_MAX - (uint64_t)ktmo.tv_nsec) / 1000000000ULL)
+            {
+                task->status = RUNNING;
+                futex_dequeue_waiter(&waiter);
+                return SYSCALL_FAULT_(EINVAL);
+            }
+
             uint64_t timeout_ns = (uint64_t)ktmo.tv_sec * 1000000000ULL + (uint64_t)ktmo.tv_nsec;
             uint64_t start_ns = bootNanoTime();
+            if (cmd == FUTEX_WAIT_BITSET)
+            {
+                uint64_t now_ns = (op & FUTEX_CLOCK_REALTIME) ? realtime_ns() : bootNanoTime();
+                if (timeout_ns <= now_ns)
+                {
+                    task->status = RUNNING;
+                    futex_dequeue_waiter(&waiter);
+                    if (trace_xfce_task())
+                        write_serial_fmt("[xfce-trace] sys:futex-wait-exit task=%s uaddr=%p ret=-ETIMEDOUT elapsed=%llu\n",
+                                         trace_task_name(),
+                                         uaddr,
+                                         (unsigned long long)(nanoTime() - futex_start));
+                    return SYSCALL_FAULT_(ETIMEDOUT);
+                }
+                timeout_ns -= now_ns;
+            }
             while (task->status == FUTEX)
             {
                 scheduler_yield();
@@ -4716,6 +5148,11 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
                 {
                     task->status = RUNNING;
                     futex_dequeue_waiter(&waiter);
+                    if (trace_xfce_task())
+                        write_serial_fmt("[xfce-trace] sys:futex-wait-exit task=%s uaddr=%p ret=-ETIMEDOUT elapsed=%llu\n",
+                                         trace_task_name(),
+                                         uaddr,
+                                         (unsigned long long)(nanoTime() - futex_start));
                     return SYSCALL_FAULT_(ETIMEDOUT);
                 }
             }
@@ -4728,10 +5165,27 @@ sys_(futex, uint32_t *uaddr, int op, uint32_t val, const struct timespec *timeou
 
         futex_dequeue_waiter(&waiter);
         if (task->status == START) task->status = RUNNING;
+        if (trace_xfce_task())
+            write_serial_fmt("[xfce-trace] sys:futex-wait-exit task=%s uaddr=%p ret=0 elapsed=%llu\n",
+                             trace_task_name(),
+                             uaddr,
+                             (unsigned long long)(nanoTime() - futex_start));
         return 0;
     }
     case FUTEX_WAKE:
-        return futex_wake_waiters(uaddr, pagedir, (int)val, 0xffffffffU);
+    case FUTEX_WAKE_BITSET:
+    {
+        uint32_t wake_bitset = cmd == FUTEX_WAKE_BITSET ? val3 : 0xffffffffU;
+        if (wake_bitset == 0) return SYSCALL_FAULT_(EINVAL);
+        int woken = futex_wake_waiters(uaddr, pagedir, (int)val, wake_bitset);
+        if (trace_xfce_task())
+            write_serial_fmt("[xfce-trace] sys:futex-wake task=%s uaddr=%p n=%u ret=%d\n",
+                             trace_task_name(),
+                             uaddr,
+                             val,
+                             woken);
+        return woken;
+    }
     default:
         return SYSCALL_FAULT_(ENOSYS);
     }
@@ -5406,6 +5860,8 @@ sys_(statx, int dirfd, char *pathname, uint64_t flags, uint64_t mask, struct sta
 
     kstatx.stx_mtime.tv_sec  = (long)simple.st_mtim.tv_sec;
     kstatx.stx_mtime.tv_nsec = simple.st_mtim.tv_nsec;
+    kstatx.stx_rdev_major    = linux_major((uint64_t)simple.st_rdev);
+    kstatx.stx_rdev_minor    = linux_minor((uint64_t)simple.st_rdev);
 
     if (!copy_to_user_pagedir(current_user_pagedir(), buff, &kstatx, sizeof(kstatx))) return SYSCALL_FAULT_(EFAULT);
     return 0;
@@ -7475,12 +7931,18 @@ sys_(fstatfs, int fd, struct statfs *buf)
 sys_(eventfd, uint64_t initial_value)
 {
     int ret = anonfs_create_eventfd(initial_value, 0);
+    fd_file_handle *handle =
+        ret >= 0 ? (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, (size_t)ret) : NULL;
+    trace_udev_fd_result("eventfd", ret, handle, initial_value, 0, ret);
     return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
 }
 
 sys_(eventfd2, uint64_t initial_value, uint64_t flags)
 {
     int ret = anonfs_create_eventfd(initial_value, (uint32_t)flags);
+    fd_file_handle *handle =
+        ret >= 0 ? (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, (size_t)ret) : NULL;
+    trace_udev_fd_result("eventfd2", ret, handle, initial_value, flags, ret);
     return ret < 0 ? SYSCALL_FAULT_(-ret) : (uint64_t)ret;
 }
 

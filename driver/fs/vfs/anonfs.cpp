@@ -109,6 +109,7 @@ static bool anonfs_timerfd_refresh(anonfs_handle_t *handle)
         return timer->pending != 0;
     }
 
+    uint64_t old_pending = timer->pending;
     uint64_t now = anonfs_clock_now_ns(timer->clockid);
     while (timer->armed && timer->next_expire_ns != 0 && now >= timer->next_expire_ns)
     {
@@ -123,6 +124,7 @@ static bool anonfs_timerfd_refresh(anonfs_handle_t *handle)
     }
     bool ready = timer->pending != 0;
     spin_unlock(&timer->lock);
+    if (old_pending == 0 && ready) poll_notify_event();
     return ready;
 }
 
@@ -216,7 +218,7 @@ static errno_t anonfs_stat(void *file, vfs_node_t node)
 
 static size_t anonfs_eventfd_read(anonfs_eventfd_t *efd, void *addr, size_t size)
 {
-    if (size < sizeof(uint64_t)) return VFS_STATUS_FAILED;
+    if (size < sizeof(uint64_t)) return (size_t)-EINVAL;
     uint64_t value = 0;
     bool ready = false;
 
@@ -249,10 +251,10 @@ static size_t anonfs_eventfd_read(anonfs_eventfd_t *efd, void *addr, size_t size
 
 static size_t anonfs_eventfd_write(anonfs_eventfd_t *efd, const void *addr, size_t size)
 {
-    if (size < sizeof(uint64_t)) return VFS_STATUS_FAILED;
+    if (size < sizeof(uint64_t)) return (size_t)-EINVAL;
     uint64_t value = 0;
     memcpy(&value, addr, sizeof(value));
-    if (value == ANONFS_U64_MAX) return VFS_STATUS_FAILED;
+    if (value == ANONFS_U64_MAX) return (size_t)-EINVAL;
 
     while (true)
     {
@@ -261,6 +263,7 @@ static size_t anonfs_eventfd_write(anonfs_eventfd_t *efd, const void *addr, size
         {
             efd->counter += value;
             spin_unlock(&efd->lock);
+            poll_notify_event();
             return sizeof(value);
         }
         spin_unlock(&efd->lock);
@@ -542,14 +545,12 @@ static errno_t anonfs_poll(void *file, size_t events)
     case ANONFS_SIGNALFD:
         spin_lock(&handle->u.signalfd.lock);
         if ((events & EPOLLIN) && handle->u.signalfd.count != 0) out |= EPOLLIN;
-        if (events & EPOLLOUT) out |= EPOLLOUT;
         spin_unlock(&handle->u.signalfd.lock);
         break;
     case ANONFS_TIMERFD:
         anonfs_timerfd_refresh(handle);
         spin_lock(&handle->u.timerfd.lock);
         if ((events & EPOLLIN) && handle->u.timerfd.pending != 0) out |= EPOLLIN;
-        if (events & EPOLLOUT) out |= EPOLLOUT;
         spin_unlock(&handle->u.timerfd.lock);
         break;
     case ANONFS_MEMFD:
@@ -558,7 +559,6 @@ static errno_t anonfs_poll(void *file, size_t events)
     case ANONFS_INOTIFY:
         spin_lock(&handle->u.inotify.lock);
         if ((events & EPOLLIN) && handle->u.inotify.event_count != 0) out |= EPOLLIN;
-        if (events & EPOLLOUT) out |= EPOLLOUT;
         spin_unlock(&handle->u.inotify.lock);
         break;
     default:
@@ -606,7 +606,7 @@ static void *anonfs_map(void *file, void *addr, size_t offset, size_t size, size
     {
         uint64_t virt = (uint64_t)addr + pos;
         uint64_t frame = memfd->phys + ((offset + pos) & PAGE_MASK);
-        page_map_to(process->pagedir, virt, frame, pte_flags);
+        page_map_ref_to(process->pagedir, virt, frame, pte_flags);
     }
     spin_unlock(&memfd->lock);
     return addr;
@@ -657,7 +657,7 @@ static errno_t anonfs_del(void *parent, vfs_node_t node)
     if (handle->kind == ANONFS_MEMFD)
     {
         free(handle->u.memfd.name);
-        if (handle->u.memfd.phys != 0 && !handle->u.memfd.borrowed_phys)
+        if (handle->u.memfd.phys != 0)
         {
             size_t pages = (handle->u.memfd.capacity + PAGE_SIZE - 1) / PAGE_SIZE;
             if (pages != 0) free_frames(handle->u.memfd.phys, pages);
@@ -705,7 +705,7 @@ static vfs_node_t anonfs_alloc_node(const char *name, anonfs_kind_t kind, uint64
     int inode = anonfs_next_inode++;
     spin_unlock(&anonfs_alloc_lock);
 
-    vfs_node_t node = vfs_node_alloc(anonfs_root, name);
+    vfs_node_t node = vfs_node_alloc(NULL, name);
     if (node == NULL) return NULL;
 
     anonfs_handle_t *handle = (anonfs_handle_t *)calloc(1, sizeof(anonfs_handle_t));
@@ -721,6 +721,7 @@ static vfs_node_t anonfs_alloc_node(const char *name, anonfs_kind_t kind, uint64
     node->mode  = 0600;
     node->flags = fd_flags;
     node->handle = handle;
+    node->root  = anonfs_root;
     handle->kind = kind;
 
     switch (kind)
@@ -1003,6 +1004,7 @@ void anonfs_notify_path_event(const char *path, uint32_t mask)
                 (handle->u.inotify.event_tail + 1) % (sizeof(handle->u.inotify.events) / sizeof(handle->u.inotify.events[0]));
             handle->u.inotify.event_count++;
             delivered++;
+            poll_notify_event();
             write_serial_fmt("[udev-trace] inotify:queue path=%s watch=%s wd=%d mask=0x%x name=%s count=%llu\n",
                              event_path,
                              watch->path != NULL ? watch->path : "(null)",
@@ -1228,6 +1230,10 @@ int anonfs_create_phys_memfd(const char *name, uint64_t phys, size_t size, uint3
     handle->u.memfd.flags         = flags;
     handle->u.memfd.seals         = F_SEAL_SEAL;
     handle->u.memfd.borrowed_phys = true;
+    for (size_t pos = 0; pos < capacity; pos += PAGE_SIZE)
+    {
+        address_ref(phys + pos);
+    }
     node->size = size;
     return anonfs_install_fd(node, fd_flags);
 }
@@ -1255,6 +1261,7 @@ size_t anonfs_notify_signal(pcb_t process, int sig, const siginfo_t *info)
             sfd->tail = (sfd->tail + 1) % (sizeof(sfd->queue) / sizeof(sfd->queue[0]));
             sfd->count++;
             delivered++;
+            poll_notify_event();
         }
         spin_unlock(&sfd->lock);
     }

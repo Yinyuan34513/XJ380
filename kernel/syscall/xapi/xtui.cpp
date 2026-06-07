@@ -30,6 +30,7 @@
 extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
+static constexpr size_t XAPI_XTTTP_BUFFER_SIZE = 1024;
 
 uint64_t do_xapi_GetTime()
 {
@@ -44,53 +45,134 @@ static uint64_t p_xapi_wait_process_exit(uint64_t pid)
     return sys_wait4(pid, NULL, 0, NULL, 0, 0, NULL);
 }
 
+static bool xapi_pcb_is_exiting(pcb_t process)
+{
+    return process == NULL || process->status == DEATH || process->status == OUT || process->status == ZOMBIE;
+}
+
+static bool xapi_get_process_snapshot(pcb_t process, pcb_t *parent_out, xtttp_dtt **terminal_out,
+                                      bool *is_terminal_out)
+{
+    if (parent_out != NULL) *parent_out = NULL;
+    if (terminal_out != NULL) *terminal_out = NULL;
+    if (is_terminal_out != NULL) *is_terminal_out = false;
+    if (process == NULL || process == kernel_group) return false;
+    if (pcb_group_queue == NULL) return false;
+
+    bool found = false;
+    spin_lock(&pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, node)
+    {
+        if (node->data == process)
+        {
+            if (!xapi_pcb_is_exiting(process))
+            {
+                xtttp_dtt *terminal = process->xtttp_stc;
+                if (parent_out != NULL) *parent_out = process->parent_task;
+                if (terminal_out != NULL) *terminal_out = terminal;
+                if (is_terminal_out != NULL) *is_terminal_out = terminal != NULL && terminal->is_shell;
+                found = true;
+            }
+            break;
+        }
+    }
+    spin_unlock(&pcb_group_queue->lock);
+    return found;
+}
+
+static xtttp_dtt *xapi_find_xtttp_terminal(pcb_t *owner_out)
+{
+    if (owner_out != NULL) *owner_out = NULL;
+
+    tcb_t task = get_current_task();
+    pcb_t process = task != NULL ? task->parent_group : NULL;
+    for (size_t depth = 0; process != NULL && process != kernel_group && depth < 64; depth++)
+    {
+        pcb_t parent = NULL;
+        xtttp_dtt *terminal = NULL;
+        bool is_terminal = false;
+        if (!xapi_get_process_snapshot(process, &parent, &terminal, &is_terminal)) break;
+        if (is_terminal)
+        {
+            if (owner_out != NULL) *owner_out = process;
+            return terminal;
+        }
+
+        if (parent == process) break;
+        process = parent;
+    }
+    return NULL;
+}
+
+static bool xapi_xtttp_terminal_is_valid_locked(pcb_t owner, xtttp_dtt *terminal)
+{
+    if (owner == NULL || terminal == NULL || pcb_group_queue == NULL) return false;
+    queue_foreach(pcb_group_queue, node)
+    {
+        if (node->data == owner)
+        {
+            return !xapi_pcb_is_exiting(owner) && owner->xtttp_stc == terminal && terminal->is_shell;
+        }
+    }
+    return false;
+}
+
 // p 开头的代表 private
 void p_xapi_output_kernel(const char *str)
 {
     if (str == NULL) return;
 
-    pcb_t front_p = get_current_task()->parent_group;
-    pcb_t caller = front_p;
+    pcb_t owner = NULL;
+    xtttp_dtt *terminal = xapi_find_xtttp_terminal(&owner);
+    if (terminal == NULL)
+    {
+        pr_warn("A program call xapi_Output, but cannot found parent terminal. \n");
+        return;
+    }
+
+    bool queued = false;
+    spin_lock(&pcb_group_queue->lock);
+    if (xapi_xtttp_terminal_is_valid_locked(owner, terminal))
+    {
+        char  *output   = terminal->output;
+        size_t out_cap  = sizeof(terminal->output);
+        size_t out_len  = strlen(output);
+        size_t str_len  = strlen(str);
+        size_t copy_len = str_len;
+
+        if (out_len < out_cap - 1)
+        {
+            size_t avail = out_cap - out_len - 1;
+            if (copy_len > avail) copy_len = avail;
+            memcpy(output + out_len, str, copy_len);
+            output[out_len + copy_len] = '\0';
+        }
+        terminal->output_lock = false;
+        queued = true;
+    }
+    spin_unlock(&pcb_group_queue->lock);
+
+    if (!queued) return;
+
     while (true)
     {
-        if (front_p == NULL || front_p == kernel_group)
+        bool flushed = false;
+        spin_lock(&pcb_group_queue->lock);
+        if (!xapi_xtttp_terminal_is_valid_locked(owner, terminal))
         {
-            pr_warn("A program call xapi_Output, but cannot found parent terminal. \n");
+            spin_unlock(&pcb_group_queue->lock);
             return;
         }
-        if (front_p->xtttp_stc->is_shell)
-        {
-            // found it!
-            if (str == NULL) {
-                return;
-            }
+        flushed = terminal->output_lock;
+        spin_unlock(&pcb_group_queue->lock);
 
-            char  *output    = front_p->xtttp_stc->output;
-            size_t  out_cap  = sizeof(front_p->xtttp_stc->output);
-            size_t  out_len  = strlen(output);
-            size_t  str_len  = strlen(str);
-            size_t  copy_len = str_len;
-
-            if (out_len < out_cap - 1)
-            {
-                size_t avail = out_cap - out_len - 1;
-                if (copy_len > avail) copy_len = avail;
-                memcpy(output + out_len, str, copy_len);
-                output[out_len + copy_len] = '\0';
-            }
-
-            front_p->xtttp_stc->output_lock = false;
-
-            while (true)
-            {
-                if (front_p->xtttp_stc->output_lock) break;
-                scheduler_yield();
-            }
-            memset(front_p->xtttp_stc->output, 0, sizeof(front_p->xtttp_stc->output));
-            return;
-        }
-        front_p = front_p->parent_task;
+        if (flushed) break;
+        scheduler_yield();
     }
+
+    spin_lock(&pcb_group_queue->lock);
+    if (xapi_xtttp_terminal_is_valid_locked(owner, terminal)) memset(terminal->output, 0, sizeof(terminal->output));
+    spin_unlock(&pcb_group_queue->lock);
 }
 
 static void p_xapi_free_argv(char **argv)
@@ -174,58 +256,97 @@ void do_xapi_Output(char *str)
 
 void do_xapi_Input(char *str)
 {
-    pcb_t front_p = get_current_task()->parent_group;
+    pcb_t owner = NULL;
+    xtttp_dtt *terminal = xapi_find_xtttp_terminal(&owner);
+    if (terminal == NULL)
+    {
+        pr_warn("A program call xapi_Input, but cannot found parent terminal. \n");
+        return;
+    }
+
+    spin_lock(&pcb_group_queue->lock);
+    if (!xapi_xtttp_terminal_is_valid_locked(owner, terminal))
+    {
+        spin_unlock(&pcb_group_queue->lock);
+        return;
+    }
+    terminal->wait_for_input = true;
+    spin_unlock(&pcb_group_queue->lock);
+
+    char input[XAPI_XTTTP_BUFFER_SIZE];
     while (true)
     {
-        if (front_p == NULL || front_p == kernel_group)
+        bool ready = false;
+        size_t input_len = 0;
+
+        spin_lock(&pcb_group_queue->lock);
+        if (!xapi_xtttp_terminal_is_valid_locked(owner, terminal))
         {
-            pr_warn("A program call xapi_Input, but cannot found parent terminal. \n");
+            spin_unlock(&pcb_group_queue->lock);
             return;
         }
-        if (front_p->xtttp_stc->is_shell)
+
+        if (terminal->input_lock)
         {
-            // 等待命令行输入
-            front_p->xtttp_stc->wait_for_input = true;
-            while (true)
-            {
-                if (front_p->xtttp_stc->input_lock) break;
-                scheduler_yield();
-            }
-            size_t input_len = p_xapi_strnlen(front_p->xtttp_stc->input, sizeof(front_p->xtttp_stc->input) - 1);
-            front_p->xtttp_stc->input[input_len] = '\0';
-            copy_to_user_pagedir(xapi_current_pagedir(), str, front_p->xtttp_stc->input, input_len + 1);
-            memset(front_p->xtttp_stc->input, 0, sizeof(front_p->xtttp_stc->input));
-            front_p->xtttp_stc->input_lock = false;
-            front_p->xtttp_stc->wait_for_input = false;
+            input_len = p_xapi_strnlen(terminal->input, sizeof(input) - 1);
+            memcpy(input, terminal->input, input_len);
+            input[input_len] = '\0';
+            memset(terminal->input, 0, sizeof(terminal->input));
+            terminal->input_lock = false;
+            terminal->wait_for_input = false;
+            ready = true;
+        }
+        spin_unlock(&pcb_group_queue->lock);
+
+        if (ready)
+        {
+            copy_to_user_pagedir(xapi_current_pagedir(), str, input, input_len + 1);
             return;
         }
-        front_p = front_p->parent_task;
+        scheduler_yield();
     }
 }
 
 char do_xapi_Getch()
 {
-    pcb_t front_p = get_current_task()->parent_group;
+    pcb_t owner = NULL;
+    xtttp_dtt *terminal = xapi_find_xtttp_terminal(&owner);
+    if (terminal == NULL)
+    {
+        pr_warn("A program call xapi_Getch, but cannot found parent terminal. \n");
+        return 0;
+    }
+
+    spin_lock(&pcb_group_queue->lock);
+    if (!xapi_xtttp_terminal_is_valid_locked(owner, terminal))
+    {
+        spin_unlock(&pcb_group_queue->lock);
+        return 0;
+    }
+    terminal->wait_for_getch = true;
+    spin_unlock(&pcb_group_queue->lock);
+
     while (true)
     {
-        if (front_p == NULL || front_p == kernel_group)
+        bool ready = false;
+        char c = 0;
+
+        spin_lock(&pcb_group_queue->lock);
+        if (!xapi_xtttp_terminal_is_valid_locked(owner, terminal))
         {
-            pr_warn("A program call xapi_Getch, but cannot found parent terminal. \n");
+            spin_unlock(&pcb_group_queue->lock);
             return 0;
         }
-        if (front_p->xtttp_stc->is_shell)
+
+        if (!terminal->wait_for_getch)
         {
-            // 等待命令行输入
-            front_p->xtttp_stc->wait_for_getch = true;
-            while (true)
-            {
-                if (!front_p->xtttp_stc->wait_for_getch) break;
-                scheduler_yield();
-            }
-            // found it!
-            return front_p->xtttp_stc->char_for_getch;
+            c = terminal->char_for_getch;
+            ready = true;
         }
-        front_p = front_p->parent_task;
+        spin_unlock(&pcb_group_queue->lock);
+
+        if (ready) return c;
+        scheduler_yield();
     }
 }
 

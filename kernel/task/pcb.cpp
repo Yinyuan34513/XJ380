@@ -345,6 +345,7 @@ void kill_proc0(pcb_t pcb)
     lock_queue *virt_queue = pcb->virt_queue;
 
     lazy_free(pcb);
+    vma_manager_exit_cleanup(&pcb->vma_manager);
 
     pcb->file_open = NULL;
     pcb->ipc_queue = NULL;

@@ -39,6 +39,7 @@ vfs_callback_t fs_callbacks[256] = {
 };
 
 extern void p_xapi_output_kernel(const char *str);
+extern lock_queue *pcb_group_queue;
 
 struct llist_header fs_metadata_list;
 
@@ -255,7 +256,7 @@ static errno_t vfs_release_final(vfs_node_t node, bool force_destroy, bool per_f
                 {
                     epoll_watch_t *watch = (epoll_watch_t *)queue_dequeue(ep->watches);
                     if (watch == NULL) break;
-                    free(watch);
+                    epoll_watch_free(watch);
                 }
                 queue_destroy(ep->watches);
             }
@@ -1331,11 +1332,7 @@ errno_t vfs_poll(vfs_node_t node, size_t event) {
     if (node->type & file_epoll)
     {
         epoll_file_t *ep = (epoll_file_t *)node->handle;
-        if (ep == NULL || ep->watches == NULL) return EPOLLERR;
-        spin_lock(&ep->watches->lock);
-        bool has_watches = ep->watches->size != 0;
-        spin_unlock(&ep->watches->lock);
-        return has_watches ? (event & EPOLLIN) : 0;
+        return (errno_t)epoll_file_poll(ep, (uint32_t)event);
     }
     errno_t ret = callbackof(node, poll)(node->handle, event);
     if (ret < 0 && vfs_udev_trace_node(node))
@@ -1565,14 +1562,55 @@ static tty_t *current_tty()
     return task->parent_group->tty;
 }
 
+static bool vfs_pcb_is_exiting(pcb_t process)
+{
+    return process == NULL || process->status == DEATH || process->status == OUT || process->status == ZOMBIE;
+}
+
+static bool vfs_get_process_snapshot(pcb_t process, pcb_t *parent_out, xtttp_dtt **terminal_out,
+                                     bool *is_terminal_out)
+{
+    if (parent_out != NULL) *parent_out = NULL;
+    if (terminal_out != NULL) *terminal_out = NULL;
+    if (is_terminal_out != NULL) *is_terminal_out = false;
+    if (process == NULL || process == kernel_group) return false;
+    if (pcb_group_queue == NULL) return false;
+
+    bool found = false;
+    spin_lock(&pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, node)
+    {
+        if (node->data == process)
+        {
+            if (!vfs_pcb_is_exiting(process))
+            {
+                xtttp_dtt *terminal = process->xtttp_stc;
+                if (parent_out != NULL) *parent_out = process->parent_task;
+                if (terminal_out != NULL) *terminal_out = terminal;
+                if (is_terminal_out != NULL) *is_terminal_out = terminal != NULL && terminal->is_shell;
+                found = true;
+            }
+            break;
+        }
+    }
+    spin_unlock(&pcb_group_queue->lock);
+    return found;
+}
+
 static xtttp_dtt *current_xtttp_terminal()
 {
     tcb_t task = get_current_task();
     pcb_t process = task != NULL ? task->parent_group : NULL;
-    while (process != NULL && process != kernel_group)
+    for (size_t depth = 0; process != NULL && process != kernel_group && depth < 64; depth++)
     {
-        if (process->xtttp_stc != NULL && process->xtttp_stc->is_shell) return process->xtttp_stc;
-        process = process->parent_task;
+        pcb_t parent = NULL;
+        xtttp_dtt *terminal = NULL;
+        bool is_terminal = false;
+        if (!vfs_get_process_snapshot(process, &parent, &terminal, &is_terminal)) break;
+        if (is_terminal) return terminal;
+
+        if (parent == process) break;
+        process = parent;
     }
     return NULL;
 }

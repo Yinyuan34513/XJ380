@@ -32,24 +32,49 @@ typedef uint32_t socklen_t;
 #define SO_REUSEADDR 2
 #define SO_TYPE 3
 #define SO_ERROR 4
-#define SO_PEERCRED 17
+#define SO_DONTROUTE 5
 #define SO_BROADCAST 6
 #define SO_SNDBUF 7
 #define SO_RCVBUF 8
 #define SO_KEEPALIVE 9
+#define SO_OOBINLINE 10
+#define SO_PRIORITY 12
 #define SO_LINGER 13
+#define SO_REUSEPORT 15
 #define SO_PASSCRED 16
+#define SO_PEERCRED 17
 #define SO_RCVLOWAT 18
 #define SO_SNDLOWAT 19
+#define SO_RCVTIMEO_OLD 20
+#define SO_SNDTIMEO_OLD 21
+#define SO_BINDTODEVICE 25
 #define SO_ATTACH_FILTER 26
 #define SO_DETACH_FILTER 27
 #define SO_ACCEPTCONN 30
+#define SO_PEERSEC 31
 #define SO_SNDBUFFORCE 32
 #define SO_RCVBUFFORCE 33
+#define SO_PASSSEC 34
+#define SO_TIMESTAMPNS_OLD 35
+#define SO_MARK 36
+#define SO_TIMESTAMPING_OLD 37
 #define SO_PROTOCOL 38
 #define SO_DOMAIN 39
-#define SO_SNDTIMEO 66
-#define SO_RCVTIMEO 67
+#define SO_PEEK_OFF 42
+#define SO_PEERGROUPS 59
+#define SO_TIMESTAMP_NEW 63
+#define SO_TIMESTAMPNS_NEW 64
+#define SO_TIMESTAMPING_NEW 65
+#define SO_RCVTIMEO_NEW 66
+#define SO_SNDTIMEO_NEW 67
+#define SO_PEERPIDFD 77
+
+#define SO_TIMESTAMP_OLD 29
+#define SO_TIMESTAMP SO_TIMESTAMP_OLD
+#define SO_TIMESTAMPNS SO_TIMESTAMPNS_OLD
+#define SO_TIMESTAMPING SO_TIMESTAMPING_OLD
+#define SO_RCVTIMEO SO_RCVTIMEO_OLD
+#define SO_SNDTIMEO SO_SNDTIMEO_OLD
 
 #define IPPROTO_IP 0
 #define IPPROTO_ICMP 1
@@ -130,6 +155,11 @@ struct ucred {
     int pid;
     int uid;
     int gid;
+};
+
+struct linger {
+    int l_onoff;
+    int l_linger;
 };
 
 #define CMSG_ALIGN(len) (((size_t)(len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))

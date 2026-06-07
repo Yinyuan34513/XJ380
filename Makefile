@@ -60,7 +60,7 @@ STARDUSTUI_BUILTIN_APPS := helloworld.elf layout.elf $(if $(STARDUSTUI_DUCKCHAT_
 # not an X11 DISPLAY string like ":0".
 # Use "DISPLAY_BACKEND" to select the backend; keep exporting X11 DISPLAY
 # via SUDO_CMD when needed.
-DISPLAY_BACKEND ?= gtk,gl=on
+DISPLAY_BACKEND ?= gtk
 USB_XHCI_DEVICES ?= -device usb-kbd,bus=xhci.0,port=1 -device usb-mouse,bus=xhci.0,port=2
 AUDIO ?= 0
 AUDIO_BACKEND ?= sdl
@@ -68,7 +68,7 @@ HDA_CODEC ?= hda-output
 ifeq ($(AUDIO), 1)
 QEMU_AUDIO_ARGS = -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -device $(HDA_CODEC),audiodev=snd0
 endif
-QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=$(VDISK_IMAGE),index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial stdio $(QEMU_AUDIO_ARGS) -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -vga virtio
+QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=$(VDISK_IMAGE),index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log $(QEMU_AUDIO_ARGS) -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -vga virtio
 
 COMPILER_PREFIX ?=
 
@@ -98,7 +98,7 @@ KERNEL_LINUX_OUTPUT_MIRROR ?= 0
 KERNEL_XBPS_WAIT_DEBUG ?= 0
 KERNEL_PROFILER ?= 1
 BF_DIR ?= Bf
-XBPS_BOOTSTRAP_EXTRA ?= weston seatd eudev dbus wayland wayland-protocols libxkbcommon pixman xkeyboard-config adwaita-icon-theme dejavu-fonts-ttf glibc-locales xfce4 labwc xorg-server-xwayland xrandr pciutils sudo iw mesa mesa-dri mesa-demos
+XBPS_BOOTSTRAP_EXTRA ?= weston seatd eudev dbus wayland wayland-protocols libxkbcommon pixman xkeyboard-config adwaita-icon-theme dejavu-fonts-ttf glibc-locales xfce4 labwc xorg-server-xwayland xrandr pciutils sudo iw ptyxis adwaita-cursor-theme
 XBPS_PREPARE_ROOT ?= Bf/xbps-root
 XBPS_ARCH ?= x86_64
 XBPS_INSTALL ?= $(BF_DIR)/usr/bin/xbps-install

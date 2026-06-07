@@ -126,12 +126,18 @@ void page_ref(page_t *page)
 }
 void page_unref(page_t *page)
 {
-    if (page) page->refcount--;
+    if (page == NULL) return;
+    if (page->refcount == 0)
+    {
+        write_serial_string("page_unref: refcount underflow avoided\n");
+        return;
+    }
+    page->refcount--;
 }
 
 bool page_can_free(page_t *page)
 {
-    return page ? page->refcount <= 0 : true;
+    return page ? page->refcount == 0 : true;
 }
 
 void address_ref(uint64_t addr)
@@ -617,9 +623,8 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
                 continue;
             }
 
-            // fork needs a private snapshot of every present user page. Some
-            // mmap/lazy pages do not carry PTE_FRAME_ALLOCATED, but sharing
-            // them lets the parent corrupt the child's heap/stack view.
+            // fork needs a private snapshot of every present user page; sharing
+            // it would let the parent corrupt the child's heap/stack view.
             uint64_t source_phys = source_entry & PTE_ADDR_MASK;
             uint64_t new_phys    = alloc_frames(1);
             if (new_phys == 0) { continue; }
@@ -770,7 +775,15 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
     flush_tlb(addr);
 }
 
+void page_map_ref_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags)
+{
+    if (directory == NULL || frame == 0) return;
+    address_ref(frame & PTE_ADDR_MASK);
+    page_map_to(directory, addr, frame, flags | PTE_FRAME_ALLOCATED);
+}
+
 EXPORT_SYMBOL(page_map_to);
+EXPORT_SYMBOL(page_map_ref_to);
 
 void switch_process_page_directory(page_directory_t *dir)
 {

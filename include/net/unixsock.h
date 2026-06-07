@@ -48,6 +48,23 @@ struct unix_sock {
     bool    namespace_registered;
     bool    path_node_created;
     bool    passcred;
+    bool    reuseaddr;
+    bool    reuseport;
+    bool    keepalive;
+    bool    broadcast;
+    bool    passsec;
+    bool    timestamp_legacy;
+    bool    timestampns_legacy;
+    bool    timestamping_legacy;
+    int     recv_buffer_size;
+    int     send_buffer_size;
+    int     recv_lowat;
+    int     send_lowat;
+    int     priority;
+    int     peek_off;
+    struct timeval recv_timeout;
+    struct timeval send_timeout;
+    struct linger  linger_opt;
 };
 
 struct unix_stream_packet {

@@ -228,8 +228,11 @@ static void *fbdev_map(int, void *addr, size_t len, size_t offset)
     if (len > g_fbdev.total_bytes) return NULL;
     size_t map_len = PADDING_UP(MIN(len, g_fbdev.total_bytes), PAGE_SIZE);
     if (map_len == 0) return NULL;
-    page_map_range(get_current_directory(), (uint64_t)addr, g_fbdev.phys, map_len,
-                   PTE_USER | PTE_PRESENT | PTE_WRITEABLE | PTE_NO_EXECUTE);
+    for (size_t pos = 0; pos < map_len; pos += PAGE_SIZE)
+    {
+        page_map_ref_to(get_current_directory(), (uint64_t)addr + pos, g_fbdev.phys + pos,
+                        PTE_USER | PTE_PRESENT | PTE_WRITEABLE | PTE_NO_EXECUTE);
+    }
     return addr;
 }
 }

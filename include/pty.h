@@ -24,10 +24,10 @@ typedef struct pty_handle {
     size_t              ptr_master;
     size_t              ptr_slave;
     bool                locked;
+    bool                packet_mode;
     uint8_t            *master_buffer;
     uint8_t            *slave_buffer;
     struct llist_header list_node;
 } pty_handle_t;
 
 void pty_init();
-

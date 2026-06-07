@@ -7,6 +7,7 @@
 #include <krlibc.h>
 #include <proto.hpp>
 #include <pty.h>
+#include <syscall/syscall.h>
 #include <task/pcb.h>
 #include <task/poll.h>
 #include <task/scheduler.h>
@@ -18,12 +19,18 @@ static spin_t              pty_global_lock = SPIN_INIT;
 static id_allocator_t     *pty_allocator   = NULL;
 static vfs_node_t          pts_root        = NULL;
 
-static int pty_dummy()
+static uint64_t pty_mkdev(uint32_t major, uint32_t minor)
+{
+    return ((uint64_t)(major & 0xfffU) << 8) | (uint64_t)(minor & 0xffU) |
+           ((uint64_t)(minor & 0xfffff00U) << 12);
+}
+
+static int pty_dummy()//空
 {
     return -ENOSYS;
 }
 
-static int pty_str_to_int(const char *str, int *result)
+static int pty_str_to_int(const char *str, int *result)//stoi
 {
     if (str == NULL || *str == '\0' || result == NULL) return -EINVAL;
 
@@ -38,7 +45,7 @@ static int pty_str_to_int(const char *str, int *result)
     return 0;
 }
 
-static int pty_id_alloc()
+static int pty_id_alloc()//分配id
 {
     spin_lock(&pty_global_lock);
     int ret = id_alloc(pty_allocator);
@@ -46,14 +53,14 @@ static int pty_id_alloc()
     return ret;
 }
 
-static void pty_id_free(int id)
+static void pty_id_free(int id)//你自由了》：|（
 {
     spin_lock(&pty_global_lock);
     id_free(pty_allocator, (uint32_t)id);
     spin_unlock(&pty_global_lock);
 }
 
-static void pty_termios_default(struct termios *term)
+static void pty_termios_default(struct termios *term)//默认
 {
     memset(term, 0, sizeof(*term));
     term->c_iflag = ICRNL | IXON | BRKINT | ISTRIP | INPCK;
@@ -70,7 +77,7 @@ static void pty_termios_default(struct termios *term)
     term->c_cc[VMIN]   = 1;
     term->c_cc[VSTART] = 17;
     term->c_cc[VSTOP]  = 19;
-    term->c_cc[VSUSP]  = 26;
+    term->c_cc[VSUSP]  = 26;//c_cc为啥好了?我也不知道
 }
 
 static pty_handle_t *pty_find_locked(int id)
@@ -78,7 +85,7 @@ static pty_handle_t *pty_find_locked(int id)
     pty_handle_t *pos;
     pty_handle_t *n;
 
-    llist_for_each(pos, n, &ptmx_list_head, list_node)
+    llist_for_each(pos, n, &ptmx_list_head, list_node)//这个可不兴用啊
     {
         if (pos->id == id) return pos;
     }
@@ -159,6 +166,82 @@ static void pts_ctrl_assign(pty_handle_t *pair)
     pair->ctrl_pgid = task != NULL && task->parent_group != NULL ? (int)task->parent_group->pid : 0;
 }
 
+static void pty_termios_to_termios2(const struct termios *src, struct termios2 *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->c_iflag  = src->c_iflag;
+    dst->c_oflag  = src->c_oflag;
+    dst->c_cflag  = src->c_cflag;
+    dst->c_lflag  = src->c_lflag;
+    dst->c_line   = src->c_line;
+    dst->c_ispeed = B38400;
+    dst->c_ospeed = B38400;
+    memcpy(dst->c_cc, src->c_cc, MIN(sizeof(dst->c_cc), sizeof(src->c_cc)));
+}
+
+static void pty_termios_from_termios2(struct termios *dst, const struct termios2 *src)
+{
+    dst->c_iflag = src->c_iflag;
+    dst->c_oflag = src->c_oflag;
+    dst->c_cflag = src->c_cflag;
+    dst->c_lflag = src->c_lflag;
+    dst->c_line  = src->c_line;
+    memset(dst->c_cc, 0, sizeof(dst->c_cc));
+    memcpy(dst->c_cc, src->c_cc, MIN(sizeof(dst->c_cc), sizeof(src->c_cc)));
+}
+
+static int pty_install_slave_fd(pty_handle_t *pair, uint64_t flags)
+{
+    if (pair == NULL || pair->slave_node == NULL) return -ENODEV;
+    const uint64_t allowed_flags = O_ACCMODE | O_CLOEXEC | O_NONBLOCK | O_NOCTTY | O_LARGEFILE;
+    if ((flags & ~allowed_flags) != 0)
+    {
+        write_serial_fmt("pty: TIOCGPTPEER invalid flags=0x%llx allowed=0x%llx\n",
+                         (unsigned long long)flags,
+                         (unsigned long long)allowed_flags);
+        return -EINVAL;
+    }
+
+    pcb_t process = get_current_task() != NULL ? get_current_task()->parent_group : NULL;
+    if (process == NULL || process->file_open == NULL) return -EBADF;
+
+    fd_file_handle *fd_handle = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
+    if (fd_handle == NULL) return -ENOMEM;
+
+    spin_lock(&pair->lock);
+    if (pair->locked)
+    {
+        spin_unlock(&pair->lock);
+        free(fd_handle);
+        return -EIO;
+    }
+
+    vfs_node_t slave = pair->slave_node;
+    if (slave->handle == NULL && slave->refcount == 1) slave->refcount = 0;
+    pair->slave_fds++;
+    slave->handle = pair;
+    slave->type   = file_pts;
+    slave->fsid   = pts_fsid;
+    slave->size   = (uint64_t)-1;
+    slave->mode   = 0666;
+    slave->inode  = (uint64_t)pair->id;
+    slave->rdev   = pty_mkdev(136, (uint32_t)pair->id);
+    slave->refcount++;
+    spin_unlock(&pair->lock);
+
+    fd_handle->node = slave;
+    fd_handle->flags = flags & allowed_flags;
+    fd_handle->node->flags = fd_handle->flags;
+    fd_handle->fd = queue_enqueue_lowest(process->file_open, fd_handle);
+    if (fd_handle->fd == (size_t)-1)
+    {
+        vfs_close(slave);
+        free(fd_handle);
+        return -EBADF;
+    }
+    return (int)fd_handle->fd;
+}
+
 static void ptmx_open(void *parent, const char *name, vfs_node_t node)
 {
     UNUSED(parent, name);
@@ -214,6 +297,8 @@ static void ptmx_open(void *parent, const char *name, vfs_node_t node)
     slave->handle      = NULL;
     slave->mode        = 0666;
     slave->size        = (uint64_t)-1;
+    slave->inode       = (uint64_t)pair->id;
+    slave->rdev        = pty_mkdev(136, (uint32_t)pair->id);
     pair->slave_node   = slave;
     pair->master_node  = node;
 
@@ -233,6 +318,7 @@ static void ptmx_open(void *parent, const char *name, vfs_node_t node)
             new_ptmx->handle = NULL;
             new_ptmx->mode   = 0666;
             new_ptmx->size   = (uint64_t)-1;
+            new_ptmx->rdev   = pty_mkdev(5, 2);
         }
     }
 
@@ -242,6 +328,7 @@ static void ptmx_open(void *parent, const char *name, vfs_node_t node)
     node->refcount     = 1;
     node->size         = (uint64_t)-1;
     node->mode         = 0666;
+    node->rdev         = pty_mkdev(5, 2);
 
     spin_lock(&pty_global_lock);
     llist_append(&ptmx_list_head, &pair->list_node);
@@ -290,10 +377,23 @@ static size_t ptmx_read(void *file, void *addr, size_t offset, size_t size)
     }
 
     spin_lock(&pair->lock);
+    uint8_t *out = (uint8_t *)addr;
     size_t to_copy = MIN(size, ptmx_data_available(pair));
-    memcpy(addr, pair->master_buffer, to_copy);
-    memmove(pair->master_buffer, pair->master_buffer + to_copy, pair->ptr_master - to_copy);
-    pair->ptr_master -= to_copy;
+    if (pair->packet_mode && size > 0)
+    {
+        out[0] = TIOCPKT_DATA;
+        to_copy = MIN(size - 1, ptmx_data_available(pair));
+        memcpy(out + 1, pair->master_buffer, to_copy);
+        memmove(pair->master_buffer, pair->master_buffer + to_copy, pair->ptr_master - to_copy);
+        pair->ptr_master -= to_copy;
+        to_copy++;
+    }
+    else
+    {
+        memcpy(out, pair->master_buffer, to_copy);
+        memmove(pair->master_buffer, pair->master_buffer + to_copy, pair->ptr_master - to_copy);
+        pair->ptr_master -= to_copy;
+    }
     spin_unlock(&pair->lock);
     return to_copy;
 }
@@ -369,6 +469,8 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
     if (pair == NULL) return -ENOTTY;
 
     uint32_t req = (uint32_t)request;
+    if (req == TIOCGPTPEER) return pty_install_slave_fd(pair, (uint64_t)(uintptr_t)arg);
+
     errno_t ret = EOK;
     spin_lock(&pair->lock);
     switch (req)
@@ -388,6 +490,128 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
             break;
         }
         *(int *)arg = pair->id;
+        break;
+    case TIOCGDEV:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(uint32_t *)arg = (uint32_t)pty_mkdev(5, 2);
+        break;
+    case FIONREAD:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = (int)ptmx_data_available(pair);
+        break;
+    case TIOCOUTQ:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = (int)pair->ptr_slave;
+        break;
+    case TIOCEXCL:
+    case TIOCNXCL:
+    case TCFLSH:
+    case TCXONC:
+    case TIOCSBRK:
+    case TIOCCBRK:
+    case TIOCSIG:
+        ret = EOK;
+        break;
+    case TIOCPKT:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        pair->packet_mode = (*(int *)arg) != 0;
+        break;
+    case TIOCGEXCL:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = 0;
+        break;
+    case TIOCGPKT:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = pair->packet_mode ? 1 : 0;
+        break;
+    case TCGETS:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        memcpy(arg, &pair->term, sizeof(pair->term));
+        break;
+    case TCGETS2:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        pty_termios_to_termios2(&pair->term, (struct termios2 *)arg);
+        break;
+    case TCSETS:
+    case TCSETSW:
+    case TCSETSF:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        memcpy(&pair->term, arg, sizeof(pair->term));
+        break;
+    case TCSETS2:
+    case TCSETSW2:
+    case TCSETSF2:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        pty_termios_from_termios2(&pair->term, (const struct termios2 *)arg);
+        break;
+    case TIOCGPGRP:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = pair->ctrl_pgid != 0 ? pair->ctrl_pgid : get_current_task()->parent_group->pid;
+        break;
+    case TIOCSPGRP:
+        if (arg != NULL) pair->ctrl_pgid = *(int *)arg;
+        break;
+    case TIOCGETD:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = N_TTY;
+        break;
+    case TIOCSETD:
+        break;
+    case TIOCGSID:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = get_current_task()->parent_group->pid;
         break;
     case TIOCGPTLCK:
         if (arg == NULL)
@@ -469,6 +693,8 @@ static void pts_open(void *parent, const char *name, vfs_node_t node)
     node->fsid   = pts_fsid;
     node->size   = (uint64_t)-1;
     node->mode   = 0666;
+    node->inode  = (uint64_t)pair->id;
+    node->rdev   = pty_mkdev(136, (uint32_t)pair->id);
     if (pair->slave_node == NULL) pair->slave_node = node;
     spin_unlock(&pair->lock);
     spin_unlock(&pty_global_lock);
@@ -598,6 +824,14 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         }
         memcpy(arg, &pair->term, sizeof(pair->term));
         break;
+    case TCGETS2:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        pty_termios_to_termios2(&pair->term, (struct termios2 *)arg);
+        break;
     case TCSETS:
     case TCSETSW:
     case TCSETSF:
@@ -608,6 +842,16 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         }
         memcpy(&pair->term, arg, sizeof(pair->term));
         break;
+    case TCSETS2:
+    case TCSETSW2:
+    case TCSETSF2:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        pty_termios_from_termios2(&pair->term, (const struct termios2 *)arg);
+        break;
     case TIOCGPGRP:
         if (arg == NULL)
         {
@@ -616,8 +860,83 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         }
         *(int *)arg = pair->ctrl_pgid != 0 ? pair->ctrl_pgid : get_current_task()->parent_group->pid;
         break;
+    case TIOCGDEV:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(uint32_t *)arg = (uint32_t)pty_mkdev(136, (uint32_t)pair->id);
+        break;
+    case FIONREAD:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = (int)pts_data_available(pair);
+        break;
+    case TIOCOUTQ:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = (int)pair->ptr_master;
+        break;
+    case TIOCEXCL:
+    case TIOCNXCL:
+    case TCFLSH:
+    case TCXONC:
+    case TIOCSBRK:
+    case TIOCCBRK:
+    case TIOCSIG:
+        ret = EOK;
+        break;
+    case TIOCPKT:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        pair->packet_mode = (*(int *)arg) != 0;
+        break;
+    case TIOCGEXCL:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = 0;
+        break;
+    case TIOCGPKT:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = pair->packet_mode ? 1 : 0;
+        break;
     case TIOCSPGRP:
         if (arg != NULL) pair->ctrl_pgid = *(int *)arg;
+        break;
+    case TIOCGETD:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = N_TTY;
+        break;
+    case TIOCSETD:
+        break;
+    case TIOCGSID:
+        if (arg == NULL)
+        {
+            ret = -EFAULT;
+            break;
+        }
+        *(int *)arg = get_current_task()->parent_group->pid;
         break;
     case KDGKBMODE:
         if (arg == NULL)
@@ -783,13 +1102,18 @@ void pty_init()
         ptmx->handle = NULL;
         ptmx->mode   = 0666;
         ptmx->size   = (uint64_t)-1;
+        ptmx->rdev   = pty_mkdev(5, 2);
     }
 
     vfs_mkdir("/dev/pts");
     pts_root = vfs_open("/dev/pts");
     if (pts_root != NULL)
     {
-        pts_root->type = file_dir;
+        pts_root->type   = file_dir;
+        pts_root->fsid   = pts_fsid;
+        pts_root->handle = pts_root;
+        pts_root->mode   = 0755;
+        pts_root->rdev   = 0;
     }
 
     vfs_close(dev);

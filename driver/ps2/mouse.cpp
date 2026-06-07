@@ -10,6 +10,7 @@
 #include <syscall/syscall.h>
 #include <efi/boot.h>
 #include <dlinker.h>
+#include <input/evdev.h>
 #include <power.h>
 
 mouse_dec ms_dec;
@@ -28,7 +29,10 @@ SHEET        *mouse_ct_sheet_img;
 extern SHEET *desktop_ct_sheet;
 extern SHEET *dock_ct_sheet;
 MouseType     type;
-
+static void mouse_push_evdev_report()
+{
+    evdev_push_mouse_report(ms_dec.x, ms_dec.y, (uint8_t)ms_dec.btn, ms_dec.scroll);
+}
 extern bool have_full_screen_app;
 extern bool logo_menu_just_born;
 extern bool logo_menu_is_open;
@@ -631,6 +635,7 @@ extern "C" void c_mouse_handler(void *regs_ptr, uint64_t error_code)
     uint8_t data = inb(PS2_DATA_PORT);
     if (mousedecode(data))
     {
+        mouse_push_evdev_report();
         ms_dec.need_flush = true;
         process_mouse_button();
     }
@@ -976,6 +981,8 @@ int get_mouse_scroll()
 
 extern "C" void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel)
 {
+    evdev_push_mouse_report(dx, dy, buttons, wheel);
+
     ms_dec.btn = buttons & 0x07;
     ms_dec.x   = dx;
     ms_dec.y   = dy;

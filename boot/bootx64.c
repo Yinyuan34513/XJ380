@@ -684,16 +684,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     // free(kernel_buffer);        // 释放内核文件，丢掉！
     boot_status("Initializing video");
 
-    if ((BootMenuFlags & BOOT_FLAG_BASE_VIDEO) != 0)
-    {
-        SwitchToResolution(800, 600);
-    }
-#if BUILD_EDITION == DEBUG_VERSION
-    else
-    {
-        SwitchToResolution(1920, 1080); // 切换分辨率
-    }
-#endif
+    SwitchToResolution(1920, 1080); // 切换分辨率
 
     struct FrameBufferConfig config = {(UINT8 *)(GOP->Mode->FrameBufferBase + 0xffff800000000000),
                                        GOP->Mode->Info->PixelsPerScanLine, GOP->Mode->Info->HorizontalResolution,

@@ -190,6 +190,7 @@ extern "C" {
 void keyboard_push_input(uint8_t value);
 void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed);
 void mouse_inject_report(int dx, int dy, uint8_t buttons, int wheel);
+void evdev_push_usb_keyboard_event(uint8_t usage, uint8_t pressed);
 #ifdef __cplusplus
 }
 #endif

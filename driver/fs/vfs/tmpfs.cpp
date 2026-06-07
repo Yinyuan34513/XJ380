@@ -358,7 +358,7 @@ static void *tmpfs_map(void *file, void *addr, size_t offset, size_t size, size_
 
     for (size_t pos = 0; pos < size; pos += PAGE_SIZE) {
         size_t page_index = (offset + pos) / PAGE_SIZE;
-        page_map_to(process->pagedir, (uint64_t)addr + pos, entry->pages[page_index], pte_flags);
+        page_map_ref_to(process->pagedir, (uint64_t)addr + pos, entry->pages[page_index], pte_flags);
     }
 
     spin_unlock(&tmpfs_lock);

@@ -494,6 +494,7 @@ static void ev_queue(struct xj380_drm *drm, uint64_t user_data)
     ev->vbl.crtc_id     = drm->crtc_id;
     drm->event_count++;
     spin_unlock(&drm->lock);
+    poll_notify_event();
 }
 
 static int drm_poll(size_t events)
@@ -2005,62 +2006,69 @@ static int drm_ioctl(device_t *dev, size_t req, void *arg)
      */
     uint32_t cmd = (uint32_t)req;
 
+    int ret = 0;
     switch (cmd) {
-    case DRM_IOCTL_VERSION:          return drm_version(drm, (struct drm_version *)arg);
-    case DRM_IOCTL_GET_UNIQUE:       return drm_get_unique(drm, (struct drm_unique *)arg);
-    case DRM_IOCTL_GET_MAGIC:        return drm_get_magic((struct drm_auth *)arg);
-    case DRM_IOCTL_AUTH_MAGIC:       return drm_auth_magic((struct drm_auth *)arg);
-    case DRM_IOCTL_GET_CAP:          return drm_get_cap((struct drm_get_cap *)arg);
-    case DRM_IOCTL_SET_VERSION:      return drm_set_version((struct drm_set_version *)arg);
-    case DRM_IOCTL_GET_STATS:        return drm_get_stats((struct drm_stats *)arg);
-    case DRM_IOCTL_WAIT_VBLANK:      return drm_wait_vblank((union drm_wait_vblank *)arg);
-    case DRM_IOCTL_SET_CLIENT_CAP:   return drm_set_client_cap(drm, (struct drm_set_client_cap *)arg, NULL);
-    case DRM_IOCTL_PRIME_HANDLE_TO_FD: return drm_prime_handle_to_fd(drm, (struct drm_prime_handle *)arg);
-    case DRM_IOCTL_PRIME_FD_TO_HANDLE: return drm_prime_fd_to_handle(drm, (struct drm_prime_handle *)arg);
+    case DRM_IOCTL_VERSION:          ret = drm_version(drm, (struct drm_version *)arg); break;
+    case DRM_IOCTL_GET_UNIQUE:       ret = drm_get_unique(drm, (struct drm_unique *)arg); break;
+    case DRM_IOCTL_GET_MAGIC:        ret = drm_get_magic((struct drm_auth *)arg); break;
+    case DRM_IOCTL_AUTH_MAGIC:       ret = drm_auth_magic((struct drm_auth *)arg); break;
+    case DRM_IOCTL_GET_CAP:          ret = drm_get_cap((struct drm_get_cap *)arg); break;
+    case DRM_IOCTL_SET_VERSION:      ret = drm_set_version((struct drm_set_version *)arg); break;
+    case DRM_IOCTL_GET_STATS:        ret = drm_get_stats((struct drm_stats *)arg); break;
+    case DRM_IOCTL_WAIT_VBLANK:      ret = drm_wait_vblank((union drm_wait_vblank *)arg); break;
+    case DRM_IOCTL_SET_CLIENT_CAP:   ret = drm_set_client_cap(drm, (struct drm_set_client_cap *)arg, NULL); break;
+    case DRM_IOCTL_PRIME_HANDLE_TO_FD: ret = drm_prime_handle_to_fd(drm, (struct drm_prime_handle *)arg); break;
+    case DRM_IOCTL_PRIME_FD_TO_HANDLE: ret = drm_prime_fd_to_handle(drm, (struct drm_prime_handle *)arg); break;
 
-    case DRM_IOCTL_MODE_GETRESOURCES: return drm_mode_getresources(drm, (struct drm_mode_card_res *)arg);
-    case DRM_IOCTL_MODE_GETCRTC:      return drm_mode_getcrtc(drm, (struct drm_mode_crtc *)arg);
-    case DRM_IOCTL_MODE_SETCRTC:      return drm_mode_setcrtc(drm, (struct drm_mode_crtc *)arg);
-    case DRM_IOCTL_MODE_PAGE_FLIP:    return drm_mode_page_flip(drm, (struct drm_mode_crtc_page_flip *)arg);
-    case DRM_IOCTL_MODE_GETCONNECTOR: return drm_mode_getconnector(drm, (struct drm_mode_get_connector *)arg);
-    case DRM_IOCTL_MODE_GETENCODER:   return drm_mode_getencoder(drm, (struct drm_mode_get_encoder *)arg);
-    case DRM_IOCTL_MODE_CREATE_DUMB:  return drm_mode_create_dumb(drm, (struct drm_mode_create_dumb *)arg);
-    case DRM_IOCTL_MODE_MAP_DUMB:     return drm_mode_map_dumb(drm, (struct drm_mode_map_dumb *)arg);
-    case DRM_IOCTL_MODE_DESTROY_DUMB: return drm_mode_destroy_dumb(drm, (struct drm_mode_destroy_dumb *)arg);
-    case DRM_IOCTL_MODE_ADDFB:        return drm_mode_addfb(drm, (struct drm_mode_fb_cmd *)arg);
-    case DRM_IOCTL_MODE_ADDFB2:       return drm_mode_addfb2(drm, (struct drm_mode_fb_cmd2 *)arg);
-    case DRM_IOCTL_MODE_GETFB:        return drm_mode_getfb(drm, (struct drm_mode_fb_cmd *)arg);
-    case DRM_IOCTL_MODE_RMFB:         return drm_mode_rmfb(drm, (uint32_t *)arg);
-    case DRM_IOCTL_MODE_CLOSEFB:      return drm_mode_closefb(drm, (struct drm_mode_closefb *)arg);
-    case DRM_IOCTL_MODE_GETPLANERESOURCES: return drm_mode_getplane_resources(drm, (struct drm_mode_get_plane_res *)arg);
-    case DRM_IOCTL_MODE_GETPLANE:      return drm_mode_getplane(drm, (struct drm_mode_get_plane *)arg);
-    case DRM_IOCTL_MODE_SETPLANE:      return drm_mode_setplane(drm, (struct drm_mode_set_plane *)arg);
-    case DRM_IOCTL_MODE_DIRTYFB:       return drm_mode_dirtyfb(drm, (struct drm_mode_fb_dirty_cmd *)arg);
-    case DRM_IOCTL_MODE_GETPROPERTY:   return drm_mode_getproperty(drm, (struct drm_mode_get_property *)arg);
-    case DRM_IOCTL_MODE_CREATEPROPBLOB:return drm_mode_createpropblob(drm, (struct drm_mode_create_blob *)arg);
-    case DRM_IOCTL_MODE_DESTROYPROPBLOB: return drm_mode_destroypropblob(drm, (struct drm_mode_destroy_blob *)arg);
-    case DRM_IOCTL_MODE_OBJ_GETPROPERTIES: return drm_mode_obj_getproperties(drm, (struct drm_mode_obj_get_properties *)arg);
-    case DRM_IOCTL_MODE_ATOMIC:        return drm_mode_atomic(drm, (struct drm_mode_atomic *)arg);
-    case DRM_IOCTL_MODE_GETPROPBLOB:   return drm_mode_getpropblob(drm, (struct drm_mode_get_blob *)arg);
-    case DRM_IOCTL_MODE_CREATE_LEASE:  return drm_mode_create_lease((struct drm_mode_create_lease *)arg);
-    case DRM_IOCTL_MODE_LIST_LESSEES:  return drm_mode_list_lessees((struct drm_mode_list_lessees *)arg);
-    case DRM_IOCTL_MODE_GET_LEASE:     return drm_mode_get_lease((struct drm_mode_get_lease *)arg);
-    case DRM_IOCTL_MODE_REVOKE_LEASE:  return drm_mode_revoke_lease((struct drm_mode_revoke_lease *)arg);
+    case DRM_IOCTL_MODE_GETRESOURCES: ret = drm_mode_getresources(drm, (struct drm_mode_card_res *)arg); break;
+    case DRM_IOCTL_MODE_GETCRTC:      ret = drm_mode_getcrtc(drm, (struct drm_mode_crtc *)arg); break;
+    case DRM_IOCTL_MODE_SETCRTC:      ret = drm_mode_setcrtc(drm, (struct drm_mode_crtc *)arg); break;
+    case DRM_IOCTL_MODE_PAGE_FLIP:    ret = drm_mode_page_flip(drm, (struct drm_mode_crtc_page_flip *)arg); break;
+    case DRM_IOCTL_MODE_GETCONNECTOR: ret = drm_mode_getconnector(drm, (struct drm_mode_get_connector *)arg); break;
+    case DRM_IOCTL_MODE_GETENCODER:   ret = drm_mode_getencoder(drm, (struct drm_mode_get_encoder *)arg); break;
+    case DRM_IOCTL_MODE_CREATE_DUMB:  ret = drm_mode_create_dumb(drm, (struct drm_mode_create_dumb *)arg); break;
+    case DRM_IOCTL_MODE_MAP_DUMB:     ret = drm_mode_map_dumb(drm, (struct drm_mode_map_dumb *)arg); break;
+    case DRM_IOCTL_MODE_DESTROY_DUMB: ret = drm_mode_destroy_dumb(drm, (struct drm_mode_destroy_dumb *)arg); break;
+    case DRM_IOCTL_MODE_ADDFB:        ret = drm_mode_addfb(drm, (struct drm_mode_fb_cmd *)arg); break;
+    case DRM_IOCTL_MODE_ADDFB2:       ret = drm_mode_addfb2(drm, (struct drm_mode_fb_cmd2 *)arg); break;
+    case DRM_IOCTL_MODE_GETFB:        ret = drm_mode_getfb(drm, (struct drm_mode_fb_cmd *)arg); break;
+    case DRM_IOCTL_MODE_RMFB:         ret = drm_mode_rmfb(drm, (uint32_t *)arg); break;
+    case DRM_IOCTL_MODE_CLOSEFB:      ret = drm_mode_closefb(drm, (struct drm_mode_closefb *)arg); break;
+    case DRM_IOCTL_MODE_GETPLANERESOURCES: ret = drm_mode_getplane_resources(drm, (struct drm_mode_get_plane_res *)arg); break;
+    case DRM_IOCTL_MODE_GETPLANE:      ret = drm_mode_getplane(drm, (struct drm_mode_get_plane *)arg); break;
+    case DRM_IOCTL_MODE_SETPLANE:      ret = drm_mode_setplane(drm, (struct drm_mode_set_plane *)arg); break;
+    case DRM_IOCTL_MODE_DIRTYFB:       ret = drm_mode_dirtyfb(drm, (struct drm_mode_fb_dirty_cmd *)arg); break;
+    case DRM_IOCTL_MODE_GETPROPERTY:   ret = drm_mode_getproperty(drm, (struct drm_mode_get_property *)arg); break;
+    case DRM_IOCTL_MODE_CREATEPROPBLOB: ret = drm_mode_createpropblob(drm, (struct drm_mode_create_blob *)arg); break;
+    case DRM_IOCTL_MODE_DESTROYPROPBLOB: ret = drm_mode_destroypropblob(drm, (struct drm_mode_destroy_blob *)arg); break;
+    case DRM_IOCTL_MODE_OBJ_GETPROPERTIES: ret = drm_mode_obj_getproperties(drm, (struct drm_mode_obj_get_properties *)arg); break;
+    case DRM_IOCTL_MODE_ATOMIC:        ret = drm_mode_atomic(drm, (struct drm_mode_atomic *)arg); break;
+    case DRM_IOCTL_MODE_GETPROPBLOB:   ret = drm_mode_getpropblob(drm, (struct drm_mode_get_blob *)arg); break;
+    case DRM_IOCTL_MODE_CREATE_LEASE:  ret = drm_mode_create_lease((struct drm_mode_create_lease *)arg); break;
+    case DRM_IOCTL_MODE_LIST_LESSEES:  ret = drm_mode_list_lessees((struct drm_mode_list_lessees *)arg); break;
+    case DRM_IOCTL_MODE_GET_LEASE:     ret = drm_mode_get_lease((struct drm_mode_get_lease *)arg); break;
+    case DRM_IOCTL_MODE_REVOKE_LEASE:  ret = drm_mode_revoke_lease((struct drm_mode_revoke_lease *)arg); break;
 
     /* Legacy / no-ops that userspace might call */
     case DRM_IOCTL_SET_MASTER:
     case DRM_IOCTL_DROP_MASTER:
-        return 0;
+        ret = 0;
+        break;
 
     /* Stubs for unused ioctls */
     case DRM_IOCTL_GEM_CLOSE:
-        return drm_gem_close(drm, (struct drm_gem_close *)arg);
+        ret = drm_gem_close(drm, (struct drm_gem_close *)arg);
+        break;
 
     default:
         write_serial_fmt("[udev-trace] drm:unsupported ioctl req=0x%llx cmd=0x%x\n",
                          (unsigned long long)req, cmd);
         return -ENOSYS;
     }
+
+    if (ret < 0)
+        write_serial_fmt("[drm-trace] ioctl cmd=0x%x ret=%d\n", cmd, ret);
+    return ret;
 }
 
 /* ---- read (event dequeuer) ---- */
@@ -2072,11 +2080,9 @@ static size_t drm_read(int drive, uint8_t *buf, size_t len, size_t offset)
     if (len < sizeof(struct drm_event_vblank)) return (size_t)-EINVAL;
 
     spin_lock(&drm->lock);
-    while (drm->event_count == 0) {
+    if (drm->event_count == 0) {
         spin_unlock(&drm->lock);
-        /* busy-wait / yield — full sleep would need waitqueue */
-        scheduler_yield();
-        spin_lock(&drm->lock);
+        return (size_t)-EAGAIN;
     }
 
     struct event_entry *ev = &drm->events[drm->event_head];
@@ -2101,8 +2107,11 @@ static void *drm_map(int drive, void *addr, size_t len, size_t offset)
         if (drm->dumb[i].used && drm->dumb[i].phys_addr == offset) {
             size_t buf_bytes = (size_t)drm->dumb[i].pitch * drm->dumb[i].height;
             size_t map_len = PADDING_UP(MIN(len, buf_bytes), PAGE_SIZE);
-            page_map_range(get_current_directory(), (uint64_t)addr, offset, map_len,
-                           PTE_USER | PTE_PRESENT | PTE_WRITEABLE | PTE_NO_EXECUTE);
+            for (size_t pos = 0; pos < map_len; pos += PAGE_SIZE)
+            {
+                page_map_ref_to(get_current_directory(), (uint64_t)addr + pos, offset + pos,
+                                PTE_USER | PTE_PRESENT | PTE_WRITEABLE | PTE_NO_EXECUTE);
+            }
             return addr;
         }
     }

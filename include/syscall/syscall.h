@@ -76,6 +76,11 @@
 #define FUTEX_UNLOCK_PI   7
 #define FUTEX_TRYLOCK_PI  8
 #define FUTEX_WAIT_BITSET 9
+#define FUTEX_WAKE_BITSET 10
+
+#define FUTEX_PRIVATE_FLAG    128
+#define FUTEX_CLOCK_REALTIME  256
+#define FUTEX_CMD_MASK        0x7f
 
 // stat 文件类型标志
 #define S_IFMT   00170000
@@ -348,6 +353,10 @@
 #define SYS_MKNOD 133
 #define SYS_STATFS 137
 #define SYS_PIVOT_ROOT 155
+#define SYS_MLOCK 149
+#define SYS_MUNLOCK 150
+#define SYS_MLOCKALL 151
+#define SYS_MUNLOCKALL 152
 
 #define SYS_PRCTL 157
 #define SYS_ARCH_PRCTL 158
@@ -746,6 +755,10 @@ sys_(fstatfs, int fd, struct statfs *buf);
 sys_(pivot_root, char *new_root, char *put_old);
 sys_(mincore, uint64_t addr, uint64_t size, uint64_t vec);
 sys_(madvise, uint64_t addr, size_t length, int advice);
+sys_(mlock, uint64_t addr, size_t length);
+sys_(munlock, uint64_t addr, size_t length);
+sys_(mlockall, int flags);
+sys_(munlockall);
 sys_(inotify_init);
 sys_(inotify_init1, int flags);
 sys_(inotify_add_watch, int fd, const char *pathname, uint32_t mask);

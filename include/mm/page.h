@@ -100,6 +100,12 @@ void page_table_clear(page_table_t *table);
 void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags);
 
 /**
+ * Map an already-owned physical page and hold one mapping reference.
+ * The mapping will drop that reference through unmap_page().
+ */
+void page_map_ref_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags);
+
+/**
  * 映射一组物理地址 (对应的虚拟地址用hhdm计算)
  * @param directory 页表
  * @param frame 物理地址

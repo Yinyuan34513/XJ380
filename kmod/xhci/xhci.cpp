@@ -200,6 +200,22 @@ static bool xhci_keyboard_usage_present(const uint8_t *report, uint8_t usage) {
     return false;
 }
 
+static void xhci_push_keyboard_modifier_events(uint8_t previous,
+                                               uint8_t current) {
+    static const uint8_t modifier_usages[8] = {
+        0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7,
+    };
+
+    uint8_t changed = (uint8_t)(previous ^ current);
+    for (size_t i = 0; i < sizeof(modifier_usages) / sizeof(modifier_usages[0]); ++i) {
+        uint8_t mask = (uint8_t)(1U << i);
+        if ((changed & mask) == 0) {
+            continue;
+        }
+        evdev_push_usb_keyboard_event(modifier_usages[i], (current & mask) ? 1 : 0);
+    }
+}
+
 static uint8_t xhci_keyboard_translate_usage(uint8_t usage, bool shift,
                                              bool caps_lock) {
     if (usage >= 0x04 && usage <= 0x1DU) {
@@ -280,6 +296,7 @@ static void xhci_handle_keyboard_report(xhci_slot_state *slot,
 
     uint8_t new_modifiers =
         (uint8_t)(current[0] & (uint8_t)~hid->prev_report[0]);
+    xhci_push_keyboard_modifier_events(hid->prev_report[0], current[0]);
     if (new_modifiers & 0x11U) {
         keyboard_push_input(KEY_CTRL);
     }
