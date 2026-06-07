@@ -239,7 +239,7 @@ static void draw_startup_screen(SHEET_INFO *shtinf, SHEET *desktop_sheet)
     if (shtinf == NULL || desktop_sheet == NULL) return;
 
     // 开机启动界面：纯色背景 + 居中 XJ380 Logo
-    draw_rect(shtinf, desktop_sheet, 0, 0, shtinf->scrx - 1, shtinf->scry - 1, {0x0d, 0x13, 0x24, 0xff});
+    draw_rect(shtinf, desktop_sheet, 0, 0, shtinf->scrx - 1, shtinf->scry - 1, BLACK);
 
     int logo_w = (int)(shtinf->scrx * 0.26f);
     if (logo_w < 160) logo_w = 160;
@@ -249,7 +249,7 @@ static void draw_startup_screen(SHEET_INFO *shtinf, SHEET *desktop_sheet)
     int logo_x = (shtinf->scrx - logo_w) / 2;
     int logo_y = (shtinf->scry - logo_h) / 2;
 
-    PrintPicture_blend(shtinf, desktop_sheet, logo_x, logo_y, logo_w, logo_h, (char *)"/system/xj380_2.png");
+    // PrintPicture_blend(shtinf, desktop_sheet, logo_x, logo_y, logo_w, logo_h, (char *)"/system/xj380_2.png");
 
     refresh_sheet(shtinf);
     flush_sheet_damage_queue(shtinf);
@@ -366,28 +366,28 @@ void components_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data != NULL && !have_full_screen_app && !user_dock_owns_dock_sheet)
-        {
-            tm         *time          = &tw_data->time;
-            tm         *old_time      = &tw_data->old_time;
-            SHEET_INFO *shtinf        = tw_data->sht;
-            SHEET      *dock_ct_sheet = tw_data->ct_sheet;
-            int         scdx          = tw_data->scdx;
-            time_read(time);
+        // if (tw_data != NULL && !have_full_screen_app && !user_dock_owns_dock_sheet)
+        // {
+        //     tm         *time          = &tw_data->time;
+        //     tm         *old_time      = &tw_data->old_time;
+        //     SHEET_INFO *shtinf        = tw_data->sht;
+        //     SHEET      *dock_ct_sheet = tw_data->ct_sheet;
+        //     int         scdx          = tw_data->scdx;
+        //     time_read(time);
 
-            if ((old_time->tm_min != time->tm_min || old_time->tm_hour != time->tm_hour) && !tw_data->need_flush &&
-                !tw_data->flushing)
-            {
-                tw_data->flushing = true;
-                *old_time         = *time;
-                draw_rect(shtinf, dock_ct_sheet, scdx - 40, 0, scdx - 3, 23, DOCK_COL);
-                // 12 小时制
-                print_fmt_box_ttf(shtinf, dock_ct_sheet, BLACK, scdx - 40, 1, 10, "%02u:%02u", time->tm_hour % 24,
-                                  time->tm_min);
-                tw_data->flushing   = false;
-                tw_data->need_flush = true;
-            }
-        }
+        //     if ((old_time->tm_min != time->tm_min || old_time->tm_hour != time->tm_hour) && !tw_data->need_flush &&
+        //         !tw_data->flushing)
+        //     {
+        //         tw_data->flushing = true;
+        //         *old_time         = *time;
+        //         draw_rect(shtinf, dock_ct_sheet, scdx - 40, 0, scdx - 3, 23, DOCK_COL);
+        //         // 12 小时制
+        //         print_fmt_box_ttf(shtinf, dock_ct_sheet, BLACK, scdx - 40, 1, 10, "%02u:%02u", time->tm_hour % 24,
+        //                           time->tm_min);
+        //         tw_data->flushing   = false;
+        //         tw_data->need_flush = true;
+        //     }
+        // }
         if (ms_dec.need_flush) { process_mouse_info(); }
         if (sht_img != NULL) { flush_sheet_damage_queue(sht_img); }
         scheduler_yield();
@@ -399,6 +399,7 @@ SHEET        *desktop_ct_sheet; // 如果SheetTest那行输出的是1145的话�
 SHEET        *dock_ct_sheet;
 SHEET        *middle_ct_sheet;
 SHEET        *mouse_ct_sheet;
+SHEET        *top_ct_sheet;
 SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
 void desktop_flusher()
@@ -422,10 +423,12 @@ void desktop_flusher()
                  &desktop_ct_sheet);
     create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32700,
                  &dock_ct_sheet);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32766,
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32759,
                  &middle_ct_sheet); // 输入法类窗口放这层
-    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 29, 22, FixedSheetType, 32767,
+    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 29, 22, FixedSheetType, 32766,
                  &mouse_ct_sheet);
+    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32767,
+                 &top_ct_sheet);
 
     // 草稿纸吗，有点意思
     SHEET_INFO zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi;
@@ -595,11 +598,11 @@ void desktop_flusher()
             enable_intr();
             enable_scheduler();
         }
-        if (tw_data != NULL && tw_data->need_flush && !user_dock_owns_dock_sheet)
-        {
-            tw_data->need_flush = false;
-            refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
-        }
+        // if (tw_data != NULL && tw_data->need_flush && !user_dock_owns_dock_sheet)
+        // {
+        //     tw_data->need_flush = false;
+        //     refresh_part_sheet(&shtinf, scdx - 40, 0, scdx, 24); // 刷新时间
+        // }
 
         k_input = dispatch_keyboard_input_to_focused_window();
 
