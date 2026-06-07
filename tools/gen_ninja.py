@@ -658,8 +658,8 @@ def stardust(n: Ninja, core_objs: list[Path], start_obj: Path, liballoc: Path) -
         "src/components/textbox.cpp",
         "src/components/flex.cpp",
     ]
-    hello_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fshort-wchar -nostdinc -Wno-write-strings"
-    opt_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O2 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fshort-wchar -nostdinc -Wno-write-strings"
+    hello_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
+    opt_flags = "-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 -O2 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
     targets = [
         stardust_example(n, "helloworld", hello_sources, hello_flags, core_objs, start_obj, liballoc),
         stardust_example(n, "layout", full_sources, opt_flags, core_objs, start_obj, liballoc),
@@ -756,7 +756,7 @@ def main() -> None:
     n.rule("netserver_cc", "mkdir -p $$(dirname $out) && $cc $netserver_cflags -MF $out.d -c $in -o $out", log_desc("CC", "$in"), depfile="$out.d")
     n.rule("netserver_cxx", "mkdir -p $$(dirname $out) && $cxx $netserver_cxxflags -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
     n.rule("kmod_link", "$cxx -shared $in $ldflags -o $out", log_desc("LD", "$out"))
-    n.rule("stardust_cxx", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MMD -MP -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("stardust_cxx", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out && printf \"[CXX] %s -> %s\\n\" $in $out", log_desc("CXX", "$in"), depfile="$out.d")
     n.rule("stardust_ld", "mkdir -p $$(dirname $out) && $user_ld -Ttext=0x200000 -e xapi_start $in -o $out && echo \"$message\"", log_desc("LD", "$out"))
     n.rule("python_cmd", "python3 tools/ninja_build.py $cmd", "$desc")
     n.rule("shell_cmd", "$cmd", "$desc")

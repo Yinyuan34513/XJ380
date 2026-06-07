@@ -37,6 +37,12 @@ class GenNinjaDependencyTests(unittest.TestCase):
         self.assertNotIn(" | user/include/", self.text)
         self.assertNotIn(" | user/browser/", self.text)
 
+    def test_stardust_objects_keep_compiler_depfile_flags(self) -> None:
+        self.assertIn("rule stardust_cxx\n", self.text)
+        self.assertIn("build out/stardustui/helloworld/obj/helloworld.o: stardust_cxx", self.text)
+        self.assertIn("-Iframeworks/StardustUI/includes -DXJ380 -O0", self.text)
+        self.assertIn("-Wno-write-strings -MMD -MP\n", self.text)
+
 
 class GenNinjaLogTests(unittest.TestCase):
     @classmethod
