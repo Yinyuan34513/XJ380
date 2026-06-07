@@ -174,6 +174,50 @@ static bool clip_window_line(uint32_t *x1, uint32_t *y1, uint32_t *x2, uint32_t 
     return true;
 }
 
+static void xapi_mark_window_dirty(WINDOW_HANDLE *handle, int x1, int y1, int x2, int y2)
+{
+    if (handle == NULL) return;
+    if (x1 > x2)
+    {
+        int tmp = x1;
+        x1 = x2;
+        x2 = tmp;
+    }
+    if (y1 > y2)
+    {
+        int tmp = y1;
+        y1 = y2;
+        y2 = tmp;
+    }
+
+    if (!handle->dirty)
+    {
+        handle->dirty = true;
+        handle->dirty_x1 = x1;
+        handle->dirty_y1 = y1;
+        handle->dirty_x2 = x2;
+        handle->dirty_y2 = y2;
+        return;
+    }
+
+    if (x1 < handle->dirty_x1) handle->dirty_x1 = x1;
+    if (y1 < handle->dirty_y1) handle->dirty_y1 = y1;
+    if (x2 > handle->dirty_x2) handle->dirty_x2 = x2;
+    if (y2 > handle->dirty_y2) handle->dirty_y2 = y2;
+}
+
+static void xapi_mark_window_full_dirty(WINDOW_HANDLE *handle)
+{
+    if (handle == NULL || handle->WindowNodePtr == NULL || handle->WindowNodePtr->w_sheet == NULL) return;
+    SHEET *sheet = found_sheet_byid(sht_img, handle->WindowNodePtr->w_sheet);
+    if (sheet == NULL) return;
+    handle->dirty = true;
+    handle->dirty_x1 = 0;
+    handle->dirty_y1 = 0;
+    handle->dirty_x2 = (int)sheet->width;
+    handle->dirty_y2 = (int)sheet->height;
+}
+
 /*
  *
  *  @param handle 指向HDLE的指针，HDLE存储WINDOW_HANDLE的地址，即handle=**WH
@@ -201,6 +245,12 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     }
     *(uint64_t *)(handle)       = (uint64_t)(malloc(sizeof(WINDOW_HANDLE))); // HDLE
     WINDOW_HANDLE *WindowHandle = *(WINDOW_HANDLE **)(handle);
+    if (WindowHandle == NULL)
+    {
+        free(title);
+        return false;
+    }
+    memset(WindowHandle, 0, sizeof(WINDOW_HANDLE));
     uint8_t        window_type  = window_info.sets & XWIN_TYPE_MASK;
     if (window_type == XWIN_NORMAL || window_type == NULL)
     {
@@ -290,6 +340,8 @@ int do_xapi_DrawPoint(uint64_t handle, uint32_t x, uint32_t y, uint32_t color)
     draw_point(sht_img, sheet, (int)x + base_x, (int)y + base_y,
                {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                 (uint8_t)((color) & 0xFF)});
+    xapi_mark_window_dirty(WindowHandle, (int)x + base_x, (int)y + base_y, (int)x + base_x + 1,
+                           (int)y + base_y + 1);
 
     return true;
 }
@@ -310,6 +362,8 @@ int do_xapi_DrawLine(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
     draw_line(sht_img, sheet, (int)x1 + base_x, (int)y1 + base_y, (int)x2 + base_x, (int)y2 + base_y,
               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                (uint8_t)((color) & 0xFF)});
+    xapi_mark_window_dirty(WindowHandle, (int)x1 + base_x, (int)y1 + base_y, (int)x2 + base_x + 1,
+                           (int)y2 + base_y + 1);
 
     return true;
 }
@@ -330,6 +384,8 @@ int do_xapi_DrawRect_fill(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2
     draw_rect(sht_img, sheet, (int)x1 + base_x, (int)y1 + base_y, (int)x2 + base_x, (int)y2 + base_y,
               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                (uint8_t)((color) & 0xFF)});
+    xapi_mark_window_dirty(WindowHandle, (int)x1 + base_x, (int)y1 + base_y, (int)x2 + base_x + 1,
+                           (int)y2 + base_y + 1);
 
     return true;
 }
@@ -360,6 +416,8 @@ int do_xapi_DrawRect(uint64_t handle, uint32_t x1, uint32_t y1, uint32_t x2, uin
     draw_line(sht_img, sheet, (int)x2 + base_x, (int)y1 + base_y, (int)x2 + base_x, (int)y2 + base_y,
               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                (uint8_t)((color) & 0xFF)});
+    xapi_mark_window_dirty(WindowHandle, (int)x1 + base_x, (int)y1 + base_y, (int)x2 + base_x + 1,
+                           (int)y2 + base_y + 1);
 
     return true;
 }
@@ -398,6 +456,7 @@ int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint
                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                    (uint8_t)((color) & 0xFF)});
     }
+    xapi_mark_window_full_dirty(WindowHandle);
     free(TextString);
     return true;
 }
@@ -429,6 +488,7 @@ int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t si
                     (uint8_t)((color) & 0xFF)},
                    &input_width);
     }
+    xapi_mark_window_full_dirty(WindowHandle);
     if (i_width != 0) copy_to_user_pagedir(xapi_current_pagedir(), (void *)i_width, &input_width, sizeof(input_width));
     free(TextString);
     return true;
@@ -456,6 +516,7 @@ int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, ui
                      {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
                      (uint8_t)((color) & 0xFF)});
     }
+    xapi_mark_window_full_dirty(WindowHandle);
     free(TextString);
     return true;
 }
@@ -517,6 +578,8 @@ void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
             dst_row[wx].a = 255;
         }
     }
+    xapi_mark_window_dirty(WindowHandle, (int)x + base_x, (int)y + base_y, (int)(x + width) + base_x,
+                           (int)(y + height) + base_y);
 }
 
 void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t buffer)
@@ -561,6 +624,8 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
         if (!xapi_checked_mul_size((size_t)wy, row_bytes, &src_offset)) return;
         if (!copy_from_user_pagedir(pagedir, dst_row, (uint8_t *)buf + src_offset, row_bytes)) return;
     }
+    xapi_mark_window_dirty(WindowHandle, (int)x + base_x, (int)y + base_y, (int)(x + width) + base_x,
+                           (int)(y + height) + base_y);
 }
 
 int do_xapi_RefreshWindow(uint64_t handle)
@@ -569,8 +634,21 @@ int do_xapi_RefreshWindow(uint64_t handle)
     if (WindowHandle == NULL) return false;
     int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            ex           = bx + getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            ey           = by + getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    int            ex           = 0;
+    int            ey           = 0;
+    if (WindowHandle->dirty)
+    {
+        bx += WindowHandle->dirty_x1;
+        by += WindowHandle->dirty_y1;
+        ex = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + WindowHandle->dirty_x2;
+        ey = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + WindowHandle->dirty_y2;
+        WindowHandle->dirty = false;
+    }
+    else
+    {
+        ex = bx + getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+        ey = by + getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    }
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
@@ -626,6 +704,7 @@ int xapi_doDrawSvg(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint
 
     int ret = xapi_drawSvgBySheet(sht_img, window_handle->WindowNodePtr->w_sheet, (int)x + content_x,
                                   (int)y + content_y, (int)width, svg_string, enable_trans != 0);
+    xapi_mark_window_full_dirty(window_handle);
     free(svg_string);
     return ret;
 }
@@ -667,6 +746,7 @@ int xapi_doDrawFA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint6
 
     int ret = xapi_drawFABySheet(sht_img, window_handle->WindowNodePtr->w_sheet, (int)x + content_x,
                                  (int)y + content_y, (int)width, fa_name, enable_trans != 0);
+    xapi_mark_window_full_dirty(window_handle);
     free(fa_name);
     return ret;
 }
@@ -696,6 +776,7 @@ void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
         PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
 
+    xapi_mark_window_full_dirty(WindowHandle);
     free(filepath);
 }
 
@@ -715,6 +796,7 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
         PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
 
+    xapi_mark_window_full_dirty(WindowHandle);
     free(filepath);
 }
 
@@ -734,6 +816,7 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
         PrintPicture_blend(sht_img, WindowHandle->WindowNodePtr->w_sheet, x, y, width, height, filepath);
     }
 
+    xapi_mark_window_full_dirty(WindowHandle);
     free(filepath);
 }
 
@@ -752,6 +835,7 @@ void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uin
     {
         put_button_theme(WindowHandle->WindowNodePtr, x, y, button_text, CRLid, false);
     }
+    xapi_mark_window_full_dirty(WindowHandle);
     free(button_text);
 }
 

@@ -18,6 +18,7 @@ typedef struct
 enum
 {
     SHEET_DAMAGE_QUEUE_CAPACITY = 8,
+    SHEET_FLUSH_RECT_BUDGET = 2,
 };
 
 typedef struct
@@ -29,8 +30,27 @@ typedef struct
 } SheetDamageQueueState;
 
 static spin_t               g_sheet_damage_lock = SPIN_INIT;
-static spin_t               g_sheet_flush_lock  = SPIN_INIT;
+static volatile long        g_sheet_flush_busy  = 0;
 static SheetDamageQueueState g_sheet_damage_queue = {NULL, {}, 0, false};
+
+static bool sheet_flush_try_begin()
+{
+    unsigned char busy;
+    asm volatile("lock btsq $0, %1\n\t"
+                 "setc %0\n\t"
+                 : "=q"(busy), "+m"(g_sheet_flush_busy)
+                 :
+                 : "memory", "cc");
+    return !busy;
+}
+
+static void sheet_flush_end()
+{
+    asm volatile("lock btrq $0, %0\n\t"
+                 : "+m"(g_sheet_flush_busy)
+                 :
+                 : "memory", "cc");
+}
 
 static inline int rect_min_int(int a, int b)
 {
@@ -860,8 +880,9 @@ void refresh_sheet(SHEET_INFO *sht)
 void flush_sheet_damage_queue(SHEET_INFO *sht)
 {
     if (!allow_to_flush || sht == NULL) return;
+    if (!sheet_flush_try_begin()) return;
 
-    spin_lock(&g_sheet_flush_lock);
+    int flushed = 0;
     while (true)
     {
         SHEET_INFO      *pending_sht = NULL;
@@ -882,8 +903,10 @@ void flush_sheet_damage_queue(SHEET_INFO *sht)
 
         if (pending_sht == NULL) break;
         refresh_part_sheet_now(pending_sht, rect.x1, rect.y1, rect.x2, rect.y2);
+        flushed++;
+        if (flushed >= SHEET_FLUSH_RECT_BUDGET) break;
     }
-    spin_unlock(&g_sheet_flush_lock);
+    sheet_flush_end();
 }
 
 uint32_t get_hor()

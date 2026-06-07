@@ -5,6 +5,11 @@
 struct WINDOW_HANDLE
 {
     WINDOWLS *WindowNodePtr;
+    bool      dirty;
+    int       dirty_x1;
+    int       dirty_y1;
+    int       dirty_x2;
+    int       dirty_y2;
 };
 
 struct XWINDOW
