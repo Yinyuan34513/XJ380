@@ -23,6 +23,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 #include <graphics/components/button.h>
+#include <graphics/components/text_input_box.h>
 
 bool winRD_lock = false;
 
@@ -882,6 +883,47 @@ void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
     if (WindowHandle == NULL) return;
     unregister_button_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet),
                                  CRLid);
+}
+
+uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return 0;
+
+    char *initial_text = NULL;
+    if (text != 0 && xapi_copy_gui_string(&initial_text, text) < 0) return 0;
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        x += 12;
+        y += 27;
+    }
+
+    SHEET   *sheet = found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    uint64_t id    = register_text_input_box_components(sheet, (int)x, (int)y, (uint32_t)width, initial_text);
+    free(initial_text);
+    if (id == 0) return 0;
+
+    xapi_mark_window_full_dirty(WindowHandle);
+    return id;
+}
+
+uint64_t do_xapi_GetTextInputBox(uint64_t id, uint64_t text)
+{
+    if (id == 0 || text == 0) return false;
+
+    char buffer[TEXT_INPUT_BOX_MAX + 1];
+    memset(buffer, 0, sizeof(buffer));
+    if (!get_text_input_box_text(id, buffer, sizeof(buffer))) return false;
+
+    size_t copy_len = xgui_strnlen(buffer, sizeof(buffer) - 1) + 1;
+    return copy_to_user_pagedir(xapi_current_pagedir(), (void *)text, buffer, copy_len);
+}
+
+uint64_t do_xapi_DeleteTextInputBox(uint64_t id)
+{
+    if (id == 0) return false;
+    return unregister_text_input_box_component(id);
 }
 
 void do_xapi_Broken(char *info)

@@ -20,9 +20,6 @@ extern bool waiting_change_setting_apps;
 extern bool waiting_change_setting_background;
 extern int change_setting_apps_id;
 
-extern int charbox_count;
-extern char *charbox_buf;
-
 struct RunfileSettings_Item
 {
     char exname[10];
@@ -48,9 +45,7 @@ void process_left_key(int x, int y);
 void draw_mainpage();
 void draw_setting();
 void create_input_box(char *buf);
-void put_char(char ch);
-void backspace();
-void delete_input_box();
+void delete_input_box(bool save);
 
 void draw_setting_apps();
 void change_setting_apps(int id);

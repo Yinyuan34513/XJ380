@@ -49,11 +49,13 @@ typedef struct XCOLORA
     UINT8 Alpha;
 } XCOLORA;
 
-typedef struct 
+typedef struct
 {
 	UINT64 	CRLid;
 	WSTR	text;
 } RightMenuItem;
+
+#define XAPI_TEXT_INPUT_BOX_BUFFER_SIZE 256
 
 
 // 4-1
@@ -319,6 +321,23 @@ void xapi_ButtonEmp(
 void xapi_DeleteButton(
 	HDLE  	handle,
 	UINT64  CRLid
+);
+
+UINT64 xapi_PutTextInputBox(
+	HDLE    handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  width,
+	WSTR    text
+);
+
+void xapi_GetTextInputBox(
+	UINT64 id,
+	WSTR   text
+);
+
+void xapi_DeleteTextInputBox(
+	UINT64 id
 );
 
 void xapi_RegisterRightButtonMenu(

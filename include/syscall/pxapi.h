@@ -207,6 +207,10 @@ typedef struct {
 #define XAPI_REG_RB_MENU    7436
 #define XAPI_URG_RB_MENU    7437
 
+#define XAPI_PUT_TEXT_INBOX 7456
+#define XAPI_GET_TEXT_INBOX 7457
+#define XAPI_DEL_TEXT_INBOX 7458
+
 // 4-1
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
@@ -217,7 +221,7 @@ typedef struct {
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7455
+// 当前最大号：7458
 
 #define XAPI_TASK_NAME_LEN 32
 
@@ -280,6 +284,9 @@ void do_xapi_Sleep(uint64_t ms);
 void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
+uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text);
+uint64_t do_xapi_GetTextInputBox(uint64_t id, uint64_t text);
+uint64_t do_xapi_DeleteTextInputBox(uint64_t id);
 uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
 uint64_t do_xapi_FileDialog(uint64_t mode, uint64_t title, uint64_t initial_path, uint64_t out_path, uint64_t out_size);

@@ -7,6 +7,7 @@
 #include "./wbuttons.h"
 #include <global_color.h>
 #include <graphics/window/window.h>
+#include <graphics/components/text_input_box.h>
 #include <proto.hpp>
 #include <ps2/mouse.h>
 #include <ttf.h>
@@ -679,6 +680,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
     WindowIsCreating  = true;
     int       bx = 0, by = 0, ex = 0, ey = 0;
 
+    unregister_text_input_box_components(windowls->w_sheet);
     unregister_right_rb_button_menu_components(windowls);
     if (windowls->type != XWIN_DESKTOP && windowls->type != XWIN_DOCK && windowls->type != XWIN_LOGIN)
         unregister_task_dock(windowls);

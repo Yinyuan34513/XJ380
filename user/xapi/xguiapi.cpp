@@ -253,6 +253,29 @@ extern "C" void xapi_DeleteButton(
 	enter_syscall(XAPI_DELETE_BUTTON, handle, CRLid, 0, 0, 0, 0);
 }
 
+extern "C" UINT64 xapi_PutTextInputBox(
+	HDLE    handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  width,
+	WSTR    text
+) {
+	return enter_syscall(XAPI_PUT_TEXT_INBOX, handle, x, y, width, (UINT64)(text), 0);
+}
+
+extern "C" void xapi_GetTextInputBox(
+	UINT64 id,
+	WSTR   text
+) {
+	enter_syscall(XAPI_GET_TEXT_INBOX, id, (UINT64)(text), 0, 0, 0, 0);
+}
+
+extern "C" void xapi_DeleteTextInputBox(
+	UINT64 id
+) {
+	enter_syscall(XAPI_DEL_TEXT_INBOX, id, 0, 0, 0, 0, 0);
+}
+
 extern "C" void xapi_RegisterRightButtonMenu(
 	HDLE  			handle,
 	RightMenuItem  *items,

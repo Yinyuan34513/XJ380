@@ -14,15 +14,7 @@ HDLE handle;
 int fmr_width = FMR_X;
 int fmr_height = FMR_Y;
 
-static int fmanager_dialog_x()
-{
-    return fmr_width / 2 - 100;
-}
-
-static int fmanager_dialog_y()
-{
-    return fmr_height / 2 - 25;
-}
+static void fm_cancel_inline_rename();
 
 void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
 {
@@ -41,14 +33,14 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_CRL:
         process_crl(hData);
         break;
-    case MSG_CHAR:
-        process_key((char)lData);
-        break;
     case MSG_SPCHAR:
-        if ((char)(lData) == '\b') { backspace(); }
-        else if ((char)(lData) == '\n') { delete_typebox(); }
+        if ((char)(lData) == '\n') { fm_finish_inline_rename(); }
+        break;
+    case MSG_KEYDOWN:
+        if (lData == XKEY_ENTER || lData == '\n') { fm_finish_inline_rename(); }
         break;
     case MSG_RESIZE:
+        fm_cancel_inline_rename();
         fmr_width = (int)hData;
         fmr_height = (int)lData;
         fm_clamp_scroll_base();
@@ -141,6 +133,7 @@ static int fmanager_main_impl(int argc, char *argv[], char *envp[])
         }
         if (need_paint && !register_lock)
         {
+            fm_cancel_inline_rename();
             paint_dir(current_path);
             need_paint = false;
         }
@@ -154,12 +147,13 @@ extern "C" int fmanager_main_cpp(int argc, char *argv[], char *envp[])
     return fmanager_main_impl(argc, argv, envp);
 }
 
-int  tb_cop = -1;
-
 static char g_clipboard_path[1024];
 static char g_clipboard_name[256];
 static bool g_clipboard_is_dir = false;
 static bool g_clipboard_cut = false;
+static bool g_inline_rename_active = false;
+static UINT64 g_inline_rename_box = 0;
+static char g_inline_rename_old_name[256];
 
 static bool fm_copy_string(char *out, int out_size, const char *src)
 {
@@ -203,6 +197,13 @@ static bool fm_join_path_checked(char *out, int out_size, const char *base, cons
     return fm_append_string(out, out_size, name);
 }
 
+static bool fm_name_is_valid(const char *name)
+{
+    if (name == NULL || name[0] == '\0') return false;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return false;
+    return strchr(name, '/') == NULL && strchr(name, '\\') == NULL;
+}
+
 static bool fm_is_path_prefix(const char *path, const char *prefix)
 {
     if (path == NULL || prefix == NULL) return false;
@@ -216,6 +217,17 @@ static bool fm_path_exists(const char *path)
     struct stat st;
     memset(&st, 0, sizeof(st));
     return stat(path, &st) == 0;
+}
+
+static void fm_cancel_inline_rename()
+{
+    if (g_inline_rename_box != 0)
+    {
+        xapi_DeleteTextInputBox(g_inline_rename_box);
+    }
+    g_inline_rename_box = 0;
+    g_inline_rename_old_name[0] = '\0';
+    g_inline_rename_active = false;
 }
 
 static INT64 fm_create_empty_file(const char *path)
@@ -331,6 +343,104 @@ static void fm_show_progress(const char *title, const char *path, UINT64 done, U
 static void fm_show_copy_progress(const char *path, UINT64 done, UINT64 total)
 {
     fm_show_progress(g_clipboard_cut ? "正在移动" : "正在复制", path, done, total);
+}
+
+static bool fm_select_file_by_name(const char *name)
+{
+    if (name == NULL) return false;
+    for (int i = 0; i < file_count; i++)
+    {
+        if (strcmp(file_dir_cache[i].filename, name) != 0) continue;
+
+        int visible_rows = fm_visible_rows();
+        if (i < file_count_base)
+        {
+            file_count_base = i;
+        }
+        else if (i >= file_count_base + visible_rows)
+        {
+            file_count_base = i - visible_rows + 1;
+        }
+        fm_clamp_scroll_base();
+        choosing_index = i - file_count_base;
+        return true;
+    }
+    return false;
+}
+
+static bool fm_start_inline_rename(const char *old_name)
+{
+    if (old_name == NULL || old_name[0] == '\0') return false;
+
+    fm_cancel_inline_rename();
+
+    if (!fm_copy_string(g_inline_rename_old_name, sizeof(g_inline_rename_old_name), old_name))
+    {
+        fm_show_error("重命名失败", "文件名太长。");
+        return false;
+    }
+
+    int x = fm_item_name_x() - 2;
+    int y = fm_item_name_y(choosing_index) - 1;
+    int width = fm_item_name_width();
+    g_inline_rename_box = xapi_PutTextInputBox(handle, x, y, width, g_inline_rename_old_name);
+    if (g_inline_rename_box == 0)
+    {
+        g_inline_rename_old_name[0] = '\0';
+        fm_show_error("重命名失败", "无法创建输入框。");
+        return false;
+    }
+
+    g_inline_rename_active = true;
+    return true;
+}
+
+static void fm_rename_selected()
+{
+    DirNode selected_file;
+    if (!fm_get_selected_file(&selected_file))
+    {
+        fm_show_error("重命名失败", "请先选择一个文件或文件夹。");
+        return;
+    }
+
+    fm_start_inline_rename(selected_file.filename);
+}
+
+static void fm_new_folder()
+{
+    char folder_name[256];
+    char folder_path[1024];
+
+    for (int i = 0; i < 1000; i++)
+    {
+        snprintf(folder_name, sizeof(folder_name), "folder%d", i);
+        if (!fm_join_path_checked(folder_path, sizeof(folder_path), current_path, folder_name))
+        {
+            fm_show_error("新建文件夹失败", "路径太长或名称无效。");
+            return;
+        }
+        if (fm_path_exists(folder_path)) continue;
+
+        INT64 ret = (INT64)xapi_Mkdir(folder_path);
+        if (ret < 0)
+        {
+            char detail[256];
+            snprintf(detail, sizeof(detail), "%s 错误码：%lld", fm_error_text(ret), (long long)ret);
+            fm_show_error("新建文件夹失败", detail);
+            return;
+        }
+
+        paint_dir(current_path);
+        if (fm_select_file_by_name(folder_name))
+        {
+            paint_dir(current_path);
+            fm_start_inline_rename(folder_name);
+        }
+        return;
+    }
+
+    fm_show_error("新建文件夹失败", "可用的默认文件夹名称已用完。");
 }
 
 static INT64 fm_copy_file(const char *src, const char *dst, UINT64 *done, UINT64 total)
@@ -559,17 +669,8 @@ void fm_show_properties()
 
 void process_crl(int CRLid)
 {
-    /*
-    1. 新建文件夹
-    2. 重命名
-    3. 删除
-    */
-    
-    if (CRLid == FM_CMD_NEW_FOLDER || CRLid == FM_CMD_RENAME)
-    { 
-        tb_cop = CRLid; 
-        draw_typebox(); 
-    }
+    if (CRLid == FM_CMD_NEW_FOLDER) fm_new_folder();
+    else if (CRLid == FM_CMD_RENAME) fm_rename_selected();
     else if (CRLid == FM_CMD_DELETE)
     {
         DirNode selected_file;
@@ -593,131 +694,53 @@ void process_crl(int CRLid)
     else if (CRLid == FM_CMD_PROPERTIES) fm_show_properties();
 }
 
-char typebox_buffer[256];
-int  typebox_offset = 0;
-
-void draw_typebox()
+void fm_finish_inline_rename()
 {
-    memset(typebox_buffer, 0, 256);
-    typebox_offset = 0;
-    const int box_x = fmanager_dialog_x();
-    const int box_y = fmanager_dialog_y();
-    reg_lock();
-    xapi_DrawRect(handle, box_x, box_y, box_x + 200, box_y + 50, 0x007accff, true);
-    xapi_DrawRect(handle, box_x + 4, box_y + 50 - 20 - 4, box_x + 200 - 4, box_y + 50 - 4, 0xffffffff, true);
-    xapi_DrawText(handle, box_x + 4, box_y, "请输入文本（回车确定）：", 11, 0xffffffff);
-    xapi_RefreshWindow(handle);
-}
+    if (!g_inline_rename_active || g_inline_rename_box == 0) return;
 
-void process_key(char ch)
-{
-    if (!register_lock || typebox_offset >= 189) return;
+    char new_name[XAPI_TEXT_INPUT_BOX_BUFFER_SIZE];
+    memset(new_name, 0, sizeof(new_name));
+    xapi_GetTextInputBox(g_inline_rename_box, new_name);
 
-    char temp[2] = {ch, '\0'};
-    const int text_x = fmanager_dialog_x() + 8 + typebox_offset;
-    const int text_y = fmanager_dialog_y() + 50 - 20 - 4;
-    xapi_DrawSWText(handle, text_x, text_y, temp, 0x000000ff);
-    xapi_RefreshPartWindow(handle, text_x, text_y, text_x + 9, text_y + 16);
-
-    typebox_buffer[typebox_offset / 9] = ch;
-
-    typebox_offset += 9;
-}
-
-void backspace()
-{
-    if (!register_lock || typebox_offset <= 0) return;
-
-    typebox_offset -= 9;
-
-    typebox_buffer[typebox_offset / 9] = '\0';
-
-    const int text_x = fmanager_dialog_x() + 8 + typebox_offset;
-    const int text_y = fmanager_dialog_y() + 50 - 20 - 4;
-    xapi_DrawRect(handle, text_x, text_y, text_x + 9, text_y + 16, 0xffffffff, true);
-    xapi_RefreshPartWindow(handle, text_x, text_y, text_x + 9, text_y + 16);
-}
-
-void delete_typebox()
-{
-    if (!register_lock) return;
-
-    typebox_buffer[typebox_offset / 9] = '\0';
-
-    if (tb_cop == 1)
+    if (!fm_name_is_valid(new_name))
     {
-        if (typebox_buffer[0] == '\0')
-        {
-            tb_cop = -1;
-            reg_unlock();
-            fm_show_error("新建文件夹失败", "名称不能为空。");
-            return;
-        }
-        char path_name[1024];
-        if (!fm_join_path_checked(path_name, sizeof(path_name), current_path, typebox_buffer))
-        {
-            tb_cop = -1;
-            reg_unlock();
-            fm_show_error("新建文件夹失败", "路径太长或名称无效。");
-            return;
-        }
-        INT64 ret = (INT64)xapi_Mkdir(path_name);
-        if (ret < 0)
-        {
-            tb_cop = -1;
-            reg_unlock();
-            char detail[256];
-            snprintf(detail, sizeof(detail), "%s 错误码：%lld", fm_error_text(ret), (long long)ret);
-            fm_show_error("新建文件夹失败", detail);
-            return;
-        }
-    }
-    else if (tb_cop == 2)
-    {
-        if (typebox_buffer[0] == '\0')
-        {
-            tb_cop = -1;
-            reg_unlock();
-            fm_show_error("重命名失败", "名称不能为空。");
-            return;
-        }
-        DirNode selected_file;
-        if (!fm_get_selected_file(&selected_file))
-        {
-            tb_cop = -1;
-            reg_unlock();
-            fm_show_error("重命名失败", "请先选择一个文件或文件夹。");
-            return;
-        }
-        char old_path[1024];
-        if (!fm_join_path_checked(old_path, sizeof(old_path), current_path, selected_file.filename))
-        {
-            tb_cop = -1;
-            reg_unlock();
-            fm_show_error("重命名失败", "原路径太长或名称无效。");
-            return;
-        }
-        char new_path[1024];
-        if (!fm_join_path_checked(new_path, sizeof(new_path), current_path, typebox_buffer))
-        {
-            tb_cop = -1;
-            reg_unlock();
-            fm_show_error("重命名失败", "新路径太长或名称无效。");
-            return;
-        }
-        INT64 ret = (INT64)xapi_RenameFile(old_path, new_path);
-        if (ret < 0)
-        {
-            tb_cop = -1;
-            reg_unlock();
-            char detail[256];
-            snprintf(detail, sizeof(detail), "%s 错误码：%lld", fm_error_text(ret), (long long)ret);
-            fm_show_error("重命名失败", detail);
-            return;
-        }
+        fm_cancel_inline_rename();
+        fm_show_error("重命名失败", "名称不能为空，且不能包含路径分隔符。");
+        return;
     }
 
-    tb_cop = -1;
-    reg_unlock();
+    if (strcmp(new_name, g_inline_rename_old_name) == 0)
+    {
+        fm_cancel_inline_rename();
+        paint_dir(current_path);
+        return;
+    }
+
+    char old_path[1024];
+    if (!fm_join_path_checked(old_path, sizeof(old_path), current_path, g_inline_rename_old_name))
+    {
+        fm_cancel_inline_rename();
+        fm_show_error("重命名失败", "原路径太长或名称无效。");
+        return;
+    }
+
+    char new_path[1024];
+    if (!fm_join_path_checked(new_path, sizeof(new_path), current_path, new_name))
+    {
+        fm_cancel_inline_rename();
+        fm_show_error("重命名失败", "新路径太长或名称无效。");
+        return;
+    }
+
+    INT64 ret = (INT64)xapi_RenameFile(old_path, new_path);
+    fm_cancel_inline_rename();
+    if (ret < 0)
+    {
+        char detail[256];
+        snprintf(detail, sizeof(detail), "%s 错误码：%lld", fm_error_text(ret), (long long)ret);
+        fm_show_error("重命名失败", detail);
+        return;
+    }
+
     paint_dir(current_path);
 }

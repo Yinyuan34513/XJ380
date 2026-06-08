@@ -196,6 +196,22 @@ static int fm_list_right()
     return right;
 }
 
+int fm_item_name_x()
+{
+    return fm_name_x();
+}
+
+int fm_item_name_y(int visible_index)
+{
+    return FM_CONTENT_TOP + FM_ROW_HEIGHT * visible_index - 4;
+}
+
+int fm_item_name_width()
+{
+    int width = fm_type_x() - fm_name_x() - 8;
+    return width < 80 ? 80 : width;
+}
+
 void refresh_fm_part(int x1, int y1, int x2, int y2)
 {
     xapi_RefreshPartWindow(handle, x1 + 12, y1 + 27, x2 + 12, y2 + 27);
@@ -416,10 +432,13 @@ void paint_dir(char *path)
     xapi_DrawText(handle, fm_list_left() + 12, 120, "文件名称", 10, 0x000000ff);
     xapi_DrawText(handle, fm_type_x(), 120, "类型", 10, 0x000000ff);
     xapi_DrawText(handle, fm_size_x(), 120, "大小", 10, 0x000000ff);
+    UINT64 tmp_fmr_width = 0;
+    UINT64 tmp_fmr_height = 0;
+    xapi_GetWindowSize(handle, &tmp_fmr_width, &tmp_fmr_height);
     if (count == 0 || count == 404) 
     {
         // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
-        xapi_DrawText(handle, fm_list_left() + 80, 154, "空文件夹", 10, 0x6d6d6dff);
+        xapi_DrawText(handle, tmp_fmr_width / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
     }
 
     for (int i = file_count_base; i < ((file_count > visible_rows + file_count_base) ? visible_rows + file_count_base : file_count); i++)

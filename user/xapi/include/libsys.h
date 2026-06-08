@@ -298,6 +298,10 @@ typedef struct
 #define XAPI_REG_RB_MENU    7436
 #define XAPI_URG_RB_MENU    7437
 
+#define XAPI_PUT_TEXT_INBOX 7456
+#define XAPI_GET_TEXT_INBOX 7457
+#define XAPI_DEL_TEXT_INBOX 7458
+
 #define XWIN_NORMAL             0
 #define XWIN_FRAME_OFF          1
 #define XWIN_FULL_SCR           2

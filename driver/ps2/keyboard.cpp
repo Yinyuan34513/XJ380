@@ -1,6 +1,7 @@
 #include <proto.hpp>
 #include <atom_queue.h>
 #include <dlinker.h>
+#include <graphics/components/text_input_box.h>
 #include <syscall/syscall.h>
 extern mouse_dec ms_dec;
 
@@ -191,6 +192,7 @@ extern "C" void keyboard_dispatch_key_message(uint64_t msg_type, uint8_t value)
         return;
     }
 
+    process_text_input_box_key_event(ms_dec.sht_now, msg_type, value);
     do_message(msg_type, NULL, value, current_window->WinMPf, current_window->w_task);
 }
 

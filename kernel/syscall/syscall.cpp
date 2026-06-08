@@ -693,6 +693,11 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_BUTTON: do_xapi_Button(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_BUTTON_EMP: do_xapi_ButtonEmp(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_DELETE_BUTTON: do_xapi_DeleteButton(regs->rdi, regs->rsi); break;
+    case XAPI_PUT_TEXT_INBOX:
+        regs->rax = do_xapi_PutTextInputBox(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
+        break;
+    case XAPI_GET_TEXT_INBOX: regs->rax = do_xapi_GetTextInputBox(regs->rdi, regs->rsi); break;
+    case XAPI_DEL_TEXT_INBOX: regs->rax = do_xapi_DeleteTextInputBox(regs->rdi); break;
     case XAPI_GET_VERSION: do_xapi_GetSystemVersion(regs->rdi); break;
     case XAPI_GET_TIME: regs->rax = (uint64_t)do_xapi_GetTime(); break;
     case XAPI_GET_CURRENT_USER: do_xapi_GetCurrentUser(regs->rdi); break;
