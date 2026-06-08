@@ -97,8 +97,8 @@ void put_button_theme(WINDOWLS *windowls, int x, int y, char *str, int CRLid, bo
     register_button_components(found_sheet_byid(sht_img, windowls->w_sheet), 
                                x, y, x + width + 22, y + 24, CRLid);
 
-    if (!underline) { print_box_ttf(sht_img, windowls->w_sheet, str, {0x00, 0x00, 0x00, 0xff}, x + 12, y + 2, 10); }
-    else { print_box_ttf(sht_img, windowls->w_sheet, str, {0xff, 0xff, 0xff, 0xff}, x + 12, y + 2, 10); }
+    if (!underline) { print_box_ttf(sht_img, windowls->w_sheet, str, {0x00, 0x00, 0x00, 0xff}, x + 12 - 1, y + 2 - 1, 10); }
+    else { print_box_ttf(sht_img, windowls->w_sheet, str, {0xff, 0xff, 0xff, 0xff}, x + 12 - 1, y + 2 - 1, 10); }
     
     free(mtl);
     free(dst);
