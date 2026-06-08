@@ -401,7 +401,7 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
         // 直接分配下一个
         if (front_p != NULL)
         {
-            for (int i = 0; i < sht->sheet_num - 5; i++)
+            for (int i = 0; i < sht->sheet_num - 4; i++)
             {
                 front_p = front_p->next;
             }
