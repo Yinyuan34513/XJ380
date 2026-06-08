@@ -197,6 +197,8 @@
 #define XAPI_GET_CPU_MODEL      7434
 #define XAPI_GET_MEMORY_SIZE    7435
 
+#define XAPI_GET_TIME_NANO      7459
+
 // P3.6
 #define XAPI_BROKEN         7428
 #define XAPI_SEND_APP_MSG   7429

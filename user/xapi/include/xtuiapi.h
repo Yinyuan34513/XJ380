@@ -131,6 +131,7 @@ UINT64  xapi_UserCreateFirst(WSTR username, WSTR password);
 void	xapi_GetTimeX(TimeType *tm);
 void	xapi_GetCpuModel(WSTR version);
 UINT64	xapi_GetMemorySize(void);
+UINT64	xapi_GetTimeNano();
 
 // 3-6
 void	xapi_Broken(WSTR broken_info);

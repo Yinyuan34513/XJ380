@@ -123,6 +123,8 @@ typedef struct {
 #define XAPI_GET_CPU_MODEL      7434
 #define XAPI_GET_MEMORY_SIZE    7435
 
+#define XAPI_GET_TIME_NANO      7459
+
 // P3.6
 #define XAPI_BROKEN         7428
 #define XAPI_SEND_APP_MSG   7429
@@ -221,7 +223,7 @@ typedef struct {
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7458
+// 当前最大号：7459
 
 #define XAPI_TASK_NAME_LEN 32
 

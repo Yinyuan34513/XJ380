@@ -729,9 +729,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_USER_LIST: regs->rax = do_xapi_UserList(regs->rdi, regs->rsi); break;
     case XAPI_USER_LOGIN: regs->rax = do_xapi_UserLogin(regs->rdi, regs->rsi); break;
     case XAPI_USER_CREATE_FIRST: regs->rax = do_xapi_UserCreateFirst(regs->rdi, regs->rsi); break;
-    case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
+    case XAPI_GET_TIME_NANO: regs->rax = nanoTime(); break;
 
     /* XJ380API 隐藏版（严禁泄露） */
+    case SXAH_CHECK_TERMINAL_INIT_STATUS: regs->rax = (uint64_t)check_terminal_init_status(); break;
     case SXAH_SYSCALL_RETURN:
         // get_current_task()->parent_group->msgprci = false;
         // message_end();

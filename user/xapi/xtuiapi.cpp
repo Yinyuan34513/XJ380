@@ -289,6 +289,10 @@ extern "C" UINT64	xapi_GetMemorySize(void) {
 	return enter_syscall(XAPI_GET_MEMORY_SIZE, 0, 0, 0, 0, 0, 0);
 }
 
+extern "C" UINT64	xapi_GetTimeNano() {
+	return enter_syscall(XAPI_GET_TIME_NANO, 0, 0, 0, 0, 0, 0);
+}
+
 // 3-6
 extern "C" void	xapi_Broken(WSTR broken_info) {
 	enter_syscall(XAPI_BROKEN, (uint64_t)broken_info, 0, 0, 0, 0, 0);
