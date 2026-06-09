@@ -9,6 +9,7 @@ static const UINT32 ACCENT     = 0x00a2e8ff;
 static const UINT32 WHITE      = 0xffffffff;
 static const UINT32 BLACK      = 0x000000ff;
 static const UINT32 RED        = 0xff2d2dff;
+static const UINT32 GREEN      = 0x02e16eff;
 static const UINT32 LIGHT_LINE = 0xe6e6e6ff;
 
 static char g_username[64];
@@ -51,6 +52,8 @@ static const Rect OOBE_INPUT_RECTS[3] = {
 static const Rect OOBE_MESSAGE_RECT = {64, 350, 620, 28};
 static const Rect LOGIN_INPUT_RECT = {128, 168, 301, 29};
 static const Rect LOGIN_MESSAGE_RECT = {64, 210, 520, 28};
+
+UINT32 g_message_color = RED;
 
 static void copy_cstr(char *dst, size_t dst_size, const char *src)
 {
@@ -207,7 +210,7 @@ static void draw_oobe()
     xapi_DrawText(g_handle, 258, 302, (char *)"创建账户", 13, WHITE);
     xapi_DrawText(g_handle, 64, 350,
                   g_message[0] != '\0' ? g_message : (char *)"按制表键切换输入框，按回车键创建账户。", 12,
-                  g_message[0] != '\0' ? RED : WHITE);
+                  g_message[0] != '\0' ? g_message_color : WHITE);
     xapi_RefreshWindow(g_handle);
 }
 
@@ -244,7 +247,7 @@ static void redraw_oobe_dynamic()
     draw_input_box(224, 236, 320, g_confirm, true, g_focus == 2);
     xapi_DrawText(g_handle, 64, 350,
                   g_message[0] != '\0' ? g_message : (char *)"按制表键切换输入框，按回车键创建账户。", 12,
-                  g_message[0] != '\0' ? RED : WHITE);
+                  g_message[0] != '\0' ? g_message_color : WHITE);
 
     xapi_RefreshPartWindow(g_handle, 224, 136, 545, 165);
     xapi_RefreshPartWindow(g_handle, 224, 186, 545, 215);
@@ -263,7 +266,7 @@ static void redraw_login_dynamic()
     restore_region(&g_login_input_cache);
     restore_region(&g_login_message_cache);
     draw_input_box(128, 168, 300, g_password, true, true);
-    if (g_message[0] != '\0') xapi_DrawText(g_handle, 64, 210, g_message, 12, RED);
+    if (g_message[0] != '\0') xapi_DrawText(g_handle, 64, 210, g_message, 12, g_message_color);
 
     xapi_RefreshPartWindow(g_handle, 128, 168, 429, 197);
     xapi_RefreshPartWindow(g_handle, 64, 210, 584, 238);
@@ -300,6 +303,8 @@ static bool submit_oobe()
     }
 
     g_oobe_submitting = true;
+
+    g_message_color = GREEN;
     copy_cstr(g_message, sizeof(g_message), "正在创建账户...");
     redraw_oobe_dynamic();
 

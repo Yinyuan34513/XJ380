@@ -323,6 +323,25 @@ void xapi_DeleteButton(
 	UINT64  CRLid
 );
 
+void xapi_PutSwitch(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  status,
+	UINT64  CRLid
+);
+
+void xapi_SetSwitch(
+	HDLE  	handle,
+	UINT64  CRLid,
+	UINT64  status
+);
+
+void xapi_DeleteSwitch(
+	HDLE  	handle,
+	UINT64  CRLid
+);
+
 UINT64 xapi_PutTextInputBox(
 	HDLE    handle,
 	UINT64  x,

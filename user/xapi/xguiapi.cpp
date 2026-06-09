@@ -253,6 +253,31 @@ extern "C" void xapi_DeleteButton(
 	enter_syscall(XAPI_DELETE_BUTTON, handle, CRLid, 0, 0, 0, 0);
 }
 
+extern "C" void xapi_PutSwitch(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  status,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_PUT_SWITCH, handle, x, y, status, CRLid, 0);
+}
+
+extern "C" void xapi_SetSwitch(
+	HDLE  	handle,
+	UINT64  CRLid,
+	UINT64  status
+) {
+	enter_syscall(XAPI_SET_SWITCH, handle, CRLid, status, 0, 0, 0);
+}
+
+extern "C" void xapi_DeleteSwitch(
+	HDLE  	handle,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_DEL_SWITCH, handle, CRLid, 0, 0, 0, 0);
+}
+
 extern "C" UINT64 xapi_PutTextInputBox(
 	HDLE    handle,
 	UINT64  x,

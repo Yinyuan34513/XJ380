@@ -213,6 +213,10 @@ typedef struct {
 #define XAPI_GET_TEXT_INBOX 7457
 #define XAPI_DEL_TEXT_INBOX 7458
 
+#define XAPI_PUT_SWITCH     7460
+#define XAPI_SET_SWITCH     7461
+#define XAPI_DEL_SWITCH     7462
+
 // 4-1
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
@@ -223,7 +227,7 @@ typedef struct {
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7459
+// 当前最大号：7462
 
 #define XAPI_TASK_NAME_LEN 32
 
@@ -286,6 +290,9 @@ void do_xapi_Sleep(uint64_t ms);
 void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
+void do_xapi_PutSwitch(uint64_t handle, uint64_t x, uint64_t y, uint64_t status, uint64_t CRLid);
+void do_xapi_SetSwitch(uint64_t handle, uint64_t CRLid, uint64_t status);
+void do_xapi_DeleteSwitch(uint64_t handle, uint64_t CRLid);
 uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text);
 uint64_t do_xapi_GetTextInputBox(uint64_t id, uint64_t text);
 uint64_t do_xapi_DeleteTextInputBox(uint64_t id);

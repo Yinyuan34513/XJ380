@@ -181,6 +181,9 @@ void draw_setting()
     xapi_DrawRect(handle, 8, 280, win_width / 10 * 3, 310, 0x00a2e8ff, true);
     xapi_DrawText(handle, 16, 280, "时间与位置", 16, 0xffffffff);
 
+    xapi_DrawRect(handle, 8, 318, win_width / 10 * 3, 348, 0x00a2e8ff, true);
+    xapi_DrawText(handle, 16, 318, "设备", 16, 0xffffffff);
+
     if (setting_cindex == 1)
     {
         xapi_DrawRect(handle, win_width / 10 * 3, 128, win_width / 10 * 3 + 8, 158, 0x00a2e8ff, true);
@@ -264,6 +267,26 @@ void draw_setting()
         xapi_DrawText(handle, win_width / 10 * 3 + 85, 158, xcr_int2char(read_settings_time_offset()), 11, 0xffffffff);
         xapi_Button(handle, 2001, win_width / 10 * 3 + 400, 132, "调整 (+1)");
         xapi_Button(handle, 2002, win_width / 10 * 3 + 490, 132, "调整 (-1)");
+    }
+    else if (setting_cindex == 6)
+    {
+        xapi_DrawRect(handle, win_width / 10 * 3, 318, win_width / 10 * 3 + 8, 348, 0x00a2e8ff, true);
+
+        // 长度：win_width / 10 * 3 + 20 ~ win_width / 3
+        // xapi_DrawRect(handle,   win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 0, 128, 
+        //                         win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 1 - 8, 234, 
+        //                         0x00a2e8ff, true);
+        // xapi_DrawRect(handle,   win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 1, 128, 
+        //                         win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 2 - 8, 234, 
+        //                         0x00a2e8ff, true);
+        // xapi_DrawRect(handle,   win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 2, 128, 
+        //                         win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 3 - 8, 234, 
+        //                         0x00a2e8ff, true);
+
+        xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "鼠标", 16, 0xffffffff);
+
+        xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, "滚轮反转", 11, 0xffffffff);
+        xapi_PutSwitch(handle, win_width - 100, 168, 0, 4000);
     }
 }
 

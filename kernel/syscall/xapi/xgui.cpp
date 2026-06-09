@@ -885,6 +885,38 @@ void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
                                  CRLid);
 }
 
+void do_xapi_PutSwitch(uint64_t handle, uint64_t x, uint64_t y, uint64_t status, uint64_t CRLid)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return;
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        x += 12;
+        y += 27;
+    }
+
+    put_switch_theme(WindowHandle->WindowNodePtr, x, y, status, CRLid);
+    xapi_mark_window_dirty(WindowHandle, (int)x, (int)y, (int)x + 52, (int)y + 24);
+}
+
+void do_xapi_SetSwitch(uint64_t handle, uint64_t CRLid, uint64_t status)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return;
+
+    set_switch_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet), CRLid, status);
+    xapi_mark_window_full_dirty(WindowHandle);
+}
+
+void do_xapi_DeleteSwitch(uint64_t handle, uint64_t CRLid)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return;
+
+    unregister_switch_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet), CRLid);
+}
+
 uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text)
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
