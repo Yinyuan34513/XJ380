@@ -249,6 +249,8 @@
 #define XAPI_DRAW_SVG       7446
 #define XAPI_DRAW_FA        7447
 
+#define XAPI_LOAD_PICTURE   7463
+
 #define XAPI_TASK_NAME_LEN 32
 
 typedef struct

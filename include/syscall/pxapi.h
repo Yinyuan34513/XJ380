@@ -175,6 +175,8 @@ typedef struct {
 #define XAPI_DRAW_SVG       7446
 #define XAPI_DRAW_FA        7447
 
+#define XAPI_LOAD_PICTURE   7463
+
 // P4.4
 #define XAPI_SET_MSH_PROCOR 7405
 
@@ -227,7 +229,7 @@ typedef struct {
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7462
+// 当前最大号：7463
 
 #define XAPI_TASK_NAME_LEN 32
 
@@ -281,6 +283,7 @@ void do_xapi_GetCurrentUser(uint64_t dst);
 void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
+uint64_t do_xapi_LoadPicture(uint64_t buffer, uint32_t width, uint32_t height, uint64_t path);
 int  xapi_doDrawSvg(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t svg_text, uint64_t enable_trans);
 int  xapi_doDrawFA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t name, uint64_t enable_trans);
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs);

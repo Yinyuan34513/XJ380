@@ -153,6 +153,15 @@ extern "C" void xapi_DrawPicture(
 	enter_syscall(XAPI_DRAW_PICTURE, handle, x, y, width, height, (UINT64)(path));
 }
 
+extern "C" bool xapi_LoadPicture(
+	XCOLORA *buffer,
+	UINT32   width,
+	UINT32   height,
+	WSTR     path
+) {
+	return enter_syscall(XAPI_LOAD_PICTURE, (UINT64)(buffer), width, height, (UINT64)(path), 0, 0) != 0;
+}
+
 extern "C" void xapi_GetPicSize(
 	UINT32	*width,
 	UINT32	*height,

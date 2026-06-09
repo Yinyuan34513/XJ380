@@ -840,6 +840,39 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     free(filepath);
 }
 
+uint64_t do_xapi_LoadPicture(uint64_t buffer, uint32_t width, uint32_t height, uint64_t path)
+{
+    if (buffer == 0 || width == 0 || height == 0) return false;
+
+    size_t pixel_count = 0;
+    size_t byte_count  = 0;
+    if (!xapi_checked_mul_size((size_t)width, (size_t)height, &pixel_count) ||
+        !xapi_checked_mul_size(pixel_count, sizeof(SHEET_BUFFER), &byte_count))
+        return false;
+
+    char *filepath = xapi_build_gui_path(path);
+    if (filepath == NULL) return false;
+
+    SHEET_BUFFER *kernel_buffer = (SHEET_BUFFER *)malloc(byte_count);
+    if (kernel_buffer == NULL)
+    {
+        free(filepath);
+        return false;
+    }
+
+    bool loaded = LoadPicture(kernel_buffer, (int)width, (int)height, filepath);
+    free(filepath);
+    if (!loaded)
+    {
+        free(kernel_buffer);
+        return false;
+    }
+
+    bool copied = copy_to_user_pagedir(xapi_current_pagedir(), (void *)buffer, kernel_buffer, byte_count);
+    free(kernel_buffer);
+    return copied ? true : false;
+}
+
 void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text)
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);

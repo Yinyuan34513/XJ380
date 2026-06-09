@@ -54,6 +54,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
     Winfo.sets  = XWIN_FULL_SCR;  
     xapi_CreateWindow(&handle, &Winfo);
     xapi_GetWindowSize(handle, &win_width, &win_height);
+    init_ctrlmenu_background_cache();
     SetMsgPrcor(handle, ctrlmenu_MessagePrcor);
 
     draw_background();

@@ -10,6 +10,10 @@ int cindex = 1;
 bool dont_refresh = false;
 bool about_memory_show_mb = false;
 
+static XCOLORA *ctrlmenu_background_cache = NULL;
+static UINT64   ctrlmenu_background_width = 0;
+static UINT64   ctrlmenu_background_height = 0;
+
 char wdaystr_table[7][20] = {
     "星期日",
     "星期一",
@@ -21,6 +25,39 @@ char wdaystr_table[7][20] = {
 };
 
 static void draw_background_region(UINT64 refresh_x1, UINT64 refresh_y1, UINT64 refresh_x2, UINT64 refresh_y2);
+
+void init_ctrlmenu_background_cache()
+{
+    if (win_width == 0 || win_height == 0) return;
+    if (ctrlmenu_background_cache != NULL && ctrlmenu_background_width == win_width &&
+        ctrlmenu_background_height == win_height)
+        return;
+
+    if (ctrlmenu_background_cache != NULL)
+    {
+        free(ctrlmenu_background_cache);
+        ctrlmenu_background_cache = NULL;
+    }
+
+    size_t pixel_count = (size_t)win_width * (size_t)win_height;
+    if (pixel_count == 0 || pixel_count > (size_t)-1 / sizeof(XCOLORA)) return;
+
+    ctrlmenu_background_cache = (XCOLORA *)malloc(pixel_count * sizeof(XCOLORA));
+    if (ctrlmenu_background_cache == NULL) return;
+
+    if (!xapi_LoadPicture(ctrlmenu_background_cache, (UINT32)win_width, (UINT32)win_height,
+                          (char *)"/system/resources/image/background3.png"))
+    {
+        free(ctrlmenu_background_cache);
+        ctrlmenu_background_cache = NULL;
+        ctrlmenu_background_width = 0;
+        ctrlmenu_background_height = 0;
+        return;
+    }
+
+    ctrlmenu_background_width = win_width;
+    ctrlmenu_background_height = win_height;
+}
 
 static int ctrlmenu_read_text_file(const char *path, char *buffer, size_t size)
 {
@@ -118,7 +155,15 @@ static void draw_background_region(UINT64 refresh_x1, UINT64 refresh_y1, UINT64 
     if (dont_refresh) return;
 
     xapi_DrawRect(handle, 0, 0, win_width - 1, win_height - 1, 0x4d4d4dea, true);
-    xapi_DrawPicture(handle, 0, 0, win_width, win_height, "/system/resources/image/background3.png");
+    if (ctrlmenu_background_cache != NULL && ctrlmenu_background_width == win_width &&
+        ctrlmenu_background_height == win_height)
+    {
+        xapi_WriteBufferA(handle, 0, 0, (UINT32)win_width, (UINT32)win_height, ctrlmenu_background_cache);
+    }
+    else
+    {
+        xapi_DrawPicture(handle, 0, 0, win_width, win_height, "/system/resources/image/background3.png");
+    }
     xapi_DrawText(handle, 30, 18, "控制中心", 40, 0xffffffff);
     xapi_DrawRect(handle, 0, 116, win_width - 1, 120, 0x00a2e8ff, true);
 

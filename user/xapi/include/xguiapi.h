@@ -205,6 +205,13 @@ void xapi_DrawPicture(
 	WSTR  	path
 );
 
+bool xapi_LoadPicture(
+	XCOLORA *buffer,
+	UINT32   width,
+	UINT32   height,
+	WSTR     path
+);
+
 void xapi_GetPicSize(
 	UINT32	*width,
 	UINT32	*height,

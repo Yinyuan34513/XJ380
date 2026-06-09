@@ -678,6 +678,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_DRAW_BMP: do_xapi_DrawBMP(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_DRAW_PNG: do_xapi_DrawPNG(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
     case XAPI_DRAW_PICTURE: do_xapi_DrawPicture(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9); break;
+    case XAPI_LOAD_PICTURE: regs->rax = do_xapi_LoadPicture(regs->rdi, regs->rsi, regs->rdx, regs->r10); break;
     case XAPI_DRAW_SVG:
         regs->rax = (uint64_t)xapi_doDrawSvg(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
