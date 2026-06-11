@@ -17,6 +17,7 @@ bool WindowIsCreating = false;
 extern mouse_dec ms_dec;
 
 int window_create_offest_xy = 32;
+static volatile int window_create_lock = 0;
 
 static bool is_valid_gui_ptr(const void *ptr)
 {
@@ -261,6 +262,43 @@ static void append_window_node(XWM_INFO *xwmi, WINDOWLS *new_window)
     }
 }
 
+static void publish_window_node(XWM_INFO *xwmi, WINDOWLS *new_window, WINDOWLS **windowls)
+{
+    append_window_node(xwmi, new_window);
+    if (windowls != NULL) *windowls = new_window;
+    xwmi->win_num++;
+}
+
+static void clear_window_creation_state(WINDOWLS **windowls)
+{
+    if (windowls != NULL) *windowls = NULL;
+    WindowIsCreating = false;
+    __sync_lock_release(&window_create_lock);
+}
+
+static void begin_window_creation()
+{
+    while (__sync_lock_test_and_set(&window_create_lock, 1) != 0)
+    {
+        scheduler_yield();
+    }
+    WindowIsCreating = true;
+}
+
+static WINDOWLS *alloc_window_node(WINDOWLS **windowls)
+{
+    if (windowls != NULL) *windowls = NULL;
+    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
+    if (new_window == NULL)
+    {
+        write_serial_string("Create Window Failed. Reason: Cannot allocate window node.\n");
+        return NULL;
+    }
+
+    memset(new_window, 0, sizeof(WINDOWLS));
+    return new_window;
+}
+
 static void init_overlay_window_common(WINDOWLS *new_window, uint64_t type, SHEET *sheet)
 {
     new_window->WinMPf = NULL;
@@ -279,17 +317,19 @@ static void clear_overlay_sheet(SHEET *sheet)
     sheet->is_change = true;
 }
 
-void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+bool create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 {
-    WindowIsCreating = true;
+    begin_window_creation();
     have_full_screen_app = true;
 
-    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
-    memset(new_window, 0, sizeof(WINDOWLS));
+    WINDOWLS *new_window = alloc_window_node(windowls);
+    if (new_window == NULL)
+    {
+        have_full_screen_app = false;
+        clear_window_creation_state(windowls);
+        return false;
+    }
 
-    append_window_node(xwmi, new_window);
-    *windowls = new_window;
-    xwmi->win_num++;
     new_window->WinMPf = NULL;
     new_window->type   = XWIN_FULL_SCR;
     get_current_task()->hasfscr = true;
@@ -302,48 +342,65 @@ void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
     get_current_task()->window_count++;
 
     int16_t full_screen_sheet_index = sht->sheet_num > 1 ? (int16_t)(sht->sheet_num - 1) : -1;
-    create_sheet(sht, 0, 0, sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution,
-                 TopWindowSheetType, full_screen_sheet_index, &new_window->w_sheet);
+    if (!create_sheet(sht, 0, 0, sht_img->fbc->horizontal_resolution, sht_img->fbc->vertical_resolution,
+                      TopWindowSheetType, full_screen_sheet_index, &new_window->w_sheet))
+    {
+        write_serial_string("Create Window Failed. Reason: Cannot create full screen sheet.\n");
+        get_current_task()->hasfscr = false;
+        if (new_window->w_task != NULL && new_window->w_task->winnum > 0) new_window->w_task->winnum--;
+        if (new_window->w_task != NULL && new_window->w_task->window_count > 0) new_window->w_task->window_count--;
+        have_full_screen_app = false;
+        free(new_window);
+        clear_window_creation_state(windowls);
+        return false;
+    }
+    publish_window_node(xwmi, new_window, windowls);
     change_sheet_type(sht, new_window->w_sheet, TopWindowSheetType);
     draw_rect(sht, new_window->w_sheet, 0, 0, sht_img->fbc->horizontal_resolution - 1,
               sht_img->fbc->vertical_resolution - 1, {0xff, 0xff, 0xff, 0xff});
     ms_dec.sht_now = new_window->w_sheet;
 
     refresh_sheet(sht);
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
+    return true;
 }
 
-void create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+bool create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 {
-    WindowIsCreating = true;
+    begin_window_creation();
 
-    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
-    memset(new_window, 0, sizeof(WINDOWLS));
+    WINDOWLS *new_window = alloc_window_node(windowls);
+    if (new_window == NULL)
+    {
+        clear_window_creation_state(windowls);
+        return false;
+    }
 
-    append_window_node(xwmi, new_window);
-    *windowls = new_window;
-    xwmi->win_num++;
     init_overlay_window_common(new_window, XWIN_DESKTOP, desktop_ct_sheet);
+    publish_window_node(xwmi, new_window, windowls);
     if (new_window->w_sheet != NULL)
     {
         change_sheet_type(sht, new_window->w_sheet, FixedSheetType);
         refresh_sheet(sht);
     }
 
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
+    return true;
 }
 
-void create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+bool create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 {
-    WindowIsCreating = true;
+    begin_window_creation();
 
-    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
-    memset(new_window, 0, sizeof(WINDOWLS));
+    WINDOWLS *new_window = alloc_window_node(windowls);
+    if (new_window == NULL)
+    {
+        clear_window_creation_state(windowls);
+        return false;
+    }
 
-    append_window_node(xwmi, new_window);
-    *windowls = new_window;
-    xwmi->win_num++;
     init_overlay_window_common(new_window, XWIN_DOCK, dock_ct_sheet);
+    publish_window_node(xwmi, new_window, windowls);
     // user_dock_owns_dock_sheet = true;
     if (new_window->w_sheet != NULL)
     {
@@ -352,22 +409,26 @@ void create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
         refresh_sheet(sht);
     }
 
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
+    return true;
 }
 
-void create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
+bool create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
 {
-    WindowIsCreating = true;
+    begin_window_creation();
     have_full_screen_app = true;
 
-    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS)));
-    memset(new_window, 0, sizeof(WINDOWLS));
+    WINDOWLS *new_window = alloc_window_node(windowls);
+    if (new_window == NULL)
+    {
+        have_full_screen_app = false;
+        clear_window_creation_state(windowls);
+        return false;
+    }
 
-    append_window_node(xwmi, new_window);
-    *windowls = new_window;
-    xwmi->win_num++;
     init_overlay_window_common(new_window, XWIN_LOGIN, middle_ct_sheet);
     get_current_task()->hasfscr = true;
+    publish_window_node(xwmi, new_window, windowls);
     if (new_window->w_sheet != NULL)
     {
         change_sheet_type(sht, new_window->w_sheet, TopWindowSheetType);
@@ -376,40 +437,22 @@ void create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls)
         ms_dec.sht_now = new_window->w_sheet;
     }
 
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
+    return true;
 }
 
 
-void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height)
+bool create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height)
 {
-    WindowIsCreating = true;
+    begin_window_creation();
 
-    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
-    memset(new_window, 0, sizeof(WINDOWLS));
-
-    WINDOWLS *front_p = xwmi->start;
-    if (front_p == NULL)
+    WINDOWLS *new_window = alloc_window_node(windowls);
+    if (new_window == NULL)
     {
-        // 哦亲爱的孩子我不说了你知道这是干什么的
-        xwmi->start = new_window;
-    }
-    else
-    {
-        WINDOWLS *front_p = xwmi->start;
-        while (true)
-        {
-            if (front_p->next == NULL)
-            {
-                // 链表.exe
-                front_p->next = new_window;
-                break;
-            }
-            front_p = front_p->next;
-        }
+        clear_window_creation_state(windowls);
+        return false;
     }
 
-    *windowls = new_window;
-    xwmi->win_num++;
     new_window->WinMPf = NULL;
     new_window->type   = XWIN_FRAME_OFF;
 
@@ -419,8 +462,16 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
-                 width + 24, height + 47, NoEdgeWindowSheetType, -1, &new_window->w_sheet);
+    if (!create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
+                      width + 24, height + 47, NoEdgeWindowSheetType, -1, &new_window->w_sheet))
+    {
+        write_serial_string("Create Window Failed. Reason: Cannot create frame-off sheet.\n");
+        if (new_window->w_task != NULL && new_window->w_task->window_count > 0) new_window->w_task->window_count--;
+        free(new_window);
+        clear_window_creation_state(windowls);
+        return false;
+    }
+    publish_window_node(xwmi, new_window, windowls);
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
     int refresh_bx = getBX(sht, new_window->w_sheet);
     int refresh_by = getBY(sht, new_window->w_sheet);
@@ -429,40 +480,22 @@ void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, u
     window_create_offest_xy += 32;
 
     refresh_part_sheet(sht, refresh_bx, refresh_by, refresh_bx + width + 24, refresh_by + height + 47);
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
+    return true;
 }
 
 
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height)
+bool create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height)
 {
-    WindowIsCreating = true;
+    begin_window_creation();
 
-    WINDOWLS *new_window = (WINDOWLS *)(malloc(sizeof(WINDOWLS))); // 开辟内存空间
-    memset(new_window, 0, sizeof(WINDOWLS));
-
-    WINDOWLS *front_p = xwmi->start;
-    if (front_p == NULL)
+    WINDOWLS *new_window = alloc_window_node(windowls);
+    if (new_window == NULL)
     {
-        // 哦亲爱的孩子我不说了你知道这是干什么的
-        xwmi->start = new_window;
-    }
-    else
-    {
-        WINDOWLS *front_p = xwmi->start;
-        while (true)
-        {
-            if (front_p->next == NULL)
-            {
-                // 链表.exe
-                front_p->next = new_window;
-                break;
-            }
-            front_p = front_p->next;
-        }
+        clear_window_creation_state(windowls);
+        return false;
     }
 
-    *windowls = new_window;
-    xwmi->win_num++;
     new_window->WinMPf = NULL;
     new_window->type   = XWIN_NORMAL;
 
@@ -475,8 +508,15 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
     new_window->w_task = get_current_task();
     get_current_task()->window_count++;
 
-    create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
-                 width + 24, height + 47, MovableSheetType, -1, &new_window->w_sheet);
+    if (!create_sheet(sht, window_create_offest_xy, window_create_offest_xy,
+                      width + 24, height + 47, MovableSheetType, -1, &new_window->w_sheet))
+    {
+        write_serial_string("Create Window Failed. Reason: Cannot create window sheet.\n");
+        if (new_window->w_task != NULL && new_window->w_task->window_count > 0) new_window->w_task->window_count--;
+        free(new_window);
+        clear_window_creation_state(windowls);
+        return false;
+    }
     draw_rect(sht, new_window->w_sheet, 12, 27, width + 12, height + 26, {0xff, 0xff, 0xff, 0xff});
     int refresh_bx = getBX(sht, new_window->w_sheet);
     int refresh_by = getBY(sht, new_window->w_sheet);
@@ -486,6 +526,20 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     SHEET_BUFFER *top = (SHEET_BUFFER *)malloc((width + 24) * 27 * 4);
     SHEET_BUFFER *lft = (SHEET_BUFFER *)malloc(height * 12 * 4);
+    if (top == NULL || lft == NULL)
+    {
+        write_serial_string("Create Window Failed. Reason: Cannot allocate window frame buffer.\n");
+        free(top);
+        free(lft);
+        if (new_window->w_task != NULL && new_window->w_task->window_count > 0) new_window->w_task->window_count--;
+        SHEET *failed_sheet = new_window->w_sheet;
+        free(new_window);
+        clear_window_creation_state(windowls);
+        delete_sheet(sht, failed_sheet);
+        return false;
+    }
+
+    publish_window_node(xwmi, new_window, windowls);
 
     // 标题栏
     resize_theme_width(top, xwmi->theme.top, width + 24, 336, 27);
@@ -521,7 +575,8 @@ void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *
 
     register_task_dock(new_window);
 
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
+    return true;
 }
 
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title)
@@ -635,16 +690,19 @@ void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
 
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
 {
-    while (true)
-    {
-        if (!WindowIsCreating) { break; }
-        scheduler_yield();
-    }
-
     if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls)) return;
+    begin_window_creation();
+    if (!window_contains(xwmi, windowls))
+    {
+        clear_window_creation_state(NULL);
+        return;
+    }
     if (!is_valid_gui_ptr(windowls->w_sheet) && windowls->type != XWIN_FULL_SCR && windowls->type != XWIN_DESKTOP &&
         windowls->type != XWIN_DOCK && windowls->type != XWIN_LOGIN)
+    {
+        clear_window_creation_state(NULL);
         return;
+    }
 
     if (ms_dec.sht_now == windowls->w_sheet)
     {
@@ -677,7 +735,6 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         user_dock_owns_dock_sheet = false;
     }
 
-    WindowIsCreating  = true;
     int       bx = 0, by = 0, ex = 0, ey = 0;
 
     unregister_text_input_box_components(windowls->w_sheet);
@@ -704,6 +761,8 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
             else front_p2->next = front_p->next;
 
             if (windowls->w_task != NULL && windowls->w_task->window_count > 0) windowls->w_task->window_count--;
+            if (windowls->type == XWIN_FULL_SCR && windowls->w_task != NULL && windowls->w_task->winnum > 0)
+                windowls->w_task->winnum--;
             if (xwmi->win_num > 0) xwmi->win_num--;
 
             if (windowls->type != XWIN_DESKTOP && windowls->type != XWIN_DOCK && windowls->type != XWIN_LOGIN)
@@ -719,7 +778,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         front_p  = front_p->next;
     }
 
-    WindowIsCreating = false;
+    clear_window_creation_state(NULL);
 
     if (front_p == NULL)
     {

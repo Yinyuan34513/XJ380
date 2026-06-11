@@ -402,6 +402,17 @@ SHEET        *mouse_ct_sheet;
 SHEET        *top_ct_sheet;
 SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
+static void halt_gui_startup_oom(const char *name)
+{
+    write_serial_string("GUI startup sheet allocation failed: ");
+    write_serial_string(name);
+    write_serial_string(". System halted.\n");
+    while (true)
+    {
+        __asm__ __volatile__("hlt");
+    }
+}
+
 void desktop_flusher()
 {
     bool installer_mode = EFI_BC != NULL && installer_boot_active(*EFI_BC);
@@ -419,25 +430,30 @@ void desktop_flusher()
     sht_img = &shtinf;
     msid    = mouse_ct_sheet;
 
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
-                 &desktop_ct_sheet);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32700,
-                 &dock_ct_sheet);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32759,
-                 &middle_ct_sheet); // 输入法类窗口放这层
-    create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 29, 22, FixedSheetType, 32766,
-                 &mouse_ct_sheet);
-    create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 32767,
-                 &top_ct_sheet);
+    if (!create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType, 0,
+                      &desktop_ct_sheet))
+        halt_gui_startup_oom("desktop");
+    if (!create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType,
+                      32700, &dock_ct_sheet))
+        halt_gui_startup_oom("dock");
+    if (!create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType,
+                      32759, &middle_ct_sheet))
+        halt_gui_startup_oom("middle"); // 输入法类窗口放这层
+    if (!create_sheet(&shtinf, (get_hor() - 16) / 2, (get_ver() - 28 - 29) / 2, 29, 22, FixedSheetType, 32766,
+                      &mouse_ct_sheet))
+        halt_gui_startup_oom("mouse");
+    if (!create_sheet(&shtinf, 0, 0, fbc_addr->horizontal_resolution, fbc_addr->vertical_resolution, FixedSheetType,
+                      32767, &top_ct_sheet))
+        halt_gui_startup_oom("top");
 
     // 草稿纸吗，有点意思
     SHEET_INFO zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi;
     init_sheet(*fbc_addr, &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi);
-    create_sheet(
-        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi, 
-        get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, 1145,
-        &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi
-    );
+    if (!create_sheet(
+            &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi_de_tu_ceng_xin_xi,
+            get_hor() + 114, get_ver() + 114, 1000, 1000, FixedSheetType, 1145,
+            &zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi))
+        halt_gui_startup_oom("scratch");
 
     init_ttf();
     draw_startup_screen(&shtinf, desktop_ct_sheet);
@@ -585,6 +601,127 @@ void desktop_flusher()
             flush_sheet_damage_queue(&shtinf);
         }
         create_user_process_from_file((char *)"/apps/system/dock.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
+        create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
         create_user_process_from_file((char *)"/apps/builtin/texter.elf", NULL, NULL);
     }
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);

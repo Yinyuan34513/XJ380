@@ -258,32 +258,42 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     }
     memset(WindowHandle, 0, sizeof(WINDOW_HANDLE));
     uint8_t        window_type  = window_info.sets & XWIN_TYPE_MASK;
+    bool           created      = false;
     if (window_type == XWIN_NORMAL)
     {
-        create_window(xwmii, sht_img, &WindowHandle->WindowNodePtr, title ? title : (char *)"", window_info.width,
-                      window_info.height);
+        created = create_window(xwmii, sht_img, &WindowHandle->WindowNodePtr, title ? title : (char *)"",
+                                window_info.width, window_info.height);
     }
     else if (window_type == XWIN_FRAME_OFF)
     {
-        create_window_fmoff(xwmii, sht_img, &WindowHandle->WindowNodePtr, window_info.width, window_info.height);
+        created = create_window_fmoff(xwmii, sht_img, &WindowHandle->WindowNodePtr, window_info.width,
+                                      window_info.height);
     }
     else if (window_type == XWIN_FULL_SCR)
     {
-        create_window_fscr(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+        created = create_window_fscr(xwmii, sht_img, &WindowHandle->WindowNodePtr);
     }
     else if (window_type == XWIN_DESKTOP)
     {
-        create_window_desktop(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+        created = create_window_desktop(xwmii, sht_img, &WindowHandle->WindowNodePtr);
     }
     else if (window_type == XWIN_DOCK)
     {
-        create_window_dock(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+        created = create_window_dock(xwmii, sht_img, &WindowHandle->WindowNodePtr);
     }
     else if (window_type == XWIN_LOGIN)
     {
-        create_window_login(xwmii, sht_img, &WindowHandle->WindowNodePtr);
+        created = create_window_login(xwmii, sht_img, &WindowHandle->WindowNodePtr);
     }
     else
+    {
+        free(WindowHandle);
+        *(uint64_t *)(handle) = 0;
+        free(title);
+        return false;
+    }
+
+    if (!created || WindowHandle->WindowNodePtr == NULL)
     {
         free(WindowHandle);
         *(uint64_t *)(handle) = 0;
@@ -325,8 +335,11 @@ int do_xapi_CloseWindow(uint64_t handle)
 
 int do_xapi_SetIcon(uint64_t handle, uint64_t path)
 {
-    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)(handle);
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL || path == 0) return false;
+
     char          *NewPath      = vfs_cwd_path_build((char *)path);
+    if (NewPath == NULL) return false;
 
     change_task_dock_icon(WindowHandle->WindowNodePtr, NewPath);
 
@@ -1021,7 +1034,11 @@ void do_xapi_Broken(char *info)
     char *kinfo = NULL;
     if (xapi_copy_string_from_user(&kinfo, info, 48) < 0) kinfo = strdup("");
     WINDOWLS *BrokenNoticeWindow;
-    create_window(xwmii, sht_img, &BrokenNoticeWindow, "Oops!", 400, 100);
+    if (!create_window(xwmii, sht_img, &BrokenNoticeWindow, "Oops!", 400, 100))
+    {
+        free(kinfo);
+        return;
+    }
     char title[64];
     memset(title, 0, sizeof(char) * 64);
     strncpy(title, get_current_task()->name, sizeof(title) - 1);

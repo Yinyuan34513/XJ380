@@ -52,12 +52,12 @@ typedef struct XWM_INFO
 } XWM_INFO;
 
 void init_xwm(XWM_INFO *xwmi);
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
-void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height);
-void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
-void create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
-void create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
-void create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
+bool create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height);
+bool create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color);

@@ -185,11 +185,8 @@ static void *alloc_shared_sheet_buffer(size_t bytes)
     void *buffer = calloc(1, bytes);
     if (buffer != NULL) return buffer;
 
-    write_serial_string("Cannot allocate memory for shared sheet buffer. System halted.\n");
-    while (1)
-    {
-        __asm__ __volatile__("hlt");
-    }
+    write_serial_string("Cannot allocate memory for shared sheet buffer.\n");
+    return NULL;
 }
 
 static bool is_valid_sheet_buffer(const void *buffer)
@@ -281,6 +278,14 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     sht->start       = NULL;
     size_t temp_buffer_bytes = sheet_buffer_bytes(sht->scrx, sht->scry);
     sht->temp_buffer = alloc_shared_sheet_buffer(temp_buffer_bytes);
+    if (sht->temp_buffer == NULL)
+    {
+        write_serial_string("Sheet Manager critical buffer allocation failed. System halted.\n");
+        while (1)
+        {
+            __asm__ __volatile__("hlt");
+        }
+    }
     sht->sheet_num            = -1;
 
     init_foxland(sht);
@@ -288,9 +293,12 @@ void init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht)
     write_serial_string("Sheet Manager Initialize Success.\n");
 }
 
-void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
+bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                   SHEET **sheet)
 {
+    if (sheet != NULL) *sheet = NULL;
+    if (sht == NULL || sheet == NULL || x == 0 || y == 0) return false;
+
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
@@ -299,8 +307,27 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
 
     SheetIsCreating  = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
+    if (new_sheet == NULL)
+    {
+        SheetIsCreating = false;
+        return false;
+    }
     memset(new_sheet, 0, sizeof(SHEET));
     size_t buffer_bytes = sheet_buffer_bytes(x, y);
+    new_sheet->buffer = alloc_shared_sheet_buffer(buffer_bytes);
+    if (new_sheet->buffer == NULL)
+    {
+        free(new_sheet);
+        SheetIsCreating = false;
+        return false;
+    }
+
+    new_sheet->bx        = bx;
+    new_sheet->by        = by;
+    new_sheet->width     = x;
+    new_sheet->height    = y;
+    new_sheet->type      = type;
+    new_sheet->is_change = true;
 
     SHEET *front_p = sht->start;
     if (index > 0)
@@ -347,15 +374,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
 
                 // 分配
                 *sheet = new_sheet;
-
-                new_sheet->bx        = bx;
-                new_sheet->by        = by;
-                new_sheet->width     = x;
-                new_sheet->height    = y;
-                new_sheet->type      = type;
-                new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
-                new_sheet->is_change = true;
-
                 sht->sheet_num++;
             }
             else
@@ -366,15 +384,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
 
                 // 分配
                 *sheet = new_sheet;
-
-                new_sheet->bx        = bx;
-                new_sheet->by        = by;
-                new_sheet->width     = x;
-                new_sheet->height    = y;
-                new_sheet->type      = type;
-                new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
-                new_sheet->is_change = true;
-
                 sht->sheet_num++;
             }
         }
@@ -383,15 +392,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             sht->start = new_sheet;
 
             *sheet = new_sheet;
-
-            new_sheet->bx        = bx;
-            new_sheet->by        = by;
-            new_sheet->width     = x;
-            new_sheet->height    = y;
-            new_sheet->type      = type;
-            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
-            new_sheet->is_change = true;
-
             sht->sheet_num++;
         }
     }
@@ -420,15 +420,6 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             }
 
             *sheet = new_sheet;
-
-            new_sheet->bx        = bx;
-            new_sheet->by        = by;
-            new_sheet->width     = x;
-            new_sheet->height    = y;
-            new_sheet->type      = type;
-            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
-            new_sheet->is_change = true;
-
             sht->sheet_num++;
         }
         else
@@ -436,20 +427,12 @@ void create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
             sht->start = new_sheet;
 
             *sheet = new_sheet;
-
-            new_sheet->bx        = bx;
-            new_sheet->by        = by;
-            new_sheet->width     = x;
-            new_sheet->height    = y;
-            new_sheet->type      = type;
-            new_sheet->buffer    = alloc_shared_sheet_buffer(buffer_bytes);
-            new_sheet->is_change = true;
-
             sht->sheet_num++;
         }
     }
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
     SheetIsCreating = false;
+    return *sheet != NULL;
 }
 
 uint32_t getBX(SHEET_INFO *sht, SHEET *csheet)

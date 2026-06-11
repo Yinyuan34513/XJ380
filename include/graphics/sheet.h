@@ -86,7 +86,7 @@ struct TASK_DOCK_BLOCK
 
 
 void      init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
-void      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
+bool      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                        SHEET **csheet);
 uint32_t  getBX(SHEET_INFO *sht, SHEET *csheet);
 uint32_t  getBY(SHEET_INFO *sht, SHEET *csheet);

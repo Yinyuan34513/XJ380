@@ -831,6 +831,7 @@ static int texter_main_impl(int argc, char *argv[], char *envp[])
     window.height = TXR_Y;
     window.sets = XWIN_NORMAL | XWIN_SUPPORT_RESIZEABLE;
     xapi_CreateWindow(&g_handle, &window);
+    if (g_handle == 0) return -1;
     xapi_SetIcon(g_handle, "/system/icon/texter.png");
     SetMsgPrcor(g_handle, texter_message_proc);
     update_title();
