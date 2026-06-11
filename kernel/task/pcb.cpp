@@ -80,6 +80,11 @@ static bool fd_table_unref(pcb_t pcb);
 
 static tcb_t alloc_zeroed_tcb(void)
 {
+    static_assert(offsetof(struct thread_control_block, syscall_stack) == 0xb48,
+                  "Update kernel/intr/handler.S THREAD_SYSCALL_STACK when changing TCB layout");
+    static_assert(offsetof(struct thread_control_block, syscall_user_rsp) == 0xb50,
+                  "Update kernel/intr/handler.S THREAD_SYSCALL_USER_RSP when changing TCB layout");
+
     const size_t alloc_size = (sizeof(struct thread_control_block) + 15ULL) & ~15ULL;
     tcb_t        task = (tcb_t)aligned_alloc(16, alloc_size);
     if (task != NULL)
@@ -198,13 +203,20 @@ pcb_t found_pcb(int pid)
 
 tcb_t found_thread(pcb_t pcb, int tid)
 {
-    if (pcb == NULL) return NULL;
+    if (pcb == NULL || pcb->thread_queue == NULL) return NULL;
+    tcb_t ret = NULL;
+    spin_lock(&pcb->thread_queue->lock);
     queue_foreach(pcb->thread_queue, node)
     {
         tcb_t thread = (tcb_t)node->data;
-        if (thread->tid == tid) { return thread; }
+        if (thread != NULL && thread->tid == tid)
+        {
+            ret = thread;
+            break;
+        }
     }
-    return NULL;
+    spin_unlock(&pcb->thread_queue->lock);
+    return ret;
 }
 
 void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
@@ -238,6 +250,11 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
             spin_unlock(&pcb->thread_queue->lock);
         }
         ipc_message_t msg = (ipc_message_t)malloc(sizeof(struct ipc_message));
+        if (msg == NULL)
+        {
+            write_serial_fmt("task: cannot notify parent of process %s exit.\n", pcb->name);
+            return;
+        }
         msg->pid          = pcb->pid;
         msg->type         = IPC_MSG_TYPE_EPID;
         msg->data[0]      = exit_code & 0xFF;
@@ -248,10 +265,50 @@ void kill_proc(pcb_t pcb, int exit_code, bool is_zombie)
     }
     else
     {
-        queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
+        if (pcb->parent_task != NULL && pcb->parent_task->child_pcb != NULL)
+            queue_remove_data(pcb->parent_task->child_pcb, pcb);
         pcb->status = DEATH;
         kill_proc0(pcb);
     }
+}
+
+bool kill_proc_deferred(pcb_t pcb, int exit_code)
+{
+    if (pcb == NULL || kernel_group == NULL || pcb->pid == kernel_group->pid) return false;
+
+    if (pcb->parent_task != kernel_group)
+    {
+        size_t reaper_index = queue_enqueue(kernel_group->child_pcb, pcb);
+        if (reaper_index == (size_t)-1) return false;
+
+        if (pcb->parent_task != NULL && pcb->parent_task->child_pcb != NULL)
+            queue_remove_data(pcb->parent_task->child_pcb, pcb);
+        pcb->parent_task = kernel_group;
+        pcb->ppid = kernel_group->pid;
+        pcb->child_index = reaper_index;
+    }
+
+    if (xwmii != NULL && sht_img != NULL)
+    {
+        delete_process_windows(xwmii, sht_img, pcb);
+    }
+
+    pcb->exit_code = exit_code;
+    close_process_file_table(pcb);
+    pcb->status = DEATH;
+
+    if (pcb->thread_queue != NULL)
+    {
+        spin_lock(&pcb->thread_queue->lock);
+        queue_foreach(pcb->thread_queue, node)
+        {
+            tcb_t tcb = (tcb_t)node->data;
+            kill_thread(tcb);
+        }
+        spin_unlock(&pcb->thread_queue->lock);
+    }
+
+    return true;
 }
 
 void free_envp(char **envp)
@@ -291,29 +348,26 @@ void kill_proc0(pcb_t pcb)
 {
     procfs_on_exit_task(pcb);
 
+    spin_lock(&pcb->thread_queue->lock);
     queue_foreach(pcb->thread_queue, thread_node)
     {
         tcb_t thread = (tcb_t)thread_node->data;
         if (thread != NULL) thread->status = DEATH;
     }
+    spin_unlock(&pcb->thread_queue->lock);
 
     close_process_file_table(pcb);
 
     do
     {
-        tcb_t thread = NULL;
-        queue_foreach(pcb->thread_queue, thread0)
-        {
-            thread = (tcb_t)thread0->data;
-        }
+        tcb_t thread = (tcb_t)queue_dequeue(pcb->thread_queue);
         if (thread == NULL) break;
-        queue_remove_at(pcb->thread_queue, thread->group_index);
         kill_thread0(thread);
         free(thread);
     } while (true);
 
     queue_destroy(pcb->thread_queue);
-    queue_remove_at(pcb_group_queue, pcb->queue_index);
+    queue_remove_data(pcb_group_queue, pcb);
 
     // 保存需要在free之后访问的字段
     char *cmdline = pcb->cmdline;
@@ -332,6 +386,7 @@ void kill_proc0(pcb_t pcb)
     // 先销毁队列，因为它们需要访问pcb中的指针
     lock_queue *ipc_queue = pcb->ipc_queue;
     lock_queue *virt_queue = pcb->virt_queue;
+    page_directory_t *pagedir = pcb->pagedir;
 
     lazy_free(pcb);
 
@@ -348,6 +403,7 @@ void kill_proc0(pcb_t pcb)
     free(exe_path);
     free(elf_file);
     if (envp) free_envp(envp);
+    if (!vfork && pagedir != NULL && pagedir != get_kernel_pagedir()) free_page_directory(pagedir);
     free_tty(tty);
     free(xtttp);
     free(pcb);
@@ -391,8 +447,26 @@ void kill_thread0(tcb_t task)
         free(task->argv);
         task->argv = NULL;
     }
+    if (task->task_level == TASK_APPLICATION_LEVEL && task->cwd != NULL)
+    {
+        vfs_close(task->cwd);
+        task->cwd = NULL;
+    }
+    if (task->task_level == TASK_APPLICATION_LEVEL && task->str_cwd != NULL)
+    {
+        free(task->str_cwd);
+        task->str_cwd = NULL;
+    }
+    if (task->task_level == TASK_APPLICATION_LEVEL && task->owns_user_stack && task->parent_group != NULL &&
+        task->parent_group->pagedir != NULL && task->user_stack != 0)
+    {
+        unmap_page_range(task->parent_group->pagedir, task->user_stack, BIG_USER_STACK);
+        task->user_stack = 0;
+        task->user_stack_top = 0;
+    }
     free_frames((uint64_t)virt_to_phys((task->kernel_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
-    free_frames((uint64_t)virt_to_phys((task->syscall_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
+    if (task->syscall_stack != 0)
+        free_frames((uint64_t)virt_to_phys((task->syscall_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
     remove_task(task);
 }
 
@@ -1580,6 +1654,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
 
     current_task->user_stack     = stack;
     current_task->user_stack_top = stack + BIG_USER_STACK;
+    current_task->owns_user_stack = true;
     current_task->main           = e_entry;
     current_task->hasfscr        = false;
     current_task->winnum         = 0;
@@ -1710,9 +1785,9 @@ static void free_partial_process(pcb_t pcb, bool owns_pagedir)
     if (pcb == NULL) return;
 
     if (pcb->parent_task != NULL && pcb->parent_task->child_pcb != NULL && pcb->child_index != (size_t)-1)
-        queue_remove_at(pcb->parent_task->child_pcb, pcb->child_index);
+        queue_remove_data(pcb->parent_task->child_pcb, pcb);
     if (pcb_group_queue != NULL && pcb->queue_index != (size_t)-1)
-        queue_remove_at(pcb_group_queue, pcb->queue_index);
+        queue_remove_data(pcb_group_queue, pcb);
 
     if (pcb->thread_queue) queue_destroy(pcb->thread_queue);
     if (pcb->child_pcb) queue_destroy(pcb->child_pcb);
@@ -2161,6 +2236,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     if (_start == NULL || name == NULL || pcb == NULL || pcb->thread_queue == NULL || pcb->pagedir == NULL || !cwd)
     {
         write_serial_fmt("You can't create an user thread WITHOUT A CWD \n");
+        free(cwd);
+        free_envp((char **)args);
         spin_unlock(&create_thread_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-(EINVAL);
@@ -2168,6 +2245,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
+        free(cwd);
+        free_envp((char **)args);
         spin_unlock(&create_thread_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-ENOMEM;
@@ -2181,6 +2260,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (kernel_stack_phys == 0)
     {
+        free(cwd);
+        free_envp((char **)args);
         free(new_task);
         spin_unlock(&create_thread_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -2199,6 +2280,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     uint64_t syscall_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (syscall_stack_phys == 0)
     {
+        free(cwd);
+        free_envp((char **)args);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
         spin_unlock(&create_thread_lock);
@@ -2210,6 +2293,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     new_task->cwd = vfs_open(cwd);
     if (new_task->cwd == NULL)
     {
+        free(cwd);
+        free_envp((char **)args);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
@@ -2231,6 +2316,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     if (new_task->user_stack == 0)
     {
         vfs_close(new_task->cwd);
+        free(cwd);
+        free_envp((char **)args);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
@@ -2239,6 +2326,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         return (size_t)-ENOMEM;
     }
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+    new_task->owns_user_stack = true;
 
     new_task->main           = (uint64_t)_start;
     new_task->context0.cs    = 0x8;
@@ -2256,6 +2344,8 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     if (new_task->group_index == (size_t)-1)
     {
         vfs_close(new_task->cwd);
+        free(cwd);
+        free_envp((char **)args);
         unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
@@ -2287,6 +2377,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     if (_start == NULL || name == NULL || pcb == NULL || pcb->thread_queue == NULL || pcb->pagedir == NULL || !cwd)
     {
         write_serial_fmt("You can't create an message thread WITHOUT A CWD \n");
+        free(cwd);
         spin_unlock(&create_thread_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-(EINVAL);
@@ -2294,6 +2385,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
+        free(cwd);
         spin_unlock(&create_thread_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-ENOMEM;
@@ -2309,6 +2401,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (kernel_stack_phys == 0)
     {
+        free(cwd);
         free(new_task);
         spin_unlock(&create_thread_lock);
         restore_runtime_state(was_scheduler_enabled, is_sti);
@@ -2326,6 +2419,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     uint64_t syscall_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
     if (syscall_stack_phys == 0)
     {
+        free(cwd);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
         spin_unlock(&create_thread_lock);
@@ -2337,6 +2431,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     new_task->cwd = vfs_open(cwd);
     if (new_task->cwd == NULL)
     {
+        free(cwd);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
@@ -2355,6 +2450,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     if (new_task->user_stack == 0)
     {
         vfs_close(new_task->cwd);
+        free(cwd);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
@@ -2363,10 +2459,12 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
         return (size_t)-ENOMEM;
     }
     new_task->user_stack_top = new_task->user_stack + BIG_USER_STACK;
+    new_task->owns_user_stack = true;
 
     if (!ensure_message_entry_stub(pcb->pagedir))
     {
         vfs_close(new_task->cwd);
+        free(cwd);
         unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
@@ -2403,6 +2501,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     if (new_task->group_index == (size_t)-1)
     {
         vfs_close(new_task->cwd);
+        free(cwd);
         unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);

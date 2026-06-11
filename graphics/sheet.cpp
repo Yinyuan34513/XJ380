@@ -603,6 +603,19 @@ SHEET *get_sheet(SHEET_INFO *sht, SHEET *csheet)
     return csheet;
 }
 
+bool sheet_contains(SHEET_INFO *sht, SHEET *csheet)
+{
+    if (sht == NULL || csheet == NULL) return false;
+
+    SHEET *front_p = sht->start;
+    while (front_p != NULL)
+    {
+        if (front_p == csheet) return true;
+        front_p = front_p->next;
+    }
+    return false;
+}
+
 void setBX(SHEET_INFO *sht, SHEET *csheet, uint32_t num)
 {
     if (!csheet) return;
@@ -651,27 +664,45 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 // don't touch this
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
-    if (!csheet) return;
+    if (sht == NULL || csheet == NULL) return;
     while (true)
     {
         if (!SheetIsRefreshing && !SheetIsCreating) { break; }
         scheduler_yield();
     }
 
-    SheetIsCreating  = true;
-    SHEET *front_p = csheet;
-    front_p->next->front = front_p->front;
-    front_p->front->next = front_p->next;
-    SHEET *front_p2      = sht->start;
-    for (int i = 0; i < sht->sheet_num - 5; i++)
+    SheetIsCreating = true;
+    if (!sheet_contains(sht, csheet) || csheet->front == NULL || csheet->next == NULL)
+    {
+        SheetIsCreating = false;
+        return;
+    }
+
+    int target_steps = (int)sht->sheet_num - 5;
+    if (target_steps < 0)
+    {
+        SheetIsCreating = false;
+        return;
+    }
+
+    SHEET *front_p2 = sht->start;
+    for (int i = 0; i < target_steps && front_p2 != NULL; i++)
     {
         front_p2 = front_p2->next; // 寻找最后一个
     }
+    if (front_p2 == NULL || front_p2->next == NULL || front_p2 == csheet || front_p2->next == csheet)
+    {
+        SheetIsCreating = false;
+        return;
+    }
 
-    front_p->next        = front_p2->next;
-    front_p->next->front = front_p;
-    front_p2->next       = front_p;
-    front_p->front       = front_p2;
+    csheet->front->next = csheet->next;
+    csheet->next->front = csheet->front;
+
+    csheet->next        = front_p2->next;
+    csheet->next->front = csheet;
+    front_p2->next      = csheet;
+    csheet->front       = front_p2;
 
     SheetIsCreating = false;
 }
@@ -1023,5 +1054,5 @@ void *get_sheet_buffer(SHEET_INFO *sht, SHEET *csheet)
 
 SHEET *found_sheet_byid(SHEET_INFO *sht, SHEET *csheet)
 {
-    return csheet;
+    return sheet_contains(sht, csheet) ? csheet : NULL;
 }

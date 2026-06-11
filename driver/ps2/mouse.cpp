@@ -310,7 +310,7 @@ static bool send_dock_mouse_message(uint64_t type, uint64_t x, uint64_t y)
 
 static bool begin_window_resize_drag(WINDOWLS *window, uint8_t edges)
 {
-    if (window == NULL || window->w_sheet == NULL || edges == 0) return false;
+    if (window == NULL || !sheet_contains(sht_img, window->w_sheet) || edges == 0) return false;
 
     ms_dec.win_resize_lock = true;
     ms_dec.win_move_lock = false;
@@ -462,7 +462,7 @@ void process_mouse_button()
                 tcb_t current_win_task = current_window->w_task;
                 delete_window(xwmii, sht_img, current_window);
                 current_window = NULL;
-                if (current_win_task->window_count == 0) { kill_thread(current_win_task); }
+                if (current_win_task != NULL && current_win_task->window_count == 0) { kill_thread(current_win_task); }
             }
             else if (current_window->type == XWIN_NORMAL &&
                      tbx > current_window->w_sheet->bx + (int)current_window->width - 12 - 48 &&
@@ -688,7 +688,7 @@ void process_mouse_info()
             else if (click_x > 132 && click_y > sht_img->scry - 24 - 63)
             {
                 TDB_t tdb = find_dock_icon((click_x - 132) / 80);
-                if (tdb)
+                if (tdb != NULL && tdb->windowls != NULL && sheet_contains(sht_img, tdb->windowls->w_sheet))
                 {
                     if (tdb->min_mode)
                     {
@@ -782,7 +782,12 @@ void process_mouse_info()
                 ms_dec.win_move_lock = true;
                 ms_dec.sht_now       = get_sheet(sht_img, movable_sheet);
                 WINDOWLSP moving_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-                if (moving_window != NULL && moving_window->is_maximized)
+                if (!sheet_contains(sht_img, ms_dec.sht_now))
+                {
+                    ms_dec.win_move_lock = false;
+                    ms_dec.sht_now       = NULL;
+                }
+                else if (moving_window != NULL && moving_window->is_maximized)
                 {
                     ms_dec.win_move_lock = false;
                 }
@@ -810,7 +815,9 @@ void process_mouse_info()
             else
             {
                 SHEET *active_sheet = get_sheet(sht_img, hover_sheet);
+                if (!sheet_contains(sht_img, active_sheet)) return;
                 if (!have_full_screen_app) lift_sheet(sht_img, active_sheet);
+                if (!sheet_contains(sht_img, active_sheet)) return;
                 refresh_part_sheet_deferred_or_now(sht_img, active_sheet->bx, active_sheet->by,
                                                    active_sheet->bx + active_sheet->width,
                                                    active_sheet->by + active_sheet->height);

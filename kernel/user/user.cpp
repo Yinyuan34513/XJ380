@@ -1557,8 +1557,6 @@ int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     size_t tid = create_user_thread(entry, thread_argv, argc, process_name, group, cwd);
     if ((int64_t)tid < 0)
     {
-        free(cwd);
-        free_process_argv(thread_argv);
         kill_proc(group, 0, false);
         return (int)tid;
     }
@@ -1576,5 +1574,5 @@ void create_user_thread_from_file(char *path, pcb_t pcb)
     char *cwd = getCwd(path);
     if (cwd == NULL) return;
     size_t tid = create_user_thread(entry, NULL, NULL, thread_name, pcb, cwd);
-    if ((int64_t)tid < 0) free(cwd);
+    (void)tid;
 }

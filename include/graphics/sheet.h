@@ -97,6 +97,7 @@ SHEET    *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y);
 SHEET    *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y);
 void      change_sheet_type(SHEET_INFO *sht, SHEET *csheet, uint32_t new_type);
 SHEET    *get_sheet(SHEET_INFO *sht, SHEET *csheet);
+bool      sheet_contains(SHEET_INFO *sht, SHEET *csheet);
 void      setBX(SHEET_INFO *sht, SHEET *csheet, uint32_t num);
 void      setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num);
 void      lift_sheet(SHEET_INFO *sht, SHEET *csheet);

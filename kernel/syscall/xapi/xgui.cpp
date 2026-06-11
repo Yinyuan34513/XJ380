@@ -32,7 +32,14 @@ static WINDOW_HANDLE *xapi_get_window_handle(uint64_t handle)
     if (handle < KERNEL_AREA_MEM) return NULL;
     WINDOW_HANDLE *window_handle = (WINDOW_HANDLE *)handle;
     if (window_handle == NULL || window_handle->WindowNodePtr == NULL) return NULL;
+    if (!window_contains(xwmii, window_handle->WindowNodePtr)) return NULL;
     return window_handle;
+}
+
+static SHEET *xapi_get_window_sheet(WINDOW_HANDLE *handle)
+{
+    if (handle == NULL || handle->WindowNodePtr == NULL || handle->WindowNodePtr->w_sheet == NULL) return NULL;
+    return found_sheet_byid(sht_img, handle->WindowNodePtr->w_sheet);
 }
 
 static int xapi_copy_gui_string(char **out, uint64_t user_str)
@@ -71,10 +78,11 @@ static void xgui_append_cstr(char *dst, size_t dst_size, const char *src)
 static bool clip_window_region(WINDOW_HANDLE *handle, uint32_t *x, uint32_t *y, uint32_t *width, uint32_t *height,
                                int *base_x, int *base_y, int *xsize_out)
 {
-    if (handle == NULL || handle->WindowNodePtr == NULL || handle->WindowNodePtr->w_sheet == NULL) return false;
+    SHEET *sheet = xapi_get_window_sheet(handle);
+    if (sheet == NULL) return false;
 
-    int xsize = getXsize(sht_img, handle->WindowNodePtr->w_sheet);
-    int ysize = getYsize(sht_img, handle->WindowNodePtr->w_sheet);
+    int xsize = (int)sheet->width;
+    int ysize = (int)sheet->height;
     int content_x = 0;
     int content_y = 0;
     int content_w = xsize;
@@ -104,9 +112,7 @@ static bool clip_window_region(WINDOW_HANDLE *handle, uint32_t *x, uint32_t *y, 
 static bool xapi_window_content_bounds(WINDOW_HANDLE *handle, SHEET **sheet_out, int *base_x, int *base_y,
                                        int *content_w, int *content_h)
 {
-    if (handle == NULL || handle->WindowNodePtr == NULL || handle->WindowNodePtr->w_sheet == NULL) return false;
-
-    SHEET *sheet = found_sheet_byid(sht_img, handle->WindowNodePtr->w_sheet);
+    SHEET *sheet = xapi_get_window_sheet(handle);
     if (sheet == NULL) return false;
 
     int x = 0;
@@ -209,8 +215,7 @@ static void xapi_mark_window_dirty(WINDOW_HANDLE *handle, int x1, int y1, int x2
 
 static void xapi_mark_window_full_dirty(WINDOW_HANDLE *handle)
 {
-    if (handle == NULL || handle->WindowNodePtr == NULL || handle->WindowNodePtr->w_sheet == NULL) return;
-    SHEET *sheet = found_sheet_byid(sht_img, handle->WindowNodePtr->w_sheet);
+    SHEET *sheet = xapi_get_window_sheet(handle);
     if (sheet == NULL) return;
     handle->dirty = true;
     handle->dirty_x1 = 0;
@@ -460,22 +465,21 @@ int do_xapi_DrawText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, uint
     if (WindowHandle == NULL) return false;
     char          *TextString   = NULL;
     if (xapi_copy_gui_string(&TextString, str) < 0) return false;
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    SHEET *sheet = NULL;
+    int base_x = 0;
+    int base_y = 0;
+    int content_w = 0;
+    int content_h = 0;
+    if (!xapi_window_content_bounds(WindowHandle, &sheet, &base_x, &base_y, &content_w, &content_h))
     {
-        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
-        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
-        draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
-                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                   (uint8_t)((color) & 0xFF)});
+        free(TextString);
+        return false;
     }
-    else
-    {
-        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
-        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
-        draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
-                  {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                   (uint8_t)((color) & 0xFF)});
-    }
+    x %= (uint32_t)content_w;
+    y %= (uint32_t)content_h;
+    draw_text(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + base_x, y + base_y, size,
+              {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+               (uint8_t)((color) & 0xFF)});
     xapi_mark_window_full_dirty(WindowHandle);
     free(TextString);
     return true;
@@ -490,24 +494,22 @@ int do_xapi_DrawTextl(uint64_t handle, uint64_t place, uint64_t str, uint32_t si
     uint32_t       input_width  = 0;
     uint32_t       x            = place & 0xffffffff00000000;
     uint32_t       y            = place & 0x00000000ffffffff;
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    SHEET *sheet = NULL;
+    int base_x = 0;
+    int base_y = 0;
+    int content_w = 0;
+    int content_h = 0;
+    if (!xapi_window_content_bounds(WindowHandle, &sheet, &base_x, &base_y, &content_w, &content_h))
     {
-        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
-        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
-        draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
-                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                    (uint8_t)((color) & 0xFF)},
-                   &input_width);
+        free(TextString);
+        return false;
     }
-    else
-    {
-        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
-        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
-        draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
-                   {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                    (uint8_t)((color) & 0xFF)},
-                   &input_width);
-    }
+    x %= (uint32_t)content_w;
+    y %= (uint32_t)content_h;
+    draw_textl(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + base_x, y + base_y, size,
+               {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                (uint8_t)((color) & 0xFF)},
+               &input_width);
     xapi_mark_window_full_dirty(WindowHandle);
     if (i_width != 0) copy_to_user_pagedir(xapi_current_pagedir(), (void *)i_width, &input_width, sizeof(input_width));
     free(TextString);
@@ -520,22 +522,21 @@ int do_xapi_DrawSWText(uint64_t handle, uint32_t x, uint32_t y, uint64_t str, ui
     if (WindowHandle == NULL) return false;
     char          *TextString   = NULL;
     if (xapi_copy_gui_string(&TextString, str) < 0) return false;
-    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    SHEET *sheet = NULL;
+    int base_x = 0;
+    int base_y = 0;
+    int content_w = 0;
+    int content_h = 0;
+    if (!xapi_window_content_bounds(WindowHandle, &sheet, &base_x, &base_y, &content_w, &content_h))
     {
-        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width - 12;
-        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height - 27;
-        draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + 12, y + 27, size,
-                     {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                      (uint8_t)((color) & 0xFF)});
+        free(TextString);
+        return false;
     }
-    else
-    {
-        x %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->width;
-        y %= found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet)->height;
-        draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x, y, size,
-                     {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
-                     (uint8_t)((color) & 0xFF)});
-    }
+    x %= (uint32_t)content_w;
+    y %= (uint32_t)content_h;
+    draw_text_sw(xwmii, sht_img, WindowHandle->WindowNodePtr, TextString, x + base_x, y + base_y, size,
+                 {(uint8_t)((color >> 24) & 0xFF), (uint8_t)((color >> 16) & 0xFF), (uint8_t)((color >> 8) & 0xFF),
+                  (uint8_t)((color) & 0xFF)});
     xapi_mark_window_full_dirty(WindowHandle);
     free(TextString);
     return true;
@@ -546,11 +547,12 @@ void do_xapi_ReadBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width,
     WINDOW_HANDLE    *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL || buffer == 0) return;
     SHEET_BUFFER_WOA *buf          = (SHEET_BUFFER_WOA *)buffer;
-    SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     int               xsize        = 0;
     int               base_x       = 0;
     int               base_y       = 0;
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, xapi_get_window_sheet(WindowHandle));
+    if (src == NULL) return;
     page_directory_t *pagedir = xapi_current_pagedir();
     for (int wy = 0; wy < (int)height; wy++)
     {
@@ -575,11 +577,12 @@ void do_xapi_WriteBuffer(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     WINDOW_HANDLE    *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL || buffer == 0) return;
     SHEET_BUFFER_WOA *buf          = (SHEET_BUFFER_WOA *)buffer;
-    SHEET_BUFFER     *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     int               xsize        = 0;
     int               base_x       = 0;
     int               base_y       = 0;
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, xapi_get_window_sheet(WindowHandle));
+    if (src == NULL) return;
     page_directory_t *pagedir = xapi_current_pagedir();
     for (int wy = 0; wy < (int)height; wy++)
     {
@@ -607,11 +610,12 @@ void do_xapi_ReadBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL || buffer == 0) return;
     SHEET_BUFFER  *buf          = (SHEET_BUFFER *)buffer;
-    SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     int            xsize        = 0;
     int            base_x       = 0;
     int            base_y       = 0;
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, xapi_get_window_sheet(WindowHandle));
+    if (src == NULL) return;
     page_directory_t *pagedir = xapi_current_pagedir();
     size_t row_bytes = 0;
     if (!xapi_checked_mul_size(width, sizeof(SHEET_BUFFER), &row_bytes)) return;
@@ -629,11 +633,12 @@ void do_xapi_WriteBufferA(uint64_t handle, uint32_t x, uint32_t y, uint32_t widt
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL || buffer == 0) return;
     SHEET_BUFFER  *buf          = (SHEET_BUFFER *)buffer;
-    SHEET_BUFFER  *src          = (SHEET_BUFFER *)get_sheet_buffer(sht_img, WindowHandle->WindowNodePtr->w_sheet);
     int            xsize        = 0;
     int            base_x       = 0;
     int            base_y       = 0;
     if (!clip_window_region(WindowHandle, &x, &y, &width, &height, &base_x, &base_y, &xsize)) return;
+    SHEET_BUFFER *src = (SHEET_BUFFER *)get_sheet_buffer(sht_img, xapi_get_window_sheet(WindowHandle));
+    if (src == NULL) return;
     page_directory_t *pagedir = xapi_current_pagedir();
     size_t row_bytes = 0;
     if (!xapi_checked_mul_size(width, sizeof(SHEET_BUFFER), &row_bytes)) return;
@@ -652,22 +657,24 @@ int do_xapi_RefreshWindow(uint64_t handle)
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return false;
-    int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-    int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return false;
+    int            bx           = getBX(sht_img, sheet);
+    int            by           = getBY(sht_img, sheet);
     int            ex           = 0;
     int            ey           = 0;
     if (WindowHandle->dirty)
     {
         bx += WindowHandle->dirty_x1;
         by += WindowHandle->dirty_y1;
-        ex = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + WindowHandle->dirty_x2;
-        ey = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + WindowHandle->dirty_y2;
+        ex = getBX(sht_img, sheet) + WindowHandle->dirty_x2;
+        ey = getBY(sht_img, sheet) + WindowHandle->dirty_y2;
         WindowHandle->dirty = false;
     }
     else
     {
-        ex = bx + getXsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
-        ey = by + getYsize(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+        ex = bx + getXsize(sht_img, sheet);
+        ey = by + getYsize(sht_img, sheet);
     }
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
@@ -678,10 +685,12 @@ int do_xapi_RefreshPartWindow(uint64_t handle, uint32_t x1, uint32_t y1, uint32_
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return false;
-    int            bx           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x1;
-    int            by           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y1;
-    int            ex           = getBX(sht_img, WindowHandle->WindowNodePtr->w_sheet) + x2;
-    int            ey           = getBY(sht_img, WindowHandle->WindowNodePtr->w_sheet) + y2;
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return false;
+    int            bx           = getBX(sht_img, sheet) + x1;
+    int            by           = getBY(sht_img, sheet) + y1;
+    int            ex           = getBX(sht_img, sheet) + x2;
+    int            ey           = getBY(sht_img, sheet) + y2;
     refresh_part_sheet(sht_img, bx, by, ex, ey);
 
     return true;
@@ -784,6 +793,7 @@ void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
     char          *filepath     = xapi_build_gui_path(path);
     if (filepath == NULL) return;
 
@@ -804,6 +814,7 @@ void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, ui
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
     char          *filepath     = xapi_build_gui_path(path);
     if (filepath == NULL) return;
 
@@ -824,6 +835,7 @@ void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
     char          *filepath     = xapi_build_gui_path(path);
     if (filepath == NULL) return;
 
@@ -877,6 +889,7 @@ void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uin
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
     char          *button_text  = NULL;
     if (xapi_copy_gui_string(&button_text, text) < 0) return;
 
@@ -896,6 +909,7 @@ void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, 
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
     char          *button_text  = NULL;
     if (xapi_copy_gui_string(&button_text, text) < 0) return;
 
@@ -914,14 +928,16 @@ void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid)
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
-    unregister_button_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet),
-                                 CRLid);
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return;
+    unregister_button_components(sheet, CRLid);
 }
 
 void do_xapi_PutSwitch(uint64_t handle, uint64_t x, uint64_t y, uint64_t status, uint64_t CRLid)
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
 
     if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
     {
@@ -938,7 +954,9 @@ void do_xapi_SetSwitch(uint64_t handle, uint64_t CRLid, uint64_t status)
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
 
-    set_switch_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet), CRLid, status);
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return;
+    set_switch_components(sheet, CRLid, status);
     xapi_mark_window_full_dirty(WindowHandle);
 }
 
@@ -947,7 +965,9 @@ void do_xapi_DeleteSwitch(uint64_t handle, uint64_t CRLid)
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
     if (WindowHandle == NULL) return;
 
-    unregister_switch_components(found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet), CRLid);
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return;
+    unregister_switch_components(sheet, CRLid);
 }
 
 uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text)
@@ -964,7 +984,12 @@ uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64
         y += 27;
     }
 
-    SHEET   *sheet = found_sheet_byid(sht_img, WindowHandle->WindowNodePtr->w_sheet);
+    SHEET   *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL)
+    {
+        free(initial_text);
+        return 0;
+    }
     uint64_t id    = register_text_input_box_components(sheet, (int)x, (int)y, (uint32_t)width, initial_text);
     free(initial_text);
     if (id == 0) return 0;

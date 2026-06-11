@@ -75,15 +75,21 @@ lock_queue *queue_init()
 
 size_t lock_queue_enqueue(lock_queue *q, void *data)
 {
-    if (q == NULL) return -1;
+    if (q == NULL) return (size_t)-1;
     lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
-    if (!new_node) return -1;
+    if (!new_node) return (size_t)-1;
 
     new_node->data  = data;
     new_node->next  = NULL;
     new_node->prev  = NULL;
 
     spin_lock(&q->lock);
+    if (q->next_index == (size_t)-1)
+    {
+        spin_unlock(&q->lock);
+        free(new_node);
+        return (size_t)-1;
+    }
     new_node->index = q->next_index++;
     queue_append_node(q, new_node);
     spin_unlock(&q->lock);
@@ -93,15 +99,21 @@ size_t lock_queue_enqueue(lock_queue *q, void *data)
 
 size_t queue_enqueue(lock_queue *q, void *data)
 {
-    if (q == NULL) return -1;
+    if (q == NULL) return (size_t)-1;
     lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
-    if (!new_node) return -1;
+    if (!new_node) return (size_t)-1;
 
     new_node->data  = data;
     new_node->next  = NULL;
     new_node->prev  = NULL;
 
     spin_lock(&q->lock);
+    if (q->next_index == (size_t)-1)
+    {
+        spin_unlock(&q->lock);
+        free(new_node);
+        return (size_t)-1;
+    }
     new_node->index = q->next_index++;
     queue_append_node(q, new_node);
     spin_unlock(&q->lock);
@@ -111,9 +123,9 @@ size_t queue_enqueue(lock_queue *q, void *data)
 
 size_t queue_enqueue_lowest(lock_queue *q, void *data)
 {
-    if (q == NULL) return -1;
+    if (q == NULL) return (size_t)-1;
     lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
-    if (!new_node) return -1;
+    if (!new_node) return (size_t)-1;
 
     new_node->data = data;
     new_node->next = NULL;
@@ -135,10 +147,16 @@ size_t queue_enqueue_lowest(lock_queue *q, void *data)
         if (!used) break;
         id++;
     }
+    if (id == (size_t)-1)
+    {
+        spin_unlock(&q->lock);
+        free(new_node);
+        return (size_t)-1;
+    }
 
     new_node->index = id;
     queue_append_node(q, new_node);
-    if (id >= (size_t)q->next_index) q->next_index = (int)id + 1;
+    if (id >= q->next_index && id != (size_t)-1) q->next_index = id + 1;
     spin_unlock(&q->lock);
 
     return new_node->index;
@@ -147,16 +165,22 @@ size_t queue_enqueue_lowest(lock_queue *q, void *data)
 size_t queue_enqueue_ref(lock_queue *q, void *data, lock_node **out_node)
 {
     if (out_node != NULL) *out_node = NULL;
-    if (q == NULL) return -1;
+    if (q == NULL) return (size_t)-1;
 
     lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
-    if (!new_node) return -1;
+    if (!new_node) return (size_t)-1;
 
     new_node->data = data;
     new_node->next = NULL;
     new_node->prev = NULL;
 
     spin_lock(&q->lock);
+    if (q->next_index == (size_t)-1)
+    {
+        spin_unlock(&q->lock);
+        free(new_node);
+        return (size_t)-1;
+    }
     new_node->index = q->next_index++;
     queue_append_node(q, new_node);
     spin_unlock(&q->lock);
@@ -167,9 +191,10 @@ size_t queue_enqueue_ref(lock_queue *q, void *data, lock_node **out_node)
 
 size_t queue_enqueue_id(lock_queue *q, void *data, size_t id)
 {
-    if (q == NULL) return -1;
+    if (q == NULL) return (size_t)-1;
+    if (id == (size_t)-1) return (size_t)-1;
     lock_node *new_node = (lock_node *)malloc(sizeof(lock_node));
-    if (!new_node) return -1;
+    if (!new_node) return (size_t)-1;
 
     new_node->data  = data;
     new_node->next  = NULL;
@@ -182,12 +207,12 @@ size_t queue_enqueue_id(lock_queue *q, void *data, size_t id)
         {
             spin_unlock(&q->lock);
             free(new_node);
-            return -1;
+            return (size_t)-1;
         }
     }
     new_node->index = id;
     queue_append_node(q, new_node);
-    if (id >= (size_t)q->next_index) q->next_index = (int)id + 1;
+    if (id >= q->next_index && id != (size_t)-1) q->next_index = id + 1;
     spin_unlock(&q->lock);
 
     return new_node->index;
@@ -227,6 +252,26 @@ void *queue_remove_at(lock_queue *q, size_t index)
             return handle;
         }
         current  = current->next;
+    }
+    spin_unlock(&q->lock);
+    return NULL;
+}
+
+void *queue_remove_data(lock_queue *q, void *data)
+{
+    if (q == NULL || data == NULL) return NULL;
+    spin_lock(&q->lock);
+    lock_node *current = q->head;
+
+    while (current != NULL)
+    {
+        if (current->data == data)
+        {
+            void *handle = queue_remove_locked(q, current);
+            spin_unlock(&q->lock);
+            return handle;
+        }
+        current = current->next;
     }
     spin_unlock(&q->lock);
     return NULL;

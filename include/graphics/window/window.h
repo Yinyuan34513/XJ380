@@ -67,6 +67,7 @@ void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
                   SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process);
+bool window_contains(XWM_INFO *xwmi, WINDOWLS *windowls);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 WINDOWLS *sht_found_win_by_type(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet, uint64_t type);
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);

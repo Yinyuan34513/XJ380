@@ -19,7 +19,7 @@ typedef struct
     spin_t     lock;
     spin_t     iter_lock;
     size_t     size;
-    int        next_index;
+    size_t     next_index;
 } lock_queue;
 
 /**
@@ -61,6 +61,14 @@ size_t lock_queue_enqueue(lock_queue *q, void *data);
  * @return == NULL ? 找不到节点 : 被删除节点的句柄
  */
 void *queue_remove_at(lock_queue *q, size_t index);
+
+/**
+ * 删除指定数据指针的节点
+ * @param q 队列
+ * @param data 节点数据指针
+ * @return == NULL ? 找不到节点 : 被删除节点的句柄
+ */
+void *queue_remove_data(lock_queue *q, void *data);
 
 /**
  * 删除指定节点

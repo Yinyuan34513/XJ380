@@ -8,8 +8,23 @@
 #include <cpu/longm.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
+#include <smp/smp.h>
 
 extern bool no_interrupt; // 涓簍rue鏃朵唬琛ㄤ弗绂佸紑鍚腑鏂?
+
+static bool process_is_current_on_any_cpu(pcb_t process)
+{
+    if (process == NULL) return false;
+
+    for (size_t i = 0; i < get_cpu_num(); i++)
+    {
+        PROCESSOR_INFO *cpu = get_cpu(i);
+        tcb_t task = cpu != NULL ? cpu->current_task : NULL;
+        if (task != NULL && task->parent_group == process) return true;
+    }
+
+    return false;
+}
 
 static pcb_t find_reapable_child(pcb_t parent)
 {
@@ -20,7 +35,7 @@ static pcb_t find_reapable_child(pcb_t parent)
     for (lock_node *node = parent->child_pcb->head; node != NULL; node = node->next)
     {
         pcb_t child = (pcb_t)node->data;
-        if (child != NULL && child->status == DEATH)
+        if (child != NULL && child->status == DEATH && !process_is_current_on_any_cpu(child))
         {
             target = child;
             break;

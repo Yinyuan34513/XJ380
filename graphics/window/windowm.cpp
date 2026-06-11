@@ -753,6 +753,19 @@ void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process)
     }
 }
 
+bool window_contains(XWM_INFO *xwmi, WINDOWLS *windowls)
+{
+    if (!is_valid_gui_ptr(xwmi) || !is_valid_gui_ptr(windowls)) return false;
+
+    WINDOWLS *front_p = xwmi->start;
+    while (front_p != NULL)
+    {
+        if (front_p == windowls) return true;
+        front_p = front_p->next;
+    }
+    return false;
+}
+
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet)
 {
     if (!is_valid_gui_ptr(xwmi) || csheet == NULL) { return NULL; }

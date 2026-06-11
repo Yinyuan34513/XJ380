@@ -559,26 +559,40 @@ static pcb_t wait4_find_child(pcb_t parent, long pid)
 {
     if (parent == NULL || parent->child_pcb == NULL) return NULL;
 
+    pcb_t found = NULL;
+    spin_lock(&parent->child_pcb->lock);
     queue_foreach(parent->child_pcb, node)
     {
         pcb_t child = (pcb_t)node->data;
-        if (wait4_pid_matches(child, pid)) return child;
+        if (wait4_pid_matches(child, pid))
+        {
+            found = child;
+            break;
+        }
     }
+    spin_unlock(&parent->child_pcb->lock);
 
-    return NULL;
+    return found;
 }
 
 static pcb_t wait4_find_zombie_child(pcb_t parent, long pid)
 {
     if (parent == NULL || parent->child_pcb == NULL) return NULL;
 
+    pcb_t found = NULL;
+    spin_lock(&parent->child_pcb->lock);
     queue_foreach(parent->child_pcb, node)
     {
         pcb_t child = (pcb_t)node->data;
-        if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid)) return child;
+        if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid))
+        {
+            found = child;
+            break;
+        }
     }
+    spin_unlock(&parent->child_pcb->lock);
 
-    return NULL;
+    return found;
 }
 
 static ipc_message_t wait4_pop_exit_message(pcb_t parent, long pid, bool wait)

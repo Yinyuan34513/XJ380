@@ -29,6 +29,8 @@ static void draw_switch_components(button_regt_p button)
 // X 和 Y 为相对位置
 void register_button_components(SHEET *sheet, int x1, int y1, int x2, int y2, int CRLid)
 {
+    if (sheet == NULL) return;
+
     button_regt_p new_button = (button_regt_p)malloc(sizeof(button_regt));
     if (new_button == NULL) return;
     new_button->obj_sheet = sheet;
@@ -65,6 +67,8 @@ void register_button_components(SHEET *sheet, int x1, int y1, int x2, int y2, in
 
 static void register_switch_components(SHEET *sheet, int x1, int y1, int CRLid, int status)
 {
+    if (sheet == NULL) return;
+
     button_regt_p new_switch = (button_regt_p)malloc(sizeof(button_regt));
     if (new_switch == NULL) return;
     new_switch->obj_sheet = sheet;

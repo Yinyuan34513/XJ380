@@ -642,6 +642,5 @@ uint64_t do_xapi_KillProcess(uint64_t pid)
     if (target == kernel_group || target->task_level == TASK_KERNEL_LEVEL) return (uint64_t)-EPERM;
     if (target == current) return (uint64_t)-EPERM;
 
-    kill_proc(target, -1, false);
-    return 0;
+    return kill_proc_deferred(target, -1) ? 0 : (uint64_t)-ENOMEM;
 }
