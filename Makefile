@@ -199,7 +199,7 @@ all: $(KERNEL_OBJS) liballoc-x86_64.a
 	@$(OBJC) -I binary -O elf64-x86-64 ./font/hankaku.bin ./font/hankaku.o
 	@$(OBJC) -I binary -O elf64-x86-64 ./graphics/logo/xj380_2.png ./graphics/logo/xj380_2.o
 
-	@$(LD) -z muldefs -T linker.ld --static -o ./$(BUILD_DIR)/kernel.krl $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
+	@$(LD) -z muldefs -T linker.ld --static --wrap=malloc --wrap=calloc --wrap=realloc --wrap=aligned_alloc -o ./$(BUILD_DIR)/kernel.krl $(KERNEL_OBJS) ./font/hankaku.o ./graphics/logo/xj380_2.o liballoc-x86_64.a
 
 	@$(MAKE) -C user build_xapi
 	@$(MAKE) -C user

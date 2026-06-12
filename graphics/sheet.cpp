@@ -185,7 +185,9 @@ static void *alloc_shared_sheet_buffer(size_t bytes)
     void *buffer = calloc(1, bytes);
     if (buffer != NULL) return buffer;
 
-    write_serial_string("Cannot allocate memory for shared sheet buffer.\n");
+    write_serial_string("Cannot allocate memory for shared sheet buffer. Requested bytes: ");
+    write_serial_dec(bytes);
+    write_serial_string("\n");
     return NULL;
 }
 
