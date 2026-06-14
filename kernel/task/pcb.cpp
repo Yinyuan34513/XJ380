@@ -421,6 +421,18 @@ static void clear_child_tid_if_requested(tcb_t task)
     task->tid_directory = NULL;
 }
 
+static void free_user_stack_mapping(tcb_t task)
+{
+    if (task == NULL || task->parent_group == NULL || task->parent_group->pagedir == NULL ||
+        task->user_stack == 0 || task->user_stack_top <= task->user_stack)
+        return;
+
+    unmap_virtual_page(task->parent_group, task->user_stack, task->user_stack_top - task->user_stack);
+    unmap_page_range(task->parent_group->pagedir, task->user_stack, task->user_stack_top - task->user_stack);
+    task->user_stack = 0;
+    task->user_stack_top = 0;
+}
+
 void kill_thread(tcb_t task)
 {
     if (task == NULL) return;
@@ -460,9 +472,7 @@ void kill_thread0(tcb_t task)
     if (task->task_level == TASK_APPLICATION_LEVEL && task->owns_user_stack && task->parent_group != NULL &&
         task->parent_group->pagedir != NULL && task->user_stack != 0)
     {
-        unmap_page_range(task->parent_group->pagedir, task->user_stack, BIG_USER_STACK);
-        task->user_stack = 0;
-        task->user_stack_top = 0;
+        free_user_stack_mapping(task);
     }
     free_frames((uint64_t)virt_to_phys((task->kernel_stack - KERNEL_STACK_SIZE)), KERNEL_STACK_SIZE / PAGE_SIZE);
     if (task->syscall_stack != 0)
@@ -1562,7 +1572,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)exec_ret;
     }
-    uint64_t stack = page_alloc_random(get_current_directory(), BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    uint64_t stack = page_reserve_user_range(get_current_directory(), BIG_USER_STACK);
     if (stack == 0)
     {
         memcpy(current_task->name, old_thread_name, sizeof(old_thread_name));
@@ -2312,7 +2322,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
 
     new_task->user_info = current_user != NULL ? current_user : &root_user;
 
-    new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    new_task->user_stack     = page_reserve_user_range(pcb->pagedir, BIG_USER_STACK);
     if (new_task->user_stack == 0)
     {
         vfs_close(new_task->cwd);
@@ -2346,7 +2356,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         vfs_close(new_task->cwd);
         free(cwd);
         free_envp((char **)args);
-        unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
+        free_user_stack_mapping(new_task);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
@@ -2446,7 +2456,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
 
     new_task->user_info = current_user;
 
-    new_task->user_stack     = page_alloc_random(pcb->pagedir, BIG_USER_STACK, PTE_PRESENT | PTE_WRITEABLE | PTE_USER);
+    new_task->user_stack     = page_reserve_user_range(pcb->pagedir, BIG_USER_STACK);
     if (new_task->user_stack == 0)
     {
         vfs_close(new_task->cwd);
@@ -2465,7 +2475,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     {
         vfs_close(new_task->cwd);
         free(cwd);
-        unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
+        free_user_stack_mapping(new_task);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
@@ -2502,7 +2512,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     {
         vfs_close(new_task->cwd);
         free(cwd);
-        unmap_page_range(pcb->pagedir, new_task->user_stack, BIG_USER_STACK);
+        free_user_stack_mapping(new_task);
         free_frames(syscall_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free_frames(kernel_stack_phys, KERNEL_STACK_SIZE / PAGE_SIZE);
         free(new_task);
