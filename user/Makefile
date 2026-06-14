@@ -3,9 +3,10 @@ all: init.elf shell.elf cp537.elf login.elf dock.elf desktop.elf fmanager.elf bc
 export CXX ?= g++
 export CC ?= gcc
 export RUSTC ?= $(shell if [ -x "$$HOME/.cargo/bin/rustc" ]; then echo "$$HOME/.cargo/bin/rustc"; elif [ -x /snap/bin/rustc ]; then echo /snap/bin/rustc; else command -v rustc; fi)
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I ../include -Wno-write-strings
+OPT_LEVEL ?= 2
+export CFLAGS ?= -O$(OPT_LEVEL) -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I ../include -Wno-write-strings
 RUST_TARGET := x86_64-unknown-none
-RUST_FLAGS := --edition=2024 --target $(RUST_TARGET) --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes -C opt-level=0 -C debuginfo=2 -C overflow-checks=off
+RUST_FLAGS := --edition=2024 --target $(RUST_TARGET) --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes -C opt-level=$(OPT_LEVEL) -C debuginfo=2 -C overflow-checks=off
 RUST_LIBDIR := $(shell if [ -n "$(RUSTC)" ]; then "$(RUSTC)" --print target-libdir --target $(RUST_TARGET) 2>/dev/null; fi)
 RUST_CORE := $(firstword $(wildcard $(RUST_LIBDIR)/libcore-*.rlib))
 RUST_COMPILER_BUILTINS := $(firstword $(wildcard $(RUST_LIBDIR)/libcompiler_builtins-*.rlib))
@@ -16,7 +17,7 @@ BROWSER_HEADERS := $(shell find ./browser -type f \( -name "*.h" -o -name "*.hpp
 MBEDTLS_SRC_DIR := ../third_party/mbedtls-src
 MBEDTLS_CONFIG_HEADER := mbed_compat/xj380_mbedtls_user_config.h
 MBEDTLS_CFLAGS := -I ./include/mbed_compat -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"'
-MBEDTLS_CCFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include/mbed_compat -I ./xapi/include -I ./include -I ../include -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"' -DMBEDTLS_NO_UDBL_DIVISION
+MBEDTLS_CCFLAGS := -O$(OPT_LEVEL) -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./include/mbed_compat -I ./xapi/include -I ./include -I ../include -I $(MBEDTLS_SRC_DIR)/include -DMBEDTLS_USER_CONFIG_FILE='"$(MBEDTLS_CONFIG_HEADER)"' -DMBEDTLS_NO_UDBL_DIVISION
 MBEDTLS_LIBRARY_SOURCES := \
 	$(MBEDTLS_SRC_DIR)/library/aes.c \
 	$(MBEDTLS_SRC_DIR)/library/aria.c \
@@ -147,8 +148,8 @@ WEBP_DEC_SOURCES := \
 	$(WEBP_SRC_DIR)/utils/utils.c
 WEBP_DEC_OBJECTS := $(patsubst $(WEBP_SRC_DIR)/%.c, ../out/browser/libwebp/%.o, $(WEBP_DEC_SOURCES))
 
-BROWSER_HOSTED_CXXFLAGS := -O0 -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./browser $(LITEHTML_INCLUDE_DIRS) $(WEBP_INCLUDE_DIRS) -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT
-BROWSER_HOSTED_CFLAGS := -O0 -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -ffunction-sections -fdata-sections $(LITEHTML_INCLUDE_DIRS) $(WEBP_INCLUDE_DIRS) -DNDEBUG -DHAVE_CONFIG_H
+BROWSER_HOSTED_CXXFLAGS := -O$(OPT_LEVEL) -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./browser $(LITEHTML_INCLUDE_DIRS) $(WEBP_INCLUDE_DIRS) -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT
+BROWSER_HOSTED_CFLAGS := -O$(OPT_LEVEL) -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -ffunction-sections -fdata-sections $(LITEHTML_INCLUDE_DIRS) $(WEBP_INCLUDE_DIRS) -DNDEBUG -DHAVE_CONFIG_H
 BROWSER_START_CFLAGS := $(CFLAGS)
 
 BROWSER_SOURCES := ./browser/browser_app.cpp ./browser/browser_fetch.cpp ./browser/browser_alloc_guard.cpp ./browser/browser_image_decode.cpp
@@ -167,7 +168,7 @@ BROWSER_BUILTINS ?= $(shell runtime_dir="$$(clang --print-runtime-dir 2>/dev/nul
 	fi)
 
 LIBVTERM_SRC_DIR := ../third_party/libvterm
-LIBVTERM_CFLAGS := -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I $(LIBVTERM_SRC_DIR)/include -I $(LIBVTERM_SRC_DIR)/src
+LIBVTERM_CFLAGS := -O$(OPT_LEVEL) -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I $(LIBVTERM_SRC_DIR)/include -I $(LIBVTERM_SRC_DIR)/src
 LIBVTERM_SOURCES := $(shell find $(LIBVTERM_SRC_DIR)/src -maxdepth 1 -name "*.c" | sort)
 LIBVTERM_OBJECTS := $(patsubst $(LIBVTERM_SRC_DIR)/src/%.c, ../out/libvterm/%.o, $(LIBVTERM_SOURCES))
 
@@ -211,7 +212,7 @@ fbtest.elf: fbtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@echo "CPPLD $< -> ../out/$@"
 
 ccompat-demo.elf: ccompat_demo.c $(XAPI_HEADERS)
-	@$(CC) -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./xapi/include -c $< -o ../out/$@.o
+	@$(CC) -O$(OPT_LEVEL) -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./xapi/include -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "/start.cpp.o$$") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CLD $< -> ../out/$@"
 
