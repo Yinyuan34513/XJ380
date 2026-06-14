@@ -109,6 +109,27 @@ static inline int abs_int(int value)
     return value < 0 ? -value : value;
 }
 
+static inline bool sheet_point_in_rect(const SHEET *sheet, int x, int y)
+{
+    if (sheet == NULL) return false;
+    return sheet->bx <= x && x < sheet->bx + (int)sheet->width &&
+           sheet->by <= y && y < sheet->by + (int)sheet->height;
+}
+
+static bool sheet_pixel_visible_at(const SHEET *sheet, int x, int y)
+{
+    if (!sheet_point_in_rect(sheet, x, y) || sheet->buffer == NULL ||
+        (uint64_t)sheet->buffer < get_physical_memory_offset())
+    {
+        return false;
+    }
+
+    int lx = x - sheet->bx;
+    int ly = y - sheet->by;
+    SHEET_BUFFER *buffer = (SHEET_BUFFER *)sheet->buffer;
+    return buffer[ly * (int)sheet->width + lx].a != 0;
+}
+
 static void refresh_union_rect(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
                                int other_x1, int other_y1, int other_x2, int other_y2)
 {
@@ -547,21 +568,22 @@ static WINDOWLS *find_resize_window_at(int x, int y, uint8_t *edges_out)
         WINDOWLS *window = sht_found_win(xwmii, sht_img, front_p);
         if (window != NULL)
         {
-            uint8_t edges = get_window_resize_edges(window, x, y);
-            if (edges != 0)
+            if (window->type == XWIN_NORMAL)
             {
-                if (edges_out != NULL) *edges_out = edges;
-                return window;
+                uint8_t edges = get_window_resize_edges(window, x, y);
+                if (edges != 0)
+                {
+                    if (edges_out != NULL) *edges_out = edges;
+                    return window;
+                }
             }
 
-            if (front_p->bx <= x && x <= front_p->bx + (int)front_p->width &&
-                front_p->by <= y && y <= front_p->by + (int)front_p->height)
+            if (sheet_pixel_visible_at(front_p, x, y))
             {
                 return NULL;
             }
         }
-        else if (front_p->type != FixedSheetType && front_p->bx <= x && x <= front_p->bx + (int)front_p->width &&
-                 front_p->by <= y && y <= front_p->by + (int)front_p->height)
+        else if (front_p->type != FixedSheetType && sheet_pixel_visible_at(front_p, x, y))
         {
             return NULL;
         }
