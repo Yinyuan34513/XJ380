@@ -90,6 +90,7 @@ struct keyboard_buf
     bool     ctrl;
     bool     shift;
     bool     alt;
+    bool     win;
     bool     caps;
     uint8_t  buf[KB_BUF_SIZE];
 };

@@ -321,6 +321,8 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/xjver.elf    $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/elfrun.elf   $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/filedlg.elf  $(VDISK_ROOT)/apps/system
 
 	@cp -a $(BUILD_DIR)/calc.elf     $(VDISK_ROOT)/apps/builtin
@@ -388,6 +390,8 @@ installer.system.stage: all installer.prepare
 	@cp -a $(BUILD_DIR)/fmanager.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/xjver.elf    $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/elfrun.elf   $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/filedlg.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/calc.elf     $(INSTALLER_SYSTEM_ROOT)/apps/builtin
 	@cp -a $(BUILD_DIR)/texter.elf   $(INSTALLER_SYSTEM_ROOT)/apps/builtin

@@ -1,8 +1,14 @@
-all: init.elf shell.elf cp537.elf login.elf dock.elf desktop.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
+all: init.elf shell.elf cp537.elf login.elf dock.elf desktop.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf xjver.elf elfrun.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
+export RUSTC ?= $(shell if [ -x "$$HOME/.cargo/bin/rustc" ]; then echo "$$HOME/.cargo/bin/rustc"; elif [ -x /snap/bin/rustc ]; then echo /snap/bin/rustc; else command -v rustc; fi)
 export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./xapi/include -I ./include -I ../include -Wno-write-strings
+RUST_TARGET := x86_64-unknown-none
+RUST_FLAGS := --edition=2024 --target $(RUST_TARGET) --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes -C opt-level=0 -C debuginfo=2 -C overflow-checks=off
+RUST_LIBDIR := $(shell if [ -n "$(RUSTC)" ]; then "$(RUSTC)" --print target-libdir --target $(RUST_TARGET) 2>/dev/null; fi)
+RUST_CORE := $(firstword $(wildcard $(RUST_LIBDIR)/libcore-*.rlib))
+RUST_COMPILER_BUILTINS := $(firstword $(wildcard $(RUST_LIBDIR)/libcompiler_builtins-*.rlib))
 XAPI_HEADERS := $(shell find ./xapi/include -type f \( -name "*.h" -o -name "*.hpp" \))
 USER_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \))
 BROWSER_HEADERS := $(shell find ./browser -type f \( -name "*.h" -o -name "*.hpp" \))
@@ -314,10 +320,13 @@ bcms-sp.elf: bcms-sp.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "CPPLD $< -> ../out/$@"
 
-busyterm.elf: busyterm.cpp $(XAPI_HEADERS) $(USER_HEADERS) $(LIBVTERM_OBJECTS)
-	@$(CXX) $(CFLAGS) -I $(LIBVTERM_SRC_DIR)/include -c $< -o ../out/$@.o
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o $(LIBVTERM_OBJECTS) -o ../out/$@
-	@echo "CPPLD $< -> ../out/$@"
+busyterm.elf: build_xapi ../out/busyterm.rs.o $(LIBVTERM_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/busyterm.rs.o $(LIBVTERM_OBJECTS) $(RUST_CORE) $(RUST_COMPILER_BUILTINS) -o ../out/$@
+	@echo "RUSTLD busyterm.rs -> ../out/$@"
+
+../out/busyterm.rs.o: busyterm.rs | check_rust_user
+	@$(RUSTC) $(RUST_FLAGS) $< -o $@
+	@echo "RUST $< -> $@"
 
 ../out/libvterm/%.o: $(LIBVTERM_SRC_DIR)/src/%.c
 	@mkdir -p $(@D)
@@ -345,11 +354,13 @@ CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
                 ./ctrlmenu/cm_graph.cpp \
                 ./ctrlmenu/cm_processp.cpp
 
-CALC_SOURCES := ./calc/calc.cpp
+XJVER_SOURCES := ./xjver/xjver.rs
+CALC_SOURCES := ./calc/calc.rs
 
 TEXTER_SOURCES := ./texter/texter.cpp
 TASKMGR_SOURCES := ./taskmgr/taskmgr.cpp
 FILEDLG_SOURCES := ./filedlg/filedlg.cpp
+ELFRUN_SOURCES := ./elfrun/elfrun.cpp
 INSTALLER_SOURCES := ./installer/installer.cpp \
                 ./installer/installer_hidden.cpp
 
@@ -360,16 +371,27 @@ LOGIN_OBJECTS := $(patsubst ./login/%.cpp, ../out/login/%.o, $(LOGIN_SOURCES))
 DOCK_OBJECTS := $(patsubst ./dock/%.cpp, ../out/dock/%.o, $(DOCK_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
 CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
-CALC_OBJECTS := $(patsubst ./calc/%.cpp, ../out/calc/%.o, $(CALC_SOURCES))
+XJVER_OBJECTS := $(patsubst ./xjver/%.rs, ../out/xjver/%.rs.o, $(XJVER_SOURCES))
+CALC_OBJECTS := $(patsubst ./calc/%.rs, ../out/calc/%.rs.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 TASKMGR_OBJECTS := $(patsubst ./taskmgr/%.cpp, ../out/taskmgr/%.o, $(TASKMGR_SOURCES))
 FILEDLG_OBJECTS := $(patsubst ./filedlg/%.cpp, ../out/filedlg/%.o, $(FILEDLG_SOURCES))
+ELFRUN_OBJECTS := $(patsubst ./elfrun/%.cpp, ../out/elfrun/%.o, $(ELFRUN_SOURCES))
 INSTALLER_OBJECTS := $(patsubst ./installer/%.cpp, ../out/installer/%.o, $(INSTALLER_SOURCES))
 
-../out/calc/%.o: ./calc/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+check_rust_user:
+	@if [ -z "$(RUSTC)" ] || [ ! -x "$(RUSTC)" ]; then echo "缺少 Rust 编译器：请安装 rustup/rustc，或设置 RUSTC=/path/to/rustc"; exit 1; fi
+	@if [ -z "$(RUST_CORE)" ] || [ -z "$(RUST_COMPILER_BUILTINS)" ]; then echo "缺少 Rust 目标 $(RUST_TARGET)：请运行 rustup target add $(RUST_TARGET)，或设置正确的 RUSTC"; exit 1; fi
+
+../out/calc/%.rs.o: ./calc/%.rs | check_rust_user
 	@mkdir -p $(@D)
-	@$(CXX) $(CFLAGS) -c $< -o $@
-	@echo "CPP $< -> $@"
+	@$(RUSTC) $(RUST_FLAGS) $< -o $@
+	@echo "RUST $< -> $@"
+
+../out/xjver/%.rs.o: ./xjver/%.rs ../kernel/build_settings.h | check_rust_user
+	@mkdir -p $(@D)
+	@$(RUSTC) $(RUST_FLAGS) $< -o $@
+	@echo "RUST $< -> $@"
 
 shell.elf: $(SHELL_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(SHELL_OBJECTS) -o ../out/$@
@@ -414,10 +436,10 @@ dock.elf: build_xapi $(DOCK_OBJECTS)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
-calc.elf: $(CALC_OBJECTS)
-	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(CALC_OBJECTS) -o ../out/$@
+calc.elf: build_xapi $(CALC_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(CALC_OBJECTS) $(RUST_CORE) $(RUST_COMPILER_BUILTINS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
-	@echo "LINK clac objects -> ../out/$@"
+	@echo "LINK calc objects -> ../out/$@"
 
 ../out/fmanager/%.o: ./fmanager/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
@@ -430,6 +452,10 @@ ctrlmenu.elf: $(CTRLMENU_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(CTRLMENU_OBJECTS) -o ../out/$@
 #	@$(OBJD) -x -d -s ../out/$@ > ../out/$@.txt
 	@echo "LINK ctrlmenu objects -> ../out/$@"
+
+xjver.elf: build_xapi $(XJVER_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(XJVER_OBJECTS) $(RUST_CORE) $(RUST_COMPILER_BUILTINS) -o ../out/$@
+	@echo "LINK xjver objects -> ../out/$@"
 
 ../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
@@ -465,6 +491,15 @@ filedlg.elf: $(FILEDLG_OBJECTS)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
+elfrun.elf: $(ELFRUN_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(ELFRUN_OBJECTS) -o ../out/$@
+	@echo "LINK elfrun objects -> ../out/$@"
+
+../out/elfrun/%.o: ./elfrun/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@mkdir -p $(@D)
+	@$(CXX) $(CFLAGS) -c $< -o $@
+	@echo "CPP $< -> $@"
+
 installer.elf: build_xapi $(INSTALLER_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(INSTALLER_OBJECTS) -o ../out/$@
 	@echo "LINK installer objects -> ../out/$@"
@@ -474,6 +509,6 @@ installer.elf: build_xapi $(INSTALLER_OBJECTS)
 	@$(CXX) $(CFLAGS) -c $< -o $@
 	@echo "CPP $< -> $@"
 
-.PHONY: clean
+.PHONY: clean check_rust_user
 clean:
 	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/taskmgr.* ../out/taskmgr/*.* ../out/picturer.* ../out/netcfg.* ../out/helloworld.* ../out/sigtest.*

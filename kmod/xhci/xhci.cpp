@@ -304,7 +304,7 @@ static void xhci_keyboard_update_modifier(bool pressed, uint8_t value) {
         return;
     }
 
-    keyboard_usb_key_event(0, value, pressed ? 1U : 0U);
+    keyboard_usb_key_event(value, value, pressed ? 1U : 0U);
 }
 
 static void xhci_handle_keyboard_report(xhci_slot_state *slot,
@@ -332,6 +332,8 @@ static void xhci_handle_keyboard_report(xhci_slot_state *slot,
             {0x11U, KEY_CTRL},
             {0x22U, KEY_SHIFT},
             {0x44U, KEY_ALT},
+            {0x08U, 0xE3U},
+            {0x80U, 0xE7U},
         };
 
         for (size_t i = 0; i < sizeof(modifier_map) / sizeof(modifier_map[0]); ++i)

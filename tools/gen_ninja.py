@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -30,6 +31,7 @@ LOG_COLORS = {
     "OBJCOPY": "\033[1;35m",
     "PREP": "\033[1;34m",
     "RUN": "\033[1;32m",
+    "RUST": "\033[1;32m",
     "SIZE": "\033[1;34m",
     "STAGE": "\033[1;34m",
     "VDISK": "\033[1;35m",
@@ -49,7 +51,10 @@ def log_desc(tag: str, text: str = "") -> str:
 def rel(path: Path | str) -> str:
     p = Path(path)
     if p.is_absolute():
-        p = p.relative_to(ROOT)
+        try:
+            p = p.relative_to(ROOT)
+        except ValueError:
+            return p.as_posix()
     return p.as_posix()
 
 
@@ -66,6 +71,47 @@ def cmd_output(command: list[str]) -> str:
         return subprocess.check_output(command, cwd=str(ROOT), text=True, stderr=subprocess.DEVNULL).strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
         return ""
+
+
+def find_executable(names: list[str], extra_paths: list[Path] | None = None) -> str:
+    extra_paths = extra_paths or []
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+        for base in extra_paths:
+            candidate = base / name
+            if candidate.exists() and os.access(candidate, os.X_OK):
+                return str(candidate)
+    return names[0] if names else ""
+
+
+def find_rustc() -> str:
+    override = os.environ.get("RUSTC")
+    if override:
+        return override
+    return find_executable(
+        ["rustc"],
+        [
+            Path.home() / ".cargo/bin",
+            Path("/snap/bin"),
+            Path("/home/leon/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"),
+        ],
+    )
+
+
+def rust_target_libs(rustc: str, target: str) -> list[Path]:
+    if not rustc:
+        return []
+    libdir = cmd_output([rustc, "--print", "target-libdir", "--target", target])
+    if not libdir:
+        return []
+    libs: list[Path] = []
+    for pattern in ("libcore-*.rlib", "libcompiler_builtins-*.rlib"):
+        matches = sorted(Path(libdir).glob(pattern))
+        if matches:
+            libs.append(matches[-1])
+    return libs
 
 
 def find_files(base: str, suffixes: tuple[str, ...], *, max_depth: int | None = None) -> list[Path]:
@@ -265,7 +311,30 @@ def grouped_cpp_app(
     return target
 
 
-def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Path, liballoc: Path) -> list[Path]:
+def rust_gui_app(
+    n: Ninja,
+    name: str,
+    source: str,
+    object_path: Path,
+    core_objs: list[Path],
+    start_obj: Path,
+    liballoc: Path,
+    rust_libs: list[Path],
+    *,
+    extra_inputs: list[Path] | None = None,
+) -> Path:
+    n.build(object_path, "rust_user", source)
+    target = Path(f"out/{name}.elf")
+    n.build(
+        target,
+        "user_ld",
+        core_objs + [start_obj, liballoc, object_path] + (extra_inputs or []) + rust_libs,
+        variables={"message": log_desc("LD", target.as_posix())},
+    )
+    return target
+
+
+def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Path, liballoc: Path, rust_libs: list[Path]) -> list[Path]:
     xapi_headers = headers("user/xapi/include")
     user_headers = headers("user/include")
     browser_headers = headers("user/browser")
@@ -320,7 +389,9 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     targets.append(grouped_cpp_app(n, "desktop", desktop_sources, "desktop", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "fmanager", fmanager_sources, "fmanager", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "ctrlmenu", ctrlmenu_sources, "ctrlmenu", core_objs, liballoc, common_implicit))
-    targets.append(grouped_cpp_app(n, "calc", ["calc/calc.cpp"], "calc", core_objs, liballoc, common_implicit))
+    targets.append(rust_gui_app(n, "xjver", "user/xjver/xjver.rs", Path("out/xjver/xjver.rs.o"), core_objs, start_obj, liballoc, rust_libs))
+    targets.append(grouped_cpp_app(n, "elfrun", ["elfrun/elfrun.cpp"], "elfrun", core_objs, liballoc, common_implicit))
+    targets.append(rust_gui_app(n, "calc", "user/calc/calc.rs", Path("out/calc/calc.rs.o"), core_objs, start_obj, liballoc, rust_libs))
     targets.append(grouped_cpp_app(n, "texter", ["texter/texter.cpp"], "texter", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "taskmgr", ["taskmgr/taskmgr.cpp"], "taskmgr", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "filedlg", ["filedlg/filedlg.cpp"], "filedlg", core_objs, liballoc, common_implicit))
@@ -347,9 +418,19 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         obj = Path("out/libvterm") / src.name.replace(".c", ".o")
         n.build(obj, "libvterm_cc", src)
         libvterm_objs.append(obj)
-    busy_obj = user_compile(n, Path("out/busyterm.elf.o"), "user/busyterm.cpp", "$user_cflags -I ./third_party/libvterm/include", common_implicit)
-    n.build("out/busyterm.elf", "user_ld", gui_core + [liballoc, busy_obj] + libvterm_objs, variables={"message": log_desc("LD", "out/busyterm.elf")})
-    targets.append(Path("out/busyterm.elf"))
+    targets.append(
+        rust_gui_app(
+            n,
+            "busyterm",
+            "user/busyterm.rs",
+            Path("out/busyterm.rs.o"),
+            core_objs,
+            start_obj,
+            liballoc,
+            rust_libs,
+            extra_inputs=libvterm_objs,
+        )
+    )
 
     mbedtls_sources = [
         "aes.c",
@@ -709,6 +790,9 @@ def main() -> None:
     cpp_extra = " -DXHCI_BUILTIN" if builtin_xhci else ""
     host_gcc = os.environ.get("HOST_GCC", "gcc")
     host_gcc_triple = cmd_output([host_gcc, "-dumpmachine"])
+    rust_target = os.environ.get("RUST_TARGET", "x86_64-unknown-none")
+    rustc = find_rustc()
+    rust_libs = rust_target_libs(rustc, rust_target)
 
     n = Ninja()
     n.comment("Generated by tools/gen_ninja.py. Run `ninja reconfigure` after changing the build graph.")
@@ -722,6 +806,8 @@ def main() -> None:
     n.var("user_cc", os.environ.get("CC", os.environ.get("COMPILER_PREFIX", "") + "clang"))
     n.var("user_cxx", os.environ.get("CXX", "g++"))
     n.var("user_ld", os.environ.get("LD", "ld"))
+    n.var("rustc", rustc)
+    n.var("rust_target", rust_target)
     n.var("nasm_flags", "-f elf64 -DX86_64_TARGET -DUEFI")
     n.var("asm_flags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387 -MMD -MP")
     n.var("c_flags", "-O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include -MMD -MP")
@@ -732,6 +818,7 @@ def main() -> None:
     )
     n.var("boot_c_flags", "-g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar")
     n.var("user_cflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings -MMD -MP")
+    n.var("rust_user_flags", "--edition=2024 --target $rust_target --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes -C opt-level=0 -C debuginfo=2 -C overflow-checks=off")
     n.var("mbedtls_cflags", "-I ./user/include/mbed_compat -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"'")
     n.var("mbedtls_ccflags", "-O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION -MMD -MP")
     litehtml_includes = "-I ./third_party/litehtml/include -I ./third_party/litehtml/include/litehtml -I ./third_party/litehtml/src -I ./third_party/litehtml/src/gumbo -I ./third_party/litehtml/src/gumbo/include -I ./third_party/litehtml/src/gumbo/include/gumbo"
@@ -757,11 +844,17 @@ def main() -> None:
     n.rule("gen_config", "tmp=$out.tmp; { echo '#pragma once'; echo '#define CONFIG_KERNEL_BUSYBOX_ALIASES '$${KERNEL_BUSYBOX_ALIASES:-1}; echo '#define CONFIG_KERNEL_BUILTIN_XHCI '$${BUILTIN_XHCI:-1}; } > $$tmp; if ! cmp -s $$tmp $out; then mv $$tmp $out; else rm -f $$tmp; fi", log_desc("GEN", "$out"))
     n.rule("boot", "mkdir -p $$(dirname $out) && x86_64-w64-mingw32-gcc $boot_c_flags -o $out boot/bootx64.c boot/bootlib.c", log_desc("BOOT", "$out"))
     n.rule("objcopy_bin", "mkdir -p $$(dirname $out) && $objc -I binary -O elf64-x86-64 $bin_input $out", log_desc("OBJCOPY", "$bin_input"))
-    n.rule("kernel_link", "$ld -z muldefs -T linker.ld --static -o $out $in", log_desc("LD", "$out"))
+    n.rule(
+        "kernel_link",
+        "$ld -z muldefs -T linker.ld --static --wrap=malloc --wrap=calloc --wrap=realloc --wrap=aligned_alloc "
+        "-o $out $in",
+        log_desc("LD", "$out"),
+    )
     n.rule("download_liballoc", "[ -f $out ] || curl -Lo $out https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a", log_desc("FETCH", "$out"))
     n.rule("copy", "mkdir -p $$(dirname $out) && cp -a $in $out", log_desc("CP", "$in -> $out"))
     n.rule("user_cxx_custom", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
     n.rule("user_cc_custom", "mkdir -p $$(dirname $out) && $user_cc $cflags -MF $out.d -c $in -o $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
+    n.rule("rust_user", "mkdir -p $$(dirname $out) && $rustc $rust_user_flags $in -o $out", log_desc("RUST", "$in -> $out"))
     n.rule("xapi_cxx", "mkdir -p $$(dirname $out) && $user_cxx -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
     n.rule("xapi_as", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("ASM", "$in"), depfile="$out.d")
     n.rule("xapi_head", "mkdir -p $$(dirname $out) && $user_cc -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "start.cpp"), depfile="$out.d")
@@ -787,7 +880,12 @@ def main() -> None:
     n.rule("python_cmd", "python3 tools/ninja_build.py $cmd", "$desc")
     n.rule("shell_cmd", "$cmd", "$desc")
 
-    n.build("build.ninja", "regen", ["tools/gen_ninja.py", "tools/ninja_build.py"], implicit=["Makefile", "user/Makefile", "user/xapi/Makefile"])
+    n.build(
+        "build.ninja",
+        "regen",
+        ["tools/gen_ninja.py", "tools/ninja_build.py"],
+        implicit=["Makefile", "user/Makefile", "user/xapi/Makefile", "user/calc/calc.rs", "user/busyterm.rs", "user/xjver/xjver.rs", "user/elfrun/elfrun.cpp"],
+    )
     n.build("kernel/build_config.h", "gen_config")
     n.build("liballoc-x86_64.a", "download_liballoc")
 
@@ -803,7 +901,7 @@ def main() -> None:
     n.build("out/kernel.krl", "kernel_link", kernel_objs + [Path("font/hankaku.o"), Path("graphics/logo/xj380_2.o"), Path("liballoc-x86_64.a")], implicit=["linker.ld"])
 
     core_objs, start_obj, constart_obj, xapi_liballoc = xapi(n)
-    user_targets = user_apps(n, core_objs, start_obj, constart_obj, xapi_liballoc)
+    user_targets = user_apps(n, core_objs, start_obj, constart_obj, xapi_liballoc, rust_libs)
     kmod_targets = kmods(n)
     stardust_targets = stardust(n, core_objs, start_obj, xapi_liballoc)
 

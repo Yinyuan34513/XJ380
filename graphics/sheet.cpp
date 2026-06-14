@@ -31,7 +31,18 @@ typedef struct
 
 static spin_t               g_sheet_damage_lock = SPIN_INIT;
 static volatile long        g_sheet_flush_busy  = 0;
+static spin_t               g_sheet_manager_lock = SPIN_INIT;
 static SheetDamageQueueState g_sheet_damage_queue = {NULL, {}, 0, false};
+
+void lock_sheet_manager()
+{
+    spin_lock(&g_sheet_manager_lock);
+}
+
+void unlock_sheet_manager()
+{
+    spin_unlock(&g_sheet_manager_lock);
+}
 
 static bool sheet_flush_try_begin()
 {
@@ -301,17 +312,9 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     if (sheet != NULL) *sheet = NULL;
     if (sht == NULL || sheet == NULL || x == 0 || y == 0) return false;
 
-    while (true)
-    {
-        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
-        scheduler_yield();
-    }
-
-    SheetIsCreating  = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     if (new_sheet == NULL)
     {
-        SheetIsCreating = false;
         return false;
     }
     memset(new_sheet, 0, sizeof(SHEET));
@@ -320,7 +323,6 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     if (new_sheet->buffer == NULL)
     {
         free(new_sheet);
-        SheetIsCreating = false;
         return false;
     }
 
@@ -330,6 +332,9 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     new_sheet->height    = y;
     new_sheet->type      = type;
     new_sheet->is_change = true;
+
+    lock_sheet_manager();
+    SheetIsCreating = true;
 
     SHEET *front_p = sht->start;
     if (index > 0)
@@ -434,6 +439,7 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     }
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
     SheetIsCreating = false;
+    unlock_sheet_manager();
     return *sheet != NULL;
 }
 
@@ -616,12 +622,7 @@ void setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num)
 void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (!csheet) return;
-    while (true)
-    {
-        if (!SheetIsCreating && !SheetIsRefreshing) { break; }
-        scheduler_yield();
-    }
-
+    lock_sheet_manager();
     SheetIsCreating = true;
     
     if (csheet->front == NULL) {
@@ -643,53 +644,49 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     sht->sheet_num--;
 
     SheetIsCreating = false;
+    unlock_sheet_manager();
 }
 
-// 这个lift_sheet是将图层提升到倒数第五个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
-// don't touch this
+static bool is_raiseable_window_sheet(const SHEET *sheet)
+{
+    return sheet != NULL && (sheet->type == MovableSheetType || sheet->type == NoEdgeWindowSheetType);
+}
+
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (sht == NULL || csheet == NULL) return;
-    while (true)
-    {
-        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
-        scheduler_yield();
-    }
-
+    lock_sheet_manager();
     SheetIsCreating = true;
-    if (!sheet_contains(sht, csheet) || csheet->front == NULL || csheet->next == NULL)
+    if (!sheet_contains(sht, csheet) || csheet->front == NULL || !is_raiseable_window_sheet(csheet))
     {
         SheetIsCreating = false;
+        unlock_sheet_manager();
         return;
     }
 
-    int target_steps = (int)sht->sheet_num - 5;
-    if (target_steps < 0)
+    SHEET *target = sht->start;
+    for (SHEET *front_p = sht->start; front_p != NULL; front_p = front_p->next)
     {
-        SheetIsCreating = false;
-        return;
+        if (front_p != csheet && is_raiseable_window_sheet(front_p)) target = front_p;
     }
 
-    SHEET *front_p2 = sht->start;
-    for (int i = 0; i < target_steps && front_p2 != NULL; i++)
-    {
-        front_p2 = front_p2->next; // 寻找最后一个
-    }
-    if (front_p2 == NULL || front_p2->next == NULL || front_p2 == csheet || front_p2->next == csheet)
+    if (target == NULL || target == csheet || target->next == csheet)
     {
         SheetIsCreating = false;
+        unlock_sheet_manager();
         return;
     }
 
     csheet->front->next = csheet->next;
-    csheet->next->front = csheet->front;
+    if (csheet->next != NULL) csheet->next->front = csheet->front;
 
-    csheet->next        = front_p2->next;
-    csheet->next->front = csheet;
-    front_p2->next      = csheet;
-    csheet->front       = front_p2;
+    csheet->next = target->next;
+    if (csheet->next != NULL) csheet->next->front = csheet;
+    target->next  = csheet;
+    csheet->front = target;
 
     SheetIsCreating = false;
+    unlock_sheet_manager();
 }
 
 bool allow_to_flush = false;
@@ -707,6 +704,7 @@ static bool clip_refresh_region(SHEET_INFO *sht, int *bex1, int *bey1, int *bex2
 
 static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
+    lock_sheet_manager();
     SheetIsRefreshing = true;
 
     SHEET_BUFFER *temp_buf_base = (SHEET_BUFFER *)sht->temp_buffer;
@@ -887,6 +885,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
 
     serial_redraw_screen_overlay_part(bex1, bey1, bex2, bey2);
     SheetIsRefreshing = false;
+    unlock_sheet_manager();
 }
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)

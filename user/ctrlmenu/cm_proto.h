@@ -44,7 +44,10 @@ void draw_background_time();
 void init_ctrlmenu_background_cache();
 void process_left_key(int x, int y);
 void draw_mainpage();
+void draw_app_showcase();
 void draw_setting();
+bool ctrlmenu_handle_mainpage_click(int x, int y);
+bool ctrlmenu_handle_app_showcase_click(int x, int y);
 void create_input_box(char *buf);
 void delete_input_box(bool save);
 

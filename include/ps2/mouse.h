@@ -21,6 +21,13 @@ typedef struct
 
     int       win_x_offset;
     int       win_y_offset;
+    int       move_start_mouse_x;
+    int       move_start_mouse_y;
+    int       move_start_bx;
+    int       move_start_by;
+    uint32_t  move_start_width;
+    uint32_t  move_start_height;
+    bool      win_move_dragged;
     int       resize_start_mouse_x;
     int       resize_start_mouse_y;
     int       resize_start_bx;

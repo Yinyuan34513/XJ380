@@ -295,11 +295,10 @@ void focus_window_dock(WINDOWLSP win)
     if (user_dock_owns_dock_sheet) return;
     spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
-    while (true)
+    while (front_p != NULL)
     {
         front_p->in_focus = false;
-        if (front_p->windowls == win) { front_p->in_focus = true; }
-        if (front_p->next == NULL) { break; }
+        if (win != NULL && front_p->windowls == win) { front_p->in_focus = true; }
         front_p = front_p->next;
     }
 

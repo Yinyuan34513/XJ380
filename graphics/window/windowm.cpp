@@ -162,6 +162,31 @@ bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WIN
         return false;
     }
 
+    uint32_t new_sheet_width = width + 24;
+    uint32_t new_sheet_height = height + 47;
+    SHEET_BUFFER *new_buffer = (SHEET_BUFFER *)calloc((size_t)new_sheet_width * new_sheet_height,
+                                                       sizeof(SHEET_BUFFER));
+    if (new_buffer == NULL) return false;
+
+    SHEET_BUFFER white = {0xff, 0xff, 0xff, 0xff};
+    for (uint32_t y = 27; y < height + 27; y++)
+    {
+        SHEET_BUFFER *row = &new_buffer[y * new_sheet_width + 12];
+        for (uint32_t x = 0; x < width; x++)
+        {
+            row[x] = white;
+        }
+    }
+
+    lock_sheet_manager();
+
+    if (!is_valid_gui_ptr(windowls) || windowls->type != XWIN_NORMAL || windowls->w_sheet == NULL)
+    {
+        unlock_sheet_manager();
+        free(new_buffer);
+        return false;
+    }
+
     SHEET *sheet = windowls->w_sheet;
     int old_bx = sheet->bx;
     int old_by = sheet->by;
@@ -171,19 +196,6 @@ bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WIN
     uint32_t old_content_height = windowls->height;
     void *old_buffer = sheet->buffer;
 
-    SHEET_BUFFER *new_buffer = (SHEET_BUFFER *)calloc((size_t)(width + 24) * (height + 47), sizeof(SHEET_BUFFER));
-    if (new_buffer == NULL) return false;
-
-    SHEET_BUFFER white = {0xff, 0xff, 0xff, 0xff};
-    for (uint32_t y = 27; y < height + 27; y++)
-    {
-        SHEET_BUFFER *row = &new_buffer[y * (width + 24) + 12];
-        for (uint32_t x = 0; x < width; x++)
-        {
-            row[x] = white;
-        }
-    }
-
     if (is_valid_gui_ptr(old_buffer))
     {
         SHEET_BUFFER *old_sheet_buffer = (SHEET_BUFFER *)old_buffer;
@@ -191,7 +203,7 @@ bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WIN
         uint32_t copy_height = min_u32(old_content_height, height);
         for (uint32_t y = 0; y < copy_height; y++)
         {
-            SHEET_BUFFER *dst = &new_buffer[(y + 27) * (width + 24) + 12];
+            SHEET_BUFFER *dst = &new_buffer[(y + 27) * new_sheet_width + 12];
             SHEET_BUFFER *src = &old_sheet_buffer[(y + 27) * old_sheet_width + 12];
             memcpy(dst, src, (size_t)copy_width * sizeof(SHEET_BUFFER));
         }
@@ -200,17 +212,18 @@ bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WIN
     sheet->buffer = new_buffer;
     sheet->bx = bx;
     sheet->by = by;
-    sheet->width = width + 24;
-    sheet->height = height + 47;
+    sheet->width = new_sheet_width;
+    sheet->height = new_sheet_height;
     windowls->width = width;
     windowls->height = height;
 
     redraw_window_frame(xwmi, sht, windowls);
 
-    if (is_valid_gui_ptr(old_buffer)) free(old_buffer);
+    unlock_sheet_manager();
 
+    if (is_valid_gui_ptr(old_buffer)) free(old_buffer);
     refresh_part_sheet(sht, old_bx, old_by, old_bx + (int)old_sheet_width, old_by + (int)old_sheet_height);
-    refresh_part_sheet(sht, bx, by, bx + (int)sheet->width, by + (int)sheet->height);
+    refresh_part_sheet(sht, bx, by, bx + (int)new_sheet_width, by + (int)new_sheet_height);
     return true;
 }
 
@@ -241,6 +254,9 @@ extern SHEET   *desktop_ct_sheet;
 extern SHEET   *middle_ct_sheet;
 extern bool have_full_screen_app;
 extern bool user_dock_owns_dock_sheet;
+extern TDB_t first_dock_block;
+
+static void show_desktop_remove_window(WINDOWLS *window);
 
 static void append_window_node(XWM_INFO *xwmi, WINDOWLS *new_window)
 {
@@ -716,6 +732,7 @@ void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
         ms_dec.left_release_window  = NULL;
         ms_dec.left_release_pending = false;
     }
+    show_desktop_remove_window(windowls);
 
     bool need_refresh = false;
 
@@ -878,4 +895,453 @@ WINDOWLS *mpf_found_win(MsgPrcor mpf)
         else if (front_p->next == NULL) { return NULL; }
         front_p = front_p->next;
     }
+}
+
+static bool window_can_alt_tab(WINDOWLS *window)
+{
+    return window != NULL && window->type == XWIN_NORMAL && window->w_sheet != NULL;
+}
+
+enum
+{
+    ALT_TAB_MAX_WINDOWS = 16,
+    ALT_TAB_ITEM_WIDTH = 116,
+    ALT_TAB_ITEM_HEIGHT = 86,
+    ALT_TAB_GAP = 12,
+    ALT_TAB_MARGIN = 18,
+    ALT_TAB_HEADER_HEIGHT = 34,
+};
+
+struct AltTabState
+{
+    bool active;
+    SHEET *sheet;
+    WINDOWLS *items[ALT_TAB_MAX_WINDOWS];
+    int count;
+    int selected;
+};
+
+static AltTabState g_alt_tab;
+
+enum
+{
+    SHOW_DESKTOP_MAX_WINDOWS = 64,
+};
+
+struct ShowDesktopState
+{
+    bool active;
+    WINDOWLS *items[SHOW_DESKTOP_MAX_WINDOWS];
+    int bx[SHOW_DESKTOP_MAX_WINDOWS];
+    int by[SHOW_DESKTOP_MAX_WINDOWS];
+    int count;
+};
+
+static ShowDesktopState g_show_desktop;
+
+static void alt_tab_reset_items()
+{
+    memset(g_alt_tab.items, 0, sizeof(g_alt_tab.items));
+    g_alt_tab.count = 0;
+    g_alt_tab.selected = 0;
+}
+
+static int alt_tab_collect_windows(XWM_INFO *xwmi)
+{
+    alt_tab_reset_items();
+    if (!is_valid_gui_ptr(xwmi)) return 0;
+
+    WINDOWLS *front_p = xwmi->start;
+    while (front_p != NULL && g_alt_tab.count < ALT_TAB_MAX_WINDOWS)
+    {
+        if (window_can_alt_tab(front_p))
+        {
+            g_alt_tab.items[g_alt_tab.count++] = front_p;
+        }
+        front_p = front_p->next;
+    }
+    return g_alt_tab.count;
+}
+
+static int alt_tab_index_of(WINDOWLS *window)
+{
+    for (int i = 0; i < g_alt_tab.count; ++i)
+    {
+        if (g_alt_tab.items[i] == window) return i;
+    }
+    return -1;
+}
+
+static void alt_tab_select_next_from_current(XWM_INFO *xwmi, SHEET_INFO *sht)
+{
+    WINDOWLS *current = sht_found_win(xwmi, sht, ms_dec.sht_now);
+    int current_index = alt_tab_index_of(current);
+    if (g_alt_tab.count <= 0)
+    {
+        g_alt_tab.selected = 0;
+        return;
+    }
+
+    g_alt_tab.selected = (current_index >= 0) ? (current_index + 1) % g_alt_tab.count : 0;
+}
+
+static void alt_tab_draw_border(SHEET_INFO *sht, SHEET *sheet, int x1, int y1, int x2, int y2, SHEET_BUFFER color)
+{
+    draw_rect(sht, sheet, x1, y1, x2, y1 + 1, color);
+    draw_rect(sht, sheet, x1, y2 - 1, x2, y2, color);
+    draw_rect(sht, sheet, x1, y1, x1 + 1, y2, color);
+    draw_rect(sht, sheet, x2 - 1, y1, x2, y2, color);
+}
+
+static void alt_tab_draw_preview(SHEET_INFO *sht)
+{
+    if (sht == NULL || g_alt_tab.sheet == NULL) return;
+
+    SHEET *sheet = g_alt_tab.sheet;
+    draw_rect(sht, sheet, 0, 0, (int)sheet->width - 1, (int)sheet->height - 1, {0x10, 0x1a, 0x2b, 0xd8});
+    print_box_ttf(sht, sheet, (char *)"切换窗口", {0xff, 0xff, 0xff, 0xff}, ALT_TAB_MARGIN, 12, 12);
+    char counter[32];
+    snprintf(counter, sizeof(counter), "%d / %d", g_alt_tab.selected + 1, g_alt_tab.count);
+    print_box_ttf(sht, sheet, counter, {0xd8, 0xe5, 0xff, 0xff}, (unsigned)sheet->width - 72, 12, 10);
+
+    int max_visible = ((int)sheet->width - ALT_TAB_MARGIN * 2 + ALT_TAB_GAP) / (ALT_TAB_ITEM_WIDTH + ALT_TAB_GAP);
+    if (max_visible < 1) max_visible = 1;
+    if (max_visible > g_alt_tab.count) max_visible = g_alt_tab.count;
+    int start_index = g_alt_tab.selected - max_visible / 2;
+    if (start_index < 0) start_index = 0;
+    if (start_index + max_visible > g_alt_tab.count) start_index = g_alt_tab.count - max_visible;
+
+    int x = ALT_TAB_MARGIN;
+    int y = ALT_TAB_HEADER_HEIGHT + 8;
+    for (int slot = 0; slot < max_visible; ++slot)
+    {
+        int i = start_index + slot;
+        WINDOWLS *win = g_alt_tab.items[i];
+        bool selected = i == g_alt_tab.selected;
+        SHEET_BUFFER panel = selected ? SHEET_BUFFER{0xf6, 0xfa, 0xff, 0xff} : SHEET_BUFFER{0xe8, 0xef, 0xf8, 0xee};
+        SHEET_BUFFER border = selected ? SHEET_BUFFER{0x13, 0x6d, 0xff, 0xff} : SHEET_BUFFER{0x9a, 0xa8, 0xb8, 0xff};
+
+        int item_x = x + slot * (ALT_TAB_ITEM_WIDTH + ALT_TAB_GAP);
+        draw_rect(sht, sheet, item_x, y, item_x + ALT_TAB_ITEM_WIDTH, y + ALT_TAB_ITEM_HEIGHT, panel);
+        alt_tab_draw_border(sht, sheet, item_x, y, item_x + ALT_TAB_ITEM_WIDTH, y + ALT_TAB_ITEM_HEIGHT, border);
+        draw_rect(sht, sheet, item_x + 12, y + 12, item_x + ALT_TAB_ITEM_WIDTH - 12, y + 48,
+                  selected ? SHEET_BUFFER{0xc7, 0xdd, 0xff, 0xff} : SHEET_BUFFER{0xcf, 0xd8, 0xe3, 0xff});
+        alt_tab_draw_border(sht, sheet, item_x + 12, y + 12, item_x + ALT_TAB_ITEM_WIDTH - 12, y + 48,
+                            {0x7c, 0x8a, 0x99, 0xff});
+
+        char *title = (win != NULL && win->title[0] != '\0') ? win->title : (char *)"窗口";
+        print_box_ttf(sht, sheet, title, {0x11, 0x18, 0x27, 0xff}, item_x + 10, y + 58, 9);
+    }
+
+    refresh_part_sheet(sht, sheet->bx, sheet->by, sheet->bx + (int)sheet->width, sheet->by + (int)sheet->height);
+}
+
+static void alt_tab_close_preview(SHEET_INFO *sht)
+{
+    SHEET *sheet = g_alt_tab.sheet;
+    if (sheet != NULL && sheet_contains(sht, sheet))
+    {
+        int x = sheet->bx;
+        int y = sheet->by;
+        int w = (int)sheet->width;
+        int h = (int)sheet->height;
+        delete_sheet(sht, sheet);
+        refresh_part_sheet(sht, x, y, x + w, y + h);
+    }
+
+    g_alt_tab.active = false;
+    g_alt_tab.sheet = NULL;
+    alt_tab_reset_items();
+}
+
+static bool alt_tab_create_preview_sheet(SHEET_INFO *sht)
+{
+    if (sht == NULL || g_alt_tab.count <= 0) return false;
+
+    int visible_count = g_alt_tab.count;
+    int width = ALT_TAB_MARGIN * 2 + visible_count * ALT_TAB_ITEM_WIDTH + (visible_count - 1) * ALT_TAB_GAP;
+    if (width > (int)sht->scrx - 48) width = (int)sht->scrx - 48;
+    if (width < 240) width = 240;
+    int height = ALT_TAB_HEADER_HEIGHT + ALT_TAB_ITEM_HEIGHT + ALT_TAB_MARGIN + 8;
+    int x = ((int)sht->scrx - width) / 2;
+    int y = ((int)sht->scry - height) / 2;
+
+    int16_t preview_layer = sht->sheet_num > 2 ? (int16_t)(sht->sheet_num - 1) : -1;
+    if (!create_sheet(sht, x, y, (uint32_t)width, (uint32_t)height, TopWindowSheetType, preview_layer,
+                      &g_alt_tab.sheet))
+    {
+        g_alt_tab.sheet = NULL;
+        return false;
+    }
+    return true;
+}
+
+static WINDOWLS *alt_tab_selected_window()
+{
+    if (g_alt_tab.selected < 0 || g_alt_tab.selected >= g_alt_tab.count) return NULL;
+    return g_alt_tab.items[g_alt_tab.selected];
+}
+
+static void restore_minimized_window(WINDOWLS *window);
+
+static void show_desktop_remove_window(WINDOWLS *window)
+{
+    if (!g_show_desktop.active || window == NULL) return;
+
+    for (int i = 0; i < g_show_desktop.count; ++i)
+    {
+        if (g_show_desktop.items[i] != window) continue;
+
+        int last = g_show_desktop.count - 1;
+        g_show_desktop.items[i] = g_show_desktop.items[last];
+        g_show_desktop.bx[i] = g_show_desktop.bx[last];
+        g_show_desktop.by[i] = g_show_desktop.by[last];
+        g_show_desktop.items[last] = NULL;
+        g_show_desktop.count--;
+        if (g_show_desktop.count <= 0) g_show_desktop.active = false;
+        return;
+    }
+}
+
+static bool show_desktop_restore_window(WINDOWLS *window)
+{
+    if (!g_show_desktop.active || window == NULL || window->w_sheet == NULL) return false;
+
+    for (int i = 0; i < g_show_desktop.count; ++i)
+    {
+        if (g_show_desktop.items[i] != window) continue;
+
+        window->w_sheet->bx = g_show_desktop.bx[i];
+        window->w_sheet->by = g_show_desktop.by[i];
+        show_desktop_remove_window(window);
+        return true;
+    }
+
+    return false;
+}
+
+static bool is_window_offscreen_minimized(SHEET_INFO *sht, WINDOWLS *window)
+{
+    return sht != NULL && window != NULL && window->w_sheet != NULL &&
+           window->w_sheet->bx > (int)sht->scrx;
+}
+
+static void mark_dock_window_restored(WINDOWLS *window)
+{
+    if (window == NULL || user_dock_owns_dock_sheet) return;
+
+    TDB_t front_p = first_dock_block;
+    while (front_p != NULL)
+    {
+        if (front_p->mcount && front_p->windowls == window)
+        {
+            front_p->min_mode = false;
+            front_p->in_focus = false;
+            return;
+        }
+        front_p = front_p->next;
+    }
+}
+
+static bool switch_to_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *target)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || target == NULL || target->w_sheet == NULL ||
+        !sheet_contains(sht, target->w_sheet))
+    {
+        return false;
+    }
+
+    int old_x = target->w_sheet->bx;
+    int old_y = target->w_sheet->by;
+    int old_w = (int)target->w_sheet->width;
+    int old_h = (int)target->w_sheet->height;
+
+    restore_minimized_window(target);
+    lift_sheet(sht, target->w_sheet);
+    ms_dec.sht_now = target->w_sheet;
+    ms_dec.win_move_lock = false;
+    ms_dec.win_resize_lock = false;
+    ms_dec.resize_edges = 0;
+    focus_window_dock(target);
+
+    refresh_part_sheet(sht, old_x, old_y, old_x + old_w, old_y + old_h);
+    refresh_part_sheet(sht, target->w_sheet->bx, target->w_sheet->by,
+                       target->w_sheet->bx + (int)target->w_sheet->width,
+                       target->w_sheet->by + (int)target->w_sheet->height);
+    return true;
+}
+
+static void restore_minimized_window(WINDOWLS *window)
+{
+    if (window == NULL || window->w_sheet == NULL || user_dock_owns_dock_sheet) return;
+
+    TDB_t front_p = first_dock_block;
+    while (front_p != NULL)
+    {
+        if (front_p->mcount && front_p->windowls == window && front_p->min_mode)
+        {
+            window->w_sheet->bx = front_p->bmx;
+            window->w_sheet->by = front_p->bmy;
+            front_p->min_mode = false;
+            return;
+        }
+        front_p = front_p->next;
+    }
+}
+
+bool minimize_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || windowls == NULL || windowls->type != XWIN_NORMAL ||
+        windowls->w_sheet == NULL || !sheet_contains(sht, windowls->w_sheet))
+    {
+        return false;
+    }
+
+    if (is_window_offscreen_minimized(sht, windowls)) return true;
+
+    save_window_xy(windowls);
+    int bx = windowls->w_sheet->bx;
+    int by = windowls->w_sheet->by;
+    int w = (int)windowls->w_sheet->width;
+    int h = (int)windowls->w_sheet->height;
+    windowls->w_sheet->bx = sht->scrx + 10;
+    if (ms_dec.sht_now == windowls->w_sheet) ms_dec.sht_now = NULL;
+    show_desktop_remove_window(windowls);
+    refresh_part_sheet(sht, bx, by, bx + w, by + h);
+    focus_window_dock(NULL);
+    return true;
+}
+
+bool restore_and_focus_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || windowls == NULL || windowls->type != XWIN_NORMAL ||
+        windowls->w_sheet == NULL || !sheet_contains(sht, windowls->w_sheet))
+    {
+        return false;
+    }
+
+    show_desktop_restore_window(windowls);
+    return switch_to_window(xwmi, sht, windowls);
+}
+
+bool close_window_and_task(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || windowls == NULL || !window_contains(xwmi, windowls)) return false;
+
+    show_desktop_remove_window(windowls);
+    tcb_t current_win_task = windowls->w_task;
+    delete_window(xwmi, sht, windowls);
+    if (current_win_task != NULL && current_win_task->window_count == 0) { kill_thread(current_win_task); }
+    return true;
+}
+
+bool toggle_show_desktop(XWM_INFO *xwmi, SHEET_INFO *sht)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || have_full_screen_app) return false;
+
+    if (g_show_desktop.active)
+    {
+        for (int i = 0; i < g_show_desktop.count; ++i)
+        {
+            WINDOWLS *window = g_show_desktop.items[i];
+            if (window == NULL || window->w_sheet == NULL || !window_contains(xwmi, window) ||
+                !sheet_contains(sht, window->w_sheet))
+            {
+                continue;
+            }
+
+            int old_x = window->w_sheet->bx;
+            int old_y = window->w_sheet->by;
+            int old_w = (int)window->w_sheet->width;
+            int old_h = (int)window->w_sheet->height;
+            window->w_sheet->bx = g_show_desktop.bx[i];
+            window->w_sheet->by = g_show_desktop.by[i];
+            mark_dock_window_restored(window);
+            refresh_part_sheet(sht, old_x, old_y, old_x + old_w, old_y + old_h);
+            refresh_part_sheet(sht, window->w_sheet->bx, window->w_sheet->by,
+                               window->w_sheet->bx + (int)window->w_sheet->width,
+                               window->w_sheet->by + (int)window->w_sheet->height);
+        }
+
+        memset(&g_show_desktop, 0, sizeof(g_show_desktop));
+        focus_window_dock(NULL);
+        return true;
+    }
+
+    memset(&g_show_desktop, 0, sizeof(g_show_desktop));
+
+    WINDOWLS *front_p = xwmi->start;
+    while (front_p != NULL && g_show_desktop.count < SHOW_DESKTOP_MAX_WINDOWS)
+    {
+        WINDOWLS *window = front_p;
+        front_p = front_p->next;
+
+        if (window->type != XWIN_NORMAL || window->w_sheet == NULL || !sheet_contains(sht, window->w_sheet) ||
+            is_window_offscreen_minimized(sht, window))
+        {
+            continue;
+        }
+
+        int index = g_show_desktop.count++;
+        g_show_desktop.items[index] = window;
+        g_show_desktop.bx[index] = window->w_sheet->bx;
+        g_show_desktop.by[index] = window->w_sheet->by;
+
+        int bx = window->w_sheet->bx;
+        int by = window->w_sheet->by;
+        int w = (int)window->w_sheet->width;
+        int h = (int)window->w_sheet->height;
+        window->w_sheet->bx = sht->scrx + 10;
+        refresh_part_sheet(sht, bx, by, bx + w, by + h);
+    }
+
+    g_show_desktop.active = g_show_desktop.count > 0;
+    ms_dec.sht_now = NULL;
+    ms_dec.win_move_lock = false;
+    ms_dec.win_resize_lock = false;
+    ms_dec.resize_edges = 0;
+    focus_window_dock(NULL);
+    return g_show_desktop.active;
+}
+
+bool alt_tab_preview_begin(XWM_INFO *xwmi, SHEET_INFO *sht)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || have_full_screen_app) return false;
+    if (g_alt_tab.active) return alt_tab_preview_next(xwmi, sht);
+    if (alt_tab_collect_windows(xwmi) <= 0) return false;
+
+    alt_tab_select_next_from_current(xwmi, sht);
+    if (!alt_tab_create_preview_sheet(sht))
+    {
+        alt_tab_reset_items();
+        return false;
+    }
+
+    g_alt_tab.active = true;
+    alt_tab_draw_preview(sht);
+    return true;
+}
+
+bool alt_tab_preview_next(XWM_INFO *xwmi, SHEET_INFO *sht)
+{
+    if (!is_valid_gui_ptr(xwmi) || sht == NULL || have_full_screen_app) return false;
+    if (!g_alt_tab.active) return alt_tab_preview_begin(xwmi, sht);
+    if (g_alt_tab.count <= 0) return false;
+
+    g_alt_tab.selected = (g_alt_tab.selected + 1) % g_alt_tab.count;
+    alt_tab_draw_preview(sht);
+    return true;
+}
+
+bool alt_tab_preview_commit(XWM_INFO *xwmi, SHEET_INFO *sht)
+{
+    if (!g_alt_tab.active)
+    {
+        return false;
+    }
+
+    WINDOWLS *target = alt_tab_selected_window();
+    alt_tab_close_preview(sht);
+    if (target == NULL || have_full_screen_app) return false;
+    return switch_to_window(xwmi, sht, target);
 }
