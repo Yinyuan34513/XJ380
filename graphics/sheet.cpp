@@ -17,8 +17,8 @@ typedef struct
 
 enum
 {
-    SHEET_DAMAGE_QUEUE_CAPACITY = 8,
-    SHEET_FLUSH_RECT_BUDGET = 2,
+    SHEET_DAMAGE_QUEUE_CAPACITY = 16,
+    SHEET_FLUSH_RECT_BUDGET = 6,
 };
 
 typedef struct
@@ -31,7 +31,18 @@ typedef struct
 
 static spin_t               g_sheet_damage_lock = SPIN_INIT;
 static volatile long        g_sheet_flush_busy  = 0;
+static spin_t               g_sheet_manager_lock = SPIN_INIT;
 static SheetDamageQueueState g_sheet_damage_queue = {NULL, {}, 0, false};
+
+void lock_sheet_manager()
+{
+    spin_lock(&g_sheet_manager_lock);
+}
+
+void unlock_sheet_manager()
+{
+    spin_unlock(&g_sheet_manager_lock);
+}
 
 static bool sheet_flush_try_begin()
 {
@@ -301,17 +312,9 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     if (sheet != NULL) *sheet = NULL;
     if (sht == NULL || sheet == NULL || x == 0 || y == 0) return false;
 
-    while (true)
-    {
-        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
-        scheduler_yield();
-    }
-
-    SheetIsCreating  = true;
     SHEET *new_sheet = (SHEET *)(malloc(sizeof(SHEET))); // 开辟内存空间
     if (new_sheet == NULL)
     {
-        SheetIsCreating = false;
         return false;
     }
     memset(new_sheet, 0, sizeof(SHEET));
@@ -320,7 +323,6 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     if (new_sheet->buffer == NULL)
     {
         free(new_sheet);
-        SheetIsCreating = false;
         return false;
     }
 
@@ -330,6 +332,9 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     new_sheet->height    = y;
     new_sheet->type      = type;
     new_sheet->is_change = true;
+
+    lock_sheet_manager();
+    SheetIsCreating = true;
 
     SHEET *front_p = sht->start;
     if (index > 0)
@@ -434,6 +439,7 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
     }
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
     SheetIsCreating = false;
+    unlock_sheet_manager();
     return *sheet != NULL;
 }
 
@@ -616,12 +622,7 @@ void setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num)
 void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (!csheet) return;
-    while (true)
-    {
-        if (!SheetIsCreating && !SheetIsRefreshing) { break; }
-        scheduler_yield();
-    }
-
+    lock_sheet_manager();
     SheetIsCreating = true;
     
     if (csheet->front == NULL) {
@@ -643,53 +644,49 @@ void delete_sheet(SHEET_INFO *sht, SHEET *csheet)
     sht->sheet_num--;
 
     SheetIsCreating = false;
+    unlock_sheet_manager();
 }
 
-// 这个lift_sheet是将图层提升到倒数第五个（低于任务栏和鼠标），不是最顶上！！！没有100%确认不要动这里plz！！！
-// don't touch this
+static bool is_raiseable_window_sheet(const SHEET *sheet)
+{
+    return sheet != NULL && (sheet->type == MovableSheetType || sheet->type == NoEdgeWindowSheetType);
+}
+
 void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 {
     if (sht == NULL || csheet == NULL) return;
-    while (true)
-    {
-        if (!SheetIsRefreshing && !SheetIsCreating) { break; }
-        scheduler_yield();
-    }
-
+    lock_sheet_manager();
     SheetIsCreating = true;
-    if (!sheet_contains(sht, csheet) || csheet->front == NULL || csheet->next == NULL)
+    if (!sheet_contains(sht, csheet) || csheet->front == NULL || !is_raiseable_window_sheet(csheet))
     {
         SheetIsCreating = false;
+        unlock_sheet_manager();
         return;
     }
 
-    int target_steps = (int)sht->sheet_num - 5;
-    if (target_steps < 0)
+    SHEET *target = sht->start;
+    for (SHEET *front_p = sht->start; front_p != NULL; front_p = front_p->next)
     {
-        SheetIsCreating = false;
-        return;
+        if (front_p != csheet && is_raiseable_window_sheet(front_p)) target = front_p;
     }
 
-    SHEET *front_p2 = sht->start;
-    for (int i = 0; i < target_steps && front_p2 != NULL; i++)
-    {
-        front_p2 = front_p2->next; // 寻找最后一个
-    }
-    if (front_p2 == NULL || front_p2->next == NULL || front_p2 == csheet || front_p2->next == csheet)
+    if (target == NULL || target == csheet || target->next == csheet)
     {
         SheetIsCreating = false;
+        unlock_sheet_manager();
         return;
     }
 
     csheet->front->next = csheet->next;
-    csheet->next->front = csheet->front;
+    if (csheet->next != NULL) csheet->next->front = csheet->front;
 
-    csheet->next        = front_p2->next;
-    csheet->next->front = csheet;
-    front_p2->next      = csheet;
-    csheet->front       = front_p2;
+    csheet->next = target->next;
+    if (csheet->next != NULL) csheet->next->front = csheet;
+    target->next  = csheet;
+    csheet->front = target;
 
     SheetIsCreating = false;
+    unlock_sheet_manager();
 }
 
 bool allow_to_flush = false;
@@ -707,22 +704,24 @@ static bool clip_refresh_region(SHEET_INFO *sht, int *bex1, int *bey1, int *bex2
 
 static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
+    lock_sheet_manager();
     SheetIsRefreshing = true;
 
     SHEET_BUFFER *temp_buf_base = (SHEET_BUFFER *)sht->temp_buffer;
     uint8_t *temp_peek_sign = sht->foxland.peek_sign;
-    uint16_t *temp_opaque_layer = sht->foxland.opaque_layer;
+    bool foxland_enabled = sht->foxland.enabled && temp_peek_sign != NULL && sht->foxland.fl_peek_buffer != NULL;
     bool need_peek_overlay = false;
     int refresh_width = bex2 - bex1;
+    size_t refresh_row_bytes = (size_t)refresh_width * sizeof(SHEET_BUFFER);
 
     for (int y = bey1; y < bey2; y++) {
         int offset = y * sht->scrx + bex1;
-        memset(&temp_buf_base[offset], 0, (size_t)refresh_width * sizeof(SHEET_BUFFER));
-        memset(&temp_peek_sign[offset], 0, (size_t)refresh_width);
-        memset(&temp_opaque_layer[offset], 0, (size_t)refresh_width * sizeof(uint16_t));
+        memset(&temp_buf_base[offset], 0, refresh_row_bytes);
+        if (foxland_enabled) {
+            memset(&temp_peek_sign[offset], 0, (size_t)refresh_width);
+        }
     }
 
-    uint16_t layer_index = 1;
     for (SHEET *st = sht->start; st != nullptr; st = st->next) {
         int vx0 = (bex1 > (int)st->bx) ? bex1 : (int)st->bx;
         int vy0 = (bey1 > (int)st->by) ? bey1 : (int)st->by;
@@ -730,45 +729,11 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
         int vy1 = (bey2 < (int)(st->by + st->height)) ? bey2 : (int)(st->by + st->height);
 
         if (vx0 >= vx1 || vy0 >= vy1 || !is_valid_sheet_buffer(st->buffer)) {
-            layer_index++;
             continue;
         }
 
         SHEET_BUFFER *st_buf = (SHEET_BUFFER *)st->buffer;
         int width = vx1 - vx0;
-
-        for (int y = vy0; y < vy1; y++) {
-            int screen_off = y * sht->scrx + vx0;
-            int st_off = (y - st->by) * st->width + (vx0 - st->bx);
-
-            SHEET_BUFFER *p_src = &st_buf[st_off];
-            uint16_t *p_opaque_layer = &temp_opaque_layer[screen_off];
-            for (int x = 0; x < width; x++) {
-                if (p_src[x].a == 255) {
-                    p_opaque_layer[x] = layer_index;
-                }
-            }
-        }
-        layer_index++;
-    }
-
-    // 只合成最高不透明像素及其上方的半透明像素；其下方图层不会影响最终颜色。
-    layer_index = 1;
-    for (SHEET *st = sht->start; st != nullptr; st = st->next) {
-        // 计算当前图层与刷新区域的交集
-        int vx0 = (bex1 > (int)st->bx) ? bex1 : (int)st->bx;
-        int vy0 = (bey1 > (int)st->by) ? bey1 : (int)st->by;
-        int vx1 = (bex2 < (int)(st->bx + st->width)) ? bex2 : (int)(st->bx + st->width);
-        int vy1 = (bey2 < (int)(st->by + st->height)) ? bey2 : (int)(st->by + st->height);
-
-        // 不在当前刷新区域内直接跳过
-        if (vx0 >= vx1 || vy0 >= vy1 || !is_valid_sheet_buffer(st->buffer)) {
-            layer_index++;
-            continue;
-        }
-
-        SHEET_BUFFER *st_buf = (SHEET_BUFFER *)st->buffer;
-        int width = vx1 - vx0; // 计算一次，避免重复计算
         
         for (int y = vy0; y < vy1; y++) {
             int screen_off = y * sht->scrx + vx0;
@@ -776,8 +741,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
             
             SHEET_BUFFER *p_dst = &temp_buf_base[screen_off];
             SHEET_BUFFER *p_src = &st_buf[st_off];
-            uint8_t *p_sign = &temp_peek_sign[screen_off];
-            uint16_t *p_opaque_layer = &temp_opaque_layer[screen_off];
+            uint8_t *p_sign = foxland_enabled ? &temp_peek_sign[screen_off] : NULL;
 
             for (int x = 0; x < width; ) {
                 uint8_t alpha = p_src[x].a;
@@ -790,23 +754,15 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
                     continue;
                 }
 
-                if (layer_index < p_opaque_layer[x]) {
-                    int run = 1;
-                    while (x + run < width && layer_index < p_opaque_layer[x + run]) {
-                        run++;
-                    }
-                    x += run;
-                    continue;
-                }
-
                 if (alpha == 255) {
                     int run = 1;
-                    while (x + run < width && p_src[x + run].a == 255 &&
-                           layer_index >= p_opaque_layer[x + run]) {
+                    while (x + run < width && p_src[x + run].a == 255) {
                         run++;
                     }
                     memcpy(&p_dst[x], &p_src[x], (size_t)run * sizeof(SHEET_BUFFER));
-                    memset(&p_sign[x], 0, (size_t)run);
+                    if (foxland_enabled) {
+                        memset(&p_sign[x], 0, (size_t)run);
+                    }
                     x += run;
                     continue;
                 }
@@ -818,7 +774,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
                     p_dst[x].g = (p_src[x].g * alpha + p_dst[x].g * inv_alpha) >> 8;
                     p_dst[x].b = (p_src[x].b * alpha + p_dst[x].b * inv_alpha) >> 8;
 
-                    if (sht->foxland.enabled && st->type != FixedSheetType)
+                    if (foxland_enabled && st->type != FixedSheetType)
                     {
                         p_sign[x] = 1;
                         need_peek_overlay = true;
@@ -827,11 +783,9 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
                 x++;
             }
         }
-        layer_index++;
     }
 
-    // Foxland Peek 处理 - 优化：减少指针计算
-    if (need_peek_overlay && sht->foxland.enabled) {
+    if (need_peek_overlay && foxland_enabled) {
         SHEET_BUFFER *temp_peek = (SHEET_BUFFER *)sht->foxland.fl_peek_buffer;
         int peek_width = bex2 - bex1;
 
@@ -887,6 +841,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
 
     serial_redraw_screen_overlay_part(bex1, bey1, bex2, bey2);
     SheetIsRefreshing = false;
+    unlock_sheet_manager();
 }
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)

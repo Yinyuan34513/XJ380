@@ -162,12 +162,17 @@ static void capture_login_dynamic_regions()
 
 static void draw_input_box(int x, int y, int width, const char *value, bool password, bool focused)
 {
+    const int height = 28;
+    const int text_size = 12;
+    const int text_y = y + (height - text_size) / 2 - 2;
+    const int cursor_top = y + 5;
+    const int cursor_bottom = y + height - 6;
     UINT32 border = focused ? ACCENT : LIGHT_LINE;
-    xapi_DrawRect(g_handle, x, y, x + width, y + 28, WHITE, true);
+    xapi_DrawRect(g_handle, x, y, x + width, y + height, WHITE, true);
     xapi_DrawRect(g_handle, x, y, x + width, y + 1, border, true);
-    xapi_DrawRect(g_handle, x, y + 26, x + width, y + 28, border, true);
-    xapi_DrawRect(g_handle, x, y, x + 1, y + 28, border, true);
-    xapi_DrawRect(g_handle, x + width - 1, y, x + width, y + 28, border, true);
+    xapi_DrawRect(g_handle, x, y + height - 2, x + width, y + height, border, true);
+    xapi_DrawRect(g_handle, x, y, x + 1, y + height, border, true);
+    xapi_DrawRect(g_handle, x + width - 1, y, x + width, y + height, border, true);
 
     char text[64];
     memset(text, 0, sizeof(text));
@@ -181,13 +186,13 @@ static void draw_input_box(int x, int y, int width, const char *value, bool pass
     {
         copy_cstr(text, sizeof(text), value);
     }
-    xapi_DrawText(g_handle, x + 8, y + 7, text, 12, BLACK);
+    xapi_DrawText(g_handle, x + 8, text_y, text, text_size, BLACK);
 
     if (focused)
     {
         int cursor_x = x + 8 + (int)strlen(value) * 8;
         if (cursor_x > x + width - 12) cursor_x = x + width - 12;
-        xapi_DrawRect(g_handle, cursor_x, y + 6, cursor_x + 1, y + 22, BLACK, true);
+        xapi_DrawRect(g_handle, cursor_x, cursor_top, cursor_x + 1, cursor_bottom, BLACK, true);
     }
 }
 

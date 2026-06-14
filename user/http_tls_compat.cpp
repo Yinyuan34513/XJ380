@@ -304,7 +304,7 @@ extern "C" __attribute__((weak)) char *strdup(const char *str)
     return out;
 }
 
-extern "C" const unsigned short int **__ctype_b_loc(void)
+extern "C" __attribute__((weak)) const unsigned short int **__ctype_b_loc(void)
 {
     static const unsigned short int *ptr = NULL;
     if (ptr == NULL) ptr = tls_ctype_table();

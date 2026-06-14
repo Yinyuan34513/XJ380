@@ -388,7 +388,7 @@ void components_flusher()
         //         tw_data->need_flush = true;
         //     }
         // }
-        if (ms_dec.need_flush) { process_mouse_info(); }
+        if (ms_dec.need_flush || ms_dec.win_move_pending) { process_mouse_info(); }
         if (sht_img != NULL) { flush_sheet_damage_queue(sht_img); }
         scheduler_yield();
     }

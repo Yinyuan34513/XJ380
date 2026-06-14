@@ -168,7 +168,7 @@ def copy_system_apps(root: Path) -> None:
     system = root / "apps/system"
     builtin = root / "apps/builtin"
     apps = root / "apps"
-    for name in ("shell", "login", "dock", "desktop", "fmanager", "taskmgr", "ctrlmenu", "filedlg"):
+    for name in ("shell", "login", "dock", "desktop", "fmanager", "taskmgr", "ctrlmenu", "xjver", "elfrun", "filedlg"):
         cp(ROOT / f"out/{name}.elf", system)
     for name in ("calc", "texter", "picturer", "browser", "nut"):
         cp(ROOT / f"out/{name}.elf", builtin)
@@ -456,6 +456,8 @@ def size_report() -> None:
             Path("out/shell.elf"),
             Path("out/fmanager.elf"),
             Path("out/ctrlmenu.elf"),
+            Path("out/xjver.elf"),
+            Path("out/elfrun.elf"),
             Path("out/taskmgr.elf"),
             Path("out/filedlg.elf"),
             Path("out/installer.elf"),
@@ -487,7 +489,14 @@ def size_report() -> None:
 
 
 def find_tool(names: list[str]) -> str | None:
-    extra_paths = [Path("/usr/sbin"), Path("/sbin"), Path("/usr/local/sbin")]
+    extra_paths = [
+        Path("/usr/sbin"),
+        Path("/sbin"),
+        Path("/usr/local/sbin"),
+        Path.home() / ".cargo/bin",
+        Path("/snap/bin"),
+        Path("/home/leon/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"),
+    ]
     for name in names:
         found = shutil.which(name)
         if found:
@@ -509,6 +518,7 @@ def check_tools() -> None:
         ("x86_64-w64-mingw32-gcc", ["x86_64-w64-mingw32-gcc"], "编译 UEFI bootloader", "sudo apt install mingw-w64"),
         ("curl", ["curl"], "缺失 liballoc 时下载依赖", "sudo apt install curl"),
         ("python3", ["python3"], "生成 Ninja 和打包 installer payload", "sudo apt install python3"),
+        ("rustc", ["rustc"], "编译 Rust 用户态应用 calc", "rustup toolchain install stable"),
         ("ninja", ["ninja", "ninja-build"], "执行 Ninja 构建", "sudo apt install ninja-build"),
         ("xorriso", ["xorriso"], "生成 UEFI 安装 ISO", "sudo apt install xorriso"),
         ("mcopy", ["mcopy"], "写入 FAT 磁盘镜像", "sudo apt install mtools"),
@@ -528,6 +538,19 @@ def check_tools() -> None:
         else:
             print(f"[缺失] {display:24} {purpose}")
             missing.append((display, purpose, hint))
+
+    rustc = find_tool(["rustc"])
+    if rustc:
+        rust_target = env("RUST_TARGET", "x86_64-unknown-none")
+        libdir = capture([rustc, "--print", "target-libdir", "--target", rust_target])
+        rust_libs_ok = False
+        if libdir:
+            rust_libs_ok = bool(list(Path(libdir).glob("libcore-*.rlib"))) and bool(list(Path(libdir).glob("libcompiler_builtins-*.rlib")))
+        if rust_libs_ok:
+            print(f"[OK]   rust target {rust_target:10} {libdir}")
+        else:
+            print(f"[缺失] rust target {rust_target:10} 编译 Rust calc 需要该 no_std 目标")
+            missing.append((f"rust target {rust_target}", "编译 Rust 用户态应用 calc", f"rustup target add {rust_target}"))
 
     if missing:
         print("\n缺失工具和建议安装命令：")

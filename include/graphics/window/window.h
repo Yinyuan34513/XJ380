@@ -72,6 +72,13 @@ WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 WINDOWLS *sht_found_win_by_type(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet, uint64_t type);
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 WINDOWLS *mpf_found_win(MsgPrcor mpf);
+bool alt_tab_preview_begin(XWM_INFO *xwmi, SHEET_INFO *sht);
+bool alt_tab_preview_next(XWM_INFO *xwmi, SHEET_INFO *sht);
+bool alt_tab_preview_commit(XWM_INFO *xwmi, SHEET_INFO *sht);
+bool minimize_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool restore_and_focus_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool close_window_and_task(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool toggle_show_desktop(XWM_INFO *xwmi, SHEET_INFO *sht);
 bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 void set_window_maximize_support(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, bool can_maximize);
 bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,

@@ -40,7 +40,8 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
         }
         else if (strcmp(argv[0], "shortdock-open-about") == 0)
         {
-            cindex = 3;
+            xapi_Run((char *)"/apps/system/xjver.elf");
+            return 0;
         }
         else if (strcmp(argv[0], "shortdock-open-graphics") == 0)
         {

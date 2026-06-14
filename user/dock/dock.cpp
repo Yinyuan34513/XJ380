@@ -144,7 +144,7 @@ static void handle_topbar_click(int x, int y)
     else if (x > x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 &&
              x < x1 + 32 + 25 + 8 + 25 + 9 + 25 + 9 + 25 + 8 + 25)
     {
-        run_with_one_arg("/apps/system/ctrlmenu.elf", "shortdock-open-about");
+        xapi_Run((char *)"/apps/system/xjver.elf");
     }
 
     (void)y;

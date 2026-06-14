@@ -13,12 +13,25 @@ static uint8_t *kb_synth_head = kb_synth_buf;
 static uint8_t *kb_synth_tail = kb_synth_buf;
 static volatile uint32_t kb_synth_lock = 0;
 static bool kb_e0_prefix = false;
+static bool kb_win_r_down = false;
+static bool kb_win_d_down = false;
+static bool kb_alt_tab_down = false;
 extern uint8_t keyboard_code[256];
 extern uint8_t keyboard_code1[256];
 
 #define KB_USB_REPEAT_SLOTS 6
 #define KB_USB_REPEAT_DELAY_NS 500000000ULL
 #define KB_USB_REPEAT_INTERVAL_NS 25000000ULL
+#define KB_PS2_TAB_MAKE_CODE 0x0f
+#define KB_PS2_R_MAKE_CODE 0x13
+#define KB_PS2_D_MAKE_CODE 0x20
+#define KB_PS2_LEFT_WIN_MAKE_CODE 0x5b
+#define KB_PS2_RIGHT_WIN_MAKE_CODE 0x5c
+#define KB_USB_TAB_USAGE 0x2b
+#define KB_USB_R_USAGE 0x15
+#define KB_USB_D_USAGE 0x07
+#define KB_USB_LEFT_GUI_USAGE 0xe3
+#define KB_USB_RIGHT_GUI_USAGE 0xe7
 
 struct keyboard_usb_repeat_slot
 {
@@ -71,6 +84,7 @@ static void keyboard_prepare_fifo()
     kb_fifo.ctrl   = false;
     kb_fifo.shift  = false;
     kb_fifo.alt    = false;
+    kb_fifo.win    = false;
     kb_fifo.caps   = false;
     memset(kb_fifo.buf, 0, KB_BUF_SIZE);
     init_atom_queue(&kb_fifo_queue, kb_fifo.buf, KB_BUF_SIZE);
@@ -212,6 +226,11 @@ static void keyboard_update_modifier_state(uint8_t make_code, bool extended,
             return;
         case 0x38:
             kb_fifo.alt = pressed;
+            if (!pressed)
+            {
+                kb_alt_tab_down = false;
+                alt_tab_preview_commit(xwmii, sht_img);
+            }
             return;
         case 0x3a:
             if (pressed) {
@@ -230,10 +249,89 @@ static void keyboard_update_modifier_state(uint8_t make_code, bool extended,
         return;
     case 0x38:
         kb_fifo.alt = pressed;
+        if (!pressed)
+        {
+            kb_alt_tab_down = false;
+            alt_tab_preview_commit(xwmii, sht_img);
+        }
+        return;
+    case KB_PS2_LEFT_WIN_MAKE_CODE:
+    case KB_PS2_RIGHT_WIN_MAKE_CODE:
+        kb_fifo.win = pressed;
+        if (!pressed)
+        {
+            kb_win_r_down = false;
+            kb_win_d_down = false;
+        }
         return;
     default:
         return;
     }
+}
+
+static void keyboard_launch_run_dialog()
+{
+    create_user_process_from_file((char *)"/apps/system/elfrun.elf", NULL, NULL);
+}
+
+static void keyboard_switch_window()
+{
+    alt_tab_preview_next(xwmii, sht_img);
+}
+
+static void keyboard_toggle_show_desktop()
+{
+    toggle_show_desktop(xwmii, sht_img);
+}
+
+static bool keyboard_handle_global_shortcut(uint8_t make_code, bool extended, bool pressed)
+{
+    if (!extended && make_code == KB_PS2_TAB_MAKE_CODE)
+    {
+        if (pressed && kb_fifo.alt && !kb_alt_tab_down)
+        {
+            kb_alt_tab_down = true;
+            keyboard_switch_window();
+            return true;
+        }
+
+        if (!pressed) kb_alt_tab_down = false;
+        if (kb_fifo.alt) return true;
+    }
+
+    if (extended && (make_code == KB_PS2_LEFT_WIN_MAKE_CODE || make_code == KB_PS2_RIGHT_WIN_MAKE_CODE))
+    {
+        keyboard_update_modifier_state(make_code, extended, pressed);
+        return true;
+    }
+
+    if (!extended && make_code == KB_PS2_R_MAKE_CODE)
+    {
+        if (pressed && kb_fifo.win && !kb_win_r_down)
+        {
+            kb_win_r_down = true;
+            keyboard_launch_run_dialog();
+            return true;
+        }
+
+        if (!pressed) kb_win_r_down = false;
+        if (kb_fifo.win) return true;
+    }
+
+    if (!extended && make_code == KB_PS2_D_MAKE_CODE)
+    {
+        if (pressed && kb_fifo.win && !kb_win_d_down)
+        {
+            kb_win_d_down = true;
+            keyboard_toggle_show_desktop();
+            return true;
+        }
+
+        if (!pressed) kb_win_d_down = false;
+        if (kb_fifo.win) return true;
+    }
+
+    return false;
 }
 
 /*
@@ -277,6 +375,13 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
     bool pressed = (x & 0x80) == 0;
     bool key_release = !pressed;
     uint8_t make_code = pressed ? x : (uint8_t)(x & 0x7f);
+
+    if (keyboard_handle_global_shortcut(make_code, extended, pressed))
+    {
+        kb_e0_prefix = false;
+        send_eoi();
+        return;
+    }
 
     uint8_t event_value = keyboard_translate_event_value(
         make_code,
@@ -373,6 +478,68 @@ extern "C" void keyboard_push_input(uint8_t value)
 extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed)
 {
     keyboard_prepare_fifo();
+
+    if (usage == KB_USB_LEFT_GUI_USAGE || usage == KB_USB_RIGHT_GUI_USAGE)
+    {
+        kb_fifo.win = pressed != 0;
+        if (!pressed)
+        {
+            kb_win_r_down = false;
+            kb_win_d_down = false;
+        }
+        return;
+    }
+
+    if (usage == KEY_ALT)
+    {
+        kb_fifo.alt = pressed != 0;
+        if (!pressed)
+        {
+            kb_alt_tab_down = false;
+            alt_tab_preview_commit(xwmii, sht_img);
+        }
+        return;
+    }
+
+    if (usage == KB_USB_TAB_USAGE)
+    {
+        if (pressed && kb_fifo.alt && !kb_alt_tab_down)
+        {
+            kb_alt_tab_down = true;
+            keyboard_switch_window();
+            return;
+        }
+
+        if (!pressed) kb_alt_tab_down = false;
+        if (kb_fifo.alt) return;
+    }
+
+    if (usage == KB_USB_R_USAGE)
+    {
+        if (pressed && kb_fifo.win && !kb_win_r_down)
+        {
+            kb_win_r_down = true;
+            keyboard_launch_run_dialog();
+            return;
+        }
+
+        if (!pressed) kb_win_r_down = false;
+        if (kb_fifo.win) return;
+    }
+
+    if (usage == KB_USB_D_USAGE)
+    {
+        if (pressed && kb_fifo.win && !kb_win_d_down)
+        {
+            kb_win_d_down = true;
+            keyboard_toggle_show_desktop();
+            return;
+        }
+
+        if (!pressed) kb_win_d_down = false;
+        if (kb_fifo.win) return;
+    }
+
     keyboard_dispatch_key_message(pressed ? MSG_KEYDOWN : MSG_KEYUP, value);
 
     kb_synth_lock_acquire();

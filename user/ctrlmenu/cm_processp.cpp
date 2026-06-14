@@ -13,20 +13,15 @@ void process_left_key(int x, int y)
     }
     if (cindex == 1)
     {
-        if (x > 8 && y > win_height - 38 && 
-            x < win_width - 8 && y < win_height - 8)
-        {
-            exit_cm = true;
-            xapi_CloseWindow(handle);
-        }
+        ctrlmenu_handle_mainpage_click(x, y);
     }
     else if (cindex == 2)
     {
-        // pass
+        ctrlmenu_handle_app_showcase_click(x, y);
     }
     else if (cindex == 3)
     {
-        if (x < win_width / 10 * 3)
+        if (x < (int)(win_width / 10 * 3))
         {
             if (y > 128 && y < 158) { setting_cindex = 1; }
             if (y > 158 && y < 196) { setting_cindex = 2; }

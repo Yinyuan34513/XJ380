@@ -1,7 +1,8 @@
+OPT_LEVEL ?= 2
 NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
-ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
-C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
-CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
+ASM_FLAGS = -O$(OPT_LEVEL) -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -mno-80387
+C_FLAGS = -O$(OPT_LEVEL) -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
+CPP_FLAGS = -O$(OPT_LEVEL) -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
 BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
 
 DEBUG ?= 1
@@ -321,6 +322,8 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/fmanager.elf $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/xjver.elf    $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/elfrun.elf   $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/filedlg.elf  $(VDISK_ROOT)/apps/system
 
 	@cp -a $(BUILD_DIR)/calc.elf     $(VDISK_ROOT)/apps/builtin
@@ -388,6 +391,8 @@ installer.system.stage: all installer.prepare
 	@cp -a $(BUILD_DIR)/fmanager.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/taskmgr.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/xjver.elf    $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/elfrun.elf   $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/filedlg.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/calc.elf     $(INSTALLER_SYSTEM_ROOT)/apps/builtin
 	@cp -a $(BUILD_DIR)/texter.elf   $(INSTALLER_SYSTEM_ROOT)/apps/builtin
