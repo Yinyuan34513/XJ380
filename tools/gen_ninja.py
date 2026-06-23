@@ -122,6 +122,14 @@ def rust_opt_flag() -> str:
     return "-C opt-level=" + os.environ.get("OPT_LEVEL", "2")
 
 
+def c_diagnostic_color_flag() -> str:
+    return os.environ.get("DIAGNOSTICS_COLOR", "-fdiagnostics-color=always")
+
+
+def rust_diagnostic_color_flag() -> str:
+    return os.environ.get("RUST_DIAGNOSTICS_COLOR", "--color always")
+
+
 def find_files(base: str, suffixes: tuple[str, ...], *, max_depth: int | None = None) -> list[Path]:
     root = ROOT / base
     if not root.exists():
@@ -283,7 +291,7 @@ def user_simple_app(
     target = Path(f"out/{name}")
     obj = Path(f"out/{name}.o")
     if c_source:
-        cflags = f"{opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -MMD -MP"
+        cflags = f"$diagnostic_color {opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -MMD -MP"
         user_compile_c(n, obj, src, cflags, implicit)
     else:
         user_compile(n, obj, src, "$user_cflags", implicit)
@@ -773,8 +781,8 @@ def stardust(n: Ninja, core_objs: list[Path], start_obj: Path, liballoc: Path) -
         "src/components/textbox.cpp",
         "src/components/flex.cpp",
     ]
-    hello_flags = f"-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 {opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
-    opt_flags = f"-Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 {opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -fno-use-cxa-atexit -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
+    hello_flags = f"$diagnostic_color -Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 {opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
+    opt_flags = f"$diagnostic_color -Iframeworks/StardustUI -Iframeworks/StardustUI/includes -DXJ380 {opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=gnu++17 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -fno-use-cxa-atexit -fshort-wchar -nostdinc -Wno-write-strings -MMD -MP"
     targets = [
         stardust_example(n, "helloworld", hello_sources, hello_flags, core_objs, start_obj, liballoc),
         stardust_example(n, "layout", full_sources, opt_flags, core_objs, start_obj, liballoc),
@@ -818,26 +826,28 @@ def main() -> None:
     n.var("rust_target", rust_target)
     n.var("opt", opt_flag())
     n.var("rust_opt", rust_opt_flag())
+    n.var("diagnostic_color", c_diagnostic_color_flag())
+    n.var("rust_diagnostic_color", rust_diagnostic_color_flag())
     n.var("nasm_flags", "-f elf64 -DX86_64_TARGET -DUEFI")
-    n.var("asm_flags", "$opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -mno-80387 -MMD -MP")
-    n.var("c_flags", "$opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include -MMD -MP")
+    n.var("asm_flags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -mno-80387 -MMD -MP")
+    n.var("c_flags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include -MMD -MP")
     n.var(
         "cpp_flags",
-        "$opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing -MMD -MP"
+        "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing -MMD -MP"
         + cpp_extra,
     )
-    n.var("boot_c_flags", "-g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar")
-    n.var("user_cflags", "$opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings -MMD -MP")
-    n.var("rust_user_flags", "--edition=2024 --target $rust_target --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes $rust_opt -C debuginfo=2 -C overflow-checks=off")
+    n.var("boot_c_flags", "$diagnostic_color -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar")
+    n.var("user_cflags", "$diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings -MMD -MP")
+    n.var("rust_user_flags", "$rust_diagnostic_color --edition=2024 --target $rust_target --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes $rust_opt -C debuginfo=2 -C overflow-checks=off")
     n.var("mbedtls_cflags", "-I ./user/include/mbed_compat -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"'")
-    n.var("mbedtls_ccflags", "$opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION -MMD -MP")
+    n.var("mbedtls_ccflags", "$diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION -MMD -MP")
     litehtml_includes = "-I ./third_party/litehtml/include -I ./third_party/litehtml/include/litehtml -I ./third_party/litehtml/src -I ./third_party/litehtml/src/gumbo -I ./third_party/litehtml/src/gumbo/include -I ./third_party/litehtml/src/gumbo/include/gumbo"
     webp_includes = "-I ./user/browser/third_party/libwebp"
-    n.var("browser_hosted_cxxflags", f"$opt -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./user/browser {litehtml_includes} {webp_includes} -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT -MMD -MP")
-    n.var("browser_hosted_cflags", f"$opt -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -ffunction-sections -fdata-sections {litehtml_includes} {webp_includes} -DNDEBUG -DHAVE_CONFIG_H -MMD -MP")
-    n.var("libvterm_cflags", "$opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./third_party/libvterm/include -I ./third_party/libvterm/src -MMD -MP")
-    n.var("kmod_cxxflags", "$opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden -MMD -MP")
-    n.var("netserver_cflags", "$opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
+    n.var("browser_hosted_cxxflags", f"$diagnostic_color $opt -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./user/browser {litehtml_includes} {webp_includes} -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT -MMD -MP")
+    n.var("browser_hosted_cflags", f"$diagnostic_color $opt -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -ffunction-sections -fdata-sections {litehtml_includes} {webp_includes} -DNDEBUG -DHAVE_CONFIG_H -MMD -MP")
+    n.var("libvterm_cflags", "$diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./third_party/libvterm/include -I ./third_party/libvterm/src -MMD -MP")
+    n.var("kmod_cxxflags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden -MMD -MP")
+    n.var("netserver_cflags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
     n.var("netserver_cxxflags", "$kmod_cxxflags -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
     n.var("browser_stdcpp", cmd_output(["g++", "-print-file-name=libstdc++.a"]))
     n.var("browser_supcpp", cmd_output(["g++", "-print-file-name=libsupc++.a"]))
@@ -865,12 +875,12 @@ def main() -> None:
     n.rule("user_cxx_custom", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
     n.rule("user_cc_custom", "mkdir -p $$(dirname $out) && $user_cc $cflags -MF $out.d -c $in -o $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
     n.rule("rust_user", "mkdir -p $$(dirname $out) && $rustc $rust_user_flags $in -o $out", log_desc("RUST", "$in -> $out"))
-    n.rule("xapi_cxx", "mkdir -p $$(dirname $out) && $user_cxx $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
-    n.rule("xapi_as", "mkdir -p $$(dirname $out) && $user_cc $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("ASM", "$in"), depfile="$out.d")
-    n.rule("xapi_head", "mkdir -p $$(dirname $out) && $user_cc $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "start.cpp"), depfile="$out.d")
-    n.rule("xapi_headcon", "mkdir -p $$(dirname $out) && $user_cc $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "constart.cpp"), depfile="$out.d")
+    n.rule("xapi_cxx", "mkdir -p $$(dirname $out) && $user_cxx $diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "$in"), depfile="$out.d")
+    n.rule("xapi_as", "mkdir -p $$(dirname $out) && $user_cc $diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("ASM", "$in"), depfile="$out.d")
+    n.rule("xapi_head", "mkdir -p $$(dirname $out) && $user_cc $diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "start.cpp"), depfile="$out.d")
+    n.rule("xapi_headcon", "mkdir -p $$(dirname $out) && $user_cc $diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -Wno-write-strings -MMD -MP -MF $out.d -c $in -o $out", log_desc("CXX", "constart.cpp"), depfile="$out.d")
     n.rule("user_ld", "$user_ld -Ttext=0x200000 $in -o $out", log_desc("LD", "$out"))
-    n.rule("host_cc", "mkdir -p $$(dirname $out) && $user_cc -O0 -g -Wall -Wextra $in -o $out", log_desc("HOSTLD", "$in"))
+    n.rule("host_cc", "mkdir -p $$(dirname $out) && $user_cc $diagnostic_color -O0 -g -Wall -Wextra $in -o $out", log_desc("HOSTLD", "$in"))
     n.rule("mbedtls_cc", "mkdir -p $$(dirname $out) && $user_cc $mbedtls_ccflags -MF $out.d -c $in -o $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
     n.rule("browser_builtins", "mkdir -p $$(dirname $out) && python3 tools/ninja_build.py browser-builtins > $out", log_desc("FIND", "browser builtins"))
     n.rule("link_with_builtins", "$user_ld $ldflags $in $$(cat out/browser-builtins.path) -o $out", log_desc("LD", "$out"))
