@@ -37,8 +37,16 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         if ((char)(lData) == '\n') { fm_finish_inline_rename(); }
         break;
     case MSG_KEYDOWN:
+        // xapi_OutputSerial("KEY DOWN:");
+        // xapi_OutputSerial((char *)&lData);
+        // xapi_OutputSerial("\n");
         if (lData == XKEY_ENTER || lData == '\n') { fm_finish_inline_rename(); }
         break;
+    // case MSG_KEYUP:
+    //     xapi_OutputSerial("KEY UP:");
+    //     xapi_OutputSerial((char *)(uint64_t)(&lData));
+    //     xapi_OutputSerial("\n");
+    //     break;
     case MSG_RESIZE:
         fm_cancel_inline_rename();
         fmr_width = (int)hData;
