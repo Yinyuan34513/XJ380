@@ -102,15 +102,30 @@ def find_rustc() -> str:
 
 def rust_target_libs(rustc: str, target: str) -> list[Path]:
     if not rustc:
-        return []
+        raise SystemExit("缺少 Rust 编译器：请安装 rustup/rustc，或设置 RUSTC=/path/to/rustc")
     libdir = cmd_output([rustc, "--print", "target-libdir", "--target", target])
     if not libdir:
-        return []
+        raise SystemExit(
+            f"无法查询 Rust 目标库目录：{target}\n"
+            f"请先运行：rustup target add {target}\n"
+            "如果已经安装，请确认 RUSTC 指向同一个 rustup 工具链，然后运行：ninja reconfigure"
+        )
     libs: list[Path] = []
+    missing: list[str] = []
     for pattern in ("libcore-*.rlib", "libcompiler_builtins-*.rlib"):
         matches = sorted(Path(libdir).glob(pattern))
         if matches:
             libs.append(matches[-1])
+        else:
+            missing.append(pattern)
+    if missing:
+        raise SystemExit(
+            f"Rust 目标库不完整：{target}\n"
+            f"缺少：{', '.join(missing)}\n"
+            f"目标库目录：{libdir}\n"
+            f"请运行：rustup target add {target}\n"
+            "然后运行：ninja reconfigure"
+        )
     return libs
 
 
@@ -359,6 +374,7 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         ("posixdemo.elf", "user/posixdemo.cpp"),
         ("libctest.elf", "user/libctest.cpp"),
         ("fbtest.elf", "user/fbtest.cpp"),
+        ("msgtest.elf", "user/msgtest.cpp"),
         ("cp537.elf", "user/cp537.cpp"),
         ("picturer.elf", "user/picturer/picturer.cpp"),
         ("chat.elf", "user/chat.cpp"),
@@ -399,6 +415,7 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     targets.append(grouped_cpp_app(n, "ctrlmenu", ctrlmenu_sources, "ctrlmenu", core_objs, liballoc, common_implicit))
     targets.append(rust_gui_app(n, "xjver", "user/xjver/xjver.rs", Path("out/xjver/xjver.rs.o"), core_objs, start_obj, liballoc, rust_libs))
     targets.append(grouped_cpp_app(n, "elfrun", ["elfrun/elfrun.cpp"], "elfrun", core_objs, liballoc, common_implicit))
+    targets.append(rust_gui_app(n, "launcher", "user/launcher/launcher.rs", Path("out/launcher/launcher.rs.o"), core_objs, start_obj, liballoc, rust_libs))
     targets.append(rust_gui_app(n, "calc", "user/calc/calc.rs", Path("out/calc/calc.rs.o"), core_objs, start_obj, liballoc, rust_libs))
     targets.append(grouped_cpp_app(n, "texter", ["texter/texter.cpp"], "texter", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "taskmgr", ["taskmgr/taskmgr.cpp"], "taskmgr", core_objs, liballoc, common_implicit))
@@ -894,7 +911,17 @@ def main() -> None:
         "build.ninja",
         "regen",
         ["tools/gen_ninja.py", "tools/ninja_build.py"],
-        implicit=["Makefile", "user/Makefile", "user/xapi/Makefile", "user/calc/calc.rs", "user/busyterm.rs", "user/xjver/xjver.rs", "user/elfrun/elfrun.cpp"],
+        implicit=[
+            "Makefile",
+            "user/Makefile",
+            "user/xapi/Makefile",
+            "user/calc/calc.rs",
+            "user/busyterm.rs",
+            "user/xjver/xjver.rs",
+            "user/launcher/launcher.rs",
+            "user/elfrun/elfrun.cpp",
+            "user/msgtest.cpp",
+        ],
     )
     n.build("kernel/build_config.h", "gen_config")
     n.build("liballoc-x86_64.a", "download_liballoc")

@@ -15,6 +15,7 @@ static volatile uint32_t kb_synth_lock = 0;
 static bool kb_e0_prefix = false;
 static bool kb_win_r_down = false;
 static bool kb_win_d_down = false;
+static bool kb_win_space_down = false;
 static bool kb_alt_tab_down = false;
 extern uint8_t keyboard_code[256];
 extern uint8_t keyboard_code1[256];
@@ -25,11 +26,13 @@ extern uint8_t keyboard_code1[256];
 #define KB_PS2_TAB_MAKE_CODE 0x0f
 #define KB_PS2_R_MAKE_CODE 0x13
 #define KB_PS2_D_MAKE_CODE 0x20
+#define KB_PS2_SPACE_MAKE_CODE 0x39
 #define KB_PS2_LEFT_WIN_MAKE_CODE 0x5b
 #define KB_PS2_RIGHT_WIN_MAKE_CODE 0x5c
 #define KB_USB_TAB_USAGE 0x2b
 #define KB_USB_R_USAGE 0x15
 #define KB_USB_D_USAGE 0x07
+#define KB_USB_SPACE_USAGE 0x2c
 #define KB_USB_LEFT_GUI_USAGE 0xe3
 #define KB_USB_RIGHT_GUI_USAGE 0xe7
 
@@ -262,6 +265,7 @@ static void keyboard_update_modifier_state(uint8_t make_code, bool extended,
         {
             kb_win_r_down = false;
             kb_win_d_down = false;
+            kb_win_space_down = false;
         }
         return;
     default:
@@ -272,6 +276,15 @@ static void keyboard_update_modifier_state(uint8_t make_code, bool extended,
 static void keyboard_launch_run_dialog()
 {
     create_user_process_from_file((char *)"/apps/system/elfrun.elf", NULL, NULL);
+}
+
+static void keyboard_launch_launcher()
+{
+    if (focus_window_by_exe_path(xwmii, sht_img, "/apps/system/launcher.elf"))
+    {
+        return;
+    }
+    create_user_process_singleton_from_file((char *)"/apps/system/launcher.elf", NULL, NULL);
 }
 
 static void keyboard_switch_window()
@@ -328,6 +341,19 @@ static bool keyboard_handle_global_shortcut(uint8_t make_code, bool extended, bo
         }
 
         if (!pressed) kb_win_d_down = false;
+        if (kb_fifo.win) return true;
+    }
+
+    if (!extended && make_code == KB_PS2_SPACE_MAKE_CODE)
+    {
+        if (pressed && kb_fifo.win && !kb_win_space_down)
+        {
+            kb_win_space_down = true;
+            keyboard_launch_launcher();
+            return true;
+        }
+
+        if (!pressed) kb_win_space_down = false;
         if (kb_fifo.win) return true;
     }
 
@@ -486,6 +512,7 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
         {
             kb_win_r_down = false;
             kb_win_d_down = false;
+            kb_win_space_down = false;
         }
         return;
     }
@@ -537,6 +564,19 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
         }
 
         if (!pressed) kb_win_d_down = false;
+        if (kb_fifo.win) return;
+    }
+
+    if (usage == KB_USB_SPACE_USAGE)
+    {
+        if (pressed && kb_fifo.win && !kb_win_space_down)
+        {
+            kb_win_space_down = true;
+            keyboard_launch_launcher();
+            return;
+        }
+
+        if (!pressed) kb_win_space_down = false;
         if (kb_fifo.win) return;
     }
 

@@ -43,6 +43,17 @@ struct FoxLandPeek
     bool             enabled;
 };
 
+typedef struct
+{
+    uint64_t queued_rects;
+    uint64_t merged_rects;
+    uint64_t flushed_rects;
+    uint64_t flushed_pixels;
+    uint64_t last_flush_ns;
+    uint64_t max_flush_ns;
+    uint8_t  max_queue_depth;
+} SheetDamageStats;
+
 typedef struct SHEET *SHEETP;
 
 struct SHEET
@@ -107,6 +118,8 @@ void      delete_sheet(SHEET_INFO *sht, SHEET *csheet);
 void      refresh_sheet(SHEET_INFO *sht);
 void      refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 void      flush_sheet_damage_queue(SHEET_INFO *sht);
+void      flush_sheet_damage_queue_now(SHEET_INFO *sht);
+void      get_sheet_damage_stats(SheetDamageStats *stats);
 uint32_t  get_hor();
 uint32_t  get_ver();
 void     *get_sheet_buffer(SHEET_INFO *sht, SHEET *csheet);
@@ -143,5 +156,8 @@ void draw_app_message_box(char *title, char *text);
 
 void draw_logo_menu();
 void delete_logo_menu();
+void toast_manager_mark_process_exit(pcb_t process);
+void toast_manager_flush();
+bool toast_manager_handle_mouse_click(int x, int y);
 
 #endif

@@ -17,8 +17,11 @@ typedef struct
 
 enum
 {
-    SHEET_DAMAGE_QUEUE_CAPACITY = 16,
-    SHEET_FLUSH_RECT_BUDGET = 6,
+    SHEET_DAMAGE_QUEUE_CAPACITY = 32,
+    SHEET_DAMAGE_MERGE_GAP = 24,
+    SHEET_DAMAGE_MERGE_MAX_WASTE_PERCENT = 45,
+    SHEET_DAMAGE_LARGE_RECT_PERCENT = 70,
+    SHEET_FRAME_INTERVAL_NS = 16666666ULL,
 };
 
 typedef struct
@@ -33,6 +36,8 @@ static spin_t               g_sheet_damage_lock = SPIN_INIT;
 static volatile long        g_sheet_flush_busy  = 0;
 static spin_t               g_sheet_manager_lock = SPIN_INIT;
 static SheetDamageQueueState g_sheet_damage_queue = {NULL, {}, 0, false};
+static SheetDamageStats      g_sheet_damage_stats = {};
+static uint64_t              g_sheet_next_frame_ns = 0;
 
 void lock_sheet_manager()
 {
@@ -42,6 +47,42 @@ void lock_sheet_manager()
 void unlock_sheet_manager()
 {
     spin_unlock(&g_sheet_manager_lock);
+}
+
+static void keep_mouse_sheet_on_top_locked(SHEET_INFO *sht, SHEET *new_sheet)
+{
+    if (sht == NULL || mouse_ct_sheet_img == NULL || mouse_ct_sheet_img == new_sheet ||
+        sht->start == NULL || mouse_ct_sheet_img->next == NULL)
+    {
+        return;
+    }
+
+    if (mouse_ct_sheet_img->front != NULL)
+    {
+        mouse_ct_sheet_img->front->next = mouse_ct_sheet_img->next;
+    }
+    else
+    {
+        sht->start = mouse_ct_sheet_img->next;
+    }
+    mouse_ct_sheet_img->next->front = mouse_ct_sheet_img->front;
+
+    SHEET *tail = sht->start;
+    while (tail != NULL && tail->next != NULL)
+    {
+        tail = tail->next;
+    }
+    if (tail == NULL)
+    {
+        sht->start = mouse_ct_sheet_img;
+        mouse_ct_sheet_img->front = NULL;
+        mouse_ct_sheet_img->next = NULL;
+        return;
+    }
+
+    tail->next = mouse_ct_sheet_img;
+    mouse_ct_sheet_img->front = tail;
+    mouse_ct_sheet_img->next = NULL;
 }
 
 static bool sheet_flush_try_begin()
@@ -99,19 +140,49 @@ static inline uint64_t sheet_damage_rect_area(const SheetDamageRect *rect)
     return (uint64_t)(rect->x2 - rect->x1) * (uint64_t)(rect->y2 - rect->y1);
 }
 
+static inline bool sheet_damage_rect_empty(const SheetDamageRect *rect)
+{
+    return rect == NULL || rect->x1 >= rect->x2 || rect->y1 >= rect->y2;
+}
+
+static inline bool sheet_damage_rect_close_enough(const SheetDamageRect *a, const SheetDamageRect *b)
+{
+    return a->x1 <= b->x2 + SHEET_DAMAGE_MERGE_GAP && b->x1 <= a->x2 + SHEET_DAMAGE_MERGE_GAP &&
+           a->y1 <= b->y2 + SHEET_DAMAGE_MERGE_GAP && b->y1 <= a->y2 + SHEET_DAMAGE_MERGE_GAP;
+}
+
+static inline bool sheet_damage_should_merge(const SheetDamageRect *a, const SheetDamageRect *b)
+{
+    if (sheet_damage_rect_intersects_or_touches(a, b)) return true;
+    if (!sheet_damage_rect_close_enough(a, b)) return false;
+
+    SheetDamageRect merged = *a;
+    sheet_damage_rect_union_into(&merged, b);
+
+    uint64_t area_a = sheet_damage_rect_area(a);
+    uint64_t area_b = sheet_damage_rect_area(b);
+    uint64_t merged_area = sheet_damage_rect_area(&merged);
+    uint64_t source_area = area_a + area_b;
+    if (merged_area <= source_area) return true;
+
+    uint64_t waste = merged_area - source_area;
+    return waste * 100 <= source_area * SHEET_DAMAGE_MERGE_MAX_WASTE_PERCENT;
+}
+
 static void sheet_damage_queue_compact_locked(SheetDamageQueueState *queue)
 {
     for (uint8_t i = 0; i < queue->count; ++i)
     {
         for (uint8_t j = i + 1; j < queue->count;)
         {
-            if (!sheet_damage_rect_intersects_or_touches(&queue->rects[i], &queue->rects[j]))
+            if (!sheet_damage_should_merge(&queue->rects[i], &queue->rects[j]))
             {
                 ++j;
                 continue;
             }
 
             sheet_damage_rect_union_into(&queue->rects[i], &queue->rects[j]);
+            g_sheet_damage_stats.merged_rects++;
             queue->rects[j] = queue->rects[queue->count - 1];
             queue->count--;
         }
@@ -135,26 +206,34 @@ static void sheet_damage_queue_push_locked(SheetDamageQueueState *queue, SHEET_I
         {
             sheet_damage_rect_union_into(&merged, &queue->rects[i]);
         }
-        queue->sht      = queue->sht;
         queue->rects[0] = merged;
         queue->count    = queue->count ? 1 : 0;
         queue->pending  = queue->count != 0;
     }
 
     queue->sht = sht;
+    g_sheet_damage_stats.queued_rects++;
 
     SheetDamageRect rect;
     sheet_damage_rect_set(&rect, x1, y1, x2, y2);
 
+    uint64_t screen_area = (uint64_t)sht->scrx * (uint64_t)sht->scry;
+    if (screen_area != 0 && sheet_damage_rect_area(&rect) * 100 >= screen_area * SHEET_DAMAGE_LARGE_RECT_PERCENT)
+    {
+        sheet_damage_rect_set(&rect, 0, 0, (int)sht->scrx, (int)sht->scry);
+        queue->count = 0;
+    }
+
     for (uint8_t i = 0; i < queue->count;)
     {
-        if (!sheet_damage_rect_intersects_or_touches(&queue->rects[i], &rect))
+        if (!sheet_damage_should_merge(&queue->rects[i], &rect))
         {
             ++i;
             continue;
         }
 
         sheet_damage_rect_union_into(&rect, &queue->rects[i]);
+        g_sheet_damage_stats.merged_rects++;
         queue->rects[i] = queue->rects[queue->count - 1];
         queue->count--;
     }
@@ -163,25 +242,31 @@ static void sheet_damage_queue_push_locked(SheetDamageQueueState *queue, SHEET_I
     {
         queue->rects[queue->count++] = rect;
         queue->pending = true;
+        if (queue->count > g_sheet_damage_stats.max_queue_depth) g_sheet_damage_stats.max_queue_depth = queue->count;
         return;
     }
 
     uint8_t  best_index  = 0;
     uint64_t best_growth = (uint64_t)-1;
+    uint64_t best_area = (uint64_t)-1;
     for (uint8_t i = 0; i < queue->count; ++i)
     {
         SheetDamageRect merged = queue->rects[i];
         sheet_damage_rect_union_into(&merged, &rect);
         uint64_t growth = sheet_damage_rect_area(&merged) - sheet_damage_rect_area(&queue->rects[i]);
-        if (growth < best_growth)
+        uint64_t area = sheet_damage_rect_area(&merged);
+        if (growth < best_growth || (growth == best_growth && area < best_area))
         {
             best_growth = growth;
+            best_area = area;
             best_index  = i;
         }
     }
 
     sheet_damage_rect_union_into(&queue->rects[best_index], &rect);
+    g_sheet_damage_stats.merged_rects++;
     sheet_damage_queue_compact_locked(queue);
+    if (queue->count > g_sheet_damage_stats.max_queue_depth) g_sheet_damage_stats.max_queue_depth = queue->count;
 }
 
 static size_t sheet_buffer_bytes(uint32_t width, uint32_t height)
@@ -438,6 +523,7 @@ bool create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_
         }
     }
     // write_serial_fmt("Sheet Create Success. SheetID: %d\n", *ct_sheet);
+    keep_mouse_sheet_on_top_locked(sht, new_sheet);
     SheetIsCreating = false;
     unlock_sheet_manager();
     return *sheet != NULL;
@@ -691,6 +777,14 @@ void lift_sheet(SHEET_INFO *sht, SHEET *csheet)
 
 bool allow_to_flush = false;
 
+void get_sheet_damage_stats(SheetDamageStats *stats)
+{
+    if (stats == NULL) return;
+    spin_lock(&g_sheet_damage_lock);
+    *stats = g_sheet_damage_stats;
+    spin_unlock(&g_sheet_damage_lock);
+}
+
 static bool clip_refresh_region(SHEET_INFO *sht, int *bex1, int *bey1, int *bex2, int *bey2)
 {
     if (sht == NULL) return false;
@@ -702,8 +796,9 @@ static bool clip_refresh_region(SHEET_INFO *sht, int *bex1, int *bey1, int *bex2
     return true;
 }
 
-static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
+static void refresh_part_sheet_compose(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
 {
+    uint64_t flush_start_ns = nanoTime();
     lock_sheet_manager();
     SheetIsRefreshing = true;
 
@@ -808,7 +903,7 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
         }
     }
 
-    // 写入活动 framebuffer，再把脏区 present 到 GOP。
+    // 写入后备 framebuffer，帧调度器统一 present 到 GOP。
     uint8_t *frame_buffer = fbdev_ready() ? fbdev_kernel_framebuffer() : (uint8_t *)sht->fbc->frame_buffer;
     uint32_t pixels_per_scan_line = sht->fbc->pixels_per_scan_line;
     size_t row_bytes = (size_t)(bex2 - bex1) * sizeof(SHEET_BUFFER);
@@ -835,13 +930,17 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int bex1, int bey1, int bex2
         }
     }
 
-    if (fbdev_ready()) {
-        fbdev_present_kernel_region((uint32_t)bex1, (uint32_t)bey1, (uint32_t)bex2, (uint32_t)bey2);
-    }
-
-    serial_redraw_screen_overlay_part(bex1, bey1, bex2, bey2);
     SheetIsRefreshing = false;
     unlock_sheet_manager();
+
+    uint64_t elapsed_ns = nanoTime() - flush_start_ns;
+    spin_lock(&g_sheet_damage_lock);
+    g_sheet_damage_stats.flushed_rects++;
+    g_sheet_damage_stats.flushed_pixels +=
+        (uint64_t)(bex2 - bex1) * (uint64_t)(bey2 - bey1);
+    g_sheet_damage_stats.last_flush_ns = elapsed_ns;
+    if (elapsed_ns > g_sheet_damage_stats.max_flush_ns) g_sheet_damage_stats.max_flush_ns = elapsed_ns;
+    spin_unlock(&g_sheet_damage_lock);
 }
 
 void refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2)
@@ -859,36 +958,81 @@ void refresh_sheet(SHEET_INFO *sht)
     refresh_part_sheet(sht, 0, 0, sht->scrx, sht->scry);
 }
 
-void flush_sheet_damage_queue(SHEET_INFO *sht)
+static int sheet_damage_queue_take_frame_locked(SHEET_INFO *sht, SheetDamageRect *rects, int max_count)
+{
+    if (rects == NULL || max_count <= 0 || !g_sheet_damage_queue.pending ||
+        g_sheet_damage_queue.sht != sht || g_sheet_damage_queue.count == 0)
+    {
+        return 0;
+    }
+
+    int count = g_sheet_damage_queue.count;
+    if (count > max_count) count = max_count;
+    for (int i = 0; i < count; ++i)
+    {
+        rects[i] = g_sheet_damage_queue.rects[i];
+    }
+
+    g_sheet_damage_queue.count = 0;
+    g_sheet_damage_queue.pending = false;
+    g_sheet_damage_queue.sht = NULL;
+    return count;
+}
+
+static void sheet_present_frame_rects(SHEET_INFO *sht, SheetDamageRect *rects, int count)
+{
+    if (sht == NULL || rects == NULL || count <= 0) return;
+
+    SheetDamageRect present = rects[0];
+    for (int i = 1; i < count; ++i)
+    {
+        sheet_damage_rect_union_into(&present, &rects[i]);
+    }
+    if (sheet_damage_rect_empty(&present)) return;
+
+    if (fbdev_ready()) {
+        fbdev_present_kernel_region((uint32_t)present.x1, (uint32_t)present.y1,
+                                    (uint32_t)present.x2, (uint32_t)present.y2);
+    }
+    serial_redraw_screen_overlay_part(present.x1, present.y1, present.x2, present.y2);
+}
+
+static void flush_sheet_damage_queue_frame(SHEET_INFO *sht, bool force)
 {
     if (!allow_to_flush || sht == NULL) return;
     if (!sheet_flush_try_begin()) return;
 
-    int flushed = 0;
-    while (true)
+    uint64_t now = nanoTime();
+    if (!force && g_sheet_next_frame_ns != 0 && now < g_sheet_next_frame_ns)
     {
-        SHEET_INFO      *pending_sht = NULL;
-        SheetDamageRect  rect        = {0, 0, 0, 0};
-
-        spin_lock(&g_sheet_damage_lock);
-        if (g_sheet_damage_queue.pending && g_sheet_damage_queue.sht == sht && g_sheet_damage_queue.count != 0)
-        {
-            pending_sht = g_sheet_damage_queue.sht;
-            rect = g_sheet_damage_queue.rects[g_sheet_damage_queue.count - 1];
-            g_sheet_damage_queue.count--;
-            g_sheet_damage_queue.pending = g_sheet_damage_queue.count != 0;
-            if (!g_sheet_damage_queue.pending) {
-                g_sheet_damage_queue.sht = NULL;
-            }
-        }
-        spin_unlock(&g_sheet_damage_lock);
-
-        if (pending_sht == NULL) break;
-        refresh_part_sheet_now(pending_sht, rect.x1, rect.y1, rect.x2, rect.y2);
-        flushed++;
-        if (flushed >= SHEET_FLUSH_RECT_BUDGET) break;
+        sheet_flush_end();
+        return;
     }
+    g_sheet_next_frame_ns = now + SHEET_FRAME_INTERVAL_NS;
+
+    SheetDamageRect frame_rects[SHEET_DAMAGE_QUEUE_CAPACITY];
+    spin_lock(&g_sheet_damage_lock);
+    int frame_rect_count =
+        sheet_damage_queue_take_frame_locked(sht, frame_rects, SHEET_DAMAGE_QUEUE_CAPACITY);
+    spin_unlock(&g_sheet_damage_lock);
+
+    for (int i = 0; i < frame_rect_count; ++i)
+    {
+        refresh_part_sheet_compose(sht, frame_rects[i].x1, frame_rects[i].y1,
+                                   frame_rects[i].x2, frame_rects[i].y2);
+    }
+    sheet_present_frame_rects(sht, frame_rects, frame_rect_count);
     sheet_flush_end();
+}
+
+void flush_sheet_damage_queue(SHEET_INFO *sht)
+{
+    flush_sheet_damage_queue_frame(sht, false);
+}
+
+void flush_sheet_damage_queue_now(SHEET_INFO *sht)
+{
+    flush_sheet_damage_queue_frame(sht, true);
 }
 
 uint32_t get_hor()

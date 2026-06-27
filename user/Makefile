@@ -1,4 +1,4 @@
-all: init.elf shell.elf cp537.elf login.elf dock.elf desktop.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf xjver.elf elfrun.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf ccompat-demo.elf dyn-hello
+all: init.elf shell.elf cp537.elf login.elf dock.elf desktop.elf fmanager.elf bcms-sp.elf busyterm.elf ctrlmenu.elf xjver.elf elfrun.elf launcher.elf calc.elf texter.elf picturer.elf chat.elf httpget.elf browser.elf netcfg.elf taskmgr.elf filedlg.elf nut.elf installer.elf sigtest.elf posixdemo.elf libctest.elf fbtest.elf msgtest.elf ccompat-demo.elf dyn-hello
 
 export CXX ?= g++
 export CC ?= gcc
@@ -211,6 +211,11 @@ fbtest.elf: fbtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
 	@echo "CPPLD $< -> ../out/$@"
 
+msgtest.elf: msgtest.cpp $(XAPI_HEADERS) $(USER_HEADERS)
+	@$(CXX) $(CFLAGS) -c $< -o ../out/$@.o
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
+	@echo "CPPLD $< -> ../out/$@"
+
 ccompat-demo.elf: ccompat_demo.c $(XAPI_HEADERS)
 	@$(CC) -O$(OPT_LEVEL) -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./xapi/include -c $< -o ../out/$@.o
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "/start.cpp.o$$") ../out/xapi/liballoc-x86_64.a ../out/$@.o -o ../out/$@
@@ -341,7 +346,7 @@ SHELL_SOURCES := ./shell/shell_main.cpp \
                 ./shell/shell_fs.cpp \
                 ./shell/shell_editor.cpp \
                 ./shell/shell_tam.cpp \
-                ./shell/sxah.cpp 
+                ./shell/sxah.cpp
 
 FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
                 ./fmanager/fm_paint.cpp \
@@ -356,6 +361,7 @@ CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
                 ./ctrlmenu/cm_processp.cpp
 
 XJVER_SOURCES := ./xjver/xjver.rs
+LAUNCHER_SOURCES := ./launcher/launcher.rs
 CALC_SOURCES := ./calc/calc.rs
 
 TEXTER_SOURCES := ./texter/texter.cpp
@@ -373,6 +379,7 @@ DOCK_OBJECTS := $(patsubst ./dock/%.cpp, ../out/dock/%.o, $(DOCK_SOURCES))
 FMANAGER_OBJECTS := $(patsubst ./fmanager/%.cpp, ../out/fmanager/%.o, $(FMANAGER_SOURCES))
 CTRLMENU_OBJECTS := $(patsubst ./ctrlmenu/%.cpp, ../out/ctrlmenu/%.o, $(CTRLMENU_SOURCES))
 XJVER_OBJECTS := $(patsubst ./xjver/%.rs, ../out/xjver/%.rs.o, $(XJVER_SOURCES))
+LAUNCHER_OBJECTS := $(patsubst ./launcher/%.rs, ../out/launcher/%.rs.o, $(LAUNCHER_SOURCES))
 CALC_OBJECTS := $(patsubst ./calc/%.rs, ../out/calc/%.rs.o, $(CALC_SOURCES))
 TEXTER_OBJECTS := $(patsubst ./texter/%.cpp, ../out/texter/%.o, $(TEXTER_SOURCES))
 TASKMGR_OBJECTS := $(patsubst ./taskmgr/%.cpp, ../out/taskmgr/%.o, $(TASKMGR_SOURCES))
@@ -390,6 +397,11 @@ check_rust_user:
 	@echo "RUST $< -> $@"
 
 ../out/xjver/%.rs.o: ./xjver/%.rs ../kernel/build_settings.h | check_rust_user
+	@mkdir -p $(@D)
+	@$(RUSTC) $(RUST_FLAGS) $< -o $@
+	@echo "RUST $< -> $@"
+
+../out/launcher/%.rs.o: ./launcher/%.rs | check_rust_user
 	@mkdir -p $(@D)
 	@$(RUSTC) $(RUST_FLAGS) $< -o $@
 	@echo "RUST $< -> $@"
@@ -458,6 +470,10 @@ xjver.elf: build_xapi $(XJVER_OBJECTS)
 	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(XJVER_OBJECTS) $(RUST_CORE) $(RUST_COMPILER_BUILTINS) -o ../out/$@
 	@echo "LINK xjver objects -> ../out/$@"
 
+launcher.elf: build_xapi $(LAUNCHER_OBJECTS)
+	@$(LD) -Ttext=0x200000 $(shell find ../out/xapi -name "*.o" |grep -v "constart.cpp.o") ../out/xapi/liballoc-x86_64.a $(LAUNCHER_OBJECTS) $(RUST_CORE) $(RUST_COMPILER_BUILTINS) -o ../out/$@
+	@echo "LINK launcher objects -> ../out/$@"
+
 ../out/ctrlmenu/%.o: ./ctrlmenu/%.cpp $(XAPI_HEADERS) $(USER_HEADERS)
 	@mkdir -p $(@D)
 	@$(CXX) $(CFLAGS) -c $< -o $@
@@ -512,4 +528,4 @@ installer.elf: build_xapi $(INSTALLER_OBJECTS)
 
 .PHONY: clean check_rust_user
 clean:
-	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/taskmgr.* ../out/taskmgr/*.* ../out/picturer.* ../out/netcfg.* ../out/helloworld.* ../out/sigtest.*
+	rm -rf ../out/xapi ../out/init.* ../out/shell.* ../out/shell/*.* ../out/cp537.* ../out/fmanager/*.* ../out/bcms-sp.* ../out/ctrlmenu/*.* ../out/texter/*.* ../out/taskmgr.* ../out/taskmgr/*.* ../out/picturer.* ../out/netcfg.* ../out/helloworld.* ../out/sigtest.* ../out/msgtest.*

@@ -132,6 +132,12 @@ struct process_control_block
 
     tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
+
+    int      notify_pcor_pipe_read_fd;
+    int      notify_pcor_pipe_write_fd;
+    size_t   notify_pcor_tid;
+    uint64_t notify_pcor_func;
+    bool     notify_pcor_registered;
 };
 #ifndef CONFIG_USER_ELF_HEADER_START
 #define CONFIG_USER_ELF_HEADER_START 0x0000300000000000UL
@@ -241,4 +247,5 @@ void kill_thread(tcb_t task);
 void kill_thread0(tcb_t task);
 void kill_proc0(pcb_t pcb);
 pcb_t found_pcb(int pid);
+pcb_t found_process_by_exe_path(const char *exe_path);
 tcb_t found_thread(pcb_t pcb, int tid);

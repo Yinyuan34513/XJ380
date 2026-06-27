@@ -302,6 +302,16 @@ extern "C" void	xapi_SendAppMessage(WSTR title, WSTR text) {
 	enter_syscall(XAPI_SEND_APP_MSG, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
 }
 
+extern "C" UINT64 xapi_SetNotifyPrcor(XApiNotifyPrcor func)
+{
+    return enter_syscall(XAPI_NOTIFY_SET_PROCOR, (uint64_t)func, 0, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_SendNotification(const XApiNotificationRequest *req)
+{
+    return enter_syscall(XAPI_NOTIFY_SEND, (uint64_t)req, 0, 0, 0, 0, 0);
+}
+
 extern "C" void 	xapi_Sleep(UINT64 ms)
 {
 	enter_syscall(XAPI_SLEEP, ms, 0, 0, 0, 0, 0);
@@ -311,6 +321,12 @@ extern "C" void 	xapi_Run(WSTR path)
 {
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
 }
+
+extern "C" UINT64 xapi_PowerAction(UINT64 action)
+{
+    return enter_syscall(XAPI_POWER_ACTION, action, 0, 0, 0, 0, 0);
+}
+
 extern "C" void 	xapi_FlushTime(void)
 {
 	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);

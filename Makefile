@@ -324,6 +324,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/xjver.elf    $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/elfrun.elf   $(VDISK_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/launcher.elf $(VDISK_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/filedlg.elf  $(VDISK_ROOT)/apps/system
 
 	@cp -a $(BUILD_DIR)/calc.elf     $(VDISK_ROOT)/apps/builtin
@@ -339,6 +340,7 @@ vdisk: all
 	@cp -a $(BUILD_DIR)/sigtest.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(VDISK_ROOT)/apps
+	@cp -a $(BUILD_DIR)/msgtest.elf $(VDISK_ROOT)/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(VDISK_ROOT)/apps
 	@if [ "$(VDISK_COMPLETE)" = "1" ]; then $(MAKE) stage.linux-compat VDISK_ROOT="$(VDISK_ROOT)"; fi
 
@@ -393,6 +395,7 @@ installer.system.stage: all installer.prepare
 	@cp -a $(BUILD_DIR)/ctrlmenu.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/xjver.elf    $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/elfrun.elf   $(INSTALLER_SYSTEM_ROOT)/apps/system
+	@cp -a $(BUILD_DIR)/launcher.elf $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/filedlg.elf  $(INSTALLER_SYSTEM_ROOT)/apps/system
 	@cp -a $(BUILD_DIR)/calc.elf     $(INSTALLER_SYSTEM_ROOT)/apps/builtin
 	@cp -a $(BUILD_DIR)/texter.elf   $(INSTALLER_SYSTEM_ROOT)/apps/builtin
@@ -404,6 +407,7 @@ installer.system.stage: all installer.prepare
 	@cp -a $(BUILD_DIR)/sigtest.elf $(INSTALLER_SYSTEM_ROOT)/apps
 	@cp -a $(BUILD_DIR)/posixdemo.elf $(INSTALLER_SYSTEM_ROOT)/apps
 	@cp -a $(BUILD_DIR)/libctest.elf $(INSTALLER_SYSTEM_ROOT)/apps
+	@cp -a $(BUILD_DIR)/msgtest.elf $(INSTALLER_SYSTEM_ROOT)/apps
 	@cp -a $(BUILD_DIR)/dyn-hello $(INSTALLER_SYSTEM_ROOT)/apps
 	@$(MAKE) stage.selfhost-user VDISK_ROOT="$(INSTALLER_SYSTEM_ROOT)"
 	@cp -a /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $(INSTALLER_SYSTEM_ROOT)/lib64/ld-linux-x86-64.so.2

@@ -168,11 +168,11 @@ def copy_system_apps(root: Path) -> None:
     system = root / "apps/system"
     builtin = root / "apps/builtin"
     apps = root / "apps"
-    for name in ("shell", "login", "dock", "desktop", "fmanager", "taskmgr", "ctrlmenu", "xjver", "elfrun", "filedlg"):
+    for name in ("shell", "login", "dock", "desktop", "fmanager", "taskmgr", "ctrlmenu", "xjver", "elfrun", "launcher", "filedlg"):
         cp(ROOT / f"out/{name}.elf", system)
     for name in ("calc", "texter", "picturer", "browser", "nut"):
         cp(ROOT / f"out/{name}.elf", builtin)
-    for name in ("busyterm", "bcms-sp", "sigtest", "posixdemo", "libctest"):
+    for name in ("busyterm", "bcms-sp", "sigtest", "posixdemo", "libctest", "msgtest"):
         cp(ROOT / f"out/{name}.elf", apps)
     cp(ROOT / "out/dyn-hello", apps)
 
@@ -458,6 +458,7 @@ def size_report() -> None:
             Path("out/ctrlmenu.elf"),
             Path("out/xjver.elf"),
             Path("out/elfrun.elf"),
+            Path("out/launcher.elf"),
             Path("out/taskmgr.elf"),
             Path("out/filedlg.elf"),
             Path("out/installer.elf"),
