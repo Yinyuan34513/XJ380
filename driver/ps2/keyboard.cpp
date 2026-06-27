@@ -17,6 +17,8 @@ static bool kb_win_r_down = false;
 static bool kb_win_d_down = false;
 static bool kb_win_space_down = false;
 static bool kb_alt_tab_down = false;
+static uint8_t kb_ps2_pressed_values[2][128];
+static uint8_t kb_usb_pressed_values[256];
 extern uint8_t keyboard_code[256];
 extern uint8_t keyboard_code1[256];
 
@@ -94,6 +96,8 @@ static void keyboard_prepare_fifo()
     kb_synth_head  = kb_synth_buf;
     kb_synth_tail  = kb_synth_buf;
     memset(kb_synth_buf, 0, sizeof(kb_synth_buf));
+    memset(kb_ps2_pressed_values, 0, sizeof(kb_ps2_pressed_values));
+    memset(kb_usb_pressed_values, 0, sizeof(kb_usb_pressed_values));
     memset(kb_usb_repeat, 0, sizeof(kb_usb_repeat));
     kb_fifo_ready = true;
 }
@@ -409,12 +413,35 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         return;
     }
 
-    uint8_t event_value = keyboard_translate_event_value(
-        make_code,
-        extended,
-        kb_fifo.shift,
-        kb_fifo.caps
-    );
+    uint8_t event_value = 0;
+    if (make_code < 128)
+    {
+        uint8_t state_index = extended ? 1 : 0;
+        if (pressed)
+        {
+            event_value = keyboard_translate_event_value(
+                make_code,
+                extended,
+                kb_fifo.shift,
+                kb_fifo.caps
+            );
+            kb_ps2_pressed_values[state_index][make_code] = event_value;
+        }
+        else
+        {
+            event_value = kb_ps2_pressed_values[state_index][make_code];
+            if (event_value == 0)
+            {
+                event_value = keyboard_translate_event_value(
+                    make_code,
+                    extended,
+                    kb_fifo.shift,
+                    kb_fifo.caps
+                );
+            }
+            kb_ps2_pressed_values[state_index][make_code] = 0;
+        }
+    }
 
     keyboard_dispatch_key_message(
         pressed ? MSG_KEYDOWN : MSG_KEYUP,
@@ -504,11 +531,12 @@ extern "C" void keyboard_push_input(uint8_t value)
 extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pressed)
 {
     keyboard_prepare_fifo();
+    bool key_pressed = pressed != 0;
 
     if (usage == KB_USB_LEFT_GUI_USAGE || usage == KB_USB_RIGHT_GUI_USAGE)
     {
-        kb_fifo.win = pressed != 0;
-        if (!pressed)
+        kb_fifo.win = key_pressed;
+        if (!key_pressed)
         {
             kb_win_r_down = false;
             kb_win_d_down = false;
@@ -517,70 +545,120 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
         return;
     }
 
-    if (usage == KEY_ALT)
+    if (value == KEY_SHIFT)
     {
-        kb_fifo.alt = pressed != 0;
-        if (!pressed)
+        kb_fifo.shift = key_pressed;
+    }
+    else if (value == KEY_CTRL)
+    {
+        kb_fifo.ctrl = key_pressed;
+    }
+    else if (value == KEY_ALT)
+    {
+        kb_fifo.alt = key_pressed;
+        if (!key_pressed)
         {
             kb_alt_tab_down = false;
             alt_tab_preview_commit(xwmii, sht_img);
         }
-        return;
     }
 
     if (usage == KB_USB_TAB_USAGE)
     {
-        if (pressed && kb_fifo.alt && !kb_alt_tab_down)
+        if (key_pressed && kb_fifo.alt && !kb_alt_tab_down)
         {
             kb_alt_tab_down = true;
             keyboard_switch_window();
             return;
         }
 
-        if (!pressed) kb_alt_tab_down = false;
-        if (kb_fifo.alt) return;
+        if (kb_fifo.alt)
+        {
+            if (!key_pressed)
+            {
+                kb_alt_tab_down = false;
+                kb_usb_pressed_values[usage] = 0;
+            }
+            return;
+        }
     }
 
     if (usage == KB_USB_R_USAGE)
     {
-        if (pressed && kb_fifo.win && !kb_win_r_down)
+        if (key_pressed && kb_fifo.win && !kb_win_r_down)
         {
             kb_win_r_down = true;
             keyboard_launch_run_dialog();
             return;
         }
 
-        if (!pressed) kb_win_r_down = false;
-        if (kb_fifo.win) return;
+        if (kb_fifo.win)
+        {
+            if (!key_pressed)
+            {
+                kb_win_r_down = false;
+                kb_usb_pressed_values[usage] = 0;
+            }
+            return;
+        }
     }
 
     if (usage == KB_USB_D_USAGE)
     {
-        if (pressed && kb_fifo.win && !kb_win_d_down)
+        if (key_pressed && kb_fifo.win && !kb_win_d_down)
         {
             kb_win_d_down = true;
             keyboard_toggle_show_desktop();
             return;
         }
 
-        if (!pressed) kb_win_d_down = false;
-        if (kb_fifo.win) return;
+        if (kb_fifo.win)
+        {
+            if (!key_pressed)
+            {
+                kb_win_d_down = false;
+                kb_usb_pressed_values[usage] = 0;
+            }
+            return;
+        }
     }
 
     if (usage == KB_USB_SPACE_USAGE)
     {
-        if (pressed && kb_fifo.win && !kb_win_space_down)
+        if (key_pressed && kb_fifo.win && !kb_win_space_down)
         {
             kb_win_space_down = true;
             keyboard_launch_launcher();
             return;
         }
 
-        if (!pressed) kb_win_space_down = false;
-        if (kb_fifo.win) return;
+        if (kb_fifo.win)
+        {
+            if (!key_pressed)
+            {
+                kb_win_space_down = false;
+                kb_usb_pressed_values[usage] = 0;
+            }
+            return;
+        }
     }
 
-    keyboard_dispatch_key_message(pressed ? MSG_KEYDOWN : MSG_KEYUP, value);
+    uint8_t event_value = value;
+    if (!key_pressed && event_value == 0)
+    {
+        event_value = kb_usb_pressed_values[usage];
+    }
+
+    if (key_pressed)
+    {
+        kb_usb_pressed_values[usage] = event_value;
+    }
+    else
+    {
+        kb_usb_pressed_values[usage] = 0;
+    }
+
+    keyboard_dispatch_key_message(key_pressed ? MSG_KEYDOWN : MSG_KEYUP, event_value);
 
     kb_synth_lock_acquire();
     keyboard_usb_repeat_slot *free_slot = NULL;
@@ -593,10 +671,10 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
         else if (!slot->active && free_slot == NULL) { free_slot = slot; }
     }
 
-    if (pressed)
+    if (key_pressed)
     {
-        kb_synth_enqueue_locked(value);
-        if (kb_value_repeatable(value))
+        kb_synth_enqueue_locked(event_value);
+        if (kb_value_repeatable(event_value))
         {
             keyboard_usb_repeat_slot *slot = match ? match : free_slot;
             if (slot != NULL)
@@ -604,7 +682,7 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
                 uint64_t now = nanoTime();
                 slot->active = true;
                 slot->usage = usage;
-                slot->value = value;
+                slot->value = event_value;
                 slot->next_repeat_ns = now ? now + KB_USB_REPEAT_DELAY_NS : 0;
             }
         }
@@ -614,7 +692,7 @@ extern "C" void keyboard_usb_key_event(uint8_t usage, uint8_t value, uint8_t pre
         if (match != NULL) {
             match->active = false;
         }
-        if (value == KEY_CTRL)
+        if (event_value == KEY_CTRL)
         {
             // Keep legacy terminal input behavior consistent with the PS/2 path.
             kb_synth_enqueue_locked(0x9d);

@@ -48,6 +48,8 @@ scsi.txt
 # will generate by Makefile
 .clangd
 
+build.ninja
+
 .codex
 
 XJ380/
