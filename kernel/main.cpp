@@ -252,7 +252,7 @@ static void draw_startup_screen(SHEET_INFO *shtinf, SHEET *desktop_sheet)
     // PrintPicture_blend(shtinf, desktop_sheet, logo_x, logo_y, logo_w, logo_h, (char *)"/system/xj380_2.png");
 
     refresh_sheet(shtinf);
-    flush_sheet_damage_queue(shtinf);
+    flush_sheet_damage_queue_now(shtinf);
 }
 
 static void draw_boot_progress_logo(const FrameBufferConfig &fbc)
@@ -388,7 +388,8 @@ void components_flusher()
         //         tw_data->need_flush = true;
         //     }
         // }
-        if (ms_dec.need_flush || ms_dec.win_move_pending) { process_mouse_info(); }
+        toast_manager_flush();
+        if (ms_dec.need_flush || ms_dec.win_move_pending || ms_dec.win_resize_pending) { process_mouse_info(); }
         if (sht_img != NULL) { flush_sheet_damage_queue(sht_img); }
         scheduler_yield();
     }
@@ -564,7 +565,7 @@ void desktop_flusher()
     winRD_lock = true;
 
     refresh_sheet(&shtinf); // 刷新
-    flush_sheet_damage_queue(&shtinf);
+    flush_sheet_damage_queue_now(&shtinf);
 
     uint8_t k_input;
 
@@ -593,14 +594,14 @@ void desktop_flusher()
         {
             dispatch_keyboard_input_to_focused_window();
             scheduler_yield();
-            flush_sheet_damage_queue(&shtinf);
+            flush_sheet_damage_queue_now(&shtinf);
         }
         init_time();
         create_user_process_from_file((char *)"/apps/system/desktop.elf", NULL, NULL);
         for (int i = 0; i < 8; i++)
         {
             scheduler_yield();
-            flush_sheet_damage_queue(&shtinf);
+            flush_sheet_damage_queue_now(&shtinf);
         }
         create_user_process_from_file((char *)"/apps/system/dock.elf", NULL, NULL);
 

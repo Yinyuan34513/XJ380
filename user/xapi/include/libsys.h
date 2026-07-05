@@ -212,6 +212,37 @@
 #define XAPI_USER_CREATE_FIRST  7455
 
 #define XAPI_FLUSH_TIME     7445
+#define XAPI_POWER_ACTION   7464
+
+// P3.6.2
+#define XAPI_NOTIFY_SEND    7465
+#define XAPI_NOTIFY_SET_PROCOR 7466
+
+#define XPOWER_REBOOT   1
+#define XPOWER_SHUTDOWN 2
+
+typedef enum {
+    XNOTIFY_ICON_NONE = 0,
+    XNOTIFY_ICON_INFO = 1,
+    XNOTIFY_ICON_SUCCESS = 2,
+    XNOTIFY_ICON_WARNING = 3,
+    XNOTIFY_ICON_ERROR = 4,
+    XNOTIFY_ICON_APP = 5
+} XNotifyBuiltinIcon;
+
+typedef struct {
+    UINT64 key;
+    char  *title;
+    char  *text;
+    UINT64 builtin_icon;
+    char  *icon_path;
+    char  *action0_text;
+    UINT64 action0_id;
+    char  *action1_text;
+    UINT64 action1_id;
+} XApiNotificationRequest;
+
+typedef void (*XApiNotifyPrcor)(UINT64 notification_id, UINT64 action_id);
 
 // P3.7
 #define XAPI_MALLOC         7441

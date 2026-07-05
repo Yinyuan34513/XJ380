@@ -9,6 +9,7 @@
 #include <ps2/keyboard.h>
 #include <ps2/mouse.h>
 #include <rtc.h>
+#include <syscall/pxapi.h>
 #include <syscall/syscall.h>
 #include <ttf.h>
 #include <efi/boot.h>
@@ -57,7 +58,11 @@ static const int WINDOW_RESIZE_HOTZONE = 10;
 static const int WINDOW_SNAP_HOTZONE = 8;
 static const int WINDOW_DRAG_THRESHOLD = 6;
 static const int WINDOW_SNAP_PREVIEW_INSET = 8;
+static const int REFRESH_RECT_MERGE_GAP = 18;
+static const int REFRESH_RECT_MERGE_MAX_WASTE_PERCENT = 35;
+static const uint64_t MOUSE_CURSOR_FRAME_INTERVAL_NS = 4166666ULL;
 static const uint64_t WINDOW_MOVE_FRAME_INTERVAL_NS = 16666666ULL;
+static const uint64_t WINDOW_RESIZE_FRAME_INTERVAL_NS = 16666666ULL;
 static const uint32_t WINDOW_MIN_CONTENT_WIDTH = 80;
 static const uint32_t WINDOW_MIN_CONTENT_HEIGHT = 60;
 
@@ -92,6 +97,8 @@ static const int DOCK_WINDOW_MENU_WIDTH = 128;
 static const int DOCK_WINDOW_MENU_ITEM_HEIGHT = 28;
 static const int DOCK_WINDOW_MENU_ITEM_COUNT = 4;
 
+static uint64_t g_last_mouse_cursor_flush_ns = 0;
+
 static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, int *y);
 static void update_snap_preview(WINDOWLS *window);
 
@@ -108,6 +115,35 @@ static inline int rect_max_int(int a, int b)
 static inline int abs_int(int value)
 {
     return value < 0 ? -value : value;
+}
+
+static inline uint64_t rect_area_int(int x1, int y1, int x2, int y2)
+{
+    if (x2 <= x1 || y2 <= y1) return 0;
+    return (uint64_t)(x2 - x1) * (uint64_t)(y2 - y1);
+}
+
+static inline bool rects_close_enough(int x1, int y1, int x2, int y2,
+                                      int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    return x1 <= other_x2 + REFRESH_RECT_MERGE_GAP && other_x1 <= x2 + REFRESH_RECT_MERGE_GAP &&
+           y1 <= other_y2 + REFRESH_RECT_MERGE_GAP && other_y1 <= y2 + REFRESH_RECT_MERGE_GAP;
+}
+
+static bool should_merge_refresh_rects(int x1, int y1, int x2, int y2,
+                                       int other_x1, int other_y1, int other_x2, int other_y2)
+{
+    if (!rects_close_enough(x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2)) return false;
+
+    uint64_t source_area = rect_area_int(x1, y1, x2, y2) + rect_area_int(other_x1, other_y1, other_x2, other_y2);
+    if (source_area == 0) return true;
+
+    uint64_t merged_area = rect_area_int(rect_min_int(x1, other_x1), rect_min_int(y1, other_y1),
+                                         rect_max_int(x2, other_x2), rect_max_int(y2, other_y2));
+    if (merged_area <= source_area) return true;
+
+    uint64_t waste = merged_area - source_area;
+    return waste * 100 <= source_area * REFRESH_RECT_MERGE_MAX_WASTE_PERCENT;
 }
 
 static inline bool sheet_point_in_rect(const SHEET *sheet, int x, int y)
@@ -141,13 +177,18 @@ static void refresh_union_rect(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
                        rect_min_int(x1, other_x1),
                        rect_min_int(y1, other_y1),
                        rect_max_int(x2, other_x2),
-	                       rect_max_int(y2, other_y2));
+                       rect_max_int(y2, other_y2));
 }
 
 static void refresh_two_rects(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
                               int other_x1, int other_y1, int other_x2, int other_y2)
 {
     if (sht == NULL) {
+        return;
+    }
+    if (should_merge_refresh_rects(x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2))
+    {
+        refresh_union_rect(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
         return;
     }
     refresh_part_sheet(sht, x1, y1, x2, y2);
@@ -160,21 +201,21 @@ static void refresh_part_sheet_now(SHEET_INFO *sht, int x1, int y1, int x2, int 
         return;
     }
     refresh_part_sheet(sht, x1, y1, x2, y2);
-    flush_sheet_damage_queue(sht);
+    flush_sheet_damage_queue_now(sht);
 }
 
 static void refresh_union_rect_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
                                    int other_x1, int other_y1, int other_x2, int other_y2)
 {
     refresh_union_rect(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
-    flush_sheet_damage_queue(sht);
+    flush_sheet_damage_queue_now(sht);
 }
 
 static void refresh_two_rects_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2,
                                   int other_x1, int other_y1, int other_x2, int other_y2)
 {
     refresh_two_rects(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
-    flush_sheet_damage_queue(sht);
+    flush_sheet_damage_queue_now(sht);
 }
 
 static void refresh_part_sheet_deferred_or_now(SHEET_INFO *sht, int x1, int y1, int x2, int y2)
@@ -204,6 +245,20 @@ static void refresh_two_rects_deferred_or_now(SHEET_INFO *sht, int x1, int y1, i
         return;
     }
     refresh_two_rects_now(sht, x1, y1, x2, y2, other_x1, other_y1, other_x2, other_y2);
+}
+
+static void flush_mouse_cursor_frame_if_due(SHEET_INFO *sht)
+{
+    if (sht == NULL || !desktop_done) return;
+
+    uint64_t now = nanoTime();
+    if (g_last_mouse_cursor_flush_ns != 0 && now - g_last_mouse_cursor_flush_ns < MOUSE_CURSOR_FRAME_INTERVAL_NS)
+    {
+        return;
+    }
+
+    g_last_mouse_cursor_flush_ns = now;
+    flush_sheet_damage_queue_now(sht);
 }
 
 static bool apply_pending_window_move(bool force)
@@ -242,6 +297,46 @@ static bool apply_pending_window_move(bool force)
     return true;
 }
 
+static bool apply_pending_window_resize(bool force)
+{
+    if (!ms_dec.win_resize_pending || ms_dec.sht_now == NULL || sht_img == NULL) return false;
+
+    uint64_t now = nanoTime();
+    if (!force && ms_dec.last_win_resize_ns != 0 &&
+        now - ms_dec.last_win_resize_ns < WINDOW_RESIZE_FRAME_INTERVAL_NS)
+    {
+        return false;
+    }
+
+    WINDOWLS *window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+    if (window == NULL || window->w_sheet == NULL)
+    {
+        ms_dec.win_resize_pending = false;
+        return false;
+    }
+
+    int bx = ms_dec.pending_resize_bx;
+    int by = ms_dec.pending_resize_by;
+    uint32_t width = ms_dec.pending_resize_width;
+    uint32_t height = ms_dec.pending_resize_height;
+
+    ms_dec.win_resize_pending = false;
+    ms_dec.last_win_resize_ns = now;
+    if (width == window->width && height == window->height && bx == window->w_sheet->bx && by == window->w_sheet->by)
+    {
+        return false;
+    }
+
+    if (!resize_window_sheet_preserving_content(xwmii, sht_img, window, bx, by, width, height))
+    {
+        return false;
+    }
+
+    window->is_maximized = false;
+    do_message(MSG_RESIZE, window->width, window->height, window->WinMPf, window->w_task);
+    return true;
+}
+
 static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, int *y)
 {
     if (sht == NULL || sheet == NULL || x == NULL || y == NULL) {
@@ -271,7 +366,7 @@ static void clamp_drag_window_position(SHEET_INFO *sht, SHEET *sheet, int *x, in
 
 static uint8_t get_window_resize_edges(WINDOWLS *window, int x, int y)
 {
-    if (window == NULL || window->w_sheet == NULL || window->type != XWIN_NORMAL || !window->can_maximize ||
+    if (window == NULL || window->w_sheet == NULL || window->type != XWIN_NORMAL || !window->can_resize ||
         window->is_maximized)
     {
         return 0;
@@ -293,12 +388,12 @@ static uint8_t get_window_resize_edges(WINDOWLS *window, int x, int y)
 
     uint8_t edges = 0;
     if (x >= left - WINDOW_RESIZE_HOTZONE &&
-        (x <= left || (x <= left + 12 && y >= content_top && y <= content_bottom)))
+        (x <= left + WINDOW_RESIZE_HOTZONE || (x <= left + 12 && y >= content_top && y <= content_bottom)))
         edges |= WindowResizeLeft;
     if (x <= right + WINDOW_RESIZE_HOTZONE &&
-        (x >= right || (x >= right - 12 && y >= content_top && y <= content_bottom)))
+        (x >= right - WINDOW_RESIZE_HOTZONE || (x >= right - 12 && y >= content_top && y <= content_bottom)))
         edges |= WindowResizeRight;
-    if (y >= top - WINDOW_RESIZE_HOTZONE && y <= top) edges |= WindowResizeTop;
+    if (y >= top - WINDOW_RESIZE_HOTZONE && y <= top + WINDOW_RESIZE_HOTZONE) edges |= WindowResizeTop;
     if (y <= bottom + WINDOW_RESIZE_HOTZONE && y >= bottom - 20) edges |= WindowResizeBottom;
 
     return edges;
@@ -320,6 +415,26 @@ static bool window_titlebar_hit(WINDOWLS *window, int x, int y)
     if (button_area_left < 80) button_area_left = 80;
 
     return local_y >= 0 && local_y <= 24 && local_x >= 22 && local_x <= button_area_left;
+}
+
+static bool is_point_in_window(WINDOWLS *window, int x, int y)
+{
+    if (window == NULL || window->w_sheet == NULL) return false;
+
+    int left = window->w_sheet->bx;
+    int top = window->w_sheet->by;
+    int right = left + (int)window->w_sheet->width;
+    int bottom = top + (int)window->w_sheet->height;
+
+    if (window->type == XWIN_NORMAL)
+    {
+        left += 12;
+        top += 27;
+        right -= 12;
+        bottom -= 20;
+    }
+
+    return x >= left && x < right && y >= top && y < bottom;
 }
 
 static bool window_drag_moved_far_enough()
@@ -673,6 +788,18 @@ static bool send_desktop_mouse_message(uint64_t type, uint64_t x, uint64_t y)
     return true;
 }
 
+static bool g_desktop_context_menu_open = false;
+
+static bool open_desktop_context_menu(int x, int y)
+{
+    WINDOWLSP desktop_window = sht_found_win_by_type(xwmii, sht_img, desktop_ct_sheet, XWIN_DESKTOP);
+    if (desktop_window == NULL) return false;
+
+    do_message(MSG_RBUTTON, (uint64_t)x, (uint64_t)y, desktop_window->WinMPf, desktop_window->w_task);
+    g_desktop_context_menu_open = true;
+    return true;
+}
+
 static bool send_dock_mouse_message(uint64_t type, uint64_t x, uint64_t y)
 {
     WINDOWLSP dock_window = sht_found_win_by_type(xwmii, sht_img, dock_ct_sheet, XWIN_DOCK);
@@ -780,6 +907,8 @@ static bool begin_window_resize_drag(WINDOWLS *window, uint8_t edges)
     ms_dec.resize_start_by = window->w_sheet->by;
     ms_dec.resize_start_width = window->width;
     ms_dec.resize_start_height = window->height;
+    ms_dec.win_resize_pending = false;
+    ms_dec.last_win_resize_ns = 0;
 
     lift_sheet(sht_img, window->w_sheet);
     focus_window_dock(window);
@@ -821,6 +950,13 @@ static void process_left_button_down(int x, int y)
 {
     if (!ms_dec.left)
     {
+        WINDOWLS *launcher_window = find_window_by_exe_path(xwmii, "/apps/system/launcher.elf");
+        if (launcher_window != NULL && launcher_window->w_sheet != NULL &&
+            !is_point_in_window(launcher_window, x, y))
+        {
+            close_window_and_task(xwmii, sht_img, launcher_window);
+            ms_dec.sht_now = NULL;
+        }
         activate_window_at(x, y);
     }
     ms_dec.left = true;
@@ -833,6 +969,7 @@ static void process_window_resize_drag()
     if (window == NULL || window->w_sheet == NULL)
     {
         ms_dec.win_resize_lock = false;
+        ms_dec.win_resize_pending = false;
         ms_dec.resize_edges = 0;
         update_mouse_cursor_shape(sht_img, MouseCursorStandard);
         return;
@@ -875,11 +1012,12 @@ static void process_window_resize_drag()
         return;
     }
 
-    if (resize_window_sheet_preserving_content(xwmii, sht_img, window, bx, by, (uint32_t)width, (uint32_t)height))
-    {
-        window->is_maximized = false;
-        do_message(MSG_RESIZE, window->width, window->height, window->WinMPf, window->w_task);
-    }
+    ms_dec.pending_resize_bx = bx;
+    ms_dec.pending_resize_by = by;
+    ms_dec.pending_resize_width = (uint32_t)width;
+    ms_dec.pending_resize_height = (uint32_t)height;
+    ms_dec.win_resize_pending = true;
+    apply_pending_window_resize(false);
 }
 
 extern EFI_SYSTEM_TABLE *EFI_ST;
@@ -911,9 +1049,20 @@ void process_mouse_button()
         bool was_moving = ms_dec.win_move_lock;
         bool window_drag_suppressed = was_moving && ms_dec.win_move_dragged;
         bool window_release_consumed = window_drag_suppressed;
+        if (g_desktop_context_menu_open)
+        {
+            send_desktop_mouse_message(MSG_LBUTTON, tbx, tby);
+            g_desktop_context_menu_open = false;
+            window_release_consumed = true;
+        }
         if (was_moving)
         {
             apply_pending_window_move(true);
+        }
+        if (was_resizing)
+        {
+            process_window_resize_drag();
+            apply_pending_window_resize(true);
         }
         tm time;
         time_read(&time);
@@ -930,7 +1079,7 @@ void process_mouse_button()
         }
 
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-        if (!was_resizing && current_window != NULL)
+        if (!window_release_consumed && !was_resizing && current_window != NULL)
         {
             if (!window_drag_suppressed && ms_dec.double_click && window_titlebar_hit(current_window, tbx, tby))
             {
@@ -1031,6 +1180,7 @@ void process_mouse_button()
         ms_dec.win_resize_lock = false;
         ms_dec.win_move_dragged = false;
         ms_dec.win_move_pending = false;
+        ms_dec.win_resize_pending = false;
         ms_dec.resize_edges = 0;
         update_hover_resize_cursor();
     }
@@ -1054,6 +1204,7 @@ void process_mouse_button()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (!handled_right && current_window != NULL)
         {
+            g_desktop_context_menu_open = false;
             if (tbx < current_window->w_sheet->bx + 12 ||
                 tby < current_window->w_sheet->by + 27 ||
                 tbx > current_window->w_sheet->bx +
@@ -1084,6 +1235,7 @@ void process_mouse_button()
         else if (!handled_right)
         {
             close_dock_window_menu();
+            if (!have_full_screen_app) handled_right = open_desktop_context_menu(tbx, tby);
         }
 
         ms_dec.right = false;
@@ -1137,6 +1289,7 @@ void process_mouse_button()
                                           getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
                                           getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
         update_hover_resize_cursor();
+        flush_mouse_cursor_frame_if_due(sht_img);
     }
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
@@ -1212,7 +1365,11 @@ void process_mouse_info()
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         bool full_screen_click_already_sent = have_full_screen_app && current_window != NULL &&
                                               ms_dec.left_release_window == current_window;
-        if (handle_dock_window_menu_click(click_x, click_y))
+        if (toast_manager_handle_mouse_click(click_x, click_y))
+        {
+            handled = true;
+        }
+        else if (handle_dock_window_menu_click(click_x, click_y))
         {
             handled = true;
         }
@@ -1262,13 +1419,13 @@ void process_mouse_info()
             if (click_y > 28 && click_y < 50)
             {
                 // 重启
-                power_reboot(EFI_ST, EFI_BC);
+                do_xapi_PowerAction(XPOWER_REBOOT);
                 handled = true;
             }
             else if (click_y > 50 && click_y < 72)
             {
                 // 关机
-                power_shutdown(EFI_ST, EFI_BC);
+                do_xapi_PowerAction(XPOWER_SHUTDOWN);
                 handled = true;
             }
             else if (click_y > 72 && click_y < 94)
@@ -1487,7 +1644,9 @@ void set_mouse_position(int x, int y)
     ms_dec.win_resize_lock = false;
     ms_dec.sht_now = NULL;
     ms_dec.win_move_pending = false;
+    ms_dec.win_resize_pending = false;
     ms_dec.last_win_move_ns = 0;
+    ms_dec.last_win_resize_ns = 0;
     ms_dec.resize_edges = 0;
     ms_dec.cursor_shape = MouseCursorStandard;
     ms_dec.last_btn = ms_dec.btn;
@@ -1506,6 +1665,7 @@ void set_mouse_position(int x, int y)
                                       getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
                                       getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
                                       getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+    flush_mouse_cursor_frame_if_due(sht_img);
 }
 
 void center_mouse_cursor()
@@ -1673,7 +1833,7 @@ void mouse_init()
     ack = mouse_read();
     if (ack != 0xFA) return;
 
-    mouse_write(100); // 100采样/秒（适合大多数鼠标）
+    mouse_write(200); // 200 samples/s keeps cursor motion smoother.
     delay_ms(10);
     ack = mouse_read();
     if (ack != 0xFA) return;
@@ -1755,9 +1915,11 @@ void mouse_init()
     ms_dec.last_mouse_x  = mouse_x;
     ms_dec.last_mouse_y  = mouse_y;
     ms_dec.win_move_pending = false;
+    ms_dec.win_resize_pending = false;
     ms_dec.pending_win_x    = mouse_x;
     ms_dec.pending_win_y    = mouse_y;
     ms_dec.last_win_move_ns = 0;
+    ms_dec.last_win_resize_ns = 0;
     ms_dec.pending_btn_down = 0;
     ms_dec.pending_btn_up   = 0;
     ms_dec.first_click   = false;

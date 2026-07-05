@@ -33,6 +33,28 @@ static bool message_pipe_write_handle_valid(tcb_t task, fd_file_handle **out_han
     return true;
 }
 
+static bool notify_pipe_write_handle_valid(pcb_t process, fd_file_handle **out_handle)
+{
+    if (out_handle != NULL) *out_handle = NULL;
+    if (process == NULL || process->file_open == NULL || process->notify_pcor_pipe_write_fd < 0) return false;
+
+    fd_file_handle *handle =
+        (fd_file_handle *)queue_get(process->file_open, (size_t)process->notify_pcor_pipe_write_fd);
+    if (handle == NULL || handle->node == NULL || !(handle->node->type & file_pipe) || handle->node->handle == NULL)
+    {
+        return false;
+    }
+
+    pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
+    if (spec == NULL || !spec->write || spec->info == NULL)
+    {
+        return false;
+    }
+
+    if (out_handle != NULL) *out_handle = handle;
+    return true;
+}
+
 void init_window_message(WINDOWLSP window, MsgPrcor func)
 {
     if (window == NULL || window->w_task == NULL) return;
@@ -71,6 +93,59 @@ void init_window_message(WINDOWLSP window, MsgPrcor func)
         current->message_pipe_write_fd = -1;
         write_serial_string("desktop: init_window_message thread create failed\n");
     }
+}
+
+bool init_notify_message(pcb_t process, uint64_t func)
+{
+    if (process == NULL || func == 0) return false;
+
+    process->notify_pcor_func       = func;
+    process->notify_pcor_registered = true;
+
+    fd_file_handle *existing_handle = NULL;
+    if (process->notify_pcor_pipe_read_fd >= 0 && process->notify_pcor_pipe_write_fd >= 0 &&
+        notify_pipe_write_handle_valid(process, &existing_handle))
+    {
+        return true;
+    }
+
+    process->notify_pcor_pipe_read_fd  = -1;
+    process->notify_pcor_pipe_write_fd = -1;
+    process->notify_pcor_tid           = 0;
+
+    int pipefd[2] = {-1, -1};
+    if ((int64_t)sys_pipe2(pipefd, 0, 0, 0, 0, 0, NULL) < 0)
+    {
+        process->notify_pcor_registered = false;
+        write_serial_string("notify: pipe create failed\n");
+        return false;
+    }
+
+    tcb_t current = get_current_task();
+    char *cwd = current != NULL && current->str_cwd != NULL ? strdup(current->str_cwd) : strdup("/");
+    if (cwd == NULL)
+    {
+        sys_close(pipefd[0], 0, 0, 0, 0, 0, NULL);
+        sys_close(pipefd[1], 0, 0, 0, 0, 0, NULL);
+        process->notify_pcor_registered = false;
+        return false;
+    }
+
+    size_t tid = create_message_thread((void *)(XJ380_PRIVATE_MESSAGE_REVERT_ADDRESS + XPSR_OFFEST),
+                                       "Notify Message Thread", process, cwd, (uint64_t)pipefd[0]);
+    if ((int64_t)tid < 0)
+    {
+        sys_close(pipefd[0], 0, 0, 0, 0, 0, NULL);
+        sys_close(pipefd[1], 0, 0, 0, 0, 0, NULL);
+        process->notify_pcor_registered = false;
+        write_serial_string("notify: message thread create failed\n");
+        return false;
+    }
+
+    process->notify_pcor_pipe_read_fd  = pipefd[0];
+    process->notify_pcor_pipe_write_fd = pipefd[1];
+    process->notify_pcor_tid           = tid;
+    return true;
 }
 
 // Message 线程

@@ -138,6 +138,39 @@ typedef struct {
 #define XAPI_USER_CREATE_FIRST  7455
 
 #define XAPI_FLUSH_TIME     7445
+#define XAPI_POWER_ACTION   7464
+
+// P3.6.2
+#define XAPI_NOTIFY_SEND        7465
+#define XAPI_NOTIFY_SET_PROCOR  7466
+
+#define XPOWER_REBOOT   1
+#define XPOWER_SHUTDOWN 2
+
+typedef enum
+{
+    XNOTIFY_ICON_NONE = 0,
+    XNOTIFY_ICON_INFO = 1,
+    XNOTIFY_ICON_SUCCESS = 2,
+    XNOTIFY_ICON_WARNING = 3,
+    XNOTIFY_ICON_ERROR = 4,
+    XNOTIFY_ICON_APP = 5,
+} XNotifyBuiltinIcon;
+
+typedef struct
+{
+    uint64_t key;
+    char    *title;
+    char    *text;
+    uint64_t builtin_icon;
+    char    *icon_path;
+    char    *action0_text;
+    uint64_t action0_id;
+    char    *action1_text;
+    uint64_t action1_id;
+} XApiNotificationRequest;
+
+typedef void (*XApiNotifyPrcor)(uint64_t notification_id, uint64_t action_id);
 
 // P3.7
 #define XAPI_MALLOC         7441
@@ -327,6 +360,10 @@ uint64_t do_xapi_UserOobeRequired();
 uint64_t do_xapi_UserList(uint64_t buffer, uint64_t max_count);
 uint64_t do_xapi_UserLogin(uint64_t username, uint64_t password);
 uint64_t do_xapi_UserCreateFirst(uint64_t username, uint64_t password);
+uint64_t do_xapi_PowerAction(uint64_t action);
+uint64_t do_xapi_SendAppMessage(char *title, char *text);
+uint64_t do_xapi_SendNotification(const XApiNotificationRequest *req);
+uint64_t do_xapi_SetNotifyPrcor(uint64_t func);
 uint64_t do_xapi_InstallerEnumDisks(uint64_t list);
 uint64_t do_xapi_InstallerStart(uint64_t disk_id);
 uint64_t do_xapi_InstallerStartEx(uint64_t disk_id, uint64_t mode);
@@ -345,5 +382,6 @@ void init_syscall();
 void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask);
 void init_message();
 void init_window_message(WINDOWLSP window, MsgPrcor func);
+bool init_notify_message(pcb_t process, uint64_t func);
 void message_thread(uint64_t arg);
 uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);

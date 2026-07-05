@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Generate the Python-backed Ninja graph for XJ380.
+
+This file is intentionally more explicit than a normal packaged build project:
+XJ380 is freestanding, mixes kernel/user/kmod/browser/Rust outputs, and needs
+stable staged artifact names under out/.  Keep build behavior in this generator
+instead of hand-editing build.ninja, because build.ninja is regenerated.
+"""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "build.ninja"
 
+# Keep generated Ninja output easy to scan with colored progress labels.
 LOG_RESET = "\033[0m"
 LOG_COLORS = {
     "ASM": "\033[1;35m",
@@ -40,15 +48,24 @@ LOG_COLORS = {
 
 
 def log_label(tag: str) -> str:
+    """Return the colored `[TAG]` prefix used in Ninja descriptions."""
     return f"{LOG_COLORS[tag]}[{tag}]{LOG_RESET}"
 
 
 def log_desc(tag: str, text: str = "") -> str:
+    """Keep generated Ninja descriptions short but visually grouped."""
     return log_label(tag) if not text else f"{log_label(tag)} {text}"
 
 
 
 def rel(path: Path | str) -> str:
+    """Return a repository-relative path when the path lives under ROOT.
+
+    Generated build files should be portable between Windows paths, WSL paths,
+    and checked-out copies, so normal project inputs are emitted relative to the
+    repository.  Absolute paths are kept only for external toolchain artifacts
+    such as Rust sysroot libraries.
+    """
     p = Path(path)
     if p.is_absolute():
         try:
@@ -59,14 +76,31 @@ def rel(path: Path | str) -> str:
 
 
 def esc(path: str) -> str:
-    return path.replace("$", "$$").replace(" ", "$ ")
+    """Escape characters that Ninja treats as syntax inside paths.
+
+    Ninja uses `:` after output lists and `$` for continuations/variables, so
+    Windows drive letters, spaces, and literal dollars must be escaped before a
+    path can appear in a build edge.
+    """
+    return path.replace("$", "$$").replace(":", "$:").replace(" ", "$ ")
 
 
 def paths(items: list[Path | str]) -> str:
+    """Format a path list for a Ninja build edge.
+
+    Callers pass raw Path/string objects; this helper centralizes the relpath
+    conversion and Ninja escaping so every edge follows the same output style.
+    """
     return " ".join(esc(rel(item)) for item in items)
 
 
 def cmd_output(command: list[str]) -> str:
+    """Run a small discovery command; missing tools produce an empty value.
+
+    The generator should still be inspectable when optional host tools are not
+    installed.  Hard requirements, such as the Rust target libraries, validate
+    their own result after calling this helper.
+    """
     try:
         return subprocess.check_output(command, cwd=str(ROOT), text=True, stderr=subprocess.DEVNULL).strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
@@ -74,6 +108,12 @@ def cmd_output(command: list[str]) -> str:
 
 
 def find_executable(names: list[str], extra_paths: list[Path] | None = None) -> str:
+    """Find a tool while honoring common non-PATH locations used on WSL/Linux.
+
+    Environment variables still win before this function is called.  The extra
+    paths cover common Rust installations where `rustc` exists but the shell
+    PATH inside the build environment has not been fully initialized.
+    """
     extra_paths = extra_paths or []
     for name in names:
         found = shutil.which(name)
@@ -87,6 +127,7 @@ def find_executable(names: list[str], extra_paths: list[Path] | None = None) -> 
 
 
 def find_rustc() -> str:
+    """Resolve the Rust compiler used by no_std userland Rust apps."""
     override = os.environ.get("RUSTC")
     if override:
         return override
@@ -101,36 +142,62 @@ def find_rustc() -> str:
 
 
 def rust_target_libs(rustc: str, target: str) -> list[Path]:
+    """Resolve libcore/compiler_builtins for no_std Rust user apps at gen time."""
     if not rustc:
-        return []
+        raise SystemExit("缺少 Rust 编译器：请安装 rustup/rustc，或设置 RUSTC=/path/to/rustc")
     libdir = cmd_output([rustc, "--print", "target-libdir", "--target", target])
     if not libdir:
-        return []
+        raise SystemExit(
+            f"无法查询 Rust 目标库目录：{target}\n"
+            f"请先运行：rustup target add {target}\n"
+            "如果已经安装，请确认 RUSTC 指向同一个 rustup 工具链，然后运行：ninja reconfigure"
+        )
     libs: list[Path] = []
+    missing: list[str] = []
     for pattern in ("libcore-*.rlib", "libcompiler_builtins-*.rlib"):
         matches = sorted(Path(libdir).glob(pattern))
         if matches:
             libs.append(matches[-1])
+        else:
+            missing.append(pattern)
+    if missing:
+        raise SystemExit(
+            f"Rust 目标库不完整：{target}\n"
+            f"缺少：{', '.join(missing)}\n"
+            f"目标库目录：{libdir}\n"
+            f"请运行：rustup target add {target}\n"
+            "然后运行：ninja reconfigure"
+        )
     return libs
 
 
 def opt_flag() -> str:
+    """Translate OPT_LEVEL into the C/C++ optimization flag family."""
     return "-O" + os.environ.get("OPT_LEVEL", "2")
 
 
 def rust_opt_flag() -> str:
+    """Translate OPT_LEVEL into the rustc optimization flag family."""
     return "-C opt-level=" + os.environ.get("OPT_LEVEL", "2")
 
 
 def c_diagnostic_color_flag() -> str:
+    """Keep compiler color enabled unless the environment overrides it."""
     return os.environ.get("DIAGNOSTICS_COLOR", "-fdiagnostics-color=always")
 
 
 def rust_diagnostic_color_flag() -> str:
+    """Keep rustc color enabled unless the environment overrides it."""
     return os.environ.get("RUST_DIAGNOSTICS_COLOR", "--color always")
 
 
 def find_files(base: str, suffixes: tuple[str, ...], *, max_depth: int | None = None) -> list[Path]:
+    """Collect files with deterministic sorted output.
+
+    The optional depth cap is used for vendored libraries where only the first
+    layer belongs to the existing build contract.  Sorting keeps regenerated
+    build.ninja diffs stable when filesystems enumerate entries differently.
+    """
     root = ROOT / base
     if not root.exists():
         return []
@@ -150,15 +217,24 @@ def find_files(base: str, suffixes: tuple[str, ...], *, max_depth: int | None = 
 
 
 def headers(*bases: str) -> list[Path]:
+    """Collect headers for implicit dependencies on generated object edges.
+
+    These broad lists make initial dependency tracking conservative before
+    compiler depfiles take over for subsequent builds.
+    """
     out: list[Path] = []
     for base in bases:
         out.extend(find_files(base, (".h", ".hpp")))
     return sorted(out)
 
 
+# Tiny writer for the subset of Ninja syntax this repository needs.
+# It deliberately keeps commands as shell strings because the OS build still has
+# many freestanding/linker steps that are clearer as explicit command lines.
 class Ninja:
     def __init__(self) -> None:
         self.lines: list[str] = []
+        self.default_order_only: list[Path | str] = []
 
     def line(self, text: str = "") -> None:
         self.lines.append(text)
@@ -169,7 +245,31 @@ class Ninja:
     def var(self, name: str, value: str) -> None:
         self.line(f"{name} = {value}")
 
-    def rule(self, name: str, command: str, description: str | None = None, *, depfile: str | None = None) -> None:
+    def var_list(self, name: str, values: list[Path | str]) -> None:
+        """Emit long source lists over multiple Ninja lines."""
+        escaped_values = [esc(rel(value)) for value in values]
+        if not escaped_values:
+            self.line(f"{name} =")
+            return
+        if len(escaped_values) == 1:
+            self.var(name, escaped_values[0])
+            return
+        self.line(f"{name} = {escaped_values[0]} $")
+        for value in escaped_values[1:-1]:
+            self.line(f"  {value} $")
+        self.line(f"  {escaped_values[-1]}")
+
+    def rule(
+        self,
+        name: str,
+        command: str,
+        description: str | None = None,
+        *,
+        depfile: str | None = None,
+        generator: bool = False,
+        restat: bool = False,
+    ) -> None:
+        """Emit one Ninja rule and optional GCC-style depfile metadata."""
         self.line(f"rule {name}")
         self.line(f"  command = {command}")
         if description:
@@ -177,6 +277,10 @@ class Ninja:
         if depfile:
             self.line(f"  depfile = {depfile}")
             self.line("  deps = gcc")
+        if generator:
+            self.line("  generator = 1")
+        if restat:
+            self.line("  restat = 1")
         self.line()
 
     def build(
@@ -188,7 +292,15 @@ class Ninja:
         implicit: list[Path | str] | None = None,
         order_only: list[Path | str] | None = None,
         variables: dict[str, str] | None = None,
+        use_default_order_only: bool = True,
     ) -> None:
+        """Emit one Ninja build edge.
+
+        `implicit` inputs appear after `|` and affect rebuild decisions without
+        being passed to the command.  `order_only` inputs appear after `||` and
+        enforce sequencing without making the output dirty when they change.
+        Single values and lists are both accepted so call sites stay readable.
+        """
         outs = [outputs] if isinstance(outputs, (str, Path)) else outputs
         ins: list[Path | str] = []
         if inputs is not None:
@@ -198,8 +310,13 @@ class Ninja:
             line += f" {paths(ins)}"
         if implicit:
             line += f" | {paths(implicit)}"
+        effective_order_only: list[Path | str] = []
+        if use_default_order_only:
+            effective_order_only.extend(self.default_order_only)
         if order_only:
-            line += f" || {paths(order_only)}"
+            effective_order_only.extend(order_only)
+        if effective_order_only:
+            line += f" || {paths(effective_order_only)}"
         self.line(line)
         if variables:
             for key, value in variables.items():
@@ -207,20 +324,17 @@ class Ninja:
         self.line()
 
 
-def root_objects(n: Ninja, builtin_xhci: bool) -> list[Path]:
-    source_roots = ["kernel", "driver", "graphics", "font", "lib"]
-    nasm_files: list[Path] = []
-    asm_files: list[Path] = []
-    c_files: list[Path] = []
-    cpp_files: list[Path] = []
-    for base in source_roots:
-        nasm_files.extend(find_files(base, (".asm",)))
-        asm_files.extend(find_files(base, (".S",)))
-        c_files.extend(find_files(base, (".c",)))
-        cpp_files.extend(find_files(base, (".cpp",)))
-    if builtin_xhci:
-        cpp_files.extend(find_files("kmod/xhci", (".cpp",)))
-
+def root_objects(
+    n: Ninja,
+    nasm_files: list[Path],
+    asm_files: list[Path],
+    c_files: list[Path],
+    cpp_files: list[Path],
+) -> list[Path]:
+    """Emit kernel/root object build edges and return their object paths."""
+    # Root objects use the same source lists emitted in the generated FILES
+    # section, so the readable list and the real build graph cannot drift.
+    n.comment("ROOT OBJECTS - kernel, built-in drivers, graphics, font, lib, optional built-in xhci")
     config = Path("kernel/build_config.h")
     settings = Path("kernel/build_settings.h")
     objs: list[Path] = []
@@ -244,6 +358,10 @@ def root_objects(n: Ninja, builtin_xhci: bool) -> list[Path]:
 
 
 def xapi(n: Ninja) -> tuple[list[Path], Path, Path, Path]:
+    """Emit user runtime objects shared by every ELF app."""
+    # XAPI is split into common runtime objects plus two mutually exclusive
+    # entry shims: start.cpp for GUI apps and constart.cpp for console apps.
+    n.comment("XAPI RUNTIME - common runtime objects and GUI/console startup shims")
     xapi_headers = headers("user/xapi/include")
     impl_includes = find_files("user/xapi", (".inc",))
     srcs = sorted(
@@ -268,6 +386,8 @@ def xapi(n: Ninja) -> tuple[list[Path], Path, Path, Path]:
 
 
 def user_compile(n: Ninja, out: Path, src: str, flags: str, implicit: list[Path]) -> Path:
+    # Most user apps compile one or more C++ objects and then link manually
+    # against XAPI objects; using a custom cflags variable keeps rules reusable.
     n.build(out, "user_cxx_custom", src, implicit=implicit, variables={"cflags": flags})
     return out
 
@@ -288,13 +408,18 @@ def user_simple_app(
     console: bool = False,
     c_source: bool = False,
 ) -> Path:
+    """Emit the common one-source userland app compile/link pattern."""
     target = Path(f"out/{name}")
     obj = Path(f"out/{name}.o")
+    # C-only compatibility targets need a C11 compile line; C++ apps use the
+    # shared USER_CFLAGS emitted in the generated FLAGS section.
     if c_source:
         cflags = f"$diagnostic_color {opt_flag()} -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -MMD -MP"
         user_compile_c(n, obj, src, cflags, implicit)
     else:
         user_compile(n, obj, src, "$user_cflags", implicit)
+    # GUI apps get start.cpp through core selection; console-style apps keep
+    # constart.cpp and intentionally avoid the GUI process startup path.
     if c_source:
         xobjs = core_objs
     elif console:
@@ -316,6 +441,9 @@ def grouped_cpp_app(
     *,
     extra_implicit: list[Path] | None = None,
 ) -> Path:
+    """Emit a multi-source C++ GUI app and keep its objects grouped."""
+    # Multi-file GUI apps keep object files under out/<obj_prefix>/ so files
+    # with common names can coexist and the generated graph stays easy to scan.
     objs: list[Path] = []
     for src in sources:
         src_path = Path(src)
@@ -338,35 +466,52 @@ def rust_gui_app(
     rust_libs: list[Path],
     *,
     extra_inputs: list[Path] | None = None,
+    link_inputs: list[Path] | None = None,
 ) -> Path:
-    n.build(object_path, "rust_user", source)
+    """Emit a no_std Rust GUI app and link it through the userland ELF path."""
+    # extra_inputs are rebuild dependencies for rustc; link_inputs are native
+    # objects that must be passed to ld.  Keeping them separate prevents header
+    # style Rust files from being linked as if they were object files.
+    n.build(object_path, "rust_user", source, implicit=extra_inputs)
     target = Path(f"out/{name}.elf")
     n.build(
         target,
         "user_ld",
-        core_objs + [start_obj, liballoc, object_path] + (extra_inputs or []) + rust_libs,
+        core_objs + [start_obj, liballoc, object_path] + (link_inputs or []) + rust_libs,
         variables={"message": log_desc("LD", target.as_posix())},
     )
     return target
 
 
 def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Path, liballoc: Path, rust_libs: list[Path]) -> list[Path]:
+    """Emit first-party user ELF targets grouped by startup/link style."""
+    # Userland is built directly here so Ninja is the only first-party build
+    # entrypoint.
+    n.comment("USER APPS - first-party ELF outputs grouped by startup/link style")
     xapi_headers = headers("user/xapi/include")
     user_headers = headers("user/include")
     browser_headers = headers("user/browser")
     common_implicit = xapi_headers + user_headers
 
     targets: list[Path] = []
+    # These three object groups make startup selection explicit.  GUI apps enter
+    # through start.cpp, console apps enter through constart.cpp, and browser-ish
+    # targets choose their startup object manually because they have custom link
+    # requirements.
     gui_core = core_objs + [start_obj]
     console_core = core_objs + [constart_obj]
     browser_core = core_objs
 
+    # Single-source GUI utilities share the same compile/link path.  Keeping
+    # this table compact makes newly added applets easy to compare.
+    n.comment("USER APPS: single-source GUI utilities")
     for name, src in (
         ("init.elf", "user/init.cpp"),
         ("sigtest.elf", "user/sigtest.cpp"),
         ("posixdemo.elf", "user/posixdemo.cpp"),
         ("libctest.elf", "user/libctest.cpp"),
         ("fbtest.elf", "user/fbtest.cpp"),
+        ("msgtest.elf", "user/msgtest.cpp"),
         ("cp537.elf", "user/cp537.cpp"),
         ("picturer.elf", "user/picturer/picturer.cpp"),
         ("chat.elf", "user/chat.cpp"),
@@ -374,10 +519,15 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     ):
         targets.append(user_simple_app(n, name, src, core_objs, liballoc, common_implicit))
 
+    # ccompat-demo exercises the C-facing XAPI headers, while dyn-hello is a
+    # host-built dynamic-linker sample and intentionally does not use user_ld.
+    n.comment("USER APPS: C compatibility and host dynamic-linker samples")
     targets.append(user_simple_app(n, "ccompat-demo.elf", "user/ccompat_demo.c", core_objs + [constart_obj], liballoc, xapi_headers, console=True, c_source=True))
     n.build("out/dyn-hello", "host_cc", "user/dyn_hello.c")
     targets.append(Path("out/dyn-hello"))
 
+    # Larger first-party GUI components are listed explicitly instead of being
+    # globbed, so adding/removing a translation unit is a visible build decision.
     shell_sources = [
         "shell/shell_main.cpp",
         "shell/shell_ui.cpp",
@@ -399,14 +549,32 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     ctrlmenu_sources = ["ctrlmenu/ctrlmenu.cpp", "ctrlmenu/cm_graph.cpp", "ctrlmenu/cm_processp.cpp"]
     installer_sources = ["installer/installer.cpp", "installer/installer_hidden.cpp"]
 
+    n.comment("USER APPS: desktop shell, login, dock, desktop, file manager, control menu")
     targets.append(grouped_cpp_app(n, "shell", shell_sources, "shell", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "login", login_sources, "login", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "dock", dock_sources, "dock", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "desktop", desktop_sources, "desktop", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "fmanager", fmanager_sources, "fmanager", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "ctrlmenu", ctrlmenu_sources, "ctrlmenu", core_objs, liballoc, common_implicit))
+    n.comment("USER APPS: Rust GUI tools and small C++ tools")
     targets.append(rust_gui_app(n, "xjver", "user/xjver/xjver.rs", Path("out/xjver/xjver.rs.o"), core_objs, start_obj, liballoc, rust_libs))
     targets.append(grouped_cpp_app(n, "elfrun", ["elfrun/elfrun.cpp"], "elfrun", core_objs, liballoc, common_implicit))
+    # launcher.rs imports xapi_keys.rs as a Rust module.  Rustc discovers it at
+    # compile time, but Ninja still needs it as an implicit input so key/window
+    # constant edits rebuild out/launcher.elf.
+    targets.append(
+        rust_gui_app(
+            n,
+            "launcher",
+            "user/launcher/launcher.rs",
+            Path("out/launcher/launcher.rs.o"),
+            core_objs,
+            start_obj,
+            liballoc,
+            rust_libs,
+            extra_inputs=[ROOT / "user/launcher/xapi_keys.rs"],
+        )
+    )
     targets.append(rust_gui_app(n, "calc", "user/calc/calc.rs", Path("out/calc/calc.rs.o"), core_objs, start_obj, liballoc, rust_libs))
     targets.append(grouped_cpp_app(n, "texter", ["texter/texter.cpp"], "texter", core_objs, liballoc, common_implicit))
     targets.append(grouped_cpp_app(n, "taskmgr", ["taskmgr/taskmgr.cpp"], "taskmgr", core_objs, liballoc, common_implicit))
@@ -424,10 +592,16 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         )
     )
 
+    # bcms-sp is a console/browser support program.  It uses constart.cpp but
+    # otherwise follows the userland ELF link shape.
+    n.comment("USER APPS: browser support console program")
     bcms_obj = user_compile(n, Path("out/bcms-sp.elf.o"), "user/bcms-sp.cpp", "$user_cflags", common_implicit)
     n.build("out/bcms-sp.elf", "user_ld", browser_core + [constart_obj, liballoc, bcms_obj], variables={"message": log_desc("LD", "out/bcms-sp.elf")})
     targets.append(Path("out/bcms-sp.elf"))
 
+    # busyterm is Rust userland code, but the terminal engine is C libvterm.
+    # Compile libvterm objects separately and link them as native inputs.
+    n.comment("USER APPS: busyterm Rust app plus C libvterm objects")
     libvterm_sources = find_files("third_party/libvterm/src", (".c",), max_depth=1)
     libvterm_objs: list[Path] = []
     for src in libvterm_sources:
@@ -444,10 +618,13 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
             start_obj,
             liballoc,
             rust_libs,
-            extra_inputs=libvterm_objs,
+            link_inputs=libvterm_objs,
         )
     )
 
+    # Mbed TLS keeps an explicit allow-list; do not glob the whole vendored tree
+    # because unused files may need unsupported libc pieces.
+    n.comment("USER APPS: Mbed TLS allow-list shared by httpget, nut, browser")
     mbedtls_sources = [
         "aes.c",
         "aria.c",
@@ -544,6 +721,9 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         n.build(obj, "mbedtls_cc", src)
         mbedtls_objs.append(obj)
 
+    # httpget and nut both reuse the same Mbed TLS object set.  The separate
+    # app object lists below keep their public entrypoints independent while
+    # avoiding duplicate TLS source declarations.
     httpget_objs: list[Path] = []
     for name in ("httpget.cpp", "https_client.cpp", "http_tls_compat.cpp"):
         obj = Path("out/httpget") / name.replace(".cpp", ".o")
@@ -578,6 +758,9 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     )
     targets.append(Path("out/nut.elf"))
 
+    # Browser hosted objects are built with a less freestanding C++ profile and
+    # then linked into the user ELF with explicit libstdc++ support libraries.
+    n.comment("USER APPS: browser hosted-parser and image-decoder dependencies")
     litehtml_sources = find_files("third_party/litehtml/src", (".cpp",), max_depth=1)
     litehtml_objs: list[Path] = []
     for src in litehtml_sources:
@@ -586,12 +769,17 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         n.build(obj, rule, src)
         litehtml_objs.append(obj)
 
+    # Gumbo is vendored through litehtml and follows the same hosted-browser
+    # profile as litehtml's C++ objects.
     gumbo_objs: list[Path] = []
     for src in find_files("third_party/litehtml/src/gumbo", (".c",), max_depth=1):
         obj = Path("out/browser/gumbo") / src.name.replace(".c", ".o")
         n.build(obj, "browser_hosted_cc", src)
         gumbo_objs.append(obj)
 
+    # Browser only needs WebP decode support.  Keep this as a decoder allow-list
+    # instead of building every vendored libwebp component, which would pull in
+    # encoder/mux code and additional hosted-library assumptions.
     webp_sources = [
         "dec/alpha_dec.c",
         "dec/buffer_dec.c",
@@ -630,6 +818,8 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
         n.build(obj, "browser_hosted_cc", src)
         webp_objs.append(obj)
 
+    # First-party browser glue is compiled after the vendored parsers/decoders
+    # so the final link line reads from platform code toward dependencies.
     browser_objs: list[Path] = []
     for name in ("browser_app.cpp", "browser_fetch.cpp", "browser_alloc_guard.cpp", "browser_image_decode.cpp"):
         src = Path("user/browser") / name
@@ -650,7 +840,14 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
 
 
 def kmods(n: Ninja) -> list[Path]:
+    """Emit loadable kernel module artifacts."""
+    # Kmods are shared objects with dlmain entrypoints.  Keep module compile
+    # flags separate from root kernel flags because visibility/PIC differ.
+    n.comment("KERNEL MODULES - loadable .sys outputs with dlmain entrypoints")
     targets: list[Path] = []
+    # e1000 is first-party C++, so a shallow directory scan is enough and keeps
+    # nested helper experiments from silently becoming part of the module ABI.
+    n.comment("KMOD: e1000 PCI network driver")
     e1000_objs: list[Path] = []
     for src in find_files("kmod/e1000", (".cpp",), max_depth=1):
         obj = Path("out/kmod/e1000") / src.name.replace(".cpp", ".o")
@@ -659,6 +856,10 @@ def kmods(n: Ninja) -> list[Path]:
     n.build("out/e1000.sys", "kmod_link", e1000_objs, variables={"ldflags": "-nostdlib -Wl,-e,dlmain"})
     targets.append(Path("out/e1000.sys"))
 
+    # Netserver vendors lwIP, but this OS glue supports only the subset below.
+    # Avoid enabling extra lwIP files accidentally because some depend on PPP or
+    # platform hooks that are intentionally not wired in this tree.
+    n.comment("KMOD: netserver lwIP subset and XJ380 arch glue")
     lwip_c = [
         "lwip/core/def.c",
         "lwip/core/dns.c",
@@ -703,6 +904,9 @@ def kmods(n: Ninja) -> list[Path]:
     n.build("out/netserver.sys", "kmod_link", net_objs, variables={"ldflags": "-nostdlib -Wl,-e,dlmain -Wl,-z,muldefs"})
     targets.append(Path("out/netserver.sys"))
 
+    # xhci can be linked into the kernel when BUILTIN_XHCI=1, but the module
+    # artifact is still generated for staging/testing parity.
+    n.comment("KMOD: xhci USB stack module artifact")
     xhci_objs: list[Path] = []
     for name in ("usb_core.cpp", "usb_hub.cpp", "usb_msc.cpp", "xhci.cpp"):
         src = Path("kmod/xhci") / name
@@ -723,6 +927,8 @@ def stardust_example(
     start_obj: Path,
     liballoc: Path,
 ) -> Path:
+    # StardustUI is a submodule-style framework: build examples in-place first,
+    # then copy the resulting ELFs into out/ for image staging.
     base = Path(f"frameworks/StardustUI/examples/{name}")
     if not (ROOT / base).is_dir():
         return Path()
@@ -749,6 +955,11 @@ def stardust_example(
 
 
 def stardust(n: Ninja, core_objs: list[Path], start_obj: Path, liballoc: Path) -> list[Path]:
+    """Emit StardustUI example binaries copied into the image payload."""
+    n.comment("STARDUSTUI EXAMPLES - framework examples copied into out/")
+    # helloworld intentionally uses the smaller framework slice, while layout
+    # and duckchat use the fuller component set.  Keeping the two lists separate
+    # makes example size/capability changes obvious in diffs.
     hello_sources = [
         "src/file.cpp",
         "src/sytel.cpp",
@@ -794,14 +1005,37 @@ def stardust(n: Ninja, core_objs: list[Path], start_obj: Path, liballoc: Path) -
 
 
 def phony(n: Ninja, name: str, deps: list[Path | str]) -> None:
+    """Emit compatibility targets such as `all`, `kmods`, and `build_xapi`."""
     n.build(name, "phony", deps)
 
 
+def write_if_changed(path: Path, content: str) -> bool:
+    """Write generated files only when bytes actually change.
+
+    build.ninja is intentionally checked before every normal Ninja run.  If the
+    generator rewrote identical content each time, Ninja would treat its own
+    manifest as changed and restart repeatedly.
+    """
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
 def main() -> None:
+    # Generation is deterministic for a given checkout/environment.  Toolchain
+    # probes happen here so generated flags and Rust library paths are visible
+    # at the top of build.ninja.
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(OUT))
+    parser.add_argument(
+        "--fail-if-changed",
+        action="store_true",
+        help="write the manifest, then fail if it changed so Ninja can be rerun with the fresh graph",
+    )
     args = parser.parse_args()
 
+    # Environment knobs keep the same defaults as the historical build.
     builtin_xhci = os.environ.get("BUILTIN_XHCI", "1") == "1"
     cpp_extra = " -DXHCI_BUILTIN" if builtin_xhci else ""
     host_gcc = os.environ.get("HOST_GCC", "gcc")
@@ -812,6 +1046,7 @@ def main() -> None:
 
     n = Ninja()
     n.comment("Generated by tools/gen_ninja.py. Run `ninja reconfigure` after changing the build graph.")
+    n.comment("Edit tools/gen_ninja.py, not this generated build.ninja file.")
     n.var("ninja_required_version", "1.10")
     n.var("cc", os.environ.get("CC", os.environ.get("COMPILER_PREFIX", "") + "clang"))
     n.var("cxx", os.environ.get("CPP", os.environ.get("COMPILER_PREFIX", "") + "clang++"))
@@ -824,31 +1059,94 @@ def main() -> None:
     n.var("user_ld", os.environ.get("LD", "ld"))
     n.var("rustc", rustc)
     n.var("rust_target", rust_target)
-    n.var("opt", opt_flag())
-    n.var("rust_opt", rust_opt_flag())
-    n.var("diagnostic_color", c_diagnostic_color_flag())
-    n.var("rust_diagnostic_color", rust_diagnostic_color_flag())
-    n.var("nasm_flags", "-f elf64 -DX86_64_TARGET -DUEFI")
-    n.var("asm_flags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -mno-80387 -MMD -MP")
-    n.var("c_flags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include -MMD -MP")
-    n.var(
-        "cpp_flags",
-        "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing -MMD -MP"
-        + cpp_extra,
+    n.line()
+    # The generated FILES section is intentionally verbose: it lets a developer
+    # inspect exactly what the generator discovered without reading Python code.
+    n.comment("FILES - generated source and header discovery lists")
+    # These root lists intentionally feed both the readable FILES section and
+    # root_objects(); one scan owns both display and build behavior.
+    root_source_roots = ["kernel", "driver", "graphics", "font", "lib"]
+    nasm_files: list[Path] = []
+    asm_files: list[Path] = []
+    c_files: list[Path] = []
+    cpp_files: list[Path] = []
+    for base in root_source_roots:
+        nasm_files.extend(find_files(base, (".asm",)))
+        asm_files.extend(find_files(base, (".S",)))
+        c_files.extend(find_files(base, (".c",)))
+        cpp_files.extend(find_files(base, (".cpp",)))
+    if builtin_xhci:
+        cpp_files.extend(find_files("kmod/xhci", (".cpp",)))
+    xapi_sources = sorted(
+        p
+        for p in find_files("user/xapi", (".cpp", ".S"))
+        if p.name not in ("start.cpp", "constart.cpp")
     )
-    n.var("boot_c_flags", "$diagnostic_color -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar")
-    n.var("user_cflags", "$diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings -MMD -MP")
-    n.var("rust_user_flags", "$rust_diagnostic_color --edition=2024 --target $rust_target --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes $rust_opt -C debuginfo=2 -C overflow-checks=off")
-    n.var("mbedtls_cflags", "-I ./user/include/mbed_compat -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"'")
-    n.var("mbedtls_ccflags", "$diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION -MMD -MP")
-    litehtml_includes = "-I ./third_party/litehtml/include -I ./third_party/litehtml/include/litehtml -I ./third_party/litehtml/src -I ./third_party/litehtml/src/gumbo -I ./third_party/litehtml/src/gumbo/include -I ./third_party/litehtml/src/gumbo/include/gumbo"
-    webp_includes = "-I ./user/browser/third_party/libwebp"
-    n.var("browser_hosted_cxxflags", f"$diagnostic_color $opt -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./user/browser {litehtml_includes} {webp_includes} -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT -MMD -MP")
-    n.var("browser_hosted_cflags", f"$diagnostic_color $opt -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -ffunction-sections -fdata-sections {litehtml_includes} {webp_includes} -DNDEBUG -DHAVE_CONFIG_H -MMD -MP")
-    n.var("libvterm_cflags", "$diagnostic_color $opt -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./third_party/libvterm/include -I ./third_party/libvterm/src -MMD -MP")
-    n.var("kmod_cxxflags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden -MMD -MP")
-    n.var("netserver_cflags", "$diagnostic_color $opt -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
-    n.var("netserver_cxxflags", "$kmod_cxxflags -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
+    n.var("BUILTIN_XHCI", "1" if builtin_xhci else "0")
+    n.var("ROOT_SOURCE_DIRS", " ".join(root_source_roots))
+    n.var_list("NASM_FILES", nasm_files)
+    n.var_list("ASM_FILES", asm_files)
+    n.var_list("C_FILES", c_files)
+    n.var_list("CPP_FILES", cpp_files)
+    n.var_list("HEADER_FILES", headers("include"))
+    n.var_list("XAPI_SOURCES", xapi_sources)
+    n.var_list("XAPI_HEADERS", headers("user/xapi/include"))
+    n.var_list("USER_HEADERS", headers("user/include"))
+    n.var_list("BROWSER_HEADERS", headers("user/browser"))
+    n.var_list("BOOT_HEADERS", find_files("boot/include", (".h", ".hpp")))
+    n.var_list("LIBVTERM_SOURCES", find_files("third_party/libvterm/src", (".c",), max_depth=1))
+    n.var_list("LITEHTML_SOURCES", find_files("third_party/litehtml/src", (".cpp",), max_depth=1))
+    n.var_list("GUMBO_SOURCES", find_files("third_party/litehtml/src/gumbo", (".c",), max_depth=1))
+    n.var_list("KMOD_E1000_SOURCES", find_files("kmod/e1000", (".cpp",), max_depth=1))
+    n.line()
+    # Emit uppercase canonical flag variables first, then lowercase aliases for
+    # older generated rule bodies.  That makes the build options readable while
+    # preserving compatibility with existing variable names.
+    n.comment("FLAGS - canonical compile and link options")
+    n.var("OPT_LEVEL", os.environ.get("OPT_LEVEL", "2"))
+    n.var("OPT_FLAG", "-O$OPT_LEVEL")
+    n.var("RUST_OPT_FLAG", "-C opt-level=$OPT_LEVEL")
+    n.var("DIAGNOSTIC_COLOR", c_diagnostic_color_flag())
+    n.var("RUST_DIAGNOSTIC_COLOR", rust_diagnostic_color_flag())
+    n.var("NASM_FLAGS", "-f elf64 -DX86_64_TARGET -DUEFI")
+    n.var("ASM_FLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -mno-80387 -MMD -MP")
+    n.var("C_FLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include -MMD -MP")
+    n.var("CPP_FLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing -MMD -MP" + cpp_extra)
+    n.var("BOOT_C_FLAGS", "$DIAGNOSTIC_COLOR -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar")
+    n.var("USER_CFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./include -Wno-write-strings -MMD -MP")
+    n.var("RUST_FLAGS", "$RUST_DIAGNOSTIC_COLOR --edition=2024 --target $rust_target --emit=obj --crate-type lib -C panic=abort -C no-redzone=yes $RUST_OPT_FLAG -C debuginfo=2 -C overflow-checks=off")
+    n.var("MBEDTLS_CFLAGS", "-I ./user/include/mbed_compat -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"'")
+    n.var("MBEDTLS_CCFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c11 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/include/mbed_compat -I ./user/xapi/include -I ./user/include -I ./include -I ./third_party/mbedtls-src/include -DMBEDTLS_USER_CONFIG_FILE='\"mbed_compat/xj380_mbedtls_user_config.h\"' -DMBEDTLS_NO_UDBL_DIVISION -MMD -MP")
+    n.var("LITEHTML_INCLUDE_DIRS", "-I ./third_party/litehtml/include -I ./third_party/litehtml/include/litehtml -I ./third_party/litehtml/src -I ./third_party/litehtml/src/gumbo -I ./third_party/litehtml/src/gumbo/include -I ./third_party/litehtml/src/gumbo/include/gumbo")
+    n.var("WEBP_INCLUDE_DIRS", "-I ./user/browser/third_party/libwebp")
+    n.var("BROWSER_HOSTED_CXXFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -Wall -g -std=c++17 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -fno-threadsafe-statics -fno-use-cxa-atexit -ffunction-sections -fdata-sections -I ./user/browser $LITEHTML_INCLUDE_DIRS $WEBP_INCLUDE_DIRS -DLITEHTML_NO_THREADS -DLITEHTML_KEEP_GUMBO_OUTPUT -MMD -MP")
+    n.var("BROWSER_HOSTED_CFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -Wall -g -std=c11 -m64 -mstackrealign -fno-stack-protector -fno-strict-aliasing -ffunction-sections -fdata-sections $LITEHTML_INCLUDE_DIRS $WEBP_INCLUDE_DIRS -DNDEBUG -DHAVE_CONFIG_H -MMD -MP")
+    n.var("LIBVTERM_CFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c99 -fno-stack-protector -fno-strict-aliasing -fshort-wchar -nostdinc -I ./user/xapi/include -I ./user/include -I ./third_party/libvterm/include -I ./third_party/libvterm/src -MMD -MP")
+    n.var("KMOD_CXXFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -Wno-writable-strings -Wno-c++11-narrowing -fPIC -fvisibility=hidden -MMD -MP")
+    n.var("NETSERVER_CFLAGS", "$DIAGNOSTIC_COLOR $OPT_FLAG -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-strict-aliasing -std=gnu11 -fshort-wchar -nostdinc -mno-80387 -fPIC -fvisibility=hidden -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
+    n.var("NETSERVER_CXXFLAGS", "$KMOD_CXXFLAGS -MMD -MP -I./include -I./kmod/netserver/lwip/include -I./kmod/netserver")
+    n.var("opt", "$OPT_FLAG")
+    n.var("rust_opt", "$RUST_OPT_FLAG")
+    n.var("diagnostic_color", "$DIAGNOSTIC_COLOR")
+    n.var("rust_diagnostic_color", "$RUST_DIAGNOSTIC_COLOR")
+    n.var("nasm_flags", "$NASM_FLAGS")
+    n.var("asm_flags", "$ASM_FLAGS")
+    n.var("c_flags", "$C_FLAGS")
+    n.var("cpp_flags", "$CPP_FLAGS")
+    n.var("boot_c_flags", "$BOOT_C_FLAGS")
+    n.var("user_cflags", "$USER_CFLAGS")
+    n.var("rust_user_flags", "$RUST_FLAGS")
+    n.var("mbedtls_cflags", "$MBEDTLS_CFLAGS")
+    n.var("mbedtls_ccflags", "$MBEDTLS_CCFLAGS")
+    n.var("browser_hosted_cxxflags", "$BROWSER_HOSTED_CXXFLAGS")
+    n.var("browser_hosted_cflags", "$BROWSER_HOSTED_CFLAGS")
+    n.var("libvterm_cflags", "$LIBVTERM_CFLAGS")
+    n.var("kmod_cxxflags", "$KMOD_CXXFLAGS")
+    n.var("netserver_cflags", "$NETSERVER_CFLAGS")
+    n.var("netserver_cxxflags", "$NETSERVER_CXXFLAGS")
+    n.comment("Lowercase aliases above keep rule bodies compatible with older generated graphs.")
+    # Browser hosted objects need the toolchain's support libraries.  Record the
+    # resolved paths in build.ninja so failures are visible before link time.
     n.var("browser_stdcpp", cmd_output(["g++", "-print-file-name=libstdc++.a"]))
     n.var("browser_supcpp", cmd_output(["g++", "-print-file-name=libsupc++.a"]))
     n.var("browser_libgcc", cmd_output(["g++", "-print-libgcc-file-name"]))
@@ -856,7 +1154,24 @@ def main() -> None:
     n.var("host_gcc_triple", host_gcc_triple)
     n.line()
 
-    n.rule("regen", "python3 tools/gen_ninja.py --out build.ninja", log_desc("GEN", "build.ninja"), depfile=None)
+    n.comment("RULES - reusable shell commands used by build edges")
+    # Rules stay generic; per-target differences are passed as edge variables so
+    # command strings do not need to be duplicated for every app/module.
+    n.rule(
+        "regen",
+        "python3 tools/gen_ninja.py --out build.ninja",
+        log_desc("GEN", "build.ninja"),
+        generator=True,
+        restat=True,
+    )
+    n.rule(
+        "refresh_manifest",
+        "python3 tools/gen_ninja.py --out build.ninja --fail-if-changed && "
+        "mkdir -p $$(dirname $out) && touch $out",
+        log_desc("GEN", "refresh build.ninja"),
+        generator=True,
+        restat=True,
+    )
     n.rule("nasm", "mkdir -p $$(dirname $out) && $nasm $nasm_flags $in -o $out", log_desc("ASM", "$in -> $out"))
     n.rule("root_as", "mkdir -p $$(dirname $out) && $cc -mcmodel=large $asm_flags -MF $out.d -c $in -o $out", log_desc("ASM", "$in -> $out"), depfile="$out.d")
     n.rule("root_cc", "mkdir -p $$(dirname $out) && $cc -fno-pic -fno-pie -mcmodel=large $c_flags -MF $out.d -c $in -o $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
@@ -900,16 +1215,45 @@ def main() -> None:
     n.rule("python_cmd", "python3 tools/ninja_build.py $cmd", "$desc")
     n.rule("shell_cmd", "$cmd", "$desc")
 
+    n.comment("MANIFEST - regenerate build.ninja before every normal Ninja execution")
+    manifest_inputs = [
+        "user/calc/calc.rs",
+        "user/busyterm.rs",
+        "user/xjver/xjver.rs",
+        "user/launcher/launcher.rs",
+        "user/launcher/xapi_keys.rs",
+        "user/elfrun/elfrun.cpp",
+        "user/msgtest.cpp",
+    ]
+    # The manifest self-edge only tracks the generator itself.  The forced
+    # preflight below checks hand-maintained graph-affecting inputs before every
+    # normal build, without making source edits permanently dirty build.ninja.
     n.build(
         "build.ninja",
         "regen",
         ["tools/gen_ninja.py", "tools/ninja_build.py"],
-        implicit=["Makefile", "user/Makefile", "user/xapi/Makefile", "user/calc/calc.rs", "user/busyterm.rs", "user/xjver/xjver.rs", "user/elfrun/elfrun.cpp"],
+        use_default_order_only=False,
     )
+    # Ninja cannot safely force the build.ninja self-edge every run: that causes
+    # manifest regeneration loops.  Instead, every real build edge below waits
+    # for this forced preflight.  If the preflight changes build.ninja, it fails
+    # before stale graph commands execute; the next `ninja` invocation reads the
+    # refreshed graph.
+    n.build("always_refresh_manifest", "phony", use_default_order_only=False)
+    refresh_stamp = Path("out/.ninja-preflight")
+    n.build(
+        refresh_stamp,
+        "refresh_manifest",
+        ["tools/gen_ninja.py", "tools/ninja_build.py", "always_refresh_manifest"],
+        implicit=manifest_inputs,
+        use_default_order_only=False,
+    )
+    n.default_order_only = [refresh_stamp]
+    n.comment("CORE ARTIFACTS - bootloader, config header, support library, kernel")
     n.build("kernel/build_config.h", "gen_config")
     n.build("liballoc-x86_64.a", "download_liballoc")
 
-    kernel_objs = root_objects(n, builtin_xhci)
+    kernel_objs = root_objects(n, nasm_files, asm_files, c_files, cpp_files)
     n.build("out/BOOTX64.efi", "boot", ["boot/bootx64.c", "boot/bootlib.c"], implicit=find_files("boot/include", (".h",)))
     n.build("font/hankaku.o", "objcopy_bin", "font/hankaku.bin", variables={"bin_input": "./font/hankaku.bin"})
     n.build(
@@ -920,17 +1264,23 @@ def main() -> None:
     )
     n.build("out/kernel.krl", "kernel_link", kernel_objs + [Path("font/hankaku.o"), Path("graphics/logo/xj380_2.o"), Path("liballoc-x86_64.a")], implicit=["linker.ld"])
 
+    n.comment("USERLAND, KMODS, AND STARDUSTUI - first-class ELF/module outputs")
     core_objs, start_obj, constart_obj, xapi_liballoc = xapi(n)
     user_targets = user_apps(n, core_objs, start_obj, constart_obj, xapi_liballoc, rust_libs)
     kmod_targets = kmods(n)
     stardust_targets = stardust(n, core_objs, start_obj, xapi_liballoc)
 
+    n.comment("PHONY TARGETS - compatibility names for common build workflows")
     all_deps = [Path("out/BOOTX64.efi"), Path("out/kernel.krl")] + user_targets + kmod_targets + stardust_targets
     phony(n, "all", all_deps)
     phony(n, "build_xapi", core_objs + [start_obj, constart_obj, xapi_liballoc])
     phony(n, "stardustui.examples.copy", stardust_targets)
     phony(n, "kmods", kmod_targets)
 
+    n.comment("IMAGE AND UTILITY TARGETS - delegate staging/run helpers to tools/ninja_build.py")
+    # Image creation, QEMU launch, formatting, and graph reporting stay in the
+    # helper script because they are imperative workflows rather than compile
+    # edges.  Ninja still tracks their visible target names here.
     n.build(
         ["vdisk", "XJ380.img"],
         "python_cmd",
@@ -980,7 +1330,9 @@ def main() -> None:
     n.line("default all")
 
     output = Path(args.out)
-    output.write_text("\n".join(n.lines) + "\n", encoding="utf-8")
+    changed = write_if_changed(output, "\n".join(n.lines) + "\n")
+    if changed and args.fail_if_changed:
+        raise SystemExit("build.ninja was refreshed; rerun ninja so it can load the updated graph")
 
 
 if __name__ == "__main__":

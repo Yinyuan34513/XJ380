@@ -136,9 +136,12 @@ UINT64	xapi_GetTimeNano();
 // 3-6
 void	xapi_Broken(WSTR broken_info);
 void	xapi_SendAppMessage(WSTR title, WSTR text);
+UINT64  xapi_SetNotifyPrcor(XApiNotifyPrcor func);
+UINT64  xapi_SendNotification(const XApiNotificationRequest *req);
 void 	xapi_Sleep(UINT64 ms);
 void 	xapi_Run(WSTR path);
 UINT64  xapi_RunArgs(WSTR path, WSTR argv[]);
+UINT64  xapi_PowerAction(UINT64 action);
 void 	xapi_FlushTime(void);
 
 // 3-7
