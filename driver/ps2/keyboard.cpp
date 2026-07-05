@@ -534,7 +534,7 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         return;
     }
 
-    uint8_t fifo_value = extended ? event_value : make_code;
+    uint8_t fifo_value = event_value;
 
     if (fifo_value == 0)
     {
@@ -562,15 +562,7 @@ uint8_t get_keyboard_input()
     }
 
     int raw_input = atom_pop(&kb_fifo_queue);
-    if (raw_input >= 0)
-    {
-        // 有没有读的
-        uint8_t raw = (uint8_t)raw_input;
-        uint8_t temp = raw >= 128 ? raw :
-                       keyboard_translate_base_make_code(raw, kb_fifo.shift, kb_fifo.caps);
-
-        return temp;
-    }
+    if (raw_input >= 0) { return (uint8_t)raw_input; }
     return NULL;
 }
 
