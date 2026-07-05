@@ -345,18 +345,18 @@ static void draw_oobe_screen_full(char username[64], char password[64], char con
 static void refresh_user_ui_now(int x1, int y1, int x2, int y2)
 {
     refresh_part_sheet(sht_img, x1, y1, x2, y2);
-    flush_sheet_damage_queue(sht_img);
+    flush_sheet_damage_queue_now(sht_img);
 }
 
 static void refresh_user_fullscreen_now()
 {
     refresh_sheet(sht_img);
-    flush_sheet_damage_queue(sht_img);
+    flush_sheet_damage_queue_now(sht_img);
 }
 
 static void service_user_wait_loop()
 {
-    flush_sheet_damage_queue(sht_img);
+    flush_sheet_damage_queue_now(sht_img);
     __asm__ __volatile__("pause");
 }
 
@@ -1462,6 +1462,13 @@ int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         write_serial_fmt("Create User Process Failed. Reason: Cannot Create Process Group.\n");
         return -ENOMEM;
     }
+    group->exe_path = strdup(path);
+    if (group->exe_path == NULL)
+    {
+        write_serial_fmt("Create User Process Failed. Reason: Cannot Copy Exec Path.\n");
+        kill_proc(group, 0, false);
+        return -ENOMEM;
+    }
 
     entry = (void *)parse_elf_file(path, group);
 
@@ -1538,13 +1545,6 @@ int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
         return -ENOMEM;
     }
     group->argc = argc;
-    group->exe_path = strdup(path);
-    if (group->exe_path == NULL)
-    {
-        free_process_argv(thread_argv);
-        kill_proc(group, 0, false);
-        return -ENOMEM;
-    }
     group->linux_abi = true;
     char *cwd = getCwd(path);
     if (cwd == NULL)
@@ -1562,6 +1562,17 @@ int create_user_process_from_file(char *path, pcb_t pcb, char *argv[])
     }
 
     return group->pid;
+}
+
+int create_user_process_singleton_from_file(char *path, pcb_t pcb, char *argv[])
+{
+    pcb_t existing = found_process_by_exe_path(path);
+    if (existing != NULL)
+    {
+        return (int)existing->pid;
+    }
+
+    return create_user_process_from_file(path, pcb, argv);
 }
 
 void create_user_thread_from_file(char *path, pcb_t pcb)

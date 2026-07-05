@@ -44,6 +44,12 @@ typedef struct
     uint32_t  resize_start_width;
     uint32_t  resize_start_height;
     uint8_t   resize_edges;
+    bool      win_resize_pending;
+    int       pending_resize_bx;
+    int       pending_resize_by;
+    uint32_t  pending_resize_width;
+    uint32_t  pending_resize_height;
+    uint64_t  last_win_resize_ns;
     uint8_t   cursor_shape;
 
     bool      first_click;

@@ -28,6 +28,7 @@ typedef struct WINDOWLS
     uint32_t  restore_width;
     uint32_t  restore_height;
     bool      can_maximize;
+    bool      can_resize;
 } WINDOWLS;
 
 typedef struct WIN_THEME
@@ -70,6 +71,7 @@ void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process);
 bool window_contains(XWM_INFO *xwmi, WINDOWLS *windowls);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
 WINDOWLS *sht_found_win_by_type(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet, uint64_t type);
+WINDOWLS *find_window_by_exe_path(XWM_INFO *xwmi, const char *exe_path);
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 WINDOWLS *mpf_found_win(MsgPrcor mpf);
 bool alt_tab_preview_begin(XWM_INFO *xwmi, SHEET_INFO *sht);
@@ -77,6 +79,8 @@ bool alt_tab_preview_next(XWM_INFO *xwmi, SHEET_INFO *sht);
 bool alt_tab_preview_commit(XWM_INFO *xwmi, SHEET_INFO *sht);
 bool minimize_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 bool restore_and_focus_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool focus_window_by_exe_path(XWM_INFO *xwmi, SHEET_INFO *sht, const char *exe_path);
+bool close_window_by_exe_path(XWM_INFO *xwmi, SHEET_INFO *sht, const char *exe_path);
 bool close_window_and_task(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 bool toggle_show_desktop(XWM_INFO *xwmi, SHEET_INFO *sht);
 bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);

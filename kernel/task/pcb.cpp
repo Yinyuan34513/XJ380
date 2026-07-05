@@ -11,6 +11,7 @@
 #include <elf.h>
 #include <errno.h>
 #include <fs/vfs/vfs.h>
+#include <graphics/sheet.h>
 #include <mm/lazyalloc.h>
 #include <mm/uaccess.h>
 #include <pctable/gdt.h>
@@ -201,6 +202,27 @@ pcb_t found_pcb(int pid)
     return ret;
 }
 
+pcb_t found_process_by_exe_path(const char *exe_path)
+{
+    if (pcb_group_queue == NULL || exe_path == NULL || exe_path[0] == '\0') return NULL;
+
+    pcb_t ret = NULL;
+    spin_lock(&pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, node)
+    {
+        pcb_t pcb = (pcb_t)node->data;
+        if (pcb == NULL || pcb->exe_path == NULL) continue;
+        if (pcb->status == DEATH || pcb->status == OUT || pcb->status == ZOMBIE) continue;
+        if (strcmp(pcb->exe_path, exe_path) == 0)
+        {
+            ret = pcb;
+            break;
+        }
+    }
+    spin_unlock(&pcb_group_queue->lock);
+    return ret;
+}
+
 tcb_t found_thread(pcb_t pcb, int tid)
 {
     if (pcb == NULL || pcb->thread_queue == NULL) return NULL;
@@ -347,6 +369,7 @@ static char **copy_kernel_string_vector_owned(char **argv, size_t argc)
 void kill_proc0(pcb_t pcb)
 {
     procfs_on_exit_task(pcb);
+    toast_manager_mark_process_exit(pcb);
 
     spin_lock(&pcb->thread_queue->lock);
     queue_foreach(pcb->thread_queue, thread_node)
@@ -2544,6 +2567,11 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->parent_task = parent_group;
     pcb->status      = START;
     pcb->task_level  = TASK_APPLICATION_LEVEL;
+    pcb->notify_pcor_pipe_read_fd  = -1;
+    pcb->notify_pcor_pipe_write_fd = -1;
+    pcb->notify_pcor_tid           = 0;
+    pcb->notify_pcor_func          = 0;
+    pcb->notify_pcor_registered    = false;
     pcb->queue_index = queue_enqueue(pcb_group_queue, pcb);
     if (pcb->queue_index == (size_t)-1)
     {

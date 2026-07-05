@@ -33,4 +33,4 @@ driver/fs/
 - Do not add pseudo-filesystem globals without considering scheduler/locking and process lifetime.
 
 ## VERIFY
-Build with `make all -j"$(nproc)"`. Filesystem/rootfs changes need `make vdisk` and QEMU boot; inspect `/apps`, `/system`, `/mod`, and `serial.log` behavior.
+Build with `python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja all`. Filesystem/rootfs changes need `ninja -f build.ninja vdisk` and QEMU boot; inspect `/apps`, `/system`, `/mod`, and `serial.log` behavior.

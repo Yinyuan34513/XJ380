@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  make-build:
+  ninja-build:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -35,13 +35,21 @@ jobs:
             clang \
             lld \
             nasm \
+            ninja-build \
             curl \
+            mtools \
+            dosfstools \
+            gdisk \
+            qemu-system-x86 \
+            qemu-utils \
+            xorriso \
             python3-venv \
             gcc-mingw-w64-x86-64
           python3 -m venv .venv
           . .venv/bin/activate
           python3 -m pip install --upgrade pip
           python3 -m pip install kconfiglib
+          rustup target add x86_64-unknown-none
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Resolve clang builtins path
@@ -64,6 +72,14 @@ jobs:
 
           echo "path=${path}" >> "${GITHUB_OUTPUT}"
 
+      - name: Generate Ninja graph
+        run: |
+          python3 tools/gen_ninja.py --out build.ninja
+
+      - name: Check bootstrap tools
+        run: |
+          BROWSER_BUILTINS="${{ steps.builtins.outputs.path }}" ninja -f build.ninja check.tools
+
       - name: Build
         run: |
-          make all -j"$(nproc)" SUDO=0 DEBUG=0 KVM=0 BROWSER_BUILTINS="${{ steps.builtins.outputs.path }}"
+          BROWSER_BUILTINS="${{ steps.builtins.outputs.path }}" ninja -f build.ninja -j"$(nproc)" all

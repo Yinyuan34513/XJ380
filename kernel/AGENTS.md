@@ -33,7 +33,7 @@ kernel/
 - Early order matters: CPU → IDT/GDT → timers/APIC → HHDM/frame/heap → device/VFS/storage → process/SMP → rootfs/syscalls/modules → scheduler open.
 - `open_interrupt` / `close_interrupt`, `enable_scheduler()` / `disable_scheduler()`, and `no_interrupt` are stateful gates; do not move them casually.
 - Per-CPU setup happens both on BSP and AP paths. GDT/TSS, syscall MSRs, LAPIC, idle threads, and scheduler queues must stay consistent.
-- `kernel/build_settings.h` is a manual source of truth for runtime defaults; root `Makefile` generates `kernel/build_config.h`.
+- `kernel/build_settings.h` is a manual source of truth for runtime defaults; the generated Ninja graph writes `kernel/build_config.h`.
 - Boot flags can skip module loading and force safer AHCI/storage behavior.
 
 ## ANTI-PATTERNS
@@ -44,4 +44,4 @@ kernel/
 - Do not reorder SMP readiness waits unless you understand `scheduler_is_ready == xsi->cpu_count`.
 
 ## VERIFY
-Run at least `make all -j"$(nproc)"` after kernel changes. Boot-visible changes need `make run`/QEMU and `serial.log` inspection.
+Run at least `python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja all` after kernel changes. Boot-visible changes need `ninja -f build.ninja run`/QEMU and `serial.log` inspection.
