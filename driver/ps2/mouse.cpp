@@ -1,6 +1,7 @@
 #include <global_color.h>
 #include <graphics/GOP.hpp>
 #include <graphics/components/button.h>
+#include <graphics/components/scroll_bar.h>
 #include <graphics/components/text_input_box.h>
 #include <graphics/mouse.hpp>
 #include <graphics/sheet.h>
@@ -1114,6 +1115,8 @@ void process_mouse_button()
 
                 process_click_event(current_window->w_sheet, tbx - current_window->w_sheet->bx,
                                                              tby - current_window->w_sheet->by);
+                process_scroll_bar_click_event(current_window->w_sheet, tbx - current_window->w_sheet->bx,
+                                               tby - current_window->w_sheet->by);
                 process_text_input_box_click_event(current_window->w_sheet, tbx - current_window->w_sheet->bx,
                                                    tby - current_window->w_sheet->by);
             }

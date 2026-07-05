@@ -16,6 +16,7 @@ int  file_count = 0;
 static const int FM_CONTENT_TOP = 148;
 static const int FM_ROW_HEIGHT = 24;
 static const int FM_SIDEBAR_W = 132;
+static const int FM_SCROLLBAR_CRLID = 1000;
 
 /*
 static const char *xapi_demoSvgCheck =
@@ -53,9 +54,9 @@ bool fm_scrollbar_rect(int *x1, int *y1, int *x2, int *y2)
 {
     if (!need_duopage) return false;
     if (fmr_width < 80 || fmr_height <= 164) return false;
-    if (x1 != NULL) *x1 = fmr_width - 18;
+    if (x1 != NULL) *x1 = fmr_width - 22;
     if (y1 != NULL) *y1 = FM_CONTENT_TOP;
-    if (x2 != NULL) *x2 = fmr_width - 6;
+    if (x2 != NULL) *x2 = fmr_width - 7;
     if (y2 != NULL) *y2 = fmr_height - 10;
     return true;
 }
@@ -250,6 +251,8 @@ static void paint_sidebar()
 
 void paint_fm_back()
 {
+    xapi_DeleteScrollBar(handle, FM_SCROLLBAR_CRLID);
+
     xapi_DrawRect(handle, 0, 0 , fmr_width - 1, 25, 0xeaeaeaff, true);
     xapi_DrawRect(handle, 52, 4, fmr_width - 5, 22, 0xffffffff, true);
     xapi_DrawPNG(handle, 0, 26, fmr_width - 1, 94, "/system/resources/image/fm_bg.png");
@@ -263,15 +266,14 @@ void paint_fm_back()
     {
         int bar_x1, bar_y1, bar_x2, bar_y2;
         int thumb_x1, thumb_y1, thumb_x2, thumb_y2;
-        if (fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2))
+        if (fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2) &&
+            fm_scrollbar_thumb_rect(&thumb_x1, &thumb_y1, &thumb_x2, &thumb_y2))
         {
-            xapi_DrawRect(handle, bar_x1, bar_y1, bar_x2, bar_y2, 0xf0f0f0ff, true);
-            xapi_DrawRect(handle, bar_x1, bar_y1, bar_x2, bar_y2, 0xd2d2d2ff, false);
-            if (fm_scrollbar_thumb_rect(&thumb_x1, &thumb_y1, &thumb_x2, &thumb_y2))
-            {
-                xapi_DrawRect(handle, thumb_x1, thumb_y1, thumb_x2, thumb_y2, 0xb8c7d9ff, true);
-                xapi_DrawRect(handle, thumb_x1, thumb_y1, thumb_x2, thumb_y2, 0x6f8fb3ff, false);
-            }
+            xapi_PutVerticalScrollBar(handle, bar_x1, bar_y1, bar_y2 - bar_y1 + 1, thumb_y2 - thumb_y1 + 1,
+                                      FM_SCROLLBAR_CRLID);
+            xapi_DrawRect(handle, bar_x1 + 1, bar_y1 + 1, bar_x2 - 1, bar_y2 - 1, 0xe7eef6ff, true);
+            xapi_DrawRect(handle, thumb_x1, thumb_y1, thumb_x2, thumb_y2, 0xb8c7d9ff, true);
+            xapi_DrawRect(handle, thumb_x1, thumb_y1, thumb_x2, thumb_y2, 0x9eafc5ff, false);
         }
     }
 }

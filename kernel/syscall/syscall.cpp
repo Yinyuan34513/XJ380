@@ -697,6 +697,13 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case XAPI_PUT_SWITCH: do_xapi_PutSwitch(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8); break;
     case XAPI_SET_SWITCH: do_xapi_SetSwitch(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_DEL_SWITCH: do_xapi_DeleteSwitch(regs->rdi, regs->rsi); break;
+    case XAPI_PUT_VERTICAL_SCROLL_BAR:
+        do_xapi_PutVerticalScrollBar(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_PUT_HORIZONTAL_SCROLL_BAR:
+        do_xapi_PutHorizontalScrollBar(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
+        break;
+    case XAPI_DELETE_SCROLL_BAR: do_xapi_DeleteScrollBar(regs->rdi, regs->rsi); break;
     case XAPI_PUT_TEXT_INBOX:
         regs->rax = do_xapi_PutTextInputBox(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
         break;

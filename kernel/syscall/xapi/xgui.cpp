@@ -23,6 +23,7 @@
 #include <task/pcb.h>
 #include <ttf.h>
 #include <graphics/components/button.h>
+#include <graphics/components/scroll_bar.h>
 #include <graphics/components/text_input_box.h>
 
 bool winRD_lock = false;
@@ -981,6 +982,57 @@ void do_xapi_DeleteSwitch(uint64_t handle, uint64_t CRLid)
     SHEET *sheet = xapi_get_window_sheet(WindowHandle);
     if (sheet == NULL) return;
     unregister_switch_components(sheet, CRLid);
+}
+
+static void do_xapi_PutScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint64_t length, uint64_t thumb_length,
+                                 uint64_t CRLid, ScrollBarDirection direction)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return;
+    if (xapi_get_window_sheet(WindowHandle) == NULL) return;
+
+    if (length < SCROLL_BAR_SIZE) length = SCROLL_BAR_SIZE;
+    if (thumb_length < SCROLL_BAR_MIN_THUMB) thumb_length = SCROLL_BAR_MIN_THUMB;
+    if (thumb_length > length) thumb_length = length;
+
+    if (WindowHandle->WindowNodePtr->type == XWIN_NORMAL)
+    {
+        x += 12;
+        y += 27;
+    }
+
+    put_scroll_bar_theme(WindowHandle->WindowNodePtr, (int)x, (int)y, (int)length, (int)thumb_length, (int)CRLid,
+                         direction);
+    if (direction == ScrollBarVertical)
+    {
+        xapi_mark_window_dirty(WindowHandle, (int)x, (int)y, (int)x + SCROLL_BAR_SIZE, (int)y + (int)length);
+    }
+    else
+    {
+        xapi_mark_window_dirty(WindowHandle, (int)x, (int)y, (int)x + (int)length, (int)y + SCROLL_BAR_SIZE);
+    }
+}
+
+void do_xapi_PutVerticalScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint64_t length, uint64_t thumb_length,
+                                  uint64_t CRLid)
+{
+    do_xapi_PutScrollBar(handle, x, y, length, thumb_length, CRLid, ScrollBarVertical);
+}
+
+void do_xapi_PutHorizontalScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint64_t length, uint64_t thumb_length,
+                                    uint64_t CRLid)
+{
+    do_xapi_PutScrollBar(handle, x, y, length, thumb_length, CRLid, ScrollBarHorizontal);
+}
+
+void do_xapi_DeleteScrollBar(uint64_t handle, uint64_t CRLid)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return;
+
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return;
+    unregister_scroll_bar_components(sheet, CRLid);
 }
 
 uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text)

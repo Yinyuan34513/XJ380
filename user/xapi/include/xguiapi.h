@@ -349,6 +349,29 @@ void xapi_DeleteSwitch(
 	UINT64  CRLid
 );
 
+void xapi_PutVerticalScrollBar(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  length,
+	UINT64  thumbLength,
+	UINT64  CRLid
+);
+
+void xapi_PutHorizontalScrollBar(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  length,
+	UINT64  thumbLength,
+	UINT64  CRLid
+);
+
+void xapi_DeleteScrollBar(
+	HDLE  	handle,
+	UINT64  CRLid
+);
+
 UINT64 xapi_PutTextInputBox(
 	HDLE    handle,
 	UINT64  x,
