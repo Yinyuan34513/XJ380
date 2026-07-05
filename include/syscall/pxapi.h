@@ -252,9 +252,9 @@ typedef void (*XApiNotifyPrcor)(uint64_t notification_id, uint64_t action_id);
 #define XAPI_SET_SWITCH     7461
 #define XAPI_DEL_SWITCH     7462
 
-#define XAPI_PUT_VERTICAL_SCROLL_BAR   7464
-#define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7465
-#define XAPI_DELETE_SCROLL_BAR         7466
+#define XAPI_PUT_VERTICAL_SCROLL_BAR   7467
+#define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7468
+#define XAPI_DELETE_SCROLL_BAR         7469
 
 // 4-1
 #define XWIN_NORMAL				0

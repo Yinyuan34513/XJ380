@@ -578,7 +578,6 @@ def check_tools() -> None:
                                 "编译 Rust no_std 用户态应用", "rustup toolchain install stable")
     check_required_tool(missing, "x86_64-w64-mingw32-gcc", ["x86_64-w64-mingw32-gcc"], "编译 UEFI bootloader",
                         "sudo apt install gcc-mingw-w64-x86-64")
-    check_required_tool(missing, "curl", ["curl"], "缺失 liballoc 时下载依赖", "sudo apt install curl")
     check_required_tool(missing, "python3", ["python3"], "生成 Ninja 和打包 installer payload",
                         "sudo apt install python3")
     check_required_tool(missing, "ninja", ["ninja", "ninja-build"], "执行 Ninja 构建",

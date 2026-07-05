@@ -1185,7 +1185,6 @@ def main() -> None:
         "-o $out $in",
         log_desc("LD", "$out"),
     )
-    n.rule("download_liballoc", "[ -f $out ] || curl -Lo $out https://github.com/plos-clan/liballoc/releases/download/release/liballoc-x86_64.a", log_desc("FETCH", "$out"))
     n.rule("copy", "mkdir -p $$(dirname $out) && cp -a $in $out", log_desc("CP", "$in -> $out"))
     n.rule("user_cxx_custom", "mkdir -p $$(dirname $out) && $user_cxx $cflags -MF $out.d -c $in -o $out", log_desc("CXX", "$in -> $out"), depfile="$out.d")
     n.rule("user_cc_custom", "mkdir -p $$(dirname $out) && $user_cc $cflags -MF $out.d -c $in -o $out", log_desc("CC", "$in -> $out"), depfile="$out.d")
@@ -1251,7 +1250,6 @@ def main() -> None:
     n.default_order_only = [refresh_stamp]
     n.comment("CORE ARTIFACTS - bootloader, config header, support library, kernel")
     n.build("kernel/build_config.h", "gen_config")
-    n.build("liballoc-x86_64.a", "download_liballoc")
 
     kernel_objs = root_objects(n, nasm_files, asm_files, c_files, cpp_files)
     n.build("out/BOOTX64.efi", "boot", ["boot/bootx64.c", "boot/bootlib.c"], implicit=find_files("boot/include", (".h",)))
