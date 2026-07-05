@@ -509,49 +509,111 @@ def find_tool(names: list[str]) -> str | None:
     return None
 
 
-def check_tools() -> None:
-    tools = [
-        ("clang", ["clang"], "编译内核 C/ASM 和部分模块", "sudo apt install clang"),
-        ("clang++", ["clang++"], "编译内核 C++ 和模块", "sudo apt install clang"),
-        ("nasm", ["nasm"], "编译 NASM 汇编", "sudo apt install nasm"),
-        ("ld", ["ld"], "链接内核和用户态 ELF", "sudo apt install binutils"),
-        ("objcopy", ["objcopy"], "打包内置二进制资源", "sudo apt install binutils"),
-        ("x86_64-w64-mingw32-gcc", ["x86_64-w64-mingw32-gcc"], "编译 UEFI bootloader", "sudo apt install mingw-w64"),
-        ("curl", ["curl"], "缺失 liballoc 时下载依赖", "sudo apt install curl"),
-        ("python3", ["python3"], "生成 Ninja 和打包 installer payload", "sudo apt install python3"),
-        ("rustc", ["rustc"], "编译 Rust 用户态应用 calc", "rustup toolchain install stable"),
-        ("ninja", ["ninja", "ninja-build"], "执行 Ninja 构建", "sudo apt install ninja-build"),
-        ("xorriso", ["xorriso"], "生成 UEFI 安装 ISO", "sudo apt install xorriso"),
-        ("mcopy", ["mcopy"], "写入 FAT 磁盘镜像", "sudo apt install mtools"),
-        ("sgdisk", ["sgdisk"], "创建 GPT/EFI 分区", "sudo apt install gdisk"),
-        ("mkfs.vfat", ["mkfs.vfat"], "格式化 FAT32 EFI 分区", "sudo apt install dosfstools"),
-        ("qemu-system-x86_64", ["qemu-system-x86_64"], "运行 XJ380 / installer", "sudo apt install qemu-system-x86"),
-        ("qemu-img", ["qemu-img"], "生成 VMDK 镜像", "sudo apt install qemu-utils"),
-    ]
+def env_tool(name: str, default: str) -> str:
+    value = env(name, default).strip()
+    if not value:
+        return default
+    return value.split()[0]
 
+
+def check_required_tool(
+    missing: list[tuple[str, str, str]],
+    display: str,
+    aliases: list[str],
+    purpose: str,
+    hint: str,
+) -> str | None:
+    found = find_tool(aliases)
+    if found:
+        print(f"[OK]   {display:28} {found}")
+        return found
+
+    print(f"[缺失] {display:28} {purpose}")
+    missing.append((display, purpose, hint))
+    return None
+
+
+def find_browser_builtins(clang: str | None = None) -> tuple[str | None, str]:
+    override = os.environ.get("BROWSER_BUILTINS")
+    if override:
+        if Path(override).is_file():
+            return override, "BROWSER_BUILTINS"
+        return None, f"BROWSER_BUILTINS points to a missing file: {override}"
+
+    clang_bin = clang or find_tool(["clang"])
+    if clang_bin:
+        runtime_dir = capture([clang_bin, "--print-runtime-dir"])
+        candidate = Path(runtime_dir) / "libclang_rt.builtins-x86_64.a" if runtime_dir else Path()
+        if candidate.is_file():
+            return str(candidate), "clang runtime dir"
+
+    matches = sorted(Path("/usr/lib/clang").glob("**/libclang_rt.builtins-x86_64.a"))
+    if matches:
+        return str(matches[-1]), "/usr/lib/clang"
+
+    return None, "libclang_rt.builtins-x86_64.a not found"
+
+
+def check_tools() -> None:
     missing: list[tuple[str, str, str]] = []
+    prefix = env("COMPILER_PREFIX", "")
     print("XJ380 Ninja 构建工具检查")
     print("=" * 64)
-    for display, aliases, purpose, hint in tools:
-        found = find_tool(aliases)
-        if found:
-            print(f"[OK]   {display:24} {found}")
-        else:
-            print(f"[缺失] {display:24} {purpose}")
-            missing.append((display, purpose, hint))
 
-    rustc = find_tool(["rustc"])
+    clang = check_required_tool(missing, "clang", [env_tool("CC", prefix + "clang"), "clang"],
+                                "编译内核 C/ASM 和部分模块", "sudo apt install clang")
+    check_required_tool(missing, "clang++", [env_tool("CPP", prefix + "clang++"), "clang++"],
+                        "编译内核 C++ 和模块", "sudo apt install clang")
+    check_required_tool(missing, "g++", [env_tool("CXX", "g++"), "g++"], "编译用户态 C++ 和浏览器 hosted 对象",
+                        "sudo apt install g++")
+    check_required_tool(missing, "ld", [env_tool("LD", prefix + "ld"), "ld"], "链接内核和用户态 ELF",
+                        "sudo apt install binutils")
+    check_required_tool(missing, "ld.lld", ["ld.lld", "lld"], "提供 LLVM lld 链接器，避免 CI/本地缺 lld 后分散失败",
+                        "sudo apt install lld")
+    check_required_tool(missing, "objcopy", [env_tool("OBJC", prefix + "objcopy"), "objcopy"],
+                        "打包内置二进制资源", "sudo apt install binutils")
+    check_required_tool(missing, "nasm", [env_tool("NASM", prefix + "nasm"), "nasm"], "编译 NASM 汇编",
+                        "sudo apt install nasm")
+    rustc = check_required_tool(missing, "rustc", [env_tool("RUSTC", "rustc"), "rustc"],
+                                "编译 Rust no_std 用户态应用", "rustup toolchain install stable")
+    check_required_tool(missing, "x86_64-w64-mingw32-gcc", ["x86_64-w64-mingw32-gcc"], "编译 UEFI bootloader",
+                        "sudo apt install gcc-mingw-w64-x86-64")
+    check_required_tool(missing, "curl", ["curl"], "缺失 liballoc 时下载依赖", "sudo apt install curl")
+    check_required_tool(missing, "python3", ["python3"], "生成 Ninja 和打包 installer payload",
+                        "sudo apt install python3")
+    check_required_tool(missing, "ninja", ["ninja", "ninja-build"], "执行 Ninja 构建",
+                        "sudo apt install ninja-build")
+    check_required_tool(missing, "mcopy", ["mcopy"], "写入 FAT 磁盘镜像", "sudo apt install mtools")
+    check_required_tool(missing, "sgdisk", ["sgdisk"], "创建 GPT/EFI 分区", "sudo apt install gdisk")
+    check_required_tool(missing, "mkfs.vfat", ["mkfs.vfat"], "格式化 FAT32 EFI 分区",
+                        "sudo apt install dosfstools")
+    check_required_tool(missing, "qemu-system-x86_64", ["qemu-system-x86_64"], "运行 XJ380 / installer",
+                        "sudo apt install qemu-system-x86")
+    check_required_tool(missing, "qemu-img", ["qemu-img"], "生成 VMDK 镜像", "sudo apt install qemu-utils")
+    check_required_tool(missing, "xorriso", ["xorriso"], "生成 UEFI 安装 ISO", "sudo apt install xorriso")
+
     if rustc:
         rust_target = env("RUST_TARGET", "x86_64-unknown-none")
         libdir = capture([rustc, "--print", "target-libdir", "--target", rust_target])
         rust_libs_ok = False
         if libdir:
-            rust_libs_ok = bool(list(Path(libdir).glob("libcore-*.rlib"))) and bool(list(Path(libdir).glob("libcompiler_builtins-*.rlib")))
+            rust_libs_ok = bool(list(Path(libdir).glob("libcore-*.rlib"))) and bool(
+                list(Path(libdir).glob("libcompiler_builtins-*.rlib"))
+            )
         if rust_libs_ok:
-            print(f"[OK]   rust target {rust_target:10} {libdir}")
+            print(f"[OK]   rust target {rust_target:14} {libdir}")
         else:
-            print(f"[缺失] rust target {rust_target:10} 编译 Rust calc 需要该 no_std 目标")
-            missing.append((f"rust target {rust_target}", "编译 Rust 用户态应用 calc", f"rustup target add {rust_target}"))
+            print(f"[缺失] rust target {rust_target:14} 编译 Rust no_std 用户态应用需要该目标")
+            missing.append((f"rust target {rust_target}", "缺少 libcore/libcompiler_builtins",
+                            f"rustup target add {rust_target}"))
+
+    builtins, builtins_source = find_browser_builtins(clang)
+    if builtins:
+        print(f"[OK]   libclang_rt.builtins       {builtins} ({builtins_source})")
+    else:
+        print(f"[缺失] libclang_rt.builtins       浏览器/httpget/nut 链接需要 compiler-rt builtins")
+        missing.append(("libclang_rt.builtins-x86_64.a", builtins_source,
+                        "sudo apt install clang；或设置 BROWSER_BUILTINS=/path/to/libclang_rt.builtins-x86_64.a"))
 
     if missing:
         print("\n缺失工具和建议安装命令：")
@@ -586,18 +648,13 @@ def graph() -> None:
 
 
 def browser_builtins() -> None:
-    override = os.environ.get("BROWSER_BUILTINS")
-    if override:
-        print(override)
+    builtins, reason = find_browser_builtins()
+    if builtins:
+        print(builtins)
         return
-    runtime_dir = capture(["clang", "--print-runtime-dir"])
-    candidate = Path(runtime_dir) / "libclang_rt.builtins-x86_64.a" if runtime_dir else Path()
-    if candidate.is_file():
-        print(candidate)
-        return
-    matches = sorted(Path("/usr/lib/clang").glob("**/libclang_rt.builtins-x86_64.a"))
-    if matches:
-        print(matches[-1])
+
+    print(f"Cannot find libclang_rt.builtins-x86_64.a: {reason}", file=sys.stderr)
+    raise SystemExit(1)
 
 
 def main() -> None:

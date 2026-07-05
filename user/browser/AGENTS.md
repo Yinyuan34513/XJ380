@@ -17,7 +17,7 @@ user/browser/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Build rules | `../Makefile` browser target | Pulls litehtml/gumbo/libwebp/mbedtls/std libs. |
+| Build rules | `tools/gen_ninja.py` browser section | Pulls litehtml/gumbo/libwebp/mbedtls/std libs. |
 | Startup | `browser_start.cpp` | Not the generic xapi startup path. |
 | App/UI | `browser_app.cpp` | Browser state, URL/search/render loop. |
 | Networking | `browser_fetch.cpp`, `../https_client.cpp`, `../http_tls_compat.cpp` | HTTP/TLS integration. |
@@ -38,4 +38,4 @@ user/browser/
 - Do not omit `BROWSER_BUILTINS` diagnosis if browser/httpget/nut link fails on compiler builtins.
 
 ## VERIFY
-Build `make -C user browser.elf` only after `make -C user build_xapi`; prefer root `make all` for dependency correctness. Runtime verify with QEMU and actual page/navigation/image fetch paths.
+Build `python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja out/browser.elf`; prefer `ninja -f build.ninja all` for dependency correctness. Runtime verify with QEMU and actual page/navigation/image fetch paths.

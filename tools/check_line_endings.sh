@@ -15,7 +15,7 @@ check_file()
     return 0
 }
 
-for path in Makefile tools/*.sh Bf/xbps-triggers/*; do
+for path in tools/*.sh Bf/xbps-triggers/*; do
     check_file "$path" || bad=1
 done
 

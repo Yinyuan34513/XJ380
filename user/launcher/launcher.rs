@@ -4,6 +4,10 @@
 use core::ffi::{c_char, c_int};
 use core::panic::PanicInfo;
 
+mod xapi_keys;
+
+use crate::xapi_keys::{XKEY_DOWN, XKEY_ENTER, XKEY_ESC, XKEY_UP, XPOWER_REBOOT, XPOWER_SHUTDOWN, XWIN_FRAME_OFF};
+
 type Hdl = u64;
 type MsgProc = extern "C" fn(u64, u64, u64);
 
@@ -26,16 +30,6 @@ const MSG_LBUTTON: u64 = 2;
 const MSG_CRL: u64 = 6;
 const MSG_SPCHAR: u64 = 7;
 const MSG_KEYDOWN: u64 = 10;
-
-const XWIN_FRAME_OFF: u8 = 1;
-
-const XKEY_ESC: u64 = 128;
-const XKEY_ENTER: u64 = 131;
-const XKEY_UP: u64 = 152;
-const XKEY_DOWN: u64 = 157;
-
-const XPOWER_REBOOT: u64 = 1;
-const XPOWER_SHUTDOWN: u64 = 2;
 
 const COLOR_BG: u32 = 0xf7f9fcff;
 const COLOR_PANEL: u32 = 0xffffffff;

@@ -37,4 +37,4 @@ driver/
 - Do not silently change device registration names or node paths; user apps and VFS may depend on them.
 
 ## VERIFY
-`make all -j"$(nproc)"`; hardware-visible changes need QEMU boot and `serial.log`. Storage changes should also build `make vdisk`.
+`python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja all`; hardware-visible changes need QEMU boot and `serial.log`. Storage changes should also build `ninja -f build.ninja vdisk`.

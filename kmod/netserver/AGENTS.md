@@ -6,7 +6,6 @@ Loadable networking module that integrates first-party socket/netdev glue with v
 ## STRUCTURE
 ```
 kmod/netserver/
-├── Makefile        # Selects lwIP C files + first-party C++ glue
 ├── netserver.cpp   # Module orchestration, sockets, DHCP/manual IPv4, DNS
 ├── arch/           # lwIP OS-port glue for scheduler/mutex/time
 └── lwip/           # Vendored lwIP stack; avoid local feature edits
@@ -15,7 +14,7 @@ kmod/netserver/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Module build | `Makefile` | Produces `../../out/netserver.sys`. |
+| Module build | `tools/gen_ninja.py` kmod section | Produces `out/netserver.sys`. |
 | Socket/provider glue | `netserver.cpp` | Main first-party networking behavior. |
 | lwIP OS port | `arch/sys_arch.cpp`, `arch/utils.cpp` | Scheduler/mutex/timer bridge. |
 | Network ABI | `include/net/`, `include/netdev.h` | Shared with kernel/user callers. |
@@ -36,4 +35,4 @@ kmod/netserver/
 - Do not assume chained pbuf support where lwIP ZEP code asserts `p->next == NULL`.
 
 ## VERIFY
-Build `make -C kmod/netserver` or root `make all`. Runtime changes require booting with modules enabled and exercising `netcfg`, `httpget`, `browser`, or socket-using apps.
+Build `python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja out/netserver.sys` or `ninja -f build.ninja all`. Runtime changes require booting with modules enabled and exercising `netcfg`, `httpget`, `browser`, or socket-using apps.
