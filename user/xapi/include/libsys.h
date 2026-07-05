@@ -310,6 +310,10 @@ typedef struct
 #define XAPI_SET_SWITCH     7461
 #define XAPI_DEL_SWITCH     7462
 
+#define XAPI_PUT_VERTICAL_SCROLL_BAR   7464
+#define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7465
+#define XAPI_DELETE_SCROLL_BAR         7466
+
 #define XWIN_NORMAL             0
 #define XWIN_FRAME_OFF          1
 #define XWIN_FULL_SCR           2

@@ -287,6 +287,35 @@ extern "C" void xapi_DeleteSwitch(
 	enter_syscall(XAPI_DEL_SWITCH, handle, CRLid, 0, 0, 0, 0);
 }
 
+extern "C" void xapi_PutVerticalScrollBar(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  length,
+	UINT64  thumbLength,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_PUT_VERTICAL_SCROLL_BAR, handle, x, y, length, thumbLength, CRLid);
+}
+
+extern "C" void xapi_PutHorizontalScrollBar(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  length,
+	UINT64  thumbLength,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_PUT_HORIZONTAL_SCROLL_BAR, handle, x, y, length, thumbLength, CRLid);
+}
+
+extern "C" void xapi_DeleteScrollBar(
+	HDLE  	handle,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_DELETE_SCROLL_BAR, handle, CRLid, 0, 0, 0, 0);
+}
+
 extern "C" UINT64 xapi_PutTextInputBox(
 	HDLE    handle,
 	UINT64  x,
