@@ -704,6 +704,7 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         do_xapi_PutHorizontalScrollBar(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8, regs->r9);
         break;
     case XAPI_DELETE_SCROLL_BAR: do_xapi_DeleteScrollBar(regs->rdi, regs->rsi); break;
+    case XAPI_SET_SCROLL_BAR_POSITION: do_xapi_SetScrollBarPosition(regs->rdi, regs->rsi, regs->rdx); break;
     case XAPI_PUT_TEXT_INBOX:
         regs->rax = do_xapi_PutTextInputBox(regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
         break;

@@ -255,6 +255,7 @@ typedef void (*XApiNotifyPrcor)(uint64_t notification_id, uint64_t action_id);
 #define XAPI_PUT_VERTICAL_SCROLL_BAR   7467
 #define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7468
 #define XAPI_DELETE_SCROLL_BAR         7469
+#define XAPI_SET_SCROLL_BAR_POSITION   7470
 
 // 4-1
 #define XWIN_NORMAL				0
@@ -266,7 +267,7 @@ typedef void (*XApiNotifyPrcor)(uint64_t notification_id, uint64_t action_id);
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7466
+// 当前最大号：7470
 
 #define XAPI_TASK_NAME_LEN 32
 
@@ -338,6 +339,7 @@ void do_xapi_PutVerticalScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint6
 void do_xapi_PutHorizontalScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint64_t length, uint64_t thumb_length,
                                     uint64_t CRLid);
 void do_xapi_DeleteScrollBar(uint64_t handle, uint64_t CRLid);
+void do_xapi_SetScrollBarPosition(uint64_t handle, uint64_t CRLid, uint64_t position);
 uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text);
 uint64_t do_xapi_GetTextInputBox(uint64_t id, uint64_t text);
 uint64_t do_xapi_DeleteTextInputBox(uint64_t id);

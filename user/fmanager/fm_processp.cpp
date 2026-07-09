@@ -115,6 +115,23 @@ void register_scrollbar_click(int x, int y)
     set_scroll_base(target);
 }
 
+void register_scrollbar_position(int position)
+{
+    if (!need_duopage) return;
+
+    int bar_x1, bar_y1, bar_x2, bar_y2;
+    if (!fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2)) return;
+
+    int track_h = bar_y2 - bar_y1;
+    int max_base = fm_max_scroll_base();
+    if (track_h <= 0 || max_base <= 0) return;
+    if (position < 0) position = 0;
+    if (position > track_h) position = track_h;
+
+    int target = (position * max_base + track_h / 2) / track_h;
+    set_scroll_base(target);
+}
+
 void register_scroll_wheel(int delta)
 {
     if (!need_duopage || delta == 0) return;

@@ -344,6 +344,7 @@ typedef struct
 #define XAPI_PUT_VERTICAL_SCROLL_BAR   7467
 #define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7468
 #define XAPI_DELETE_SCROLL_BAR         7469
+#define XAPI_SET_SCROLL_BAR_POSITION   7470
 
 #define XWIN_NORMAL             0
 #define XWIN_FRAME_OFF          1

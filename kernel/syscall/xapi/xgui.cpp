@@ -1035,6 +1035,16 @@ void do_xapi_DeleteScrollBar(uint64_t handle, uint64_t CRLid)
     unregister_scroll_bar_components(sheet, CRLid);
 }
 
+void do_xapi_SetScrollBarPosition(uint64_t handle, uint64_t CRLid, uint64_t position)
+{
+    WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);
+    if (WindowHandle == NULL) return;
+
+    SHEET *sheet = xapi_get_window_sheet(WindowHandle);
+    if (sheet == NULL) return;
+    set_scroll_bar_position_components(sheet, (int)CRLid, (int)position);
+}
+
 uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text)
 {
     WINDOW_HANDLE *WindowHandle = xapi_get_window_handle(handle);

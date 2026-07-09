@@ -31,7 +31,7 @@ void fmanager_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
         yicixing_lock = true;
         break;
     case MSG_CRL:
-        process_crl(hData);
+        process_crl(hData, lData);
         break;
     case MSG_SPCHAR:
         if ((char)(lData) == '\n') { fm_finish_inline_rename(); }
@@ -675,7 +675,7 @@ void fm_show_properties()
     need_paint = true;
 }
 
-void process_crl(int CRLid)
+void process_crl(int CRLid, UINT64 data)
 {
     if (CRLid == FM_CMD_NEW_FOLDER) fm_new_folder();
     else if (CRLid == FM_CMD_RENAME) fm_rename_selected();
@@ -700,6 +700,7 @@ void process_crl(int CRLid)
     else if (CRLid == FM_CMD_CUT) fm_copy_selected(true);
     else if (CRLid == FM_CMD_PASTE) fm_paste_clipboard();
     else if (CRLid == FM_CMD_PROPERTIES) fm_show_properties();
+    else if (CRLid == FM_CMD_SCROLLBAR) register_scrollbar_position((int)data);
 }
 
 void fm_finish_inline_rename()

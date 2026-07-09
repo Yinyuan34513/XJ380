@@ -316,6 +316,14 @@ extern "C" void xapi_DeleteScrollBar(
 	enter_syscall(XAPI_DELETE_SCROLL_BAR, handle, CRLid, 0, 0, 0, 0);
 }
 
+extern "C" void xapi_SetScrollBarPosition(
+	HDLE  	handle,
+	UINT64  CRLid,
+	UINT64  position
+) {
+	enter_syscall(XAPI_SET_SCROLL_BAR_POSITION, handle, CRLid, position, 0, 0, 0);
+}
+
 extern "C" UINT64 xapi_PutTextInputBox(
 	HDLE    handle,
 	UINT64  x,

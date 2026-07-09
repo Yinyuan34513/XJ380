@@ -372,6 +372,12 @@ void xapi_DeleteScrollBar(
 	UINT64  CRLid
 );
 
+void xapi_SetScrollBarPosition(
+	HDLE  	handle,
+	UINT64  CRLid,
+	UINT64  position
+);
+
 UINT64 xapi_PutTextInputBox(
 	HDLE    handle,
 	UINT64  x,

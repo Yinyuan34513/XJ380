@@ -1042,6 +1042,13 @@ void process_mouse_button()
     {
         // 左键按下
         process_left_button_down(tbx, tby);
+
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (current_window != NULL && current_window->w_sheet != NULL)
+        {
+            process_scroll_bar_mouse_down_event(current_window->w_sheet, tbx - current_window->w_sheet->bx,
+                                                tby - current_window->w_sheet->by);
+        }
     }
     if ((pending_up & 0x01) && ms_dec.left)
     {
@@ -1176,6 +1183,7 @@ void process_mouse_button()
         ms_dec.left_release_pending = !was_resizing && !window_release_consumed;
 
         ms_dec.left          = false;
+        process_scroll_bar_mouse_up_event();
         ms_dec.win_move_lock = false;
         ms_dec.win_resize_lock = false;
         ms_dec.win_move_dragged = false;
@@ -1290,6 +1298,11 @@ void process_mouse_button()
                                           getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
         update_hover_resize_cursor();
         flush_mouse_cursor_frame_if_due(sht_img);
+    }
+
+    if (mouse_moved && ms_dec.left)
+    {
+        process_scroll_bar_drag_event(tbx, tby);
     }
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);

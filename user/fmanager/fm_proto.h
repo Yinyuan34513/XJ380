@@ -48,6 +48,7 @@ enum FmCommandId
     FM_CMD_CUT = 5,
     FM_CMD_PASTE = 6,
     FM_CMD_PROPERTIES = 7,
+    FM_CMD_SCROLLBAR = 1000,
 };
 
 void paint_fm_back();
@@ -60,7 +61,7 @@ bool fm_handle_sidebar_click(int x, int y);
 void cat_path(char *folder_name);
 void revert_path(char *path);
 void record_current_path();
-void process_crl(int CRLid);
+void process_crl(int CRLid, UINT64 data);
 void fm_finish_inline_rename();
 void fm_show_error(const char *title, const char *detail);
 void fm_show_info(const char *title, const char *detail);
@@ -84,4 +85,5 @@ bool fm_scrollbar_rect(int *x1, int *y1, int *x2, int *y2);
 bool fm_scrollbar_thumb_rect(int *x1, int *y1, int *x2, int *y2);
 bool fm_get_selected_file(DirNode *node);
 void register_scrollbar_click(int x, int y);
+void register_scrollbar_position(int position);
 void register_scroll_wheel(int delta);
