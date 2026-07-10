@@ -235,6 +235,7 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
 {
     page_directory_t *pagedir = xapi_current_pagedir();
     if (pagedir == NULL || handle == 0 || xwin == 0) return false;
+    if (!user_range_mapped(pagedir, (void *)handle, sizeof(uint64_t))) return false;
 
     XWINDOW window_info;
     memset(&window_info, 0, sizeof(window_info));
@@ -250,8 +251,7 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
         if (winRD_lock) { break; }
         scheduler_yield();
     }
-    *(uint64_t *)(handle)       = (uint64_t)(malloc(sizeof(WINDOW_HANDLE))); // HDLE
-    WINDOW_HANDLE *WindowHandle = *(WINDOW_HANDLE **)(handle);
+    WINDOW_HANDLE *WindowHandle = (WINDOW_HANDLE *)malloc(sizeof(WINDOW_HANDLE));
     if (WindowHandle == NULL)
     {
         free(title);
@@ -289,7 +289,6 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     else
     {
         free(WindowHandle);
-        *(uint64_t *)(handle) = 0;
         free(title);
         return false;
     }
@@ -297,7 +296,6 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     if (!created || WindowHandle->WindowNodePtr == NULL)
     {
         free(WindowHandle);
-        *(uint64_t *)(handle) = 0;
         free(title);
         return false;
     }
@@ -306,6 +304,15 @@ int do_xapi_CreateWindow(uint64_t handle, uint64_t xwin)
     {
         set_window_maximize_support(xwmii, sht_img, WindowHandle->WindowNodePtr,
                                     (window_info.sets & XWIN_SUPPORT_RESIZEABLE) != 0);
+    }
+
+    uint64_t user_handle = (uint64_t)WindowHandle;
+    if (!copy_to_user_pagedir(pagedir, (void *)handle, &user_handle, sizeof(user_handle)))
+    {
+        delete_window(xwmii, sht_img, WindowHandle->WindowNodePtr);
+        free(WindowHandle);
+        free(title);
+        return false;
     }
 
     free(title);
