@@ -979,22 +979,27 @@ static int sheet_damage_queue_take_frame_locked(SHEET_INFO *sht, SheetDamageRect
     return count;
 }
 
-static void sheet_present_frame_rects(SHEET_INFO *sht, SheetDamageRect *rects, int count)
+static bool sheet_damage_frame_union(SheetDamageRect *rects, int count, SheetDamageRect *frame)
 {
-    if (sht == NULL || rects == NULL || count <= 0) return;
+    if (rects == NULL || count <= 0 || frame == NULL) return false;
 
-    SheetDamageRect present = rects[0];
+    *frame = rects[0];
     for (int i = 1; i < count; ++i)
     {
-        sheet_damage_rect_union_into(&present, &rects[i]);
+        sheet_damage_rect_union_into(frame, &rects[i]);
     }
-    if (sheet_damage_rect_empty(&present)) return;
+    return !sheet_damage_rect_empty(frame);
+}
+
+static void sheet_present_frame(SHEET_INFO *sht, const SheetDamageRect *frame)
+{
+    if (sht == NULL || sheet_damage_rect_empty(frame)) return;
 
     if (fbdev_ready()) {
-        fbdev_present_kernel_region((uint32_t)present.x1, (uint32_t)present.y1,
-                                    (uint32_t)present.x2, (uint32_t)present.y2);
+        fbdev_present_kernel_region((uint32_t)frame->x1, (uint32_t)frame->y1,
+                                    (uint32_t)frame->x2, (uint32_t)frame->y2);
     }
-    serial_redraw_screen_overlay_part(present.x1, present.y1, present.x2, present.y2);
+    serial_redraw_screen_overlay_part(frame->x1, frame->y1, frame->x2, frame->y2);
 }
 
 static void flush_sheet_damage_queue_frame(SHEET_INFO *sht, bool force)
@@ -1016,12 +1021,12 @@ static void flush_sheet_damage_queue_frame(SHEET_INFO *sht, bool force)
         sheet_damage_queue_take_frame_locked(sht, frame_rects, SHEET_DAMAGE_QUEUE_CAPACITY);
     spin_unlock(&g_sheet_damage_lock);
 
-    for (int i = 0; i < frame_rect_count; ++i)
+    SheetDamageRect frame;
+    if (sheet_damage_frame_union(frame_rects, frame_rect_count, &frame))
     {
-        refresh_part_sheet_compose(sht, frame_rects[i].x1, frame_rects[i].y1,
-                                   frame_rects[i].x2, frame_rects[i].y2);
+        refresh_part_sheet_compose(sht, frame.x1, frame.y1, frame.x2, frame.y2);
+        sheet_present_frame(sht, &frame);
     }
-    sheet_present_frame_rects(sht, frame_rects, frame_rect_count);
     sheet_flush_end();
 }
 
