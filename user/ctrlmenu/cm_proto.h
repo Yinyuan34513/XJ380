@@ -48,13 +48,18 @@ void draw_app_showcase();
 void draw_setting();
 bool ctrlmenu_handle_mainpage_click(int x, int y);
 bool ctrlmenu_handle_app_showcase_click(int x, int y);
+void ctrlmenu_settings_init();
+void ctrlmenu_settings_hide_controls();
+bool ctrlmenu_settings_handle_click(int x, int y);
+bool ctrlmenu_settings_handle_control(UINT64 id, UINT64 data);
+void ctrlmenu_settings_scroll(int delta);
 void create_input_box(char *buf);
 void delete_input_box(bool save);
 
-void draw_setting_apps();
 void change_setting_apps(int id);
 
 void change_setting_background();
+void set_background_file_path(const char *path);
 
 int read_settings_time_offset();
 void change_clock_hour_offset(int value);

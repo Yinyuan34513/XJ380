@@ -59,81 +59,6 @@ void init_ctrlmenu_background_cache()
     ctrlmenu_background_height = win_height;
 }
 
-static int ctrlmenu_read_text_file(const char *path, char *buffer, size_t size)
-{
-    if (path == NULL || buffer == NULL || size == 0) return -1;
-
-    int fd = (int)enter_syscall(SYS_OPEN, (uint64_t)path, 0, 0, 0, 0, 0);
-    if (fd < 0) return -1;
-
-    int got = read(fd, buffer, size - 1);
-    close(fd);
-    if (got < 0) return -1;
-
-    buffer[got] = '\0';
-    return got;
-}
-
-static void ctrlmenu_draw_network_status()
-{
-    static char nm_status_path[] = "/run/NetworkManager/status";
-    char        status_text[512];
-    memset(status_text, 0, sizeof(status_text));
-
-    xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "NetworkManager", 16, 0xffffffff);
-    xapi_DrawText(handle, win_width / 10 * 3 + 24, 156, "/run/NetworkManager/status", 11, 0xffc8f7ff);
-
-    int got = ctrlmenu_read_text_file(nm_status_path, status_text, sizeof(status_text));
-    if (got <= 0)
-    {
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 196, "网络运行态不可用。", 11, 0xffffffff);
-        return;
-    }
-
-    int   y          = 196;
-    char *cursor     = status_text;
-    char  line[160];
-    while (*cursor != '\0' && y < (int)win_height - 24)
-    {
-        size_t len = 0;
-        while (cursor[len] != '\0' && cursor[len] != '\n' && len + 1 < sizeof(line))
-        {
-            line[len] = cursor[len];
-            len++;
-        }
-        line[len] = '\0';
-
-        if (cursor[len] == '\n') cursor += len + 1;
-        else cursor += len;
-
-        if (line[0] == '\0') continue;
-
-        uint32_t color = 0xffffffff;
-        char     draw_line[160];
-        memset(draw_line, 0, sizeof(draw_line));
-
-        if (line[0] == '[')
-        {
-            color = 0x00a2e8ff;
-            size_t line_len = strlen(line);
-            if (line_len >= 2 && line[line_len - 1] == ']')
-            {
-                strncpy(draw_line, line + 1, MIN(line_len - 2, sizeof(draw_line) - 1));
-            }
-            else
-            {
-                strncpy(draw_line, line, sizeof(draw_line) - 1);
-            }
-        }
-        else
-        {
-            strncpy(draw_line, line, sizeof(draw_line) - 1);
-        }
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, y, draw_line, 11, color);
-        y += 24;
-    }
-}
 
 static const UINT32 CTRLMENU_BLUE        = 0x00a2e8ff;
 static const UINT32 CTRLMENU_PANEL       = 0x12324af2;
@@ -578,162 +503,7 @@ bool ctrlmenu_handle_app_showcase_click(int x, int y)
 
 int setting_cindex = 1;
 
-void draw_setting()
-{
-    xapi_DrawRect(handle, win_width / 10 * 3 + 8, 128, win_width / 10 * 3 + 12, win_height - 8, 0x00a2e8ff, true);
-
-    xapi_DrawRect(handle, 8, 128, win_width / 10 * 3, 158, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 128, "系统", 16, 0xffffffff);
-
-    xapi_DrawRect(handle, 8, 166, win_width / 10 * 3, 196, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 166, "网络", 16, 0xffffffff);
-
-    xapi_DrawRect(handle, 8, 204, win_width / 10 * 3, 234, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 204, "外观", 16, 0xffffffff);
-
-    xapi_DrawRect(handle, 8, 242, win_width / 10 * 3, 272, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 242, "应用", 16, 0xffffffff);
-
-    xapi_DrawRect(handle, 8, 280, win_width / 10 * 3, 310, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 280, "时间与位置", 16, 0xffffffff);
-
-    xapi_DrawRect(handle, 8, 318, win_width / 10 * 3, 348, 0x00a2e8ff, true);
-    xapi_DrawText(handle, 16, 318, "设备", 16, 0xffffffff);
-
-    if (setting_cindex == 1)
-    {
-        xapi_DrawRect(handle, win_width / 10 * 3, 128, win_width / 10 * 3 + 8, 158, 0x00a2e8ff, true);
-
-        char system_version[64];
-        xapi_GetSystemVersion(system_version);
-        char cpu_model[64];
-        xapi_GetCpuModel(cpu_model);
-        uint64_t memory_kib = xapi_GetMemorySize();
-        char memory_size[64];
-        memset(memory_size, 0, sizeof(memory_size));
-        if (about_memory_show_mb)
-        {
-            strcat(memory_size, xcr_int2char(memory_kib / 1024));
-            strcat(memory_size, " MB");
-        }
-        else
-        {
-            strcat(memory_size, xcr_int2char(memory_kib / 1024 / 1024));
-            strcat(memory_size, " GB");
-        }
-        char fenbianlv[64];
-        memset(fenbianlv, 0, sizeof(fenbianlv));
-        strcat(fenbianlv, xcr_int2char(win_width));
-        strcat(fenbianlv, "x");
-        strcat(fenbianlv, xcr_int2char(win_height));
-
-        xapi_DrawPicture(handle, win_width / 10 * 3 + 8, 129, 302, 170, "/system/xj380_2.png");
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 128, "XJ380 操作系统", 16, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 158, OS_VERSION, 11, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 218, "处理器", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 218, cpu_model, 11, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 248, "运行内存", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 248, memory_size, 11, 0xffc8f7ff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 278, "内核版本", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 278, KN_VERSION, 11, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 308, "系统版本", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 308, system_version, 11, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 338, "系统类型", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 338, "x64 操作系统，基于 x86_64 处理器", 11, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 302, 368, "分辨率", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 402, 368, fenbianlv, 11, 0xffffffff);
-    }
-    else if (setting_cindex == 2)
-    {
-        xapi_DrawRect(handle, win_width / 10 * 3, 166, win_width / 10 * 3 + 8, 196, 0x00a2e8ff, true);
-        ctrlmenu_draw_network_status();
-    }
-    else if (setting_cindex == 3)
-    {
-        xapi_DrawRect(handle, win_width / 10 * 3, 204, win_width / 10 * 3 + 8, 234, 0x00a2e8ff, true);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "外观", 16, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, "壁纸", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 124, 168, get_background_file_path(), 11, 0xffffffff);
-        xapi_Button(handle, 3000, win_width - 100, 168, "更改");
-    }
-    else if (setting_cindex == 4)
-    {
-        xapi_DrawRect(handle, win_width / 10 * 3, 242, win_width / 10 * 3 + 8, 272, 0x00a2e8ff, true);
-        draw_setting_apps();
-    }
-    else if (setting_cindex == 5)
-    {
-        xapi_DrawRect(handle, win_width / 10 * 3, 280, win_width / 10 * 3 + 8, 310, 0x00a2e8ff, true);
-        
-        char current_time_title[256];
-        TimeType tm;
-        xapi_GetTimeX(&tm);
-        sprintf(current_time_title, "当前时间：%d 年 %d 月 %d 日 %02u : %02u", tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min);
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, current_time_title, 16, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 158, "当前偏移：", 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 85, 158, xcr_int2char(read_settings_time_offset()), 11, 0xffffffff);
-        xapi_Button(handle, 2001, win_width / 10 * 3 + 400, 132, "调整 (+1)");
-        xapi_Button(handle, 2002, win_width / 10 * 3 + 490, 132, "调整 (-1)");
-    }
-    else if (setting_cindex == 6)
-    {
-        xapi_DrawRect(handle, win_width / 10 * 3, 318, win_width / 10 * 3 + 8, 348, 0x00a2e8ff, true);
-
-        // 长度：win_width / 10 * 3 + 20 ~ win_width / 3
-        // xapi_DrawRect(handle,   win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 0, 128, 
-        //                         win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 1 - 8, 234, 
-        //                         0x00a2e8ff, true);
-        // xapi_DrawRect(handle,   win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 1, 128, 
-        //                         win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 2 - 8, 234, 
-        //                         0x00a2e8ff, true);
-        // xapi_DrawRect(handle,   win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 2, 128, 
-        //                         win_width / 10 * 3 + 20 + ((win_width - (win_width / 10 * 3 + 20)) / 3) * 3 - 8, 234, 
-        //                         0x00a2e8ff, true);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "鼠标", 16, 0xffffffff);
-
-        xapi_DrawText(handle, win_width / 10 * 3 + 24, 168, "滚轮反转", 11, 0xffffffff);
-        xapi_PutSwitch(handle, win_width - 100, 168, 0, 4000);
-    }
-}
-
 char setting_apps_change_char_buffer[256];
-
-void draw_setting_apps()
-{
-    UserInfo usif;
-    xapi_GetCurrentUser(&usif);
-    char runfile_path[256];
-    memset((void *)runfile_path, 0, 256);
-    strcat(runfile_path, "/users/");
-    strcat(runfile_path, usif.name);
-    strcat(runfile_path, "/runfile.dat");
-    XFILE *f = xapi_OpenFile(runfile_path);
-    if (!f) return;
-    RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
-    xapi_DrawText(handle, win_width / 10 * 3 + 24, 128, "默认应用", 16, 0xffffffff);
-
-    for (int i = 0; rff->items[i].exname[0] != '\0'; i++)
-    {
-        char temp_exname[11] = ".";
-        strcat(temp_exname, rff->items[i].exname);
-        xapi_DrawText(handle, win_width / 10 * 3 + 24 , 168 + i * 32, temp_exname, 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 124, 168 + i * 32, rff->items[i].describe, 11, 0xffffffff);
-        xapi_DrawText(handle, win_width / 10 * 3 + 274, 168 + i * 32, rff->items[i].runpath, 11, 0xffffffff);
-        xapi_Button(handle, i, win_width - 100, 168 + i * 32, "更改");
-    }
-
-    xapi_CloseFile(f);
-}
 
 char *charbox_buf = NULL;
 int charbox_input_complete = 0;
@@ -850,6 +620,25 @@ void change_clock_hour_offset(int value)
 }
 
 char background_file_path[256];
+
+void set_background_file_path(const char *path)
+{
+    if (path == NULL) return;
+
+    UserInfo usif;
+    xapi_GetCurrentUser(&usif);
+    char settings_path[256];
+    memset(settings_path, 0, sizeof(settings_path));
+    snprintf(settings_path, sizeof(settings_path), "/users/%s/settings.dat", usif.name);
+    XFILE *file = xapi_OpenFile(settings_path);
+    if (file == NULL) return;
+
+    SettingsDataFileFormat *settings = (SettingsDataFileFormat *)file->buffer;
+    strncpy(settings->BackgroundFilePath, path, sizeof(settings->BackgroundFilePath) - 1);
+    settings->BackgroundFilePath[sizeof(settings->BackgroundFilePath) - 1] = '\0';
+    xapi_CloseFile(file);
+    draw_background_body();
+}
 
 char *get_background_file_path()
 {

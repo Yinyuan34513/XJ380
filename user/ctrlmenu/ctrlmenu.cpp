@@ -16,8 +16,12 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         process_left_key(hData, lData);
         break;
+    case MSG_ROLLER:
+        ctrlmenu_settings_scroll((int)hData);
+        break;
     case MSG_CRL:
-        if (hData <= 1999) { change_setting_apps(hData); } // cm_graph.cpp:145
+        if (cindex == 3 && ctrlmenu_settings_handle_control(hData, lData)) break;
+        if (hData <= 1999) { change_setting_apps(hData); }
         else if (hData == 2001) { change_clock_hour_offset(+1); }
         else if (hData == 2002) { change_clock_hour_offset(23); }
         else if (hData == 3000) { change_setting_background(); }
@@ -56,6 +60,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
     xapi_CreateWindow(&handle, &Winfo);
     xapi_GetWindowSize(handle, &win_width, &win_height);
     init_ctrlmenu_background_cache();
+    ctrlmenu_settings_init();
     SetMsgPrcor(handle, ctrlmenu_MessagePrcor);
 
     draw_background();

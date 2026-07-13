@@ -1,0 +1,64 @@
+# XJ380 控制中心页面配置（UTF-8，字段用 | 分隔）
+# page|页面标识|侧栏标题
+# h1/h2/h3|标题；text|正文；value|左侧文字|右侧值
+# button|文字|值|按钮文字|action
+# input|文字|值|按钮文字|action
+# switch|文字|说明|状态值|action
+# divider；space|像素；dynamic|default_apps 或 network_status
+# 以 @ 开头的值由 ctrlmenu 的动态值注册表提供。
+
+page|system|系统
+h1|系统
+text|查看 XJ380、硬件和当前显示环境的基本信息。
+h2|系统信息
+value|产品|XJ380 操作系统
+value|发行版本|@os_version
+value|系统版本|@system_version
+value|内核版本|@kernel_version
+h2|设备规格
+value|处理器|@cpu
+value|运行内存|@memory
+value|系统类型|x64 操作系统，基于 x86_64 处理器
+h3|显示
+value|当前分辨率|@resolution
+switch|以 MB 显示内存|关闭时以 GB 显示|@memory_mb|toggle_memory_unit
+
+page|network|网络
+h1|网络
+text|查看 NetworkManager 当前导出的连接状态。
+h2|运行状态
+value|状态文件|/run/NetworkManager/status
+dynamic|network_status
+
+page|appearance|外观
+h1|外观
+text|调整桌面和控制中心的显示方式。
+h2|桌面背景
+h3|壁纸文件
+input|文件路径|@background|更改|edit_background
+text|输入系统内可读取的图片绝对路径，确认后桌面会使用新壁纸。
+
+page|apps|应用
+h1|应用
+text|为不同文件扩展名选择默认打开程序。
+h2|默认应用
+dynamic|default_apps
+
+page|time|时间与位置
+h1|时间与位置
+text|查看当前时间并调整本地时区偏移。
+h2|当前时间
+value|本地时间|@current_time
+h3|时区偏移
+button|向东调整一小时|@timezone|+1 小时|timezone_plus
+button|向西调整一小时|@timezone|-1 小时|timezone_minus
+
+page|device|设备
+h1|设备
+text|管理输入设备及其他硬件相关选项。
+h2|鼠标
+h3|滚轮
+switch|控制中心滚轮反转|反转本次控制中心会话的页面滚动方向|@wheel_reverse|toggle_wheel_reverse
+divider
+h2|配置能力示例
+text|页面支持一级、二级、三级标题、正文、键值、右侧按钮、右侧输入框、开关、分隔线和动态列表。

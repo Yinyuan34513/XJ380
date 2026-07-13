@@ -546,7 +546,12 @@ def user_apps(n: Ninja, core_objs: list[Path], start_obj: Path, constart_obj: Pa
     login_sources = ["login/login.cpp"]
     dock_sources = ["dock/dock.cpp"]
     desktop_sources = ["desktop/desktop.cpp"]
-    ctrlmenu_sources = ["ctrlmenu/ctrlmenu.cpp", "ctrlmenu/cm_graph.cpp", "ctrlmenu/cm_processp.cpp"]
+    ctrlmenu_sources = [
+        "ctrlmenu/ctrlmenu.cpp",
+        "ctrlmenu/cm_graph.cpp",
+        "ctrlmenu/cm_processp.cpp",
+        "ctrlmenu/cm_settings.cpp",
+    ]
     installer_sources = ["installer/installer.cpp", "installer/installer_hidden.cpp"]
 
     n.comment("USER APPS: desktop shell, login, dock, desktop, file manager, control menu")
