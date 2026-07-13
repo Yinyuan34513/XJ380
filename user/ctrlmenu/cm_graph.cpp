@@ -66,7 +66,7 @@ static const UINT32 CTRLMENU_PANEL_SOFT  = 0x1d4c69ee;
 static const UINT32 CTRLMENU_CARD        = 0x173c58e8;
 static const UINT32 CTRLMENU_CARD_ACTIVE = 0x00a2e8ff;
 static const UINT32 CTRLMENU_WHITE       = 0xffffffff;
-static const UINT32 CTRLMENU_TEXT_DIM    = 0xffc8f7ff;
+static const UINT32 CTRLMENU_TEXT_DIM    = 0xc8f7ffff;
 static const UINT32 CTRLMENU_TEXT_MUTED  = 0xb8d8e8ff;
 
 enum CtrlmenuAppCategory

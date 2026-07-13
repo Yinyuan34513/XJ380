@@ -398,7 +398,7 @@ static void cm_draw_default_apps(int y)
         memcpy(extension + 1, settings->items[i].exname, sizeof(settings->items[i].exname));
         extension[sizeof(settings->items[i].exname) + 1] = '\0';
         xapi_DrawText(handle, cm_content_left() + 14, row_y + 7, extension, 11, 0xffffffff);
-        xapi_DrawText(handle, cm_content_left() + 112, row_y + 7, settings->items[i].describe, 11, 0xffc8f7ff);
+        xapi_DrawText(handle, cm_content_left() + 112, row_y + 7, settings->items[i].describe, 11, 0xc8f7ffff);
         xapi_DrawText(handle, cm_content_left() + 14, row_y + 28, settings->items[i].runpath, 9, 0xb8d8e8ff);
         UINT64 id = CM_APP_BUTTON_BASE + i;
         xapi_Button(handle, id, cm_content_right() - 82, row_y + 11, "更改");
@@ -481,13 +481,13 @@ static void cm_draw_item(CmSettingItem *item, int item_index, int y, int height)
     case CM_ITEM_VALUE:
         cm_draw_card(y, height);
         xapi_DrawText(handle, left + 14, y + 12, item->fields[0], 11, 0xffffffff);
-        xapi_DrawText(handle, left + 220, y + 12, value, 11, 0xffc8f7ff);
+        xapi_DrawText(handle, left + 220, y + 12, value, 11, 0xc8f7ffff);
         break;
     case CM_ITEM_BUTTON:
     {
         cm_draw_card(y, height);
         xapi_DrawText(handle, left + 14, y + 9, item->fields[0], 11, 0xffffffff);
-        xapi_DrawText(handle, left + 220, y + 9, value, 11, 0xffc8f7ff);
+        xapi_DrawText(handle, left + 220, y + 9, value, 11, 0xc8f7ffff);
         UINT64 id = CM_ITEM_BUTTON_BASE + item_index;
         xapi_Button(handle, id, right - 96, y + 14, item->fields[2]);
         cm_remember_control(id, 0);
