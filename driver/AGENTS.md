@@ -1,7 +1,7 @@
 # DRIVER KNOWLEDGE BASE
 
 ## OVERVIEW
-Built-in driver subtree. Objects under `driver/` are linked into `kernel.elf`, unlike loadable modules in `kmod/`.
+Built-in driver subtree. Objects under `driver/` are linked into `kernel.krl`, unlike loadable modules in `kmod/`.
 
 ## STRUCTURE
 ```
@@ -26,7 +26,7 @@ driver/
 
 ## CONVENTIONS
 - Use `driver/` only for drivers that must be available in the core kernel image.
-- If a device driver is intended to be loadable and optional, put it in `kmod/` and follow `.km`/`dlmain` rules.
+- If a device driver is intended to be loadable and optional, put it in `kmod/` and follow `.sys`/`dlmain` rules.
 - Driver initialization order is mostly controlled by `kernel/main.cpp`; storage and VFS setup are boot-critical.
 - Shared public driver ABI lives in `include/`; keep headers minimal and freestanding.
 - Serial logging is the primary early-debug surface; preserve useful boot messages around risky init stages.
@@ -37,4 +37,4 @@ driver/
 - Do not silently change device registration names or node paths; user apps and VFS may depend on them.
 
 ## VERIFY
-`make all -j"$(nproc)"`; hardware-visible changes need QEMU boot and `serial.log`. Storage changes should also build `make vdisk`.
+`python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja all`; hardware-visible changes need QEMU boot and `serial.log`. Storage changes should also build `ninja -f build.ninja vdisk`.

@@ -37,7 +37,7 @@ void unmap_virtual_page(pcb_t process, uint64_t vaddr, size_t length);
  * @param page_flags 页标志
  * @param flags 分配信息标志
  */
-void lazy_infoalloc(pcb_t process, uint64_t vaddr, size_t length, uint64_t page_flags,
+bool lazy_infoalloc(pcb_t process, uint64_t vaddr, size_t length, uint64_t page_flags,
                     uint64_t flags);
 
 /**

@@ -40,7 +40,19 @@ struct FoxLandPeek
     SHEET_BUFFER    *fl_peek_buffer;
     uint8_t         *peek_sign;
     uint16_t        *opaque_layer;
+    bool             enabled;
 };
+
+typedef struct
+{
+    uint64_t queued_rects;
+    uint64_t merged_rects;
+    uint64_t flushed_rects;
+    uint64_t flushed_pixels;
+    uint64_t last_flush_ns;
+    uint64_t max_flush_ns;
+    uint8_t  max_queue_depth;
+} SheetDamageStats;
 
 typedef struct SHEET *SHEETP;
 
@@ -85,7 +97,7 @@ struct TASK_DOCK_BLOCK
 
 
 void      init_sheet(const FrameBufferConfig &fbc, SHEET_INFO *sht);
-void      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
+bool      create_sheet(SHEET_INFO *sht, uint32_t bx, uint32_t by, uint32_t x, uint32_t y, uint32_t type, int16_t index,
                        SHEET **csheet);
 uint32_t  getBX(SHEET_INFO *sht, SHEET *csheet);
 uint32_t  getBY(SHEET_INFO *sht, SHEET *csheet);
@@ -96,6 +108,9 @@ SHEET    *found_sheetmb(SHEET_INFO *sht, uint32_t x, uint32_t y);
 SHEET    *found_sheet_movable(SHEET_INFO *sht, uint32_t x, uint32_t y);
 void      change_sheet_type(SHEET_INFO *sht, SHEET *csheet, uint32_t new_type);
 SHEET    *get_sheet(SHEET_INFO *sht, SHEET *csheet);
+bool      sheet_contains(SHEET_INFO *sht, SHEET *csheet);
+void      lock_sheet_manager();
+void      unlock_sheet_manager();
 void      setBX(SHEET_INFO *sht, SHEET *csheet, uint32_t num);
 void      setBY(SHEET_INFO *sht, SHEET *csheet, uint32_t num);
 void      lift_sheet(SHEET_INFO *sht, SHEET *csheet);
@@ -103,6 +118,8 @@ void      delete_sheet(SHEET_INFO *sht, SHEET *csheet);
 void      refresh_sheet(SHEET_INFO *sht);
 void      refresh_part_sheet(SHEET_INFO *sht, int bex1, int bey1, int bex2, int bey2);
 void      flush_sheet_damage_queue(SHEET_INFO *sht);
+void      flush_sheet_damage_queue_now(SHEET_INFO *sht);
+void      get_sheet_damage_stats(SheetDamageStats *stats);
 uint32_t  get_hor();
 uint32_t  get_ver();
 void     *get_sheet_buffer(SHEET_INFO *sht, SHEET *csheet);
@@ -122,10 +139,10 @@ void draw_point(SHEET_INFO *sht, SHEET *csheet, int x, int y, const SHEET_BUFFER
 void draw_rect(SHEET_INFO *sht, SHEET *csheet, int x1, int y1, int x2, int y2, const SHEET_BUFFER &color);
 void draw_line(SHEET_INFO *sht, SHEET *csheet, int x0, int y0, int x1, int y1, const SHEET_BUFFER &color);
 
-// graphics/desktop.cpp
-void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet);
 void init_dock(SHEET_INFO *sht, SHEET *csheet);
 void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet);
+void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet);
+void process_desktop_find_block(int x, int y);
 void draw_logo(SHEET_INFO *sht, SHEET *csheet, int xi, int yi);
 void draw_studio_logo(SHEET_INFO *sht, SHEET *csheet, int xi, int yi);
 
@@ -141,7 +158,8 @@ void draw_app_message_box(char *title, char *text);
 
 void draw_logo_menu();
 void delete_logo_menu();
-
-void process_desktop_find_block(int x, int y);
+void toast_manager_mark_process_exit(pcb_t process);
+void toast_manager_flush();
+bool toast_manager_handle_mouse_click(int x, int y);
 
 #endif

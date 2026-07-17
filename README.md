@@ -16,12 +16,20 @@ XINGJI 工作室 A 级机密 | 保密编号 XSEC202212011-11-A
 
 ```bash
 sudo apt update -y
-sudo apt install make -y
+sudo apt install ninja-build -y
 sudo apt install clang -y
 sudo apt install g++ -y
 sudo apt install gcc-mingw-w64-x86-64 -y
 sudo apt install mtools dosfstools -y
 sudo apt install qemu-system -y
+```
+
+## 编译
+
+```bash
+python3 tools/gen_ninja.py --out build.ninja
+ninja -f build.ninja check.tools
+ninja -f build.ninja all
 ```
 
 ## 更新版本信息

@@ -276,7 +276,6 @@ stage.xj380: stardustui.examples.copy stage.xbps-caches
 	@cp -a ./resources/image "$(VDISK_ROOT)/system/resources/image"
 	@cp -a ./resources/svg "$(VDISK_ROOT)/system/resources/svg"
 	@cp -a ./resources/weston "$(VDISK_ROOT)/system/resources/weston"
-	@cp -a ./resources/start-wayland.sh "$(VDISK_ROOT)/system/resources/start-wayland.sh"
 	@cp -a ./resources/weston/weston.ini "$(VDISK_ROOT)/etc/xdg/weston/weston.ini"
 	@cp -a ./resources/weston/start-weston.sh "$(VDISK_ROOT)/system/resources/start-wayland.sh"
 	@cp -a ./user/fmanager/fm_bg.png "$(VDISK_ROOT)/system/resources/image/fm_bg.png"

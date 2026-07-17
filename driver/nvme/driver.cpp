@@ -1,6 +1,7 @@
 #include <device.h>
 #include <proto.hpp>
 #include <nvme/nvme.h>
+#include <ioctl.h>
 
 #define NVME_CSTS_FATAL (1U << 1)
 #define NVME_CSTS_RDY (1U << 0)
@@ -292,6 +293,13 @@ size_t nvme_write(int data, void *buffer, uint64_t bytes,uint64_t lba)
     return ret;
 }
 
+static int nvme_ioctl(device_t *device, size_t req, void *arg)
+{
+    (void)device;
+    (void)arg;
+    return req == IOBLKSYNC ? 0 : -1;
+}
+
 NVME_CONTROLLER *nvme_driver_init(uint64_t bar0, uint64_t bar_size)
 {
     NVME_CAPABILITY *cap = (NVME_CAPABILITY *)phys_to_virt(bar0);
@@ -535,7 +543,7 @@ NVME_CONTROLLER *nvme_driver_init(uint64_t bar0, uint64_t bar_size)
     sata.read = (readf)nvme_read;
     sata.write = (writef)nvme_write;
     sata.flag = 1;
-    sata.ioctl = (ioctlf)empty;
+    sata.ioctl = nvme_ioctl;
     sata.poll = (pollf)empty;
     sata.map = (mapf)empty;
     sata.read_vbuf = NULL;

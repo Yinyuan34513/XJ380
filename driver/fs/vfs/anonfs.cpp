@@ -20,6 +20,8 @@ static vfs_node_t anonfs_root         = NULL;
 static spin_t     anonfs_alloc_lock   = SPIN_INIT;
 static spin_t     anonfs_inotify_global_lock = SPIN_INIT;
 static anonfs_handle_t *anonfs_inotify_handles[64];
+static spin_t     anonfs_timerfd_global_lock = SPIN_INIT;
+static anonfs_handle_t *anonfs_timerfd_handles[256];
 
 static constexpr size_t ANONFS_PATH_MAX = 4096UL;
 
@@ -126,6 +128,60 @@ static bool anonfs_timerfd_refresh(anonfs_handle_t *handle)
     spin_unlock(&timer->lock);
     if (old_pending == 0 && ready) poll_notify_event();
     return ready;
+}
+
+static void anonfs_timerfd_register(anonfs_handle_t *handle)
+{
+    if (handle == NULL) return;
+
+    spin_lock(&anonfs_timerfd_global_lock);
+    for (size_t i = 0; i < sizeof(anonfs_timerfd_handles) / sizeof(anonfs_timerfd_handles[0]); i++)
+    {
+        if (anonfs_timerfd_handles[i] == handle)
+        {
+            spin_unlock(&anonfs_timerfd_global_lock);
+            return;
+        }
+        if (anonfs_timerfd_handles[i] == NULL)
+        {
+            anonfs_timerfd_handles[i] = handle;
+            spin_unlock(&anonfs_timerfd_global_lock);
+            return;
+        }
+    }
+    spin_unlock(&anonfs_timerfd_global_lock);
+}
+
+static void anonfs_timerfd_unregister(anonfs_handle_t *handle)
+{
+    if (handle == NULL) return;
+
+    spin_lock(&anonfs_timerfd_global_lock);
+    for (size_t i = 0; i < sizeof(anonfs_timerfd_handles) / sizeof(anonfs_timerfd_handles[0]); i++)
+    {
+        if (anonfs_timerfd_handles[i] == handle)
+        {
+            anonfs_timerfd_handles[i] = NULL;
+            break;
+        }
+    }
+    spin_unlock(&anonfs_timerfd_global_lock);
+}
+
+void anonfs_timerfd_check_wakeup(void)
+{
+    anonfs_handle_t *handles[256];
+    size_t count = 0;
+
+    spin_lock(&anonfs_timerfd_global_lock);
+    for (size_t i = 0; i < sizeof(anonfs_timerfd_handles) / sizeof(anonfs_timerfd_handles[0]); i++)
+    {
+        if (anonfs_timerfd_handles[i] != NULL) handles[count++] = anonfs_timerfd_handles[i];
+    }
+    spin_unlock(&anonfs_timerfd_global_lock);
+
+    for (size_t i = 0; i < count; i++)
+        anonfs_timerfd_refresh(handles[i]);
 }
 
 static errno_t anonfs_mount(const char *handle, vfs_node_t node)
@@ -654,6 +710,10 @@ static errno_t anonfs_del(void *parent, vfs_node_t node)
         for (size_t i = 0; i < handle->u.inotify.watch_count; i++)
             free(handle->u.inotify.watches[i].path);
     }
+    if (handle->kind == ANONFS_TIMERFD)
+    {
+        anonfs_timerfd_unregister(handle);
+    }
     if (handle->kind == ANONFS_MEMFD)
     {
         free(handle->u.memfd.name);
@@ -1099,6 +1159,7 @@ int anonfs_create_timerfd(int clockid, uint32_t flags)
     anonfs_handle_t *handle = (anonfs_handle_t *)node->handle;
     handle->u.timerfd.flags = flags;
     handle->u.timerfd.clockid = clockid;
+    anonfs_timerfd_register(handle);
     return anonfs_install_fd(node, flags & (TFD_CLOEXEC | TFD_NONBLOCK));
 }
 

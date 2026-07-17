@@ -81,6 +81,7 @@ static uint64_t find_free_user_range(page_directory_t *directory, uint64_t start
 {
     if (directory == NULL || length == 0) return 0;
 
+    pcb_t owner = find_process_by_pagedir(directory);
     uint64_t aligned_length = page_align_up(length);
     if (aligned_length == 0 || aligned_length >= USER_BRK_START) return 0;
 
@@ -90,6 +91,30 @@ static uint64_t find_free_user_range(page_directory_t *directory, uint64_t start
     while (candidate <= limit)
     {
         bool occupied = false;
+        if (owner != NULL && vma_find_intersection(&owner->vma_manager, candidate, candidate + aligned_length))
+        {
+            candidate += PAGE_SIZE;
+            continue;
+        }
+        if (owner != NULL && owner->virt_queue != NULL)
+        {
+            spin_lock(&owner->virt_queue->lock);
+            queue_foreach(owner->virt_queue, node)
+            {
+                mm_virtual_page_t *vpage = (mm_virtual_page_t *)node->data;
+                if (vpage == NULL) continue;
+
+                uint64_t vpage_end = vpage->start + vpage->count * PAGE_SIZE;
+                if (!(candidate + aligned_length <= vpage->start || candidate >= vpage_end))
+                {
+                    candidate = (vpage_end + PAGE_SIZE - 1) & PAGE_MASK;
+                    occupied = true;
+                    break;
+                }
+            }
+            spin_unlock(&owner->virt_queue->lock);
+            if (occupied) continue;
+        }
         for (uint64_t offset = 0; offset < aligned_length; offset += PAGE_SIZE)
         {
             if (translate_address(directory, candidate + offset) != 0)
@@ -338,20 +363,20 @@ extern "C" void handle_page_fault(struct X64_REGS *frame, uint64_t error_code)
         pcb_t current_proc = current_task->parent_group;
         if (current_proc != NULL && current_proc->task_level == TASK_APPLICATION_LEVEL)
         {
+            errno_t status = lazy_tryalloc(current_proc, faulting_address);
+            if (status == 0)
+            {
+                enable_scheduler();
+                open_interrupt;
+                return;
+            }
             if (try_map_user_stack_fault(current_task, faulting_address))
             {
                 enable_scheduler();
                 open_interrupt;
                 return;
             }
-            errno_t status = lazy_tryalloc(current_proc, faulting_address);
-            if (status != 0) { goto err; }
-            else
-            {
-                enable_scheduler();
-                open_interrupt;
-                return;
-            }
+            goto err;
         }
     }
 err:;
@@ -848,6 +873,31 @@ uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_
     for (uint64_t i = 0; i < aligned_length; i += PAGE_SIZE)
     {
         page_map_to(directory, addr + i, frame + i, flags | PTE_FRAME_ALLOCATED);
+    }
+    return addr;
+}
+
+uint64_t page_reserve_user_range(page_directory_t *directory, uint64_t length)
+{
+    if (directory == NULL || length == 0) return 0;
+
+    uint64_t aligned_length = page_align_up(length);
+    if (aligned_length == 0) return 0;
+
+    pcb_t owner = find_process_by_pagedir(directory);
+    uint64_t start = (owner != NULL && owner->mmap_start >= USER_MMAP_START) ? owner->mmap_start : USER_MMAP_START;
+    uint64_t addr = find_free_user_range(directory, start, aligned_length);
+    if (addr == 0 && start != USER_MMAP_START)
+    {
+        addr = find_free_user_range(directory, USER_MMAP_START, aligned_length);
+    }
+    if (addr == 0) return 0;
+
+    if (owner != NULL) owner->mmap_start = addr + aligned_length;
+    if (owner != NULL &&
+        !lazy_infoalloc(owner, addr, aligned_length, PTE_USER | PTE_PRESENT | PTE_WRITEABLE | PTE_NO_EXECUTE, 0))
+    {
+        return 0;
     }
     return addr;
 }

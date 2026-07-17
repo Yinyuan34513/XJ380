@@ -1,7 +1,7 @@
 # BOOT KNOWLEDGE BASE
 
 ## OVERVIEW
-UEFI bootloader subtree. Builds `out/BOOTX64.efi`, gathers firmware state, loads `\system\kernel.elf`, and passes `BOOT_CONFIG` into `KernelMain`.
+UEFI bootloader subtree. Builds `out/BOOTX64.efi`, gathers firmware state, loads `\system\kernel.krl`, and passes `BOOT_CONFIG` into `KernelMain`.
 
 ## WHERE TO LOOK
 | Task | Location | Notes |

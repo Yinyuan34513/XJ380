@@ -13,6 +13,10 @@ bool need_duopage = false;
 int  file_count_base = 0;
 int  file_count = 0;
 
+static const int FM_CONTENT_TOP = 148;
+static const int FM_ROW_HEIGHT = 24;
+static const int FM_SIDEBAR_W = 132;
+
 /*
 static const char *xapi_demoSvgCheck =
     "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\">"
@@ -23,8 +27,66 @@ static const char *xapi_demoSvgCheck =
 
 int fm_visible_rows()
 {
-    int rows = (fmr_height - 148 - 8) / 24;
+    int rows = (fmr_height - FM_CONTENT_TOP - 8) / FM_ROW_HEIGHT;
     return rows < 1 ? 1 : rows;
+}
+
+int fm_sidebar_width()
+{
+    return fmr_width >= 520 ? FM_SIDEBAR_W : 0;
+}
+
+int fm_max_scroll_base()
+{
+    int max_base = file_count - fm_visible_rows();
+    return max_base < 0 ? 0 : max_base;
+}
+
+void fm_clamp_scroll_base()
+{
+    int max_base = fm_max_scroll_base();
+    if (file_count_base < 0) file_count_base = 0;
+    if (file_count_base > max_base) file_count_base = max_base;
+}
+
+bool fm_scrollbar_rect(int *x1, int *y1, int *x2, int *y2)
+{
+    if (!need_duopage) return false;
+    if (fmr_width < 80 || fmr_height <= 164) return false;
+    if (x1 != NULL) *x1 = fmr_width - 22;
+    if (y1 != NULL) *y1 = FM_CONTENT_TOP;
+    if (x2 != NULL) *x2 = fmr_width - 7;
+    if (y2 != NULL) *y2 = fmr_height - 10;
+    return true;
+}
+
+bool fm_scrollbar_thumb_rect(int *x1, int *y1, int *x2, int *y2)
+{
+    int bar_x1, bar_y1, bar_x2, bar_y2;
+    if (!fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2)) return false;
+
+    int visible_rows = fm_visible_rows();
+    if (file_count <= visible_rows) return false;
+
+    int track_h = bar_y2 - bar_y1;
+    if (track_h <= 0) return false;
+    int thumb_h = (track_h * visible_rows) / file_count;
+    if (thumb_h < 28) thumb_h = track_h < 28 ? track_h : 28;
+    if (thumb_h > track_h) thumb_h = track_h;
+
+    int max_base = fm_max_scroll_base();
+    int travel = track_h - thumb_h;
+    int thumb_y = bar_y1;
+    if (max_base > 0 && travel > 0)
+    {
+        thumb_y += (file_count_base * travel + max_base / 2) / max_base;
+    }
+
+    if (x1 != NULL) *x1 = bar_x1 + 2;
+    if (y1 != NULL) *y1 = thumb_y;
+    if (x2 != NULL) *x2 = bar_x2 - 2;
+    if (y2 != NULL) *y2 = thumb_y + thumb_h;
+    return true;
 }
 
 static bool visible_index_is_valid(int visible_index)
@@ -107,13 +169,89 @@ bool fm_get_selected_file(DirNode *node)
     return true;
 }
 
+static int fm_list_left()
+{
+    return fm_sidebar_width() + 4;
+}
+
+static int fm_name_x()
+{
+    return fm_list_left() + 24;
+}
+
+static int fm_type_x()
+{
+    return fm_list_left() + 236;
+}
+
+static int fm_size_x()
+{
+    return fm_list_left() + 396;
+}
+
+static int fm_list_right()
+{
+    int right = need_duopage ? fmr_width - 22 : fmr_width - 1;
+    if (right < fm_list_left() + 120) right = fm_list_left() + 120;
+    return right;
+}
+
+int fm_item_name_x()
+{
+    return fm_name_x();
+}
+
+int fm_item_name_y(int visible_index)
+{
+    return FM_CONTENT_TOP + FM_ROW_HEIGHT * visible_index - 4;
+}
+
+int fm_item_name_width()
+{
+    int width = fm_type_x() - fm_name_x() - 8;
+    return width < 80 ? 80 : width;
+}
+
 void refresh_fm_part(int x1, int y1, int x2, int y2)
 {
     xapi_RefreshPartWindow(handle, x1 + 12, y1 + 27, x2 + 12, y2 + 27);
 }
 
+static bool path_is_prefix(const char *path, const char *prefix)
+{
+    size_t len = strlen(prefix);
+    return strcmp(path, prefix) == 0 || (strncmp(path, prefix, len) == 0 && path[len] == '/');
+}
+
+static void paint_sidebar_item(int index, const char *label, const char *target)
+{
+    int x = 8;
+    int y = FM_CONTENT_TOP + index * 34;
+    int w = fm_sidebar_width() - 16;
+    bool selected = strcmp(target, "/") == 0 ? strcmp(current_path, "/") == 0 : path_is_prefix(current_path, target);
+    xapi_DrawRect(handle, x, y, x + w, y + 28, selected ? 0xe5f3ffff : 0xf8f8f8ff, true);
+    xapi_DrawRect(handle, x, y, x + w, y + 28, selected ? 0x9cc7f4ff : 0xe4e4e4ff, false);
+    xapi_DrawText(handle, x + 10, y + 7, (char *)label, 10, selected ? 0x005a9eff : 0x333333ff);
+}
+
+static void paint_sidebar()
+{
+    int width = fm_sidebar_width();
+    if (width <= 0) return;
+    xapi_DrawRect(handle, 0, 120, width, fmr_height - 1, 0xf8f8f8ff, true);
+    xapi_DrawLine(handle, width, 120, width, fmr_height - 1, 0xd6d6d6ff);
+    xapi_DrawText(handle, 12, 124, "常用位置", 10, 0x333333ff);
+    paint_sidebar_item(0, "根目录", "/");
+    paint_sidebar_item(1, "用户", "/users");
+    paint_sidebar_item(2, "应用", "/apps");
+    paint_sidebar_item(3, "系统", "/system");
+    paint_sidebar_item(4, "磁盘/分区", "/dev");
+}
+
 void paint_fm_back()
 {
+    xapi_DeleteScrollBar(handle, FM_CMD_SCROLLBAR);
+
     xapi_DrawRect(handle, 0, 0 , fmr_width - 1, 25, 0xeaeaeaff, true);
     xapi_DrawRect(handle, 52, 4, fmr_width - 5, 22, 0xffffffff, true);
     xapi_DrawPNG(handle, 0, 26, fmr_width - 1, 94, "/system/resources/image/fm_bg.png");
@@ -125,22 +263,32 @@ void paint_fm_back()
     // xapi_DrawSvg(handle, FMR_X - 40, 30, 28, (char *)xapi_demoSvgCheck);
     if (need_duopage)
     {
-        xapi_DrawPNG(handle, fmr_width - 19, 148, 18, 18, "/system/icon/bup.png");
-        xapi_DrawPNG(handle, fmr_width - 19, 170, 18, 18, "/system/icon/bdown.png");
+        int bar_x1, bar_y1, bar_x2, bar_y2;
+        int thumb_x1, thumb_y1, thumb_x2, thumb_y2;
+        if (fm_scrollbar_rect(&bar_x1, &bar_y1, &bar_x2, &bar_y2) &&
+            fm_scrollbar_thumb_rect(&thumb_x1, &thumb_y1, &thumb_x2, &thumb_y2))
+        {
+            xapi_PutVerticalScrollBar(handle, bar_x1, bar_y1, bar_y2 - bar_y1 + 1, thumb_y2 - thumb_y1 + 1,
+                                      FM_CMD_SCROLLBAR);
+            xapi_SetScrollBarPosition(handle, FM_CMD_SCROLLBAR, thumb_y1 - bar_y1);
+        }
     }
 }
 
 void paint_item(int index, char *name, bool is_folder, int size, bool is_choosing)
 {
-    xapi_DrawRect(handle, 4, 148 + 24 * index - 4, fmr_width / 10 * 8, 148 + 24 * index + 24 - 4, 0xffffffff, true);
-    if (is_choosing) xapi_DrawRect(handle, 4, 148 + 24 * index - 4, fmr_width / 10 * 8, 148 + 24 * index + 24 - 4, 0xe5f3ffff, true);
+    int left = fm_list_left();
+    int y = FM_CONTENT_TOP + FM_ROW_HEIGHT * index;
+    int right = fm_list_right();
+    xapi_DrawRect(handle, left, y - 4, right, y + FM_ROW_HEIGHT - 4, 0xffffffff, true);
+    if (is_choosing) xapi_DrawRect(handle, left, y - 4, right, y + FM_ROW_HEIGHT - 4, 0xe5f3ffff, true);
 
-    xapi_DrawText(handle, 28, 148 + 24 * index - 3, name, 10, 0x000000ff);
+    xapi_DrawText(handle, fm_name_x(), y - 3, name, 10, 0x000000ff);
     if (is_folder)
     {
-        xapi_DrawFA(handle, 8, 150 + 24 * index, 16, "folder-open");
+        xapi_DrawFA(handle, left + 4, y + 2, 16, "folder-open");
         // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
-        xapi_DrawText(handle, 240, 148 + 24 * index - 3, "文件夹", 10, 0x6d6d6dff);
+        xapi_DrawText(handle, fm_type_x(), y - 3, "文件夹", 10, 0x6d6d6dff);
     }
     else
     {
@@ -150,38 +298,38 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
         {
             if (strcmp("elf", file_type) == 0 || strcmp("epf", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "可执行文件", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "gear");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "可执行文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "gear");
             }
             else if (strcmp("txt", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "文本文件", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-lines");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "文本文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "file-lines");
             }
             else if (strcmp("png", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "PNG 图片文件", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "PNG 图片文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "file-image");
             }
             else if (strcmp("jpg", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "JPEG 图片文件", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "JPEG 图片文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "file-image");
             }
             else if (strcmp("bmp", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "位图文件", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "位图文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "file-image");
             }
             else if (strcmp("svg", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "矢量图文件", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file-image");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "矢量图文件", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "file-image");
             }
             else if (strcmp("md", file_type) == 0)
             {
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, "Markdown", 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 8, 148 + 24 * index, 16, "markdown");
+                xapi_DrawText(handle, fm_type_x(), y - 3, "Markdown", 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 4, y, 16, "markdown");
             }
             else
             {
@@ -190,19 +338,19 @@ void paint_item(int index, char *name, bool is_folder, int size, bool is_choosin
                     if (strcmp(file_type, file_ti_index[i].file_type) == 0)
                     {
                         // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/folder.png");
-                        xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_ti_index[i].file_type_name, 10, 0x6d6d6dff);
+                        xapi_DrawText(handle, fm_type_x(), y - 3, file_ti_index[i].file_type_name, 10, 0x6d6d6dff);
                         goto type_is_found;
                     }
                 }
                 strcat(file_type, " 文件");
-                xapi_DrawText(handle, 240, 148 + 24 * index - 3, file_type, 10, 0x6d6d6dff);
-                xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file");
+                xapi_DrawText(handle, fm_type_x(), y - 3, file_type, 10, 0x6d6d6dff);
+                xapi_DrawFA(handle, left + 6, y + 2, 12, "file");
             }
         }
         else 
         {
-            xapi_DrawText(handle, 240, 148 + 24 * index - 3, "未知类型文件", 10, 0x6d6d6dff);
-            xapi_DrawFA(handle, 10, 150 + 24 * index, 12, "file");
+            xapi_DrawText(handle, fm_type_x(), y - 3, "未知类型文件", 10, 0x6d6d6dff);
+            xapi_DrawFA(handle, left + 6, y + 2, 12, "file");
             // xapi_DrawPNG(handle, 8, 148 + 24 * index, 16, 16, "/system/icon/unknowfile.png");
         }
 type_is_found:
@@ -210,7 +358,7 @@ type_is_found:
         memset(file_size_str, 0, sizeof(char) * 32);
         strcpy(file_size_str, xcr_int2char((size + 1023) / 1024));
         strcat(file_size_str, " KB");
-        xapi_DrawText(handle, 400, 148 + 24 * index - 3, file_size_str, 10, 0x6d6d6dff);
+        xapi_DrawText(handle, fm_size_x(), y - 3, file_size_str, 10, 0x6d6d6dff);
     }
 }
 
@@ -227,7 +375,8 @@ static void refresh_visible_item(int visible_index)
         file_dir_cache[file_index].filetype,
         file_dir_cache[file_index].length,
         (choosing_index == visible_index));
-    refresh_fm_part(4, 148 + 24 * visible_index - 4, fmr_width - 1, 148 + 24 * visible_index + 20);
+    refresh_fm_part(fm_list_left(), FM_CONTENT_TOP + FM_ROW_HEIGHT * visible_index - 4,
+                    fmr_width - 1, FM_CONTENT_TOP + FM_ROW_HEIGHT * visible_index + 20);
 }
 
 void refresh_choose_change(int old_visible_index, int new_visible_index)
@@ -266,7 +415,7 @@ void paint_dir(char *path)
         if (file_count_base + visible_rows > file_count)
         {
             file_count_base = file_count - visible_rows;
-            if (file_count_base < 0) file_count_base = 0;
+            fm_clamp_scroll_base();
         }
     }
     else 
@@ -276,15 +425,19 @@ void paint_dir(char *path)
     }
 
     paint_fm_back();
+    paint_sidebar();
     
     xapi_DrawLine(handle, 0, 141, fmr_width - 1, 141, 0xc4c4c4ff);
-    xapi_DrawText(handle, 16, 120, "文件名称", 10, 0x000000ff);
-    xapi_DrawText(handle, 240, 120, "类型", 10, 0x000000ff);
-    xapi_DrawText(handle, 400, 120, "大小", 10, 0x000000ff);
+    xapi_DrawText(handle, fm_list_left() + 12, 120, "文件名称", 10, 0x000000ff);
+    xapi_DrawText(handle, fm_type_x(), 120, "类型", 10, 0x000000ff);
+    xapi_DrawText(handle, fm_size_x(), 120, "大小", 10, 0x000000ff);
+    UINT64 tmp_fmr_width = 0;
+    UINT64 tmp_fmr_height = 0;
+    xapi_GetWindowSize(handle, &tmp_fmr_width, &tmp_fmr_height);
     if (count == 0 || count == 404) 
     {
         // 不知道为什么居中会看起来偏右，那就往左偏一点吧（视觉错误这一块）
-        xapi_DrawText(handle, fmr_width / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
+        xapi_DrawText(handle, tmp_fmr_width / 2 - 32, 154, "空文件夹", 10, 0x6d6d6dff);
     }
 
     for (int i = file_count_base; i < ((file_count > visible_rows + file_count_base) ? visible_rows + file_count_base : file_count); i++)

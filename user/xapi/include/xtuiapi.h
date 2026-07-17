@@ -47,6 +47,11 @@ typedef struct {
 } UserInfo;
 
 typedef struct {
+    char     name[64];
+    UserType user_type;
+} LoginUserInfo;
+
+typedef struct {
 	char	 filename[256];
 	UINT64	 length;
 	UINT64	 filetype;
@@ -119,16 +124,24 @@ UINT64  xapi_KillProcess(UINT64 pid);
 void	xapi_GetSystemVersion(WSTR version);
 UINT64	xapi_GetTime(void);
 void	xapi_GetCurrentUser(UserInfo *user_info);
+UINT64  xapi_UserOobeRequired(void);
+UINT64  xapi_UserList(LoginUserInfo *buffer, UINT64 max_count);
+UINT64  xapi_UserLogin(WSTR username, WSTR password);
+UINT64  xapi_UserCreateFirst(WSTR username, WSTR password);
 void	xapi_GetTimeX(TimeType *tm);
 void	xapi_GetCpuModel(WSTR version);
 UINT64	xapi_GetMemorySize(void);
+UINT64	xapi_GetTimeNano();
 
 // 3-6
 void	xapi_Broken(WSTR broken_info);
 void	xapi_SendAppMessage(WSTR title, WSTR text);
+UINT64  xapi_SetNotifyPrcor(XApiNotifyPrcor func);
+UINT64  xapi_SendNotification(const XApiNotificationRequest *req);
 void 	xapi_Sleep(UINT64 ms);
 void 	xapi_Run(WSTR path);
 UINT64  xapi_RunArgs(WSTR path, WSTR argv[]);
+UINT64  xapi_PowerAction(UINT64 action);
 void 	xapi_FlushTime(void);
 
 // 3-7

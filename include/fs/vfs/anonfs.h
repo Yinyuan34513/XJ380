@@ -202,6 +202,7 @@ int  anonfs_create_eventfd(uint64_t initial_value, uint32_t flags);
 int  anonfs_create_signalfd(int ufd, const sigset_t *mask, size_t sizemask, uint32_t flags);
 int  anonfs_create_timerfd(int clockid, uint32_t flags);
 int  anonfs_timerfd_settime(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *old_value);
+void anonfs_timerfd_check_wakeup(void);
 int  anonfs_create_memfd(const char *name, uint32_t flags);
 int  anonfs_create_phys_memfd(const char *name, uint64_t phys, size_t size, uint32_t flags);
 int  anonfs_create_inotify(uint32_t flags);

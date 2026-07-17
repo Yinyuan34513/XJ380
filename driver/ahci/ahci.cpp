@@ -2,6 +2,7 @@
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <device.h>
+#include <ioctl.h>
 
 void              *op_buffer;
 static uint32_t    cdb_size[] = {SCSI_CDB12, SCSI_CDB16, 0, 0};
@@ -397,6 +398,13 @@ size_t ahci_write(int drive, uint8_t *buffer, size_t size, size_t lba) {
     return size;
 }
 
+static int ahci_ioctl(device_t *device, size_t req, void *arg)
+{
+    (void)device;
+    (void)arg;
+    return req == IOBLKSYNC ? 0 : -1;
+}
+
 // �?utils.cpp 中添�?
 void ahci_setup() {
     pci_device_t *device = pci_find_class(0x010601);
@@ -501,9 +509,9 @@ void ahci_setup() {
         sata.sector_size = hbadev->block_size;
         sata.type = DEVICE_BLOCK;
         sata.read = ahci_read;
-        sata.write = ahci_write;
+        sata.write = (hbadev->flags & HBA_DEV_FATAPI) ? NULL : ahci_write;
         sata.flag = 1;
-        sata.ioctl = (ioctlf)empty;
+        sata.ioctl = ahci_ioctl;
         sata.poll = (pollf)empty;
         sata.map = (mapf)empty;
         sata.read_vbuf = NULL;
@@ -512,8 +520,8 @@ void ahci_setup() {
         strcpy(sata.drive_name, name_buf);
         int id = regist_device(NULL, sata);
         hbaDevice[id] = hbadev;
-        write_serial_fmt("sata%d: blk_size=%d, blk=0..%d, %s\n", i, hbadev->block_size, hbadev->max_lba,
-                         hbadev->model);
+        write_serial_fmt("sata%d: blk_size=%d, blk=0..%d, %s%s\n", i, hbadev->block_size, hbadev->max_lba,
+                         hbadev->model, (hbadev->flags & HBA_DEV_FATAPI) ? " [ATAPI read-only]" : "");
     }
     write_serial_fmt("AHCI initialized: online_ports=%d ready_ports=%d implemented_ports=%d version=%d.%d.%d\n",
                      online_ports, ready_ports, hba->ports_num, major, minor, patch);

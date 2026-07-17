@@ -22,6 +22,7 @@ export XKB_DEFAULT_MODEL=pc104
 mkdir -p /tmp/.X11-unix
 mkdir -p /tmp/.ICE-unix
 mkdir -p $HOME/.config/dconf
+mkdir -p $HOME/.config/labwc
 mkdir -p /run/dbus
 mkdir -p /var/lib/dbus
 mkdir -p $XDG_RUNTIME_DIR
@@ -50,6 +51,16 @@ setup_xcursor_aliases() {
 
 setup_xcursor_aliases
 
+cat > $HOME/.config/labwc/autostart <<'EOF'
+#!/bin/sh
+
+background="/system/resources/image/background2.png"
+if [ -f "$background" ]; then
+    swaybg -i "$background" -m fill &
+fi
+EOF
+chmod +x $HOME/.config/labwc/autostart
+
 dbus-daemon --system --fork
 dbus-uuidgen --ensure
 
@@ -63,4 +74,4 @@ udevadm settle
 
 exec dbus-run-session -- \
     seatd-launch -- \
-    startxfce4 --wayland
+    labwc

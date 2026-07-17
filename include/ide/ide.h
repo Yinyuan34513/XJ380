@@ -31,6 +31,7 @@
 #define IDE_CMD_READ_SECTORS  0x20
 #define IDE_CMD_WRITE_SECTORS 0x30
 #define IDE_CMD_IDENTIFY      0xEC
+#define IDE_CMD_CACHE_FLUSH   0xE7
 
 // IDE 状态寄存器位
 #define IDE_STATUS_BSY  0x80

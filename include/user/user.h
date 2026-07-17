@@ -46,3 +46,11 @@ void copy_args(char *dst[], char *src[], int n);
 uint32_t user_uid(const UserInfo *user);
 uint32_t user_gid(const UserInfo *user);
 UserInfo *task_effective_user();
+bool user_session_needs_oobe();
+int user_session_list(UserInfo *out, int max_count);
+int user_session_login(const char *username, const char *password);
+int user_session_create_first(const char *username, const char *password);
+void user_session_use_root();
+
+extern UserInfo  root_user;
+extern UserInfo *current_user;

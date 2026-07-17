@@ -39,23 +39,12 @@ extern UserInfo *current_user;
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet);
 
-/*
-static const char *xapi_demoSvgCheck =
-    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 448 512\">"
-    "<!--!Font Awesome Free v7.2.0 by @fontawesome - https://fontawesome.com License - "
-    "https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.-->"
-    "<path d=\"M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z\"/>"
-    "</svg>"; */
-
 // 初始化桌面
 void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
 {
-    int           scrx = sht->scrx;
-    int           scry = sht->scry;
-    // #136dff
-    // draw_rect(sht, ct_sheet, 0, 0, scrx - 1, scry - 1, WIN_BLUE);
+    int scrx = sht->scrx;
+    int scry = sht->scry;
 
-    // 获取路径
     char runfile_setfile_path[256];
     memset(runfile_setfile_path, 0, 256);
     strcat(runfile_setfile_path, "/users/");
@@ -63,17 +52,16 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
     strcat(runfile_setfile_path, "/settings.dat");
     vfs_mkfile(runfile_setfile_path);
 
-    char  settings_file_buffer[sizeof(SettingsDataFileFormat)];
+    char settings_file_buffer[sizeof(SettingsDataFileFormat)];
     vfs_node_t settings_file_v = vfs_open(runfile_setfile_path);
     if (!settings_file_v) return;
     vfs_read(settings_file_v, settings_file_buffer, 0, sizeof(SettingsDataFileFormat));
 
     SettingsDataFileFormat *file_format = (SettingsDataFileFormat *)settings_file_buffer;
 
-    // 渲染
     SHEET_BUFFER *buff = (SHEET_BUFFER *)malloc(scrx * scry * 4);
-    int           w, h, bpp;
-    vfs_node_t    v = vfs_open(file_format->BackgroundFilePath);
+    int w, h, bpp;
+    vfs_node_t v = vfs_open(file_format->BackgroundFilePath);
     if (!v)
     {
         write_serial_fmt("init_desktop: cannot open '%s'\n", file_format->BackgroundFilePath);
@@ -109,21 +97,11 @@ void init_desktop(SHEET_INFO *sht, SHEET *csheet, SHEET *dock_ct_sheet)
         front_p = front_p->next;
     }
 
-    // SHEET_BUFFER *SheetBuffer = (SHEET_BUFFER *)(front_p->buffer);
-
-    // 检查内存对齐情况
     front_p->buffer = (void *)buff;
 
     init_dock(sht, dock_ct_sheet);
     init_shortcut_dock(sht, dock_ct_sheet);
     init_desktop_icon(sht, csheet);
-
-    int svg_demo_width  = 56;
-    int svg_demo_height = 64;
-    int svg_demo_x      = scrx - svg_demo_width - 28;
-    int svg_demo_y      = 34;
-    // xapi_drawSvgBySheet(sht, csheet, svg_demo_x, svg_demo_y, svg_demo_width,
-    //                                        xapi_demoSvgCheck, true);
 }
 
 void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
@@ -147,7 +125,6 @@ void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
     print_box_ttf(sht, csheet, "垃圾桶", BLACK, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110 + 1, 11);
     print_box_ttf(sht, csheet, "垃圾桶", WHITE, 57 - calc_ttf_length("垃圾桶", 11) / 2, 105 + 1 * 110, 11);
 
-    // 每个格是 110 * 110，从（0，25）开始
     int nindex = 2;
     for (list_t node = desktop_setting_file_v->child; node != NULL; node = node->next)
     {
@@ -156,20 +133,16 @@ void init_desktop_icon(SHEET_INFO *sht, SHEET *csheet)
         int by = 30 + (nindex - (nindex / ((sht->scry - 88) / 110)) * ((sht->scry - 88) / 110)) * 110;
         if (data->type == file_dir)
         {
-            // 是文件夹
             PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/folder.png");
         }
         else
         {
-            // 是文件
             PrintPicture_blend(sht, csheet, bx, by, 74, 74, "/system/icon/texter.png");
         }
-        print_box_ttf(sht, csheet, 
-            data->name, BLACK, 
-            57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110 + 1, 11);
-        print_box_ttf(sht, csheet, 
-            data->name, WHITE, 
-            57 - calc_ttf_length(data->name, 11) / 2, 105 + nindex * 110, 11);
+        print_box_ttf(sht, csheet, data->name, BLACK, 57 - calc_ttf_length(data->name, 11) / 2,
+                      105 + nindex * 110 + 1, 11);
+        print_box_ttf(sht, csheet, data->name, WHITE, 57 - calc_ttf_length(data->name, 11) / 2,
+                      105 + nindex * 110, 11);
         nindex++;
     }
 
@@ -225,7 +198,7 @@ void init_shortcut_dock(SHEET_INFO *sht, SHEET *csheet)
 void process_desktop_find_block(int x, int y)
 {
     char desktop_folder_path[265] = "/users/";
-    memset(desktop_folder_path, 0, 256);    // 回收再利用
+    memset(desktop_folder_path, 0, 256);
     strcat(desktop_folder_path, "/users/");
     strcat(desktop_folder_path, current_user->name);
     strcat(desktop_folder_path, "/desktop");
@@ -233,17 +206,14 @@ void process_desktop_find_block(int x, int y)
     vfs_node_t desktop_setting_file_v = vfs_open(desktop_folder_path);
     if (!desktop_setting_file_v) return;
 
-    // 每个格是 110 * 110，从（0，25）开始
     int i;
     for (i = 0; i < 2; i++)
     {
         int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
         int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
 
-        if (x > bx && x < bx + 110 &&
-            y > by && y < by + 110)
+        if (x > bx && x < bx + 110 && y > by && y < by + 110)
         {
-            // 就是他！
             if (i == 0)
             {
                 create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, NULL);
@@ -255,10 +225,8 @@ void process_desktop_find_block(int x, int y)
         int bx = 20 + 110 * (i / ((sht_img->scry - 88) / 110));
         int by = 30 + (i - (i / ((sht_img->scry - 88) / 110)) * ((sht_img->scry - 88) / 110)) * 110;
 
-        if (x > bx && x < bx + 110 &&
-            y > by && y < by + 110)
+        if (x > bx && x < bx + 110 && y > by && y < by + 110)
         {
-            // 就是他！
             vfs_node_t data = (vfs_node_t)node->data;
             char runfile_path[256] = "\0";
             strcat(runfile_path, "/users/");
@@ -267,7 +235,6 @@ void process_desktop_find_block(int x, int y)
             strcat(runfile_path, data->name);
             if (data->type == file_dir)
             {
-                // 是文件夹
                 char *argv[2] = {runfile_path, NULL};
                 create_user_process_from_file((char *)"/apps/system/fmanager.elf", NULL, argv);
             }
@@ -309,6 +276,7 @@ SHEET_BUFFER LCD_AlphaBlend(SHEET_BUFFER foreground_color, SHEET_BUFFER backgrou
 
     // 混合计算
     float blended_alpha = src_alpha + dst_a * (1.0f - src_alpha);
+    if (blended_alpha <= 0.0f) return {0, 0, 0, 0};
 
     // 颜色混合
     float blended_r = (src_r + dst_r * (1.0f - src_alpha)) / blended_alpha;
@@ -396,9 +364,11 @@ void paint_task_dock_item(TDB_t tdb, int count)
 }
 
 extern bool have_full_screen_app;
+bool user_dock_owns_dock_sheet = false;
 
 void flush_task_dock()
 {
+    if (user_dock_owns_dock_sheet) return;
     if (have_full_screen_app) return;
 
     spin_lock(&task_dock_lock);
@@ -419,6 +389,7 @@ void flush_task_dock()
 
 void register_task_dock(WINDOWLSP window)
 {
+    if (user_dock_owns_dock_sheet) return;
     spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     TDB_t new_win = (TDB_t)malloc(sizeof(TASK_DOCK_BLOCK));
@@ -447,6 +418,7 @@ void register_task_dock(WINDOWLSP window)
 
 void unregister_task_dock(WINDOWLSP window)
 {
+    if (user_dock_owns_dock_sheet) return;
     spin_lock(&task_dock_lock);
     int   i       = 0;
     TDB_t front_p = first_dock_block;
@@ -491,13 +463,13 @@ void unregister_task_dock(WINDOWLSP window)
 
 void focus_window_dock(WINDOWLSP win)
 {
+    if (user_dock_owns_dock_sheet) return;
     spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
-    while (true)
+    while (front_p != NULL)
     {
         front_p->in_focus = false;
-        if (front_p->windowls == win) { front_p->in_focus = true; }
-        if (front_p->next == NULL) { break; }
+        if (win != NULL && front_p->windowls == win) { front_p->in_focus = true; }
         front_p = front_p->next;
     }
 
@@ -507,6 +479,7 @@ void focus_window_dock(WINDOWLSP win)
 
 void change_task_dock_icon(WINDOWLSP win, char *path)
 {
+    if (user_dock_owns_dock_sheet) return;
     spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
@@ -527,6 +500,7 @@ void change_task_dock_icon(WINDOWLSP win, char *path)
 
 void save_window_xy(WINDOWLSP win)
 {
+    if (user_dock_owns_dock_sheet) return;
     spin_lock(&task_dock_lock);
     TDB_t front_p = first_dock_block;
     while (true)
@@ -561,6 +535,7 @@ TDB_t find_dock_icon(int index)
 
 void draw_app_message_box(char *title, char *text)
 {
+    if (user_dock_owns_dock_sheet) return;
     if (have_full_screen_app) return;
 
     int scdx = fbc_addr->horizontal_resolution * 13 / 16 - 1;
@@ -581,6 +556,7 @@ bool logo_menu_is_open = false;
 
 void draw_logo_menu()
 {
+    if (user_dock_owns_dock_sheet) return;
     if (have_full_screen_app) return;
     int x1 = sht_img->scrx * 0.1875;
     draw_rect(sht_img, dock_ct_sheet, x1, 28, x1 + 99, 93, DOCK_COL);
@@ -594,6 +570,7 @@ void draw_logo_menu()
 
 void delete_logo_menu()
 {
+    if (user_dock_owns_dock_sheet) return;
     if (have_full_screen_app) { return; }
     if (logo_menu_just_born)
     {

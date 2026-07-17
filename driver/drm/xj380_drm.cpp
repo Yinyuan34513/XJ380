@@ -523,6 +523,70 @@ static bool drm_format_is_bgr_order(uint32_t format)
            format == DRM_FORMAT_BGRX8888 || format == DRM_FORMAT_BGRA8888;
 }
 
+static uint32_t drm_read_pixel32(const uint8_t *src)
+{
+    return (uint32_t)src[0] | ((uint32_t)src[1] << 8) | ((uint32_t)src[2] << 16) | ((uint32_t)src[3] << 24);
+}
+
+static bool drm_format_matches_fbc_memory(uint32_t format, bool dst_rgb)
+{
+    switch (format) {
+    case DRM_FORMAT_XRGB8888:
+    case DRM_FORMAT_ARGB8888:
+        return !dst_rgb;
+    case DRM_FORMAT_XBGR8888:
+    case DRM_FORMAT_ABGR8888:
+        return dst_rgb;
+    default:
+        return false;
+    }
+}
+
+static void drm_unpack_format_pixel(uint32_t pixel, uint32_t format, uint8_t *r, uint8_t *g, uint8_t *b,
+                                    uint8_t *a)
+{
+    if (r == NULL || g == NULL || b == NULL || a == NULL) {
+        return;
+    }
+
+    switch (format) {
+    case DRM_FORMAT_XRGB8888:
+    case DRM_FORMAT_ARGB8888:
+        *r = (uint8_t)((pixel >> 16) & 0xffU);
+        *g = (uint8_t)((pixel >> 8) & 0xffU);
+        *b = (uint8_t)(pixel & 0xffU);
+        *a = format == DRM_FORMAT_ARGB8888 ? (uint8_t)((pixel >> 24) & 0xffU) : 0xffU;
+        return;
+    case DRM_FORMAT_RGBX8888:
+    case DRM_FORMAT_RGBA8888:
+        *r = (uint8_t)((pixel >> 24) & 0xffU);
+        *g = (uint8_t)((pixel >> 16) & 0xffU);
+        *b = (uint8_t)((pixel >> 8) & 0xffU);
+        *a = format == DRM_FORMAT_RGBA8888 ? (uint8_t)(pixel & 0xffU) : 0xffU;
+        return;
+    case DRM_FORMAT_XBGR8888:
+    case DRM_FORMAT_ABGR8888:
+        *r = (uint8_t)(pixel & 0xffU);
+        *g = (uint8_t)((pixel >> 8) & 0xffU);
+        *b = (uint8_t)((pixel >> 16) & 0xffU);
+        *a = format == DRM_FORMAT_ABGR8888 ? (uint8_t)((pixel >> 24) & 0xffU) : 0xffU;
+        return;
+    case DRM_FORMAT_BGRX8888:
+    case DRM_FORMAT_BGRA8888:
+        *r = (uint8_t)((pixel >> 8) & 0xffU);
+        *g = (uint8_t)((pixel >> 16) & 0xffU);
+        *b = (uint8_t)((pixel >> 24) & 0xffU);
+        *a = format == DRM_FORMAT_BGRA8888 ? (uint8_t)(pixel & 0xffU) : 0xffU;
+        return;
+    default:
+        *r = 0;
+        *g = 0;
+        *b = 0;
+        *a = 0xffU;
+        return;
+    }
+}
+
 static int present_rect(struct xj380_drm *drm,
                         uint32_t fb_id,
                         uint32_t src_x,
@@ -559,30 +623,47 @@ static int present_rect(struct xj380_drm *drm,
     h = MIN(h, drm->fb_height - crtc_y);
     if (w == 0 || h == 0) return 0;
 
-    bool src_rgb = drm_format_is_rgb_order(fb->format);
-    bool src_bgr = drm_format_is_bgr_order(fb->format);
-    if (!src_rgb && !src_bgr) return -EINVAL;
+    if (!drm_format_is_rgb_order(fb->format) && !drm_format_is_bgr_order(fb->format)) return -EINVAL;
     bool dst_rgb = fbc->pixel_format == PixelFormat::kRGBR;
-    bool same_order = (src_rgb && dst_rgb) || (src_bgr && !dst_rgb);
 
     src += fb->offset;
     size_t row_bytes = (size_t)w * 4;
+    if (drm_format_matches_fbc_memory(fb->format, dst_rgb))
+    {
+        for (uint32_t y = 0; y < h; y++)
+        {
+            uint8_t *dst_row = dst + (size_t)(crtc_y + y) * dst_pitch + (size_t)crtc_x * 4;
+            uint8_t *src_row = src + (size_t)(src_y + y) * (size_t)fb->pitch + (size_t)src_x * 4;
+            memcpy(dst_row, src_row, row_bytes);
+        }
+        fbdev_present_kernel_region(crtc_x, crtc_y, crtc_x + w, crtc_y + h);
+        return 0;
+    }
+
     for (uint32_t y = 0; y < h; y++)
     {
         uint8_t *dst_row = dst + (size_t)(crtc_y + y) * dst_pitch + (size_t)crtc_x * 4;
         uint8_t *src_row = src + (size_t)(src_y + y) * (size_t)fb->pitch + (size_t)src_x * 4;
-        if (same_order)
-        {
-            memcpy(dst_row, src_row, row_bytes);
-            continue;
-        }
-
         for (uint32_t x = 0; x < w; x++)
         {
-            dst_row[x * 4 + 0] = src_row[x * 4 + 2];
-            dst_row[x * 4 + 1] = src_row[x * 4 + 1];
-            dst_row[x * 4 + 2] = src_row[x * 4 + 0];
-            dst_row[x * 4 + 3] = src_row[x * 4 + 3];
+            uint32_t src_pixel = drm_read_pixel32(src_row + (size_t)x * 4);
+            uint8_t  src_r;
+            uint8_t  src_g;
+            uint8_t  src_b;
+            uint8_t  src_a;
+            drm_unpack_format_pixel(src_pixel, fb->format, &src_r, &src_g, &src_b, &src_a);
+
+            uint8_t *dst_pixel = dst_row + (size_t)x * 4;
+            if (dst_rgb) {
+                dst_pixel[0] = src_r;
+                dst_pixel[1] = src_g;
+                dst_pixel[2] = src_b;
+            } else {
+                dst_pixel[0] = src_b;
+                dst_pixel[1] = src_g;
+                dst_pixel[2] = src_r;
+            }
+            dst_pixel[3] = src_a;
         }
     }
 

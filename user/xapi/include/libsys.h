@@ -209,6 +209,8 @@
 #define XAPI_GET_CPU_MODEL      7434
 #define XAPI_GET_MEMORY_SIZE    7435
 
+#define XAPI_GET_TIME_NANO      7459
+
 // P3.6
 #define XAPI_BROKEN         7428
 #define XAPI_SEND_APP_MSG   7429
@@ -216,8 +218,43 @@
 
 #define XAPI_RUN            7439
 #define XAPI_RUN_ARGS       7451
+#define XAPI_USER_OOBE_REQUIRED 7452
+#define XAPI_USER_LIST          7453
+#define XAPI_USER_LOGIN         7454
+#define XAPI_USER_CREATE_FIRST  7455
 
 #define XAPI_FLUSH_TIME     7445
+#define XAPI_POWER_ACTION   7464
+
+// P3.6.2
+#define XAPI_NOTIFY_SEND    7465
+#define XAPI_NOTIFY_SET_PROCOR 7466
+
+#define XPOWER_REBOOT   1
+#define XPOWER_SHUTDOWN 2
+
+typedef enum {
+    XNOTIFY_ICON_NONE = 0,
+    XNOTIFY_ICON_INFO = 1,
+    XNOTIFY_ICON_SUCCESS = 2,
+    XNOTIFY_ICON_WARNING = 3,
+    XNOTIFY_ICON_ERROR = 4,
+    XNOTIFY_ICON_APP = 5
+} XNotifyBuiltinIcon;
+
+typedef struct {
+    UINT64 key;
+    char  *title;
+    char  *text;
+    UINT64 builtin_icon;
+    char  *icon_path;
+    char  *action0_text;
+    UINT64 action0_id;
+    char  *action1_text;
+    UINT64 action1_id;
+} XApiNotificationRequest;
+
+typedef void (*XApiNotifyPrcor)(UINT64 notification_id, UINT64 action_id);
 
 // P3.7
 #define XAPI_MALLOC         7441
@@ -255,6 +292,8 @@
 #define XAPI_DRAW_SVG       7446
 #define XAPI_DRAW_FA        7447
 
+#define XAPI_LOAD_PICTURE   7463
+
 #define XAPI_TASK_NAME_LEN 32
 
 typedef struct
@@ -285,6 +324,8 @@ typedef struct
 #define MSG_CRL     6
 #define MSG_SPCHAR  7
 #define MSG_RESIZE  8
+#define MSG_KEYUP   9
+#define MSG_KEYDOWN 10
 
 // P4.5
 #define XAPI_READBUFFER     7406
@@ -304,8 +345,27 @@ typedef struct
 #define XAPI_REG_RB_MENU    7436
 #define XAPI_URG_RB_MENU    7437
 
-#define XWIN_TYPE_MASK         0x0f
-#define XWIN_SUPPORT_RESIZEABLE  0x80
+#define XAPI_PUT_TEXT_INBOX 7456
+#define XAPI_GET_TEXT_INBOX 7457
+#define XAPI_DEL_TEXT_INBOX 7458
+
+#define XAPI_PUT_SWITCH     7460
+#define XAPI_SET_SWITCH     7461
+#define XAPI_DEL_SWITCH     7462
+
+#define XAPI_PUT_VERTICAL_SCROLL_BAR   7467
+#define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7468
+#define XAPI_DELETE_SCROLL_BAR         7469
+#define XAPI_SET_SCROLL_BAR_POSITION   7470
+
+#define XWIN_NORMAL             0
+#define XWIN_FRAME_OFF          1
+#define XWIN_FULL_SCR           2
+#define XWIN_DESKTOP            3
+#define XWIN_DOCK               4
+#define XWIN_LOGIN              5
+#define XWIN_TYPE_MASK          0x0f
+#define XWIN_SUPPORT_RESIZEABLE 0x80
 
 #ifdef __cplusplus
 extern "C" {

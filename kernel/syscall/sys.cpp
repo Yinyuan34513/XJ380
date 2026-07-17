@@ -1412,13 +1412,20 @@ static pcb_t wait4_find_child(pcb_t parent, long pid)
 {
     if (parent == NULL || parent->child_pcb == NULL) return NULL;
 
+    pcb_t found = NULL;
+    spin_lock(&parent->child_pcb->lock);
     queue_foreach(parent->child_pcb, node)
     {
         pcb_t child = (pcb_t)node->data;
-        if (wait4_pid_matches(child, pid)) return child;
+        if (wait4_pid_matches(child, pid))
+        {
+            found = child;
+            break;
+        }
     }
+    spin_unlock(&parent->child_pcb->lock);
 
-    return NULL;
+    return found;
 }
 
 static pcb_t waitid_find_child(pcb_t parent, int idtype, uint64_t id)
@@ -1438,13 +1445,20 @@ static pcb_t wait4_find_zombie_child(pcb_t parent, long pid)
 {
     if (parent == NULL || parent->child_pcb == NULL) return NULL;
 
+    pcb_t found = NULL;
+    spin_lock(&parent->child_pcb->lock);
     queue_foreach(parent->child_pcb, node)
     {
         pcb_t child = (pcb_t)node->data;
-        if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid)) return child;
+        if (child != NULL && child->status == ZOMBIE && wait4_pid_matches(child, pid))
+        {
+            found = child;
+            break;
+        }
     }
+    spin_unlock(&parent->child_pcb->lock);
 
-    return NULL;
+    return found;
 }
 
 static pcb_t waitid_find_zombie_child(pcb_t parent, int idtype, uint64_t id)
@@ -3510,9 +3524,36 @@ static bool heap_growth_range_available(pcb_t process, uint64_t start, uint64_t 
     return !mapped_page_intersects(process->pagedir, start, end - start);
 }
 
+static vma_t *heap_vma_at_end(pcb_t process, uint64_t end)
+{
+    if (process == NULL) return NULL;
+
+    vma_t *vma = process->vma_manager.vma_list;
+    while (vma != NULL)
+    {
+        if (vma->vm_end == end && vma->vm_type == VMA_TYPE_ANON &&
+            vma->vm_name != NULL && strcmp(vma->vm_name, "[heap]") == 0 &&
+            (vma->vm_flags & (VMA_READ | VMA_WRITE | VMA_ANON)) == (VMA_READ | VMA_WRITE | VMA_ANON))
+        {
+            return vma;
+        }
+        vma = vma->vm_next;
+    }
+
+    return NULL;
+}
+
 static bool heap_insert_range(pcb_t process, uint64_t start, uint64_t end)
 {
     if (process == NULL || start >= end) return true;
+
+    vma_t *tail = heap_vma_at_end(process, start);
+    if (tail != NULL)
+    {
+        tail->vm_end = end;
+        process->vma_manager.vm_used += end - start;
+        return true;
+    }
 
     vma_t *heap_vma = vma_alloc();
     if (heap_vma == NULL) return false;
@@ -3561,23 +3602,22 @@ uint64_t sys_brk(uint64_t brk) {
             return process->brk_current;
         }
 
-        // brk 分配的是用户态堆页，必须带 PTE_USER，否则用户态 malloc 会页故障。
-        if (!map_zero_user_range(get_current_directory(),
-                                 old_map_end,
-                                 new_map_end - old_map_end,
-                                 PTE_USER | PTE_PRESENT | PTE_WRITEABLE)) {
+        if (!heap_insert_range(process, old_map_end, new_map_end)) {
             mm_op_lock_release();
             return process->brk_current;
         }
 
-        if (!heap_insert_range(process, old_map_end, new_map_end)) {
-            unmap_page_range(get_current_directory(), old_map_end, new_map_end - old_map_end);
+        if (!lazy_infoalloc(process, old_map_end, new_map_end - old_map_end,
+                            PTE_USER | PTE_PRESENT | PTE_WRITEABLE | PTE_NO_EXECUTE, 0))
+        {
+            vma_unmap_range(&process->vma_manager, old_map_end, new_map_end);
             mm_op_lock_release();
             return process->brk_current;
         }
     }
     else if (new_map_end < old_map_end) {
         vma_unmap_range(&process->vma_manager, new_map_end, old_map_end);
+        unmap_virtual_page(process, new_map_end, old_map_end - new_map_end);
         unmap_page_range(get_current_directory(), new_map_end, old_map_end - new_map_end);
     }
 
@@ -3723,7 +3763,11 @@ sys_(mmap, uint64_t addr, size_t length, uint64_t prot, uint64_t flags, int fd,
         if (!(prot & PROT_EXEC)) pt_flags |= PTE_NO_EXECUTE;
     }
 
-    lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags);
+    if (!lazy_infoalloc(process, start_addr, aligned_len, pt_flags, flags)) {
+        vma_unmap_range(mgr, start_addr, end_addr);
+        mm_op_lock_release();
+        return SYSCALL_FAULT_(ENOMEM);
+    }
     mm_op_lock_release();
 
     trace_slow_mmap_syscall(requested_addr, length, prot, flags, fd, offset, NULL, start_addr,

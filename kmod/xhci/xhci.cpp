@@ -821,7 +821,7 @@ static void xhci_fill_ep0_ctx(xhci_slot_state *slot, xhci_ep_ctx *ep0_ctx) {
     ep0_ctx->deq_high = (uint32_t)(slot->ep0_ring.phys >> 32);
     ep0_ctx->tx_info =
         (uint32_t)slot->max_packet0 |
-        (8U << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+        (8U << XHCI_EP_TX_MAX_ESIT_PAYLOAD_SHIFT);
 }
 
 static void xhci_fill_interrupt_ep_ctx(xhci_slot_state *slot,
@@ -838,7 +838,7 @@ static void xhci_fill_interrupt_ep_ctx(xhci_slot_state *slot,
     ep_ctx->deq_high = (uint32_t)(hid->ring.phys >> 32);
     ep_ctx->tx_info =
         (uint32_t)hid->max_packet |
-        ((uint32_t)hid->report_buffer_len << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+        ((uint32_t)hid->report_buffer_len << XHCI_EP_TX_MAX_ESIT_PAYLOAD_SHIFT);
 }
 
 static void xhci_fill_bulk_ep_ctx(xhci_msc_state *msc, bool in_dir,
@@ -860,7 +860,7 @@ static void xhci_fill_bulk_ep_ctx(xhci_msc_state *msc, bool in_dir,
     ep_ctx->deq_high = (uint32_t)(ring->phys >> 32);
     ep_ctx->tx_info =
         (uint32_t)max_packet |
-        ((uint32_t)max_packet << XHCI_EP_TX_AVG_TRB_LENGTH_SHIFT);
+        ((uint32_t)max_packet << XHCI_EP_TX_MAX_ESIT_PAYLOAD_SHIFT);
 }
 
 static int xhci_update_ep0_packet(xhci_controller *xhci, xhci_slot_state *slot,

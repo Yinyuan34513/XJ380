@@ -6,7 +6,7 @@
 #    include <graphics/sheet.h>
 #    include <proto.hpp>
 
-#define KB_BUF_SIZE 100
+#define KB_BUF_SIZE 128
 
 #define MOUSE_BBIT 0x01
 #define MOUSE_ABIT 0x02
@@ -90,6 +90,7 @@ struct keyboard_buf
     bool     ctrl;
     bool     shift;
     bool     alt;
+    bool     win;
     bool     caps;
     uint8_t  buf[KB_BUF_SIZE];
 };

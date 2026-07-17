@@ -5,6 +5,11 @@
 struct WINDOW_HANDLE
 {
     WINDOWLS *WindowNodePtr;
+    bool      dirty;
+    int       dirty_x1;
+    int       dirty_y1;
+    int       dirty_x2;
+    int       dirty_y2;
 };
 
 struct XWINDOW
@@ -33,7 +38,7 @@ typedef struct {
 #define XAPI_OFFEST 380
 
 // 一些隐藏的API，不对外开放，严禁泄露！
-#define SXAH_SYSCALL_RETURN         128956723895689201      // syscall返回 
+#define SXAH_SYSCALL_RETURN         128956723895689201      // syscall返回
 #define SXAH_CREATE_KERNEL_TERMINAL 128956723895689202      // 创建内核态进程
 #define SXAH_CHECK_USER_PASSWORD    128956723895689203      // 检查用户密码
 #define SXAH_MARK_IS_TERMINAL       128956723895689204      // 标记为命令行
@@ -42,6 +47,15 @@ typedef struct {
 #define SXAH_CHECK_INPUT_BUFFER     128956723895689207      // 检查是否需要输入
 #define SXAH_UNLOCK_OUTPUT_LOCK     128956723895689208      // 完成输出，关闭输出锁
 #define SXAH_MESSAGE_ASK            128956723895689209      // message查询
+#define SXAH_INSTALLER_ENUM_DISKS       128956723895689220
+#define SXAH_INSTALLER_START            128956723895689221
+#define SXAH_INSTALLER_PROGRESS         128956723895689222
+#define SXAH_INSTALLER_PRECHECK         128956723895689223
+#define SXAH_INSTALLER_START_EX         128956723895689224
+#define SXAH_INSTALLER_RESCUE           128956723895689225
+#define SXAH_INSTALLER_LOG              128956723895689226
+#define SXAH_INSTALLER_START_OPTIONS    128956723895689227
+#define SXAH_INSTALLER_PRECHECK_OPTIONS 128956723895689228
 
 #define SXAH_CHECK_TERMINAL_INIT_STATUS  3801    // 查询终端初始化状态
 
@@ -59,6 +73,11 @@ typedef struct {
     char            name[64];   // 用户名
     UserType        user_type;  // 用户等级
 } xapi_type_UserInfo;
+
+typedef struct {
+    char     name[64];
+    UserType user_type;
+} xapi_type_LoginUserInfo;
 
 // P3.1
 #define XAPI_OUTPUT    7381
@@ -80,7 +99,7 @@ typedef struct {
 
 #define XAPI_MAKEDIR        7425
 #define XAPI_CREATE_FILE    7420
-#define XAPI_DELETE_FILE    7421  
+#define XAPI_DELETE_FILE    7421
 #define XAPI_RENAME_FILE    7422
 #define XAPI_READ_FILE      7423
 #define XAPI_WRITE_FILE     7424
@@ -104,6 +123,8 @@ typedef struct {
 #define XAPI_GET_CPU_MODEL      7434
 #define XAPI_GET_MEMORY_SIZE    7435
 
+#define XAPI_GET_TIME_NANO      7459
+
 // P3.6
 #define XAPI_BROKEN         7428
 #define XAPI_SEND_APP_MSG   7429
@@ -111,8 +132,45 @@ typedef struct {
 
 #define XAPI_RUN            7439
 #define XAPI_RUN_ARGS       7451
+#define XAPI_USER_OOBE_REQUIRED 7452
+#define XAPI_USER_LIST          7453
+#define XAPI_USER_LOGIN         7454
+#define XAPI_USER_CREATE_FIRST  7455
 
 #define XAPI_FLUSH_TIME     7445
+#define XAPI_POWER_ACTION   7464
+
+// P3.6.2
+#define XAPI_NOTIFY_SEND        7465
+#define XAPI_NOTIFY_SET_PROCOR  7466
+
+#define XPOWER_REBOOT   1
+#define XPOWER_SHUTDOWN 2
+
+typedef enum
+{
+    XNOTIFY_ICON_NONE = 0,
+    XNOTIFY_ICON_INFO = 1,
+    XNOTIFY_ICON_SUCCESS = 2,
+    XNOTIFY_ICON_WARNING = 3,
+    XNOTIFY_ICON_ERROR = 4,
+    XNOTIFY_ICON_APP = 5,
+} XNotifyBuiltinIcon;
+
+typedef struct
+{
+    uint64_t key;
+    char    *title;
+    char    *text;
+    uint64_t builtin_icon;
+    char    *icon_path;
+    char    *action0_text;
+    uint64_t action0_id;
+    char    *action1_text;
+    uint64_t action1_id;
+} XApiNotificationRequest;
+
+typedef void (*XApiNotifyPrcor)(uint64_t notification_id, uint64_t action_id);
 
 // P3.7
 #define XAPI_MALLOC         7441
@@ -150,6 +208,8 @@ typedef struct {
 #define XAPI_DRAW_SVG       7446
 #define XAPI_DRAW_FA        7447
 
+#define XAPI_LOAD_PICTURE   7463
+
 // P4.4
 #define XAPI_SET_MSH_PROCOR 7405
 
@@ -162,6 +222,8 @@ typedef struct {
 #define MSG_CRL     6
 #define MSG_SPCHAR  7
 #define MSG_RESIZE  8
+#define MSG_KEYUP   9
+#define MSG_KEYDOWN 10
 
 // P4.5
 #define XAPI_READBUFFER     7406
@@ -182,14 +244,30 @@ typedef struct {
 #define XAPI_REG_RB_MENU    7436
 #define XAPI_URG_RB_MENU    7437
 
+#define XAPI_PUT_TEXT_INBOX 7456
+#define XAPI_GET_TEXT_INBOX 7457
+#define XAPI_DEL_TEXT_INBOX 7458
+
+#define XAPI_PUT_SWITCH     7460
+#define XAPI_SET_SWITCH     7461
+#define XAPI_DEL_SWITCH     7462
+
+#define XAPI_PUT_VERTICAL_SCROLL_BAR   7467
+#define XAPI_PUT_HORIZONTAL_SCROLL_BAR 7468
+#define XAPI_DELETE_SCROLL_BAR         7469
+#define XAPI_SET_SCROLL_BAR_POSITION   7470
+
 // 4-1
 #define XWIN_NORMAL				0
 #define XWIN_FRAME_OFF			1
 #define XWIN_FULL_SCR			2
+#define XWIN_DESKTOP            3
+#define XWIN_DOCK               4
+#define XWIN_LOGIN              5
 #define XWIN_TYPE_MASK          0x0f
 #define XWIN_SUPPORT_RESIZEABLE 0x80
 
-// 当前最大号：7449
+// 当前最大号：7470
 
 #define XAPI_TASK_NAME_LEN 32
 
@@ -243,6 +321,7 @@ void do_xapi_GetCurrentUser(uint64_t dst);
 void do_xapi_DrawBMP(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPNG(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
 void do_xapi_DrawPicture(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint64_t path);
+uint64_t do_xapi_LoadPicture(uint64_t buffer, uint32_t width, uint32_t height, uint64_t path);
 int  xapi_doDrawSvg(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t svg_text, uint64_t enable_trans);
 int  xapi_doDrawFA(uint64_t handle, uint32_t x, uint32_t y, uint32_t width, uint64_t name, uint64_t enable_trans);
 uint64_t do_xapi_ReadFile(struct X64_REGS *regs);
@@ -252,6 +331,18 @@ void do_xapi_Sleep(uint64_t ms);
 void do_xapi_Button(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_ButtonEmp(uint64_t handle, uint64_t x, uint64_t y, uint64_t CRLid, uint64_t text);
 void do_xapi_DeleteButton(uint64_t handle, uint64_t CRLid);
+void do_xapi_PutSwitch(uint64_t handle, uint64_t x, uint64_t y, uint64_t status, uint64_t CRLid);
+void do_xapi_SetSwitch(uint64_t handle, uint64_t CRLid, uint64_t status);
+void do_xapi_DeleteSwitch(uint64_t handle, uint64_t CRLid);
+void do_xapi_PutVerticalScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint64_t length, uint64_t thumb_length,
+                                  uint64_t CRLid);
+void do_xapi_PutHorizontalScrollBar(uint64_t handle, uint64_t x, uint64_t y, uint64_t length, uint64_t thumb_length,
+                                    uint64_t CRLid);
+void do_xapi_DeleteScrollBar(uint64_t handle, uint64_t CRLid);
+void do_xapi_SetScrollBarPosition(uint64_t handle, uint64_t CRLid, uint64_t position);
+uint64_t do_xapi_PutTextInputBox(uint64_t handle, uint64_t x, uint64_t y, uint64_t width, uint64_t text);
+uint64_t do_xapi_GetTextInputBox(uint64_t id, uint64_t text);
+uint64_t do_xapi_DeleteTextInputBox(uint64_t id);
 uint64_t do_xapi_OpenFile(uint64_t path);
 void do_xapi_CloseFile(uint64_t ptr);
 uint64_t do_xapi_FileDialog(uint64_t mode, uint64_t title, uint64_t initial_path, uint64_t out_path, uint64_t out_size);
@@ -267,6 +358,23 @@ uint64_t do_xapi_MapMemory(uint64_t ptr, uint64_t size, uint32_t flags);
 void do_xapi_FlushTime();
 uint64_t do_xapi_GetTaskList(uint64_t buffer, uint64_t max_count);
 uint64_t do_xapi_KillProcess(uint64_t pid);
+uint64_t do_xapi_UserOobeRequired();
+uint64_t do_xapi_UserList(uint64_t buffer, uint64_t max_count);
+uint64_t do_xapi_UserLogin(uint64_t username, uint64_t password);
+uint64_t do_xapi_UserCreateFirst(uint64_t username, uint64_t password);
+uint64_t do_xapi_PowerAction(uint64_t action);
+uint64_t do_xapi_SendAppMessage(char *title, char *text);
+uint64_t do_xapi_SendNotification(const XApiNotificationRequest *req);
+uint64_t do_xapi_SetNotifyPrcor(uint64_t func);
+uint64_t do_xapi_InstallerEnumDisks(uint64_t list);
+uint64_t do_xapi_InstallerStart(uint64_t disk_id);
+uint64_t do_xapi_InstallerStartEx(uint64_t disk_id, uint64_t mode);
+uint64_t do_xapi_InstallerStartOptions(uint64_t options);
+uint64_t do_xapi_InstallerPrecheck(uint64_t disk_id, uint64_t mode, uint64_t out);
+uint64_t do_xapi_InstallerPrecheckOptions(uint64_t options, uint64_t out);
+uint64_t do_xapi_InstallerProgress(uint64_t progress);
+uint64_t do_xapi_InstallerRescue(uint64_t action, uint64_t disk_id, uint64_t out);
+uint64_t do_xapi_InstallerLog(uint64_t out);
 
 
 
@@ -276,5 +384,6 @@ void init_syscall();
 void do_message(uint64_t msg_type, uint64_t hData, uint64_t lData, MsgPrcor WinMpf, tcb_t ftask);
 void init_message();
 void init_window_message(WINDOWLSP window, MsgPrcor func);
+bool init_notify_message(pcb_t process, uint64_t func);
 void message_thread(uint64_t arg);
 uint64_t message_ask(uint64_t msg_type_p, uint64_t hdatap, uint64_t ldatap, uint64_t funcp, uint64_t taskp);

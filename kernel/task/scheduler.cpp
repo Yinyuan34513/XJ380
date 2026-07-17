@@ -5,6 +5,7 @@
 #include "krlibc.h"
 #include "lock_queue.h"
 #include "proto.hpp"
+#include "fs/vfs/anonfs.h"
 #include "smp/smp.h"
 #include "task/pcb.h"
 
@@ -383,6 +384,8 @@ extern "C" registers_t *timer_handle(registers_t *reg)
         send_eoi();
         return reg; 
     }
+
+    anonfs_timerfd_check_wakeup();
 
     tcb_t current = get_current_task();
     if (current == NULL) {

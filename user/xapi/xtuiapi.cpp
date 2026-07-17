@@ -257,6 +257,26 @@ extern "C" void	xapi_GetCurrentUser(UserInfo *user_info) {
 	enter_syscall(XAPI_GET_CURRENT_USER, (uint64_t)user_info, 0, 0, 0, 0, 0);
 }
 
+extern "C" UINT64 xapi_UserOobeRequired(void)
+{
+	return enter_syscall(XAPI_USER_OOBE_REQUIRED, 0, 0, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_UserList(LoginUserInfo *buffer, UINT64 max_count)
+{
+	return enter_syscall(XAPI_USER_LIST, (uint64_t)buffer, max_count, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_UserLogin(WSTR username, WSTR password)
+{
+	return enter_syscall(XAPI_USER_LOGIN, (uint64_t)username, (uint64_t)password, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_UserCreateFirst(WSTR username, WSTR password)
+{
+	return enter_syscall(XAPI_USER_CREATE_FIRST, (uint64_t)username, (uint64_t)password, 0, 0, 0, 0);
+}
+
 extern "C" void	xapi_GetTimeX(TimeType *tm) {
 	enter_syscall(XAPI_GET_TIME_X, (uint64_t)tm, 0, 0, 0, 0, 0);
 }
@@ -269,6 +289,10 @@ extern "C" UINT64	xapi_GetMemorySize(void) {
 	return enter_syscall(XAPI_GET_MEMORY_SIZE, 0, 0, 0, 0, 0, 0);
 }
 
+extern "C" UINT64	xapi_GetTimeNano() {
+	return enter_syscall(XAPI_GET_TIME_NANO, 0, 0, 0, 0, 0, 0);
+}
+
 // 3-6
 extern "C" void	xapi_Broken(WSTR broken_info) {
 	enter_syscall(XAPI_BROKEN, (uint64_t)broken_info, 0, 0, 0, 0, 0);
@@ -276,6 +300,16 @@ extern "C" void	xapi_Broken(WSTR broken_info) {
 
 extern "C" void	xapi_SendAppMessage(WSTR title, WSTR text) {
 	enter_syscall(XAPI_SEND_APP_MSG, (uint64_t)title, (uint64_t)text, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_SetNotifyPrcor(XApiNotifyPrcor func)
+{
+    return enter_syscall(XAPI_NOTIFY_SET_PROCOR, (uint64_t)func, 0, 0, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_SendNotification(const XApiNotificationRequest *req)
+{
+    return enter_syscall(XAPI_NOTIFY_SEND, (uint64_t)req, 0, 0, 0, 0, 0);
 }
 
 extern "C" void 	xapi_Sleep(UINT64 ms)
@@ -287,6 +321,12 @@ extern "C" void 	xapi_Run(WSTR path)
 {
 	enter_syscall(XAPI_RUN, (uint64_t)path, 0, 0, 0, 0, 0);
 }
+
+extern "C" UINT64 xapi_PowerAction(UINT64 action)
+{
+    return enter_syscall(XAPI_POWER_ACTION, action, 0, 0, 0, 0, 0);
+}
+
 extern "C" void 	xapi_FlushTime(void)
 {
 	enter_syscall(XAPI_FLUSH_TIME, 0, 0, 0, 0, 0, 0);

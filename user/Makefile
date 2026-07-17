@@ -350,7 +350,8 @@ FMANAGER_SOURCES := ./fmanager/fmanager.cpp \
 
 CTRLMENU_SOURCES := ./ctrlmenu/ctrlmenu.cpp \
                 ./ctrlmenu/cm_graph.cpp \
-                ./ctrlmenu/cm_processp.cpp 
+                ./ctrlmenu/cm_processp.cpp \
+                ./ctrlmenu/cm_settings.cpp
 
 CALC_SOURCES := ./calc/calc.cpp
 

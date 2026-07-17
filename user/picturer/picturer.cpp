@@ -23,6 +23,40 @@ static void picturer_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     }
 }
 
+// 红温了，用数学库会重复声明，只能这样了
+double st_fabs(double x)
+{
+    if (x < 0) { return -x; }
+    else { return x; }
+}
+
+double st_sqrt(double number)
+{
+    if (number < 0) { return __builtin_nanf(""); }
+
+    double x       = number;
+    double epsilon = 1e-15;
+    double diff;
+
+    do
+    {
+        x    = (x + number / x) / 2;
+        diff = st_fabs(x - number / x);
+    } while (diff > epsilon);
+
+    return x;
+}
+
+// 神秘压测程序
+void stress_test()
+{
+    while (true)
+    {
+        int sand = xapi_GetTimeNano();
+        int result = st_sqrt(sand);
+    }
+}
+
 static int picturer_main_impl(int argc, char *argv[], char *envp[])
 {
     if (argc == 1)
@@ -31,6 +65,7 @@ static int picturer_main_impl(int argc, char *argv[], char *envp[])
     }
     else
     {
+        stress_test();
         return 0;
     }
 

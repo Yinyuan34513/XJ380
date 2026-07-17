@@ -7,7 +7,7 @@
 #define PTE_HUGE            (0x1 << 7)
 #define PTE_FRAME_ALLOCATED (((uint64_t)0x1) << 62)
 #define PTE_NO_EXECUTE      (((uint64_t)0x1) << 63)
-#define PTE_ADDR_MASK       0x00007fffffff000ULL
+#define PTE_ADDR_MASK       0x000ffffffffff000ULL
 
 #define ARCH_PT_IS_TABLE(x) (((x) & (PTE_PRESENT | PTE_WRITEABLE)) == (PTE_PRESENT | PTE_WRITEABLE))
 #define ARCH_PT_IS_LARGE(x) (((x) & (PTE_PRESENT | PTE_HUGE)) == (PTE_PRESENT | PTE_HUGE))
@@ -167,6 +167,7 @@ void switch_process_page_directory(page_directory_t *dir);
  * @return == -1 ? 未分配成功 : 地址
  */
 uint64_t page_alloc_random(page_directory_t *directory, uint64_t length, uint64_t flags);
+uint64_t page_reserve_user_range(page_directory_t *directory, uint64_t length);
 
 /**
  * 释放一段页映射 (未使用 alloc_frames 的页不可使用此方法取消映射)

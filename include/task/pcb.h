@@ -132,6 +132,12 @@ struct process_control_block
 
     tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
+
+    int      notify_pcor_pipe_read_fd;
+    int      notify_pcor_pipe_write_fd;
+    size_t   notify_pcor_tid;
+    uint64_t notify_pcor_func;
+    bool     notify_pcor_registered;
 };
 #ifndef CONFIG_USER_ELF_HEADER_START
 #define CONFIG_USER_ELF_HEADER_START 0x0000300000000000UL
@@ -172,8 +178,7 @@ struct thread_control_block
     uint64_t main;           // 线程入口地址
     uint64_t user_stack;     // 用户栈
     uint64_t user_stack_top; // 用户栈顶部地址
-    
-    
+
     uint64_t syscall_stack;
     uint64_t syscall_user_rsp;
     
@@ -210,6 +215,8 @@ struct thread_control_block
     uint64_t eevdf_deadline;
     uint64_t eevdf_slice;
     uint64_t eevdf_last_start;
+
+    bool owns_user_stack;
 };
 
 extern pcb_t kernel_group;
@@ -237,8 +244,10 @@ void init_reaper();
 
 typedef void (*elf_start)(int, char **, char **);
 void kill_proc(pcb_t pcb, int exit_code, bool is_zombie);
+bool kill_proc_deferred(pcb_t pcb, int exit_code);
 void kill_thread(tcb_t task);
 void kill_thread0(tcb_t task);
 void kill_proc0(pcb_t pcb);
 pcb_t found_pcb(int pid);
+pcb_t found_process_by_exe_path(const char *exe_path);
 tcb_t found_thread(pcb_t pcb, int tid);

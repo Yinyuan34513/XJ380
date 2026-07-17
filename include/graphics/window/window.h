@@ -28,6 +28,7 @@ typedef struct WINDOWLS
     uint32_t  restore_width;
     uint32_t  restore_height;
     bool      can_maximize;
+    bool      can_resize;
 } WINDOWLS;
 
 typedef struct WIN_THEME
@@ -52,9 +53,12 @@ typedef struct XWM_INFO
 } XWM_INFO;
 
 void init_xwm(XWM_INFO *xwmi);
-void create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
-void create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height);
-void create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, CHAR8 *title, uint32_t width, uint32_t height);
+bool create_window_fmoff(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls, uint32_t width, uint32_t height);
+bool create_window_fscr(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window_login(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window_desktop(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
+bool create_window_dock(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS **windowls);
 void change_title(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title);
 void draw_text(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *title, int x, int y, int size,
                SHEET_BUFFER color);
@@ -64,9 +68,21 @@ void draw_text_sw(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, CHAR8 *ti
                   SHEET_BUFFER color);
 void delete_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 void delete_process_windows(XWM_INFO *xwmi, SHEET_INFO *sht, pcb_t process);
+bool window_contains(XWM_INFO *xwmi, WINDOWLS *windowls);
 WINDOWLS *sht_found_win(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet);
+WINDOWLS *sht_found_win_by_type(XWM_INFO *xwmi, SHEET_INFO *sht, SHEET *csheet, uint64_t type);
+WINDOWLS *find_window_by_exe_path(XWM_INFO *xwmi, const char *exe_path);
 WINDOWLS *thread_found_win(XWM_INFO *xwmi, tcb_t thread);
 WINDOWLS *mpf_found_win(MsgPrcor mpf);
+bool alt_tab_preview_begin(XWM_INFO *xwmi, SHEET_INFO *sht);
+bool alt_tab_preview_next(XWM_INFO *xwmi, SHEET_INFO *sht);
+bool alt_tab_preview_commit(XWM_INFO *xwmi, SHEET_INFO *sht);
+bool minimize_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool restore_and_focus_window(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool focus_window_by_exe_path(XWM_INFO *xwmi, SHEET_INFO *sht, const char *exe_path);
+bool close_window_by_exe_path(XWM_INFO *xwmi, SHEET_INFO *sht, const char *exe_path);
+bool close_window_and_task(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
+bool toggle_show_desktop(XWM_INFO *xwmi, SHEET_INFO *sht);
 bool toggle_window_maximized(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls);
 void set_window_maximize_support(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls, bool can_maximize);
 bool resize_window_sheet_preserving_content(XWM_INFO *xwmi, SHEET_INFO *sht, WINDOWLS *windowls,

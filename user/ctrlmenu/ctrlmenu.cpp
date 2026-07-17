@@ -16,19 +16,18 @@ void ctrlmenu_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     case MSG_LBUTTON:
         process_left_key(hData, lData);
         break;
+    case MSG_ROLLER:
+        ctrlmenu_settings_scroll((int)hData);
+        break;
     case MSG_CRL:
-        if (hData <= 1999) { change_setting_apps(hData); } // cm_graph.cpp:145
+        if (cindex == 3 && ctrlmenu_settings_handle_control(hData, lData)) break;
+        if (hData <= 1999) { change_setting_apps(hData); }
         else if (hData == 2001) { change_clock_hour_offset(+1); }
         else if (hData == 2002) { change_clock_hour_offset(23); }
         else if (hData == 3000) { change_setting_background(); }
-        else if (hData == 114514) { delete_input_box(); charbox_input_complete = -1; }
-        else if (hData == 114515) { delete_input_box(); charbox_input_complete = 1; }
+        else if (hData == 114514) { delete_input_box(false); }
+        else if (hData == 114515) { delete_input_box(true); }
         break;
-    case MSG_CHAR:
-        put_char((char)lData);
-        break;
-    case MSG_SPCHAR:
-        if (lData == '\b') { backspace(); }
     }
     return;
 }
@@ -45,7 +44,8 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
         }
         else if (strcmp(argv[0], "shortdock-open-about") == 0)
         {
-            cindex = 3;
+            xapi_Run((char *)"/apps/system/xjver.elf");
+            return 0;
         }
         else if (strcmp(argv[0], "shortdock-open-graphics") == 0)
         {
@@ -59,6 +59,8 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
     Winfo.sets  = XWIN_FULL_SCR;  
     xapi_CreateWindow(&handle, &Winfo);
     xapi_GetWindowSize(handle, &win_width, &win_height);
+    init_ctrlmenu_background_cache();
+    ctrlmenu_settings_init();
     SetMsgPrcor(handle, ctrlmenu_MessagePrcor);
 
     draw_background();
@@ -112,7 +114,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
                 {
                     RunfileSettings_Format *rff = (RunfileSettings_Format *)f->buffer;
 
-                    strcpy(rff->items[change_setting_apps_id].runpath, charbox_buf);
+                    strcpy(rff->items[change_setting_apps_id].runpath, setting_apps_change_char_buffer);
 
                     xapi_CloseFile(f);
 
@@ -143,7 +145,7 @@ static int ctrlmenu_main_impl(int argc, char *argv[], char *envp[])
                 {
                     SettingsDataFileFormat *sdff = (SettingsDataFileFormat *)f->buffer;
 
-                    strcpy(sdff->BackgroundFilePath, charbox_buf);
+                    strcpy(sdff->BackgroundFilePath, setting_apps_change_char_buffer);
 
                     xapi_CloseFile(f);
 

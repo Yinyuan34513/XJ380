@@ -20,9 +20,6 @@ extern bool waiting_change_setting_apps;
 extern bool waiting_change_setting_background;
 extern int change_setting_apps_id;
 
-extern int charbox_count;
-extern char *charbox_buf;
-
 struct RunfileSettings_Item
 {
     char exname[10];
@@ -44,18 +41,25 @@ struct SettingsDataFileFormat
 void draw_background();
 void draw_background_body();
 void draw_background_time();
+void init_ctrlmenu_background_cache();
 void process_left_key(int x, int y);
 void draw_mainpage();
+void draw_app_showcase();
 void draw_setting();
+bool ctrlmenu_handle_mainpage_click(int x, int y);
+bool ctrlmenu_handle_app_showcase_click(int x, int y);
+void ctrlmenu_settings_init();
+void ctrlmenu_settings_hide_controls();
+bool ctrlmenu_settings_handle_click(int x, int y);
+bool ctrlmenu_settings_handle_control(UINT64 id, UINT64 data);
+void ctrlmenu_settings_scroll(int delta);
 void create_input_box(char *buf);
-void put_char(char ch);
-void backspace();
-void delete_input_box();
+void delete_input_box(bool save);
 
-void draw_setting_apps();
 void change_setting_apps(int id);
 
 void change_setting_background();
+void set_background_file_path(const char *path);
 
 int read_settings_time_offset();
 void change_clock_hour_offset(int value);

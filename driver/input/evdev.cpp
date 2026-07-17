@@ -222,6 +222,16 @@ static void evdev_queue_event_locked(evdev_device_t *dev, const struct input_eve
     dev->count++;
 }
 
+static bool evdev_frame_has_syn_report(const struct input_event *events, size_t count)
+{
+    if (events == NULL) return false;
+    for (size_t i = 0; i < count; i++)
+    {
+        if (events[i].type == EV_SYN && events[i].code == SYN_REPORT) return true;
+    }
+    return false;
+}
+
 static bool evdev_coalesce_mouse_frame_locked(evdev_device_t *dev, struct input_event *frame, size_t count)
 {
     if (dev == NULL || frame == NULL || dev->index != 1 || count == 0 || dev->count == 0) return false;
@@ -337,8 +347,11 @@ void evdev_push_event(int event_index, uint16_t type, uint16_t code, int32_t val
     event.value = value;
 
     spin_lock(&dev->lock);
+    bool was_empty = dev->count == 0;
     evdev_queue_event_locked(dev, &event);
     spin_unlock(&dev->lock);
+
+    if (was_empty || (type == EV_SYN && code == SYN_REPORT)) poll_notify_event();
 }
 
 static void evdev_push_frame(int event_index, const struct input_event *events, size_t count)
@@ -356,10 +369,13 @@ static void evdev_push_frame(int event_index, const struct input_event *events, 
         evdev_stamp_event(&frame[i], ns);
     }
 
+    bool notify = false;
     spin_lock(&dev->lock);
+    bool was_empty = dev->count == 0;
     if (evdev_coalesce_mouse_frame_locked(dev, frame, count))
     {
         spin_unlock(&dev->lock);
+        poll_notify_event();
         return;
     }
 
@@ -368,7 +384,10 @@ static void evdev_push_frame(int event_index, const struct input_event *events, 
 
     for (size_t i = 0; i < count; i++)
         evdev_queue_event_locked(dev, &frame[i]);
+    notify = was_empty || evdev_frame_has_syn_report(frame, count);
     spin_unlock(&dev->lock);
+
+    if (notify) poll_notify_event();
 }
 
 static uint16_t evdev_usb_keyboard_usage_to_key(uint8_t usage)

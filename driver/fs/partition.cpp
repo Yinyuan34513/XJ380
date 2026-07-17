@@ -108,6 +108,21 @@ static void partition_scan_single_device(size_t vdisk_id, bool auto_mount)
     }
 }
 
+void partition_rescan_device(size_t vdisk_id, bool auto_mount)
+{
+    if (vdisk_id >= 256) return;
+    partition_scan_single_device(vdisk_id, auto_mount);
+}
+
+int partition_find_first_for_disk(size_t vdisk_id)
+{
+    for (size_t i = partition_num; i > 0; i--)
+    {
+        if (partitions[i - 1].vdisk_id == vdisk_id) return (int)(i - 1);
+    }
+    return -1;
+}
+
 static void partition_dump_prefix(const char *name, const uint8_t *buf, size_t bytes)
 {
     size_t dump_len = bytes > 64 ? 64 : bytes;

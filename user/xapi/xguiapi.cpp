@@ -153,6 +153,15 @@ extern "C" void xapi_DrawPicture(
 	enter_syscall(XAPI_DRAW_PICTURE, handle, x, y, width, height, (UINT64)(path));
 }
 
+extern "C" bool xapi_LoadPicture(
+	XCOLORA *buffer,
+	UINT32   width,
+	UINT32   height,
+	WSTR     path
+) {
+	return enter_syscall(XAPI_LOAD_PICTURE, (UINT64)(buffer), width, height, (UINT64)(path), 0, 0) != 0;
+}
+
 extern "C" void xapi_GetPicSize(
 	UINT32	*width,
 	UINT32	*height,
@@ -251,6 +260,91 @@ extern "C" void xapi_DeleteButton(
 	UINT64  CRLid
 ) {
 	enter_syscall(XAPI_DELETE_BUTTON, handle, CRLid, 0, 0, 0, 0);
+}
+
+extern "C" void xapi_PutSwitch(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  status,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_PUT_SWITCH, handle, x, y, status, CRLid, 0);
+}
+
+extern "C" void xapi_SetSwitch(
+	HDLE  	handle,
+	UINT64  CRLid,
+	UINT64  status
+) {
+	enter_syscall(XAPI_SET_SWITCH, handle, CRLid, status, 0, 0, 0);
+}
+
+extern "C" void xapi_DeleteSwitch(
+	HDLE  	handle,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_DEL_SWITCH, handle, CRLid, 0, 0, 0, 0);
+}
+
+extern "C" void xapi_PutVerticalScrollBar(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  length,
+	UINT64  thumbLength,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_PUT_VERTICAL_SCROLL_BAR, handle, x, y, length, thumbLength, CRLid);
+}
+
+extern "C" void xapi_PutHorizontalScrollBar(
+	HDLE  	handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  length,
+	UINT64  thumbLength,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_PUT_HORIZONTAL_SCROLL_BAR, handle, x, y, length, thumbLength, CRLid);
+}
+
+extern "C" void xapi_DeleteScrollBar(
+	HDLE  	handle,
+	UINT64  CRLid
+) {
+	enter_syscall(XAPI_DELETE_SCROLL_BAR, handle, CRLid, 0, 0, 0, 0);
+}
+
+extern "C" void xapi_SetScrollBarPosition(
+	HDLE  	handle,
+	UINT64  CRLid,
+	UINT64  position
+) {
+	enter_syscall(XAPI_SET_SCROLL_BAR_POSITION, handle, CRLid, position, 0, 0, 0);
+}
+
+extern "C" UINT64 xapi_PutTextInputBox(
+	HDLE    handle,
+	UINT64  x,
+	UINT64  y,
+	UINT64  width,
+	WSTR    text
+) {
+	return enter_syscall(XAPI_PUT_TEXT_INBOX, handle, x, y, width, (UINT64)(text), 0);
+}
+
+extern "C" void xapi_GetTextInputBox(
+	UINT64 id,
+	WSTR   text
+) {
+	enter_syscall(XAPI_GET_TEXT_INBOX, id, (UINT64)(text), 0, 0, 0, 0);
+}
+
+extern "C" void xapi_DeleteTextInputBox(
+	UINT64 id
+) {
+	enter_syscall(XAPI_DEL_TEXT_INBOX, id, 0, 0, 0, 0, 0);
 }
 
 extern "C" void xapi_RegisterRightButtonMenu(
