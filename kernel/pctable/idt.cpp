@@ -1,3 +1,4 @@
+#include <apic/apic.h>
 #include <cpu/longm.h>
 #include <mm/memory.h>
 #include <pctable/gdt.h>
@@ -53,6 +54,7 @@ void init_idt()
     init_idt_desc(32, X86_64_INTR_GATE, save_registers, RING0, NULL); // timer
     init_idt_desc(33, X86_64_INTR_GATE, keyboard_handler, RING0, NULL);
     init_idt_desc(34, X86_64_INTR_GATE, mouse_handler, RING0, NULL);
+    init_idt_desc(LAPIC_IPI_SMOKE_VECTOR, X86_64_INTR_GATE, ipi_smoke_handler, RING0, NULL);
 
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 

@@ -12,5 +12,6 @@ void scheduler_sleep_ns(uint64_t nano);
 void scheduler_wake_task(tcb_t task);
 void scheduler_tick();
 void scheduler_init_task(tcb_t task);
+void scheduler_reweight_task(tcb_t task);
 
 // tcb_t select_next_task_safe();

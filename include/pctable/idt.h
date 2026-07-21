@@ -51,6 +51,7 @@ void sb16_interr();
 void undefined_interrupt();
 
 void hda_interrupt();
+void ipi_smoke_handler();
 
 #ifdef __cplusplus
 }

@@ -21,6 +21,12 @@ static constexpr uint64_t EEVDF_MIN_SLICE_NS   = MIN_SLICE * EEVDF_TICK_NS;
 static constexpr uint64_t EEVDF_WAKEUP_CREDIT  = EEVDF_BASE_SLICE_NS;
 static constexpr uint64_t EEVDF_SLEEPER_CREDIT = EEVDF_BASE_SLICE_NS * 2;
 static constexpr uint64_t EEVDF_DEFAULT_WEIGHT = 1024ULL;
+static constexpr uint32_t EEVDF_NICE_WEIGHTS[] = {
+    88761, 71755, 56483, 46273, 36291, 29154, 23254, 18705, 14949, 11916,
+    9548,  7620,  6100,  4904,  3906,  3121,  2501,  1991,  1586,  1277,
+    1024,  820,   655,   526,   423,   335,   272,   215,   172,   137,
+    110,   87,    70,    56,    45,    36,    29,    23,    18,    15,
+};
 
 void enable_scheduler()
 {
@@ -201,19 +207,48 @@ static inline uint64_t task_sched_slice(tcb_t task)
     return task->eevdf_slice;
 }
 
+static inline uint32_t task_sched_weight(tcb_t task)
+{
+    int nice = task != NULL && task->parent_group != NULL ? task->parent_group->nice : 0;
+    if (nice < -20) nice = -20;
+    if (nice > 19) nice = 19;
+    return EEVDF_NICE_WEIGHTS[nice + 20];
+}
+
+static inline uint64_t task_vruntime_delta(tcb_t task, uint64_t runtime_ns)
+{
+    uint64_t weight = task_sched_weight(task);
+    return (runtime_ns / weight) * EEVDF_DEFAULT_WEIGHT +
+           ((runtime_ns % weight) * EEVDF_DEFAULT_WEIGHT) / weight;
+}
+
+static inline uint64_t task_virtual_slice(tcb_t task)
+{
+    uint64_t slice  = task_sched_slice(task);
+    uint64_t weight = task_sched_weight(task);
+    return (slice / weight) * EEVDF_DEFAULT_WEIGHT +
+           ((slice % weight) * EEVDF_DEFAULT_WEIGHT + weight - 1) / weight;
+}
+
+static inline uint64_t task_virtual_deadline(tcb_t task)
+{
+    uint64_t slice = task_virtual_slice(task);
+    return task->eevdf_vruntime > (uint64_t)-1 - slice ? (uint64_t)-1 : task->eevdf_vruntime + slice;
+}
+
 static inline void apply_eevdf_wakeup_credit(tcb_t task, uint64_t base_vruntime)
 {
     if (task == NULL || task->task_level == TASK_IDLE_LEVEL) return;
 
-    uint64_t credit = task_sched_slice(task);
-    if (credit < EEVDF_WAKEUP_CREDIT) credit = EEVDF_WAKEUP_CREDIT;
-    if (credit > EEVDF_SLEEPER_CREDIT) credit = EEVDF_SLEEPER_CREDIT;
+    uint64_t credit = task_vruntime_delta(task, EEVDF_WAKEUP_CREDIT);
+    uint64_t max_credit = task_vruntime_delta(task, EEVDF_SLEEPER_CREDIT);
+    if (credit > max_credit) credit = max_credit;
 
     uint64_t placed_vruntime = base_vruntime > credit ? base_vruntime - credit : 0;
     if (task->eevdf_vruntime > placed_vruntime) {
         task->eevdf_vruntime = placed_vruntime;
     }
-    task->eevdf_deadline = task->eevdf_vruntime + task_sched_slice(task);
+    task->eevdf_deadline = task_virtual_deadline(task);
 }
 
 static inline bool wake_sleeping_task(tcb_t task, uint64_t now, uint64_t base_vruntime)
@@ -226,11 +261,6 @@ static inline bool wake_sleeping_task(tcb_t task, uint64_t now, uint64_t base_vr
         return true;
     }
     return false;
-}
-
-static inline uint64_t vruntime_delta(uint64_t runtime_ns)
-{
-    return (runtime_ns * EEVDF_DEFAULT_WEIGHT) / EEVDF_DEFAULT_WEIGHT;
 }
 
 static inline bool deadline_before(tcb_t left, tcb_t right)
@@ -247,9 +277,11 @@ static void charge_current_eevdf_runtime(tcb_t current, uint64_t runtime_ns)
     if (current->status != RUNNING) return;
     if (runtime_ns == 0) return;
 
-    current->eevdf_vruntime += vruntime_delta(runtime_ns);
-    uint64_t slice = task_sched_slice(current);
-    current->eevdf_deadline = current->eevdf_vruntime + slice;
+    __atomic_fetch_add(&current->cpu_runtime_ns, runtime_ns, __ATOMIC_RELAXED);
+    PROCESSOR_INFO *cpu = get_current_cpu();
+    if (cpu != NULL) __atomic_fetch_add(&cpu->cpu_runtime_ns, runtime_ns, __ATOMIC_RELAXED);
+    current->eevdf_vruntime += task_vruntime_delta(current, runtime_ns);
+    current->eevdf_deadline = task_virtual_deadline(current);
 }
 
 static uint64_t queue_average_vruntime(lock_queue *queue, tcb_t current, uint64_t now, tcb_t *fallback, tcb_t *idle)
@@ -291,7 +323,7 @@ static void init_task_eevdf_entity(tcb_t task, uint64_t base_vruntime, uint64_t 
     uint64_t slice = task_sched_slice(task);
     task->eevdf_slice = slice;
     task->eevdf_vruntime = base_vruntime > EEVDF_WAKEUP_CREDIT ? base_vruntime - EEVDF_WAKEUP_CREDIT : 0;
-    task->eevdf_deadline = task->eevdf_vruntime + slice;
+    task->eevdf_deadline = task_virtual_deadline(task);
     task->eevdf_last_start = now;
 }
 
@@ -307,7 +339,7 @@ static void mark_task_dispatched(tcb_t task, uint64_t now)
         task->eevdf_slice = EEVDF_BASE_SLICE_NS;
     }
     if (task->eevdf_deadline == 0) {
-        task->eevdf_deadline = task->eevdf_vruntime + task_sched_slice(task);
+        task->eevdf_deadline = task_virtual_deadline(task);
     }
     task->eevdf_last_start = now;
 }
@@ -503,6 +535,12 @@ void scheduler_wake_task(tcb_t task)
 }
 EXPORT_SYMBOL(scheduler_wake_task);
 
+void scheduler_reweight_task(tcb_t task)
+{
+    if (task == NULL || task->task_level == TASK_IDLE_LEVEL) return;
+    task->eevdf_deadline = task_virtual_deadline(task);
+}
+
 void debug_sched_queue(lock_queue *q)
 {
     if (q == NULL) return;
@@ -521,11 +559,12 @@ void debug_sched_queue(lock_queue *q)
 size_t add_task(tcb_t new_task)
 {
     if (new_task == NULL) return -1;
-	    
+
     spin_lock(&scheduler_lock);
-    
+
     // 确保任务有基本设置
-    if (new_task->status == CREATE) {
+    if (new_task->status == CREATE)
+    {
         new_task->status = START;
     }
     

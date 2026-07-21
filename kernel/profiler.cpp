@@ -95,6 +95,7 @@ static const char *profiler_syscall_name(uint64_t nr)
     case SYS_PIPE: return "pipe";
     case SYS_SELECT: return "select";
     case SYS_SCHED_YIELD: return "sched_yield";
+    case SYS_SCHED_SETSCHEDULER: return "sched_setscheduler";
     case SYS_MREMAP: return "mremap";
     case SYS_MINCORE: return "mincore";
     case SYS_MADVISE: return "madvise";
@@ -164,9 +165,11 @@ static const char *profiler_syscall_name(uint64_t nr)
     case SYS_LREMOVEXATTR: return "lremovexattr";
     case SYS_FREMOVEXATTR: return "fremovexattr";
     case SYS_FUTEX: return "futex";
+    case SYS_SCHED_SETAFFINITY: return "sched_setaffinity";
     case SYS_SCHED_GETAFFINITY: return "sched_getaffinity";
     case SYS_EPOLL_CREATE: return "epoll_create";
     case SYS_GETDENTS64: return "getdents64";
+    case SYS_GETRLIMIT: return "getrlimit";
     case SYS_SET_TID_ADDRESS: return "set_tid_address";
     case SYS_FADVISE64: return "fadvise64";
     case SYS_CLOCK_GETTIME: return "clock_gettime";
@@ -184,6 +187,7 @@ static const char *profiler_syscall_name(uint64_t nr)
     case SYS_NEWFSTATAT: return "newfstatat";
     case SYS_UNLINKAT: return "unlinkat";
     case SYS_RENAMEAT: return "renameat";
+    case SYS_RENAMEAT2: return "renameat2";
     case SYS_LINKAT: return "linkat";
     case SYS_SYMLINKAT: return "symlinkat";
     case SYS_READLINKAT: return "readlinkat";
@@ -194,6 +198,7 @@ static const char *profiler_syscall_name(uint64_t nr)
     case SYS_SYNC_FILE_RANGE: return "sync_file_range";
     case SYS_UTIMENSAT: return "utimensat";
     case SYS_EPOLL_PWAIT: return "epoll_pwait";
+    case SYS_EPOLL_PWAIT2: return "epoll_pwait2";
     case SYS_SIGNALFD: return "signalfd";
     case SYS_TIMERFD_CREATE: return "timerfd_create";
     case SYS_EVENTFD: return "eventfd";

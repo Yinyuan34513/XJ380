@@ -5,6 +5,10 @@
 #define AT_FDCWD (-100)
 #define AT_SYMLINK_NOFOLLOW 0x100
 
+#define RENAME_NOREPLACE 0x1
+#define RENAME_EXCHANGE  0x2
+#define RENAME_WHITEOUT  0x4
+
 #define O_RDONLY 0
 #define O_WRONLY 1
 #define O_RDWR   2

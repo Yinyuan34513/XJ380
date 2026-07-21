@@ -195,6 +195,7 @@ int  syscall_sig_action(int sig, sigaction_t *action, sigaction_t *oldaction);
 int  syscall_sigaltstack(stack_t *ss, stack_t *old_ss);
 int  signal_send_process(pcb_t process, int sig);
 int  signal_send_process_info(pcb_t process, int sig, const siginfo_t *info);
+int  signal_send_process_group(size_t pgid, int sig);
 bool signal_deliver_pending(struct X64_REGS *regs);
 uint64_t signal_return(struct X64_REGS *regs);
 

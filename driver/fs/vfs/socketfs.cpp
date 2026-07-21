@@ -206,7 +206,7 @@ static errno_t socketfs_del(void *parent, vfs_node_t node)
     (void)parent;
     socketfs_handle_t *handle = socketfs_get_handle(node);
     if (handle != NULL) {
-        if (socketfs_provider_valid(&handle->provider)) {
+        if (handle->provider.close != NULL) {
             handle->provider.close(handle->socket);
         }
         free(handle);

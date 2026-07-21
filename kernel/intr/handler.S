@@ -289,6 +289,13 @@ ENTRY(mouse_handler)
     xchgq %rax, (%rsp)
     jmp Err_Code
 
+ENTRY(ipi_smoke_handler)
+    pushq $0
+    pushq %rax
+    leaq c_ipi_smoke_handler(%rip), %rax
+    xchgq %rax, (%rsp)
+    jmp Err_Code
+
 ENTRY(hda_interrupt)
     pushq $0
     pushq %rax

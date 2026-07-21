@@ -31,6 +31,7 @@ sys_(chown, char *path, uint32_t owner, uint32_t group);
 sys_(fchown, int fd, uint32_t owner, uint32_t group);
 sys_(fchownat, int dirfd, char *pathname, uint32_t owner, uint32_t group, int flags);
 sys_(fchmodat, int dirfd, char *pathname, uint64_t mode, int flags);
+sys_(mknodat, int dirfd, char *pathname, uint64_t mode, uint64_t dev);
 sys_(utimensat, int dirfd, char *pathname, const struct timespec *times, int flags);
 sys_(utimes, char *filename, const struct timeval *times);
 sys_(close_range, uint32_t first, uint32_t last, uint32_t flags);
@@ -71,6 +72,7 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_RT_SIGPROCMASK: return "rt_sigprocmask";
     case SYS_ACCESS: return "access";
     case SYS_PIPE: return "pipe";
+    case SYS_SCHED_SETSCHEDULER: return "sched_setscheduler";
     case SYS_DUP3: return "dup3";
     case SYS_SELECT: return "select";
     case SYS_NANOSLEEP: return "nanosleep";
@@ -104,6 +106,8 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_SYSINFO: return "sysinfo";
     case SYS_SETUID: return "setuid";
     case SYS_SETGID: return "setgid";
+    case SYS_SETREUID: return "setreuid";
+    case SYS_SETREGID: return "setregid";
     case SYS_SETGROUPS: return "setgroups";
     case SYS_SETRESUID: return "setresuid";
     case SYS_GETRESUID: return "getresuid";
@@ -114,6 +118,8 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_CAPGET: return "capget";
     case SYS_CAPSET: return "capset";
     case SYS_GETPGRP: return "getpgrp";
+    case SYS_GETPRIORITY: return "getpriority";
+    case SYS_SETPRIORITY: return "setpriority";
     case SYS_SETSID: return "setsid";
     case SYS_GETSID: return "getsid";
     case SYS_GETCWD: return "getcwd";
@@ -121,12 +127,14 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_FCHDIR: return "fchdir";
     case SYS_GETTIMEOFDAY: return "gettimeofday";
     case SYS_GETDENTS64: return "getdents64";
+    case SYS_GETRLIMIT: return "getrlimit";
     case SYS_RENAME: return "rename";
     case SYS_RMDIR: return "rmdir";
     case SYS_UNLINK: return "unlink";
     case SYS_STATFS: return "statfs";
     case SYS_MKDIRAT: return "mkdirat";
     case SYS_RENAMEAT: return "renameat";
+    case SYS_RENAMEAT2: return "renameat2";
     case SYS_LINKAT: return "linkat";
     case SYS_SYMLINKAT: return "symlinkat";
     case SYS_CLOCK_GETTIME: return "clock_gettime";
@@ -160,10 +168,13 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_MEMFD_CREATE: return "memfd_create";
     case SYS_GETRANDOM: return "getrandom";
     case SYS_FUTEX: return "futex";
+    case SYS_SCHED_SETAFFINITY: return "sched_setaffinity";
+    case SYS_SCHED_GETAFFINITY: return "sched_getaffinity";
     case SYS_EPOLL_CREATE: return "epoll_create";
     case SYS_EPOLL_WAIT: return "epoll_wait";
     case SYS_EPOLL_CTL: return "epoll_ctl";
     case SYS_EPOLL_PWAIT: return "epoll_pwait";
+    case SYS_EPOLL_PWAIT2: return "epoll_pwait2";
     case SYS_EPOLL_CREATE1: return "epoll_create1";
     case SYS_PRCTL: return "prctl";
     case SYS_ARCH_PRCTL: return "arch_prctl";
@@ -188,6 +199,8 @@ static const char *debug_syscall_name(uint64_t nr)
     case SYS_PIDFD_OPEN: return "pidfd_open";
     case SYS_CLONE3: return "clone3";
     case SYS_CLOSE_RANGE: return "close_range";
+    case SYS_NAME_TO_HANDLE_AT: return "name_to_handle_at";
+    case SYS_FSOPEN: return "fsopen";
     default: return "?";
     }
 }
@@ -407,6 +420,14 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETCWD: regs->rax = (uint64_t)sys_getcwd((char *)regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_LSEEK: regs->rax = (uint64_t)sys_lseek(regs->rdi, (int64_t)regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_UMASK: regs->rax = (uint64_t)sys_umask(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SCHED_YIELD: scheduler_yield(); regs->rax = 0; break;
+    case SYS_SCHED_SETSCHEDULER:
+        regs->rax = (uint64_t)sys_sched_setscheduler(regs->rdi, regs->rsi, (const struct sched_param *)regs->rdx,
+                                                      0, 0, 0, regs);
+        break;
+    case SYS_GETRLIMIT:
+        regs->rax = (uint64_t)sys_getrlimit(regs->rdi, (struct rlimit *)regs->rsi, 0, 0, 0, 0, regs);
+        break;
     case SYS_GETDENTS:
         regs->rax = (uint64_t)sys_getdents(regs->rdi, (dirent *)regs->rsi, regs->rdx, 0, 0, 0, regs);
         break;
@@ -454,6 +475,10 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
         break;
     case SYS_SCHED_GETAFFINITY:
         regs->rax = (uint64_t)sys_sched_getaffinity(regs->rdi, regs->rsi, (void *)regs->rdx, 0, 0, 0, regs);
+        break;
+    case SYS_SCHED_SETAFFINITY:
+        regs->rax =
+            (uint64_t)sys_sched_setaffinity(regs->rdi, regs->rsi, (const void *)regs->rdx, 0, 0, 0, regs);
         break;
     case SYS_DUP: regs->rax = (uint64_t)sys_dup(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_DUP2: regs->rax = (uint64_t)sys_dup2(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
@@ -604,6 +629,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETGID: regs->rax = (uint64_t)sys_getgid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_SETUID: regs->rax = (uint64_t)sys_setuid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_SETGID: regs->rax = (uint64_t)sys_setgid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
+    case SYS_SETREUID: regs->rax = (uint64_t)sys_setreuid(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_SETREGID: regs->rax = (uint64_t)sys_setregid(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_GETEUID: regs->rax = (uint64_t)sys_geteuid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETEGID: regs->rax = (uint64_t)sys_getegid(0, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETGROUPS: regs->rax = (uint64_t)sys_getgroups(regs->rdi, (int *)regs->rsi, 0, 0, 0, 0, regs); break;
@@ -643,6 +670,8 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_GETSID: regs->rax = (uint64_t)sys_getsid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_GETPGID: regs->rax = (uint64_t)sys_getpgid(regs->rdi, 0, 0, 0, 0, 0, regs); break;
     case SYS_SETPGID: regs->rax = (uint64_t)sys_setpgid(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_GETPRIORITY: regs->rax = (uint64_t)sys_getpriority(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
+    case SYS_SETPRIORITY: regs->rax = (uint64_t)sys_setpriority(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_SENDFILE:
         regs->rax = (uint64_t)sys_sendfile(regs->rdi, regs->rsi, (uint64_t *)regs->rdx, regs->r10, 0, 0, regs);
         break;
@@ -695,9 +724,18 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_FACCESSAT2:
         regs->rax = (uint64_t)sys_faccessat2(regs->rdi, regs->rsi, regs->rdx, regs->r10, 0, 0, regs);
         break;
+    case SYS_EPOLL_PWAIT2:
+        regs->rax = (uint64_t)sys_epoll_pwait2(regs->rdi, (struct epoll_event *)regs->rsi, regs->rdx,
+                                                (const struct timespec *)regs->r10, (const sigset_t *)regs->r8,
+                                                regs->r9, regs);
+        break;
     case SYS_UNLINKAT: regs->rax = (uint64_t)sys_unlinkat(regs->rdi, regs->rsi, regs->rdx, 0, 0, 0, regs); break;
     case SYS_RENAMEAT:
         regs->rax = (uint64_t)sys_renameat(regs->rdi, (char *)regs->rsi, regs->rdx, (char *)regs->r10, 0, 0, regs);
+        break;
+    case SYS_RENAMEAT2:
+        regs->rax = (uint64_t)sys_renameat2(regs->rdi, (char *)regs->rsi, regs->rdx, (char *)regs->r10,
+                                             regs->r8, 0, regs);
         break;
     case SYS_LINKAT:
         regs->rax = (uint64_t)sys_linkat(regs->rdi, (char *)regs->rsi, regs->rdx, (char *)regs->r10, regs->r8, 0, regs);
@@ -733,6 +771,16 @@ extern "C" uint64_t c_syscall_handler(struct X64_REGS *regs, uint64_t user_rsp)
     case SYS_ARCH_PRCTL:
         regs->rax = (uint64_t)sys_arch_prctl(regs->rdi, regs->rsi, 0, 0, 0, 0, regs);
         break;
+    case SYS_MOUNT:
+        regs->rax = (uint64_t)sys_mount((char *)regs->rdi, (char *)regs->rsi, (char *)regs->rdx,
+                                         regs->r10, (void *)regs->r8, 0, regs);
+        break;
+    case SYS_NAME_TO_HANDLE_AT:
+        regs->rax = (uint64_t)sys_name_to_handle_at(regs->rdi, (char *)regs->rsi, (void *)regs->rdx,
+                                                      (int *)regs->r10, regs->r8, 0, regs);
+        break;
+    case SYS_FSOPEN: regs->rax = SYSCALL_FAULT_(ENOSYS); break;
+    case SYS_UMOUNT2: regs->rax = (uint64_t)sys_umount2(regs->rdi, regs->rsi, 0, 0, 0, 0, regs); break;
     case SYS_CHROOT:
         regs->rax = (uint64_t)sys_chroot((char *)regs->rdi, 0, 0, 0, 0, 0, regs);
         break;

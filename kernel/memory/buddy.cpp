@@ -230,7 +230,13 @@ uint64_t buddy_alloc_zone(zone_t *zone, size_t count)
         push_block(zone, current_order, addr + order_to_block_size(current_order));//右边滚回去
     }
 
-    zone->free_pages -= order_to_pages(order);
+    size_t allocated_pages = order_to_pages(order);
+    zone->free_pages -= allocated_pages;
+    bitmap_set_range(&using_regions, addr / PAGE_SIZE, addr / PAGE_SIZE + allocated_pages, true);
+    for (uint64_t page = addr; page < addr + allocated_pages * PAGE_SIZE; page += PAGE_SIZE)
+    {
+        page_ref(get_page(page));
+    }
 
     spin_unlock(&zone->allocator.lock);
     return addr;
@@ -345,8 +351,7 @@ uint64_t alloc_frames(size_t count)
 {
     if (count == 0) return 0;
 
-    size_t   required_pages = count_to_block_pages(count);
-    uint64_t addr           = 0;
+    uint64_t addr = 0;
 
     if (zones[ZONE_NORMAL] && zone_has_memory(zones[ZONE_NORMAL]))
     {
@@ -367,16 +372,7 @@ uint64_t alloc_frames(size_t count)
     }
 
 ret:
-    if (addr)
-    {
-        bitmap_set_range(&using_regions, addr / PAGE_SIZE, addr / PAGE_SIZE + required_pages, true);
-        for (uint64_t a = addr; a < addr + required_pages * PAGE_SIZE; a += PAGE_SIZE)
-        {
-            page_t *p = get_page(a);
-            page_ref(p);
-        }
-    }
-    else
+    if (addr == 0)
     {
         serial_wprintf("Failed to allocate memory!!!");
     }
@@ -398,17 +394,21 @@ void free_frames(uint64_t addr, size_t count)
         uint64_t page = addr + off * PAGE_SIZE;
         uint64_t idx  = page / PAGE_SIZE;
 
-        if (bitmap_get(&using_regions, idx) == false) continue;
-        if (bitmap_get(&frame_allocator.bitmap, idx) == false) continue;
-
         enum zone_type type = phys_to_zone_type(page);
         zone_t        *zone = zones[type];
         if (!zone) continue;
 
-        address_unref(page);
-        if (!address_can_free(page)) continue;
-
         spin_lock(&zone->allocator.lock);
+        if (bitmap_get(&using_regions, idx) == false || bitmap_get(&frame_allocator.bitmap, idx) == false)
+        {
+            spin_unlock(&zone->allocator.lock);
+            continue;
+        }
+        if (!address_unref(page))
+        {
+            spin_unlock(&zone->allocator.lock);
+            continue;
+        }
         bitmap_set(&using_regions, idx, false);
         buddy_free_zone(zone, page, MIN_ORDER);
         spin_unlock(&zone->allocator.lock);
@@ -421,8 +421,7 @@ uint64_t alloc_frames_dma32(size_t count)
 {
     if (count == 0) return 0;
 
-    size_t   required_pages = count_to_block_pages(count);
-    uint64_t addr           = 0;
+    uint64_t addr = 0;
 
     if (zones[ZONE_DMA32] && zone_has_memory(zones[ZONE_DMA32]))
     {
@@ -438,13 +437,6 @@ uint64_t alloc_frames_dma32(size_t count)
 
 ret:
     if (addr == 0) return 0;
-
-    bitmap_set_range(&using_regions, addr / PAGE_SIZE, addr / PAGE_SIZE + required_pages, true);
-    for (uint64_t a = addr; a < addr + required_pages * PAGE_SIZE; a += PAGE_SIZE)
-    {
-        page_t *p = get_page(a);
-        page_ref(p);
-    }
 
     return addr;
 }

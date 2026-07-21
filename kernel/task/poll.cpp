@@ -67,6 +67,54 @@ void poll_waiter_disarm(void)
     spin_unlock(&g_poll_waiters_lock);
 }
 
+void poll_waiter_cancel_task(tcb_t task)
+{
+    if (task == NULL) return;
+
+    spin_lock(&g_poll_waiters_lock);
+    for (size_t i = 0; i < sizeof(g_poll_waiters) / sizeof(g_poll_waiters[0]); i++)
+    {
+        if (g_poll_waiters[i] == task) g_poll_waiters[i] = NULL;
+    }
+    spin_unlock(&g_poll_waiters_lock);
+}
+
+bool poll_waiter_sleep(uint64_t expected_generation, uint64_t timeout_ns, uint64_t *observed_generation)
+{
+    tcb_t task = get_current_task();
+    if (task == NULL) return false;
+
+    open_interrupt;
+    spin_lock(&g_poll_waiters_lock);
+
+    uint64_t generation = __atomic_load_n(&g_poll_event_generation, __ATOMIC_ACQUIRE);
+    if (generation != expected_generation)
+    {
+        spin_unlock(&g_poll_waiters_lock);
+        close_interrupt;
+        if (observed_generation != NULL) *observed_generation = generation;
+        return false;
+    }
+
+    uint64_t now = nanoTime();
+    uint64_t wakeup_time = now + timeout_ns;
+    task->wakeup_time = wakeup_time < now ? (uint64_t)-1 : wakeup_time;
+    task->status = WAIT;
+    spin_unlock(&g_poll_waiters_lock);
+
+    do
+    {
+        scheduler_yield();
+    } while (task->status == WAIT);
+
+    if (task->status == START) task->status = RUNNING;
+    close_interrupt;
+
+    if (observed_generation != NULL)
+        *observed_generation = __atomic_load_n(&g_poll_event_generation, __ATOMIC_ACQUIRE);
+    return true;
+}
+
 uint32_t epoll_to_poll_comp(uint32_t epoll_events) {
     uint32_t poll_events = 0;
 

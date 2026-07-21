@@ -808,6 +808,7 @@ static int spawn_shell(char *envp[])
     int pid = fork();
     if (pid == 0)
     {
+        if (setsid() < 0) exit(126);
         int slave = open(slave_name, O_RDWR | O_NOCTTY);
         if (slave < 0) exit(126);
 

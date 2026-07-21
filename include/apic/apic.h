@@ -41,6 +41,8 @@ extern "C" {
 #define LAPIC_REG_ICR0        0x300
 #define LAPIC_REG_ICR1        0x310
 #define LAPIC_REG_EOI         0x0b0
+#define LAPIC_ICR_DELIVERY_STATUS (1U << 12)
+#define LAPIC_IPI_SMOKE_VECTOR    0xf1
 
 #define LAPIC_LVT_TIMER_OFFEST   0x320
 #define LAPIC_LVT_THERMAL_OFFEST 0x330
@@ -59,6 +61,9 @@ struct APIC_INFO
     uint64_t LocalApicAddr;
     uint64_t ioApicAddr;
 };
+
+bool lapic_send_fixed_ipi(uint64_t target_lapic_id, uint8_t vector);
+void apic_ipi_smoke_test();
 
 #define MADT_APIC_LOCAL   0x00
 #define MADT_APIC_IO      0x01

@@ -96,16 +96,21 @@ KERNEL_UDEV_TRACE ?= 0
 KERNEL_BUSYBOX_DEBUG ?= 0
 KERNEL_LINUX_OUTPUT_MIRROR ?= 0
 KERNEL_XBPS_WAIT_DEBUG ?= 0
-KERNEL_PROFILER ?= 1
+KERNEL_PROFILER ?= 0
 BF_DIR ?= Bf
-XBPS_BOOTSTRAP_EXTRA ?= weston seatd eudev dbus wayland wayland-protocols libxkbcommon pixman xkeyboard-config adwaita-icon-theme dejavu-fonts-ttf glibc-locales xfce4 labwc xorg-server-xwayland xrandr pciutils sudo iw ptyxis adwaita-cursor-theme
+XBPS_BOOTSTRAP_EXTRA ?= 
 XBPS_PREPARE_ROOT ?= Bf/xbps-root
 XBPS_ARCH ?= x86_64
 XBPS_INSTALL ?= $(BF_DIR)/usr/bin/xbps-install
 XBPS_STATIC_TARBALL ?= $(BF_DIR)/xbps-static-latest.$(XBPS_ARCH)-musl.tar.xz
 XBPS_REPOSITORY ?= http://mirrors.tuna.tsinghua.edu.cn/voidlinux/current
 XBPS_CACHEDIR ?= $(BF_DIR)/xbps-cache
-XBPS_BOOTSTRAP_BASE ?= base-minimal bash dash coreutils findutils sed grep gawk diffutils gzip tar bzip2 util-linux ncurses tzdata which shadow fastfetch gcc binutils make strace elfutils git inetutils bind-utils curl
+XBPS_BOOTSTRAP_BASE ?= base-minimal bash coreutils util-linux inetutils bind-utils pciutils usbutils sudo iw \
+    gcc binutils make strace git \
+    glibc-locales ncurses tzdata which shadow grep elfutils curl htop \
+    seatd eudev dbus xfce4 labwc xorg-server-xwayland xrandr xkeyboard-config \
+    fastfetch mesa mesa-dri mesa-demos lite-xl qemu-system-amd64 libwebkit2gtk41 \
+    adwaita-icon-theme noto-fonts-cjk
 XBPS_BOOTSTRAP ?= $(strip $(XBPS_BOOTSTRAP_BASE) $(XBPS_BOOTSTRAP_EXTRA))
 KERNEL_TRACE_DEFS := \
 	-DCONFIG_KERNEL_UDEV_TRACE=$(KERNEL_UDEV_TRACE) \
@@ -249,7 +254,8 @@ stage.xj380: stardustui.examples.copy stage.xbps-caches
 	@test -d "$(VDISK_ROOT)/var/db/xbps" || { echo "missing prepared root: $(VDISK_ROOT)"; echo "run: make prepare"; exit 1; }
 	@mkdir -p "$(VDISK_ROOT)/EFI/BOOT" "$(VDISK_ROOT)/apps/system" "$(VDISK_ROOT)/apps/builtin" "$(VDISK_ROOT)/mod" \
 		"$(VDISK_ROOT)/system/config" "$(VDISK_ROOT)/system/font" "$(VDISK_ROOT)/system/foxland" \
-		"$(VDISK_ROOT)/system/resources/image" "$(VDISK_ROOT)/system/theme" "$(VDISK_ROOT)/etc/xdg/weston"
+		"$(VDISK_ROOT)/system/resources/image" "$(VDISK_ROOT)/system/theme" "$(VDISK_ROOT)/etc/xdg/weston" \
+		"$(VDISK_ROOT)/etc/runit/runsvdir/default"
 	@cp -a "$(BOOT_EFI)" "$(VDISK_ROOT)/EFI/BOOT/BOOTX64.efi"
 	@cp -a "$(KERNEL_ELF)" "$(VDISK_ROOT)/system/kernel.elf"
 	@rm -f $(addprefix $(VDISK_ROOT)/apps/system/,$(SYSTEM_APPS))
@@ -277,7 +283,13 @@ stage.xj380: stardustui.examples.copy stage.xbps-caches
 	@cp -a ./resources/svg "$(VDISK_ROOT)/system/resources/svg"
 	@cp -a ./resources/weston "$(VDISK_ROOT)/system/resources/weston"
 	@cp -a ./resources/weston/weston.ini "$(VDISK_ROOT)/etc/xdg/weston/weston.ini"
-	@cp -a ./resources/weston/start-weston.sh "$(VDISK_ROOT)/system/resources/start-wayland.sh"
+	@cp -a ./resources/weston/start-weston.sh "$(VDISK_ROOT)/system/resources/start-weston.sh"
+	@cp -a ./resources/weston/start-xfce4-session "$(VDISK_ROOT)/system/resources/start-xfce4-session"
+	@cp -a ./resources/aether/. "$(VDISK_ROOT)/"
+	@chmod 0755 "$(VDISK_ROOT)/etc/sv/aether-xfce/run" "$(VDISK_ROOT)/usr/lib/aether/start-xfce4-session"
+	@for service in dbus elogind polkitd seatd udevd aether-xfce; do \
+		ln -sfn "/etc/sv/$$service" "$(VDISK_ROOT)/etc/runit/runsvdir/default/$$service"; \
+	done
 	@cp -a ./user/fmanager/fm_bg.png "$(VDISK_ROOT)/system/resources/image/fm_bg.png"
 	@find "$(VDISK_ROOT)/mod" -maxdepth 1 -type f -name '*.km' -delete
 	@cp -a ./$(BUILD_DIR)/*.km "$(VDISK_ROOT)/mod/" 2>/dev/null || true
@@ -345,6 +357,9 @@ prepare: $(XBPS_INSTALL)
 				"$$ldso" --library-path "$$libpath" "$(XBPS_PREPARE_ROOT)/usr/bin/localedef" \
 				--prefix "$$(cd "$(XBPS_PREPARE_ROOT)" && pwd)" -i en_US -f UTF-8 en_US.UTF-8 || true; \
 		fi; \
+		sudo ln -sf /usr/share/zoneinfo/Asia/Shanghai "$(XBPS_PREPARE_ROOT)/etc/localtime"; \
+		sudo chroot "$(XBPS_PREPARE_ROOT)" /bin/bash --login -c "xbps-reconfigure -f glibc-locales"; \
+		sudo chroot "$(XBPS_PREPARE_ROOT)" /bin/bash --login -c 'echo "root:root" | chpasswd'; \
 	else \
 		echo "Nothing to prepare for IMAGE_PACKAGE_MANAGER=$(IMAGE_PACKAGE_MANAGER)"; \
 	fi

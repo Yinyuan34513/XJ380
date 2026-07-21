@@ -6,3 +6,9 @@ extern "C" int poll(struct pollfd *fds, nfds_t nfds, int timeout_ms)
 {
     return (int)__xposix_ret(enter_syscall(SYS_POLL, (uint64_t)fds, nfds, (uint64_t)timeout_ms, 0, 0, 0));
 }
+
+extern "C" int ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout, const sigset_t *sigmask)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_PPOLL, (uint64_t)fds, nfds, (uint64_t)timeout,
+                                           (uint64_t)sigmask, sizeof(sigset_t), 0));
+}

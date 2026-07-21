@@ -471,7 +471,7 @@ void module_setup() {
 static bool ends_with_sys(const char *str) {
     size_t len = strlen(str);
     if (len < 4) return false;
-    return strcmp(str + len - 4, ".sys") == 0;
+    return strcmp(str + len - 3, ".km") == 0;
 }
 
 void start_all_kernel_module() {
@@ -491,17 +491,29 @@ void start_all_kernel_module() {
 void load_all_kernel_module() {
     kmod_allocator = id_allocator_create(MAX_KERNEL_MODULE);
     for (size_t i = 0; i < module_count; i++) {
-        if (module_ls[i].is_use) {
-            if (ends_with_sys(module_ls[i].raw_name)) {
-                cp_module_t *mod = get_module(module_ls[i].module_name);
-                if (mod) {
-                    int id = id_alloc(kmod_allocator);
-                    kmods[id] = (kernel_mode_t*)calloc(1,sizeof(kernel_mode_t));
-                    dlinker_load(kmods[id],mod);
-                    kmods[id]->module = mod;
-                }
-            }
+        if (!module_ls[i].is_use) continue;
+
+        bool eligible = ends_with_sys(module_ls[i].raw_name);
+        if (!eligible) continue;
+
+        cp_module_t *mod = get_module(module_ls[i].module_name);
+        if (mod == NULL) {
+            continue;
         }
+
+        int id = id_alloc(kmod_allocator);
+        if (id < 0) {
+            continue;
+        }
+
+        kmods[id] = (kernel_mode_t*)calloc(1,sizeof(kernel_mode_t));
+        if (kmods[id] == NULL) {
+            id_free(kmod_allocator, (uint32_t)id);
+            continue;
+        }
+
+        dlinker_load(kmods[id],mod);
+        kmods[id]->module = mod;
     }
 }
 
@@ -1311,7 +1323,7 @@ void* dlopen(const char* filename, int flags) {
     
     // 判断是否是内核模块
     bool is_kernel = false;
-    if (strstr(filename, ".sys") || strstr(filename, "/system/")) {
+    if (strstr(filename, ".km") || strstr(filename, "/system/")) {
         is_kernel = true;
         flags |= RTLD_KERNEL;
     }
@@ -1393,8 +1405,7 @@ static void set_dlerror(const char* msg) {
 
 void dlinker_load(kernel_mode_t* kmod, cp_module_t* module) {
     if (!module) return;
-    
-    
+
     dlhandle_t* handle = load_shared_object_internal(strdup(module->path), RTLD_KERNEL, NULL);
     if (!handle) {
         write_serial_fmt("Failed to load kernel module: %s\n", module->module_name);

@@ -1,5 +1,6 @@
 #include "build_settings.h"
 #include <ahci/ahci.h>
+#include <apic/apic.h>
 #include <cpu/regio.h>
 #include <device.h>
 #include <cpu/fsgsbase.h>
@@ -801,14 +802,11 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_syscall();
     init_message();
 
-    if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD)) == 0) {
-        module_setup();
-        dlinker_init();
-        load_all_kernel_module();
-    } else {
-        write_serial_string("BOOT: kernel modules skipped by boot menu\n");
-    }
-
+    // if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD)) == 0) {
+    dlinker_init();
+    module_setup();
+    
+    load_all_kernel_module();
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     while (true)
@@ -816,6 +814,8 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
         __asm__ volatile("pause");
         if (scheduler_is_ready == xsi->cpu_count) break;
     }
+
+    apic_ipi_smoke_test();
 
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 7, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
@@ -861,6 +861,12 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     while (!desktop_done)
         cpu_relax();
 
+    
+
+    // char *init_argv[] = {(char *)"/sbin/init", NULL};
+    // int   init_pid    = create_user_process_from_file((char *)"/sbin/init", NULL, init_argv);
+    // if (init_pid < 0)
+    //     write_serial_fmt("BOOT: failed to start /sbin/init: %d\n", init_pid);
     create_user_process_from_file((char *)"/apps/init.elf", NULL, NULL);
 
     // no_interrupt = true;
@@ -873,12 +879,6 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (true)
     {
-        if (!no_interrupt)
-        {
-            enable_intr();
-            enable_scheduler();
-        }
-
         __asm__ __volatile__("pause");
     }
 }

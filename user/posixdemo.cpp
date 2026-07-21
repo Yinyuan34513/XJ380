@@ -1,11 +1,14 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include "xapi/include/libsys.h"
@@ -87,18 +90,78 @@ static int posixdemo_main_impl()
     int pipefd[2];
     if (pipe(pipefd) == 0) {
         const char byte = 'x';
-        write(pipefd[1], &byte, 1);
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        FD_SET(pipefd[0], &readfds);
-        struct timeval timeout = {0, 0};
-        if (select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout) >= 0) {
-            OK("pipe/select ok\n");
-        }
-        close(pipefd[0]);
+        struct pollfd pipe_poll = {.fd = pipefd[0], .events = POLLIN, .revents = 0};
+        bool pipe_ready = write(pipefd[1], &byte, 1) == 1 && poll(&pipe_poll, 1, 0) == 1 &&
+                          (pipe_poll.revents & POLLIN) != 0 && read(pipefd[0], &buf[0], 1) == 1;
         close(pipefd[1]);
+        pipe_poll.revents = 0;
+        bool pipe_eof = poll(&pipe_poll, 1, 0) == 1 && (pipe_poll.revents & POLLHUP) != 0 &&
+                        read(pipefd[0], &buf[0], 1) == 0;
+        close(pipefd[0]);
+        if (pipe_ready && pipe_eof) {
+            OK("pipe/poll/hup ok\n");
+        } else {
+            FAIL("pipe/poll/hup failed\n");
+        }
     } else {
         FAIL("pipe failed\n");
+    }
+
+    int fork_pipefd[2];
+    if (pipe(fork_pipefd) == 0) {
+        pid_t child = fork();
+        if (child == 0) {
+            close(fork_pipefd[0]);
+            const char byte = 'f';
+            bool wrote = write(fork_pipefd[1], &byte, 1) == 1;
+            close(fork_pipefd[1]);
+            _exit(wrote ? 0 : 1);
+        }
+
+        bool fork_eof = false;
+        if (child > 0) {
+            close(fork_pipefd[1]);
+            char byte = 0;
+            int status = 0;
+            fork_eof = read(fork_pipefd[0], &byte, 1) == 1 && byte == 'f' &&
+                       read(fork_pipefd[0], &byte, 1) == 0 && waitpid(child, &status, 0) == child && status == 0;
+            close(fork_pipefd[0]);
+        } else {
+            close(fork_pipefd[0]);
+            close(fork_pipefd[1]);
+        }
+
+        if (fork_eof) {
+            OK("pipe/fork/eof ok\n");
+        } else {
+            FAIL("pipe/fork/eof failed\n");
+        }
+    } else {
+        FAIL("pipe/fork setup failed\n");
+    }
+
+    int nonblock_pipefd[2];
+    if (pipe2(nonblock_pipefd, O_NONBLOCK) == 0) {
+        char pipe_fill[1024] = {};
+        const char byte = 'x';
+        bool pipe_nonblock = true;
+        for (int i = 0; i < 128; i++) {
+            if (write(nonblock_pipefd[1], pipe_fill, sizeof(pipe_fill)) < 0) {
+                pipe_nonblock = errno == EAGAIN;
+                break;
+            }
+            if (i == 127) pipe_nonblock = false;
+        }
+        pipe_nonblock = pipe_nonblock && write(nonblock_pipefd[1], &byte, 1) == -1 && errno == EAGAIN;
+        close(nonblock_pipefd[0]);
+        close(nonblock_pipefd[1]);
+        if (pipe_nonblock) {
+            OK("pipe/nonblock ok\n");
+        } else {
+            FAIL("pipe/nonblock failed\n");
+        }
+    } else {
+        FAIL("pipe/nonblock setup failed\n");
     }
 
     DIR *dir = opendir("/");

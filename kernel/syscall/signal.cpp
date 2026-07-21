@@ -5,6 +5,8 @@
 #include <syscall/signal.h>
 #include <task/pcb.h>
 
+extern lock_queue *pcb_group_queue;
+
 struct user_signal_frame {
     uint64_t magic;
     int      sig;
@@ -175,6 +177,24 @@ int signal_send_process_info(pcb_t process, int sig, const siginfo_t *info)
 int signal_send_process(pcb_t process, int sig)
 {
     return signal_send_process_info(process, sig, NULL);
+}
+
+int signal_send_process_group(size_t pgid, int sig)
+{
+    if (pcb_group_queue == NULL || pgid == 0) return -ESRCH;
+
+    int delivered = 0;
+    spin_lock(&pcb_group_queue->lock);
+    queue_foreach(pcb_group_queue, node)
+    {
+        pcb_t process = (pcb_t)node->data;
+        if (process == NULL || process->pgid != pgid || process->status == DEATH ||
+            process->status == OUT || process->status == ZOMBIE)
+            continue;
+        if (signal_send_process(process, sig) == 0) delivered++;
+    }
+    spin_unlock(&pcb_group_queue->lock);
+    return delivered > 0 ? 0 : -ESRCH;
 }
 
 static int find_deliverable_signal(tcb_t task)

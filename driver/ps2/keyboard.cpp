@@ -1,8 +1,8 @@
 #include <proto.hpp>
 #include <dlinker.h>
+#include <input/evdev.h>
 #include <syscall/syscall.h>
 
-extern "C" void evdev_push_usb_keyboard_event(uint8_t usage, uint8_t pressed);
 extern mouse_dec ms_dec;
 
 struct keyboard_buf kb_fifo;
@@ -145,6 +145,8 @@ extern "C" void c_keyboard_handler(void *regs_ptr, uint64_t error_code)
         send_eoi();
         return;
     }
+
+    evdev_push_ps2_keyboard_event(x, kb_e0_prefix ? 1 : 0);
 
     if (x == 0x2a || x == 0x36)
     { // Shift按下

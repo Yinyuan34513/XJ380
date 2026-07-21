@@ -325,6 +325,7 @@
 #define SYS_LCHOWN   94
 #define SYS_UMASK    95
 #define SYS_GETTIMEOFDAY 96
+#define SYS_GETRLIMIT 97
 
 #define SYS_SYSINFO 99
 #define SYS_GETUID 102
@@ -337,6 +338,8 @@
 #define SYS_GETPPID 110
 #define SYS_GETPGRP 111
 #define SYS_SETSID 112
+#define SYS_SETREUID 113
+#define SYS_SETREGID 114
 #define SYS_GETGROUPS 115
 #define SYS_SETGROUPS 116
 #define SYS_SETRESUID 117
@@ -352,7 +355,26 @@
 #define SYS_SIGALTSTACK 131
 #define SYS_MKNOD 133
 #define SYS_STATFS 137
+#define SYS_GETPRIORITY 140
+#define SYS_SETPRIORITY 141
+#define SYS_SCHED_SETSCHEDULER 144
 #define SYS_PIVOT_ROOT 155
+
+#define PRIO_PROCESS 0
+#define PRIO_PGRP    1
+#define PRIO_USER    2
+
+#define SCHED_OTHER 0
+#define SCHED_FIFO  1
+#define SCHED_RR    2
+#define SCHED_BATCH 3
+#define SCHED_IDLE  5
+
+struct sched_param
+{
+    int sched_priority;
+};
+
 #define SYS_MLOCK 149
 #define SYS_MUNLOCK 150
 #define SYS_MLOCKALL 151
@@ -380,6 +402,7 @@
 #define SYS_FREMOVEXATTR 199
 #define SYS_TIME 201
 #define SYS_FUTEX 202
+#define SYS_SCHED_SETAFFINITY 203
 #define SYS_SCHED_GETAFFINITY 204
 #define SYS_INOTIFY_INIT 253
 #define SYS_EPOLL_CREATE 213
@@ -430,6 +453,7 @@
 #define SYS_TIMERFD_SETTIME 286
 #define SYS_PRLIMIT64 302
 #define SYS_SENDMMSG 307
+#define SYS_RENAMEAT2 316
 #define SYS_MEMFD_CREATE 319
 #define SYS_GETRANDOM 318
 #define SYS_COPY_FILE_RANGE 326
@@ -439,11 +463,13 @@
 #define SYS_FDATASYNC 75
 
 #define SYS_RSEQ 334
+#define SYS_NAME_TO_HANDLE_AT 303
 #define SYS_FSOPEN 430
 #define SYS_PIDFD_OPEN 434
 #define SYS_CLONE3 435
 #define SYS_CLOSE_RANGE 436
 #define SYS_FACCESSAT2 439
+#define SYS_EPOLL_PWAIT2 441
 #define SYS_FCHMODAT2 452
 
 #define CLOSE_RANGE_UNSHARE  (1U << 1)
@@ -719,7 +745,7 @@ sys_(fchdir, int fd);
 sys_(wait4, unsigned long pid, int *status, int options, void *rusage);
 sys_(waitid, int idtype, uint64_t id, siginfo_t *infop, int options, void *rusage);
 sys_(exit_group, int exit_code);
-sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout);
+sys_(poll, struct pollfd *fds_user, size_t nfds, int timeout);
 sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout,
      const sigset_t *sigmask, size_t sigsetsize);
 sys_(epoll_create, int size);
@@ -727,6 +753,10 @@ sys_(epoll_create1, int flags);
 sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event);
 sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeout);
 sys_(epoll_pwait, int epfd, struct epoll_event *events, int maxevents, int timeout, sigset_t *sigmask, size_t sigsetsize);
+sys_(epoll_pwait2, int epfd, struct epoll_event *events, int maxevents, const struct timespec *timeout,
+     const sigset_t *sigmask, size_t sigsetsize);
+sys_(sched_setscheduler, int pid, int policy, const struct sched_param *param);
+sys_(sched_setaffinity, int pid, size_t cpusetsize, const void *mask);
 sys_(sched_getaffinity, int pid, size_t cpusetsize, void *mask);
 sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset);
 sys_(kill, int pid, int sig);
@@ -771,6 +801,8 @@ sys_(getuid);
 sys_(getgid);
 sys_(setuid, uint32_t uid);
 sys_(setgid, uint32_t gid);
+sys_(setreuid, uint32_t ruid, uint32_t euid);
+sys_(setregid, uint32_t rgid, uint32_t egid);
 sys_(setresuid, uint32_t ruid, uint32_t euid, uint32_t suid);
 sys_(getresuid, uint32_t *ruid, uint32_t *euid, uint32_t *suid);
 sys_(setresgid, uint32_t rgid, uint32_t egid, uint32_t sgid);
@@ -784,8 +816,10 @@ sys_(capset, struct user_cap_header *header, struct user_cap_data *data);
 sys_(sysinfo, struct sysinfo *info);
 sys_(readlink);
 sys_(readlinkat, int dirfd, char *path, char *buf, size_t size);
+sys_(name_to_handle_at, int dirfd, char *pathname, void *handle, int *mount_id, uint32_t flags);
 sys_(mkdirat, int dirfd, char *pathname, uint64_t mode);
 sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath);
+sys_(renameat2, int olddirfd, char *oldpath, int newdirfd, char *newpath, uint32_t flags);
 sys_(linkat, int olddirfd, char *oldpath, int newdirfd, char *newpath, int flags);
 sys_(symlinkat, char *target, int newdirfd, char *linkpath);
 sys_(ftruncate, int fd, uint64_t length);
@@ -796,6 +830,7 @@ sys_(fadvise64, int fd, uint64_t offset, uint64_t len, int advice);
 sys_(sync_file_range, int fd, int64_t offset, int64_t nbytes, uint64_t flags);
 sys_(sync);
 sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rlimit *old_limit);
+sys_(getrlimit, uint64_t resource, struct rlimit *old_limit);
 sys_(getrandom, void *buf, size_t buflen, uint64_t flags);
 sys_(umount2);
 sys_(link, char *name, char *nw);
@@ -805,6 +840,8 @@ sys_(getgroups, int count, int *gid_list);
 sys_(setgroups, int count, const int *gid_list);
 sys_(getpgid);
 sys_(setpgid, int pid, int pgid);
+sys_(getpriority, int which, int who);
+sys_(setpriority, int which, int who, int nice);
 sys_(flock, int fd, int operation);
 sys_(chroot, char *path);
 sys_(pidfd_open, int pid, uint32_t flags);

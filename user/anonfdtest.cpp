@@ -2,6 +2,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <string.h>
+#include <time.h>
 #include <sys/eventfd.h>
 #include <sys/memfd.h>
 #include <sys/mman.h>
@@ -33,6 +34,16 @@ static void expect(bool ok, const char *name)
 static int anonfdtest_main_impl()
 {
     out("anonfdtest: start\n");
+
+    struct pollfd ignored_fd = {-1, POLLIN, (short)0x7fff};
+    expect(poll(&ignored_fd, 1, 0) == 0 && ignored_fd.revents == 0, "poll ignores negative fd");
+
+    struct pollfd invalid_fd = {32767, POLLIN, 0};
+    expect(poll(&invalid_fd, 1, 0) == 1 && (invalid_fd.revents & POLLNVAL), "poll reports invalid fd");
+
+    struct timespec zero_timeout = {};
+    expect(ppoll(&ignored_fd, 1, &zero_timeout, NULL) == 0 && ignored_fd.revents == 0,
+           "ppoll zero timeout");
 
     int efd = eventfd(2, 0);
     expect(efd >= 0, "eventfd create");

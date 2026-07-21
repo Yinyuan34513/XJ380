@@ -32,6 +32,8 @@
 #include "./xposix/sys/memfd.h"
 #include "./xposix/sys/mman.h"
 #include "./xposix/sys/select.h"
+#include "./xposix/sys/resource.h"
+#include "./xposix/sys/resource.h"
 #include "./xposix/sys/stat.h"
 #include "./xposix/sys/time.h"
 #include "./xposix/sys/types.h"

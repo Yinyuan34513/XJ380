@@ -170,6 +170,7 @@ struct input_absinfo {
 
 void evdev_init(void);
 void evdev_push_event(int event_index, uint16_t type, uint16_t code, int32_t value);
+void evdev_push_ps2_keyboard_event(uint8_t scancode, uint8_t extended);
 void evdev_push_usb_keyboard_event(uint8_t usage, uint8_t pressed);
 void evdev_push_mouse_report(int dx, int dy, uint8_t buttons, int wheel);
 

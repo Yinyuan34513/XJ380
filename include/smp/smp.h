@@ -44,8 +44,10 @@ struct PROCESSOR_INFO
     lock_queue         *scheduler_queue; // 该核心的调度队列
     lock_node          *iter_node;       // 该核心当前调度迭代的节点
     uint64_t            scheduler_ticks; // 当前时间片已运行的 tick 数
+    uint64_t            cpu_runtime_ns;  // 非 idle 任务累计运行时间
     uint64_t            syscall_user_rsp;
     uint64_t            syscall_user_rax;
+    page_directory_t    directory_snapshot; // 当前核心最近一次页表快照
 };
 
 struct XSK_SMP_INFO

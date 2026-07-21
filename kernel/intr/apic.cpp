@@ -2,8 +2,10 @@
 #include <apic/madt.h>
 #include <cpu/msr.h>
 #include <proto.hpp>
+#include <smp/smp.h>
 
 APIC_INFO ApicInfo;
+static volatile uint64_t ipi_smoke_hits[MAX_CPU_NUM];
 
 /**
  *
@@ -61,6 +63,95 @@ uint64_t lapic_id()
 {
     if (ApicInfo.x2Apic) { return lapic_read(LAPIC_REG_ID); }
     return (lapic_read(LAPIC_REG_ID) >> 24);
+}
+
+static bool lapic_wait_for_icr_idle()
+{
+    for (uint32_t tries = 0; tries < 1000000; tries++)
+    {
+        if ((lapic_read(LAPIC_REG_ICR0) & LAPIC_ICR_DELIVERY_STATUS) == 0) return true;
+        asm volatile("pause" ::: "memory");
+    }
+    return false;
+}
+
+bool lapic_send_fixed_ipi(uint64_t target_lapic_id, uint8_t vector)
+{
+    if (!lapic_wait_for_icr_idle()) return false;
+
+    asm volatile("" ::: "memory");
+    if (ApicInfo.x2Apic)
+    {
+        lapic_write(LAPIC_REG_ICR0, (target_lapic_id << 32) | vector);
+    }
+    else
+    {
+        lapic_write(LAPIC_REG_ICR1, target_lapic_id << 24);
+        lapic_write(LAPIC_REG_ICR0, vector);
+    }
+
+    return lapic_wait_for_icr_idle();
+}
+
+extern "C" void c_ipi_smoke_handler(void *, uint64_t)
+{
+    PROCESSOR_INFO *cpu = get_current_cpu();
+    if (cpu != NULL)
+    {
+        for (size_t index = 0; index < get_cpu_num(); index++)
+        {
+            if (get_cpu(index) != cpu) continue;
+            __atomic_fetch_add(&ipi_smoke_hits[index], 1, __ATOMIC_RELAXED);
+            break;
+        }
+    }
+    send_eoi();
+}
+
+void apic_ipi_smoke_test()
+{
+    PROCESSOR_INFO *self = get_current_cpu();
+    size_t cpu_count = get_cpu_num();
+    if (self == NULL || cpu_count <= 1)
+    {
+        write_serial_string("IPI smoke: skipped (single CPU).\n");
+        return;
+    }
+
+    for (size_t index = 0; index < cpu_count; index++)
+    {
+        __atomic_store_n(&ipi_smoke_hits[index], 0, __ATOMIC_RELAXED);
+    }
+
+    size_t failures = 0;
+    for (size_t index = 0; index < cpu_count; index++)
+    {
+        PROCESSOR_INFO *cpu = get_cpu(index);
+        if (cpu == NULL || cpu == self) continue;
+        if (!lapic_send_fixed_ipi(cpu->lapic_id, LAPIC_IPI_SMOKE_VECTOR)) failures++;
+    }
+
+    for (size_t index = 0; index < cpu_count; index++)
+    {
+        PROCESSOR_INFO *cpu = get_cpu(index);
+        if (cpu == NULL || cpu == self) continue;
+
+        for (uint32_t tries = 0; tries < 1000000; tries++)
+        {
+            if (__atomic_load_n(&ipi_smoke_hits[index], __ATOMIC_ACQUIRE) != 0) break;
+            asm volatile("pause" ::: "memory");
+        }
+        if (__atomic_load_n(&ipi_smoke_hits[index], __ATOMIC_ACQUIRE) != 1) failures++;
+    }
+
+    if (failures == 0)
+    {
+        write_serial_string("IPI smoke: passed.\n");
+    }
+    else
+    {
+        write_serial_fmt("IPI smoke: failed on %d target(s).\n", (int)failures);
+    }
 }
 
 static void ioapic_write(uint32_t reg, uint32_t value)

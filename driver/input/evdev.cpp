@@ -66,7 +66,7 @@ static void evdev_write_sysfs_file(const char *path, const char *content)
 static const char *evdev_uevent_extra(int index)
 {
     return index == 0 ? "ID_INPUT=1\nID_INPUT_KEYBOARD=1\nSUBSYSTEM=input\n"
-                      : "ID_INPUT=1\nID_INPUT_MOUSE=1\nID_INPUT_POINTINGSTICK=1\nSUBSYSTEM=input\n";
+                      : "ID_INPUT=1\nID_INPUT_MOUSE=1\nSUBSYSTEM=input\n";
 }
 
 static bool evdev_append_char(char *out, size_t out_size, size_t *off, char ch)
@@ -462,6 +462,51 @@ static uint16_t evdev_usb_keyboard_usage_to_key(uint8_t usage)
         if (usage >= 0x3a && usage <= 0x45) return (uint16_t)(KEY_F1 + usage - 0x3a);
         return KEY_RESERVED;
     }
+}
+
+static uint16_t evdev_ps2_scancode_to_key(uint8_t scancode, bool extended)
+{
+    uint8_t code = scancode & 0x7f;
+    if (!extended)
+    {
+        return code > 0 && code <= KEY_F12 ? code : KEY_RESERVED;
+    }
+
+    switch (code)
+    {
+    case 0x1c: return 96;
+    case 0x1d: return KEY_RIGHTCTRL;
+    case 0x35: return 98;
+    case 0x38: return KEY_RIGHTALT;
+    case 0x47: return KEY_HOME;
+    case 0x48: return KEY_UP;
+    case 0x49: return KEY_PAGEUP;
+    case 0x4b: return KEY_LEFT;
+    case 0x4d: return KEY_RIGHT;
+    case 0x4f: return KEY_END;
+    case 0x50: return KEY_DOWN;
+    case 0x51: return KEY_PAGEDOWN;
+    case 0x52: return KEY_INSERT;
+    case 0x53: return KEY_DELETE;
+    case 0x5b: return KEY_LEFTMETA;
+    case 0x5c: return KEY_RIGHTMETA;
+    case 0x5d: return 139;
+    default: return KEY_RESERVED;
+    }
+}
+
+void evdev_push_ps2_keyboard_event(uint8_t scancode, uint8_t extended)
+{
+    uint16_t key = evdev_ps2_scancode_to_key(scancode, extended != 0);
+    if (key == KEY_RESERVED) return;
+
+    struct input_event frame[2] = {};
+    frame[0].type = EV_KEY;
+    frame[0].code = key;
+    frame[0].value = (scancode & 0x80) == 0 ? 1 : 0;
+    frame[1].type = EV_SYN;
+    frame[1].code = SYN_REPORT;
+    evdev_push_frame(0, frame, 2);
 }
 
 void evdev_push_usb_keyboard_event(uint8_t usage, uint8_t pressed)
@@ -870,9 +915,9 @@ static void evdev_setup_one(int index, const char *name, bool mouse)
     dev->index = index;
     dev->lock = SPIN_INIT;
     strncpy(dev->name, name, sizeof(dev->name) - 1);
-    snprintf(dev->phys, sizeof(dev->phys), "xj380/input%d", index);
+    snprintf(dev->phys, sizeof(dev->phys), "/sys/devices/platform/i8042/serio%d/input%d", index, index);
     snprintf(dev->uniq, sizeof(dev->uniq), "xj380-event%d", index);
-    dev->id.bustype = BUS_VIRTUAL;
+    dev->id.bustype = BUS_I8042;
     dev->id.vendor = 0x1;
     dev->id.product = (uint16_t)(index + 1);
     dev->id.version = 1;

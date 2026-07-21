@@ -179,6 +179,12 @@ extern "C" int renameat(int olddirfd, const char *oldpath, int newdirfd, const c
     return (int)__xposix_ret(enter_syscall(SYS_RENAMEAT, olddirfd, (uint64_t)oldpath, newdirfd, (uint64_t)newpath, 0, 0));
 }
 
+extern "C" int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags)
+{
+    return (int)__xposix_ret(
+        enter_syscall(SYS_RENAMEAT2, olddirfd, (uint64_t)oldpath, newdirfd, (uint64_t)newpath, flags, 0));
+}
+
 extern "C" int link(const char *oldpath, const char *newpath)
 {
     return (int)__xposix_ret(enter_syscall(SYS_LINK, (uint64_t)oldpath, (uint64_t)newpath, 0, 0, 0, 0));
@@ -217,6 +223,11 @@ extern "C" int fsync(int fd)
 extern "C" int fdatasync(int fd)
 {
     return (int)__xposix_ret(enter_syscall(SYS_FDATASYNC, fd, 0, 0, 0, 0, 0));
+}
+
+extern "C" int sched_yield(void)
+{
+    return (int)__xposix_ret(enter_syscall(SYS_SCHED_YIELD, 0, 0, 0, 0, 0, 0));
 }
 
 extern "C" unsigned int sleep(unsigned int seconds)

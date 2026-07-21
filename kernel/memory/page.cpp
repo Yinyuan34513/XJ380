@@ -15,10 +15,11 @@
 spin_t page_lock;
 
 page_directory_t  kernel_page_dir;
-page_directory_t *current_directory = NULL;
+static page_directory_t bootstrap_directory_snapshot;
 
 extern bool     no_interrupt;
 extern uint64_t memory_size;
+extern XSK_SMP_INFO *xsi;
 uint64_t        double_fault_page = 0;
 page_t         *page_maps;
 void           *early_alloc(size_t size);
@@ -147,31 +148,39 @@ page_t *get_page(uint64_t addr)
 
 void page_ref(page_t *page)
 {
-    if (page) page->refcount++;
+    if (page) __atomic_fetch_add(&page->refcount, 1, __ATOMIC_RELAXED);
 }
-void page_unref(page_t *page)
+bool page_unref(page_t *page)
 {
-    if (page == NULL) return;
-    if (page->refcount == 0)
+    if (page == NULL) return false;
+
+    int current = __atomic_load_n(&page->refcount, __ATOMIC_ACQUIRE);
+    while (current > 0)
     {
-        write_serial_string("page_unref: refcount underflow avoided\n");
-        return;
+        int next = current - 1;
+        if (__atomic_compare_exchange_n(&page->refcount, &current, next, false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE))
+        {
+            return next == 0;
+        }
     }
-    page->refcount--;
+
+    write_serial_string("page_unref: refcount underflow avoided\n");
+    return false;
 }
 
 bool page_can_free(page_t *page)
 {
-    return page ? page->refcount == 0 : true;
+    return page ? __atomic_load_n(&page->refcount, __ATOMIC_ACQUIRE) == 0 : true;
 }
 
 void address_ref(uint64_t addr)
 {
     page_ref(get_page(addr));
 }
-void address_unref(uint64_t addr)
+bool address_unref(uint64_t addr)
 {
-    page_unref(get_page(addr));
+    return page_unref(get_page(addr));
 }
 
 bool address_can_free(uint64_t addr)
@@ -595,9 +604,16 @@ page_table_t *page_table_create(page_table_entry_t *entry, bool user)
     if (entry->value == (uint64_t)NULL)
     {
         uint64_t frame = alloc_frames(1);
+        if (frame == 0) return NULL;
         // write_serial_fmt("oiiaoiia 0x%x\n",(uint64_t)frame);
         entry->value        = frame | PTE_PRESENT | PTE_WRITEABLE | (user ? PTE_USER : 0);
         page_table_t *table = (page_table_t *)phys_to_virt(entry->value & PTE_ADDR_MASK);
+        if (table == NULL)
+        {
+            free_frame(frame);
+            entry->value = 0;
+            return NULL;
+        }
         page_table_clear(table);
         return table;
     }
@@ -613,15 +629,22 @@ page_directory_t *get_kernel_pagedir()
 
 extern volatile bool is_scheduler;
 
-page_directory_t gdc_temp_pdt;
-
 page_directory_t *get_current_directory()
 {
-    gdc_temp_pdt.table = (page_table_t *)phys_to_virt(get_cr3());
-    return &gdc_temp_pdt;
+    page_directory_t *directory = &bootstrap_directory_snapshot;
+    if (xsi != NULL)
+    {
+        PROCESSOR_INFO *cpu = get_current_cpu();
+        if (cpu != NULL) directory = &cpu->directory_snapshot;
+    }
+
+    directory->table = (page_table_t *)phys_to_virt(get_cr3());
+    return directory;
 }
 
 EXPORT_SYMBOL(get_current_directory);
+
+static void free_page_table_recursive(page_table_t *table, int level);
 
 static page_table_t *copy_page_table_recursive(page_table_t *source_table, int level, bool all_copy, bool kernel_space)
 {
@@ -631,7 +654,13 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
         if (kernel_space) { return source_table; }
 
         uint64_t      frame          = alloc_frames(1);
+        if (frame == 0) return NULL;
         page_table_t *new_page_table = (page_table_t *)phys_to_virt(frame);
+        if (new_page_table == NULL)
+        {
+            free_frame(frame);
+            return NULL;
+        }
         page_table_clear(new_page_table);
         for (int i = 0; i < 512; i++)
         {
@@ -652,7 +681,11 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
             // it would let the parent corrupt the child's heap/stack view.
             uint64_t source_phys = source_entry & PTE_ADDR_MASK;
             uint64_t new_phys    = alloc_frames(1);
-            if (new_phys == 0) { continue; }
+            if (new_phys == 0)
+            {
+                free_page_table_recursive(new_page_table, 1);
+                return NULL;
+            }
 
             memcpy((void *)phys_to_virt(new_phys), (const void *)phys_to_virt(source_phys), PAGE_SIZE);
             new_page_table->entries[i].value = (source_entry & ~PTE_ADDR_MASK) | new_phys | PTE_FRAME_ALLOCATED;
@@ -661,7 +694,13 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
     }
 
     uint64_t      phy_frame = alloc_frames(1);
+    if (phy_frame == 0) return NULL;
     page_table_t *new_table = (page_table_t *)(phys_to_virt(phy_frame));
+    if (new_table == NULL)
+    {
+        free_frame(phy_frame);
+        return NULL;
+    }
     page_table_clear(new_table);
     for (uint64_t i = 0; i < (all_copy ? 512 : (level == 4 ? 256 : 512)); i++)
     {
@@ -682,6 +721,14 @@ static page_table_t *copy_page_table_recursive(page_table_t *source_table, int l
             (page_table_t *)phys_to_virt(source_table->entries[i].value & PTE_ADDR_MASK);
         page_table_t *new_page_table = copy_page_table_recursive(source_page_table_next, level - 1, all_copy,
                                                                  level != 4 ? kernel_space : i >= 256);
+        if (new_page_table == NULL)
+        {
+            if (!all_copy)
+                free_page_table_recursive(new_table, level);
+            else
+                free_frame(phy_frame);
+            return NULL;
+        }
         new_table->entries[i].value =
             (uint64_t)virt_to_phys((uint64_t)new_page_table) | (source_table->entries[i].value & ~PTE_ADDR_MASK);
     }
@@ -720,10 +767,22 @@ static void free_page_table_recursive(page_table_t *table, int level)
 
 page_directory_t *clone_page_directory(page_directory_t *dir, bool all_copy)
 {
+    if (dir == NULL || dir->table == NULL) return NULL;
+
     spin_lock(&page_lock);
     page_directory_t *new_directory = (page_directory_t *)(malloc(sizeof(page_directory_t)));
-    if (new_directory == NULL) return NULL;
+    if (new_directory == NULL)
+    {
+        spin_unlock(&page_lock);
+        return NULL;
+    }
     new_directory->table = copy_page_table_recursive(dir->table, 4, all_copy, false);
+    if (new_directory->table == NULL)
+    {
+        free(new_directory);
+        spin_unlock(&page_lock);
+        return NULL;
+    }
     if (!all_copy) memcpy((uint64_t *)new_directory->table + 256, (uint64_t *)dir->table + 256, PAGE_SIZE / 2);
     spin_unlock(&page_lock);
     return new_directory;
@@ -783,6 +842,8 @@ void unmap_page_range(page_directory_t *directory, uint64_t vaddr, uint64_t size
 
 void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uint64_t flags)
 {
+    if (directory == NULL || directory->table == NULL) return;
+
     uint64_t l4_index = (((addr >> 39)) & 0x1FF);
     uint64_t l3_index = (((addr >> 30)) & 0x1FF);
     uint64_t l2_index = (((addr >> 21)) & 0x1FF);
@@ -790,8 +851,11 @@ void page_map_to(page_directory_t *directory, uint64_t addr, uint64_t frame, uin
 
     page_table_t *l4_table = directory->table;
     page_table_t *l3_table = page_table_create(&(l4_table->entries[l4_index]), !!(flags & PTE_USER));
+    if (l3_table == NULL) return;
     page_table_t *l2_table = page_table_create(&(l3_table->entries[l3_index]), !!(flags & PTE_USER));
+    if (l2_table == NULL) return;
     page_table_t *l1_table = page_table_create(&(l2_table->entries[l2_index]), !!(flags & PTE_USER));
+    if (l1_table == NULL) return;
 
     if (!frame) { serial_wprintf("WARNING: Invalid frame addr: 0\n"); }
 
@@ -830,7 +894,6 @@ void switch_page_directory(page_directory_t *dir)
     // if (cpu->ready) {
     //     cpu->directory = dir;
     // } else {
-    current_directory = dir;
     // }
     page_table_t *physical_table = (page_table_t *)(virt_to_phys((uint64_t)((page_table_t *)((uint64_t)dir->table))));
     // write_serial_string("Switch Page Directory:\nPhysAddr:");
@@ -1000,7 +1063,6 @@ void switch_xsk_page_directory()
     free(new_directory);
     switch_page_directory(&kernel_page_dir);
     double_fault_page = get_cr3();
-    current_directory = &kernel_page_dir;
 }
 
 void page_setup()
@@ -1008,7 +1070,6 @@ void page_setup()
     page_table_t *kernel_page_table = (page_table_t *)phys_to_virt(get_cr3());
     kernel_page_dir                 = (page_directory_t){.table = kernel_page_table};
     double_fault_page               = get_cr3();
-    current_directory               = &kernel_page_dir;
 }
 
 EXPORT_SYMBOL(page_map_range);

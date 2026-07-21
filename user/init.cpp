@@ -9,7 +9,7 @@ static int init_main_impl(int argc, char *argv[], char *envp[])
     const char *sh_path = "/usr/bin/bash";
     char *const sh_argv[] = {
         (char *)"bash",
-        (char *)"/system/resources/start-wayland.sh",
+        (char *)"/system/resources/start-weston.sh",
         NULL
     };
 

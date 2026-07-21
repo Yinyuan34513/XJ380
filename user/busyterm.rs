@@ -283,6 +283,7 @@ unsafe extern "C" {
     fn read(fd: c_int, buf: *mut c_void, len: SizeT) -> SSizeT;
     fn write(fd: c_int, buf: *const c_void, len: SizeT) -> SSizeT;
     fn fork() -> c_int;
+    fn setsid() -> c_int;
     fn dup2(fd: c_int, newfd: c_int) -> c_int;
     fn execve(filename: *const c_char, argv: *mut *mut c_char, envp: *mut *mut c_char) -> c_int;
     fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
@@ -1112,6 +1113,9 @@ fn spawn_busybox(envp: *mut *mut c_char) -> c_int {
         sync_pty_window_size();
         let pid = fork();
         if pid == 0 {
+            if setsid() < 0 {
+                exit(126);
+            }
             let child_env = build_shell_env(envp);
             let slave = open(slave_name, O_RDWR | O_NOCTTY);
             if slave < 0 {

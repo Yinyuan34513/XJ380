@@ -19,6 +19,7 @@
 #include <vt.h>
 #include <input/evdev.h>
 #include <task/ipc.h>
+#include <task/scheduler.h>
 #include <mutex.h>
 #include <math.hpp>
 #include <user/user.h>
@@ -189,13 +190,19 @@ static uint64_t poll_empty_wait_ns(uint64_t timeout_ns, bool infinite)
 {
     if (timeout_ns == 0 && !infinite) return 0;
 
-    uint64_t remaining = timeout_ns;
-    while (infinite || remaining != 0)
+    uint64_t start_time = nanoTime();
+    while (infinite || nanoTime() - start_time < timeout_ns)
     {
         if (signals_pending_quick(get_current_task())) return (uint64_t)-EINTR;
-        uint64_t sleep_ns = infinite || remaining > 100000000ULL ? 100000000ULL : remaining;
+        uint64_t sleep_ns = 100000000ULL;
+        if (!infinite)
+        {
+            uint64_t elapsed = nanoTime() - start_time;
+            if (elapsed >= timeout_ns) break;
+            uint64_t remaining = timeout_ns - elapsed;
+            if (remaining < sleep_ns) sleep_ns = remaining;
+        }
         scheduler_sleep_ns(sleep_ns);
-        if (!infinite) remaining -= sleep_ns;
     }
 
     return 0;
@@ -203,17 +210,7 @@ static uint64_t poll_empty_wait_ns(uint64_t timeout_ns, bool infinite)
 
 static void poll_wait_slice(uint64_t start_time, uint64_t timeout_ns, bool infinite, uint64_t *seen_generation)
 {
-    if (seen_generation != NULL)
-    {
-        uint64_t current_generation = poll_event_generation();
-        if (current_generation != *seen_generation)
-        {
-            *seen_generation = current_generation;
-            return;
-        }
-    }
-
-    uint64_t sleep_ns = 100000ULL;
+    uint64_t sleep_ns = 10000000ULL;
     if (!infinite)
     {
         uint64_t elapsed = nanoTime() - start_time;
@@ -222,13 +219,27 @@ static void poll_wait_slice(uint64_t start_time, uint64_t timeout_ns, bool infin
         if (remaining < sleep_ns) sleep_ns = remaining;
     }
 
-    open_interrupt;
+    uint64_t expected_generation = seen_generation != NULL ? *seen_generation : poll_event_generation();
     poll_waiter_arm();
-    scheduler_sleep_ns(sleep_ns);
+    poll_waiter_sleep(expected_generation, sleep_ns, seen_generation);
     poll_waiter_disarm();
-    close_interrupt;
+}
 
-    if (seen_generation != NULL) *seen_generation = poll_event_generation();
+static bool poll_timeout_ms_to_ns(int64_t timeout_ms, uint64_t *timeout_ns, bool *infinite_timeout)
+{
+    if (timeout_ns == NULL || infinite_timeout == NULL) return false;
+
+    if (timeout_ms < 0)
+    {
+        *timeout_ns = 0;
+        *infinite_timeout = true;
+        return true;
+    }
+
+    if ((uint64_t)timeout_ms > UINT64_MAX / 1000000ULL) return false;
+    *timeout_ns = (uint64_t)timeout_ms * 1000000ULL;
+    *infinite_timeout = false;
+    return true;
 }
 
 static bool align_up_u64(uint64_t value, uint64_t align, uint64_t *out)
@@ -336,6 +347,26 @@ static bool futex_dequeue_waiter(futex_waiter *waiter)
     }
     spin_unlock(&futex_wait_lock);
     return removed;
+}
+
+void futex_cancel_task_waiters(tcb_t task)
+{
+    if (task == NULL) return;
+
+    spin_lock(&futex_wait_lock);
+    futex_waiter **link = &futex_waiters;
+    while (*link != NULL)
+    {
+        futex_waiter *waiter = *link;
+        if (waiter->task == task)
+        {
+            *link = waiter->next;
+            waiter->next = NULL;
+            continue;
+        }
+        link = &waiter->next;
+    }
+    spin_unlock(&futex_wait_lock);
 }
 
 int futex_wake_waiters(uint32_t *uaddr, page_directory_t *pagedir, int max_wake, uint32_t bitset)
@@ -755,6 +786,139 @@ static uint32_t current_gid()
     return user_gid(task_effective_user());
 }
 
+static uint32_t process_uid(pcb_t process)
+{
+    if (process == NULL || process->thread_queue == NULL) return 0;
+
+    UserInfo *user = NULL;
+    spin_lock(&process->thread_queue->lock);
+    queue_foreach(process->thread_queue, node)
+    {
+        tcb_t task = (tcb_t)node->data;
+        if (task != NULL && task->user_info != NULL)
+        {
+            user = task->user_info;
+            break;
+        }
+    }
+    spin_unlock(&process->thread_queue->lock);
+    return user_uid(user);
+}
+
+static bool process_is_priority_target(pcb_t process)
+{
+    return process != NULL && process->status != DEATH && process->status != OUT && process->status != ZOMBIE;
+}
+
+sys_(getpriority, int which, int who)
+{
+    tcb_t current = get_current_task();
+    if (current == NULL || current->parent_group == NULL) return SYSCALL_FAULT_(ESRCH);
+
+    int  best_nice = 19;
+    bool found     = false;
+
+    switch (which)
+    {
+    case PRIO_PROCESS:
+    {
+        pcb_t process = who == 0 ? current->parent_group : found_pcb(who);
+        if (!process_is_priority_target(process)) return SYSCALL_FAULT_(ESRCH);
+        best_nice = process->nice;
+        found     = true;
+        break;
+    }
+    case PRIO_PGRP:
+    case PRIO_USER:
+    {
+        size_t selector = which == PRIO_PGRP ? (who == 0 ? current->parent_group->pgid : (size_t)who)
+                                             : (who == 0 ? current_uid() : (size_t)who);
+        if (pcb_group_queue == NULL) return SYSCALL_FAULT_(ESRCH);
+
+        spin_lock(&pcb_group_queue->lock);
+        queue_foreach(pcb_group_queue, node)
+        {
+            pcb_t process = (pcb_t)node->data;
+            if (!process_is_priority_target(process)) continue;
+
+            bool matches = which == PRIO_PGRP ? process->pgid == selector : process_uid(process) == selector;
+            if (!matches) continue;
+
+            if (!found || process->nice < best_nice) best_nice = process->nice;
+            found = true;
+        }
+        spin_unlock(&pcb_group_queue->lock);
+        break;
+    }
+    default: return SYSCALL_FAULT_(EINVAL);
+    }
+
+    if (!found) return SYSCALL_FAULT_(ESRCH);
+    return 20 - best_nice;
+}
+
+static int clamp_nice(int nice)
+{
+    if (nice < -20) return -20;
+    if (nice > 19) return 19;
+    return nice;
+}
+
+static void process_set_nice(pcb_t process, int nice)
+{
+    if (process == NULL || process->thread_queue == NULL) return;
+
+    process->nice = nice;
+    spin_lock(&process->thread_queue->lock);
+    queue_foreach(process->thread_queue, node)
+    {
+        scheduler_reweight_task((tcb_t)node->data);
+    }
+    spin_unlock(&process->thread_queue->lock);
+}
+
+sys_(setpriority, int which, int who, int nice)
+{
+    tcb_t current = get_current_task();
+    if (current == NULL || current->parent_group == NULL) return SYSCALL_FAULT_(ESRCH);
+
+    nice = clamp_nice(nice);
+    switch (which)
+    {
+    case PRIO_PROCESS:
+    {
+        pcb_t process = who == 0 ? current->parent_group : found_pcb(who);
+        if (!process_is_priority_target(process)) return SYSCALL_FAULT_(ESRCH);
+        process_set_nice(process, nice);
+        return 0;
+    }
+    case PRIO_PGRP:
+    case PRIO_USER:
+    {
+        size_t selector = which == PRIO_PGRP ? (who == 0 ? current->parent_group->pgid : (size_t)who)
+                                             : (who == 0 ? current_uid() : (size_t)who);
+        if (pcb_group_queue == NULL) return SYSCALL_FAULT_(ESRCH);
+
+        bool found = false;
+        spin_lock(&pcb_group_queue->lock);
+        queue_foreach(pcb_group_queue, node)
+        {
+            pcb_t process = (pcb_t)node->data;
+            if (!process_is_priority_target(process)) continue;
+
+            bool matches = which == PRIO_PGRP ? process->pgid == selector : process_uid(process) == selector;
+            if (!matches) continue;
+
+            process_set_nice(process, nice);
+            found = true;
+        }
+        spin_unlock(&pcb_group_queue->lock);
+        return found ? 0 : SYSCALL_FAULT_(ESRCH);
+    }
+    default: return SYSCALL_FAULT_(EINVAL);
+    }
+}
+
 static void stamp_node_owner(vfs_node_t node)
 {
     if (node == NULL) return;
@@ -780,6 +944,64 @@ static uint64_t lstat_kernel_path(const char *path, struct stat *out)
     uint64_t ret = fill_stat_from_node(node, out);
     vfs_close(node);
     return ret;
+}
+
+static int resolve_user_path_at(int dirfd, char *pathname, char **resolved);
+
+struct linux_file_handle_header
+{
+    uint32_t handle_bytes;
+    int32_t  handle_type;
+};
+
+struct xj380_file_handle
+{
+    struct linux_file_handle_header header;
+    uint64_t                        inode;
+    uint32_t                        device;
+    uint16_t                        filesystem;
+    uint16_t                        type;
+};
+
+sys_(name_to_handle_at, int dirfd, char *pathname, void *handle, int *mount_id, uint32_t flags)
+{
+    if (pathname == NULL || handle == NULL) return SYSCALL_FAULT_(EINVAL);
+    if ((flags & ~AT_SYMLINK_NOFOLLOW) != 0) return SYSCALL_FAULT_(EINVAL);
+
+    page_directory_t *pagedir = current_user_pagedir();
+    struct linux_file_handle_header header = {};
+    if (!copy_from_user_pagedir(pagedir, &header, handle, sizeof(header))) return SYSCALL_FAULT_(EFAULT);
+
+    constexpr uint32_t required_bytes = sizeof(struct xj380_file_handle) - sizeof(header);
+    if (header.handle_bytes < required_bytes)
+    {
+        header.handle_bytes = required_bytes;
+        if (!copy_to_user_pagedir(pagedir, handle, &header, sizeof(header))) return SYSCALL_FAULT_(EFAULT);
+        return SYSCALL_FAULT_(EOVERFLOW);
+    }
+
+    char *resolved = NULL;
+    int path_ret = resolve_user_path_at(dirfd, pathname, &resolved);
+    if (path_ret < 0) return SYSCALL_FAULT_(-path_ret);
+
+    vfs_node_t node = (flags & AT_SYMLINK_NOFOLLOW) ? vfs_open_no_follow(resolved) : vfs_open(resolved);
+    free(resolved);
+    if (node == NULL) return SYSCALL_FAULT_(ENOENT);
+
+    struct xj380_file_handle result = {};
+    result.header.handle_bytes = required_bytes;
+    result.header.handle_type  = 1;
+    result.inode               = node->inode;
+    result.device              = (uint32_t)node->dev;
+    result.filesystem          = node->fsid;
+    result.type                = node->type;
+    int stable_mount_id        = node->root != NULL && node->root->inode != 0 ? (int)node->root->inode : 1;
+    vfs_close(node);
+
+    if (!copy_to_user_pagedir(pagedir, handle, &result, sizeof(result))) return SYSCALL_FAULT_(EFAULT);
+    if (mount_id != NULL && !copy_to_user_pagedir(pagedir, mount_id, &stable_mount_id, sizeof(stable_mount_id)))
+        return SYSCALL_FAULT_(EFAULT);
+    return 0;
 }
 
 static bool busybox_debug_current_linux_abi()
@@ -849,6 +1071,22 @@ static int resolve_user_path_at(int dirfd, char *pathname, char **resolved)
     return 0;
 }
 
+static bool pipe_write_would_block(fd_file_handle *handle, size_t size)
+{
+    if (handle == NULL || handle->node == NULL || !(handle->node->type & file_pipe) ||
+        !(handle->flags & O_NONBLOCK))
+        return false;
+
+    pipe_specific_t *spec = (pipe_specific_t *)handle->node->handle;
+    pipe_info_t *pipe = spec != NULL ? spec->info : NULL;
+    if (pipe == NULL || !spec->write) return false;
+
+    spin_lock(&pipe->lock);
+    bool would_block = pipe->read_fds != 0 && PIPE_BUFF - pipe->ptr < size;
+    spin_unlock(&pipe->lock);
+    return would_block;
+}
+
 static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buffer, size_t size, bool socket_mode)
 {
     if (handle == NULL || (buffer == NULL && size > 0)) return -EINVAL;
@@ -864,6 +1102,13 @@ static int64_t write_from_user_buffer(fd_file_handle *handle, const uint8_t *buf
     while (total < size)
     {
         size_t chunk = MIN(size - total, bounce_bytes);
+        if (!socket_mode && (handle->node->type & file_pipe) && (handle->flags & O_NONBLOCK))
+            chunk = MIN(chunk, (size_t)PIPE_BUFF);
+        if (pipe_write_would_block(handle, chunk))
+        {
+            free(bounce);
+            return total > 0 ? (int64_t)total : -EAGAIN;
+        }
         if (!copy_from_user_pagedir(process->pagedir, bounce, buffer + total, chunk))
         {
             free(bounce);
@@ -4161,7 +4406,8 @@ static int poll_node_events(vfs_node_t node, short events)
     {
         errno_t ret = vfs_poll(node, wanted);
         if (ret < 0) return 0;
-        return (int)epoll_to_poll_comp((uint32_t)ret);
+        return (int)epoll_to_poll_comp((uint32_t)ret) &
+               (events | POLLERR | POLLHUP | POLLNVAL | POLLRDHUP);
     }
 
     if (fs_callbacks[node->fsid]->poll == (void *)empty)//empty怎么又好几个实现以前
@@ -4178,26 +4424,19 @@ static int poll_node_events(vfs_node_t node, short events)
     errno_t ret = vfs_poll(node, wanted);//嗯嗯
     if (ret < 0) return 0;
 
-    return (int)epoll_to_poll_comp((uint32_t)ret);//反过来
+    return (int)epoll_to_poll_comp((uint32_t)ret) &
+           (events | POLLERR | POLLHUP | POLLNVAL | POLLRDHUP);//反过来
 }//大坑
 
-static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t timeout)
+static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, uint64_t timeout_ns, bool infinite_timeout)
 {
-    int      ready      = 0;
-    uint64_t start_time = nanoTime();
-    uint64_t timeout_ns = timeout == (size_t)-1 ? (uint64_t)-1 : timeout * 1000000ULL;
-    uint64_t seen_generation = poll_event_generation();
-    bool     sigexit    = false;
-
-    extern vfs_callback_t fs_callbacks[256];
-
-    do
-    {
-        ready = 0;
+    auto scan_ready = [fds_user, nfds]() {
+        int ready = 0;
         for (size_t i = 0; i < nfds; i++)
         {
             fds_user[i].revents = 0;
             if (fds_user[i].fd < 0) continue;
+
             fd_file_handle *handle =
                 (fd_file_handle *)queue_get(get_current_task()->parent_group->file_open, fds_user[i].fd);
             if (handle == NULL)
@@ -4206,21 +4445,44 @@ static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t tim
                 ready++;
                 continue;
             }
-            vfs_node_t      node   = handle->node;
-            int revents = (int)poll_node_events(node,fds_user[i].events);//结合
+
+            vfs_node_t node = handle->node;
+            int revents = (int)poll_node_events(node, fds_user[i].events);
             if (revents > 0)
             {
                 fds_user[i].revents = (short)revents;
                 ready++;
             }
         }
+        return ready;
+    };
 
-        // sigexit = signals_pending_quick(get_current_task());
+    int      ready      = 0;
+    uint64_t start_time = nanoTime();
+    uint64_t seen_generation = poll_event_generation();
+    bool     sigexit    = false;
+
+    do
+    {
+        ready = scan_ready();
+
+        sigexit = signals_pending_quick(get_current_task());
 
         if (ready > 0 || sigexit) break;
+        if (!infinite_timeout && timeout_ns == 0) break;
 
-        poll_wait_slice(start_time, timeout_ns, timeout == (size_t)-1, &seen_generation);
-    } while (timeout != 0 && (timeout == (size_t)-1 || (nanoTime() - start_time) < timeout_ns));
+        poll_waiter_arm();
+        ready = scan_ready();
+        sigexit = signals_pending_quick(get_current_task());
+        if (ready > 0 || sigexit)
+        {
+            poll_waiter_disarm();
+            break;
+        }
+
+        poll_wait_slice(start_time, timeout_ns, infinite_timeout, &seen_generation);
+        poll_waiter_disarm();
+    } while (infinite_timeout || (nanoTime() - start_time) < timeout_ns);
 
     close_interrupt;
 
@@ -4229,7 +4491,7 @@ static uint64_t poll_kernel_fds(struct pollfd *fds_user, size_t nfds, size_t tim
         write_serial_fmt("[xfce-trace] sys:poll-scan task=%s nfds=%llu timeout=%lld ready=%d elapsed=%llu",
                          trace_task_name(),
                          (unsigned long long)nfds,
-                         timeout == (size_t)-1 ? -1LL : (long long)timeout,
+                         infinite_timeout ? -1LL : (long long)(timeout_ns / 1000000ULL),
                          ready,
                          (unsigned long long)(nanoTime() - start_time));
         size_t sample = MIN(nfds, (size_t)4);
@@ -4559,14 +4821,19 @@ sys_(epoll_ctl, int epfd, int op, int fd, struct epoll_event *event)
     }
 }
 
-sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeout)
+static uint64_t epoll_wait_common(epoll_file_t *ep, struct epoll_event *events, int maxevents, uint64_t timeout_ns,
+                                  bool infinite_timeout, const sigset_t *temporary_mask)
 {
-    epoll_file_t *ep = epoll_from_fd(epfd);
-    if (ep == NULL) return SYSCALL_FAULT_(EBADF);
-    if (events == NULL || maxevents <= 0) return SYSCALL_FAULT_(EINVAL);
+    sigset_t original_mask = 0;
+    bool mask_installed = false;
+    if (temporary_mask != NULL)
+    {
+        int mask_ret = signal_setmask(SIG_SETMASK, temporary_mask, &original_mask);
+        if (mask_ret < 0) return SYSCALL_FAULT_(-mask_ret);
+        mask_installed = true;
+    }
 
     uint64_t start_time = nanoTime();
-    uint64_t timeout_ns = timeout < 0 ? (uint64_t)-1 : (uint64_t)timeout * 1000000ULL;
     uint64_t seen_generation = poll_event_generation();
     int ready = 0;
 
@@ -4598,10 +4865,30 @@ sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeou
         }
         spin_unlock(&ep->watches->lock);
 
-        if (ready > 0 || timeout == 0) break;
+        if (ready > 0) break;
+        if (signals_pending_quick(get_current_task()))
+        {
+            ready = -EINTR;
+            break;
+        }
+        if (!infinite_timeout && timeout_ns == 0) break;
 
-        poll_wait_slice(start_time, timeout_ns, timeout < 0, &seen_generation);
-    } while (timeout < 0 || (nanoTime() - start_time) < timeout_ns);
+        poll_wait_slice(start_time, timeout_ns, infinite_timeout, &seen_generation);
+    } while (infinite_timeout || (nanoTime() - start_time) < timeout_ns);
+
+    if (mask_installed) signal_setmask(SIG_SETMASK, &original_mask, NULL);
+    return ready;
+}
+
+sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeout)
+{
+    epoll_file_t *ep = epoll_from_fd(epfd);
+    if (ep == NULL) return SYSCALL_FAULT_(EBADF);
+    if (events == NULL || maxevents <= 0) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t timeout_ns = timeout < 0 ? 0 : (uint64_t)timeout * 1000000ULL;
+    uint64_t start_time = nanoTime();
+    uint64_t ret = epoll_wait_common(ep, events, maxevents, timeout_ns, timeout < 0, NULL);
 
     if (trace_xfce_task())
         write_serial_fmt("[xfce-trace] sys:epoll_wait task=%s epfd=%d max=%d timeout=%d ready=%d elapsed=%llu\n",
@@ -4609,32 +4896,63 @@ sys_(epoll_wait, int epfd, struct epoll_event *events, int maxevents, int timeou
                          epfd,
                          maxevents,
                          timeout,
-                         ready,
+                         (int)ret,
                          (unsigned long long)(nanoTime() - start_time));
 
-    return ready;
+    return ret;
 }
 
 sys_(epoll_pwait, int epfd, struct epoll_event *events, int maxevents, int timeout, sigset_t *sigmask, size_t sigsetsize)
 {
-    (void)sigmask;
-    (void)sigsetsize;
-    return sys_epoll_wait(epfd, events, maxevents, timeout, 0, 0, regs);
+    epoll_file_t *ep = epoll_from_fd(epfd);
+    if (ep == NULL) return SYSCALL_FAULT_(EBADF);
+    if (events == NULL || maxevents <= 0) return SYSCALL_FAULT_(EINVAL);
+    if (sigmask != NULL && sigsetsize < sizeof(sigset_t)) return SYSCALL_FAULT_(EINVAL);
+
+    sigset_t temporary_mask = 0;
+    if (sigmask != NULL && !copy_from_user_pagedir(current_user_pagedir(), &temporary_mask, sigmask, sizeof(temporary_mask)))
+        return SYSCALL_FAULT_(EFAULT);
+
+    uint64_t timeout_ns = timeout < 0 ? 0 : (uint64_t)timeout * 1000000ULL;
+    return epoll_wait_common(ep, events, maxevents, timeout_ns, timeout < 0,
+                             sigmask != NULL ? &temporary_mask : NULL);
 }
 
-sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
+sys_(epoll_pwait2, int epfd, struct epoll_event *events, int maxevents, const struct timespec *timeout,
+     const sigset_t *sigmask, size_t sigsetsize)
 {
-    if (nfds == 0)
+    epoll_file_t *ep = epoll_from_fd(epfd);
+    if (ep == NULL) return SYSCALL_FAULT_(EBADF);
+    if (events == NULL || maxevents <= 0) return SYSCALL_FAULT_(EINVAL);
+    if (sigmask != NULL && sigsetsize < sizeof(sigset_t)) return SYSCALL_FAULT_(EINVAL);
+
+    uint64_t timeout_ns = 0;
+    bool infinite_timeout = timeout == NULL;
+    if (timeout != NULL)
     {
-        uint64_t timeout_ns = 0;
-        if (timeout != (size_t)-1)
-        {
-            if (timeout > UINT64_MAX / 1000000ULL) return SYSCALL_FAULT_(EINVAL);
-            timeout_ns = timeout * 1000000ULL;
-        }
-        return poll_empty_wait_ns(timeout_ns, timeout == (size_t)-1);
+        struct timespec ktimeout = {};
+        if (!copy_from_user_pagedir(current_user_pagedir(), &ktimeout, timeout, sizeof(ktimeout)))
+            return SYSCALL_FAULT_(EFAULT);
+        if (!checked_timespec_to_ns(&ktimeout, &timeout_ns)) return SYSCALL_FAULT_(EINVAL);
     }
-    if (fds_user == NULL) return SYSCALL_FAULT_(EINVAL);
+
+    sigset_t temporary_mask = 0;
+    if (sigmask != NULL && !copy_from_user_pagedir(current_user_pagedir(), &temporary_mask, sigmask, sizeof(temporary_mask)))
+        return SYSCALL_FAULT_(EFAULT);
+
+    return epoll_wait_common(ep, events, maxevents, timeout_ns, infinite_timeout,
+                             sigmask != NULL ? &temporary_mask : NULL);
+}
+
+sys_(poll, struct pollfd *fds_user, size_t nfds, int timeout)
+{
+    uint64_t timeout_ns = 0;
+    bool infinite_timeout = false;
+    if (!poll_timeout_ms_to_ns(timeout, &timeout_ns, &infinite_timeout)) return SYSCALL_FAULT_(EINVAL);
+
+    if (nfds == 0)
+        return poll_empty_wait_ns(timeout_ns, infinite_timeout);
+    if (fds_user == NULL) return SYSCALL_FAULT_(EFAULT);
     if (nfds > USER_POLL_MAX) return SYSCALL_FAULT_(EINVAL);
 
     size_t fds_bytes = 0;
@@ -4647,12 +4965,12 @@ sys_(poll, struct pollfd *fds_user, size_t nfds, size_t timeout)
         return SYSCALL_FAULT_(EFAULT);
     }
 
-    uint64_t ret = poll_kernel_fds(fds, nfds, timeout);
+    uint64_t ret = poll_kernel_fds(fds, nfds, timeout_ns, infinite_timeout);
     if (trace_xfce_task())
         write_serial_fmt("[xfce-trace] sys:poll task=%s nfds=%llu timeout=%lld ret=%lld\n",
                          trace_task_name(),
                          (unsigned long long)nfds,
-                         timeout == (size_t)-1 ? -1LL : (long long)timeout,
+                         (long long)timeout,
                          (long long)ret);
     if ((int64_t)ret >= 0 && !copy_to_user_pagedir(current_user_pagedir(), fds_user, fds, fds_bytes))
     {
@@ -4671,7 +4989,6 @@ sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout
 
     page_directory_t *pagedir = current_user_pagedir();
 
-    size_t timeout_ms = (size_t)-1;
     uint64_t timeout_ns = 0;
     bool infinite_timeout = timeout == NULL;
     if (timeout != NULL)
@@ -4682,8 +4999,6 @@ sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout
         if (!checked_timespec_to_ns(&ktimeout, &timeout_ns))
             return SYSCALL_FAULT_(EINVAL);
 
-        timeout_ms = (size_t)(timeout_ns / 1000000ULL);
-        if ((timeout_ns % 1000000ULL) != 0) timeout_ms++;
     }
 
     sigset_t origmask = 0;
@@ -4712,7 +5027,7 @@ sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout
     if (fds_user == NULL)
     {
         if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
-        return SYSCALL_FAULT_(EINVAL);
+        return SYSCALL_FAULT_(EFAULT);
     }
 
     size_t fds_bytes = 0;
@@ -4735,13 +5050,13 @@ sys_(ppoll, struct pollfd *fds_user, size_t nfds, const struct timespec *timeout
         return SYSCALL_FAULT_(EFAULT);
     }
 
-    uint64_t ret = poll_kernel_fds(fds, nfds, timeout_ms);
+    uint64_t ret = poll_kernel_fds(fds, nfds, timeout_ns, infinite_timeout);
     if (trace_xfce_task())
         write_serial_fmt("[xfce-trace] sys:ppoll task=%s nfds=%llu timeout_ns=%llu timeout_ms=%lld ret=%lld\n",
                          trace_task_name(),
                          (unsigned long long)nfds,
                          (unsigned long long)timeout_ns,
-                         infinite_timeout ? -1LL : (long long)timeout_ms,
+                         infinite_timeout ? -1LL : (long long)(timeout_ns / 1000000ULL),
                          (long long)ret);
 
     if (mask_installed) signal_setmask(SIG_SETMASK, &origmask, NULL);
@@ -4767,6 +5082,43 @@ sys_(sched_getaffinity, int pid, size_t cpusetsize, void *mask)
     bool ok = copy_to_user_pagedir(current_user_pagedir(), mask, kbuf, cpusetsize);
     free(kbuf);
     return ok ? 0 : SYSCALL_FAULT_(EFAULT);
+}
+
+sys_(sched_setscheduler, int pid, int policy, const struct sched_param *param)
+{
+    pcb_t process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
+    if (process == NULL || process->status == DEATH || process->status == OUT || process->status == ZOMBIE)
+        return SYSCALL_FAULT_(ESRCH);
+    if (param == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    struct sched_param sched_param = {};
+    if (!copy_from_user_pagedir(current_user_pagedir(), &sched_param, param, sizeof(sched_param)))
+        return SYSCALL_FAULT_(EFAULT);
+
+    if (policy != SCHED_OTHER || sched_param.sched_priority != 0) return SYSCALL_FAULT_(EINVAL);
+    return 0;
+}
+
+sys_(sched_setaffinity, int pid, size_t cpusetsize, const void *mask)
+{
+    static constexpr size_t SCHED_CPUSET_MAX_BYTES = 128;
+
+    pcb_t process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
+    if (process == NULL || process->status == DEATH || process->status == OUT || process->status == ZOMBIE)
+        return SYSCALL_FAULT_(ESRCH);
+    if (cpusetsize == 0 || cpusetsize > SCHED_CPUSET_MAX_BYTES) return SYSCALL_FAULT_(EINVAL);
+    if (mask == NULL) return SYSCALL_FAULT_(EFAULT);
+
+    uint8_t cpuset[SCHED_CPUSET_MAX_BYTES] = {};
+    if (!copy_from_user_pagedir(current_user_pagedir(), cpuset, mask, cpusetsize)) return SYSCALL_FAULT_(EFAULT);
+    if (cpuset[0] != 1) return SYSCALL_FAULT_(EINVAL);
+
+    for (size_t index = 1; index < cpusetsize; index++)
+    {
+        if (cpuset[index] != 0) return SYSCALL_FAULT_(EINVAL);
+    }
+
+    return 0;
 }
 
 sys_(rt_sigprocmask, int how, sigset_t *set, sigset_t *oldset)
@@ -5308,7 +5660,8 @@ sys_(clock_gettime, uint64_t arg0, struct timespec *ts)
             return SYSCALL_FAULT_(EFAULT);
         return 0;
     }
-    case 0: {
+    case 0:
+    case 5: {
         uint64_t now_ns = realtime_ns();
         kts.tv_sec  = now_ns / 1000000000ULL;
         kts.tv_nsec = now_ns % 1000000000ULL;
@@ -5513,7 +5866,7 @@ static uint64_t select_common(int nfds, uint8_t *read, uint8_t *write, uint8_t *
     if (kwrite) memset(kwrite, 0, bitmap_bytes);
     if (kexcept) memset(kexcept, 0, bitmap_bytes);
 
-    size_t time = 0;
+    int64_t time = 0;
     if (ktimeout == NULL) { time = -1; }
     else if (ktimeout->tv_sec == -1 || ktimeout->tv_usec == -1) { time = -1; }
     else
@@ -5533,10 +5886,23 @@ static uint64_t select_common(int nfds, uint8_t *read, uint8_t *write, uint8_t *
             free(kread); free(kwrite); free(kexcept); free(comp);
             return SYSCALL_FAULT_(EINVAL);
         }
-        time = usec_ms;
+        if (usec_ms > INT64_MAX)
+        {
+            free(kread); free(kwrite); free(kexcept); free(comp);
+            return SYSCALL_FAULT_(EINVAL);
+        }
+        time = (int64_t)usec_ms;
     }
 
-    size_t res = poll_kernel_fds(comp, compIndex, time);
+    uint64_t timeout_ns = 0;
+    bool infinite_timeout = false;
+    if (!poll_timeout_ms_to_ns(time, &timeout_ns, &infinite_timeout))
+    {
+        free(kread); free(kwrite); free(kexcept); free(comp);
+        return SYSCALL_FAULT_(EINVAL);
+    }
+
+    size_t res = poll_kernel_fds(comp, compIndex, timeout_ns, infinite_timeout);
 
     if ((int64_t)res < 0)
     {
@@ -6726,7 +7092,7 @@ sys_(setpgid, int pid, int pgid)
     pcb_t process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
     if (process == NULL || process->status == DEATH) { return SYSCALL_FAULT_(ESRCH); }
     if (pgid == 0) { pgid = process->pid; }
-    process->pid = pgid;
+    process->pgid = pgid;
 
     // Keep the controlling tty foreground pgrp in sync for Linux userland job control.
     tcb_t current = get_current_task();
@@ -6747,13 +7113,16 @@ sys_(getpgid)
     size_t pid     = arg0;
     pcb_t  process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
     if (process == NULL || process->status == DEATH) { return SYSCALL_FAULT_(ESRCH); }
-    return process->pid;
+    return process->pgid;
 }
 
 sys_(setsid)
 {
     pcb_t process = get_current_task()->parent_group;
     if (process == NULL) return SYSCALL_FAULT_(ESRCH);
+    if (process->pid == process->pgid) return SYSCALL_FAULT_(EPERM);
+    process->sid  = process->pid;
+    process->pgid = process->pid;
     return process->pid;
 }
 
@@ -6761,7 +7130,7 @@ sys_(getsid, int pid)
 {
     pcb_t process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
     if (process == NULL || process->status == DEATH) return SYSCALL_FAULT_(ESRCH);
-    return process->pid;
+    return process->sid;
 }
 
 
@@ -6952,6 +7321,12 @@ sys_(renameat, int olddirfd, char *oldpath, int newdirfd, char *newpath)
     free(resolved_old);
     free(resolved_new);
     return ret;
+}
+
+sys_(renameat2, int olddirfd, char *oldpath, int newdirfd, char *newpath, uint32_t flags)
+{
+    if (flags != 0) return SYSCALL_FAULT_(EOPNOTSUPP);
+    return sys_renameat(olddirfd, oldpath, newdirfd, newpath, 0, 0, regs);
 }
 
 sys_(symlink, char *name, char *nw)
@@ -7252,6 +7627,12 @@ sys_(prlimit64, int pid, uint64_t resource, struct rlimit *new_limit, struct rli
     return 0;
 }
 
+sys_(getrlimit, uint64_t resource, struct rlimit *old_limit)
+{
+    return sys_prlimit64(0, resource, NULL, old_limit, 0, 0, regs);
+}
+
+
 sys_(ftruncate, int fd, uint64_t length)
 {
     if (fd < 0) return SYSCALL_FAULT_(EBADF);
@@ -7425,6 +7806,16 @@ sys_(setgid, uint32_t gid)
     uint32_t egid = current_gid();
     if (gid == egid || current_uid() == 0) return 0;
     return SYSCALL_FAULT_(EPERM);
+}
+
+sys_(setreuid, uint32_t ruid, uint32_t euid)
+{
+    return sys_setresuid(ruid, euid, (uint32_t)-1, 0, 0, 0, regs);
+}
+
+sys_(setregid, uint32_t rgid, uint32_t egid)
+{
+    return sys_setresgid(rgid, egid, (uint32_t)-1, 0, 0, 0, regs);
 }
 
 static bool linux_id_arg_allowed(uint32_t id, uint32_t current)

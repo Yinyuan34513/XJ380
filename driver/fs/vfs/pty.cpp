@@ -12,6 +12,14 @@
 #include <task/poll.h>
 #include <task/scheduler.h>
 
+#define TCIFLUSH 0
+#define TCOFLUSH 1
+#define TCIOFLUSH 2
+#define TCOOFF 0
+#define TCOON 1
+#define TCIOFF 2
+#define TCION 3
+
 static int                 ptmx_fsid = 0;
 static int                 pts_fsid  = 0;
 static struct llist_header ptmx_list_head;
@@ -121,6 +129,12 @@ static size_t ptmx_data_available(pty_handle_t *pair)
     return pair->ptr_master;
 }
 
+static bool pty_nonblock(pty_handle_t *pair, bool master)
+{
+    vfs_node_t node = master ? pair->master_node : pair->slave_node;
+    return node != NULL && (node->flags & O_NONBLOCK) != 0;
+}
+
 static size_t pty_master_append_processed_locked(pty_handle_t *pair, const uint8_t *in, size_t size)
 {
     size_t written = 0;
@@ -163,7 +177,94 @@ static size_t pts_data_available(pty_handle_t *pair)
 static void pts_ctrl_assign(pty_handle_t *pair)
 {
     tcb_t task = get_current_task();
-    pair->ctrl_pgid = task != NULL && task->parent_group != NULL ? (int)task->parent_group->pid : 0;
+    if (task == NULL || task->parent_group == NULL) return;
+    pair->ctrl_session = task->parent_group->sid;
+    pair->ctrl_pgid    = (int)task->parent_group->pgid;
+    if (pair->front_pgid == 0) pair->front_pgid = pair->ctrl_pgid;
+}
+
+static int pty_foreground_pgid(pty_handle_t *pair)
+{
+    return pair->front_pgid != 0 ? pair->front_pgid : pair->ctrl_pgid;
+}
+
+static void pty_packet_mark_data_locked(pty_handle_t *pair)
+{
+    if (pair != NULL && pair->packet_mode && pair->ptr_master > 0)
+        pair->packet_data_pending = true;
+}
+
+static void pty_packet_queue_locked(pty_handle_t *pair, uint8_t status)
+{
+    if (pair != NULL && pair->packet_mode && status != 0)
+        pair->packet_status |= status;
+}
+
+static void pty_packet_termios_changed_locked(pty_handle_t *pair, const struct termios *old_term)
+{
+    if (pair == NULL || old_term == NULL) return;
+    if ((old_term->c_iflag ^ pair->term.c_iflag) & IXON)
+    {
+        pty_packet_queue_locked(pair, (pair->term.c_iflag & IXON) ? TIOCPKT_DOSTOP : TIOCPKT_NOSTOP);
+    }
+}
+
+static int pty_flush_locked(pty_handle_t *pair, int selector)
+{
+    if (pair == NULL) return -EINVAL;
+    switch (selector)
+    {
+    case TCIFLUSH:
+        pair->ptr_slave = 0;
+        pty_packet_queue_locked(pair, TIOCPKT_FLUSHREAD);
+        return 0;
+    case TCOFLUSH:
+        pair->ptr_master = 0;
+        pair->packet_data_pending = false;
+        pty_packet_queue_locked(pair, TIOCPKT_FLUSHWRITE);
+        return 0;
+    case TCIOFLUSH:
+        pair->ptr_slave = 0;
+        pair->ptr_master = 0;
+        pair->packet_data_pending = false;
+        pty_packet_queue_locked(pair, TIOCPKT_FLUSHREAD | TIOCPKT_FLUSHWRITE);
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
+static int pty_tcxonc_locked(pty_handle_t *pair, bool master, int action)
+{
+    if (pair == NULL) return -EINVAL;
+    bool *stopped = master ? &pair->stop_master_output : &pair->stop_slave_output;
+    switch (action)
+    {
+    case TCOOFF:
+        *stopped = true;
+        return 0;
+    case TCOON:
+        *stopped = false;
+        return 0;
+    case TCIOFF:
+    case TCION: {
+        uint8_t flow = pair->term.c_cc[action == TCIOFF ? VSTOP : VSTART];
+        if (master)
+        {
+            if (pair->ptr_slave >= PTY_BUFF_SIZE) return -EAGAIN;
+            pair->slave_buffer[pair->ptr_slave++] = flow;
+        }
+        else
+        {
+            if (pair->ptr_master >= PTY_BUFF_SIZE) return -EAGAIN;
+            pty_master_append_processed_locked(pair, &flow, 1);
+            pty_packet_mark_data_locked(pair);
+        }
+        return 0;
+    }
+    default:
+        return -EINVAL;
+    }
 }
 
 static void pty_termios_to_termios2(const struct termios *src, struct termios2 *dst)
@@ -351,6 +452,7 @@ static void ptmx_close(void *handle)
         pty_pair_destroy_locked(pair);
         spin_unlock(&pty_global_lock);
     }
+    poll_notify_event();
 }
 
 static size_t ptmx_read(void *file, void *addr, size_t offset, size_t size)
@@ -358,10 +460,19 @@ static size_t ptmx_read(void *file, void *addr, size_t offset, size_t size)
     UNUSED(offset);
     pty_handle_t *pair = (pty_handle_t *)file;
     if (pair == NULL || addr == NULL) return VFS_STATUS_FAILED;
+    if (size == 0) return 0;
 
     while (true)
     {
         spin_lock(&pair->lock);
+        if (pair->packet_mode && pair->packet_status != 0 && size > 0)
+        {
+            ((uint8_t *)addr)[0] = pair->packet_status;
+            pair->packet_status = 0;
+            spin_unlock(&pair->lock);
+            poll_notify_event();
+            return 1;
+        }
         if (ptmx_data_available(pair) > 0)
         {
             spin_unlock(&pair->lock);
@@ -371,6 +482,11 @@ static size_t ptmx_read(void *file, void *addr, size_t offset, size_t size)
         {
             spin_unlock(&pair->lock);
             return 0;
+        }
+        if (pty_nonblock(pair, true))
+        {
+            spin_unlock(&pair->lock);
+            return (size_t)-EWOULDBLOCK;
         }
         spin_unlock(&pair->lock);
         scheduler_yield();
@@ -387,6 +503,7 @@ static size_t ptmx_read(void *file, void *addr, size_t offset, size_t size)
         memmove(pair->master_buffer, pair->master_buffer + to_copy, pair->ptr_master - to_copy);
         pair->ptr_master -= to_copy;
         to_copy++;
+        pair->packet_data_pending = pair->ptr_master > 0;
     }
     else
     {
@@ -395,6 +512,7 @@ static size_t ptmx_read(void *file, void *addr, size_t offset, size_t size)
         pair->ptr_master -= to_copy;
     }
     spin_unlock(&pair->lock);
+    poll_notify_event();
     return to_copy;
 }
 
@@ -408,10 +526,20 @@ static size_t ptmx_write(void *file, const void *addr, size_t offset, size_t siz
     while (true)
     {
         spin_lock(&pair->lock);
+        if (pair->slave_fds == 0)
+        {
+            spin_unlock(&pair->lock);
+            return (size_t)-EIO;
+        }
         if (pair->ptr_slave < PTY_BUFF_SIZE)
         {
             spin_unlock(&pair->lock);
             break;
+        }
+        if (pty_nonblock(pair, true))
+        {
+            spin_unlock(&pair->lock);
+            return (size_t)-EWOULDBLOCK;
         }
         spin_unlock(&pair->lock);
         scheduler_yield();
@@ -423,6 +551,34 @@ static size_t ptmx_write(void *file, const void *addr, size_t offset, size_t siz
     for (size_t i = 0; i < size; i++)
     {
         uint8_t ch = input[i];
+        if (pair->term.c_iflag & IXON)
+        {
+            if (ch == pair->term.c_cc[VSTOP])
+            {
+                pair->stop_master_output = true;
+                written++;
+                continue;
+            }
+            if (ch == pair->term.c_cc[VSTART])
+            {
+                pair->stop_master_output = false;
+                written++;
+                continue;
+            }
+        }
+        if ((pair->term.c_lflag & ISIG) && pty_foreground_pgid(pair) != 0)
+        {
+            int signal = 0;
+            if (ch == pair->term.c_cc[VINTR]) signal = SIGINT;
+            else if (ch == pair->term.c_cc[VQUIT]) signal = SIGQUIT;
+            else if (ch == pair->term.c_cc[VSUSP]) signal = SIGTSTP;
+            if (signal != 0)
+            {
+                signal_send_process_group((size_t)pty_foreground_pgid(pair), signal);
+                written++;
+                continue;
+            }
+        }
         if ((pair->term.c_iflag & ICRNL) && ch == '\r')
         {
             ch = '\n';
@@ -460,6 +616,7 @@ static size_t ptmx_write(void *file, const void *addr, size_t offset, size_t siz
         if (!erased) written++;
     }
     spin_unlock(&pair->lock);
+    poll_notify_event();
     return written;
 }
 
@@ -505,7 +662,9 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
             ret = -EFAULT;
             break;
         }
-        *(int *)arg = (int)ptmx_data_available(pair);
+        *(int *)arg = (pair->packet_mode && (pair->packet_status != 0 || pair->packet_data_pending))
+                          ? 0
+                          : (int)ptmx_data_available(pair);
         break;
     case TIOCOUTQ:
         if (arg == NULL)
@@ -517,12 +676,16 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
         break;
     case TIOCEXCL:
     case TIOCNXCL:
-    case TCFLSH:
-    case TCXONC:
     case TIOCSBRK:
     case TIOCCBRK:
     case TIOCSIG:
         ret = EOK;
+        break;
+    case TCXONC:
+        ret = pty_tcxonc_locked(pair, true, (int)(uintptr_t)arg);
+        break;
+    case TCFLSH:
+        ret = pty_flush_locked(pair, (int)(uintptr_t)arg);
         break;
     case TIOCPKT:
         if (arg == NULL)
@@ -531,6 +694,8 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
             break;
         }
         pair->packet_mode = (*(int *)arg) != 0;
+        pair->packet_status = 0;
+        pair->packet_data_pending = pair->packet_mode && pair->ptr_master > 0;
         break;
     case TIOCGEXCL:
         if (arg == NULL)
@@ -566,14 +731,18 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
         break;
     case TCSETS:
     case TCSETSW:
-    case TCSETSF:
+    case TCSETSF: {
         if (arg == NULL)
         {
             ret = -EFAULT;
             break;
         }
+        struct termios old_term = pair->term;
         memcpy(&pair->term, arg, sizeof(pair->term));
+        pty_packet_termios_changed_locked(pair, &old_term);
+        if (req == TCSETSF) ret = pty_flush_locked(pair, TCIFLUSH);
         break;
+    }
     case TCSETS2:
     case TCSETSW2:
     case TCSETSF2:
@@ -583,6 +752,7 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
             break;
         }
         pty_termios_from_termios2(&pair->term, (const struct termios2 *)arg);
+        if (req == TCSETSF2) ret = pty_flush_locked(pair, TCIFLUSH);
         break;
     case TIOCGPGRP:
         if (arg == NULL)
@@ -590,10 +760,11 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
             ret = -EFAULT;
             break;
         }
-        *(int *)arg = pair->ctrl_pgid != 0 ? pair->ctrl_pgid : get_current_task()->parent_group->pid;
+        *(int *)arg = pty_foreground_pgid(pair);
         break;
     case TIOCSPGRP:
-        if (arg != NULL) pair->ctrl_pgid = *(int *)arg;
+        if (arg == NULL) ret = -EFAULT;
+        else pair->front_pgid = *(int *)arg;
         break;
     case TIOCGETD:
         if (arg == NULL)
@@ -611,7 +782,7 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
             ret = -EFAULT;
             break;
         }
-        *(int *)arg = get_current_task()->parent_group->pid;
+        *(int *)arg = (int)pair->ctrl_session;
         break;
     case TIOCGPTLCK:
         if (arg == NULL)
@@ -642,6 +813,7 @@ static errno_t ptmx_ioctl(void *handle, size_t request, void *arg)
         break;
     }
     spin_unlock(&pair->lock);
+    poll_notify_event();
     return ret;
 }
 
@@ -652,6 +824,11 @@ static errno_t ptmx_poll(void *file, size_t events)
 
     int revents = 0;
     spin_lock(&pair->lock);
+    if (pair->packet_mode && pair->packet_status != 0)
+    {
+        if (events & EPOLLIN) revents |= EPOLLIN;
+        if (events & EPOLLPRI) revents |= EPOLLPRI;
+    }
     if (ptmx_data_available(pair) > 0 && (events & EPOLLIN)) revents |= EPOLLIN;
     if (pair->ptr_slave < PTY_BUFF_SIZE && (events & EPOLLOUT)) revents |= EPOLLOUT;
     if (pair->slave_fds == 0) revents |= EPOLLHUP;
@@ -716,6 +893,7 @@ static void pts_close(void *handle)
         pty_pair_destroy_locked(pair);
         spin_unlock(&pty_global_lock);
     }
+    poll_notify_event();
 }
 
 static size_t pts_read(void *file, void *addr, size_t offset, size_t size)
@@ -723,6 +901,7 @@ static size_t pts_read(void *file, void *addr, size_t offset, size_t size)
     UNUSED(offset);
     pty_handle_t *pair = (pty_handle_t *)file;
     if (pair == NULL || addr == NULL) return VFS_STATUS_FAILED;
+    if (size == 0) return 0;
 
     while (true)
     {
@@ -737,6 +916,11 @@ static size_t pts_read(void *file, void *addr, size_t offset, size_t size)
             spin_unlock(&pair->lock);
             return 0;
         }
+        if (pty_nonblock(pair, false))
+        {
+            spin_unlock(&pair->lock);
+            return (size_t)-EWOULDBLOCK;
+        }
         spin_unlock(&pair->lock);
         scheduler_yield();
     }
@@ -747,6 +931,7 @@ static size_t pts_read(void *file, void *addr, size_t offset, size_t size)
     memmove(pair->slave_buffer, pair->slave_buffer + to_copy, pair->ptr_slave - to_copy);
     pair->ptr_slave -= to_copy;
     spin_unlock(&pair->lock);
+    poll_notify_event();
     return to_copy;
 }
 
@@ -767,6 +952,13 @@ static size_t pts_write(void *file, const void *addr, size_t offset, size_t size
     while (true)
     {
         spin_lock(&pair->lock);
+        if (pair->stop_master_output || pair->stop_slave_output)
+        {
+            spin_unlock(&pair->lock);
+            if (pty_nonblock(pair, false)) return (size_t)-EWOULDBLOCK;
+            scheduler_yield();
+            continue;
+        }
         if (pair->master_fds == 0)
         {
             spin_unlock(&pair->lock);
@@ -777,13 +969,20 @@ static size_t pts_write(void *file, const void *addr, size_t offset, size_t size
             spin_unlock(&pair->lock);
             break;
         }
+        if (pty_nonblock(pair, false))
+        {
+            spin_unlock(&pair->lock);
+            return (size_t)-EWOULDBLOCK;
+        }
         spin_unlock(&pair->lock);
         scheduler_yield();
     }
 
     spin_lock(&pair->lock);
     size_t written = pts_write_inner(pair, (const uint8_t *)addr, size);
+    if (written > 0) pty_packet_mark_data_locked(pair);
     spin_unlock(&pair->lock);
+    poll_notify_event();
     return written;
 }
 
@@ -834,14 +1033,18 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         break;
     case TCSETS:
     case TCSETSW:
-    case TCSETSF:
+    case TCSETSF: {
         if (arg == NULL)
         {
             ret = -EFAULT;
             break;
         }
+        struct termios old_term = pair->term;
         memcpy(&pair->term, arg, sizeof(pair->term));
+        pty_packet_termios_changed_locked(pair, &old_term);
+        if (req == TCSETSF) ret = pty_flush_locked(pair, TCIFLUSH);
         break;
+    }
     case TCSETS2:
     case TCSETSW2:
     case TCSETSF2:
@@ -851,6 +1054,7 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
             break;
         }
         pty_termios_from_termios2(&pair->term, (const struct termios2 *)arg);
+        if (req == TCSETSF2) ret = pty_flush_locked(pair, TCIFLUSH);
         break;
     case TIOCGPGRP:
         if (arg == NULL)
@@ -858,7 +1062,7 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
             ret = -EFAULT;
             break;
         }
-        *(int *)arg = pair->ctrl_pgid != 0 ? pair->ctrl_pgid : get_current_task()->parent_group->pid;
+        *(int *)arg = pty_foreground_pgid(pair);
         break;
     case TIOCGDEV:
         if (arg == NULL)
@@ -886,12 +1090,16 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         break;
     case TIOCEXCL:
     case TIOCNXCL:
-    case TCFLSH:
-    case TCXONC:
     case TIOCSBRK:
     case TIOCCBRK:
     case TIOCSIG:
         ret = EOK;
+        break;
+    case TCXONC:
+        ret = pty_tcxonc_locked(pair, false, (int)(uintptr_t)arg);
+        break;
+    case TCFLSH:
+        ret = pty_flush_locked(pair, (int)(uintptr_t)arg);
         break;
     case TIOCPKT:
         if (arg == NULL)
@@ -900,6 +1108,8 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
             break;
         }
         pair->packet_mode = (*(int *)arg) != 0;
+        pair->packet_status = 0;
+        pair->packet_data_pending = pair->packet_mode && pair->ptr_master > 0;
         break;
     case TIOCGEXCL:
         if (arg == NULL)
@@ -918,7 +1128,8 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         *(int *)arg = pair->packet_mode ? 1 : 0;
         break;
     case TIOCSPGRP:
-        if (arg != NULL) pair->ctrl_pgid = *(int *)arg;
+        if (arg == NULL) ret = -EFAULT;
+        else pair->front_pgid = *(int *)arg;
         break;
     case TIOCGETD:
         if (arg == NULL)
@@ -936,7 +1147,7 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
             ret = -EFAULT;
             break;
         }
-        *(int *)arg = get_current_task()->parent_group->pid;
+        *(int *)arg = (int)pair->ctrl_session;
         break;
     case KDGKBMODE:
         if (arg == NULL)
@@ -991,6 +1202,7 @@ static errno_t pts_ioctl(void *handle, size_t request, void *arg)
         break;
     }
     spin_unlock(&pair->lock);
+    poll_notify_event();
     return ret;
 }
 
@@ -1003,7 +1215,9 @@ static errno_t pts_poll(void *file, size_t events)
     spin_lock(&pair->lock);
     if ((pair->master_fds == 0 || pts_data_available(pair) > 0) && (events & EPOLLIN)) revents |= EPOLLIN;
     if (pair->master_fds == 0) revents |= EPOLLHUP;
-    if (pair->ptr_master < PTY_BUFF_SIZE && (events & EPOLLOUT)) revents |= EPOLLOUT;
+    if (!pair->stop_master_output && !pair->stop_slave_output && pair->ptr_master < PTY_BUFF_SIZE &&
+        (events & EPOLLOUT))
+        revents |= EPOLLOUT;
     spin_unlock(&pair->lock);
     return revents;
 }

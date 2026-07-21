@@ -202,21 +202,54 @@ static char *proc_gen_loadavg(size_t *content_len)
 
 static char *proc_gen_root_stat(size_t *content_len)
 {
+    static constexpr uint64_t proc_clock_tick_ns = 10000000ULL;
     uint64_t procs = pcb_group_queue ? pcb_group_queue->size : 0;
-    uint64_t uptime_ticks = bootNanoTime() / 10000000ULL;
-    char *buffer = (char *)malloc(PAGE_SIZE);
-    int len = sprintf(buffer,
-                      "cpu  0 0 0 %llu 0 0 0 0 0 0\n"
-                      "cpu0 0 0 0 %llu 0 0 0 0 0 0\n"
-                      "intr 0\n"
-                      "ctxt 0\n"
-                      "btime 0\n"
-                      "processes %llu\n"
-                      "procs_running 1\n"
-                      "procs_blocked 0\n",
-                      (unsigned long long)uptime_ticks,
-                      (unsigned long long)uptime_ticks,
-                      (unsigned long long)procs);
+    size_t cpu_count = xsi != NULL && xsi->cpu_count != 0 ? xsi->cpu_count : 1;
+    uint64_t uptime_ns = bootNanoTime();
+    uint64_t uptime_ticks = uptime_ns / proc_clock_tick_ns;
+    uint64_t total_runtime_ticks = 0;
+    size_t buffer_size = 256 + cpu_count * 96;
+    char *buffer = (char *)malloc(buffer_size);
+    if (buffer == NULL) {
+        *content_len = 0;
+        return NULL;
+    }
+
+    for (size_t i = 0; i < cpu_count; i++)
+    {
+        uint64_t runtime_ns = xsi != NULL ? __atomic_load_n(&xsi->pcr_inf[i].cpu_runtime_ns, __ATOMIC_RELAXED) : 0;
+        total_runtime_ticks += MIN(runtime_ns / proc_clock_tick_ns, uptime_ticks);
+    }
+
+    uint64_t total_capacity_ticks = uptime_ticks * cpu_count;
+    uint64_t idle_runtime_ticks = total_runtime_ticks < total_capacity_ticks ?
+                                      total_capacity_ticks - total_runtime_ticks : 0;
+    int len = snprintf(buffer, buffer_size,
+                       "cpu  %llu 0 0 %llu 0 0 0 0 0 0\n",
+                       (unsigned long long)total_runtime_ticks,
+                       (unsigned long long)idle_runtime_ticks);
+    for (size_t i = 0; i < cpu_count && len > 0 && (size_t)len < buffer_size; i++)
+    {
+        uint64_t runtime_ns = xsi != NULL ? __atomic_load_n(&xsi->pcr_inf[i].cpu_runtime_ns, __ATOMIC_RELAXED) : 0;
+        uint64_t runtime_ticks = MIN(runtime_ns / proc_clock_tick_ns, uptime_ticks);
+        uint64_t idle_ticks = uptime_ticks - runtime_ticks;
+        len += snprintf(buffer + len, buffer_size - (size_t)len,
+                        "cpu%llu %llu 0 0 %llu 0 0 0 0 0 0\n",
+                        (unsigned long long)i,
+                        (unsigned long long)runtime_ticks,
+                        (unsigned long long)idle_ticks);
+    }
+    if (len > 0 && (size_t)len < buffer_size)
+    {
+        len += snprintf(buffer + len, buffer_size - (size_t)len,
+                        "intr 0\n"
+                        "ctxt 0\n"
+                        "btime 0\n"
+                        "processes %llu\n"
+                        "procs_running 1\n"
+                        "procs_blocked 0\n",
+                        (unsigned long long)procs);
+    }
     *content_len = len > 0 ? (size_t)len : 0;
     return buffer;
 }
@@ -274,6 +307,22 @@ static tcb_t proc_task_first_thread(pcb_t task)
         if (thread != NULL) return thread;
     }
     return NULL;
+}
+
+static uint64_t proc_task_runtime_ticks(pcb_t task)
+{
+    static constexpr uint64_t proc_clock_tick_ns = 10000000ULL;
+    if (task == NULL || task->thread_queue == NULL) return 0;
+
+    uint64_t runtime_ns = 0;
+    spin_lock(&task->thread_queue->lock);
+    queue_foreach(task->thread_queue, node)
+    {
+        tcb_t thread = (tcb_t)node->data;
+        if (thread != NULL) runtime_ns += __atomic_load_n(&thread->cpu_runtime_ns, __ATOMIC_RELAXED);
+    }
+    spin_unlock(&task->thread_queue->lock);
+    return runtime_ns / proc_clock_tick_ns;
 }
 
 static char proc_task_state(pcb_t task)
@@ -515,8 +564,10 @@ char *proc_gen_stat_file(pcb_t task, size_t *content_len) {
     uint32_t processor = main_thread ? (uint32_t)main_thread->cpu_id : 0;
     uint32_t flags = task->linux_abi ? 0x00400000u : 0;
     int exit_signal = task->status == ZOMBIE ? SIGCHLD : 0;
-    int priority = task->task_level == TASK_KERNEL_LEVEL ? 5 : 6;
-    size_t num_threads = task->thread_queue ? task->thread_queue->size : 0;
+    long priority = 20L - (long)task->nice;
+    long num_threads = task->thread_queue ? (long)task->thread_queue->size : 0;
+    unsigned long cpu_runtime_ticks = (unsigned long)proc_task_runtime_ticks(task);
+    unsigned long start_time_ticks = (unsigned long)(task->start_time_ns / 10000000ULL);
 
     char *buffer = (char*)malloc(PAGE_SIZE * 4);
     int   len    = sprintf(buffer,
@@ -536,15 +587,15 @@ char *proc_gen_stat_file(pcb_t task, size_t *content_len) {
                            0,                                            // cminflt
                            0,                                            // majflt
                            0,                                            // cmajflt
-                           0,                                            // utime
+                           cpu_runtime_ticks,                            // utime
                            0,                                            // stime
                            0,                                            // cutime
                            0,                                            // cstime
                            priority,                                     // priority
-                           0,                                            // nice
+                           task->nice,                                   // nice
                            num_threads,                                  // num_threads
                            0,                                            // itrealvalue
-                           0,                                            // starttime
+                           start_time_ticks,                              // starttime
                            vsize,                                        // vsize
                            rss,                                          // rss
                            0,                                            // rsslim

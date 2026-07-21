@@ -51,6 +51,8 @@ static size_t alloc_tid()
 }
 
 extern int futex_wake_waiters(uint32_t *uaddr, page_directory_t *pagedir, int max_wake, uint32_t bitset);
+extern void futex_cancel_task_waiters(tcb_t task);
+extern void poll_waiter_cancel_task(tcb_t task);
 
 static void reserve_tid_value(size_t tid)
 {
@@ -298,9 +300,29 @@ static char **copy_kernel_string_vector_owned(char **argv, size_t argc)
     return copy;
 }
 
+static void reparent_orphaned_children(pcb_t process)
+{
+    if (process == NULL || process == kernel_group || process->child_pcb == NULL || kernel_group == NULL ||
+        kernel_group->child_pcb == NULL)
+        return;
+
+    // A child can outlive its parent. Move it before the parent's PCB and IPC
+    // queue are released so future exit notifications never dereference them.
+    while (true)
+    {
+        pcb_t child = (pcb_t)queue_dequeue(process->child_pcb);
+        if (child == NULL) break;
+
+        child->parent_task = kernel_group;
+        child->ppid        = kernel_group->pid;
+        child->child_index = queue_enqueue(kernel_group->child_pcb, child);
+    }
+}
+
 void kill_proc0(pcb_t pcb)
 {
     procfs_on_exit_task(pcb);
+    reparent_orphaned_children(pcb);
 
     queue_foreach(pcb->thread_queue, thread_node)
     {
@@ -386,6 +408,8 @@ void kill_thread(tcb_t task)
         write_serial_fmt("Cannot stop kernel thread.");
         return;
     }
+    futex_cancel_task_waiters(task);
+    poll_waiter_cancel_task(task);
     clear_child_tid_if_requested(task);
     task->status = DEATH;
     // kill_thread0(task); 瑕佺敤鐨勮В鎺?浣嗗彲鑳借鍔犻攣
@@ -395,6 +419,8 @@ extern void remove_task(tcb_t task);
 
 void kill_thread0(tcb_t task)
 {
+    futex_cancel_task_waiters(task);
+    poll_waiter_cancel_task(task);
     task->status = OUT;
     clear_child_tid_if_requested(task);
     if (task->argv != NULL)
@@ -1865,6 +1891,10 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_pcb->queue_index = (size_t)-1;
     new_pcb->child_index = (size_t)-1;
     new_pcb->pid = alloc_pid();
+    new_pcb->pgid = current_pcb->pgid;
+    new_pcb->sid = current_pcb->sid;
+    new_pcb->nice = current_pcb->nice;
+    new_pcb->start_time_ns = bootNanoTime();
     strcpy(new_pcb->name, current_pcb->name);
     write_serial_fmt("fork name: %s\n", new_pcb->name);
     new_pcb->task_level = TASK_APPLICATION_LEVEL;
@@ -2460,6 +2490,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     }
 
     pcb->pid         = alloc_pid();
+    pcb->pgid        = pcb->pid;
+    pcb->sid         = parent_group->sid;
+    pcb->start_time_ns = bootNanoTime();
     pcb->parent_task = parent_group;
     pcb->status      = START;
     pcb->task_level  = TASK_APPLICATION_LEVEL;
@@ -2593,6 +2626,9 @@ void process_setup()
     pcb_group_queue     = queue_init();
     pcb_t kernel_pcb    = (pcb_t)calloc(1, sizeof(struct process_control_block));
     kernel_pcb->pid     = alloc_pid();
+    kernel_pcb->pgid    = kernel_pcb->pid;
+    kernel_pcb->sid     = kernel_pcb->pid;
+    kernel_pcb->start_time_ns = bootNanoTime();
     kernel_pcb->pagedir = get_kernel_pagedir();
     strcpy(kernel_pcb->name, "XSK System");
     kernel_pcb->parent_task  = kernel_pcb;

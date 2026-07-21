@@ -1377,10 +1377,8 @@ int unix_close(void *impl)
 
     if (sk->peer != NULL) {
         spin_lock(&sk->peer->lock);
-        sk->peer->closed = true;
         sk->peer->peer   = NULL;
         spin_unlock(&sk->peer->lock);
-        poll_notify_event();
         sk->peer = NULL;
     }
 
@@ -1395,6 +1393,8 @@ int unix_close(void *impl)
     }
 
     spin_unlock(&sk->lock);
+
+    poll_notify_event();
 
     if (remove_path_node)
         unix_delete_path_node(bound_path);

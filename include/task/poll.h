@@ -101,3 +101,6 @@ uint64_t       poll_event_generation(void);
 void           poll_notify_event(void);
 void           poll_waiter_arm(void);
 void           poll_waiter_disarm(void);
+void           poll_waiter_cancel_task(tcb_t task);
+bool           poll_waiter_sleep(uint64_t expected_generation, uint64_t timeout_ns,
+                                 uint64_t *observed_generation);

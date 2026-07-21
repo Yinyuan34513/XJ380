@@ -388,6 +388,7 @@ void init_smp(uint64_t MADT0)
             cpuinf->processor_id    = lapic->ACPI_Processor_UID;
             cpuinf->lapic_id        = lapic->local_apic_id;
             cpuinf->scheduler_queue = queue_init();
+            cpuinf->cpu_runtime_ns  = 0;
 
             // 如果是BSP就跑路
             if (lapic->local_apic_id == bsp_lapic_id)
@@ -421,6 +422,7 @@ void init_smp(uint64_t MADT0)
             cpuinf->processor_id    = x2lapic->acpi_processor_uid;
             cpuinf->lapic_id        = x2lapic->x2apic_id;
             cpuinf->scheduler_queue = queue_init();
+            cpuinf->cpu_runtime_ns  = 0;
 
             // 如果是BSP就跑路
             if (x2lapic->x2apic_id == bsp_lapic_id)

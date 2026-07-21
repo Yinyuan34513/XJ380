@@ -736,6 +736,7 @@ static int spawn_busybox(char *envp[])
     int pid = fork();
     if (pid == 0)
     {
+        if (setsid() < 0) exit(126);
         char **child_env = build_shell_env(envp);
         int slave = open(slave_name, O_RDWR | O_NOCTTY);
         if (slave < 0) exit(126);

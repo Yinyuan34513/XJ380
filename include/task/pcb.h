@@ -85,6 +85,9 @@ typedef struct vfs_node *vfs_node_t;
 struct process_control_block
 {
     size_t   pid;  // 进程ID
+    size_t   pgid; // 进程组ID
+    size_t   sid;  // 会话ID
+    int      nice; // Linux nice 值，范围 [-20, 19]
     uint64_t ppid; // 父进程ID
 
     char              name[32];     // 进程名称
@@ -129,6 +132,7 @@ struct process_control_block
     uint64_t brk_start;
     uint64_t brk_end;
     uint64_t brk_current ;
+    uint64_t start_time_ns;
 
     tty_t       *tty;
     xtttp_dtt   *xtttp_stc;
@@ -215,6 +219,7 @@ struct thread_control_block
     uint64_t eevdf_deadline;
     uint64_t eevdf_slice;
     uint64_t eevdf_last_start;
+    uint64_t cpu_runtime_ns;
 
     bool owns_user_stack;
 };
