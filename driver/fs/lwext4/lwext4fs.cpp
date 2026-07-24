@@ -64,6 +64,11 @@ static inline void lwext4fs_unlock()
     mutex_unlock(&lwext4_lock);
 }
 
+static const struct ext4_lock lwext4_os_locks = {
+    lwext4fs_lock,
+    lwext4fs_unlock,
+};
+
 static int lwext4_err(int ret)
 {
     return ret == EOK ? EOK : -ret;
@@ -463,8 +468,8 @@ static lwext4_mount_t *lwext4_mount_alloc(const char *src, vfs_node_t node)
     mount->iface.bread    = lwext4_block_read;
     mount->iface.bwrite   = lwext4_block_write;
     mount->iface.close    = lwext4_block_close;
-    mount->iface.lock     = NULL;
-    mount->iface.unlock   = NULL;
+    mount->iface.lock     = lwext4_block_lock;
+    mount->iface.unlock   = lwext4_block_unlock;
     mount->iface.ph_bsize = 512;
     mount->iface.ph_bcnt  = mount->device->size / 512;
     mount->iface.ph_bbuf  = mount->block_buffer;
@@ -549,6 +554,9 @@ static errno_t lwext4fs_mount(const char *src, vfs_node_t node)
         ext4_device_unregister(mount->device_name);
         goto fail;
     }
+
+    ret = ext4_mount_setup_locks(mount->mount_point, &lwext4_os_locks);
+    if (ret != EOK) goto fail_umount;
 
     dir = (ext4_dir *)malloc(sizeof(ext4_dir));
     if (dir == NULL) goto fail_umount;

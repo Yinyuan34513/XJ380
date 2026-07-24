@@ -605,6 +605,7 @@ static size_t evdev_read(int drive, uint8_t *buffer, size_t number, size_t offse
         written += sizeof(struct input_event);
     }
     spin_unlock(&dev->lock);
+
     return written;
 }
 
@@ -896,18 +897,6 @@ static void evdev_publish_metadata(int index)
                      event_path);
 }
 
-static void evdev_ready(struct _device *device)
-{
-    if (device == NULL) return;
-    evdev_device_t *dev = evdev_by_drive((int)device->vdiskid);
-    if (dev == NULL) return;
-    write_serial_fmt("[udev-trace] evdev:ready drive=%llu index=%d name=%s\n",
-                     (unsigned long long)device->vdiskid,
-                     dev->index,
-                     dev->name);
-    evdev_publish_metadata(dev->index);
-}
-
 static void evdev_setup_one(int index, const char *name, bool mouse)
 {
     evdev_device_t *dev = &g_evdev[index];
@@ -969,12 +958,12 @@ static void evdev_setup_one(int index, const char *name, bool mouse)
     device.ioctl = evdev_ioctl;
     device.poll = mouse ? evdev_mouse_poll : evdev_keyboard_poll;
     device.map = (mapf)empty;
-    device.ready = evdev_ready;
     snprintf(device.drive_name, sizeof(device.drive_name), "event%d", index);
     device.major = 13;
     device.minor = (uint32_t)(64 + index);
     char devnode[64];
     snprintf(devnode, sizeof(devnode), "input/event%d", index);
+    evdev_publish_metadata(index);
     write_serial_fmt("[udev-trace] evdev:setup index=%d devnode=%s name=%s major=%u minor=%u\n",
                      index,
                      devnode,
@@ -1007,7 +996,6 @@ static void evdev_setup_one(int index, const char *name, bool mouse)
                          "/sys/class/input",
                          device.drive_name,
                          "/sys/devices/platform/i8042");
-        evdev_publish_metadata(index);
     }
 }
 

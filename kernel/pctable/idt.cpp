@@ -1,5 +1,6 @@
 #include <apic/apic.h>
 #include <cpu/longm.h>
+#include <dlinker.h>
 #include <mm/memory.h>
 #include <pctable/gdt.h>
 #include <pctable/idt.h>
@@ -7,6 +8,9 @@
 
 IDT_GATE_TYPE idt_gate[IDT_SIZE] __attribute__((__aligned__(PAGE_SIZE)));
 IDTR_TYPE     idt_ptr;
+
+static xhci_irq_handler_t g_xhci_irq_handler = NULL;
+static void              *g_xhci_irq_data    = NULL;
 
 extern void save_registers();
 
@@ -54,11 +58,42 @@ void init_idt()
     init_idt_desc(32, X86_64_INTR_GATE, save_registers, RING0, NULL); // timer
     init_idt_desc(33, X86_64_INTR_GATE, keyboard_handler, RING0, NULL);
     init_idt_desc(34, X86_64_INTR_GATE, mouse_handler, RING0, NULL);
+    init_idt_desc(XHCI_MSI_VECTOR, X86_64_INTR_GATE, xhci_interrupt, RING0, NULL);
     init_idt_desc(LAPIC_IPI_SMOKE_VECTOR, X86_64_INTR_GATE, ipi_smoke_handler, RING0, NULL);
 
     __asm__ volatile("lidt %0" : : "m"(idt_ptr));
 
     write_serial_string("IDT Initialize Success.\n");
+}
+
+int xhci_irq_register(xhci_irq_handler_t handler, void *data, uint32_t *msi_address, uint16_t *msi_data)
+{
+    if (handler == NULL || msi_address == NULL || msi_data == NULL) return -1;
+    if (__atomic_load_n(&g_xhci_irq_handler, __ATOMIC_ACQUIRE) != NULL) return -1;
+
+    g_xhci_irq_data = data;
+    __atomic_store_n(&g_xhci_irq_handler, handler, __ATOMIC_RELEASE);
+
+    *msi_address = 0xFEE00000U | ((uint32_t)(lapic_id() & 0xFFU) << 12);
+    *msi_data    = XHCI_MSI_VECTOR;
+    return 0;
+}
+EXPORT_SYMBOL(xhci_irq_register);
+
+void xhci_irq_unregister(xhci_irq_handler_t handler, void *data)
+{
+    if (__atomic_load_n(&g_xhci_irq_handler, __ATOMIC_ACQUIRE) != handler || g_xhci_irq_data != data) return;
+
+    __atomic_store_n(&g_xhci_irq_handler, (xhci_irq_handler_t)NULL, __ATOMIC_RELEASE);
+    g_xhci_irq_data = NULL;
+}
+EXPORT_SYMBOL(xhci_irq_unregister);
+
+extern "C" void c_xhci_interrupt_handler(void *, uint64_t)
+{
+    xhci_irq_handler_t handler = __atomic_load_n(&g_xhci_irq_handler, __ATOMIC_ACQUIRE);
+    if (handler != NULL) handler(g_xhci_irq_data);
+    send_eoi();
 }
 
 /**

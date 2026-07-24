@@ -242,6 +242,7 @@ typedef struct socket_provider {
 int     socket_provider_register(const socket_provider_t *provider);
 int     socketfs_setup(void);
 int     socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_provider_t *provider);
+int     socketfs_close_fd(int fd);
 int     socketfs_get_socket_impl(int fd, void **out_impl, socket_provider_t *out_provider);
 int     socket_open(int domain, int type, int protocol);
 int     netlink_open(int type, int protocol);

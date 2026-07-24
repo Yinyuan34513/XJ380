@@ -14,9 +14,11 @@ extern "C" {
 #endif
 
 #include "../../include/task/pcb.h"
+#include "../../include/cpu/lock.h"
 #include <stdint.h>
 
 #define XHCI_PCI_CLASS 0x0C0330U
+#define XHCI_PCI_CAP_ID_MSIX 0x11U
 #define XHCI_MMIO_PTE_FLAGS (PTE_PRESENT | PTE_WRITEABLE | (1ULL << 3) | (1ULL << 4))
 
 #define XHCI_RING_TRBS 256U
@@ -29,6 +31,9 @@ extern "C" {
 #define XHCI_STS_HCH (1U << 0)
 #define XHCI_STS_EINT (1U << 3)
 #define XHCI_STS_CNR (1U << 11)
+
+#define XHCI_IMAN_IP (1U << 0)
+#define XHCI_IMAN_IE (1U << 1)
 
 #define XHCI_PORTSC_CCS (1U << 0)
 #define XHCI_PORTSC_PED (1U << 1)
@@ -465,6 +470,7 @@ struct xhci_hid_state {
     bool supported;
     bool ready;
     bool pending;
+    bool completion_pending;
     uint8_t kind;
     uint8_t interface_number;
     uint8_t endpoint_address;
@@ -474,6 +480,8 @@ struct xhci_hid_state {
     uint8_t max_burst;
     uint16_t max_packet;
     uint16_t report_buffer_len;
+    uint32_t completion_actual;
+    uint32_t completion_code;
     xhci_ring ring;
     void *report_buffer;
     uint64_t report_buffer_phys;
@@ -599,7 +607,11 @@ struct xhci_controller {
 
     xhci_slot_state *slots;
     uint8_t *root_port_pending;
-    volatile uint32_t event_lock;
+    spin_t event_lock;
+    bool irq_enabled;
+    bool irq_msix;
+    uint8_t msi_cap_offset;
+    volatile uint32_t *msix_entry;
     bool service_worker_started;
     bool hid_worker_started;
     bool hid_devices_present;

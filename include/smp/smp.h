@@ -48,6 +48,7 @@ struct PROCESSOR_INFO
     uint64_t            syscall_user_rsp;
     uint64_t            syscall_user_rax;
     page_directory_t    directory_snapshot; // 当前核心最近一次页表快照
+    volatile bool       scheduler_disabled; // 当前核心的本地调度禁止状态
 };
 
 struct XSK_SMP_INFO

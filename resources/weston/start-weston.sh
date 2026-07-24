@@ -26,6 +26,8 @@ while [ ! -e "/run/udev/control" ]; do
     sleep 0.1
 done
 
+udevadm trigger --action=add --type=subsystems
+udevadm trigger --action=add --type=devices
 udevadm settle
 
 exec runuser -l root -c "/system/resources/start-xfce4-session"

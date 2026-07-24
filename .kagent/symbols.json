@@ -1,50 +1,5 @@
 {
   "symbols": {
-    "tools/gen_ninja.py": {
-      "ipo_ts": 1783169453038,
-      "edit_count": 4,
-      "last_lines": 1339,
-      "last_ts": 1783220622355,
-      "delisted": false,
-      "last_source": "onEdit",
-      "last_content_hash": "ec35f7e0"
-    },
-    "tools/__pycache__/gen_ninja.cpython-312.pyc": {
-      "ipo_ts": 1783169467236,
-      "edit_count": 1,
-      "last_lines": 320,
-      "last_ts": 1783169467236,
-      "delisted": false,
-      "last_source": "onEdit",
-      "last_content_hash": "badc48cb"
-    },
-    "tools/__pycache__/gen_ninja.cpython-313.pyc": {
-      "ipo_ts": 1783169467668,
-      "edit_count": 3,
-      "last_lines": 311,
-      "last_ts": 1783220660535,
-      "delisted": false,
-      "last_source": "onEdit",
-      "last_content_hash": "2c7275b5"
-    },
-    "build.ninja": {
-      "ipo_ts": 1783169484531,
-      "edit_count": 3,
-      "last_lines": 2050,
-      "last_ts": 1783220644513,
-      "delisted": false,
-      "last_source": "onEdit",
-      "last_content_hash": "f3a426c9"
-    },
-    ".ninja_log": {
-      "ipo_ts": 1783169502649,
-      "edit_count": 6,
-      "last_lines": 6,
-      "last_ts": 1783221849285,
-      "delisted": false,
-      "last_source": "onEdit",
-      "last_content_hash": "77b4352b"
-    },
     ".gitignore": {
       "ipo_ts": 1783220276763,
       "edit_count": 1,
@@ -53,15 +8,6 @@
       "delisted": false,
       "last_source": "onEdit",
       "last_content_hash": "d4f8122e"
-    },
-    "tools/__pycache__/ninja_build.cpython-313.pyc": {
-      "ipo_ts": 1783220452445,
-      "edit_count": 2,
-      "last_lines": 152,
-      "last_ts": 1783221775861,
-      "delisted": false,
-      "last_source": "onEdit",
-      "last_content_hash": "d546436f"
     },
     ".github/workflows/pr-build.yml": {
       "ipo_ts": 1783220522555,

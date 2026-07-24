@@ -63,6 +63,18 @@ static int send_fd_with_payload(int sockfd, int fd_to_send, const char *payload)
     return (int)sendmsg(sockfd, &msg, 0);
 }
 
+static int send_payload(int sockfd, const char *payload)
+{
+    struct iovec iov = {};
+    iov.iov_base = (void *)payload;
+    iov.iov_len = strlen(payload);
+
+    struct msghdr msg = {};
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    return (int)sendmsg(sockfd, &msg, 0);
+}
+
 static int recv_fd_with_payload(int sockfd, char *payload_buf, size_t payload_buf_size, int flags, int *out_fd)
 {
     char control[CMSG_SPACE(sizeof(int))];
@@ -233,6 +245,35 @@ static void test_explicit_stream_credentials()
     close_if_valid(sv[1]);
 }
 
+static void test_stream_rights_packet_boundaries(int source_fd)
+{
+    int sv[2] = {-1, -1};
+    int sp_ret = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+    log_result("socketpair stream SCM_RIGHTS boundaries", sp_ret == 0);
+    if (sp_ret != 0) return;
+
+    log_result("send first packet with SCM_RIGHTS", send_fd_with_payload(sv[0], source_fd, "A") == 1);
+    log_result("send middle packet without SCM_RIGHTS", send_payload(sv[0], "B") == 1);
+    log_result("send second packet with SCM_RIGHTS", send_fd_with_payload(sv[0], source_fd, "C") == 1);
+
+    char payload[16] = {};
+    int first_fd = -1;
+    int recv_ret = recv_fd_with_payload(sv[1], payload, sizeof(payload) - 1, 0, &first_fd);
+    log_result("first recv stops before second SCM_RIGHTS", recv_ret == 2 && strcmp(payload, "AB") == 0);
+    log_result("first recv has SCM_RIGHTS", first_fd >= 0);
+
+    memset(payload, 0, sizeof(payload));
+    int second_fd = -1;
+    recv_ret = recv_fd_with_payload(sv[1], payload, sizeof(payload) - 1, 0, &second_fd);
+    log_result("second recv preserves payload", recv_ret == 1 && strcmp(payload, "C") == 0);
+    log_result("second recv preserves SCM_RIGHTS", second_fd >= 0);
+
+    close_if_valid(first_fd);
+    close_if_valid(second_fd);
+    close_if_valid(sv[0]);
+    close_if_valid(sv[1]);
+}
+
 static int scmtest_main_impl()
 {
     out("scmtest: start\n");
@@ -258,6 +299,7 @@ static int scmtest_main_impl()
 
     test_zero_len_dgram_passcred();
     test_explicit_stream_credentials();
+    test_stream_rights_packet_boundaries(data_fd);
 
     const char msg1[] = "hello-fd";
     int send_ret = send_fd_with_payload(sv[0], data_fd, msg1);

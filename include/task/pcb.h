@@ -14,6 +14,8 @@
 #include <mm/vma.h>
 #include <syscall/signal.h>
 
+#define TASK_CPU_UNASSIGNED ((size_t)-1)
+
 typedef struct registers
 {
     uint64_t ds;
@@ -92,6 +94,7 @@ struct process_control_block
 
     char              name[32];     // 进程名称
     page_directory_t *pagedir;      // 页表目录
+    size_t            home_cpu;     // 地址空间固定运行的 CPU
     pcb_t             parent_task;  // 父进程
     lock_queue       *thread_queue; // 线程队列
     size_t            queue_index;  // 进程队列索引

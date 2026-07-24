@@ -318,7 +318,8 @@ static int pty_install_slave_fd(pty_handle_t *pair, uint64_t flags)
     }
 
     vfs_node_t slave = pair->slave_node;
-    if (slave->handle == NULL && slave->refcount == 1) slave->refcount = 0;
+    bool drop_cached_ref = slave->handle == NULL &&
+                           __atomic_load_n(&slave->refcount, __ATOMIC_ACQUIRE) == 1;
     pair->slave_fds++;
     slave->handle = pair;
     slave->type   = file_pts;
@@ -327,8 +328,9 @@ static int pty_install_slave_fd(pty_handle_t *pair, uint64_t flags)
     slave->mode   = 0666;
     slave->inode  = (uint64_t)pair->id;
     slave->rdev   = pty_mkdev(136, (uint32_t)pair->id);
-    slave->refcount++;
     spin_unlock(&pair->lock);
+
+    vfs_retain_cached(slave, drop_cached_ref);
 
     fd_handle->node = slave;
     fd_handle->flags = flags & allowed_flags;

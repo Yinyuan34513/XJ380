@@ -263,7 +263,10 @@ static void unix_sock_init(struct unix_sock *sk, int type, int protocol)
     sk->stream_queue = NULL;
     sk->lock     = SPIN_INIT;
     sk->refcount = 1;
+    sk->peer_ref = false;
     sk->closed   = false;
+    sk->shut_rd  = false;
+    sk->shut_wr  = false;
     sk->namespace_registered = false;
     sk->path_node_created    = false;
     sk->passcred             = false;
@@ -275,6 +278,12 @@ static void unix_sock_init(struct unix_sock *sk, int type, int protocol)
     sk->timestamp_legacy     = false;
     sk->timestampns_legacy   = false;
     sk->timestamping_legacy  = false;
+    sk->wayland_trace_pending = NULL;
+    sk->wayland_trace_pending_len = 0;
+    sk->wayland_trace_pending_cap = 0;
+    sk->wayland_trace_out_pending = NULL;
+    sk->wayland_trace_out_pending_len = 0;
+    sk->wayland_trace_out_pending_cap = 0;
     sk->recv_buffer_size     = UNIX_RING_SIZE;
     sk->send_buffer_size     = UNIX_RING_SIZE;
     sk->recv_lowat           = 1;
@@ -346,25 +355,138 @@ static void unix_dgram_free(struct unix_dgram *dg)
     free(dg);
 }
 
+static void unix_sock_free(struct unix_sock *sk);
+
+static inline void unix_sock_get(struct unix_sock *sk)
+{
+    if (sk != NULL) __atomic_add_fetch(&sk->refcount, 1, __ATOMIC_ACQ_REL);
+}
+
+static inline void unix_sock_put(struct unix_sock *sk)
+{
+    if (sk == NULL) return;
+
+    size_t refs = __atomic_load_n(&sk->refcount, __ATOMIC_ACQUIRE);
+    while (refs != 0 &&
+           !__atomic_compare_exchange_n(&sk->refcount, &refs, refs - 1, false, __ATOMIC_ACQ_REL,
+                                         __ATOMIC_ACQUIRE))
+        ;
+    if (refs == 1) unix_sock_free(sk);
+}
+
+static struct unix_sock *unix_sock_get_peer_ref(struct unix_sock *sk)
+{
+    if (sk == NULL) return NULL;
+
+    spin_lock(&sk->lock);
+    struct unix_sock *peer = sk->peer;
+    if (peer != NULL) unix_sock_get(peer);
+    spin_unlock(&sk->lock);
+    return peer;
+}
+
+static bool unix_sock_peer_write_closed(struct unix_sock *sk)
+{
+    struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+    if (peer == NULL) return true;
+
+    spin_lock(&peer->lock);
+    bool closed = peer->closed || peer->shut_wr;
+    spin_unlock(&peer->lock);
+    unix_sock_put(peer);
+    return closed;
+}
+
+static inline void unix_sock_set_peer_locked(struct unix_sock *sk, struct unix_sock *peer)
+{
+    if (sk == NULL) return;
+    if (peer != NULL) unix_sock_get(peer);
+    sk->peer = peer;
+    sk->peer_ref = peer != NULL;
+}
+
+static inline void unix_sock_lock_pair(struct unix_sock *a, struct unix_sock *b)
+{
+    if (a == NULL) return;
+    if (b == NULL || a == b) {
+        spin_lock(&a->lock);
+        return;
+    }
+
+    if ((uintptr_t)a < (uintptr_t)b) {
+        spin_lock(&a->lock);
+        spin_lock(&b->lock);
+    } else {
+        spin_lock(&b->lock);
+        spin_lock(&a->lock);
+    }
+}
+
+static inline void unix_sock_unlock_pair(struct unix_sock *a, struct unix_sock *b)
+{
+    if (a == NULL) return;
+    if (b == NULL || a == b) {
+        spin_unlock(&a->lock);
+        return;
+    }
+
+    spin_unlock(&a->lock);
+    spin_unlock(&b->lock);
+}
+
+static void unix_sock_disconnect_peer_links(struct unix_sock *sk, bool mark_closed)
+{
+    if (sk == NULL) return;
+
+    spin_lock(&sk->lock);
+    struct unix_sock *peer = sk->peer;
+    if (peer != NULL) unix_sock_get(peer);
+    spin_unlock(&sk->lock);
+
+    unix_sock_lock_pair(sk, peer);
+    if (mark_closed) sk->closed = true;
+
+    struct unix_sock *drop_sk_peer = NULL;
+    struct unix_sock *drop_peer_sk = NULL;
+    if (peer != NULL && sk->peer == peer) {
+        if (sk->peer_ref) drop_sk_peer = peer;
+        sk->peer = NULL;
+        sk->peer_ref = false;
+    }
+    if (peer != NULL && peer->peer == sk) {
+        if (peer->peer_ref) drop_peer_sk = sk;
+        peer->peer = NULL;
+        peer->peer_ref = false;
+    }
+    unix_sock_unlock_pair(sk, peer);
+
+    if (peer != NULL) poll_notify_event();
+    unix_sock_put(drop_sk_peer);
+    unix_sock_put(drop_peer_sk);
+    unix_sock_put(peer);
+}
+
 static void unix_sock_free(struct unix_sock *sk)
 {
     if (sk == NULL) return;
     if (sk->in_buf) { free(sk->in_buf); sk->in_buf = NULL; }
+    if (sk->wayland_trace_pending) {
+        free(sk->wayland_trace_pending);
+        sk->wayland_trace_pending = NULL;
+    }
+    if (sk->wayland_trace_out_pending) {
+        free(sk->wayland_trace_out_pending);
+        sk->wayland_trace_out_pending = NULL;
+    }
     if (sk->conn_queue) {
         while (sk->conn_queue->head) {
             struct unix_sock *cs = (struct unix_sock *)sk->conn_queue->head->data;
             if (cs) {
                 spin_lock(&cs->lock);
-                if (cs->peer != NULL) {
-                    spin_lock(&cs->peer->lock);
-                    cs->peer->peer = NULL;
-                    cs->peer->closed = true;
-                    spin_unlock(&cs->peer->lock);
-                }
-                cs->peer = NULL;
                 cs->state = UNIX_FREE;
                 spin_unlock(&cs->lock);
-                unix_sock_free(cs);
+                unix_sock_disconnect_peer_links(cs, true);
+                unix_sock_put(cs);
             }
             queue_remove_node(sk->conn_queue, sk->conn_queue->head);
         }
@@ -428,7 +550,7 @@ static struct unix_sock *unix_ns_lookup(const char *path)
         if (sk != NULL && sk->state >= UNIX_BOUND &&
             sk->local_addr.sun_path[0] != '\0' &&
             !strcmp(sk->local_addr.sun_path, path)) {
-            sk->refcount++;
+            unix_sock_get(sk);
             spin_unlock(&g_unix_ns_lock);
             return sk;
         }
@@ -550,7 +672,7 @@ static ssize_t unix_dgram_enqueue_locked(struct unix_sock *peer, const struct so
         unix_release_fd_array(fds, fd_count);
         return -EPIPE;
     }
-    if (peer->closed) {
+    if (peer->closed || peer->shut_rd) {
         unix_release_fd_array(fds, fd_count);
         return -EPIPE;
     }
@@ -615,7 +737,7 @@ static ssize_t unix_dgram_send_to_path(struct unix_sock *sk, const char *path,
     }
 
     ssize_t ret = unix_dgram_send_to_peer(sk, peer, data, len, fds, fd_count, cred, has_cred);
-    peer->refcount--;
+    unix_sock_put(peer);
     return ret;
 }
 
@@ -659,7 +781,7 @@ int unix_bind(void *impl, const struct sockaddr *addr, socklen_t addrlen)
         }
         struct unix_sock *existing = unix_ns_lookup(bound_path);
         if (existing != NULL) {
-            existing->refcount--;
+            unix_sock_put(existing);
             free(bound_path);
             spin_unlock(&sk->lock);
             return -EADDRINUSE;
@@ -737,9 +859,9 @@ int unix_connect(void *impl, const struct sockaddr *addr, socklen_t addrlen)
     }
 
     spin_lock(&listener->lock);
-    if (listener->state != UNIX_LISTENING || listener->conn_queue == NULL) {
+    if (listener->closed || listener->state != UNIX_LISTENING || listener->conn_queue == NULL) {
         spin_unlock(&listener->lock);
-        listener->refcount--;
+        unix_sock_put(listener);
         free(peer_path);
         spin_unlock(&sk->lock);
         return -ECONNREFUSED;
@@ -748,7 +870,7 @@ int unix_connect(void *impl, const struct sockaddr *addr, socklen_t addrlen)
     struct unix_sock *server_sk = (struct unix_sock *)malloc(sizeof(struct unix_sock));
     if (server_sk == NULL) {
         spin_unlock(&listener->lock);
-        listener->refcount--;
+        unix_sock_put(listener);
         free(peer_path);
         spin_unlock(&sk->lock);
         return -ENOMEM;
@@ -760,25 +882,29 @@ int unix_connect(void *impl, const struct sockaddr *addr, socklen_t addrlen)
     server_sk->owner_gid = listener->owner_gid;
     server_sk->local_addr = listener->local_addr;
     server_sk->peer_addr  = sk->local_addr;
-    server_sk->peer       = sk;
     server_sk->passcred   = listener->passcred;
 
-    sk->state = UNIX_CONNECTED;
-    sk->peer  = server_sk;
-
     if (queue_enqueue(listener->conn_queue, server_sk) == (size_t)-1) {
-        sk->peer = NULL;
         sk->state = sk->local_addr.sun_family == AF_UNIX ? UNIX_BOUND : UNIX_FREE;
-        unix_sock_free(server_sk);
+        unix_sock_put(server_sk);
         spin_unlock(&listener->lock);
-        listener->refcount--;
+        unix_sock_put(listener);
         free(peer_path);
         spin_unlock(&sk->lock);
         return -ENOMEM;
     }
+    unix_sock_set_peer_locked(server_sk, sk);
+    unix_sock_set_peer_locked(sk, server_sk);
+    sk->state = UNIX_CONNECTED;
     poll_notify_event();
     spin_unlock(&listener->lock);
     spin_unlock(&sk->lock);
+    tcb_t task = get_current_task();
+    write_serial_fmt("[unix-trace] connect task=%s pid=%llu client=%p server=%p listener=%p path=%s\n",
+                     task != NULL ? task->name : "?",
+                     (unsigned long long)(task != NULL && task->parent_group != NULL ? task->parent_group->pid : 0),
+                     sk, server_sk, listener, peer_path != NULL ? peer_path : "(anonymous)");
+    unix_sock_put(listener);
     free(peer_path);
     return 0;
 }
@@ -790,7 +916,7 @@ int unix_listen(void *impl, int backlog)
 
     spin_lock(&sk->lock);
     if (sk->type != SOCK_STREAM && sk->type != SOCK_SEQPACKET) { spin_unlock(&sk->lock); return -EOPNOTSUPP; }
-    if (sk->state != UNIX_BOUND) { spin_unlock(&sk->lock); return -EINVAL; }
+    if (sk->closed || sk->state != UNIX_BOUND) { spin_unlock(&sk->lock); return -EINVAL; }
 
     sk->state = UNIX_LISTENING;
     if (sk->conn_queue == NULL)
@@ -806,7 +932,7 @@ int unix_accept(void *impl, void **out_new, struct sockaddr *addr, socklen_t *ad
     if (sk == NULL || out_new == NULL) return -EINVAL;
 
     spin_lock(&sk->lock);
-    if (sk->state != UNIX_LISTENING || sk->conn_queue == NULL) {
+    if (sk->closed || sk->state != UNIX_LISTENING || sk->conn_queue == NULL) {
         spin_unlock(&sk->lock);
         return -EINVAL;
     }
@@ -819,12 +945,12 @@ int unix_accept(void *impl, void **out_new, struct sockaddr *addr, socklen_t *ad
         spin_unlock(&sk->lock);
         scheduler_yield();
         spin_lock(&sk->lock);
-        if (sk->state != UNIX_LISTENING) { spin_unlock(&sk->lock); return -EINVAL; }
+        if (sk->closed || sk->state != UNIX_LISTENING) { spin_unlock(&sk->lock); return -EINVAL; }
     }
 
     struct unix_sock *new_sk = (struct unix_sock *)sk->conn_queue->head->data;
     queue_remove_node(sk->conn_queue, sk->conn_queue->head);
-    struct unix_sock *client = new_sk->peer;
+    struct unix_sock *client = unix_sock_get_peer_ref(new_sk);
     if (client != NULL) {
         spin_lock(&client->lock);
         client->state = UNIX_CONNECTED;
@@ -841,6 +967,12 @@ int unix_accept(void *impl, void **out_new, struct sockaddr *addr, socklen_t *ad
 
     *out_new = new_sk;
     spin_unlock(&sk->lock);
+    tcb_t task = get_current_task();
+    write_serial_fmt("[unix-trace] accept task=%s pid=%llu listener=%p server=%p client=%p\n",
+                     task != NULL ? task->name : "?",
+                     (unsigned long long)(task != NULL && task->parent_group != NULL ? task->parent_group->pid : 0),
+                     sk, new_sk, client);
+    unix_sock_put(client);
     return 0;
 }
 
@@ -848,9 +980,11 @@ int unix_getsockname(void *impl, struct sockaddr *addr, socklen_t *addrlen)
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || addr == NULL || addrlen == NULL) return -EINVAL;
+    spin_lock(&sk->lock);
     socklen_t copy = *addrlen < (socklen_t)sizeof(sk->local_addr) ? *addrlen : (socklen_t)sizeof(sk->local_addr);
     memcpy(addr, &sk->local_addr, copy);
     *addrlen = sizeof(sk->local_addr);
+    spin_unlock(&sk->lock);
     return 0;
 }
 
@@ -858,10 +992,15 @@ int unix_getpeername(void *impl, struct sockaddr *addr, socklen_t *addrlen)
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || addr == NULL || addrlen == NULL) return -EINVAL;
-    if (sk->peer_addr.sun_family != AF_UNIX) return -ENOTCONN;
+    spin_lock(&sk->lock);
+    if (sk->peer_addr.sun_family != AF_UNIX) {
+        spin_unlock(&sk->lock);
+        return -ENOTCONN;
+    }
     socklen_t copy = *addrlen < (socklen_t)sizeof(sk->peer_addr) ? *addrlen : (socklen_t)sizeof(sk->peer_addr);
     memcpy(addr, &sk->peer_addr, copy);
     *addrlen = sizeof(sk->peer_addr);
+    spin_unlock(&sk->lock);
     return 0;
 }
 
@@ -892,6 +1031,320 @@ static bool unix_sock_has_input_locked(struct unix_sock *sk)
     if (sk->type == SOCK_DGRAM)
         return sk->dg_queue != NULL && sk->dg_queue->head != NULL;
     return sk->stream_queue != NULL && sk->stream_queue->head != NULL;
+}
+
+static void unix_trace_wayland_receive(struct unix_sock *sk, const uint8_t *buf, ssize_t ret, const char *operation,
+                                       size_t fd_count)
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL || strstr(task->name, "labwc") == NULL) return;
+
+    uint32_t object_id = 0;
+    uint32_t size_opcode = 0;
+    uint32_t last_object_id = 0;
+    uint32_t last_size_opcode = 0;
+    size_t parsed_bytes = 0;
+    bool malformed = false;
+    if (ret >= (ssize_t)(sizeof(uint32_t) * 2) && buf != NULL) {
+        memcpy(&object_id, buf, sizeof(object_id));
+        memcpy(&size_opcode, buf + sizeof(object_id), sizeof(size_opcode));
+        size_t received_bytes = (size_t)ret;
+        while (parsed_bytes + sizeof(uint32_t) * 2 <= received_bytes) {
+            uint32_t current_object_id = 0;
+            uint32_t current_size_opcode = 0;
+            memcpy(&current_object_id, buf + parsed_bytes, sizeof(current_object_id));
+            memcpy(&current_size_opcode, buf + parsed_bytes + sizeof(current_object_id), sizeof(current_size_opcode));
+            size_t message_length = current_size_opcode >> 16;
+            if (message_length < sizeof(uint32_t) * 2) {
+                malformed = true;
+                break;
+            }
+            if (message_length > received_bytes - parsed_bytes) break;
+            last_object_id = current_object_id;
+            last_size_opcode = current_size_opcode;
+            parsed_bytes += message_length;
+        }
+    }
+    struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+    size_t pending_len = 0;
+    uint32_t invalid_object_id = 0;
+    uint32_t invalid_opcode = 0;
+    uint32_t shm_new_id = 0;
+    int32_t shm_size = 0;
+    bool shm_create_pool = false;
+    if (ret > 0 && buf != NULL) {
+        spin_lock(&sk->lock);
+        size_t needed = sk->wayland_trace_pending_len + (size_t)ret;
+        if (needed > UNIX_RING_SIZE) {
+            sk->wayland_trace_pending_len = 0;
+            write_serial_fmt("[unix-trace] wayland-stream-reset task=%s pid=%llu sk=%p reason=oversize pending=%llu incoming=%llu\n",
+                             task->name,
+                             (unsigned long long)task->parent_group->pid,
+                             sk,
+                             (unsigned long long)sk->wayland_trace_pending_len,
+                             (unsigned long long)ret);
+        } else {
+            if (needed > sk->wayland_trace_pending_cap) {
+                size_t new_cap = sk->wayland_trace_pending_cap == 0 ? 4096 : sk->wayland_trace_pending_cap;
+                while (new_cap < needed && new_cap < UNIX_RING_SIZE) new_cap *= 2;
+                if (new_cap > UNIX_RING_SIZE) new_cap = UNIX_RING_SIZE;
+                uint8_t *new_buf = (uint8_t *)realloc(sk->wayland_trace_pending, new_cap);
+                if (new_buf != NULL) {
+                    sk->wayland_trace_pending = new_buf;
+                    sk->wayland_trace_pending_cap = new_cap;
+                }
+            }
+            if (sk->wayland_trace_pending != NULL && needed <= sk->wayland_trace_pending_cap) {
+                memcpy(sk->wayland_trace_pending + sk->wayland_trace_pending_len, buf, (size_t)ret);
+                sk->wayland_trace_pending_len = needed;
+            } else {
+                sk->wayland_trace_pending_len = 0;
+            }
+        }
+        size_t consumed = 0;
+        while (sk->wayland_trace_pending_len - consumed >= sizeof(uint32_t) * 2) {
+            uint32_t current_object_id = 0;
+            uint32_t current_size_opcode = 0;
+            memcpy(&current_object_id, sk->wayland_trace_pending + consumed, sizeof(current_object_id));
+            memcpy(&current_size_opcode, sk->wayland_trace_pending + consumed + sizeof(current_object_id),
+                   sizeof(current_size_opcode));
+            size_t message_length = current_size_opcode >> 16;
+            if (message_length < sizeof(uint32_t) * 2 || message_length > UNIX_RING_SIZE) {
+                malformed = true;
+                consumed = sk->wayland_trace_pending_len;
+                break;
+            }
+            if (message_length > sk->wayland_trace_pending_len - consumed) break;
+            if (current_object_id == 1 && (current_size_opcode & 0xffff) > 1) {
+                invalid_object_id = current_object_id;
+                invalid_opcode = current_size_opcode & 0xffff;
+            }
+            if (current_object_id == 4 && (current_size_opcode & 0xffff) == 0 && message_length >= 16) {
+                memcpy(&shm_new_id, sk->wayland_trace_pending + consumed + 8, sizeof(shm_new_id));
+                memcpy(&shm_size, sk->wayland_trace_pending + consumed + 12, sizeof(shm_size));
+                shm_create_pool = true;
+            }
+            consumed += message_length;
+        }
+        if (consumed > 0) {
+            size_t remaining = sk->wayland_trace_pending_len - consumed;
+            if (remaining > 0) memmove(sk->wayland_trace_pending, sk->wayland_trace_pending + consumed, remaining);
+            sk->wayland_trace_pending_len = remaining;
+        }
+        pending_len = sk->wayland_trace_pending_len;
+        spin_unlock(&sk->lock);
+    }
+    write_serial_fmt("[unix-trace] recv task=%s pid=%llu op=%s sk=%p peer=%p ret=%lld object=%u msg_len=%u opcode=%u last_object=%u last_len=%u last_opcode=%u parsed=%llu malformed=%d pending=%llu fds=%llu\n",
+                     task->name,
+                     (unsigned long long)task->parent_group->pid,
+                     operation != NULL ? operation : "?",
+                     sk,
+                     peer,
+                     (long long)ret,
+                     object_id,
+                     size_opcode >> 16,
+                     size_opcode & 0xffff,
+                     last_object_id,
+                     last_size_opcode >> 16,
+                     last_size_opcode & 0xffff,
+                     (unsigned long long)parsed_bytes,
+                     malformed ? 1 : 0,
+                     (unsigned long long)pending_len,
+                     (unsigned long long)fd_count);
+    unix_sock_put(peer);
+    if (invalid_opcode != 0) {
+        write_serial_fmt("[unix-trace] wayland-invalid-request task=%s pid=%llu sk=%p peer=%p object=%u opcode=%u\n",
+                         task->name,
+                         (unsigned long long)task->parent_group->pid,
+                         sk,
+                         peer,
+                         invalid_object_id,
+                         invalid_opcode);
+    }
+    if (shm_create_pool) {
+        write_serial_fmt("[unix-trace] wayland-shm-create-pool task=%s pid=%llu sk=%p peer=%p new_id=%u size=%d fds=%llu\n",
+                         task->name,
+                         (unsigned long long)task->parent_group->pid,
+                         sk,
+                         peer,
+                         shm_new_id,
+                         shm_size,
+                         (unsigned long long)fd_count);
+    }
+}
+
+static void unix_trace_wayland_error_send(struct unix_sock *sk, const uint8_t *buf, ssize_t ret,
+                                          const char *operation)
+{
+    tcb_t task = get_current_task();
+    if (task == NULL || task->parent_group == NULL ||
+        (strstr(task->name, "labwc") == NULL && strstr(task->parent_group->name, "labwc") == NULL) ||
+        buf == NULL || ret < 8)
+        return;
+
+    size_t offset = 0;
+    uint32_t error_object = 0;
+    uint32_t error_code = 0;
+    uint32_t error_length = 0;
+    char error_message[96] = {};
+    while (offset + sizeof(uint32_t) * 2 <= (size_t)ret) {
+        uint32_t object_id = 0;
+        uint32_t size_opcode = 0;
+        memcpy(&object_id, buf + offset, sizeof(object_id));
+        memcpy(&size_opcode, buf + offset + sizeof(object_id), sizeof(size_opcode));
+        size_t message_length = size_opcode >> 16;
+        if (message_length < sizeof(uint32_t) * 2 || message_length > (size_t)ret - offset) break;
+        if (object_id == 1 && (size_opcode & 0xffff) == 0) {
+            if (message_length >= 16) {
+                memcpy(&error_object, buf + offset + 8, sizeof(error_object));
+                memcpy(&error_code, buf + offset + 12, sizeof(error_code));
+                uint32_t string_length = 0;
+                memcpy(&string_length, buf + offset + 16, sizeof(string_length));
+                size_t text_offset = 20;
+                size_t text_length = string_length;
+                if (text_offset > message_length) text_length = 0;
+                else if (text_length > message_length - text_offset) text_length = message_length - text_offset;
+                if (text_length >= sizeof(error_message)) text_length = sizeof(error_message) - 1;
+                if (text_length > 0) memcpy(error_message, buf + offset + text_offset, text_length);
+                error_message[text_length] = '\0';
+                for (size_t i = 0; i < text_length; i++) {
+                    if (error_message[i] < 0x20 || error_message[i] > 0x7e) error_message[i] = '?';
+                }
+            }
+            error_length = (uint32_t)message_length;
+            break;
+        }
+        offset += message_length;
+    }
+    if (error_length == 0) return;
+    struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+    write_serial_fmt("[unix-trace] wayland-error-send task=%s proc=%s pid=%llu op=%s sk=%p peer=%p object=%u code=%u len=%u message=%s\n",
+                     task->name,
+                     task->parent_group->name,
+                     (unsigned long long)task->parent_group->pid,
+                     operation != NULL ? operation : "?",
+                     sk,
+                     peer,
+                     error_object,
+                     error_code,
+                     error_length,
+                     error_message);
+    unix_sock_put(peer);
+}
+
+static void unix_trace_wayland_client_send(struct unix_sock *sk, struct unix_sock *peer, const uint8_t *buf,
+                                           ssize_t ret, size_t fd_count, const char *operation)
+{
+    tcb_t task = get_current_task();
+    if (sk == NULL || peer == NULL || buf == NULL || ret <= 0 || task == NULL || task->parent_group == NULL ||
+        sk->type != SOCK_STREAM || strstr(task->name, "labwc") != NULL ||
+        (strstr(task->name, "xfce") == NULL && strstr(task->name, "xfdesktop") == NULL &&
+         strstr(task->parent_group->name, "xfce") == NULL && strstr(task->parent_group->name, "xfdesktop") == NULL))
+        return;
+
+    struct wayland_trace_request {
+        uint32_t object_id;
+        uint32_t opcode;
+        size_t length;
+        uint32_t new_id;
+        int32_t size;
+        bool has_shm_args;
+    } requests[16];
+    size_t request_count = 0;
+    size_t pending_len = 0;
+
+    spin_lock(&sk->lock);
+    size_t needed = sk->wayland_trace_out_pending_len + (size_t)ret;
+    if (needed <= UNIX_RING_SIZE) {
+        if (needed > sk->wayland_trace_out_pending_cap) {
+            size_t new_cap = sk->wayland_trace_out_pending_cap == 0 ? 4096 : sk->wayland_trace_out_pending_cap;
+            while (new_cap < needed && new_cap < UNIX_RING_SIZE) new_cap *= 2;
+            if (new_cap > UNIX_RING_SIZE) new_cap = UNIX_RING_SIZE;
+            uint8_t *new_buf = (uint8_t *)realloc(sk->wayland_trace_out_pending, new_cap);
+            if (new_buf != NULL) {
+                sk->wayland_trace_out_pending = new_buf;
+                sk->wayland_trace_out_pending_cap = new_cap;
+            }
+        }
+        if (sk->wayland_trace_out_pending != NULL && needed <= sk->wayland_trace_out_pending_cap) {
+            memcpy(sk->wayland_trace_out_pending + sk->wayland_trace_out_pending_len, buf, (size_t)ret);
+            sk->wayland_trace_out_pending_len = needed;
+        } else {
+            sk->wayland_trace_out_pending_len = 0;
+        }
+    } else {
+        sk->wayland_trace_out_pending_len = 0;
+    }
+
+    size_t consumed = 0;
+    while (sk->wayland_trace_out_pending_len - consumed >= sizeof(uint32_t) * 2) {
+        uint32_t object_id = 0;
+        uint32_t size_opcode = 0;
+        memcpy(&object_id, sk->wayland_trace_out_pending + consumed, sizeof(object_id));
+        memcpy(&size_opcode, sk->wayland_trace_out_pending + consumed + sizeof(object_id), sizeof(size_opcode));
+        size_t message_length = size_opcode >> 16;
+        if (message_length < sizeof(uint32_t) * 2 || message_length > UNIX_RING_SIZE) {
+            sk->wayland_trace_out_pending_len = 0;
+            consumed = 0;
+            break;
+        }
+        if (message_length > sk->wayland_trace_out_pending_len - consumed) break;
+        if (request_count < sizeof(requests) / sizeof(requests[0])) {
+            requests[request_count].object_id = object_id;
+            requests[request_count].opcode = size_opcode & 0xffff;
+            requests[request_count].length = message_length;
+            requests[request_count].new_id = 0;
+            requests[request_count].size = 0;
+            requests[request_count].has_shm_args = object_id == 4 && (size_opcode & 0xffff) == 0 &&
+                                                    message_length >= 16;
+            if (requests[request_count].has_shm_args) {
+                memcpy(&requests[request_count].new_id, sk->wayland_trace_out_pending + consumed + 8,
+                       sizeof(requests[request_count].new_id));
+                memcpy(&requests[request_count].size, sk->wayland_trace_out_pending + consumed + 12,
+                       sizeof(requests[request_count].size));
+            }
+            request_count++;
+        }
+        consumed += message_length;
+    }
+    if (consumed > 0) {
+        size_t remaining = sk->wayland_trace_out_pending_len - consumed;
+        if (remaining > 0)
+            memmove(sk->wayland_trace_out_pending, sk->wayland_trace_out_pending + consumed, remaining);
+        sk->wayland_trace_out_pending_len = remaining;
+    }
+    pending_len = sk->wayland_trace_out_pending_len;
+    spin_unlock(&sk->lock);
+
+    for (size_t i = 0; i < request_count; i++) {
+        if (requests[i].has_shm_args) {
+            write_serial_fmt("[unix-trace] wayland-client-send task=%s pid=%llu op=%s sk=%p peer=%p object=%u opcode=%u len=%llu fds=%llu new_id=%u size=%d pending=%llu\n",
+                             task->name,
+                             (unsigned long long)task->parent_group->pid,
+                             operation != NULL ? operation : "?",
+                             sk,
+                             peer,
+                             requests[i].object_id,
+                             requests[i].opcode,
+                             (unsigned long long)requests[i].length,
+                             (unsigned long long)fd_count,
+                             requests[i].new_id,
+                             requests[i].size,
+                             (unsigned long long)pending_len);
+        } else {
+            write_serial_fmt("[unix-trace] wayland-client-send task=%s pid=%llu op=%s sk=%p peer=%p object=%u opcode=%u len=%llu fds=%llu pending=%llu\n",
+                             task->name,
+                             (unsigned long long)task->parent_group->pid,
+                             operation != NULL ? operation : "?",
+                             sk,
+                             peer,
+                             requests[i].object_id,
+                             requests[i].opcode,
+                             (unsigned long long)requests[i].length,
+                             (unsigned long long)fd_count,
+                             (unsigned long long)pending_len);
+        }
+    }
 }
 
 int unix_getsockopt(void *impl, int level, int optname, void *optval, socklen_t *optlen)
@@ -1126,10 +1579,26 @@ int unix_shutdown(void *impl, int how)
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL) return -EINVAL;
-    (void)how;
+    if (how < SHUT_RD || how > SHUT_RDWR) return -EINVAL;
+
     spin_lock(&sk->lock);
-    sk->closed = true;
+    bool connected = sk->peer != NULL || sk->state == UNIX_CONNECTED;
+    if (!connected) {
+        spin_unlock(&sk->lock);
+        return -ENOTCONN;
+    }
+    if (how == SHUT_RD || how == SHUT_RDWR) sk->shut_rd = true;
+    if (how == SHUT_WR || how == SHUT_RDWR) sk->shut_wr = true;
+    struct unix_sock *peer = sk->peer;
+    if (peer != NULL) unix_sock_get(peer);
     spin_unlock(&sk->lock);
+    tcb_t task = get_current_task();
+    write_serial_fmt("[unix-trace] shutdown task=%s pid=%llu sk=%p peer=%p how=%d\n",
+                     task != NULL ? task->name : "?",
+                     (unsigned long long)(task != NULL && task->parent_group != NULL ? task->parent_group->pid : 0),
+                     sk, peer, how);
+    poll_notify_event();
+    unix_sock_put(peer);
     return 0;
 }
 
@@ -1137,13 +1606,21 @@ ssize_t unix_read(void *impl, void *buf, size_t size, uint64_t flags)
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || (buf == NULL && size > 0)) return -EINVAL;
-    bool nonblock = ((sk->flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
+    spin_lock(&sk->lock);
+    uint64_t socket_flags = sk->flags;
+    bool shut_rd = sk->shut_rd;
+    spin_unlock(&sk->lock);
+    if (shut_rd) {
+        unix_trace_wayland_receive(sk, (const uint8_t *)buf, 0, "read", 0);
+        return 0;
+    }
+    bool nonblock = ((socket_flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
 
     if (sk->type == SOCK_DGRAM) {
         spin_lock(&sk->lock);
         if (sk->dg_queue == NULL) sk->dg_queue = queue_init();
         while (sk->dg_queue->head == NULL) {
-            if (sk->closed) { spin_unlock(&sk->lock); return 0; }
+            if (sk->closed || sk->shut_rd) { spin_unlock(&sk->lock); return 0; }
             if (nonblock) { spin_unlock(&sk->lock); return -EAGAIN; }
             spin_unlock(&sk->lock);
             scheduler_yield();
@@ -1161,8 +1638,18 @@ ssize_t unix_read(void *impl, void *buf, size_t size, uint64_t flags)
     spin_lock(&sk->lock);
     if (sk->stream_queue == NULL) sk->stream_queue = queue_init();
     while (sk->stream_queue == NULL || sk->stream_queue->head == NULL) {
-        if (sk->closed || sk->peer == NULL) {
+        if (sk->closed || sk->shut_rd || sk->peer == NULL) {
             spin_unlock(&sk->lock);
+            unix_trace_wayland_receive(sk, (const uint8_t *)buf, 0, "read", 0);
+            return 0;
+        }
+        spin_unlock(&sk->lock);
+        bool peer_eof = unix_sock_peer_write_closed(sk);
+        spin_lock(&sk->lock);
+        if (sk->stream_queue != NULL && sk->stream_queue->head != NULL) break;
+        if (peer_eof) {
+            spin_unlock(&sk->lock);
+            unix_trace_wayland_receive(sk, (const uint8_t *)buf, 0, "read", 0);
             return 0;
         }
         if (nonblock) {
@@ -1191,6 +1678,7 @@ ssize_t unix_read(void *impl, void *buf, size_t size, uint64_t flags)
         if (n == 0) break;
     }
     spin_unlock(&sk->lock);
+    unix_trace_wayland_receive(sk, (const uint8_t *)buf, (ssize_t)total, "read", 0);
     return (ssize_t)total;
 }
 
@@ -1200,25 +1688,44 @@ ssize_t unix_write(void *impl, const void *buf, size_t size, uint64_t flags)
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || (buf == NULL && size > 0)) return -EINVAL;
 
+    spin_lock(&sk->lock);
+    bool shut_wr = sk->shut_wr;
+    spin_unlock(&sk->lock);
+    if (shut_wr) return -EPIPE;
+
     if (sk->type == SOCK_DGRAM) {
-        if (sk->peer != NULL)
-            return unix_dgram_send_to_peer(sk, sk->peer, (const uint8_t *)buf, size, NULL, 0, NULL, false);
+        struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+        if (peer != NULL) {
+            ssize_t ret = unix_dgram_send_to_peer(sk, peer, (const uint8_t *)buf, size, NULL, 0, NULL, false);
+            unix_sock_put(peer);
+            return ret;
+        }
 
         if (sk->peer_addr.sun_family != AF_UNIX || sk->peer_addr.sun_path[0] == '\0')
             return -EDESTADDRREQ;
         return unix_dgram_send_to_path(sk, sk->peer_addr.sun_path, (const uint8_t *)buf, size, NULL, 0, NULL, false);
     }
 
-    struct unix_sock *peer = sk->peer;
-    if (peer == NULL) return -EPIPE;
-
-    spin_lock(&peer->lock);
-    if (peer->closed) {
+    struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+    bool peer_closed = false;
+    ssize_t ret = -EPIPE;
+    if (peer != NULL) {
+        spin_lock(&peer->lock);
+        peer_closed = peer->closed || peer->shut_rd;
+        if (!peer_closed)
+            ret = unix_stream_enqueue_locked(peer, (const uint8_t *)buf, size, NULL, 0, NULL, false);
         spin_unlock(&peer->lock);
-        return -EPIPE;
     }
-    ssize_t ret = unix_stream_enqueue_locked(peer, (const uint8_t *)buf, size, NULL, 0, NULL, false);
-    spin_unlock(&peer->lock);
+    if (ret >= 0) unix_trace_wayland_client_send(sk, peer, (const uint8_t *)buf, ret, 0, "write");
+    unix_sock_put(peer);
+    if (ret == -EPIPE) {
+        tcb_t task = get_current_task();
+        write_serial_fmt("[unix-trace] EPIPE op=write task=%s pid=%llu sk=%p peer=%p peer_closed=%d size=%llu\n",
+                         task != NULL ? task->name : "?",
+                         (unsigned long long)(task != NULL && task->parent_group != NULL ? task->parent_group->pid : 0),
+                         sk, peer, peer_closed ? 1 : 0, (unsigned long long)size);
+    }
+    if (ret >= 0) unix_trace_wayland_error_send(sk, (const uint8_t *)buf, ret, "write");
     return ret;
 }
 
@@ -1241,7 +1748,10 @@ ssize_t unix_sendto(void *impl, const void *buf, size_t size, uint64_t flags,
         return ret;
     }
 
-    if (sk->peer != NULL) return unix_write(impl, buf, size, flags);
+    struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+    bool connected = peer != NULL;
+    unix_sock_put(peer);
+    if (connected) return unix_write(impl, buf, size, flags);
     if (sk->peer_addr.sun_family != AF_UNIX) return -EDESTADDRREQ;
     return unix_write(impl, buf, size, flags);
 }
@@ -1251,6 +1761,11 @@ ssize_t unix_recvfrom(void *impl, void *buf, size_t size, uint64_t flags,
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || (buf == NULL && size > 0)) return -EINVAL;
+
+    spin_lock(&sk->lock);
+    bool shut_rd = sk->shut_rd;
+    spin_unlock(&sk->lock);
+    if (shut_rd) return 0;
 
     if (sk->type != SOCK_DGRAM)
     {
@@ -1274,12 +1789,15 @@ ssize_t unix_recvfrom(void *impl, void *buf, size_t size, uint64_t flags,
         return ret;
     }
 
-    bool nonblock = ((sk->flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
+    spin_lock(&sk->lock);
+    uint64_t socket_flags = sk->flags;
+    spin_unlock(&sk->lock);
+    bool nonblock = ((socket_flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
 
     spin_lock(&sk->lock);
     if (sk->dg_queue == NULL) sk->dg_queue = queue_init();
     while (sk->dg_queue->head == NULL) {
-        if (sk->closed) { spin_unlock(&sk->lock); return 0; }
+        if (sk->closed || sk->shut_rd) { spin_unlock(&sk->lock); return 0; }
         if (nonblock) { spin_unlock(&sk->lock); return -EAGAIN; }
         spin_unlock(&sk->lock);
         scheduler_yield();
@@ -1326,41 +1844,54 @@ int unix_poll(void *impl, size_t events)
     if (has_input)
         revents |= EPOLLIN | EPOLLRDNORM;
 
-    if (sk->type == SOCK_DGRAM) {
-        if (!sk->closed)
-            revents |= EPOLLOUT | EPOLLWRNORM;
+    bool self_closed = sk->closed;
+    bool self_shut_rd = sk->shut_rd;
+    bool self_shut_wr = sk->shut_wr;
+    enum unix_sock_state state = sk->state;
+    struct unix_sock *peer = sk->peer;
+    if (peer != NULL) unix_sock_get(peer);
 
-        if (sk->peer != NULL) {
-            spin_lock(&sk->peer->lock);
-            if (sk->peer->closed) {
+    if (sk->type == SOCK_DGRAM) {
+        if (!self_closed && !self_shut_wr)
+            revents |= EPOLLOUT | EPOLLWRNORM;
+        if (self_shut_rd)
+            revents |= EPOLLHUP | EPOLLERR;
+
+        spin_unlock(&sk->lock);
+        if (peer != NULL) {
+            spin_lock(&peer->lock);
+            if (peer->closed || peer->shut_wr) {
                 revents |= EPOLLHUP;
                 if (requested & EPOLLRDHUP)
                     revents |= EPOLLRDHUP;
             }
-            spin_unlock(&sk->peer->lock);
+            spin_unlock(&peer->lock);
         }
-
-        spin_unlock(&sk->lock);
+        unix_sock_put(peer);
         return revents & (requested | EPOLLERR | EPOLLHUP | EPOLLRDHUP);
     }
 
-    if (sk->peer != NULL) {
-        spin_lock(&sk->peer->lock);
-        if (sk->peer->closed) {
+    spin_unlock(&sk->lock);
+    if (peer != NULL) {
+        spin_lock(&peer->lock);
+        if (peer->closed || peer->shut_wr) {
             revents |= EPOLLIN | EPOLLRDNORM | EPOLLHUP;
             if (requested & EPOLLRDHUP)
                 revents |= EPOLLRDHUP;
-        } else if (!sk->closed) {
+        } else if (!self_closed && !self_shut_wr && !peer->shut_rd) {
             revents |= EPOLLOUT | EPOLLWRNORM;
         }
-        spin_unlock(&sk->peer->lock);
-    } else if (sk->state == UNIX_CONNECTED || sk->closed) {
+        spin_unlock(&peer->lock);
+    } else if (state == UNIX_CONNECTED || self_closed || self_shut_rd) {
         revents |= EPOLLIN | EPOLLRDNORM | EPOLLHUP;
         if (requested & EPOLLRDHUP)
             revents |= EPOLLRDHUP;
     }
 
-    spin_unlock(&sk->lock);
+    if (self_shut_rd)
+        revents |= EPOLLHUP | EPOLLERR;
+
+    unix_sock_put(peer);
     return revents & (requested | EPOLLERR | EPOLLHUP | EPOLLRDHUP);
 }
 
@@ -1371,17 +1902,22 @@ int unix_close(void *impl)
 
     char bound_path[UNIX_PATH_MAX];
     bool remove_path_node = false;
+    struct unix_sock *peer = NULL;
+    enum unix_sock_state state = UNIX_FREE;
+    int owner_pid = 0;
+    int peer_owner_pid = 0;
 
     spin_lock(&sk->lock);
-    sk->closed = true;
+    state = sk->state;
+    owner_pid = sk->owner_pid;
+    peer = sk->peer;
+    if (peer != NULL) unix_sock_get(peer);
+    spin_unlock(&sk->lock);
 
-    if (sk->peer != NULL) {
-        spin_lock(&sk->peer->lock);
-        sk->peer->peer   = NULL;
-        spin_unlock(&sk->peer->lock);
-        sk->peer = NULL;
-    }
+    if (peer != NULL) peer_owner_pid = peer->owner_pid;
+    unix_sock_disconnect_peer_links(sk, true);
 
+    spin_lock(&sk->lock);
     if (sk->state >= UNIX_BOUND)
         unix_ns_unregister(sk);
 
@@ -1394,14 +1930,21 @@ int unix_close(void *impl)
 
     spin_unlock(&sk->lock);
 
+    if (peer != NULL || state == UNIX_LISTENING) {
+        tcb_t task = get_current_task();
+        write_serial_fmt("[unix-trace] close task=%s pid=%llu sk=%p owner=%d state=%d peer=%p peer_owner=%d\n",
+                         task != NULL ? task->name : "?",
+                         (unsigned long long)(task != NULL && task->parent_group != NULL ? task->parent_group->pid : 0),
+                         sk, owner_pid, state, peer, peer_owner_pid);
+    }
+
     poll_notify_event();
 
     if (remove_path_node)
         unix_delete_path_node(bound_path);
 
-    sk->refcount--;
-    if (sk->refcount == 0)
-        unix_sock_free(sk);
+    unix_sock_put(peer);
+    unix_sock_put(sk);
     return 0;
 }
 
@@ -1425,6 +1968,13 @@ ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_
         unix_release_fd_array(fds, fd_count);
         return -EINVAL;
     }
+    spin_lock(&sk->lock);
+    bool shut_wr = sk->shut_wr;
+    spin_unlock(&sk->lock);
+    if (shut_wr) {
+        unix_release_fd_array(fds, fd_count);
+        return -EPIPE;
+    }
     if (sk->type == SOCK_DGRAM) {
         if (addr != NULL && addrlen >= (socklen_t)sizeof(sa_family_t)) {
             const struct sockaddr_un *sunaddr = (const struct sockaddr_un *)addr;
@@ -1447,8 +1997,12 @@ ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_
             return ret;
         }
 
-        if (sk->peer != NULL)
-            return unix_dgram_send_to_peer(sk, sk->peer, buf, size, fds, fd_count, cred, has_cred);
+        struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+        if (peer != NULL) {
+            ssize_t ret = unix_dgram_send_to_peer(sk, peer, buf, size, fds, fd_count, cred, has_cred);
+            unix_sock_put(peer);
+            return ret;
+        }
         if (sk->peer_addr.sun_family == AF_UNIX && sk->peer_addr.sun_path[0] != '\0')
             return unix_dgram_send_to_path(sk, sk->peer_addr.sun_path, buf, size, fds, fd_count, cred, has_cred);
 
@@ -1460,23 +2014,29 @@ ssize_t unix_sendmsg_kernel(void *impl, const uint8_t *buf, size_t size, uint64_
         return -EISCONN;
     }
 
-    struct unix_sock *peer = sk->peer;
-    if (peer == NULL) {
-        unix_release_fd_array(fds, fd_count);
-        return -EPIPE;
-    }
-
-    spin_lock(&peer->lock);
-    if (peer->closed) {
+    struct unix_sock *peer = unix_sock_get_peer_ref(sk);
+    bool peer_closed = false;
+    ssize_t ret = -EPIPE;
+    if (peer != NULL) {
+        spin_lock(&peer->lock);
+        peer_closed = peer->closed || peer->shut_rd;
+        if (!peer_closed)
+            ret = unix_stream_enqueue_locked(peer, buf, size, fds, fd_count, cred, has_cred);
         spin_unlock(&peer->lock);
-        unix_release_fd_array(fds, fd_count);
-        return -EPIPE;
     }
-    ssize_t ret = unix_stream_enqueue_locked(peer, buf, size, fds, fd_count, cred, has_cred);
-    spin_unlock(&peer->lock);
+    if (ret >= 0) unix_trace_wayland_client_send(sk, peer, buf, ret, fd_count, "sendmsg");
+    unix_sock_put(peer);
+    if (ret == -EPIPE) {
+        tcb_t task = get_current_task();
+        write_serial_fmt("[unix-trace] EPIPE op=sendmsg task=%s pid=%llu sk=%p peer=%p peer_closed=%d size=%llu fds=%llu\n",
+                         task != NULL ? task->name : "?",
+                         (unsigned long long)(task != NULL && task->parent_group != NULL ? task->parent_group->pid : 0),
+                         sk, peer, peer_closed ? 1 : 0, (unsigned long long)size, (unsigned long long)fd_count);
+    }
     if (ret < 0) {
         unix_release_fd_array(fds, fd_count);
     }
+    if (ret >= 0) unix_trace_wayland_error_send(sk, buf, ret, "sendmsg");
     return ret;
 }
 
@@ -1487,7 +2047,12 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
 {
     struct unix_sock *sk = (struct unix_sock *)impl;
     if (sk == NULL || (buf == NULL && size > 0)) return -EINVAL;
-    bool nonblock = ((sk->flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
+    spin_lock(&sk->lock);
+    uint64_t socket_flags = sk->flags;
+    bool shut_rd = sk->shut_rd;
+    spin_unlock(&sk->lock);
+    if (shut_rd) return 0;
+    bool nonblock = ((socket_flags & O_NONBLOCK) != 0) || ((flags & MSG_DONTWAIT) != 0);
     bool peek = (flags & MSG_PEEK) != 0;
     if (out_fds != NULL) *out_fds = NULL;
     if (out_fd_count != NULL) *out_fd_count = 0;
@@ -1497,7 +2062,7 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
         spin_lock(&sk->lock);
         if (sk->dg_queue == NULL) sk->dg_queue = queue_init();
         while (sk->dg_queue->head == NULL) {
-            if (sk->closed) { spin_unlock(&sk->lock); return 0; }
+            if (sk->closed || sk->shut_rd) { spin_unlock(&sk->lock); return 0; }
             if (nonblock) { spin_unlock(&sk->lock); return -EAGAIN; }
             spin_unlock(&sk->lock);
             scheduler_yield();
@@ -1541,7 +2106,15 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
     spin_lock(&sk->lock);
     if (sk->stream_queue == NULL) sk->stream_queue = queue_init();
     while (sk->stream_queue == NULL || sk->stream_queue->head == NULL) {
-        if (sk->closed || sk->peer == NULL) {
+        if (sk->closed || sk->shut_rd || sk->peer == NULL) {
+            spin_unlock(&sk->lock);
+            return 0;
+        }
+        spin_unlock(&sk->lock);
+        bool peer_eof = unix_sock_peer_write_closed(sk);
+        spin_lock(&sk->lock);
+        if (sk->stream_queue != NULL && sk->stream_queue->head != NULL) break;
+        if (peer_eof) {
             spin_unlock(&sk->lock);
             return 0;
         }
@@ -1571,6 +2144,7 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
             stream_node = next_node;
             continue;
         }
+        if (ancillary_taken && packet->fd_count > 0) break;
         if (!ancillary_taken && packet->fd_count > 0 && out_fds != NULL && out_fd_count != NULL) {
             fd_file_handle **fds = peek ? unix_copy_fd_array(packet->fds, packet->fd_count) : packet->fds;
             if (fds == NULL) {
@@ -1607,6 +2181,7 @@ ssize_t unix_recvmsg_kernel(void *impl, uint8_t *buf, size_t size, uint64_t flag
     }
 
     spin_unlock(&sk->lock);
+    unix_trace_wayland_receive(sk, buf, (ssize_t)total, "recvmsg", out_fd_count != NULL ? *out_fd_count : 0);
     return (ssize_t)total;
 }
 
@@ -1638,17 +2213,19 @@ int unix_socketpair(int type, int protocol, int sv[2])
     sk2->owner_gid = sk1->owner_gid;
     sk1->local_addr.sun_family = AF_UNIX;
     sk2->local_addr.sun_family = AF_UNIX;
-    sk1->peer = sk2;
-    sk2->peer = sk1;
-    sk2->refcount++;
-    sk1->refcount++;
+    unix_sock_set_peer_locked(sk1, sk2);
+    unix_sock_set_peer_locked(sk2, sk1);
 
     sv[0] = socketfs_alloc_fd_with_provider(s1, 0, &g_unix_provider);
-    sv[1] = socketfs_alloc_fd_with_provider(s2, 0, &g_unix_provider);
-    if (sv[0] < 0 || sv[1] < 0) {
-        unix_close(s1);
+    if (sv[0] < 0) {
         unix_close(s2);
-        return -EMFILE;
+        return sv[0];
+    }
+
+    sv[1] = socketfs_alloc_fd_with_provider(s2, 0, &g_unix_provider);
+    if (sv[1] < 0) {
+        socketfs_close_fd(sv[0]);
+        return sv[1];
     }
     return 0;
 }
@@ -1663,7 +2240,7 @@ void unix_unbind_path(const char *path)
         bound->path_node_created = false;
         unix_ns_unregister(bound);
         spin_unlock(&bound->lock);
-        bound->refcount--;
+        unix_sock_put(bound);
     }
 
     unix_delete_path_node(path);

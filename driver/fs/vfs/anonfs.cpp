@@ -383,7 +383,18 @@ static size_t anonfs_memfd_read(anonfs_memfd_t *memfd, void *addr, size_t offset
     }
     size_t available = memfd->size - offset;
     size_t copy = MIN(size, available);
-    if (copy != 0) memcpy(addr, memfd->data + offset, copy);
+    size_t copied = 0;
+    while (copied < copy)
+    {
+        size_t position = offset + copied;
+        size_t page_index = position / PAGE_SIZE;
+        size_t page_offset = position & (PAGE_SIZE - 1);
+        size_t chunk = MIN(copy - copied, PAGE_SIZE - page_offset);
+        uint8_t *page = memfd->borrowed_phys ? memfd->data + page_index * PAGE_SIZE :
+                                              (uint8_t *)phys_to_virt(memfd->pages[page_index]);
+        memcpy((uint8_t *)addr + copied, page + page_offset, chunk);
+        copied += chunk;
+    }
     spin_unlock(&memfd->lock);
     return copy;
 }
@@ -398,18 +409,64 @@ static bool anonfs_memfd_reserve(anonfs_memfd_t *memfd, size_t needed)
         if (new_capacity > (size_t)-1 / 2) return false;
         new_capacity *= 2;
     }
-    size_t old_pages = memfd->capacity == 0 ? 0 : (memfd->capacity + PAGE_SIZE - 1) / PAGE_SIZE;
     size_t new_pages = (new_capacity + PAGE_SIZE - 1) / PAGE_SIZE;
-    uint64_t new_phys = alloc_frames(new_pages);
-    if (new_phys == 0) return false;
-    uint8_t *new_data = (uint8_t *)phys_to_virt(new_phys);
-    memset(new_data, 0, new_pages * PAGE_SIZE);
-    if (memfd->data != NULL && memfd->size != 0) memcpy(new_data, memfd->data, memfd->size);
-    if (memfd->phys != 0) free_frames(memfd->phys, old_pages);
-    memfd->phys = new_phys;
-    memfd->data = new_data;
+    uint64_t *new_page_array = (uint64_t *)calloc(new_pages, sizeof(uint64_t));
+    if (new_page_array == NULL) return false;
+    if (memfd->pages != NULL && memfd->page_count != 0)
+        memcpy(new_page_array, memfd->pages, memfd->page_count * sizeof(uint64_t));
+
+    size_t allocated_pages = memfd->page_count;
+    while (allocated_pages < new_pages)
+    {
+        uint64_t frame = alloc_frames(1);
+        if (frame == 0)
+        {
+            for (size_t index = memfd->page_count; index < allocated_pages; index++)
+                free_frames(new_page_array[index], 1);
+            free(new_page_array);
+            return false;
+        }
+        memset(phys_to_virt(frame), 0, PAGE_SIZE);
+        new_page_array[allocated_pages++] = frame;
+    }
+
+    free(memfd->pages);
+    memfd->pages = new_page_array;
+    memfd->page_count = new_pages;
     memfd->capacity = new_capacity;
     return true;
+}
+
+static void anonfs_memfd_zero(anonfs_memfd_t *memfd, size_t offset, size_t size)
+{
+    size_t cleared = 0;
+    while (cleared < size)
+    {
+        size_t position = offset + cleared;
+        size_t page_index = position / PAGE_SIZE;
+        size_t page_offset = position & (PAGE_SIZE - 1);
+        size_t chunk = MIN(size - cleared, PAGE_SIZE - page_offset);
+        uint8_t *page = memfd->borrowed_phys ? memfd->data + page_index * PAGE_SIZE :
+                                              (uint8_t *)phys_to_virt(memfd->pages[page_index]);
+        memset(page + page_offset, 0, chunk);
+        cleared += chunk;
+    }
+}
+
+static void anonfs_memfd_copy_in(anonfs_memfd_t *memfd, size_t offset, const void *addr, size_t size)
+{
+    size_t copied = 0;
+    while (copied < size)
+    {
+        size_t position = offset + copied;
+        size_t page_index = position / PAGE_SIZE;
+        size_t page_offset = position & (PAGE_SIZE - 1);
+        size_t chunk = MIN(size - copied, PAGE_SIZE - page_offset);
+        uint8_t *page = memfd->borrowed_phys ? memfd->data + page_index * PAGE_SIZE :
+                                              (uint8_t *)phys_to_virt(memfd->pages[page_index]);
+        memcpy(page + page_offset, (const uint8_t *)addr + copied, chunk);
+        copied += chunk;
+    }
 }
 
 static bool anonfs_memfd_write_sealed(const anonfs_memfd_t *memfd)
@@ -438,7 +495,7 @@ static size_t anonfs_memfd_write(anonfs_memfd_t *memfd, const void *addr, size_t
         spin_unlock(&memfd->lock);
         return VFS_STATUS_FAILED;
     }
-    memcpy(memfd->data + offset, addr, size);
+    anonfs_memfd_copy_in(memfd, offset, addr, size);
     if (end > memfd->size) memfd->size = end;
     spin_unlock(&memfd->lock);
     return size;
@@ -661,7 +718,9 @@ static void *anonfs_map(void *file, void *addr, size_t offset, size_t size, size
     for (size_t pos = 0; pos < size; pos += PAGE_SIZE)
     {
         uint64_t virt = (uint64_t)addr + pos;
-        uint64_t frame = memfd->phys + ((offset + pos) & PAGE_MASK);
+        size_t page_index = (offset + pos) / PAGE_SIZE;
+        uint64_t frame = memfd->borrowed_phys ? memfd->phys + ((offset + pos) & PAGE_MASK) :
+                                               memfd->pages[page_index];
         page_map_ref_to(process->pagedir, virt, frame, pte_flags);
     }
     spin_unlock(&memfd->lock);
@@ -687,7 +746,7 @@ static void anonfs_resize(void *file, uint64_t size)
     {
         if (anonfs_memfd_reserve(memfd, (size_t)size))
         {
-            memset(memfd->data + memfd->size, 0, (size_t)size - memfd->size);
+            anonfs_memfd_zero(memfd, memfd->size, (size_t)size - memfd->size);
             memfd->size = (size_t)size;
         }
     }
@@ -717,10 +776,16 @@ static errno_t anonfs_del(void *parent, vfs_node_t node)
     if (handle->kind == ANONFS_MEMFD)
     {
         free(handle->u.memfd.name);
-        if (handle->u.memfd.phys != 0)
+        if (handle->u.memfd.borrowed_phys && handle->u.memfd.phys != 0)
         {
             size_t pages = (handle->u.memfd.capacity + PAGE_SIZE - 1) / PAGE_SIZE;
             if (pages != 0) free_frames(handle->u.memfd.phys, pages);
+        }
+        else if (handle->u.memfd.pages != NULL)
+        {
+            for (size_t index = 0; index < handle->u.memfd.page_count; index++)
+                free_frames(handle->u.memfd.pages[index], 1);
+            free(handle->u.memfd.pages);
         }
     }
     free(handle);

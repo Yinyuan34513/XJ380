@@ -245,6 +245,8 @@ static struct vfs_callback socketfs_callbacks = {
 int socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_provider_t *provider)
 {
     if (socketfs_root == NULL || impl == NULL || provider == NULL) {
+        if (impl != NULL && provider != NULL && provider->close != NULL)
+            provider->close(impl);
         return -ENOSYS;
     }
 
@@ -253,11 +255,13 @@ int socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_pro
 
     vfs_node_t node = vfs_node_alloc(socketfs_root, name);
     if (node == NULL) {
+        provider->close(impl);
         return -ENOMEM;
     }
 
     socketfs_handle_t *socket_handle = (socketfs_handle_t *)calloc(1, sizeof(socketfs_handle_t));
     if (socket_handle == NULL) {
+        provider->close(impl);
         socketfs_root->child = list_delete(socketfs_root->child, node);
         free(node->name);
         free(node);
@@ -299,6 +303,20 @@ int socketfs_alloc_fd_with_provider(void *impl, uint64_t flags, const socket_pro
     return (int)fd_handle->fd;
 }
 
+int socketfs_close_fd(int fd)
+{
+    if (fd < 0 || get_current_task() == NULL || get_current_task()->parent_group == NULL ||
+        get_current_task()->parent_group->file_open == NULL)
+        return -EINVAL;
+
+    fd_file_handle *handle =
+        (fd_file_handle *)queue_remove_at(get_current_task()->parent_group->file_open, (size_t)fd);
+    if (handle == NULL) return -EBADF;
+    vfs_close(handle->node);
+    free(handle);
+    return 0;
+}
+
 int socketfs_get_socket_impl(int fd, void **out_impl, socket_provider_t *out_provider)
 {
     fd_file_handle *fd_handle = NULL;
@@ -318,14 +336,6 @@ int socketfs_get_socket_impl(int fd, void **out_impl, socket_provider_t *out_pro
         *out_provider = handle->provider;
     }
     return 0;
-}
-
-static int socketfs_alloc_fd(void *impl, uint64_t flags)
-{
-    socket_provider_t provider = {};
-    int ret = socketfs_snapshot_provider(&provider);
-    if (ret < 0) return ret;
-    return socketfs_alloc_fd_with_provider(impl, flags, &provider);
 }
 
 static bool netlink_groups_match(uint32_t subscribed_groups, uint32_t target_groups)
@@ -929,7 +939,7 @@ int socket_open(int domain, int type, int protocol)
     }
 
     printk("socketfs: provider create ok impl=%p\n", impl);
-    return socketfs_alloc_fd(impl, 0);
+    return socketfs_alloc_fd_with_provider(impl, 0, &provider);
 }
 
 int socket_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
@@ -1056,11 +1066,7 @@ int socket_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
     }
 
     int new_fd = socketfs_alloc_fd_with_provider(new_socket, fd_handle->node->flags, &handle->provider);
-    if (new_fd < 0)
-    {
-        handle->provider.close(new_socket);
-        return new_fd;
-    }
+    if (new_fd < 0) return new_fd;
     return new_fd;
 }
 

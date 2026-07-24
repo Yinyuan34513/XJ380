@@ -4,6 +4,7 @@
 #define IDT_SIZE         256
 #define X86_64_INTR_GATE 0x8E
 #define X86_64_TRAP_GATE 0x8F
+#define XHCI_MSI_VECTOR  0xF0
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,6 +53,7 @@ void undefined_interrupt();
 
 void hda_interrupt();
 void ipi_smoke_handler();
+void xhci_interrupt();
 
 #ifdef __cplusplus
 }

@@ -3061,7 +3061,10 @@ sys_(socket, int domain, int type, int protocol)
             if (handle->node->type & file_socket)
             {
                 int flags_ret = socket_apply_flags(handle->node, handle->node->flags);
-                if (flags_ret < 0) return SYSCALL_FAULT_(-flags_ret);
+                if (flags_ret < 0) {
+                    socketfs_close_fd(ret);
+                    return SYSCALL_FAULT_(-flags_ret);
+                }
             }
         }
     }
@@ -3106,13 +3109,21 @@ sys_(socketpair, int domain, int type, int protocol, int *sv)
                 if (handle->node->type & file_socket)
                 {
                     int flags_ret = socket_apply_flags(handle->node, handle->node->flags);
-                    if (flags_ret < 0) return SYSCALL_FAULT_(-flags_ret);
+                    if (flags_ret < 0) {
+                        socketfs_close_fd(fds[0]);
+                        socketfs_close_fd(fds[1]);
+                        return SYSCALL_FAULT_(-flags_ret);
+                    }
                 }
             }
         }
 
         page_directory_t *pagedir = current_user_pagedir();
-        if (!copy_to_user_pagedir(pagedir, sv, fds, sizeof(fds))) return SYSCALL_FAULT_(EFAULT);
+        if (!copy_to_user_pagedir(pagedir, sv, fds, sizeof(fds))) {
+            socketfs_close_fd(fds[0]);
+            socketfs_close_fd(fds[1]);
+            return SYSCALL_FAULT_(EFAULT);
+        }
         return 0;
     }
     return SYSCALL_FAULT_(EAFNOSUPPORT);
@@ -3149,10 +3160,14 @@ sys_(accept, int fd, struct sockaddr *addr, socklen_t *addrlen)
     trace_udev_fd_result("accept", fd, handle, kaddrlen, 0, ret);
     if (ret >= 0) trace_udev_sockaddr("accept", addr ? (const struct sockaddr *)&kaddr : NULL, kaddrlen);
     if (ret < 0) return SYSCALL_FAULT_(-ret);
-    if (addr != NULL && !copy_to_user_pagedir(current_user_pagedir(), addr, &kaddr, MIN(user_addr_capacity, kaddrlen)))
+    if (addr != NULL && !copy_to_user_pagedir(current_user_pagedir(), addr, &kaddr, MIN(user_addr_capacity, kaddrlen))) {
+        socketfs_close_fd(ret);
         return SYSCALL_FAULT_(EFAULT);
-    if (addrlen != NULL && !copy_to_user_pagedir(current_user_pagedir(), addrlen, &kaddrlen, sizeof(kaddrlen)))
+    }
+    if (addrlen != NULL && !copy_to_user_pagedir(current_user_pagedir(), addrlen, &kaddrlen, sizeof(kaddrlen))) {
+        socketfs_close_fd(ret);
         return SYSCALL_FAULT_(EFAULT);
+    }
     return ret;
 }
 
@@ -3174,7 +3189,10 @@ sys_(accept4, int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
             if (handle->node->type & file_socket)
             {
                 int flag_ret = socket_apply_flags(handle->node, handle->node->flags);
-                if (flag_ret < 0) return SYSCALL_FAULT_(-flag_ret);
+                if (flag_ret < 0) {
+                    socketfs_close_fd((int)ret);
+                    return SYSCALL_FAULT_(-flag_ret);
+                }
             }
         }
     }
@@ -3623,16 +3641,17 @@ static bool task_shm_trace_enabled()
     if (task == NULL) return false;
     const char *task_name = task->name;
     const char *proc_name = task->parent_group != NULL ? task->parent_group->name : NULL;
-    return trace_name_contains(task_name, "labwc") || trace_name_contains(proc_name, "labwc") ||
-           trace_name_contains(task_name, "weston") || trace_name_contains(proc_name, "weston") ||
-           trace_name_contains(task_name, "seatd") || trace_name_contains(proc_name, "seatd") ||
-           trace_name_contains(task_name, "pango") || trace_name_contains(proc_name, "pango") ||
-           trace_name_contains(task_name, "fontcon") || trace_name_contains(proc_name, "fontcon");
+    // return trace_name_contains(task_name, "labwc") || trace_name_contains(proc_name, "labwc") ||
+    //        trace_name_contains(task_name, "weston") || trace_name_contains(proc_name, "weston") ||
+    //        trace_name_contains(task_name, "seatd") || trace_name_contains(proc_name, "seatd") ||
+    //        trace_name_contains(task_name, "pango") || trace_name_contains(proc_name, "pango") ||
+    //        trace_name_contains(task_name, "fontcon") || trace_name_contains(proc_name, "fontcon");
+    return 0;
 }
 
 static bool path_shm_trace_enabled(const char *path)
 {
-    return path != NULL && strstr(path, "/dev/shm") != NULL;
+    return 0;
 }
 
 static bool fd_shm_trace_enabled(fd_file_handle *handle)
@@ -4147,6 +4166,11 @@ sys_(munmap, uint64_t addr, size_t size) {
     vma_manager_t *mgr = &get_current_task()->parent_group->vma_manager;
     if (vma_unmap_range(mgr, start, end) != 0) return SYSCALL_FAULT_(ENOMEM);
 
+    if (task_shm_trace_enabled()) {
+        write_serial_fmt("[shm-trace] munmap task=%s addr=%llu len=%llu vm_used=%llu\n", trace_task_name(),
+                         (unsigned long long)addr, (unsigned long long)size, (unsigned long long)mgr->vm_used);
+    }
+
     unmap_virtual_page(get_current_task()->parent_group, addr, size);
     unmap_page_range(get_current_directory(), addr, size);
     return 0;
@@ -4376,7 +4400,11 @@ sys_(fchdir, int fd)
     char *normalized_path = vfs_get_fullpath(handle->node);
     if (unlikely(normalized_path == NULL)) return SYSCALL_FAULT_(ENOENT);
 
-    handle->node->refcount++;
+    if (!vfs_retain(handle->node))
+    {
+        free(normalized_path);
+        return SYSCALL_FAULT_(EBADF);
+    }
     return set_current_cwd(handle->node, normalized_path);
 }
 
@@ -5076,9 +5104,15 @@ sys_(sched_getaffinity, int pid, size_t cpusetsize, void *mask)
     if (cpusetsize == 0 || mask == NULL) return SYSCALL_FAULT_(EINVAL);
     if (pid < 0) return SYSCALL_FAULT_(ESRCH);
 
+    pcb_t process = pid == 0 ? get_current_task()->parent_group : found_pcb(pid);
+    if (process == NULL || process->status == DEATH || process->status == OUT || process->status == ZOMBIE)
+        return SYSCALL_FAULT_(ESRCH);
+    size_t cpu_id = process->home_cpu;
+    if (cpu_id >= get_cpu_num() || cpu_id / 8 >= cpusetsize) return SYSCALL_FAULT_(EINVAL);
+
     uint8_t *kbuf = (uint8_t *)calloc(1, cpusetsize);
     if (kbuf == NULL) return SYSCALL_FAULT_(ENOMEM);
-    kbuf[0] = 1;
+    kbuf[cpu_id / 8] = (uint8_t)(1U << (cpu_id % 8));
     bool ok = copy_to_user_pagedir(current_user_pagedir(), mask, kbuf, cpusetsize);
     free(kbuf);
     return ok ? 0 : SYSCALL_FAULT_(EFAULT);
@@ -5111,12 +5145,9 @@ sys_(sched_setaffinity, int pid, size_t cpusetsize, const void *mask)
 
     uint8_t cpuset[SCHED_CPUSET_MAX_BYTES] = {};
     if (!copy_from_user_pagedir(current_user_pagedir(), cpuset, mask, cpusetsize)) return SYSCALL_FAULT_(EFAULT);
-    if (cpuset[0] != 1) return SYSCALL_FAULT_(EINVAL);
-
-    for (size_t index = 1; index < cpusetsize; index++)
-    {
-        if (cpuset[index] != 0) return SYSCALL_FAULT_(EINVAL);
-    }
+    size_t cpu_id = process->home_cpu;
+    if (cpu_id >= get_cpu_num() || cpu_id / 8 >= cpusetsize) return SYSCALL_FAULT_(EINVAL);
+    if ((cpuset[cpu_id / 8] & (uint8_t)(1U << (cpu_id % 8))) == 0) return SYSCALL_FAULT_(EINVAL);
 
     return 0;
 }

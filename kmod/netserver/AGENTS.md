@@ -14,7 +14,7 @@ kmod/netserver/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Module build | `tools/gen_ninja.py` kmod section | Produces `out/netserver.sys`. |
+| Module build | `kmod/Makefile` | Produces `out/netserver.km`. |
 | Socket/provider glue | `netserver.cpp` | Main first-party networking behavior. |
 | lwIP OS port | `arch/sys_arch.cpp`, `arch/utils.cpp` | Scheduler/mutex/timer bridge. |
 | Network ABI | `include/net/`, `include/netdev.h` | Shared with kernel/user callers. |
@@ -35,4 +35,4 @@ kmod/netserver/
 - Do not assume chained pbuf support where lwIP ZEP code asserts `p->next == NULL`.
 
 ## VERIFY
-Build `python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja out/netserver.sys` or `ninja -f build.ninja all`. Runtime changes require booting with modules enabled and exercising `netcfg`, `httpget`, `browser`, or socket-using apps.
+Build `make -C kmod netserver` or `make all -j"$(nproc)"`. Runtime changes require booting with modules enabled and exercising `netcfg`, `httpget`, `browser`, or socket-using apps.

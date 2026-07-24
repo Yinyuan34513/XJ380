@@ -14,6 +14,7 @@
 #include "pipe.h"
 #include "rtc.h"
 #include "task/pcb.h"
+#include "mutex.h"
 #include <ioctl.h>
 #include <cpu/lock.h>
 #include <fs/vfs/anonfs.h>
@@ -45,6 +46,7 @@ struct llist_header fs_metadata_list;
 
 static int fs_nextid = 1;
 static spin_t vfs_child_list_lock = SPIN_INIT;
+static mutex_t vfs_lifecycle_lock;
 
 #define VFS_ALIAS_MAX 256
 
@@ -171,18 +173,45 @@ static inline void do_update(vfs_node_t file) {
 static inline bool vfs_ref_drop(vfs_node_t node)
 {
     if (node == NULL) return false;
-    if (node->refcount == 0)
+    uint32_t refs = __atomic_load_n(&node->refcount, __ATOMIC_ACQUIRE);
+    while (refs != 0)
     {
-        write_serial_fmt("vfs_close: refcount underflow avoided node=%p parent=%p type=0x%x fsid=%u name_ptr=%p\n",
-                         node,
-                         node->parent,
-                         node->type,
-                         node->fsid,
-                         node->name);
-        return false;
+        if (__atomic_compare_exchange_n(&node->refcount, &refs, refs - 1, false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE))
+            return refs == 1;
     }
-    node->refcount--;
-    return node->refcount == 0;
+
+    write_serial_fmt("vfs_close: refcount underflow avoided node=%p parent=%p type=0x%x fsid=%u name_ptr=%p\n",
+                     node,
+                     node->parent,
+                     node->type,
+                     node->fsid,
+                     node->name);
+    return false;
+}
+
+static inline void vfs_ref_add(vfs_node_t node)
+{
+    if (node != NULL) __atomic_add_fetch(&node->refcount, 1, __ATOMIC_ACQ_REL);
+}
+
+static inline uint32_t vfs_ref_count(vfs_node_t node)
+{
+    return node != NULL ? __atomic_load_n(&node->refcount, __ATOMIC_ACQUIRE) : 0;
+}
+
+static bool vfs_ref_retain(vfs_node_t node)
+{
+    if (node == NULL) return false;
+
+    uint32_t refs = vfs_ref_count(node);
+    while (refs != 0)
+    {
+        if (__atomic_compare_exchange_n(&node->refcount, &refs, refs + 1, false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE))
+            return true;
+    }
+    return false;
 }
 
 static void vfs_detach_from_parent(vfs_node_t node)
@@ -709,7 +738,7 @@ errno_t vfs_mkfile(const char *name) {
     return status;
 }
 
-errno_t vfs_delete(vfs_node_t node) {
+static errno_t vfs_delete_locked(vfs_node_t node) {
     if (node == rootdir)
     {
         vfs_udev_log_node("delete-root", NULL, node, VFS_STATUS_FAILED);
@@ -732,7 +761,7 @@ errno_t vfs_delete(vfs_node_t node) {
     node->type |= file_delete;
     uint32_t delete_mask = (node->type & file_dir) ? (IN_DELETE | IN_ISDIR) : IN_DELETE;
     uint32_t last_delete_ref = vfs_node_has_persistent_handle(node) ? 1 : 0;
-    if (node->refcount > last_delete_ref + 1)
+    if (vfs_ref_count(node) > last_delete_ref + 1)
     {
         vfs_detach_from_parent(node);
         errno_t ret = vfs_close(node);
@@ -761,9 +790,19 @@ errno_t vfs_delete(vfs_node_t node) {
     return ret;
 }
 
+errno_t vfs_delete(vfs_node_t node)
+{
+    mutex_lock(&vfs_lifecycle_lock);
+    errno_t ret = vfs_delete_locked(node);
+    mutex_unlock(&vfs_lifecycle_lock);
+    return ret;
+}
+
 void vfs_detach(vfs_node_t node)
 {
+    mutex_lock(&vfs_lifecycle_lock);
     vfs_detach_from_parent(node);
+    mutex_unlock(&vfs_lifecycle_lock);
 }
 
 errno_t vfs_rename(vfs_node_t node, const char *nw) {
@@ -982,7 +1021,7 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
     if (unlikely(str == NULL)) return NULL;
     if (unlikely(str[0] != '/')) return NULL;
     if (str[1] == '\0') { // 根目录
-        if (rootdir != NULL) rootdir->refcount++;
+        vfs_ref_add(rootdir);
         return rootdir;
     }
 
@@ -1008,8 +1047,13 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
         bool final_component_had_handle = current->handle != NULL;
         do_update(current);
         bool is_final_component = save_ptr == NULL || *save_ptr == '\0';
-        if (is_final_component && !final_component_had_handle && current->handle != NULL && current->refcount == 1)
-            current->refcount = 0;
+        if (is_final_component && !final_component_had_handle && current->handle != NULL &&
+            vfs_ref_count(current) == 1)
+        {
+            uint32_t expected_ref = 1;
+            __atomic_compare_exchange_n(&current->refcount, &expected_ref, 0, false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE);
+        }
         if (is_final_component && !follow_final_symlink) break;
         if (current->type & file_symlink) {
             if (!current->parent) { goto err; }
@@ -1061,7 +1105,7 @@ static vfs_node_t vfs_open_impl(const char *str, bool follow_final_symlink, bool
     }
 
     free(path);
-    if (current != NULL) current->refcount++;
+    vfs_ref_add(current);
     return current;
 err:
     free(path);
@@ -1078,15 +1122,40 @@ err:
 }
 
 vfs_node_t vfs_open(const char *str) {
-    return vfs_open_impl(str, true, true);
+    mutex_lock(&vfs_lifecycle_lock);
+    vfs_node_t node = vfs_open_impl(str, true, true);
+    mutex_unlock(&vfs_lifecycle_lock);
+    return node;
 }
 
 vfs_node_t vfs_open_no_follow(const char *str) {
-    return vfs_open_impl(str, false, true);
+    mutex_lock(&vfs_lifecycle_lock);
+    vfs_node_t node = vfs_open_impl(str, false, true);
+    mutex_unlock(&vfs_lifecycle_lock);
+    return node;
 }
 
 void vfs_update(vfs_node_t node) {
+    mutex_lock(&vfs_lifecycle_lock);
     do_update(node);
+    mutex_unlock(&vfs_lifecycle_lock);
+}
+
+bool vfs_retain(vfs_node_t node)
+{
+    return vfs_ref_retain(node);
+}
+
+void vfs_retain_cached(vfs_node_t node, bool drop_cached_ref)
+{
+    if (node == NULL) return;
+    mutex_lock(&vfs_lifecycle_lock);
+    uint32_t expected_ref = 1;
+    if (drop_cached_ref)
+        __atomic_compare_exchange_n(&node->refcount, &expected_ref, 0, false, __ATOMIC_ACQ_REL,
+                                    __ATOMIC_ACQUIRE);
+    vfs_ref_add(node);
+    mutex_unlock(&vfs_lifecycle_lock);
 }
 
 void vfs_deinit() {
@@ -1101,9 +1170,13 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
     nw->flags      = src->flags;
     nw->fd         = src->fd;
     vfs_node_t node = nw->node;
+    if (!vfs_retain(node))
+    {
+        free(nw);
+        return NULL;
+    }
     if ((node->type & (file_ptmx | file_pts)) && fs_callbacks[node->fsid]->dup != (void *)empty_func) {
         fs_callbacks[node->fsid]->dup(node);
-        node->refcount++;
         return nw;
     }
     if ((node->type & file_pipe) && node->handle != NULL) {
@@ -1119,7 +1192,6 @@ fd_file_handle *fd_dup(fd_file_handle *src) {
             spin_unlock(&pipe->lock);
         }
     }
-    node->refcount++;
     return nw;
 }
 
@@ -1165,9 +1237,9 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name) {
     return node;
 }
 
-errno_t vfs_close(vfs_node_t node) {
+static errno_t vfs_close_locked(vfs_node_t node) {
     if (unlikely(node == NULL)) return VFS_STATUS_FAILED;
-    bool had_ref = node->refcount > 0;
+    bool had_ref = vfs_ref_count(node) > 0;
     bool final_ref = vfs_ref_drop(node);
 
     if (node == rootdir) return VFS_STATUS_SUCCESS;
@@ -1177,10 +1249,18 @@ errno_t vfs_close(vfs_node_t node) {
         callbackof(node, close)(node->handle);
     uint32_t last_delete_ref = vfs_node_has_persistent_handle(node) ? 1 : 0;
     bool unlinked_final_ref = had_ref && (node->type & file_delete) && node->parent == NULL &&
-                              node->refcount <= last_delete_ref;
+                              vfs_ref_count(node) <= last_delete_ref;
     if (!final_ref && !unlinked_final_ref) return VFS_STATUS_SUCCESS;
 
     return vfs_release_final(node, false, per_fd_close_done);
+}
+
+errno_t vfs_close(vfs_node_t node)
+{
+    mutex_lock(&vfs_lifecycle_lock);
+    errno_t ret = vfs_close_locked(node);
+    mutex_unlock(&vfs_lifecycle_lock);
+    return ret;
 }
 
 bool is_virtual_fs(const char *src) {
@@ -1192,7 +1272,7 @@ bool is_virtual_fs(const char *src) {
            ((uint64_t)src) == NM_REGISTER_ID;
 }
 
-void vfs_free(vfs_node_t vfs) {
+static void vfs_free_locked(vfs_node_t vfs) {
     if (vfs == NULL) return;
     vfs_child_lock();
     list_t child = vfs->child;
@@ -1208,16 +1288,25 @@ void vfs_free(vfs_node_t vfs) {
         vfs_release_final(vfs, true, false);
 }
 
+void vfs_free(vfs_node_t vfs)
+{
+    mutex_lock(&vfs_lifecycle_lock);
+    vfs_free_locked(vfs);
+    mutex_unlock(&vfs_lifecycle_lock);
+}
+
 void vfs_free_child(vfs_node_t vfs) {
     if (vfs == NULL) return;
+    mutex_lock(&vfs_lifecycle_lock);
     vfs_child_lock();
     list_t child = vfs->child;
     vfs->child   = NULL;
     vfs_child_unlock();
     list_free_with(child, (void (*)(void *))vfs_free);
+    mutex_unlock(&vfs_lifecycle_lock);
 }
 
-errno_t vfs_mount(const char *src, vfs_node_t node) {
+static errno_t vfs_mount_locked(const char *src, vfs_node_t node) {
     const bool src_virtual = is_virtual_fs(src);
     if (node == NULL)
     {
@@ -1254,6 +1343,14 @@ errno_t vfs_mount(const char *src, vfs_node_t node) {
     vfs_udev_log_node("mount-fail", target_path, node, VFS_STATUS_FAILED);
     free(target_path);
     return VFS_STATUS_FAILED;
+}
+
+errno_t vfs_mount(const char *src, vfs_node_t node)
+{
+    mutex_lock(&vfs_lifecycle_lock);
+    errno_t ret = vfs_mount_locked(src, node);
+    mutex_unlock(&vfs_lifecycle_lock);
+    return ret;
 }
 
 size_t vfs_read(vfs_node_t file, void *addr, size_t offset, size_t size) {
@@ -1364,7 +1461,7 @@ errno_t vfs_poll(vfs_node_t node, size_t event) {
     return ret;
 }
 
-errno_t vfs_unmount(const char *path) {
+static errno_t vfs_unmount_locked(const char *path) {
     vfs_node_t node = vfs_open(path);
     vfs_udev_log_node("unmount-lookup", path, node, node != NULL ? 0 : VFS_STATUS_FAILED);
     if (node == NULL) return VFS_STATUS_FAILED;
@@ -1397,6 +1494,14 @@ errno_t vfs_unmount(const char *path) {
     }
     vfs_udev_log_node("unmount-fail", path, node, VFS_STATUS_FAILED);
     return VFS_STATUS_FAILED;
+}
+
+errno_t vfs_unmount(const char *path)
+{
+    mutex_lock(&vfs_lifecycle_lock);
+    errno_t ret = vfs_unmount_locked(path);
+    mutex_unlock(&vfs_lifecycle_lock);
+    return ret;
 }
 
 size_t vfs_readlink(vfs_node_t node, char *buf, size_t bufsize) {
@@ -1497,48 +1602,37 @@ char *normalize_path(const char *path)
     if (!path) return NULL;
 
     size_t len    = strlen(path);
-    char  *result = (char *)malloc(len + 1);
+    char  *result = (char *)malloc(len + 2);
     if (!result) return NULL;
 
-    char *dup = strdup(path);
-    if (!dup)
-    {
-        free(result);
-        return NULL;
-    }
+    size_t result_len = 1;
+    result[0]         = '/';
+    result[1]         = '\0';
 
-    strcpy(result, "/");
-    if (strcmp(path, "/") == 0)
+    size_t cursor = 0;
+    while (cursor < len)
     {
-        free(dup);
-        return result;
-    }
+        while (cursor < len && path[cursor] == '/') cursor++;
+        size_t component_start = cursor;
+        while (cursor < len && path[cursor] != '/') cursor++;
+        size_t component_len = cursor - component_start;
+        if (component_len == 0) continue;
 
-    char *start = dup;
-    if (*start == '/') start++;
-
-    char *token = strtok(start, "/");
-    while (token)
-    {
-        if (strcmp(token, ".") == 0) {}
-        else if (strcmp(token, "..") == 0)
+        if (component_len == 1 && path[component_start] == '.') continue;
+        if (component_len == 2 && path[component_start] == '.' && path[component_start + 1] == '.')
         {
-            char *last_slash = strrchr(result, '/');
-            if (last_slash != result)
-                *last_slash = '\0';
-            else
-                result[1] = '\0';
-        }
-        else
-        {
-            if (result[strlen(result) - 1] != '/') strcat(result, "/");
-            strcat(result, token);
+            while (result_len > 1 && result[result_len - 1] != '/') result_len--;
+            if (result_len > 1) result_len--;
+            result[result_len] = '\0';
+            continue;
         }
 
-        token = strtok(NULL, "/");
+        if (result_len > 1) result[result_len++] = '/';
+        memcpy(result + result_len, path + component_start, component_len);
+        result_len += component_len;
+        result[result_len] = '\0';
     }
 
-    free(dup);
     return result;
 }
 char *vfs_cwd_path_build(char *src) {
@@ -1561,6 +1655,7 @@ bool vfs_init() {
     for (size_t i = 0; i < sizeof(struct vfs_callback) / sizeof(void *); i++) {
         ((void **)&vfs_empty_callback)[i] = (void *)empty_func;
     }
+    mutex_create(&vfs_lifecycle_lock, true);
     llist_init_head(&fs_metadata_list);
     rootdir       = vfs_node_alloc(NULL, "/");
     rootdir->type = file_dir;

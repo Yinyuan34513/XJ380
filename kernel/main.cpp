@@ -751,6 +751,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     tcb_t idle_thread            = (tcb_t)aligned_alloc(16, idle_alloc_size);
     if (idle_thread != NULL) memset(idle_thread, 0, sizeof(struct thread_control_block));
     if (idle_thread == NULL) while (true) { __asm__ volatile("hlt"); }
+    // idle_thread->task_level   = TASK_IDLE_LEVEL;
     idle_thread->tid          = __atomic_fetch_add(&now_tid, 1, __ATOMIC_SEQ_CST);
     idle_thread->parent_group = kernel_group;
     idle_thread->kernel_stack = get_rsp();
@@ -783,7 +784,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 #if CONFIG_KERNEL_BUSYBOX_ALIASES
     setup_busybox_vfs_aliases();
 #endif
-    setup_xbps_vfs_aliases();
+    // setup_xbps_vfs_aliases();
     tmpfs_setup();
     pipefs_setup();
     anonfs_init();
@@ -803,10 +804,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     init_message();
 
     // if ((BootConfig.boot_flags & (BOOT_FLAG_SAFE_MODE | BOOT_FLAG_DISABLE_KMOD)) == 0) {
-    dlinker_init();
-    module_setup();
     
-    load_all_kernel_module();
     rect(*fbc_addr, 0, 0, int(fbc_addr->horizontal_resolution) / 10 * 6, 7, {0x00, 0xa2, 0xe8}); // 驱动好了来一下
 
     while (true)
@@ -852,15 +850,16 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
     // uint64_t utsk = page_alloc_random(get_current_directory(), 114, PTE_PRESENT | PTE_USER);
     // memcpy((void *)utsk, (void *)test_task, 114);
     // create_user_thread((void *)utsk, NULL, (char *)"test_task2", ugp);
-
+    module_setup();
+    dlinker_init();
+    
+    
+    load_all_kernel_module();
+    
 
     enable_scheduler();
     open_interrupt;
     no_interrupt = false;
-
-    while (!desktop_done)
-        cpu_relax();
-
     
 
     // char *init_argv[] = {(char *)"/sbin/init", NULL};
@@ -879,6 +878,7 @@ extern "C" void KernelMain(const FrameBufferConfig &fbc, EFI_SYSTEM_TABLE &Syste
 
     while (true)
     {
+        scheduler_yield();
         __asm__ __volatile__("pause");
     }
 }

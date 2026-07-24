@@ -25,7 +25,7 @@ graphics/
 
 ## CONVENTIONS
 - Graphics is built into the kernel, not a user-space library.
-- Image/logo assets can be embedded into kernel objects via `objcopy` in `tools/gen_ninja.py` or copied into `/system` by `ninja vdisk`.
+- Image/logo assets can be embedded into kernel objects via `objcopy` in `Makefile` or copied into `/system` by `make vdisk`.
 - Many calls assume kernel heap/framebuffer state and scheduler timing from `KernelMain`; avoid moving early boot graphics into late UI code or vice versa.
 - User GUI behavior must be surfaced through xapi/syscalls, not direct struct sharing with user apps.
 - Visual behavior needs real QEMU/browser-style observation; build success is not enough.
@@ -36,4 +36,4 @@ graphics/
 - Do not bypass damage/refresh queues when existing code uses them for screen updates.
 
 ## VERIFY
-`python3 tools/gen_ninja.py --out build.ninja && ninja -f build.ninja all` plus QEMU visual validation. For user-visible GUI changes, boot image and exercise the desktop/app path, not just static checks.
+`make all -j"$(nproc)"` plus QEMU visual validation. For user-visible GUI changes, boot image and exercise the desktop/app path, not just static checks.

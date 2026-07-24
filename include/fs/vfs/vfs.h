@@ -283,6 +283,8 @@ vfs_node_t vfs_node_alloc(vfs_node_t parent, const char *name);
  * @return 非0 代表错误返回
  */
 errno_t vfs_close(vfs_node_t node);
+bool    vfs_retain(vfs_node_t node);
+void    vfs_retain_cached(vfs_node_t node, bool drop_cached_ref);
 
 void vfs_detach(vfs_node_t node);
 

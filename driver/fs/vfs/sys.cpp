@@ -137,6 +137,83 @@ static bool sysfs_reserve(sysfs_handle_t *handle, size_t need)
     return true;
 }
 
+static size_t sysfs_write_storage(sysfs_handle_t *handle, const void *addr, size_t offset, size_t size)
+{
+    if (handle == NULL || offset > (size_t)-1 - size) return VFS_STATUS_FAILED;
+    if (!sysfs_reserve(handle, offset + size + 1)) return VFS_STATUS_FAILED;
+    memcpy(handle->content + offset, addr, size);
+    handle->size = MAX(handle->size, offset + size);
+    handle->content[handle->size] = '\0';
+    if (handle->node != NULL) handle->node->size = handle->size;
+    return size;
+}
+
+static bool sysfs_uevent_write_requests_add(const void *addr, size_t size)
+{
+    const char *command = (const char *)addr;
+    if (command == NULL || size == 0) return false;
+
+    while (size > 0 && (*command == ' ' || *command == '\t' || *command == '\n'))
+    {
+        command++;
+        size--;
+    }
+    return size >= 3 && command[0] == 'a' && command[1] == 'd' && command[2] == 'd' &&
+           (size == 3 || command[3] == '\0' || command[3] == '\n' || command[3] == ' ' ||
+            command[3] == '\t');
+}
+
+static size_t sysfs_uevent_write(sysfs_handle_t *handle, const void *addr, size_t size)
+{
+    if (handle == NULL || handle->node == NULL || handle->node->parent == NULL) return VFS_STATUS_FAILED;
+    if (!sysfs_uevent_write_requests_add(addr, size)) return size;
+
+    char *parent_path = vfs_get_fullpath(handle->node->parent);
+    if (parent_path == NULL) return VFS_STATUS_FAILED;
+    const char *devpath = strncmp(parent_path, "/sys", 4) == 0 ? parent_path + 4 : parent_path;
+    const char *content = handle->content != NULL ? handle->content : "";
+    size_t event_capacity = strlen(devpath) + strlen(content) + 96;
+    char *event = (char *)malloc(event_capacity);
+    if (event == NULL)
+    {
+        free(parent_path);
+        return VFS_STATUS_FAILED;
+    }
+
+    int current_seq = __atomic_fetch_add(&sysfs_seqnum, 1, __ATOMIC_SEQ_CST);
+    snprintf(event,
+             event_capacity,
+             "add@%s\nACTION=add\nSEQNUM=%d\n%s%s",
+             devpath,
+             current_seq,
+             content,
+             content[0] != '\0' && content[strlen(content) - 1] == '\n' ? "" : "\n");
+
+    size_t source_len = strlen(event);
+    size_t event_len = 0;
+    bool last_was_nul = false;
+    for (size_t i = 0; i < source_len; i++)
+    {
+        char value = event[i] == '\n' ? '\0' : event[i];
+        if (value == '\0')
+        {
+            if (last_was_nul) continue;
+            last_was_nul = true;
+        }
+        else
+        {
+            last_was_nul = false;
+        }
+        event[event_len++] = value;
+    }
+    if (event_len == 0 || event[event_len - 1] != '\0') event[event_len++] = '\0';
+
+    netlink_kernel_uevent_send(event, (int)event_len);
+    free(event);
+    free(parent_path);
+    return size;
+}
+
 static size_t sysfs_write(void *file, const void *addr, size_t offset, size_t size)
 {
     sysfs_handle_t *handle = (sysfs_handle_t *)file;
@@ -148,12 +225,8 @@ static size_t sysfs_write(void *file, const void *addr, size_t offset, size_t si
                      (unsigned long long)size,
                      sysfs_node_is_uevent(handle) ? 1 : 0);
 
-    if (!sysfs_reserve(handle, offset + size + 1)) return VFS_STATUS_FAILED;
-    memcpy(handle->content + offset, addr, size);
-    handle->size = MAX(handle->size, offset + size);
-    handle->content[handle->size] = '\0';
-    if (handle->node != NULL) handle->node->size = handle->size;
-    return size;
+    if (sysfs_node_is_uevent(handle)) return sysfs_uevent_write(handle, addr, size);
+    return sysfs_write_storage(handle, addr, offset, size);
 }
 
 static size_t sysfs_readlink(vfs_node_t node, void *addr, size_t offset, size_t size)
@@ -569,7 +642,7 @@ vfs_node_t sysfs_child_append_symlink(vfs_node_t parent, const char *name, const
 int sysfs_write_node(vfs_node_t node, const void *buf, size_t len, size_t offset)
 {
     if (node == NULL || buf == NULL) return -EINVAL;
-    size_t ret = sysfs_write(node->handle, buf, offset, len);
+    size_t ret = sysfs_write_storage((sysfs_handle_t *)node->handle, buf, offset, len);
     return ret == len ? 0 : -EIO;
 }
 

@@ -627,8 +627,6 @@ page_directory_t *get_kernel_pagedir()
     return &kernel_page_dir;
 }
 
-extern volatile bool is_scheduler;
-
 page_directory_t *get_current_directory()
 {
     page_directory_t *directory = &bootstrap_directory_snapshot;
@@ -876,7 +874,7 @@ EXPORT_SYMBOL(page_map_ref_to);
 
 void switch_process_page_directory(page_directory_t *dir)
 {
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     bool was_interrupt_enabled = are_interrupts_enabled();
 
     disable_scheduler();

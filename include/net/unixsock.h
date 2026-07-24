@@ -44,7 +44,10 @@ struct unix_sock {
 
     spin_t  lock;
     size_t  refcount;
+    bool    peer_ref;
     bool    closed;
+    bool    shut_rd;
+    bool    shut_wr;
     bool    namespace_registered;
     bool    path_node_created;
     bool    passcred;
@@ -56,6 +59,12 @@ struct unix_sock {
     bool    timestamp_legacy;
     bool    timestampns_legacy;
     bool    timestamping_legacy;
+    uint8_t *wayland_trace_pending;
+    size_t   wayland_trace_pending_len;
+    size_t   wayland_trace_pending_cap;
+    uint8_t *wayland_trace_out_pending;
+    size_t   wayland_trace_out_pending_len;
+    size_t   wayland_trace_out_pending_cap;
     int     recv_buffer_size;
     int     send_buffer_size;
     int     recv_lowat;

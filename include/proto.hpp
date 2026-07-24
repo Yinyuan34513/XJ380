@@ -234,6 +234,10 @@ void set_kernel_stack(uint64_t rsp);
 extern "C" void        send_eoi();
 struct PROCESSOR_INFO *get_current_cpu();
 
+typedef void (*xhci_irq_handler_t)(void *data);
+int  xhci_irq_register(xhci_irq_handler_t handler, void *data, uint32_t *msi_address, uint16_t *msi_data);
+void xhci_irq_unregister(xhci_irq_handler_t handler, void *data);
+
 extern const FrameBufferConfig *fbc_addr;
 
 /*

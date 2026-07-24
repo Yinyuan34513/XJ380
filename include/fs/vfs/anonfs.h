@@ -167,6 +167,8 @@ typedef struct anonfs_memfd {
     char    *name;
     uint64_t phys;
     uint8_t *data;
+    uint64_t *pages;
+    size_t   page_count;
     size_t   size;
     size_t   capacity;
     uint32_t flags;

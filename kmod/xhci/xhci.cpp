@@ -4,6 +4,10 @@ static xhci_controller *g_xhci = NULL;
 static const uint32_t XHCI_INVALID_INDEX = (uint32_t)-1;
 
 static void xhci_process_events(xhci_controller *xhci);
+static int xhci_submit_hid_transfer(xhci_controller *xhci,
+                                    xhci_slot_state *slot);
+static int xhci_enable_msi(xhci_controller *xhci);
+static void xhci_disable_msi(xhci_controller *xhci);
 
 static void *xhci_zero_alloc(size_t bytes) {
     void *ptr = malloc(bytes);
@@ -555,6 +559,10 @@ static void xhci_event_ring_commit(xhci_controller *xhci) {
     xhci_write32(&xhci->ir0->erdp_low,
                  (uint32_t)(erdp & ~0xFULL) | (1U << 3));
     xhci_write32(&xhci->ir0->erdp_high, (uint32_t)(erdp >> 32));
+    if (xhci->irq_enabled) {
+        xhci_write32(&xhci->ir0->iman, XHCI_IMAN_IE | XHCI_IMAN_IP);
+        xhci_write32(&xhci->ir0->iman, XHCI_IMAN_IE);
+    }
 }
 
 static void xhci_process_events(xhci_controller *xhci) {
@@ -562,7 +570,7 @@ static void xhci_process_events(xhci_controller *xhci) {
         return;
     }
 
-    xhci_lock_u32(&xhci->event_lock);
+    spin_lock(&xhci->event_lock);
     bool processed = false;
 
     for (;;) {
@@ -606,15 +614,10 @@ static void xhci_process_events(xhci_controller *xhci) {
                                     ? (uint32_t)(slot->hid.report_buffer_len -
                                                  residue)
                                     : 0;
-                            xhci_handle_hid_report(
-                                slot, (const uint8_t *)slot->hid.report_buffer,
-                                actual);
-                        } else {
-                            pr_info("xhci: hid transfer failed slot=%u kind=%s cc=%u status=0x%x control=0x%x\n",
-                                   slot->slot_id,
-                                   xhci_hid_kind_name(slot->hid.kind), cc,
-                                   evt->status, evt->control);
+                            slot->hid.completion_actual = actual;
                         }
+                        slot->hid.completion_code = cc;
+                        slot->hid.completion_pending = true;
                     }
                 } else if (slot->msc.ready &&
                            epid == slot->msc.bulk_in_epid) {
@@ -675,7 +678,17 @@ static void xhci_process_events(xhci_controller *xhci) {
     if (processed) {
         xhci_event_ring_commit(xhci);
     }
-    xhci_unlock_u32(&xhci->event_lock);
+    spin_unlock(&xhci->event_lock);
+}
+
+static void xhci_irq_handler(void *arg) {
+    xhci_controller *xhci = (xhci_controller *)arg;
+    if (!xhci) {
+        return;
+    }
+
+    xhci_write32(&xhci->op->usb_sts, XHCI_STS_EINT);
+    xhci_process_events(xhci);
 }
 
 static int xhci_wait_for_ring(xhci_controller *xhci, xhci_ring *ring,
@@ -1396,6 +1409,33 @@ static int xhci_submit_hid_transfer(xhci_controller *xhci,
     hid->pending = true;
     xhci_doorbell(xhci, slot->slot_id, hid->endpoint_epid);
     return 0;
+}
+
+static void xhci_service_hid_completion(xhci_controller *xhci,
+                                        xhci_slot_state *slot) {
+    uint32_t actual = 0;
+    uint32_t cc = 0;
+
+    spin_lock(&xhci->event_lock);
+    bool completed = slot->hid.completion_pending;
+    if (completed) {
+        actual = slot->hid.completion_actual;
+        cc = slot->hid.completion_code;
+        slot->hid.completion_pending = false;
+    }
+    spin_unlock(&xhci->event_lock);
+
+    if (!completed) {
+        return;
+    }
+
+    if (cc == XHCI_CC_SUCCESS || cc == XHCI_CC_SHORT_PACKET) {
+        xhci_handle_hid_report(
+            slot, (const uint8_t *)slot->hid.report_buffer, actual);
+    } else {
+        pr_info("xhci: hid transfer failed slot=%u kind=%s cc=%u\n",
+               slot->slot_id, xhci_hid_kind_name(slot->hid.kind), cc);
+    }
 }
 
 static int xhci_submit_bulk_transfer(xhci_controller *xhci,
@@ -2384,11 +2424,11 @@ static void xhci_service_worker(void *arg) {
             if (!slot->used || !slot->hid.ready) {
                 continue;
             }
+            xhci_service_hid_completion(xhci, slot);
             (void)xhci_submit_hid_transfer(xhci, slot);
         }
 
-        cpu_relax();
-        scheduler_yield();
+        scheduler_sleep_ns(1000000ULL);
     }
 }
 
@@ -2704,6 +2744,7 @@ static void xhci_free_controller(xhci_controller *xhci) {
         free(xhci->root_usbdev);
         xhci->root_usbdev = NULL;
     }
+    xhci_disable_msi(xhci);
     xhci_stop_controller(xhci);
     xhci_runtime_free(xhci);
     free(xhci);
@@ -2712,10 +2753,202 @@ static void xhci_free_controller(xhci_controller *xhci) {
 static int xhci_enable_pci_device(pci_device_t *pci_dev) {
     uint32_t cmd = pci_dev->op->read(pci_dev->bus, pci_dev->slot, pci_dev->func,
                                      pci_dev->segment, PCI_CONF_COMMAND);
-    cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+    cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER | PCI_RCMD_DISABLE_INTR;
     pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
                        pci_dev->segment, PCI_CONF_COMMAND, cmd);
     return 0;
+}
+
+static uint8_t xhci_find_pci_capability(pci_device_t *pci_dev,
+                                        uint8_t capability_id) {
+    uint8_t offset = (uint8_t)(pci_dev->capability_point & 0xFCU);
+    for (uint32_t hops = 0; offset >= 0x40U && hops < 48U; ++hops) {
+        uint32_t header = pci_dev->op->read(
+            pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment,
+            offset);
+        if ((header & 0xFFU) == capability_id) {
+            return offset;
+        }
+        uint8_t next = (uint8_t)((header >> 8) & 0xFCU);
+        if (next == 0 || next == offset) {
+            break;
+        }
+        offset = next;
+    }
+    return 0;
+}
+
+static void xhci_set_msi_enabled(xhci_controller *xhci, bool enabled) {
+    if (!xhci || xhci->irq_msix || xhci->msi_cap_offset == 0) {
+        return;
+    }
+
+    pci_device_t *pci_dev = xhci->pci_dev;
+    uint32_t header = pci_dev->op->read(
+        pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment,
+        xhci->msi_cap_offset);
+    uint16_t control = (uint16_t)(header >> 16);
+    if (enabled) {
+        control |= 1U;
+    } else {
+        control &= (uint16_t)~1U;
+    }
+    header = (header & 0xFFFFU) | ((uint32_t)control << 16);
+    pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                       pci_dev->segment, xhci->msi_cap_offset, header);
+}
+
+static int xhci_enable_msix(xhci_controller *xhci, uint8_t cap,
+                            uint32_t msi_address, uint16_t msi_data) {
+    pci_device_t *pci_dev = xhci->pci_dev;
+    uint32_t header = pci_dev->op->read(
+        pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment, cap);
+    uint16_t control = (uint16_t)(header >> 16);
+    uint32_t table_info = pci_dev->op->read(
+        pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment, cap + 4U);
+    uint32_t bir = table_info & 0x7U;
+    uint32_t table_offset = table_info & ~0x7U;
+
+    if (bir >= 6U || !pci_dev->bars[bir].mmio ||
+        pci_dev->bars[bir].address == 0 || pci_dev->bars[bir].size < 16U ||
+        table_offset > pci_dev->bars[bir].size - 16U) {
+        return -EINVAL;
+    }
+
+    void *table_base = driver_phys_to_virt(pci_dev->bars[bir].address);
+    page_map_range(get_current_directory(), (uint64_t)table_base,
+                   pci_dev->bars[bir].address, pci_dev->bars[bir].size,
+                   XHCI_MMIO_PTE_FLAGS);
+    volatile uint32_t *entry =
+        (volatile uint32_t *)((uint8_t *)table_base + table_offset);
+
+    control &= (uint16_t)~(1U << 15);
+    control |= (uint16_t)(1U << 14);
+    header = (header & 0xFFFFU) | ((uint32_t)control << 16);
+    pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                       pci_dev->segment, cap, header);
+
+    xhci_write32(&entry[3], xhci_read32(&entry[3]) | 1U);
+    xhci_write32(&entry[0], msi_address);
+    xhci_write32(&entry[1], 0);
+    xhci_write32(&entry[2], msi_data);
+    xhci_write32(&entry[3], xhci_read32(&entry[3]) & ~1U);
+
+    control &= (uint16_t)~(1U << 14);
+    control |= (uint16_t)(1U << 15);
+    header = (header & 0xFFFFU) | ((uint32_t)control << 16);
+    pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                       pci_dev->segment, cap, header);
+
+    xhci->irq_msix = true;
+    xhci->msi_cap_offset = cap;
+    xhci->msix_entry = entry;
+    return 0;
+}
+
+static int xhci_enable_msi(xhci_controller *xhci) {
+    uint32_t msi_address = 0;
+    uint16_t msi_data = 0;
+    if (xhci_irq_register(xhci_irq_handler, xhci, &msi_address, &msi_data) != 0) {
+        return -EBUSY;
+    }
+
+    pci_device_t *pci_dev = xhci->pci_dev;
+    bool msix_enabled = false;
+    uint8_t cap =
+        xhci_find_pci_capability(pci_dev, XHCI_PCI_CAP_ID_MSIX);
+    if (cap != 0 && xhci_enable_msix(xhci, cap, msi_address, msi_data) == 0) {
+        xhci->irq_enabled = true;
+        msix_enabled = true;
+    }
+
+    cap = msix_enabled ? 0 : xhci_find_pci_capability(pci_dev, PCI_CAP_ID_MSI);
+    if (!msix_enabled && cap == 0) {
+        xhci_irq_unregister(xhci_irq_handler, xhci);
+        return -ENODEV;
+    }
+
+    if (!msix_enabled) {
+        xhci->msi_cap_offset = cap;
+        uint32_t header = pci_dev->op->read(
+            pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment, cap);
+        uint16_t control = (uint16_t)(header >> 16);
+        bool is_64bit = (control & (1U << 7)) != 0;
+        bool can_mask = (control & (1U << 8)) != 0;
+
+        control &= (uint16_t)~((1U << 0) | (7U << 4));
+        header = (header & 0xFFFFU) | ((uint32_t)control << 16);
+        pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                           pci_dev->segment, cap, header);
+        pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                           pci_dev->segment, cap + 4U, msi_address);
+
+        uint8_t data_offset = is_64bit ? (uint8_t)(cap + 12U)
+                                       : (uint8_t)(cap + 8U);
+        if (is_64bit) {
+            pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                               pci_dev->segment, cap + 8U, 0);
+        }
+        uint32_t data_word = pci_dev->op->read(
+            pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment,
+            data_offset);
+        data_word = (data_word & 0xFFFF0000U) | msi_data;
+        pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                           pci_dev->segment, data_offset, data_word);
+
+        if (can_mask) {
+            uint8_t mask_offset = (uint8_t)(data_offset + 4U);
+            uint32_t mask = pci_dev->op->read(
+                pci_dev->bus, pci_dev->slot, pci_dev->func, pci_dev->segment,
+                mask_offset);
+            pci_dev->op->write(pci_dev->bus, pci_dev->slot, pci_dev->func,
+                               pci_dev->segment, mask_offset, mask & ~1U);
+        }
+
+        xhci_set_msi_enabled(xhci, true);
+        xhci->irq_enabled = true;
+    }
+
+    xhci_write32(&xhci->op->usb_sts, XHCI_STS_EINT);
+    xhci_write32(&xhci->ir0->iman, XHCI_IMAN_IE | XHCI_IMAN_IP);
+    xhci_write32(&xhci->ir0->iman, XHCI_IMAN_IE);
+    uint32_t cmd = xhci_read32(&xhci->op->usb_cmd);
+    xhci_write32(&xhci->op->usb_cmd, cmd | XHCI_CMD_INTE);
+    pr_info("xhci: using %s interrupts\n",
+           xhci->irq_msix ? "MSI-X" : "MSI");
+    return 0;
+}
+
+static void xhci_disable_msi(xhci_controller *xhci) {
+    if (!xhci || !xhci->irq_enabled) {
+        return;
+    }
+
+    uint32_t cmd = xhci_read32(&xhci->op->usb_cmd);
+    xhci_write32(&xhci->op->usb_cmd, cmd & ~XHCI_CMD_INTE);
+    xhci_write32(&xhci->ir0->iman, 0);
+    if (xhci->irq_msix) {
+        if (xhci->msix_entry) {
+            xhci_write32(&xhci->msix_entry[3],
+                         xhci_read32(&xhci->msix_entry[3]) | 1U);
+        }
+        uint32_t header = xhci->pci_dev->op->read(
+            xhci->pci_dev->bus, xhci->pci_dev->slot, xhci->pci_dev->func,
+            xhci->pci_dev->segment, xhci->msi_cap_offset);
+        uint16_t control = (uint16_t)(header >> 16);
+        control &= (uint16_t)~(1U << 15);
+        control |= (uint16_t)(1U << 14);
+        header = (header & 0xFFFFU) | ((uint32_t)control << 16);
+        xhci->pci_dev->op->write(
+            xhci->pci_dev->bus, xhci->pci_dev->slot, xhci->pci_dev->func,
+            xhci->pci_dev->segment, xhci->msi_cap_offset, header);
+    } else {
+        xhci_set_msi_enabled(xhci, false);
+    }
+    xhci->irq_enabled = false;
+    xhci->irq_msix = false;
+    xhci->msix_entry = NULL;
+    xhci_irq_unregister(xhci_irq_handler, xhci);
 }
 
 static int xhci_find_mmio_bar(const pci_device_t *pci_dev, uint64_t *base_out,
@@ -2803,6 +3036,11 @@ static int xhci_probe(pci_device_t *pci_dev) {
         pr_info("xhci: failed to start controller (%d)\n", rc);
         xhci_free_controller(xhci);
         return rc;
+    }
+
+    rc = xhci_enable_msi(xhci);
+    if (rc != 0) {
+        pr_info("xhci: MSI unavailable (%d), using event-ring polling\n", rc);
     }
 
     pr_info("xhci: controller ready ports=%u slots=%u intrs=%u ctx=%u\n",

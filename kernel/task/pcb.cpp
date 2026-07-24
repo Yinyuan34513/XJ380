@@ -68,12 +68,18 @@ extern UserInfo *current_user;
 extern UserInfo root_user;
 
 extern bool no_interrupt;
-extern bool is_scheduler;
 spin_t create_thread_lock = SPIN_INIT;
 static spin_t execve_image_lock = SPIN_INIT;
 static spin_t user_stack_build_lock = SPIN_INIT;
 // pcb.cpp
 #include "task/scheduler.h"
+
+static bool address_space_owned_by_current_cpu(pcb_t process)
+{
+    PROCESSOR_INFO *cpu = get_current_cpu();
+    return process != NULL &&
+           (process->home_cpu == TASK_CPU_UNASSIGNED || (cpu != NULL && process->home_cpu == cpu->processor_id));
+}
 
 extern spin_t scheduler_lock;
 extern void message_thread(uint64_t arg);
@@ -727,7 +733,9 @@ static void switch_task_to_user_mode(tcb_t task)
         vfs_node_t stdio        = vfs_open(new_path);
         if (stdio != NULL)
         {
-            stdio->refcount       += 3;
+            vfs_retain(stdio);
+            vfs_retain(stdio);
+            vfs_retain(stdio);
             fd_file_handle *stdout = (fd_file_handle *)calloc(1, sizeof(fd_file_handle));
             stdout->node           = stdio;
             stdout->offset         = 0;
@@ -1104,7 +1112,7 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     if ((flags & CLONE_VM_FLAG) == 0) return SYSCALL_FAULT_(EINVAL);
 
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     tcb_t parent_task          = get_current_task();
     if (parent_task == NULL || parent_task->parent_group == NULL || parent_task->parent_group->pagedir == NULL)
         return SYSCALL_FAULT_(EFAULT);
@@ -1133,7 +1141,7 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     }
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
-    new_task->cpu_id     = get_current_cpu()->processor_id;
+    new_task->cpu_id     = process->home_cpu;
     new_task->status     = START;
     new_task->parent_group = process;
     strncpy(new_task->name, parent_task->name, sizeof(new_task->name) - 1);
@@ -1193,7 +1201,7 @@ uint64_t thread_clone(struct X64_REGS *reg, uint64_t flags, uint64_t stack, int 
     new_task->fs_base = (flags & CLONE_SETTLS_FLAG) ? tls : parent_task->fs_base;
 
     new_task->cwd = parent_task->cwd;
-    if (new_task->cwd != NULL) new_task->cwd->refcount++;
+    if (new_task->cwd != NULL && !vfs_retain(new_task->cwd)) new_task->cwd = NULL;
     new_task->str_cwd = parent_task->str_cwd != NULL ? strdup(parent_task->str_cwd) : NULL;
     new_task->user_info = parent_task->user_info;
     new_task->winnum = 0;
@@ -1257,7 +1265,7 @@ uint64_t process_execve(char *path, char **argv, char **envp)
     //     if (is_scheduler) break;
     // }
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     if (!no_interrupt) open_interrupt;
 
     if (path == NULL) return (uint64_t)-EINVAL;
@@ -1850,7 +1858,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     if (reg == NULL) return (uint64_t)-EINVAL;
 
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     close_interrupt;
     disable_scheduler();
 
@@ -1919,6 +1927,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (uint64_t)-ENOMEM;
     }
+    new_pcb->home_cpu = is_vfork ? current_pcb->home_cpu : TASK_CPU_UNASSIGNED;
 
     if (!vma_manager_clone(&current_pcb->vma_manager, &new_pcb->vma_manager))//calloc灏辨垜鐙楀懡
     {
@@ -1996,7 +2005,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
         return (uint64_t)-(ENOMEM);
     }
     new_task->task_level     = TASK_APPLICATION_LEVEL;
-    new_task->cpu_id         = get_current_cpu()->processor_id;
+    new_task->cpu_id         = new_pcb->home_cpu;
     new_task->status         = START;
     set_child_user_stack_bounds(new_task, parent_task, user_stack);
     uint64_t kernel_stack_phys = alloc_frames(KERNEL_STACK_SIZE / PAGE_SIZE);
@@ -2022,7 +2031,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
     new_task->syscall_stack = ((uint64_t)phys_to_virt(syscall_stack_phys)) + KERNEL_STACK_SIZE;
     new_task->main          = parent_task->main;
     new_task->cwd           = parent_task->cwd;
-    if (new_task->cwd != NULL) new_task->cwd->refcount++;
+    if (new_task->cwd != NULL && !vfs_retain(new_task->cwd)) new_task->cwd = NULL;
     new_task->str_cwd       = parent_task->str_cwd != NULL ? strdup(parent_task->str_cwd) : NULL;
     new_task->user_info     = parent_task->user_info;
     strcpy(new_task->name, parent_task->name);
@@ -2122,7 +2131,7 @@ uint64_t process_fork(struct X64_REGS *reg, bool is_vfork, uint64_t user_stack, 
 size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 {
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     if (!no_interrupt) open_interrupt;
 
     spin_lock(&create_thread_lock);
@@ -2210,7 +2219,7 @@ size_t create_kernel_thread(void *_start, void *args, char *name, pcb_t pcb)
 size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t pcb, char *cwd)
 {
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     if (!no_interrupt) open_interrupt;
 
     spin_lock(&create_thread_lock);
@@ -2223,6 +2232,16 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-(EINVAL);
     }
+    if (!address_space_owned_by_current_cpu(pcb))
+    {
+        write_serial_fmt("[DEBUG-mm-affinity] reject=user-thread pid=%llu home=%llu current=%llu\n",
+                         (unsigned long long)pcb->pid,
+                         (unsigned long long)pcb->home_cpu,
+                         (unsigned long long)get_current_cpu()->processor_id);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (size_t)-EXDEV;
+    }
     tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
@@ -2232,7 +2251,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
     }
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
-    new_task->cpu_id     = get_current_cpu()->processor_id;
+    new_task->cpu_id     = pcb->home_cpu;
     strncpy(new_task->name, name, sizeof(new_task->name) - 1);
     new_task->parent_group = pcb;
 
@@ -2334,7 +2353,7 @@ size_t create_user_thread(void *_start, void *args, int argc, char *name, pcb_t 
 size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uint64_t arg)
 {
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     if (!no_interrupt) open_interrupt;
 
     tcb_t creator_task = get_current_task();
@@ -2349,6 +2368,16 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
         restore_runtime_state(was_scheduler_enabled, is_sti);
         return (size_t)-(EINVAL);
     }
+    if (!address_space_owned_by_current_cpu(pcb))
+    {
+        write_serial_fmt("[DEBUG-mm-affinity] reject=message-thread pid=%llu home=%llu current=%llu\n",
+                         (unsigned long long)pcb->pid,
+                         (unsigned long long)pcb->home_cpu,
+                         (unsigned long long)get_current_cpu()->processor_id);
+        spin_unlock(&create_thread_lock);
+        restore_runtime_state(was_scheduler_enabled, is_sti);
+        return (size_t)-EXDEV;
+    }
     tcb_t new_task = alloc_zeroed_tcb();
     if (new_task == NULL)
     {
@@ -2358,7 +2387,7 @@ size_t create_message_thread(void *_start, char *name, pcb_t pcb, char *cwd, uin
     }
 
     new_task->task_level = TASK_APPLICATION_LEVEL;
-    new_task->cpu_id     = get_current_cpu()->processor_id;
+    new_task->cpu_id     = pcb->home_cpu;
     strncpy(new_task->name, name, sizeof(new_task->name) - 1);
     new_task->parent_group = pcb;
 
@@ -2506,6 +2535,9 @@ pcb_t create_process_group(const char *name, pcb_t parent, page_directory_t *dir
     pcb->thread_queue = queue_init();
     pcb->ppid         = 0;
     pcb->pagedir      = directory ? directory : get_kernel_pagedir();
+    pcb->home_cpu     = pcb->pagedir == parent_group->pagedir && parent_group != kernel_group
+                            ? parent_group->home_cpu
+                            : TASK_CPU_UNASSIGNED;
     pcb->child_pcb    = queue_init();
     pcb->vfork        = false;
     pcb->file_open    = queue_init();
@@ -2630,6 +2662,7 @@ void process_setup()
     kernel_pcb->sid     = kernel_pcb->pid;
     kernel_pcb->start_time_ns = bootNanoTime();
     kernel_pcb->pagedir = get_kernel_pagedir();
+    kernel_pcb->home_cpu = 0;
     strcpy(kernel_pcb->name, "XSK System");
     kernel_pcb->parent_task  = kernel_pcb;
     kernel_pcb->status       = RUNNING;

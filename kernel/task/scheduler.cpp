@@ -9,7 +9,7 @@
 #include "smp/smp.h"
 #include "task/pcb.h"
 
-volatile bool        is_scheduler = false;
+static volatile bool scheduler_started = false;
 extern lock_queue   *pcb_group_queue;
 extern XSK_SMP_INFO *xsi;
 extern bool          no_interrupt;
@@ -30,12 +30,33 @@ static constexpr uint32_t EEVDF_NICE_WEIGHTS[] = {
 
 void enable_scheduler()
 {
-    is_scheduler = true;
+    if (xsi != NULL)
+    {
+        PROCESSOR_INFO *cpu = get_current_cpu();
+        if (cpu != NULL) cpu->scheduler_disabled = false;
+    }
+    scheduler_started = true;
 }
 
 void disable_scheduler()
 {
-    is_scheduler = false;
+    if (!scheduler_started) return;
+
+    PROCESSOR_INFO *cpu = xsi != NULL ? get_current_cpu() : NULL;
+    if (cpu != NULL)
+    {
+        cpu->scheduler_disabled = true;
+        return;
+    }
+    scheduler_started = false;
+}
+
+bool scheduler_is_enabled()
+{
+    if (!scheduler_started) return false;
+
+    PROCESSOR_INFO *cpu = xsi != NULL ? get_current_cpu() : NULL;
+    return cpu == NULL || !cpu->scheduler_disabled;
 }
 
 tcb_t get_current_task()
@@ -412,7 +433,7 @@ extern pcb_t kernel_group;
 extern "C" registers_t *timer_handle(registers_t *reg)
 {
     // send_eoi();
-    if (!is_scheduler) { 
+    if (!scheduler_is_enabled()) {
         send_eoi();
         return reg; 
     }
@@ -486,7 +507,7 @@ extern "C" registers_t *timer_handle(registers_t *reg)
 
 void scheduler_yield()
 {
-    if (!is_scheduler) return;
+    if (!scheduler_is_enabled()) return;
     get_current_cpu()->scheduler_ticks = TIME_SLICE;
     __asm__ volatile("int %0" ::"i"(32));
 }
@@ -494,7 +515,7 @@ EXPORT_SYMBOL(scheduler_yield);
 
 void scheduler_sleep_ns(uint64_t nano)
 {
-    if (!is_scheduler || nano == 0) {
+    if (!scheduler_is_enabled() || nano == 0) {
         scheduler_yield();
         return;
     }
@@ -568,18 +589,47 @@ size_t add_task(tcb_t new_task)
         new_task->status = START;
     }
     
-    struct PROCESSOR_INFO *min_cpu = get_cpu(0);
-    size_t                 min_cpu_index = 0;
+    bool uses_user_address_space =
+        new_task->task_level == TASK_APPLICATION_LEVEL ||
+        (new_task->parent_group != NULL && new_task->parent_group != kernel_group);
 
-    if (new_task->task_level != TASK_APPLICATION_LEVEL) {
-        for (size_t i = 1; i < get_cpu_num(); i++) {
-            struct PROCESSOR_INFO *cpui = get_cpu(i);
-            if (cpui != NULL && cpui->scheduler_queue != NULL &&
-                cpui->scheduler_queue->size < min_cpu->scheduler_queue->size) {
-                min_cpu       = cpui;
+    // Without cross-CPU TLB shootdown, a user page table is assigned once and never migrated.
+    struct PROCESSOR_INFO *min_cpu = NULL;
+    size_t min_cpu_index = TASK_CPU_UNASSIGNED;
+    if (uses_user_address_space && new_task->parent_group->home_cpu < get_cpu_num())
+    {
+        min_cpu_index = new_task->parent_group->home_cpu;
+        min_cpu = get_cpu(min_cpu_index);
+    }
+
+    if (min_cpu == NULL || min_cpu->scheduler_queue == NULL)
+    {
+        for (size_t i = 0; i < get_cpu_num(); i++)
+        {
+            struct PROCESSOR_INFO *candidate = get_cpu(i);
+            if (candidate == NULL || candidate->scheduler_queue == NULL) continue;
+            if (min_cpu == NULL || candidate->scheduler_queue->size < min_cpu->scheduler_queue->size)
+            {
+                min_cpu = candidate;
                 min_cpu_index = i;
             }
         }
+    }
+
+    if (min_cpu == NULL || min_cpu_index == TASK_CPU_UNASSIGNED)
+    {
+        spin_unlock(&scheduler_lock);
+        return (size_t)-1;
+    }
+
+    if (uses_user_address_space && new_task->parent_group->home_cpu == TASK_CPU_UNASSIGNED)
+    {
+        new_task->parent_group->home_cpu = min_cpu_index;
+        write_serial_fmt("[DEBUG-mm-affinity] pid=%llu process=%s cpu=%llu queue=%llu\n",
+                         (unsigned long long)new_task->parent_group->pid,
+                         new_task->parent_group->name,
+                         (unsigned long long)min_cpu_index,
+                         (unsigned long long)min_cpu->scheduler_queue->size);
     }
 	    
     uint64_t now = nanoTime();

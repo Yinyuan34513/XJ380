@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <syscall/syscall.h>
 #include <task/pcb.h>
+#include <task/scheduler.h>
 #include <user/user.h>
 #include <graphics/svg.h>
 
@@ -108,7 +109,6 @@ UserInfo *task_effective_user()
 extern SHEET *desktop_ct_sheet;
 extern mouse_dec ms_dec;
 extern bool no_interrupt;
-extern bool is_scheduler;
 
 static void restore_runtime_state(bool was_scheduler_enabled, bool was_interrupt_enabled)
 {
@@ -692,7 +692,7 @@ uint64_t parse_elf_file(char *path, pcb_t group)
     }
 
     bool is_sti                = are_interrupts_enabled();
-    bool was_scheduler_enabled = is_scheduler;
+    bool was_scheduler_enabled = scheduler_is_enabled();
     if (!no_interrupt) close_interrupt;
     disable_scheduler();
 

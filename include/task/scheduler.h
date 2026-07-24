@@ -7,6 +7,7 @@ extern const uint64_t TIME_SLICE;
 extern const uint64_t MIN_SLICE;
 
 // 调度器函数声明
+bool scheduler_is_enabled();
 void scheduler_yield();
 void scheduler_sleep_ns(uint64_t nano);
 void scheduler_wake_task(tcb_t task);
