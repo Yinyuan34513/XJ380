@@ -17,6 +17,39 @@ static UINT32  g_entry_count = 0;
 static const int ICON_CELL_W = 110;
 static const int ICON_CELL_H = 110;
 static const int ICON_SIZE   = 74;
+static const int ICON_DRAG_THRESHOLD = 5;
+static const int MAX_DESKTOP_ICONS = 258;
+
+struct DesktopIconPosition
+{
+    char name[256];
+    int  slot;
+};
+
+struct DesktopIconSettings
+{
+    UINT32 magic;
+    UINT32 version;
+    UINT32 count;
+    DesktopIconPosition positions[MAX_DESKTOP_ICONS];
+};
+
+static const UINT32 DESKTOP_ICON_MAGIC = 0x49434f4e;
+static const UINT32 DESKTOP_ICON_VERSION = 1;
+static const char *SYSTEM_ICON_KEY = ":system:";
+static const char *TRASH_ICON_KEY = ":trash:";
+
+static DesktopIconSettings g_icon_settings;
+static int  g_icon_slots[MAX_DESKTOP_ICONS];
+static int  g_icon_count = 0;
+static int  g_drag_icon = -1;
+static int  g_drag_start_x = 0;
+static int  g_drag_start_y = 0;
+static int  g_drag_origin_slot = 0;
+static int  g_drag_preview_slot = 0;
+static bool g_icon_settings_loaded = false;
+static bool g_dragging_icon = false;
+static bool g_icon_drag_moved = false;
 
 static const UINT32 WIDGET_GLASS       = 0x12324ae8;
 static const UINT32 WIDGET_GLASS_SOFT  = 0x1d4c69dd;
@@ -66,6 +99,8 @@ static int g_context_menu_x = 0;
 static int g_context_menu_y = 0;
 
 static void redraw_desktop();
+static const char *desktop_icon_key(int index);
+static void set_saved_icon_slot(const char *key, int slot);
 
 struct DesktopSettings
 {
@@ -167,6 +202,73 @@ static void current_widget_settings_path(char *path, size_t path_size)
     path_join(path, path_size, base, "desktop_widgets.dat");
 }
 
+static void current_icon_settings_path(char *path, size_t path_size)
+{
+    char base[256];
+    current_user_base_path(base, sizeof(base));
+    path_join(path, path_size, base, "desktop_icons.dat");
+}
+
+static void load_icon_settings()
+{
+    if (g_icon_settings_loaded) return;
+    g_icon_settings_loaded = true;
+    memset(&g_icon_settings, 0, sizeof(g_icon_settings));
+    g_icon_settings.magic = DESKTOP_ICON_MAGIC;
+    g_icon_settings.version = DESKTOP_ICON_VERSION;
+
+    char path[256];
+    current_icon_settings_path(path, sizeof(path));
+    XFILE *file = xapi_OpenFile(path);
+    if (file == NULL || file->buffer == NULL)
+    {
+        if (file != NULL) xapi_CloseFile(file);
+        return;
+    }
+
+    const size_t header_size = sizeof(g_icon_settings.magic) + sizeof(g_icon_settings.version) +
+                               sizeof(g_icon_settings.count);
+    if (file->length >= header_size)
+    {
+        memcpy(&g_icon_settings, file->buffer, header_size);
+        size_t settings_size = header_size + (size_t)g_icon_settings.count * sizeof(DesktopIconPosition);
+        if (g_icon_settings.magic != DESKTOP_ICON_MAGIC || g_icon_settings.version != DESKTOP_ICON_VERSION ||
+            g_icon_settings.count > MAX_DESKTOP_ICONS || file->length < settings_size)
+        {
+            memset(&g_icon_settings, 0, sizeof(g_icon_settings));
+            g_icon_settings.magic = DESKTOP_ICON_MAGIC;
+            g_icon_settings.version = DESKTOP_ICON_VERSION;
+        }
+        else if (g_icon_settings.count > 0)
+        {
+            memcpy(g_icon_settings.positions, (char *)file->buffer + header_size,
+                   (size_t)g_icon_settings.count * sizeof(DesktopIconPosition));
+            for (UINT32 i = 0; i < g_icon_settings.count; i++)
+                g_icon_settings.positions[i].name[sizeof(g_icon_settings.positions[i].name) - 1] = '\0';
+        }
+    }
+    xapi_CloseFile(file);
+}
+
+static void save_icon_layout()
+{
+    memset(&g_icon_settings, 0, sizeof(g_icon_settings));
+    g_icon_settings.magic = DESKTOP_ICON_MAGIC;
+    g_icon_settings.version = DESKTOP_ICON_VERSION;
+    for (int icon = 0; icon < g_icon_count; icon++)
+    {
+        set_saved_icon_slot(desktop_icon_key(icon), g_icon_slots[icon]);
+    }
+
+    const size_t header_size = sizeof(g_icon_settings.magic) + sizeof(g_icon_settings.version) +
+                               sizeof(g_icon_settings.count);
+    size_t settings_size = header_size + (size_t)g_icon_settings.count * sizeof(DesktopIconPosition);
+    char path[256];
+    current_icon_settings_path(path, sizeof(path));
+    xapi_DeleteFile(path);
+    xapi_WriteFile(path, (char *)&g_icon_settings, settings_size, 0);
+}
+
 static void set_default_widget_settings(DesktopWidgetSettings *settings)
 {
     if (settings == NULL) return;
@@ -248,6 +350,17 @@ static int desktop_rows()
     return rows > 0 ? rows : 1;
 }
 
+static int desktop_columns()
+{
+    int columns = ((int)g_screen_width - 20) / ICON_CELL_W;
+    return columns > 0 ? columns : 1;
+}
+
+static int desktop_slot_count()
+{
+    return desktop_rows() * desktop_columns();
+}
+
 static int icon_x(int index)
 {
     return 20 + ICON_CELL_W * (index / desktop_rows());
@@ -279,6 +392,103 @@ static void draw_desktop_icon(const char *label, const char *icon_path, int inde
     int y = icon_y(index);
     xapi_DrawPicture(g_desktop_handle, x, y, ICON_SIZE, ICON_SIZE, (char *)icon_path);
     draw_centered_icon_text(label, index);
+}
+
+static void draw_drag_selection_box()
+{
+    if (!g_dragging_icon || !g_icon_drag_moved) return;
+
+    int x1 = icon_x(g_drag_preview_slot);
+    int y1 = icon_y(g_drag_preview_slot);
+    int x2 = x1 + ICON_CELL_W - 1;
+    int y2 = y1 + ICON_CELL_H - 1;
+    xapi_DrawRect(g_desktop_handle, x1, y1, x2, y2, 0x3a8de833, true);
+    xapi_DrawRect(g_desktop_handle, x1, y1, x2, y2, WIDGET_BLUE_SOFT, false);
+}
+
+static const char *desktop_icon_key(int index)
+{
+    if (index == 0) return SYSTEM_ICON_KEY;
+    if (index == 1) return TRASH_ICON_KEY;
+    if (index >= 2 && index - 2 < (int)g_entry_count) return g_entries[index - 2].filename;
+    return NULL;
+}
+
+static int saved_icon_slot(const char *key, int fallback)
+{
+    if (key == NULL) return fallback;
+    for (UINT32 i = 0; i < g_icon_settings.count; i++)
+    {
+        if (strcmp(g_icon_settings.positions[i].name, key) == 0) return g_icon_settings.positions[i].slot;
+    }
+    return fallback;
+}
+
+static void set_saved_icon_slot(const char *key, int slot)
+{
+    if (key == NULL) return;
+    for (UINT32 i = 0; i < g_icon_settings.count; i++)
+    {
+        if (strcmp(g_icon_settings.positions[i].name, key) == 0)
+        {
+            g_icon_settings.positions[i].slot = slot;
+            return;
+        }
+    }
+    if (g_icon_settings.count >= MAX_DESKTOP_ICONS) return;
+
+    DesktopIconPosition *position = &g_icon_settings.positions[g_icon_settings.count++];
+    memset(position, 0, sizeof(*position));
+    copy_cstr(position->name, sizeof(position->name), key);
+    position->slot = slot;
+}
+
+static bool icon_slot_used_before(int icon, int slot)
+{
+    for (int i = 0; i < icon; i++)
+    {
+        if (g_icon_slots[i] == slot) return true;
+    }
+    return false;
+}
+
+static void arrange_icon_slots()
+{
+    int slot_count = desktop_slot_count();
+    for (int icon = 0; icon < g_icon_count; icon++)
+    {
+        int slot = saved_icon_slot(desktop_icon_key(icon), icon);
+        if (slot < 0 || slot >= slot_count || icon_slot_used_before(icon, slot))
+        {
+            slot = 0;
+            while (slot < slot_count && icon_slot_used_before(icon, slot)) slot++;
+            if (slot >= slot_count) slot = icon % slot_count;
+        }
+        g_icon_slots[icon] = slot;
+    }
+}
+
+static int icon_at(int x, int y)
+{
+    for (int icon = g_icon_count - 1; icon >= 0; icon--)
+    {
+        int slot = g_icon_slots[icon];
+        int bx = icon_x(slot);
+        int by = icon_y(slot);
+        if (x >= bx && x < bx + ICON_CELL_W && y >= by && y < by + ICON_CELL_H) return icon;
+    }
+    return -1;
+}
+
+static int nearest_icon_slot(int x, int y)
+{
+    int column = (x - 20) / ICON_CELL_W;
+    int row = (y - 30) / ICON_CELL_H;
+    if (column < 0) column = 0;
+    if (row < 0) row = 0;
+    if (column >= desktop_columns()) column = desktop_columns() - 1;
+    if (row >= desktop_rows()) row = desktop_rows() - 1;
+    return column * desktop_rows() + row;
 }
 
 static bool desktop_widgets_visible()
@@ -562,25 +772,41 @@ static void draw_desktop_icons()
     current_desktop_path(desktop_path, sizeof(desktop_path));
     xapi_Mkdir(desktop_path);
 
-    draw_desktop_icon("系统", "/system/icon/d_system.png", 0);
-    draw_desktop_icon("垃圾桶", "/system/icon/bin.png", 1);
-
     memset(g_entries, 0, sizeof(g_entries));
     g_entry_count = 0;
     xapi_SearchFile(desktop_path, &g_entry_count, g_entries);
     if (g_entry_count == 404)
     {
         g_entry_count = 0;
-        return;
     }
     if (g_entry_count > 255) g_entry_count = 255;
 
-    int index = 2;
+    g_icon_count = (int)g_entry_count + 2;
+    arrange_icon_slots();
+
+    if (!(g_dragging_icon && g_icon_drag_moved && g_drag_icon == 0))
+        draw_desktop_icon("系统", "/system/icon/d_system.png", g_icon_slots[0]);
+    if (!(g_dragging_icon && g_icon_drag_moved && g_drag_icon == 1))
+        draw_desktop_icon("垃圾桶", "/system/icon/bin.png", g_icon_slots[1]);
+
     for (UINT32 i = 0; i < g_entry_count; i++)
     {
+        int index = (int)i + 2;
+        if (g_dragging_icon && g_icon_drag_moved && g_drag_icon == index) continue;
         const char *icon_path = g_entries[i].filetype == 1 ? "/system/icon/folder.png" : "/system/icon/texter.png";
-        draw_desktop_icon(g_entries[i].filename, icon_path, index);
-        index++;
+        draw_desktop_icon(g_entries[i].filename, icon_path, g_icon_slots[index]);
+    }
+
+    if (g_dragging_icon && g_icon_drag_moved && g_drag_icon >= 0 && g_drag_icon < g_icon_count)
+    {
+        draw_drag_selection_box();
+        const char *label = g_drag_icon == 0 ? "系统" : g_drag_icon == 1 ? "垃圾桶" :
+                            g_entries[g_drag_icon - 2].filename;
+        const char *icon_path = g_drag_icon == 0 ? "/system/icon/d_system.png" :
+                                g_drag_icon == 1 ? "/system/icon/bin.png" :
+                                g_entries[g_drag_icon - 2].filetype == 1 ? "/system/icon/folder.png" :
+                                                                        "/system/icon/texter.png";
+        draw_desktop_icon(label, icon_path, g_drag_preview_slot);
     }
 }
 
@@ -672,31 +898,80 @@ static void open_desktop_icon_at(int x, int y)
     char desktop_path[256];
     current_desktop_path(desktop_path, sizeof(desktop_path));
 
-    for (int i = 0; i < 2; i++)
+    int icon = icon_at(x, y);
+    if (icon < 0) return;
+    if (icon < 2)
     {
-        int bx = icon_x(i);
-        int by = icon_y(i);
-        if (x > bx && x < bx + ICON_CELL_W && y > by && y < by + ICON_CELL_H)
-        {
-            if (i == 0) xapi_Run("/apps/system/fmanager.elf");
-            return;
-        }
+        if (icon == 0) xapi_Run("/apps/system/fmanager.elf");
+        return;
     }
 
-    for (UINT32 i = 0; i < g_entry_count; i++)
+    UINT32 entry = (UINT32)(icon - 2);
+    char run_path[512];
+    path_join(run_path, sizeof(run_path), desktop_path, g_entries[entry].filename);
+    if (g_entries[entry].filetype == 1) run_with_one_arg("/apps/system/fmanager.elf", run_path);
+    else open_desktop_file(run_path);
+}
+
+static void begin_icon_drag(int x, int y)
+{
+    if (g_context_menu_open || y < 24) return;
+    int icon = icon_at(x, y);
+    if (icon < 0) return;
+
+    g_drag_icon = icon;
+    g_drag_start_x = x;
+    g_drag_start_y = y;
+    g_drag_origin_slot = g_icon_slots[icon];
+    g_drag_preview_slot = g_drag_origin_slot;
+    g_dragging_icon = true;
+    g_icon_drag_moved = false;
+}
+
+static void move_icon_drag(int x, int y)
+{
+    if (!g_dragging_icon) return;
+    int dx = x - g_drag_start_x;
+    int dy = y - g_drag_start_y;
+    if (!g_icon_drag_moved && dx > -ICON_DRAG_THRESHOLD && dx < ICON_DRAG_THRESHOLD &&
+        dy > -ICON_DRAG_THRESHOLD && dy < ICON_DRAG_THRESHOLD)
+        return;
+
+    g_icon_drag_moved = true;
+    int slot = nearest_icon_slot(x, y);
+    if (slot != g_drag_preview_slot)
     {
-        int index = (int)i + 2;
-        int bx = icon_x(index);
-        int by = icon_y(index);
-        if (x > bx && x < bx + ICON_CELL_W && y > by && y < by + ICON_CELL_H)
-        {
-            char run_path[512];
-            path_join(run_path, sizeof(run_path), desktop_path, g_entries[i].filename);
-            if (g_entries[i].filetype == 1) run_with_one_arg("/apps/system/fmanager.elf", run_path);
-            else open_desktop_file(run_path);
-            return;
-        }
+        g_drag_preview_slot = slot;
+        g_needs_redraw = true;
     }
+}
+
+static void end_icon_drag(int x, int y)
+{
+    if (!g_dragging_icon) return;
+    move_icon_drag(x, y);
+    if (g_icon_drag_moved)
+    {
+        int target_slot = g_drag_preview_slot;
+        int target_icon = -1;
+        for (int icon = 0; icon < g_icon_count; icon++)
+        {
+            if (icon != g_drag_icon && g_icon_slots[icon] == target_slot)
+            {
+                target_icon = icon;
+                break;
+            }
+        }
+
+        g_icon_slots[g_drag_icon] = target_slot;
+        if (target_icon >= 0) g_icon_slots[target_icon] = g_drag_origin_slot;
+        save_icon_layout();
+    }
+
+    g_dragging_icon = false;
+    g_icon_drag_moved = false;
+    g_drag_icon = -1;
+    g_needs_redraw = true;
 }
 
 static bool open_widget_app_at(int x, int y)
@@ -793,6 +1068,18 @@ static void desktop_MessagePrcor(UINT64 Type, UINT64 hData, UINT64 lData)
     {
         handle_widget_command(hData);
     }
+    else if (Type == MSG_LBUTTONDOWN)
+    {
+        begin_icon_drag((int)hData, (int)lData);
+    }
+    else if (Type == MSG_MOVE)
+    {
+        move_icon_drag((int)hData, (int)lData);
+    }
+    else if (Type == MSG_LBUTTONUP)
+    {
+        end_icon_drag((int)hData, (int)lData);
+    }
 }
 
 static int desktop_main_impl(int argc, char *argv[], char *envp[])
@@ -811,6 +1098,7 @@ static int desktop_main_impl(int argc, char *argv[], char *envp[])
     xapi_GetWindowSize(g_desktop_handle, &g_screen_width, &g_screen_height);
     SetMsgPrcor(g_desktop_handle, desktop_MessagePrcor);
     load_widget_settings();
+    load_icon_settings();
     redraw_desktop();
 
     while (1)
@@ -832,7 +1120,7 @@ static int desktop_main_impl(int argc, char *argv[], char *envp[])
         {
             refresh_widget_area();
         }
-        xapi_Sleep(200);
+        xapi_Sleep(g_dragging_icon ? 16 : 200);
     }
 
     return 0;

@@ -789,6 +789,16 @@ static bool send_desktop_mouse_message(uint64_t type, uint64_t x, uint64_t y)
 }
 
 static bool g_desktop_context_menu_open = false;
+static bool g_desktop_left_pressed = false;
+static bool g_desktop_left_dragged = false;
+static int  g_desktop_press_x = 0;
+static int  g_desktop_press_y = 0;
+
+static bool desktop_mouse_area_at(int x, int y)
+{
+    if (have_full_screen_app || y < 24 || y >= (int)sht_img->scry - 87) return false;
+    return found_sheetmb(sht_img, x, y) == NULL;
+}
 
 static bool open_desktop_context_menu(int x, int y)
 {
@@ -1043,6 +1053,15 @@ void process_mouse_button()
         // 左键按下
         process_left_button_down(tbx, tby);
 
+        g_desktop_left_pressed = desktop_mouse_area_at(tbx, tby);
+        g_desktop_left_dragged = false;
+        if (g_desktop_left_pressed)
+        {
+            g_desktop_press_x = tbx;
+            g_desktop_press_y = tby;
+            send_desktop_mouse_message(MSG_LBUTTONDOWN, tbx, tby);
+        }
+
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
         if (current_window != NULL && current_window->w_sheet != NULL)
         {
@@ -1052,6 +1071,11 @@ void process_mouse_button()
     }
     if ((pending_up & 0x01) && ms_dec.left)
     {
+        if (g_desktop_left_pressed)
+        {
+            send_desktop_mouse_message(MSG_LBUTTONUP, tbx, tby);
+            g_desktop_left_pressed = false;
+        }
         bool was_resizing = ms_dec.win_resize_lock;
         bool was_moving = ms_dec.win_move_lock;
         bool window_drag_suppressed = was_moving && ms_dec.win_move_dragged;
@@ -1083,6 +1107,12 @@ void process_mouse_button()
         {
             ms_dec.first_click = true;
             ms_dec.click_time  = click_time;
+        }
+        if (g_desktop_left_dragged)
+        {
+            ms_dec.first_click = false;
+            ms_dec.double_click = false;
+            g_desktop_left_dragged = false;
         }
 
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
@@ -1302,6 +1332,12 @@ void process_mouse_button()
 
     if (mouse_moved && ms_dec.left)
     {
+        if (g_desktop_left_pressed)
+        {
+            if (abs_int(tbx - g_desktop_press_x) >= 5 || abs_int(tby - g_desktop_press_y) >= 5)
+                g_desktop_left_dragged = true;
+            send_desktop_mouse_message(MSG_MOVE, tbx, tby);
+        }
         process_scroll_bar_drag_event(tbx, tby);
     }
 
