@@ -295,10 +295,134 @@ static void update_hover_resize_cursor()
     update_mouse_cursor_shape(sht_img, cursor_shape_for_resize_edges(edges));
 }
 
+static bool send_desktop_mouse_message(uint64_t type, uint64_t x, uint64_t y)
+{
+    WINDOWLSP desktop_window = sht_found_win_by_type(xwmii, sht_img, desktop_ct_sheet, XWIN_DESKTOP);
+    if (desktop_window == NULL) return false;
+
+    do_message(type, x, y, desktop_window->WinMPf, desktop_window->w_task);
+    return true;
+}
+
+static bool g_desktop_context_menu_open = false;
+static bool g_desktop_left_pressed = false;
+static bool g_desktop_left_dragged = false;
+static int  g_desktop_press_x = 0;
+static int  g_desktop_press_y = 0;
+
+static bool desktop_mouse_area_at(int x, int y)
+{
+    if (have_full_screen_app || y < 24 || y >= (int)sht_img->scry - 87) return false;
+    return found_sheetmb(sht_img, x, y) == NULL;
+}
+
+static bool open_desktop_context_menu(int x, int y)
+{
+    WINDOWLSP desktop_window = sht_found_win_by_type(xwmii, sht_img, desktop_ct_sheet, XWIN_DESKTOP);
+    if (desktop_window == NULL) return false;
+
+    do_message(MSG_RBUTTON, (uint64_t)x, (uint64_t)y, desktop_window->WinMPf, desktop_window->w_task);
+    g_desktop_context_menu_open = true;
+    return true;
+}
+
+static bool send_dock_mouse_message(uint64_t type, uint64_t x, uint64_t y)
+{
+    WINDOWLSP dock_window = sht_found_win_by_type(xwmii, sht_img, dock_ct_sheet, XWIN_DOCK);
+    if (dock_window == NULL) return false;
+
+    do_message(type, x, y, dock_window->WinMPf, dock_window->w_task);
+    return true;
+}
+
+static void close_dock_window_menu()
+{
+    if (!g_dock_window_menu_open || dock_ct_sheet == NULL || sht_img == NULL) return;
+
+    draw_rect(sht_img, dock_ct_sheet, g_dock_window_menu_x, g_dock_window_menu_y,
+              g_dock_window_menu_x + DOCK_WINDOW_MENU_WIDTH - 1,
+              g_dock_window_menu_y + DOCK_WINDOW_MENU_ITEM_HEIGHT * DOCK_WINDOW_MENU_ITEM_COUNT - 1,
+              {0, 0, 0, 0});
+    refresh_part_sheet_deferred_or_now(sht_img, g_dock_window_menu_x, g_dock_window_menu_y,
+                                       g_dock_window_menu_x + DOCK_WINDOW_MENU_WIDTH,
+                                       g_dock_window_menu_y +
+                                           DOCK_WINDOW_MENU_ITEM_HEIGHT * DOCK_WINDOW_MENU_ITEM_COUNT);
+    g_dock_window_menu_target = NULL;
+    g_dock_window_menu_open = false;
+}
+
+static void draw_dock_window_menu(WINDOWLSP window, int x, int y)
+{
+    if (window == NULL || dock_ct_sheet == NULL || sht_img == NULL || have_full_screen_app) return;
+
+    close_dock_window_menu();
+
+    int menu_w = DOCK_WINDOW_MENU_WIDTH;
+    int menu_h = DOCK_WINDOW_MENU_ITEM_HEIGHT * DOCK_WINDOW_MENU_ITEM_COUNT;
+    if (x + menu_w > (int)sht_img->scrx) x = (int)sht_img->scrx - menu_w - 4;
+    if (y + menu_h > (int)sht_img->scry) y = (int)sht_img->scry - menu_h - 4;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+
+    g_dock_window_menu_target = window;
+    g_dock_window_menu_open = true;
+    g_dock_window_menu_x = x;
+    g_dock_window_menu_y = y;
+
+    draw_rect(sht_img, dock_ct_sheet, x, y, x + menu_w - 1, y + menu_h - 1, {0xed, 0xf4, 0xff, 0xf2});
+    draw_rect(sht_img, dock_ct_sheet, x, y, x + menu_w - 1, y, {0x3a, 0x8d, 0xe8, 0xff});
+    draw_rect(sht_img, dock_ct_sheet, x, y + menu_h - 1, x + menu_w - 1, y + menu_h - 1, {0x3a, 0x8d, 0xe8, 0xff});
+    draw_rect(sht_img, dock_ct_sheet, x, y, x, y + menu_h - 1, {0x3a, 0x8d, 0xe8, 0xff});
+    draw_rect(sht_img, dock_ct_sheet, x + menu_w - 1, y, x + menu_w - 1, y + menu_h - 1, {0x3a, 0x8d, 0xe8, 0xff});
+
+    print_box_ttf(sht_img, dock_ct_sheet, (char *)"还原", BLACK, x + 12, y + 6, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, (char *)"最小化", BLACK, x + 12,
+                  y + DOCK_WINDOW_MENU_ITEM_HEIGHT + 6, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, (char *)"最大化", BLACK, x + 12,
+                  y + DOCK_WINDOW_MENU_ITEM_HEIGHT * 2 + 6, 10);
+    print_box_ttf(sht_img, dock_ct_sheet, (char *)"关闭", BLACK, x + 12,
+                  y + DOCK_WINDOW_MENU_ITEM_HEIGHT * 3 + 6, 10);
+
+    refresh_part_sheet_deferred_or_now(sht_img, x, y, x + menu_w, y + menu_h);
+}
+
+static bool handle_dock_window_menu_click(int x, int y)
+{
+    if (!g_dock_window_menu_open) return false;
+
+    bool inside = x >= g_dock_window_menu_x && x < g_dock_window_menu_x + DOCK_WINDOW_MENU_WIDTH &&
+                  y >= g_dock_window_menu_y &&
+                  y < g_dock_window_menu_y + DOCK_WINDOW_MENU_ITEM_HEIGHT * DOCK_WINDOW_MENU_ITEM_COUNT;
+    WINDOWLSP target = g_dock_window_menu_target;
+    int action = inside ? (y - g_dock_window_menu_y) / DOCK_WINDOW_MENU_ITEM_HEIGHT + 1 : 0;
+    close_dock_window_menu();
+    if (!inside || target == NULL || !window_contains(xwmii, target)) return true;
+
+    if (action == DockWindowMenuRestore)
+    {
+        restore_and_focus_window(xwmii, sht_img, target);
+    }
+    else if (action == DockWindowMenuMinimize)
+    {
+        minimize_window(xwmii, sht_img, target);
+    }
+    else if (action == DockWindowMenuMaximize)
+    {
+        if (target->type == XWIN_NORMAL && target->can_maximize) toggle_window_maximized(xwmii, sht_img, target);
+    }
+    else if (action == DockWindowMenuClose)
+    {
+        close_window_and_task(xwmii, sht_img, target);
+    }
+
+    return true;
+}
+
 static bool begin_window_resize_drag(WINDOWLS *window, uint8_t edges)
 {
-    if (window == NULL || window->w_sheet == NULL || edges == 0) return false;
+    if (window == NULL || !sheet_contains(sht_img, window->w_sheet) || edges == 0) return false;
 
+    hide_snap_preview();
     ms_dec.win_resize_lock = true;
     ms_dec.win_move_lock = false;
     ms_dec.sht_now = window->w_sheet;
@@ -384,15 +508,61 @@ void process_mouse_button()
     if (!allow_to_flush) return;
     tbx = get_mouse_x();
     tby = get_mouse_y();
+    uint8_t pending_down = __atomic_exchange_n(&ms_dec.pending_btn_down, 0, __ATOMIC_ACQ_REL);
+    uint8_t pending_up = __atomic_exchange_n(&ms_dec.pending_btn_up, 0, __ATOMIC_ACQ_REL);
+    bool button_changed = pending_down != 0 || pending_up != 0 || ms_dec.btn != ms_dec.last_btn;
+    bool mouse_moved = tbx != ms_dec.last_mouse_x || tby != ms_dec.last_mouse_y;
+    bool left_down_after_up = (pending_down & 0x01) && (pending_up & 0x01) && (ms_dec.btn & 0x01);
+    bool right_down_after_up = (pending_down & 0x02) && (pending_up & 0x02) && (ms_dec.btn & 0x02);
+    bool center_down_after_up = (pending_down & 0x04) && (pending_up & 0x04) && (ms_dec.btn & 0x04);
 
-    if (ms_dec.btn & 0x01)
+    if ((pending_down & 0x01) && !left_down_after_up)
     {
         // 左键按下
-        ms_dec.left = true;
+        process_left_button_down(tbx, tby);
+
+        g_desktop_left_pressed = desktop_mouse_area_at(tbx, tby);
+        g_desktop_left_dragged = false;
+        if (g_desktop_left_pressed)
+        {
+            g_desktop_press_x = tbx;
+            g_desktop_press_y = tby;
+            send_desktop_mouse_message(MSG_LBUTTONDOWN, tbx, tby);
+        }
+
+        WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
+        if (current_window != NULL && current_window->w_sheet != NULL)
+        {
+            process_scroll_bar_mouse_down_event(current_window->w_sheet, tbx - current_window->w_sheet->bx,
+                                                tby - current_window->w_sheet->by);
+        }
     }
-    else if ((ms_dec.btn & 0x01) == 0 && ms_dec.left)
+    if ((pending_up & 0x01) && ms_dec.left)
     {
+        if (g_desktop_left_pressed)
+        {
+            send_desktop_mouse_message(MSG_LBUTTONUP, tbx, tby);
+            g_desktop_left_pressed = false;
+        }
         bool was_resizing = ms_dec.win_resize_lock;
+        bool was_moving = ms_dec.win_move_lock;
+        bool window_drag_suppressed = was_moving && ms_dec.win_move_dragged;
+        bool window_release_consumed = window_drag_suppressed;
+        if (g_desktop_context_menu_open)
+        {
+            send_desktop_mouse_message(MSG_LBUTTON, tbx, tby);
+            g_desktop_context_menu_open = false;
+            window_release_consumed = true;
+        }
+        if (was_moving)
+        {
+            apply_pending_window_move(true);
+        }
+        if (was_resizing)
+        {
+            process_window_resize_drag();
+            apply_pending_window_resize(true);
+        }
         tm time;
         time_read(&time);
         uint64_t click_time = mktime(&time);
@@ -406,10 +576,25 @@ void process_mouse_button()
             ms_dec.first_click = true;
             ms_dec.click_time  = click_time;
         }
+        if (g_desktop_left_dragged)
+        {
+            ms_dec.first_click = false;
+            ms_dec.double_click = false;
+            g_desktop_left_dragged = false;
+        }
 
         WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-        if (!was_resizing && current_window != NULL)
+        if (!window_release_consumed && !was_resizing && current_window != NULL)
         {
+            if (!window_drag_suppressed && ms_dec.double_click && window_titlebar_hit(current_window, tbx, tby))
+            {
+                ms_dec.sht_now = current_window->w_sheet;
+                toggle_window_maximized(xwmii, sht_img, current_window);
+                ms_dec.double_click = false;
+                window_release_consumed = true;
+            }
+            else if (!window_drag_suppressed)
+            {
             if (tbx < current_window->w_sheet->bx + 12 ||
                 tby < current_window->w_sheet->by + 27 ||
                 tbx > current_window->w_sheet->bx +
@@ -573,24 +758,36 @@ void process_mouse_button()
 
         ms_dec.center = false;
     }
+    if (center_down_after_up) { ms_dec.center = true; }
 
-    int prev_tbx = getBX(sht_img, mouse_ct_sheet_img);
-    int prev_tby = getBY(sht_img, mouse_ct_sheet_img);
-    int mouse_x = get_mouse_x();
-    int mouse_y = get_mouse_y();
-    int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
-    int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
-    move_mouse(sht_img, mouse_ct_sheet_img, mouse_x, mouse_y);
-    refresh_union_rect_deferred_or_now(sht_img, prev_tbx, prev_tby, prev_tbx + mouse_w, prev_tby + mouse_h,
-                                       getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
-                                       getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
-                                       getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
-    update_hover_resize_cursor();
-    tbx = mouse_x;
-    tby = mouse_y;
+    if (mouse_moved && mouse_ct_sheet_img != NULL)
+    {
+        int prev_tbx = getBX(sht_img, mouse_ct_sheet_img);
+        int prev_tby = getBY(sht_img, mouse_ct_sheet_img);
+        int mouse_w = (int)getXsize(sht_img, mouse_ct_sheet_img);
+        int mouse_h = (int)getYsize(sht_img, mouse_ct_sheet_img);
+        move_mouse(sht_img, mouse_ct_sheet_img, tbx, tby);
+        refresh_two_rects_deferred_or_now(sht_img, prev_tbx, prev_tby, prev_tbx + mouse_w, prev_tby + mouse_h,
+                                          getBX(sht_img, mouse_ct_sheet_img), getBY(sht_img, mouse_ct_sheet_img),
+                                          getBX(sht_img, mouse_ct_sheet_img) + mouse_w,
+                                          getBY(sht_img, mouse_ct_sheet_img) + mouse_h);
+        update_hover_resize_cursor();
+        flush_mouse_cursor_frame_if_due(sht_img);
+    }
+
+    if (mouse_moved && ms_dec.left)
+    {
+        if (g_desktop_left_pressed)
+        {
+            if (abs_int(tbx - g_desktop_press_x) >= 5 || abs_int(tby - g_desktop_press_y) >= 5)
+                g_desktop_left_dragged = true;
+            send_desktop_mouse_message(MSG_MOVE, tbx, tby);
+        }
+        process_scroll_bar_drag_event(tbx, tby);
+    }
 
     WINDOWLSP current_window = sht_found_win(xwmii, sht_img, ms_dec.sht_now);
-    if (current_window != NULL)
+    if (mouse_moved && current_window != NULL && !ms_dec.win_move_lock && !ms_dec.win_resize_lock)
     {
         if (tbx < current_window->w_sheet->bx + 12 ||
             tby < current_window->w_sheet->by + 27 ||

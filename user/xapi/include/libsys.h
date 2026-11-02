@@ -331,6 +331,8 @@ typedef struct
 #define MSG_RESIZE  8
 #define MSG_KEYUP   9
 #define MSG_KEYDOWN 10
+#define MSG_LBUTTONDOWN 11
+#define MSG_LBUTTONUP   12
 
 // P4.5
 #define XAPI_READBUFFER     7406
