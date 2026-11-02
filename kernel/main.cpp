@@ -381,6 +381,32 @@ SHEET        *mouse_ct_sheet;
 SHEET        *top_ct_sheet;
 SHEET *zhe_shi_yi_ge_sha_bi_dao_ji_zhi_de_cao_zuo_da_jia_bu_yao_xue___GuoqiFish_is_shabi_and_this_var_is_cao_gao_zhi;
 
+// 内核命令行中若指定了 init=<path>，则以 Code-Cube 的方式额外启动该程序。
+// 默认（无 init= 或解析失败）保持 XSK2.1 桌面启动逻辑不变，绝不回退/出错。
+extern BOOT_CONFIG *EFI_BC;
+
+static void launch_init_override(void)
+{
+    if (EFI_BC == NULL) return;
+    const char *cmdline = EFI_BC->cmdline;
+    if (cmdline[0] == '\0') return;
+
+    const char *p = strstr(cmdline, "init=");
+    if (p == NULL) return;
+    p += 5; // 跳过 "init="
+    while (*p == ' ' || *p == '\t') p++;
+
+    char  path[256];
+    size_t i = 0;
+    while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\n' && i < sizeof(path) - 1)
+        path[i++] = *p++;
+    path[i] = '\0';
+    if (i == 0) return;
+
+    write_serial_fmt("init override (Code-Cube way): launching %s\n", path);
+    create_user_process_from_file((char *)path, NULL, NULL);
+}
+
 void desktop_flusher()
 {
     no_interrupt = true;
@@ -564,6 +590,10 @@ skip_timer_widget_init:
     // wav_player("/system/test.wav");
     // create_user_process_from_file((char *)"/system/picturer.elf", NULL, argv);
     create_user_process_from_file((char *)"/apps/terminal.elf", NULL, NULL);
+
+    // 叠加：若内核命令行指定了 init=<path>，则以 Code-Cube 方式额外启动该 init 程序。
+    // 未指定时此处为空操作，XSK2.1 桌面照常运行。
+    launch_init_override();
     // create_user_process_from_file((char *)"/system/ctrlmenu.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/cp537.elf", NULL, NULL);
     // create_user_process_from_file((char *)"/apps/bcms-sp.elf", NULL, NULL);

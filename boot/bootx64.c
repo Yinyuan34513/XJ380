@@ -716,6 +716,21 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, struct EFI_SYSTEM_TABLE *SystemTable
     BootConfig->is_qemu = 0;
     BootConfig->boot_flags = BootMenuFlags;
 
+    // 将 EFI LoadOptions 作为内核命令行传入（用于 init= 等内核参数）。
+    // 此时仍处于 BootServices 阶段，拷贝其内容到内核态 BootConfig 是安全的。
+    if (LIP != NULL && LIP->LoadOptions != NULL && LIP->LoadOptionsSize > 0)
+    {
+        UINTN   lo_len = LIP->LoadOptionsSize / sizeof(UINT16);
+        char   *dst    = BootConfig->cmdline;
+        UINTN   maxlen = sizeof(BootConfig->cmdline) - 1;
+        for (UINTN i = 0; i < lo_len && i < maxlen; i++)
+        {
+            UINT16 wc = ((UINT16 *)LIP->LoadOptions)[i];
+            if (wc == 0) break;
+            dst[i] = (wc <= 0x7f) ? (char)wc : '?';
+        }
+    }
+
     // 获取RSDP
     EFI_CONFIGURATION_TABLE *SystemConfigTable = NULL;
     UINT8                    AcpiTableWasFound = 0; // 0=找不着 1=找到了
