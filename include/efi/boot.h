@@ -34,6 +34,10 @@ typedef struct
     uint64_t installer_root_pak_size;
     uint64_t system_payload_pak;
     uint64_t system_payload_pak_size;
+
+    // 内核命令行（来自 EFI LoadOptions），用于支持 init= 等内核参数。
+    // 放在结构体末尾，与 boot/include/boot.h 保持一致以保证 ABI 兼容。
+    char cmdline[512];
 } BOOT_CONFIG;
 
 #endif
