@@ -31,20 +31,17 @@ FONT_BIN_OBJ := $(BUILD_DIR)/font/hankaku.o
 LOGO_BIN_OBJ := $(BUILD_DIR)/graphics/logo/xj380_2.o
 VDISK_IMAGE := XJ380.img
 VMDK_IMAGE := XJ380.vmdk
-VDISK_ESP_IMAGE := XJ380-esp.img
 VDISK_ROOTFS_IMAGE := XJ380-rootfs.img
 VDISK_SIZE_MIB ?= 14096
 VDISK_OFFSET_SECTORS ?= 2048
 VDISK_ESP_START_MIB ?= 1
 VDISK_ROOTFS_START_MIB ?= 256
-VDISK_ESP_MIB := $(shell expr $(VDISK_ROOTFS_START_MIB) - $(VDISK_ESP_START_MIB))
 VDISK_ROOTFS_MIB ?= $(shell expr $(VDISK_SIZE_MIB) - $(VDISK_ROOTFS_START_MIB))
 VDISK_EXT_BLOCK_SIZE ?= 1024
 VDISK_EXT_INODE_SIZE ?= 256
 VDISK_EXT_FEATURES ?= extent,64bit,flex_bg,huge_file,dir_nlink,extra_isize,dir_index,metadata_csum,^has_journal,^quota,^metadata_csum_seed,^orphan_file,^project,^encrypt,^verity,^casefold,^inline_data,^ea_inode,^bigalloc,^mmp,^fast_commit,^sparse_super2
 VDISK_ROOT ?= $(XBPS_PREPARE_ROOT)
 VDISK_ROOTFS_START_SECTORS := $(shell expr $(VDISK_ROOTFS_START_MIB) \* 2048)
-VDISK_ESP_END_SECTORS := $(shell expr $(VDISK_ROOTFS_START_SECTORS) - 1)
 KMOD_DIR := kmod
 STARDUSTUI_DUCKCHAT_DIR := $(wildcard frameworks/StardustUI/examples/duckchat)
 STARDUSTUI_EXAMPLE_DIRS := \
@@ -94,15 +91,18 @@ LWEXT4_C_FILES := $(shell find ./third_party/lwext4/src -name "*.c")
 ifeq ($(USE_GNU),1)
 COMPILER_PREFIX ?= x86_64-elf-
 export CC  = $(COMPILER_PREFIX)gcc
+export CXX = $(COMPILER_PREFIX)g++
 export CPP = $(COMPILER_PREFIX)g++
 export NASM = nasm
 export LD  = $(COMPILER_PREFIX)ld
 export NM  = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
+export TARGET_FLAG =
 else
 # 默认：clang + lld (LLVM) 交叉编译
 export CC  = $(LLVM_PREFIX)clang
+export CXX = $(LLVM_PREFIX)clang++
 export CPP = $(LLVM_PREFIX)clang++
 export NASM = nasm
 export LD  = $(LLVM_PREFIX)ld.lld
@@ -111,6 +111,7 @@ export OBJC = $(LLVM_PREFIX)llvm-objcopy
 export OBJD = $(LLVM_PREFIX)llvm-objdump
 # clang 交叉编译需要显式指定目标架构
 export CLANG_TARGET
+export TARGET_FLAG = --target=$(CLANG_TARGET)
 C_FLAGS   += --target=$(CLANG_TARGET)
 CPP_FLAGS += --target=$(CLANG_TARGET)
 ASM_FLAGS += --target=$(CLANG_TARGET)
@@ -333,11 +334,11 @@ FORCE:
 
 clean:
 	@rm -rf $(BUILD_DIR) serial.log $(BUILD_CONFIG_HEADER)
-	@rm -rf $(VDISK_IMAGE) $(VDISK_ESP_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE) xj380-vdisk
+	@rm -rf $(VDISK_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE) xj380-vdisk
 	@echo "Removed build files. "
 
 clean.vdisk:
-	@rm -rf $(VDISK_IMAGE) $(VDISK_ESP_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE)
+	@rm -rf $(VDISK_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE)
 	@echo Removed vdisk image files.
 
 $(XBPS_INSTALL): $(XBPS_STATIC_TARBALL)
@@ -453,18 +454,15 @@ $(VDISK_ROOTFS_IMAGE): stage.xj380
 	@$(VDISK_SUDO) mkfs.ext4 -b $(VDISK_EXT_BLOCK_SIZE) -I $(VDISK_EXT_INODE_SIZE) -O "$(VDISK_EXT_FEATURES)" \
 		-E lazy_itable_init=0,lazy_journal_init=0 -F -q -d "$(VDISK_ROOT)" "$(VDISK_ROOTFS_IMAGE)"
 
+# 单 ext4 分区镜像：彻底抛弃 FAT/vfat 与 mtools(mmd/mcopy/mkfs.vfat)。
+# EFI/BOOT/BOOTX64.efi 与 system/kernel.elf 仍保留在 ext4 中。
+# 注意：标准 UEFI 固件(如 OVMF)默认只能从 FAT ESP 加载启动项；若要从 ext4
+# 启动，需要固件/加载器支持 ext4（例如带 ext4 驱动的 OVMF，或改用其它引导方式）。
 $(VDISK_IMAGE): $(VDISK_ROOTFS_IMAGE)
-	@rm -f "$(VDISK_IMAGE)" "$(VDISK_ESP_IMAGE)"
+	@rm -f "$(VDISK_IMAGE)"
 	@dd if=/dev/zero of="$(VDISK_IMAGE)" bs=1M count=0 seek=$(VDISK_SIZE_MIB)
-	@$(VDISK_SUDO) sgdisk --new=1:$(VDISK_OFFSET_SECTORS):$(VDISK_ESP_END_SECTORS) --typecode=1:ef00 --change-name=1:XJ380ESP \
-		--new=2:$(VDISK_ROOTFS_START_SECTORS):0 --typecode=2:8300 --change-name=2:XJ380ROOT "$(VDISK_IMAGE)"
-	@dd if=/dev/zero of="$(VDISK_ESP_IMAGE)" bs=1M count=0 seek=$(VDISK_ESP_MIB)
-	@$(VDISK_SUDO) mkfs.vfat -F 32 -S 512 "$(VDISK_ESP_IMAGE)"
-	@mmd -i "$(VDISK_ESP_IMAGE)" ::/EFI ::/EFI/BOOT ::/system
-	@mcopy -o -i "$(VDISK_ESP_IMAGE)" "$(VDISK_ROOT)/EFI/BOOT/BOOTX64.efi" ::/EFI/BOOT
-	@mcopy -o -i "$(VDISK_ESP_IMAGE)" "$(VDISK_ROOT)/system/kernel.elf" ::/system
-	@dd if="$(VDISK_ESP_IMAGE)" of="$(VDISK_IMAGE)" bs=512 seek=$(VDISK_OFFSET_SECTORS) conv=notrunc,sparse status=none
-	@dd if="$(VDISK_ROOTFS_IMAGE)" of="$(VDISK_IMAGE)" bs=1M seek=$(VDISK_ROOTFS_START_MIB) conv=notrunc,sparse status=none
+	@$(VDISK_SUDO) sgdisk --new=1:$(VDISK_OFFSET_SECTORS):0 --typecode=1:8300 --change-name=1:XJ380ROOT "$(VDISK_IMAGE)"
+	@dd if="$(VDISK_ROOTFS_IMAGE)" of="$(VDISK_IMAGE)" bs=1M seek=$(VDISK_ESP_START_MIB) conv=notrunc,sparse status=none
 
 vdisk: $(VDISK_IMAGE)
 

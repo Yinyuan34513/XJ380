@@ -4,7 +4,7 @@ XAPI_HEADERS := $(shell find ./include -type f \( -name "*.h" -o -name "*.hpp" \
 XAPI_IMPL_INCLUDES := $(shell find . -type f -name "*.inc")
 
 export CXX ?= g++
-export CFLAGS ?= -O0 -Wall -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include -Wno-write-strings
+export CFLAGS ?= -O0 -Wall $(TARGET_FLAG) -g -ffreestanding -fno-builtin -m64 -mstackrealign -std=c++11 -fno-stack-protector -fshort-wchar -nostdinc -I ./include -Wno-write-strings
 
 compile_head: start.cpp $(XAPI_HEADERS)
 	@mkdir -p ../../out/xapi
