@@ -18,6 +18,7 @@
 #include <pci/pci.h>
 #include <proto.hpp>
 #include <rtc.h>
+#include <power.h>
 #include <syscall/pxapi.h>
 #include <syscall/xapi_user.h>
 #include <task/pcb.h>
@@ -31,6 +32,19 @@ extern UserInfo *current_user;
 extern lock_queue *pcb_group_queue;
 
 static constexpr size_t XAPI_XTTTP_BUFFER_SIZE = 1024;
+
+// 以下常量与电源确认对话框相关，移植自 XJ380(XSK2.1) 的电源菜单特性。
+static constexpr uint32_t POWER_CONFIRM_WIDTH  = 420;
+static constexpr uint32_t POWER_CONFIRM_HEIGHT = 142;
+static constexpr uint32_t POWER_CONFIRM_OK_X1  = 238;
+static constexpr uint32_t POWER_CONFIRM_OK_X2  = 328;
+static constexpr uint32_t POWER_CONFIRM_BTN_Y1 = 100;
+static constexpr uint32_t POWER_CONFIRM_BTN_Y2 = 126;
+
+// 移植自 XJ380 的 extern 声明，供电源菜单特性使用。
+extern EFI_SYSTEM_TABLE *EFI_ST;
+extern BOOT_CONFIG *EFI_BC;
+extern mouse_dec ms_dec;
 
 uint64_t do_xapi_GetTime()
 {
@@ -695,4 +709,101 @@ uint64_t do_xapi_KillProcess(uint64_t pid)
 
     kill_proc(target, -1, false);
     return 0;
+}
+
+// 以下三个函数移植自 XJ380(XSK2.1) 的电源菜单特性，
+// 用于支持 mouse.cpp 中调用的 do_xapi_PowerAction（重启/关机确认）。
+static void xapi_draw_power_confirm(SHEET *sheet, uint64_t action)
+{
+    if (sheet == NULL) return;
+
+    const char *title = action == XPOWER_REBOOT ? "确认重启" : "确认关机";
+    const char *body  = action == XPOWER_REBOOT ? "系统将立即重启。未保存的数据可能丢失。"
+                                                : "系统将立即关闭电源。未保存的数据可能丢失。";
+
+    draw_rect(sht_img, sheet, 0, 0, POWER_CONFIRM_WIDTH - 1, POWER_CONFIRM_HEIGHT - 1, {0xff, 0xff, 0xff, 0xff});
+    draw_rect(sht_img, sheet, 0, 0, POWER_CONFIRM_WIDTH - 1, 0, {0x28, 0x78, 0xf0, 0xff});
+    draw_rect(sht_img, sheet, 0, POWER_CONFIRM_HEIGHT - 1, POWER_CONFIRM_WIDTH - 1, POWER_CONFIRM_HEIGHT - 1,
+              {0xd8, 0xe0, 0xeb, 0xff});
+    draw_rect(sht_img, sheet, 0, 0, 0, POWER_CONFIRM_HEIGHT - 1, {0xd8, 0xe0, 0xeb, 0xff});
+    draw_rect(sht_img, sheet, POWER_CONFIRM_WIDTH - 1, 0, POWER_CONFIRM_WIDTH - 1, POWER_CONFIRM_HEIGHT - 1,
+              {0xd8, 0xe0, 0xeb, 0xff});
+
+    print_box_ttf(sht_img, sheet, (char *)title, {0x15, 0x22, 0x35, 0xff}, 24, 20, 16);
+    print_box_ttf(sht_img, sheet, (char *)body, {0x60, 0x70, 0x85, 0xff}, 24, 54, 11);
+    print_box_ttf(sht_img, sheet, (char *)"按 Enter 确认，Esc 取消", {0x60, 0x70, 0x85, 0xff}, 24, 80, 10);
+
+    draw_rect(sht_img, sheet, POWER_CONFIRM_OK_X1, POWER_CONFIRM_BTN_Y1, POWER_CONFIRM_OK_X2, POWER_CONFIRM_BTN_Y2,
+              {0x28, 0x78, 0xf0, 0xff});
+    print_box_ttf(sht_img, sheet, (char *)"确认", {0xff, 0xff, 0xff, 0xff}, POWER_CONFIRM_OK_X1 + 28,
+                  POWER_CONFIRM_BTN_Y1 + 6, 10);
+
+    draw_rect(sht_img, sheet, POWER_CONFIRM_OK_X2 + 12, POWER_CONFIRM_BTN_Y1, POWER_CONFIRM_OK_X2 + 102,
+              POWER_CONFIRM_BTN_Y2, {0xee, 0xf2, 0xf7, 0xff});
+    print_box_ttf(sht_img, sheet, (char *)"取消", {0x15, 0x22, 0x35, 0xff}, POWER_CONFIRM_OK_X2 + 40,
+                  POWER_CONFIRM_BTN_Y1 + 6, 10);
+}
+
+static bool xapi_confirm_power_action(uint64_t action)
+{
+    if (sht_img == NULL) return false;
+
+    uint32_t x = 0;
+    uint32_t y = 0;
+    if (sht_img->scrx > POWER_CONFIRM_WIDTH) x = (sht_img->scrx - POWER_CONFIRM_WIDTH) / 2;
+    if (sht_img->scry > POWER_CONFIRM_HEIGHT) y = (sht_img->scry - POWER_CONFIRM_HEIGHT) / 2;
+
+    SHEET *confirm_sheet = NULL;
+    if (!create_sheet(sht_img, x, y, POWER_CONFIRM_WIDTH, POWER_CONFIRM_HEIGHT, TopWindowSheetType, 32765,
+                      &confirm_sheet))
+    {
+        return false;
+    }
+
+    SHEET *previous_focus = ms_dec.sht_now;
+    ms_dec.sht_now       = confirm_sheet;
+
+    xapi_draw_power_confirm(confirm_sheet, action);
+    refresh_part_sheet(sht_img, x, y, x + POWER_CONFIRM_WIDTH, y + POWER_CONFIRM_HEIGHT);
+
+    bool confirmed = false;
+    open_interrupt;
+    while (true)
+    {
+        uint8_t key = get_keyboard_input();
+        if (key == SCANCODE_ENTER || key == CHARACTER_ENTER || key == KEY_ENTER)
+        {
+            confirmed = true;
+            break;
+        }
+        if (key == 1 || key == KEY_ESC)
+        {
+            break;
+        }
+        scheduler_yield();
+    }
+    close_interrupt;
+
+    if (ms_dec.sht_now == confirm_sheet) ms_dec.sht_now = previous_focus;
+    delete_sheet(sht_img, confirm_sheet);
+    refresh_part_sheet(sht_img, x, y, x + POWER_CONFIRM_WIDTH, y + POWER_CONFIRM_HEIGHT);
+    return confirmed;
+}
+
+uint64_t do_xapi_PowerAction(uint64_t action)
+{
+    if (EFI_ST == NULL || EFI_BC == NULL) return (uint64_t)-ENODEV;
+
+    if (action == XPOWER_REBOOT)
+    {
+        if (!xapi_confirm_power_action(action)) return (uint64_t)-EINTR;
+        power_reboot(EFI_ST, EFI_BC);
+    }
+    if (action == XPOWER_SHUTDOWN)
+    {
+        if (!xapi_confirm_power_action(action)) return (uint64_t)-EINTR;
+        power_shutdown(EFI_ST, EFI_BC);
+    }
+
+    return (uint64_t)-EINVAL;
 }
