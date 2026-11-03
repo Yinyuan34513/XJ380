@@ -2,7 +2,7 @@ NASM_FLAGS = -f elf64 -DX86_64_TARGET -DUEFI
 ASM_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -mno-80387
 C_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -std=c11 -fshort-wchar -nostdinc -mno-80387 -I./include
 CPP_FLAGS = -O0 -g -mno-red-zone -mstackrealign -nostdlib -ffreestanding -fno-builtin -m64 -fno-stack-protector -fno-exceptions -fno-rtti -std=gnu++17 -fshort-wchar -nostdinc -fno-use-cxa-atexit -fno-threadsafe-statics -mno-80387 -Wno-int-to-pointer-cast -Wno-macro-redefined -Wno-c11-extensions -Wno-c99-extensions -Wno-gnu-statement-expression-from-macro-expansion -I./include -Wno-writable-strings -Wno-c++11-narrowing
-BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -fno-builtin -Wl,--subsystem,10 -fshort-wchar
+BOOT_C_FLAGS = -g -I ./boot/include -Wextra -e efi_main -nostdinc -nostdlib -ffreestanding -fno-stack-protector -fno-builtin -Wl,--subsystem,efi_application -fshort-wchar
 
 DEBUG ?= 0
 SMP ?= 4
@@ -70,7 +70,18 @@ QEMU_AUDIO_ARGS = -audiodev $(AUDIO_BACKEND),id=snd0 -device ich9-intel-hda -dev
 endif
 QEMU_CMD = $(SUDO_CMD) qemu-system-x86_64 --display $(DISPLAY_BACKEND) -M q35 -bios OVMF.fd -m 8192 -smp $(SMP) $(KVM_FLAG) -drive if=none,id=harddisk,file=$(VDISK_IMAGE),index=0,format=raw -device ahci,id=ahci -device ide-hd,bus=ahci.0,drive=harddisk -device qemu-xhci,id=xhci $(USB_XHCI_DEVICES) -serial file:serial.log $(QEMU_AUDIO_ARGS) -netdev user,id=net0,hostfwd=tcp::2323-:2323 -device e1000,netdev=net0 $(DEBUG_FLAG) -vga virtio
 
-COMPILER_PREFIX ?=
+# 交叉编译工具链：默认使用 clang + lld (LLVM)，可在任意架构主机上
+# （x86_64 Linux 或 aarch64/ARM64 等）交叉编译出 x86_64 目标，无需安装
+# MinGW 或 x86_64 GNU binutils。
+#
+# 可用变量：
+#   LLVM_PREFIX  LLVM 工具前缀，例如 /opt/llvm/bin/（默认空，即 PATH 中寻找）
+#   CLANG_TARGET 内核/驱动等 ELF 目标架构（默认 x86_64-elf）
+#   BOOT_TARGET  UEFI 引导程序目标（默认 x86_64-w64-mingw32）
+#   USE_GNU=1    回退到传统 GNU 交叉工具链（需自行安装 x86_64 交叉 binutils/mingw）
+LLVM_PREFIX ?=
+CLANG_TARGET ?= x86_64-elf
+BOOT_TARGET  ?= x86_64-w64-mingw32
 
 # FILES
 NASM_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.asm")
@@ -80,13 +91,30 @@ CPP_FILES := $(shell find ./kernel ./driver ./graphics ./font ./lib -name "*.cpp
 HEADER_FILES := $(shell find ./include -name "*.h" -o -name "*.hpp")
 LWEXT4_C_FILES := $(shell find ./third_party/lwext4/src -name "*.c")
 
-export CC = $(COMPILER_PREFIX)clang
-export CPP = $(COMPILER_PREFIX)clang++
-export NASM = $(COMPILER_PREFIX)nasm
-export LD = $(COMPILER_PREFIX)ld
-export NM = $(COMPILER_PREFIX)nm
+ifeq ($(USE_GNU),1)
+COMPILER_PREFIX ?= x86_64-elf-
+export CC  = $(COMPILER_PREFIX)gcc
+export CPP = $(COMPILER_PREFIX)g++
+export NASM = nasm
+export LD  = $(COMPILER_PREFIX)ld
+export NM  = $(COMPILER_PREFIX)nm
 export OBJC = $(COMPILER_PREFIX)objcopy
 export OBJD = $(COMPILER_PREFIX)objdump
+else
+# 默认：clang + lld (LLVM) 交叉编译
+export CC  = $(LLVM_PREFIX)clang
+export CPP = $(LLVM_PREFIX)clang++
+export NASM = nasm
+export LD  = $(LLVM_PREFIX)ld.lld
+export NM  = $(LLVM_PREFIX)llvm-nm
+export OBJC = $(LLVM_PREFIX)llvm-objcopy
+export OBJD = $(LLVM_PREFIX)llvm-objdump
+# clang 交叉编译需要显式指定目标架构
+export CLANG_TARGET
+C_FLAGS   += --target=$(CLANG_TARGET)
+CPP_FLAGS += --target=$(CLANG_TARGET)
+ASM_FLAGS += --target=$(CLANG_TARGET)
+endif
 HOST_CC ?= cc
 IMAGE_PACKAGE_MANAGER ?= xbps
 KERNEL_BUSYBOX_ALIASES ?= 0
@@ -191,7 +219,11 @@ $(BUILD_DIR)/%.o: %.cpp
 
 $(BOOT_EFI): boot/bootx64.c boot/bootlib.c
 	@mkdir -p $(@D)
+ifeq ($(USE_GNU),1)
 	@x86_64-w64-mingw32-gcc $(BOOT_C_FLAGS) -o $@ $^
+else
+	@$(CC) --target=$(BOOT_TARGET) -fuse-ld=lld $(BOOT_C_FLAGS) -o $@ $^ boot/builtins.c
+endif
 
 $(FONT_BIN_OBJ): font/hankaku.bin
 	@mkdir -p $(@D)
