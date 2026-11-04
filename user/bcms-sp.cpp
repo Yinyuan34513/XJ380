@@ -2,7 +2,7 @@
 
 static int bcms_sp_main_impl(int argc, char *argv[], char *envp[])
 {
-    xapi_Printf("%s 哈机密\n","gulu");
+    xapi_Printf("%s\n","gulu");
     char t[114514];
     xapi_Input(t);
     xapi_Output("Hello World!");
