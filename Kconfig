@@ -1,0 +1,153 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# XJ380 / Code-Cube 内核配置 (Kconfig, 取自 Linux kconfig 工具链)
+# 使用 make menuconfig / make defconfig 生成 .config，
+# 再由 conf 生成 kernel/build_config.h 供内核编译消费。
+#
+mainmenu "XJ380 Kernel Configuration"
+
+menu "General setup"
+
+config OS_EDITION
+	string "OS 发行代号"
+	default "BetaVersion"
+	help
+	  系统发行代号，编译进版本字符串。
+
+config KN_VERSION
+	string "内核版本号 (KN version)"
+	default "XSK 2.1.0"
+
+config OS_VERSION
+	string "完整操作系统版本字符串"
+	default "XINGJI XJ380 Singularity 1.0.0"
+
+config KERNEL_DEFAULT_USER_APP
+	string "默认启动的用户态程序路径"
+	default "/apps/browser.elf"
+
+config BUILD_EDITION_RELEASE
+	bool "构建为 Release 版本"
+	default n
+	help
+	  选中则 BUILD_EDITION=RELEASE，否则为调试版本。
+
+endmenu
+
+menu "Memory layout"
+
+config STACK_SIZE
+	int "默认栈大小 (字节)"
+	default 262144
+
+config KERNEL_TASK_STACK_SIZE
+	int "内核任务栈大小 (字节)"
+	default 1048576
+
+config USER_STACK_SIZE
+	int "用户态栈大小 (字节)"
+	default 16777216
+
+config MAX_CPU_NUM
+	int "支持的最大 CPU 数量"
+	default 256
+
+config KERNEL_HEAP_START
+	hex "内核堆起始地址"
+	default 0xffffc00000000000
+
+config KERNEL_HEAP_SIZE
+	int "内核堆大小 (MiB)"
+	default 256
+
+config USER_MMAP_START
+	hex "用户 mmap 起始地址"
+	default 0x0000400000000000
+
+config USER_BRK_START
+	hex "用户 brk 起始地址"
+	default 0x0000700000000000
+
+config USER_BRK_END
+	hex "用户 brk 结束地址"
+	default 0x00007ffff0000000
+
+config USER_ELF_HEADER_START
+	hex "用户 ELF 头映射起始地址"
+	default 0x0000300000000000
+
+endmenu
+
+menu "Kernel features"
+
+config KERNEL_BOOT_LOGO
+	int "显示启动 Logo"
+	range 0 1
+	default 1
+
+config KERNEL_START_DESKTOP
+	int "启动时直接进入桌面"
+	range 0 1
+	default 0
+
+config KERNEL_START_COMPONENT_FLUSHER
+	int "启动时启动组件刷新器"
+	range 0 1
+	default 0
+
+config KERNEL_AUTO_START_USER_APP
+	int "自动启动默认用户程序"
+	range 0 1
+	default 1
+
+config KERNEL_LOAD_MODULES
+	int "加载内核模块"
+	range 0 1
+	default 1
+
+config KERNEL_ENABLE_PROCESS_KILLER
+	int "启用进程杀手"
+	range 0 1
+	default 0
+
+config KERNEL_AHCI_QEMU_ACCEL
+	int "AHCI QEMU 加速"
+	range 0 1
+	default 1
+
+config KERNEL_BUSYBOX_ALIASES
+	int "BusyBox 别名"
+	range 0 1
+	default 0
+
+config KERNEL_UDEV_TRACE
+	int "udev 跟踪日志"
+	range 0 1
+	default 0
+
+config KERNEL_BUSYBOX_DEBUG
+	int "BusyBox 调试"
+	range 0 1
+	default 0
+
+config KERNEL_LINUX_OUTPUT_MIRROR
+	int "镜像 Linux 输出"
+	range 0 1
+	default 0
+
+config KERNEL_XBPS_WAIT_DEBUG
+	int "XBPS 等待调试"
+	range 0 1
+	default 0
+
+config KERNEL_PROFILER
+	int "启用内核性能分析器"
+	range 0 1
+	default 0
+
+config KERNEL_DESKTOP_DEBUG_INPUT_ECHO
+	int "桌面调试输入回显"
+	range 0 1
+	default 1
+
+endmenu
