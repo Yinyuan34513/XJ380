@@ -1,0 +1,26 @@
+# tools/kconfig — Linux Kconfig configuration frontends (vendored)
+
+This directory contains the Linux kernel Kconfig configuration frontends,
+extracted verbatim from the Linux kernel tree (scripts/kconfig, Linux v6.12)
+and used to configure the XJ380 / Code-Cube kernel.
+
+- Upstream: https://github.com/torvalds/linux  (scripts/kconfig, v6.12)
+- License:  GNU General Public License, version 2 (GPL-2.0-only)
+  See the repository top-level LICENSE file.
+
+## Contents
+- Frontends: conf.c, mconf.c, nconf.c, gconf.c, qconf.cc
+- Parser:    lexer.l, parser.y (+ generated lexer.lex.c / parser.tab.c at build time)
+- Core:      confdata.c, expr.c, symbol.c, menu.c, preprocess.c, util.c
+- Dialog:    lxdialog/ (used by mconf)
+- Headers:   include/ (list.h, hashtable.h, hash.h, xalloc.h, ...)
+
+## Building the host tools
+The Linux kbuild Makefile (kconfig/Makefile) needs the full kbuild macro set
+and is not used here. Instead, Makefile.gnos provides a standalone host-tool
+build for `conf` and `mconf`:
+
+    make -f tools/kconfig/Makefile.gnos OUT=out/kconfig out/kconfig/conf out/kconfig/mconf
+
+The main Makefile invokes this automatically via the `defconfig` / `menuconfig`
+/ `oldconfig` / `config` / `savedefconfig` targets.

@@ -62,3 +62,9 @@ provenance and are intended to be treated as project-local implementations:
 - `driver/dma.cpp`
 - `system/kmod/netserver/arch/sys_arch.cpp`
 - `system/kmod/netserver/arch/utils.cpp`
+
+- `tools/kconfig`
+  - Upstream: Linux kernel `scripts/kconfig` (v6.12), https://github.com/torvalds/linux
+  - License: GNU General Public License, version 2 (GPL-2.0-only) — see top-level LICENSE
+  - Provenance: vendored verbatim from Linux; used to configure the XJ380/Code-Cube
+    kernel (frontends `conf`/`mconf` built via `tools/kconfig/Makefile.gnos`).
