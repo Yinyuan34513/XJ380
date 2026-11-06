@@ -35,6 +35,10 @@ VDISK_ROOTFS_IMAGE := XJ380-rootfs.img
 VDISK_SIZE_MIB ?= 14096
 VDISK_OFFSET_SECTORS ?= 2048
 VDISK_ESP_START_MIB ?= 1
+VDISK_ESP_MIB ?= 255
+VDISK_ESP_IMAGE := XJ380-esp.img
+VDISK_ESP_START_SECTORS := $(shell expr $(VDISK_ESP_START_MIB) \* 2048)
+VDISK_ESP_END_SECTORS := $(shell expr \( $(VDISK_ESP_START_MIB) + $(VDISK_ESP_MIB) \) \* 2048 - 1)
 VDISK_ROOTFS_START_MIB ?= 256
 VDISK_ROOTFS_MIB ?= $(shell expr $(VDISK_SIZE_MIB) - $(VDISK_ROOTFS_START_MIB))
 VDISK_EXT_BLOCK_SIZE ?= 1024
@@ -362,11 +366,11 @@ FORCE:
 
 clean:
 	@rm -rf $(BUILD_DIR) serial.log $(BUILD_CONFIG_HEADER)
-	@rm -rf $(VDISK_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE) xj380-vdisk
+	@rm -rf $(VDISK_IMAGE) $(VDISK_ESP_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE) xj380-vdisk
 	@echo "Removed build files. "
 
 clean.vdisk:
-	@rm -rf $(VDISK_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE)
+	@rm -rf $(VDISK_IMAGE) $(VDISK_ESP_IMAGE) $(VDISK_ROOTFS_IMAGE) $(VMDK_IMAGE)
 	@echo Removed vdisk image files.
 
 $(XBPS_INSTALL): $(XBPS_STATIC_TARBALL)
@@ -482,15 +486,27 @@ $(VDISK_ROOTFS_IMAGE): stage.xj380
 	@$(VDISK_SUDO) mkfs.ext4 -b $(VDISK_EXT_BLOCK_SIZE) -I $(VDISK_EXT_INODE_SIZE) -O "$(VDISK_EXT_FEATURES)" \
 		-E lazy_itable_init=0,lazy_journal_init=0 -F -q -d "$(VDISK_ROOT)" "$(VDISK_ROOTFS_IMAGE)"
 
-# 单 ext4 分区镜像：彻底抛弃 FAT/vfat 与 mtools(mmd/mcopy/mkfs.vfat)。
-# EFI/BOOT/BOOTX64.efi 与 system/kernel.elf 仍保留在 ext4 中。
-# 注意：标准 UEFI 固件(如 OVMF)默认只能从 FAT ESP 加载启动项；若要从 ext4
-# 启动，需要固件/加载器支持 ext4（例如带 ext4 驱动的 OVMF，或改用其它引导方式）。
+# 双分区磁盘镜像：
+#   分区1 (ef00) ESP   —— FAT 文件系统，用 mtools(mformat/mmd/mcopy) 写入 BOOTX64.efi 与 kernel.elf；
+#   分区2 (8300) rootfs —— ext4 文件系统（系统本身使用 EXT，避免依赖 vfat/dosfstools 的 mkfs.vfat）。
+# 标准 UEFI 固件(如 OVMF)只能从 FAT ESP 加载启动项，因此引导程序必须放在 FAT 分区；
+# 而系统根文件系统使用 ext4。
 $(VDISK_IMAGE): $(VDISK_ROOTFS_IMAGE)
-	@rm -f "$(VDISK_IMAGE)"
+	@rm -f "$(VDISK_IMAGE)" "$(VDISK_ESP_IMAGE)"
 	@dd if=/dev/zero of="$(VDISK_IMAGE)" bs=1M count=0 seek=$(VDISK_SIZE_MIB)
-	@$(VDISK_SUDO) sgdisk --new=1:$(VDISK_OFFSET_SECTORS):0 --typecode=1:8300 --change-name=1:XJ380ROOT "$(VDISK_IMAGE)"
-	@dd if="$(VDISK_ROOTFS_IMAGE)" of="$(VDISK_IMAGE)" bs=1M seek=$(VDISK_ESP_START_MIB) conv=notrunc,sparse status=none
+	@$(VDISK_SUDO) sgdisk \
+		--new=1:$(VDISK_ESP_START_SECTORS):$(VDISK_ESP_END_SECTORS) --typecode=1:ef00 --change-name=1:XJ380ESP \
+		--new=2:$(VDISK_ROOTFS_START_SECTORS):0 --typecode=2:8300 --change-name=2:XJ380ROOT \
+		"$(VDISK_IMAGE)"
+	@dd if=/dev/zero of="$(VDISK_ESP_IMAGE)" bs=1M count=0 seek=$(VDISK_ESP_MIB)
+	@mformat -F -i "$(VDISK_ESP_IMAGE)" ::
+	@mmd -i "$(VDISK_ESP_IMAGE)" ::/EFI
+	@mmd -i "$(VDISK_ESP_IMAGE)" ::/EFI/BOOT
+	@mcopy -i "$(VDISK_ESP_IMAGE)" "$(BOOT_EFI)" ::/EFI/BOOT/BOOTX64.efi
+	@mmd -i "$(VDISK_ESP_IMAGE)" ::/system
+	@mcopy -i "$(VDISK_ESP_IMAGE)" "$(KERNEL_ELF)" ::/system/kernel.elf
+	@dd if="$(VDISK_ESP_IMAGE)" of="$(VDISK_IMAGE)" bs=1M seek=$(VDISK_ESP_START_MIB) conv=notrunc,sparse status=none
+	@dd if="$(VDISK_ROOTFS_IMAGE)" of="$(VDISK_IMAGE)" bs=1M seek=$(VDISK_ROOTFS_START_MIB) conv=notrunc,sparse status=none
 
 vdisk: $(VDISK_IMAGE)
 
